@@ -1,0 +1,22 @@
+version: '3.8'
+
+networks:
+  proxy-network-prod:
+    external: true
+
+services:
+  Hrumble-New-frontend:
+    build:
+      context: ./Hrumble-Front-End
+      dockerfile: Dockerfile
+    container_name: Hrumble-new-frontend
+    restart: unless-stopped
+    networks:
+      - proxy-network-prod
+    ports:
+      - "5003:80"
+    volumes:
+      - ./frontend/dist:/dist
+    environment:
+      VITE_SUPABASE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImticGV5ZmlldHJ3bGh3Y3dxaGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4NDA5NjEsImV4cCI6MjA1NDQxNjk2MX0.A-K4DO6D2qQZ66qIXY4BlmoHxc-W5B0itV-HAAM84YA"
+      VITE_SUPABASE_URL: "https://kbpeyfietrwlhwcwqhjw.supabase.co"

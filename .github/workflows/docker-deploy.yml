@@ -1,0 +1,77 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy with Docker Compose
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Install SSH keys and configure SSH
+      - name: Install SSH Keys
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/id_rsa
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      # Step 2: Clone or Pull the Repository on the Server
+      - name: Clone or Pull Repository
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            if [ ! -d ~/cicdpipeline_new/.git ]; then
+              git clone https://github.com/jo73na/cicdpipeline.git ~/cicdpipeline_new
+            else
+              cd ~/cicdpipeline_new && git fetch --all && git pull
+            fi
+          "
+
+      # Step 3: Ensure MongoDB and Backend Data Volumes Exist
+      - name: Ensure MongoDB Volume and Backend data Exists
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            docker volume inspect mongodb_data || docker volume create mongodb_data &&
+            docker volume inspect backend_uploads || docker volume create backend_uploads
+          "
+
+      # Step 4: Stop and Remove Containers (Preserve Volumes)
+      - name: Stop and Remove Containers
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            cd ~/cicdpipeline_new &&
+            sudo docker-compose down --remove-orphans
+          "
+
+      # Step 5: Remove Unused Docker Images
+      - name: Clean Up Unused Docker Images
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            sudo docker image prune -f &&
+            for image_id in \$(sudo docker images -q -f 'dangling=false'); do
+              if ! sudo docker ps -a | grep \$image_id > /dev/null; then
+                sudo docker rmi \$image_id || true
+              fi
+            done
+          "
+
+      # Step 6: Build and Deploy the Application
+      - name: Run Docker Compose
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            cd ~/cicdpipeline_new &&
+            if ! command -v docker-compose &> /dev/null; then
+              echo 'Installing Docker Compose...' &&
+              sudo curl -L 'https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)' -o /usr/local/bin/docker-compose &&
+              sudo chmod +x /usr/local/bin/docker-compose
+            fi &&
+            sudo docker-compose build --no-cache &&
+            sudo docker-compose up -d
+          "
+
+      # Step 7: Cleanup SSH Keys
+      - name: Cleanup SSH Keys
+        run: |
+          rm -rf ~/.ssh
