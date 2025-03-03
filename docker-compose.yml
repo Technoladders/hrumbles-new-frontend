@@ -7,7 +7,7 @@ networks:
 services:
   hrumble-new-frontend:
     build:
-      context: ./Hrumble-Front-End_UI
+      context: ./Hrumbles-Front-End_UI
       dockerfile: Dockerfile
     container_name: hrumble-new-frontend
     restart: unless-stopped
