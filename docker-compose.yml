@@ -5,11 +5,11 @@ networks:
     external: true
 
 services:
-  Hrumble-New-frontend:
+  hrumble-new-frontend:
     build:
       context: ./Hrumble-Front-End_UI
       dockerfile: Dockerfile
-    container_name: Hrumble-new-frontend
+    container_name: hrumble-new-frontend
     restart: unless-stopped
     networks:
       - proxy-network-prod
