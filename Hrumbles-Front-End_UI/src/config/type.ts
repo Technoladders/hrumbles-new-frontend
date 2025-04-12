@@ -180,8 +180,8 @@ export type Database = {
           updated_by: string | null
           sow: string | null
 
-          ///join hr_profiles
-          hr_profiles?: {
+          ///join hr_employees
+          hr_employees?: {
             first_name: string;
             last_name: string;
           } | null;
@@ -232,7 +232,7 @@ export type Database = {
           },
         ]
       }
-      hr_profiles: {  // ✅ ADD THIS TABLE
+      hr_employees: {  // ✅ ADD THIS TABLE
         Row: {
           id: string;
           first_name: string;
@@ -282,7 +282,7 @@ export type Database = {
               foreignKeyName: "hr_project_employees_assign_employee_fkey", // ✅ Fix reference for assigned employee
               columns: ["assign_employee"],
               isOneToOne: false,
-              referencedRelation: "hr_profiles",
+              referencedRelation: "hr_employees",
               referencedColumns: ["id"]
             },
             {
@@ -295,6 +295,188 @@ export type Database = {
           ]
           
       };
+
+      hr_assigned_goals: {
+        Row: {
+          assigned_at: string
+          current_value: number
+          employee_id: string
+          goal_id: string
+          goal_type: string
+          id: string
+          notes: string | null
+          progress: number
+          status: string
+          target_value: number | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_at?: string
+          current_value?: number
+          employee_id: string
+          goal_id: string
+          goal_type?: string
+          id?: string
+          notes?: string | null
+          progress?: number
+          status?: string
+          target_value?: number | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_at?: string
+          current_value?: number
+          employee_id?: string
+          goal_id?: string
+          goal_type?: string
+          id?: string
+          notes?: string | null
+          progress?: number
+          status?: string
+          target_value?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hr_assigned_goals_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "hr_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hr_assigned_goals_goal_id_fkey"
+            columns: ["goal_id"]
+            isOneToOne: false
+            referencedRelation: "hr_goals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hr_goals: {
+        Row: {
+          created_at: string
+          description: string
+          end_date: string
+          id: string
+          metric_type: string
+          metric_unit: string
+          name: string
+          sector: string
+          start_date: string
+          target_value: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          end_date: string
+          id?: string
+          metric_type: string
+          metric_unit: string
+          name: string
+          sector: string
+          start_date: string
+          target_value: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          end_date?: string
+          id?: string
+          metric_type?: string
+          metric_unit?: string
+          name?: string
+          sector?: string
+          start_date?: string
+          target_value?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      hr_kpis: {
+        Row: {
+          created_at: string
+          current_value: number
+          goal_id: string
+          id: string
+          metric_type: string
+          metric_unit: string
+          name: string
+          target_value: number
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          current_value: number
+          goal_id: string
+          id?: string
+          metric_type: string
+          metric_unit: string
+          name: string
+          target_value: number
+          updated_at?: string
+          weight: number
+        }
+        Update: {
+          created_at?: string
+          current_value?: number
+          goal_id?: string
+          id?: string
+          metric_type?: string
+          metric_unit?: string
+          name?: string
+          target_value?: number
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hr_kpis_goal_id_fkey"
+            columns: ["goal_id"]
+            isOneToOne: false
+            referencedRelation: "hr_goals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tracking_records: {
+        Row: {
+          assigned_goal_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          record_date: string
+          value: number
+        }
+        Insert: {
+          assigned_goal_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          record_date: string
+          value?: number
+        }
+        Update: {
+          assigned_goal_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          record_date?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tracking_records_assigned_goal_id_fkey"
+            columns: ["assigned_goal_id"]
+            isOneToOne: false
+            referencedRelation: "hr_assigned_goals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

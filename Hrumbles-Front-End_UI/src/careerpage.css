@@ -1,0 +1,189 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 215 25% 27%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 27%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 27%;
+
+    --primary: 256 86% 56%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 215 25% 27%;
+
+    --muted: 215 16% 47%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 240, 5%, 60%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 255 83% 77%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --bg-button: #ad94f5;
+    --bg-select: #8c6af2;
+  }
+}
+
+@layer utilities {
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .custom-spin {
+    animation: spin 0.8s linear infinite;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  /* Glass morphism effect */
+  .glass {
+    @apply bg-white/70 backdrop-blur-lg border border-white/20 shadow-sm;
+  }
+
+  /* Animations for page transitions */
+  .page-transition-enter {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  .page-transition-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 400ms, transform 400ms;
+  }
+
+  /* Button hover animation */
+  .button-hover {
+    @apply relative overflow-hidden transition-all duration-300;
+  }
+
+  .button-hover::after {
+    content: '';
+    @apply absolute inset-0 bg-white/20 scale-x-0 origin-left transition-transform duration-300;
+  }
+
+  .button-hover:hover::after {
+    @apply scale-x-100;
+  }
+  
+  /* Card hover animation */
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-md hover:-translate-y-1;
+  }
+  
+  /* Image scale on hover */
+  .image-hover {
+    @apply transition-transform duration-500 hover:scale-105;
+  }
+  .bg-select{
+    background-color: #ad94f5;
+  }
+  .bg-button{
+    background-color: #7B43F1;
+  }
+    .bg-button-hover{
+    background-color: #8c6af2;
+  }
+  .bg-gradient-custom {
+    background: linear-gradient(to right, var(--bg-button), rgba(178, 153, 252, 0.6));
+  }
+
+  .bg-purple{
+    background-color: oklch(62.7% 0.265 303.9);
+  }
+
+  .bg-purple-hover{
+    background-color: #b343b5;
+  }
+  
+  .purple-text-color{
+    color: oklch(62.7% 0.265 303.9);
+  }
+  .purple-text-color:hover {
+    color: oklch(62.7% 0.265 303.9);
+  }
+
+  .purple-gradient {
+    background-image: linear-gradient(to right, var(--tw-gradient-stops));
+    --tw-gradient-from: #7B43F1 var(--tw-gradient-from-position);
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+    --tw-gradient-to: rgb(180 75 203 / 0.8) var(--tw-gradient-to-position);
+  }
+  
+
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v12/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2)
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v12/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2)
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v12/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2)
+    format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v12/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2)
+    format("woff2");
+}

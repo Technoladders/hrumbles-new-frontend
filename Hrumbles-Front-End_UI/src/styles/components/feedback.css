@@ -1,0 +1,15 @@
+
+/* Alert Messages */
+.alert-message {
+  @apply text-[10px] p-1.5;
+}
+
+/* Help Text */
+.help-text {
+  @apply text-[10px] text-gray-500 mt-0.5;
+}
+
+/* Error Messages */
+.error-message {
+  @apply text-[10px] text-red-500 mt-0.5;
+}

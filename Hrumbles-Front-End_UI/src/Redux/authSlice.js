@@ -11,9 +11,9 @@
 
 //       const userId = session.session.user.id;
 
-//       // ✅ Fetch role from `hr_profiles`
+//       // ✅ Fetch role from `hr_employees`
 //       const { data: profile, error: profileError } = await supabase
-//       .from("hr_profiles")
+//       .from("hr_employees")
 //       .select("role_id, organization_id") 
 //       .eq("id", userId)
 //       .single();
@@ -119,9 +119,9 @@ export const fetchUserSession = createAsyncThunk(
 
       const userId = session.session.user.id;
 
-      // ✅ Fetch role from `hr_profiles`
+      // ✅ Fetch role from `hr_employees`
       const { data: profile, error: profileError } = await supabase
-        .from("hr_profiles")
+        .from("hr_employees")
         .select("role_id, organization_id") 
         .eq("id", userId)
         .single();

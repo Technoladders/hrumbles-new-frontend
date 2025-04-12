@@ -1,0 +1,33 @@
+
+/* Form Elements */
+.input-modern {
+  @apply px-1 py-0.5 rounded border border-gray-200 
+         focus:border-brand-accent focus:ring-1 focus:ring-brand-accent 
+         text-[10px] h-5 max-w-[100px];
+}
+
+.button-modern {
+  @apply px-1 py-0.5 rounded text-[10px] font-medium transition-colors h-4 max-w-[80px];
+}
+
+.button-primary {
+  @apply bg-brand-primary text-white hover:bg-brand-primary/90;
+}
+
+.button-secondary {
+  @apply bg-gray-100 text-brand-secondary hover:bg-gray-200;
+}
+
+/* Progress Bars */
+.progress-bar {
+  @apply h-0.5 rounded-full bg-gray-100 overflow-hidden;
+}
+
+.progress-bar-fill {
+  @apply h-full rounded-full transition-all duration-300;
+}
+
+/* Form Groups */
+.form-group-compact {
+  @apply space-y-0.5;
+}

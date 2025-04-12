@@ -50,7 +50,7 @@ export const isGlobalSuperadminExists = async () => {
   const roleId = await getRoleId("global_superadmin");  // Ensure role exists first
 
   const { data, error } = await supabase
-    .from("hr_profiles")
+    .from("hr_employees")
     .select("id")
     .eq("role_id", roleId)
     .limit(1);
@@ -101,8 +101,8 @@ export const signUpFirstUser = async (email, password, firstName, lastName, orgN
   if (organizationError) throw organizationError;
   const orgId = await getOrgId(orgName);
 console.log("orgIDID", orgId)
-  // ✅ Insert into hr_profiles
-  const { error: profileError } = await supabase.from("hr_profiles").upsert({
+  // ✅ Insert into hr_employees
+  const { error: profileError } = await supabase.from("hr_employees").upsert({
     id: data.user.id,
     role_id: roleId,
     first_name: firstName,
@@ -110,7 +110,7 @@ console.log("orgIDID", orgId)
     organization_id: orgId,
     phone: phoneNo,
   });
-  console.log("Inserting into hr_profiles:", {
+  console.log("Inserting into hr_employees:", {
     id: data.user.id,
     role_id: roleId,
     first_name: firstName,
@@ -147,9 +147,9 @@ export const signIn = async (email, password) => {
   if (error) throw error;
   if (!data.user) throw new Error("User sign-in failed.");
 
-  // ✅ Get user's role from hr_profiles
+  // ✅ Get user's role from hr_employees
   const { data: profile, error: profileError } = await supabase
-    .from("hr_profiles")
+    .from("hr_employees")
     .select("role_id")
     .eq("id", data.user.id)
     .single();
@@ -252,8 +252,8 @@ export const createOrganizationWithSuperadmin = async (
     orgId = newOrg.id;
   }
 
-  // ✅ Insert into hr_profiles
-  const { error: profileError } = await supabase.from("hr_profiles").insert({
+  // ✅ Insert into hr_employees
+  const { error: profileError } = await supabase.from("hr_employees").insert({
     id: data.user.id,
     organization_id: orgId,
     role_id: roleId,
@@ -276,7 +276,7 @@ export const getUser = async () => {
 // ✅ Get user's role
 export const getUserRole = async (userId) => {
   const { data, error } = await supabase
-    .from("hr_profiles")
+    .from("hr_employees")
     .select("role_id")
     .eq("id", userId)
     .single();

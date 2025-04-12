@@ -1,14 +1,27 @@
 import { Box, Flex, IconButton, Input, InputGroup, InputLeftElement, Avatar, Menu, MenuButton, MenuList, MenuItem, useColorMode, Text, useMediaQuery } from "@chakra-ui/react";
 import { FiSearch, FiBell, FiSun, FiLogOut, FiUser, FiMenu } from "react-icons/fi";
 import { useState } from "react";
-import { Outlet } from "react-router-dom"; 
+import { Outlet, useNavigate } from "react-router-dom"; 
 import Sidebar from "../components/Sidebar/Sidebar";
 import { signOut } from "../utils/api";
+import { useSelector, useDispatch } from "react-redux"; 
+import { logout } from "../Redux/authSlice";
 
 const MainLayout = () => {
   const { colorMode, toggleColorMode } = useColorMode();
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
   const [isSidebarExpanded, setSidebarExpanded] = useState(false);
-  const [isMobile] = useMediaQuery("(max-width: 768px)"); // ✅ Detect mobile screens
+  const [isMobile] = useMediaQuery("(max-width: 768px)"); // ✅ Detect mobile screens\
+
+    // ✅ Handle Logout Function
+    const handleLogout = () => {
+      dispatch(logout()); // 🚀 Logout via Redux
+      navigate("/login"); // 🚀 Redirect to Login
+    };
+  
+  const user = useSelector((state) => state.auth.user); 
+  // console.log("loggeduser", user)
 
   // ✅ Dynamically Adjust Sidebar Width Based on Expansion and Screen Size
   const sidebarWidth = isMobile ? (isSidebarExpanded ? "200px" : "0px") : isSidebarExpanded ? "200px" : "80px";
@@ -94,15 +107,15 @@ const MainLayout = () => {
               <MenuButton>
                 <Flex align="center" gap={4}>
                   <Box textAlign="left" display={{ base: "none", md: "block" }}>
-                    <Text fontSize="sm" fontWeight="bold">Kamesh Thirumalaisamy</Text>
-                    <Text fontSize="xs" color="gray.500">kamesh.t@technoladders.com</Text>
+                  <Text fontSize="sm" fontWeight="bold">{`${user?.user_metadata?.first_name || "User "} ${user?.user_metadata?.last_name || "Name"}`}</Text>
+                    <Text fontSize="xs" color="gray.500">{user?.email || "user@example.com"}</Text>
                   </Box>
-                  <Avatar size="sm" name="Kamesh Thirumalaisamy" src="/user-avatar.png" />
+                  <Avatar size="sm" name={`${user?.user_metadata?.first_name || "User "} ${user?.user_metadata?.last_name || "Name"}`} src="/user-avatar.png" />
                 </Flex>
               </MenuButton>
               <MenuList>
-                <MenuItem icon={<FiUser />}>View Profile</MenuItem>
-                <MenuItem onClick={signOut} icon={<FiLogOut />}>Logout</MenuItem>
+                <MenuItem onClick={() => navigate("/profile")} icon={<FiUser /> }>View Profile</MenuItem>
+                <MenuItem onClick={handleLogout} icon={<FiLogOut />}>Logout</MenuItem>
               </MenuList>
             </Menu>
           </Flex>

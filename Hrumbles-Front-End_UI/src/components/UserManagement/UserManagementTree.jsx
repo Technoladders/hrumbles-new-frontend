@@ -63,18 +63,21 @@ const UserManagementTree = () => {
 
             {/* Collapsible Designations */}
             <Collapse in={expandedDepartments[dept.id]}>
-              <VStack align="start" pl={6}>
-                {Array.isArray(designations) && designations.length > 0 // ✅ Ensure `designations` is valid
-                  ? designations
-                      .filter((desig) => desig?.department_id === dept.id) // ✅ Prevent `undefined` errors
-                      .map((desig) => (
-                        <Button key={desig.id} variant="ghost" onClick={() => showEmployeesByDesignation(desig.id)}>
-                          {desig.name}
-                        </Button>
-                      ))
-                  : <Text>No Designations Found</Text>}
-              </VStack>
-            </Collapse>
+  <VStack align="start" pl={6}>
+    {Array.isArray(designations) // ✅ Ensure designations is an array
+      ? designations.filter((desig) => desig?.department_id === dept.id).length > 0 // ✅ Check if filtered list is empty
+        ? designations
+            .filter((desig) => desig?.department_id === dept.id)
+            .map((desig) => (
+              <Button key={desig.id} variant="ghost" onClick={() => showEmployeesByDesignation(desig.id)}>
+                {desig.name}
+              </Button>
+            ))
+        : <Text>No Designations Found</Text>
+      : <Text>Loading Designations...</Text>}
+  </VStack>
+</Collapse>
+
           </Box>
         ))
       ) : (

@@ -184,7 +184,7 @@ export const getUser = async () => {
 // Get the role of the authenticated user
 export const getUserRole = async (userId) => {
   const { data, error } = await supabase
-    .from("hr_profiles")
+    .from("hr_employees")
     .select("role_id")
     .eq("id", userId)
     .single();
@@ -271,7 +271,7 @@ export const createUserInOrganization = async (email, password, firstName, lastN
 
   // Assign organization, role, department, and designation
   const { data: profileUpdate, error: profileUpdateError } = await supabase
-    .from("hr_profiles")
+    .from("hr_employees")
     .update({
       organization_id: user.organization_id,
       role_id: await getRoleId(roleName),
@@ -323,7 +323,7 @@ export const getUserSession = async () => {
 // Check if a Global Superadmin already exists
 export const isGlobalSuperadminExists = async () => {
   const { data, error } = await supabase
-    .from("hr_profiles")
+    .from("hr_employees")
     .select("id")
     .eq("role_id", await getRoleId("global_superadmin"))
     .limit(1);

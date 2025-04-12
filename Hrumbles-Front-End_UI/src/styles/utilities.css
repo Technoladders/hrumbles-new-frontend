@@ -1,0 +1,32 @@
+
+@layer utilities {
+  .scrollbar-elegant {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(203, 213, 225, 0.4) transparent;
+  }
+
+  .scrollbar-elegant::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .scrollbar-elegant::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-elegant::-webkit-scrollbar-thumb {
+    background-color: rgba(203, 213, 225, 0.4);
+    border-radius: 20px;
+    transition: all 0.2s ease-in-out;
+  }
+
+  .scrollbar-elegant::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(148, 163, 184, 0.6);
+  }
+
+  .card-container-elegant {
+    @apply bg-white/80 backdrop-blur-sm 
+           shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] 
+           border border-gray-100/80 
+           rounded-lg;
+  }
+}

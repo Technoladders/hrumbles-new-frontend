@@ -1,5 +1,5 @@
 import { useSelector } from "react-redux";
-import EmployeeList from "../components/Employee/EmployeeList"
+import EmployeeList from "../components/Employee1/EmployeeList"
 
 const Employee = () => {
   const { role } = useSelector((state) => state.auth);

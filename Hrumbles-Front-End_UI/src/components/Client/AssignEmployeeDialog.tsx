@@ -44,11 +44,11 @@ const AssignEmployeeDialog = ({ open, onOpenChange, projectId, clientId }: Assig
 
   const [employees, setEmployees] = useState<any[]>([]);
 
-  // Fetch employees from `hr_profiles`
+  // Fetch employees from `hr_employees`
   React.useEffect(() => {
     const fetchEmployees = async () => {
       const { data, error } = await supabase
-        .from("hr_profiles")
+        .from("hr_employees")
         .select("id, first_name, last_name")
         .eq("organization_id", organization_id);
       if (!error && data) {

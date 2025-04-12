@@ -15,7 +15,7 @@ const fetchEmployees = createAsyncThunk("employees/fetchEmployees", async (_, { 
     if (!organization_id) return rejectWithValue("Organization ID is missing.");
   
     const { data, error } = await supabase
-      .from("hr_profiles")
+      .from("hr_employees")
       .select("id, first_name, last_name, email, department_id, designation_id, role_id, organization_id, phone")
       .eq("organization_id", organization_id); // ✅ Fetch employees only from this organization
   
@@ -31,7 +31,7 @@ const createEmployee = createAsyncThunk("employees/createEmployee", async (emplo
         email: employeeData.email,
         password: employeeData.password,
         options: {
-          data: { first_name: employeeData.firstName, last_name: employeeData.lastName, phone: employeeData.phone },
+          data: { first_name: employeeData.firstName, last_name: employeeData.lastName, phone: employeeData.phone, employee_id: employeeData.employee_id },
         },
       });
   
@@ -40,14 +40,15 @@ const createEmployee = createAsyncThunk("employees/createEmployee", async (emplo
   
       if (!userId) return rejectWithValue("User ID missing after signup.");
   
-      // 2️⃣ ✅ Insert Employee Data into `hr_profiles`
+      // 2️⃣ ✅ Insert Employee Data into `hr_employees`
       const role_id = await getRoleId("employee"); // ✅ Assign default "employee" role
-      const { error: profileError } = await supabase.from("hr_profiles").upsert({
+      const { error: profileError } = await supabase.from("hr_employees").upsert({
         id: userId, // ✅ Use `auth.users` ID
         organization_id: employeeData.organization_id,
         first_name: employeeData.firstName,
         last_name: employeeData.lastName,
         email: employeeData.email,
+        employee_id: employeeData.employee_id,
         phone: employeeData.phone,
         department_id: employeeData.department_id,
         designation_id: employeeData.designation_id,
@@ -64,14 +65,14 @@ const createEmployee = createAsyncThunk("employees/createEmployee", async (emplo
 // ✅ Update Employee Role (Fix Duplicate Export)
 const updateEmployeeRole = createAsyncThunk("employees/updateEmployeeRole", async ({ id, newRole }) => {
   const roleId = await getRoleId(newRole);
-  const { error } = await supabase.from("hr_profiles").update({ role_id: roleId }).eq("id", id);
+  const { error } = await supabase.from("hr_employees").update({ role_id: roleId }).eq("id", id);
   if (error) throw error;
 });
 
 // ✅ Fetch Employees by Department
  const fetchEmployeesByDepartment = createAsyncThunk("employees/fetchByDepartment", async (department_id) => {
     const { data, error } = await supabase
-      .from("hr_profiles")
+      .from("hr_employees")
       .select("id, first_name, last_name, email, designation_id, role_id")
       .eq("department_id", department_id);
   
@@ -82,7 +83,7 @@ const updateEmployeeRole = createAsyncThunk("employees/updateEmployeeRole", asyn
   // ✅ Fetch Employees by Designation
  const fetchEmployeesByDesignation = createAsyncThunk("employees/fetchByDesignation", async (designation_id) => {
     const { data, error } = await supabase
-      .from("hr_profiles")
+      .from("hr_employees")
       .select("id, first_name, last_name, email, role_id")
       .eq("designation_id", designation_id);
   

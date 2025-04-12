@@ -16,6 +16,7 @@ import { Checkbox } from "../ui/checkbox";
 import { unknown } from "zod";
 import { FileText } from 'lucide-react';
 import { toast } from "sonner";
+import CircularProgressBar from "../Client/RevenueProfitChart";
 
 
 interface AssignEmployee {
@@ -28,9 +29,9 @@ interface AssignEmployee {
   salary: number;
   client_billing: number;
   status: string;
-  sow:string;
+  sow: string;
   duration: number;
-  hr_profiles?: {
+  hr_employees?: {
     first_name: string;
     last_name: string;
   } | null;
@@ -51,42 +52,41 @@ interface Project {
 
 const ProjectDashboard = () => {
 
-    const { id } = useParams<{ id: string }>(); // ✅ Ensure `id` is a string
-    const [searchParams] = useSearchParams();
-    const clientId = searchParams.get("client_id");
-    const queryClient = useQueryClient();
-    const [addProjectOpen, setAddProjectOpen] = useState(false);
-  
-    const user = useSelector((state: any) => state.auth.user); // ✅ Get logged-in user
-    const organization_id = useSelector((state: any) => state.auth.organization_id); // ✅ Get organization ID
-  
-    if (!user || !organization_id) {
-      return <div className="text-center text-red-600 font-semibold mt-10">Authentication error: Missing user or organization ID</div>;
-    }
+  const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const clientId = searchParams.get("client_id");
+  const queryClient = useQueryClient();
+  const [addProjectOpen, setAddProjectOpen] = useState(false);
+
+  const user = useSelector((state: any) => state.auth.user);
+  const organization_id = useSelector((state: any) => state.auth.organization_id);
+
+  if (!user || !organization_id) {
+    return <div className="text-center text-red-600 font-semibold mt-10">Authentication error: Missing user or organization ID</div>;
+  }
+
 
     const { data: project } = useQuery({
-        queryKey: ["project", id],
-        queryFn: async () => {
-          if (!id) throw new Error("Project ID is missing");
+      queryKey: ["project", id],
+      queryFn: async () => {
+        if (!id) throw new Error("Project ID is missing");
+        const { data, error } = await supabase
+          .from("hr_projects")
+          .select("*")
+          .eq("id", id)
+          .eq("organization_id", organization_id)
+          .single();
+  
+        if (error) throw error;
+        return data as Project;
+      },
+      enabled: !!id,
+    });
     
-          const { data, error } = await supabase
-            .from("hr_projects")
-            .select("*")
-            .eq("id", id)
-            .eq("organization_id", organization_id) // ✅ Ensure data belongs to user's organization
-            .single();
-    
-          if (error) throw error;
-          return data as Project;
-        },
-        enabled: !!id, // ✅ Prevent query execution if `id` is undefined
-      });
-    
-      const { data: assign_employee } = useQuery({
+      const { data: assignEmployee } = useQuery({
         queryKey: ["project-employee", id],
         queryFn: async () => {
           if (!id) throw new Error("Project ID is missing");
-      
           const { data, error } = await supabase
             .from("hr_project_employees")
             .select(`
@@ -100,28 +100,32 @@ const ProjectDashboard = () => {
               client_billing,
               status,
               sow,
-              hr_profiles:hr_profiles!hr_project_employees_assign_employee_fkey (first_name, last_name)
+              hr_employees:hr_employees!hr_project_employees_assign_employee_fkey (first_name, last_name)
             `)
             .eq("project_id", id)
             .eq("organization_id", organization_id);
-      
+    
           if (error) throw error;
-      
-          // ✅ Compute duration dynamically
-          const processedData = data.map((employee) => ({
+    
+          return data.map((employee) => ({
             ...employee,
             duration: employee.start_date && employee.end_date
               ? Math.ceil(
                   (new Date(employee.end_date).getTime() - new Date(employee.start_date).getTime()) /
                     (1000 * 60 * 60 * 24)
                 )
-              : 0, // Default to 0 if dates are missing
-          }));
-      
-          return processedData as unknown as AssignEmployee[];
+              : 0,
+          })) as AssignEmployee[];
         },
         enabled: !!id,
       });
+      const workingCount = assignEmployee?.filter(emp => emp.status === "Working").length || 0;
+      const relievedCount = assignEmployee?.filter(emp => emp.status === "Relieved").length || 0;
+      const terminatedCount = assignEmployee?.filter(emp => emp.status === "Terminated").length || 0;
+    
+      // ✅ Calculate Revenue & Profit
+      const totalRevenue = assignEmployee?.reduce((acc, emp) => acc + (emp.client_billing || 0), 0) || 0;
+      const totalProfit = totalRevenue - (assignEmployee?.reduce((acc, emp) => acc + (emp.salary || 0), 0) || 0);
       
       
       const updateEmployeeStatus = useMutation({
@@ -142,14 +146,8 @@ const ProjectDashboard = () => {
       });
       
 
-      console.log("assignemploye:: e", assign_employee)
     
-      const chartData =
-        assign_employee?.map((assign) => ({
-          name: assign.id,
-          revenue: assign.salary,
-          profit: assign.client_billing,
-        })) || [];
+
 
   return (
     <div className="min-h-screen">
@@ -157,61 +155,56 @@ const ProjectDashboard = () => {
       <main className="container mx-auto px-6 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-semibold mb-6">{project?.name}</h1>
-          {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <div className="p-6 rounded-xl bg-white/50 backdrop-blur shadow-sm">
-              <p className="text-sm text-muted-foreground mb-2">Total Projects</p>
-              <p className="text-2xl font-semibold">{client?.total_projects}</p>
-            </div>
-            <div className="p-6 rounded-xl bg-white/50 backdrop-blur shadow-sm">
-              <p className="text-sm text-muted-foreground mb-2">Ongoing Projects</p>
-              <p className="text-2xl font-semibold">{client?.ongoing_projects}</p>
-            </div>
-            <div className="p-6 rounded-xl bg-white/50 backdrop-blur shadow-sm">
-              <p className="text-sm text-muted-foreground mb-2">Revenue</p>
-              <p className="text-2xl font-semibold">₹ {client?.revenue.toLocaleString()}</p>
-            </div>
-            <div className="p-6 rounded-xl bg-white/50 backdrop-blur shadow-sm">
-              <p className="text-sm text-muted-foreground mb-2">Profit</p>
-              <p className="text-2xl font-semibold">₹ {client?.profit.toLocaleString()}</p>
-            </div>
-          </div> */}
+           {/* ✅ Employee Status Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="p-6 rounded-xl glass-card">
+            <p className="text-sm text-muted-foreground mb-2">🟢 Working Employees</p>
+            <p className="text-2xl font-semibold">{workingCount}</p>
+          </div>
+          <div className="p-6 rounded-xl glass-card">
+            <p className="text-sm text-muted-foreground mb-2">🟡 Relieved Employees</p>
+            <p className="text-2xl font-semibold">{relievedCount}</p>
+          </div>
+          <div className="p-6 rounded-xl glass-card">
+            <p className="text-sm text-muted-foreground mb-2">🔴 Terminated Employees</p>
+            <p className="text-2xl font-semibold">{terminatedCount}</p>
+          </div>
+        </div>
 
-          <div className="h-[400px] mb-8 p-6 rounded-xl bg-white/50 backdrop-blur shadow-sm">
+        {/* ✅ Charts Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          {/* Left: Area Chart */}
+          <div className="glass-card p-6">
             <h2 className="text-xl font-semibold mb-4">Revenue & Profit Overview</h2>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="revenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="profit" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#82ca9d" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Area 
-                  type="monotone" 
-                  dataKey="revenue" 
-                  stroke="#8884d8" 
-                  fillOpacity={1} 
-                  fill="url(#revenue)" 
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="profit" 
-                  stroke="#82ca9d" 
-                  fillOpacity={1} 
-                  fill="url(#profit)" 
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <ResponsiveContainer width="100%" height={250}>
+  <AreaChart
+    data={
+      assignEmployee?.map((employee) => ({
+        name: employee.hr_employees
+          ? `${employee.hr_employees.first_name} ${employee.hr_employees.last_name}`
+          : "Unknown Employee", // ✅ Fallback for missing names
+        client_billing: employee.client_billing || 0, // ✅ Revenue
+        salary: employee.salary || 0, // ✅ Salary
+      })) || []
+    }
+  >
+    <CartesianGrid strokeDasharray="3 3" />
+    <XAxis dataKey="name" />
+    <YAxis />
+    <Tooltip />
+    <Area type="monotone" dataKey="client_billing" stroke="var(--secondary-hover)" fill="var(--secondary)"  />
+    <Area type="monotone" dataKey="salary"  stroke="#8884d8" fill="var(--theme-green)" />
+  </AreaChart>
+</ResponsiveContainer>
+
           </div>
 
+          {/* Right: Circular Progress Bar */}
+          <div className="glass-card p-6 flex flex-col items-center">
+          
+            <CircularProgressBar revenue={totalRevenue} profit={totalProfit} />
+          </div>
+        </div>
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-4">
@@ -260,12 +253,12 @@ const ProjectDashboard = () => {
 
                   </tr>
                 </thead>
-                <tbody>                   {assign_employee?.map((project) => (
+                <tbody>                   {assignEmployee?.map((project) => (
                     <tr key={project.id} className="hover:bg-white/50 transition-colors border-b">
                           <td className="px-4 py-2">
                             <Checkbox className="rounded-md" />
                           </td>
-                      <td className="px-4 py-2 font-medium cursor-pointer hover:text-primary">  {project.hr_profiles ? `${project.hr_profiles.first_name} ${project.hr_profiles.last_name}` : "N/A"}</td>
+                      <td className="px-4 py-2 font-medium cursor-pointer hover:text-primary">  {project.hr_employees ? `${project.hr_employees.first_name} ${project.hr_employees.last_name}` : "N/A"}</td>
                       <td className="px-4 py-2">{project.duration} days</td>
                       <td className="px-4 py-2">{new Date(project.start_date).toLocaleDateString()}</td>
                       <td className="px-4 py-2">{new Date(project.end_date).toLocaleDateString()}</td>

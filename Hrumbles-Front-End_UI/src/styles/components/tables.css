@@ -1,0 +1,25 @@
+
+/* Custom styles for tables */
+.table-modern {
+  @apply w-full border-collapse text-[10px];
+}
+
+.table-modern th {
+  @apply px-0.5 py-0.5 text-left text-[10px] font-semibold text-brand-primary bg-white border-b;
+}
+
+.table-modern td {
+  @apply px-0.5 py-0.5 text-[10px] text-brand-secondary border-b;
+}
+
+.table-modern tr:hover {
+  @apply bg-gray-50;
+}
+
+/* Tables Responsive */
+@media (max-width: 640px) {
+  .table-modern th,
+  .table-modern td {
+    @apply px-0.5 py-0.5 text-[9px];
+  }
+}
