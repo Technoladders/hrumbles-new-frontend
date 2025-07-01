@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
 
 // Type definitions
 export interface MainStatus {
@@ -496,6 +497,12 @@ export const createStatusChangeTimelineEntry = async (
   }
 ): Promise<boolean> => {
   try {
+
+const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id, userId } = authData;
     const eventData = {
       action: 'Status updated',
       timestamp: new Date().toISOString(),
@@ -510,7 +517,8 @@ export const createStatusChangeTimelineEntry = async (
         event_type: 'status_change',
         previous_state: statusChangeData.previousState,
         new_state: statusChangeData.newState,
-        event_data: eventData
+        event_data: eventData,
+        organization_id: organization_id,
       });
 
     if (error) {
@@ -533,6 +541,12 @@ export const updateStatusChangeCounts = async (
   userId?: string
 ): Promise<boolean> => {
   try {
+
+const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id, userId } = authData;
     // Check if a count entry already exists
     const { data: existingCount, error: countError } = await supabase
       .from('hr_status_change_counts')
@@ -567,7 +581,8 @@ export const updateStatusChangeCounts = async (
           main_status_id: mainStatusId,
           sub_status_id: subStatusId,
           employee_id: userId,
-          count: 1
+          count: 1,
+          organization_id: organization_id,
         });
       
       if (error) throw error;
@@ -737,6 +752,185 @@ export const deleteStatus = async (id: string): Promise<boolean> => {
     return true;
   } catch (error) {
     console.error('Error deleting status:', error);
+    return false;
+  }
+};
+
+
+
+
+export const updateClientSubmissionStatus = async (
+  candidateId: string,
+  jobId: string,
+  subStatusId: string,
+  userId?: string,
+  additionalData: Record<string, any> = {}
+): Promise<boolean> => {
+  try {
+const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id, userId } = authData;
+    // Fetch the sub-status to verify it's "Processed (Client)"
+    const { data: subStatus, error: subStatusError } = await supabase
+      .from('job_statuses')
+      .select('name, parent_id')
+      .eq('id', subStatusId)
+      .single();
+
+    if (subStatusError || !subStatus) {
+      console.error('Error fetching sub-status:', subStatusError);
+      throw new Error('Invalid sub-status');
+    }
+
+    if (subStatus.name !== 'Processed (Client)') {
+      console.error('Invalid sub-status for client submission:', subStatus.name);
+      throw new Error('This function is only for Processed (Client) status');
+    }
+
+    const mainStatusId = subStatus.parent_id;
+    const submissionDate = additionalData.submission_date
+      ? new Date(additionalData.submission_date).toISOString()
+      : new Date().toISOString();
+
+    // Fetch previous state from hr_job_candidates
+    const { data: prevCandidateData, error: prevError } = await supabase
+      .from('hr_job_candidates')
+      .select(`
+        main_status_id,
+        sub_status_id,
+        main_status:job_statuses!main_status_id (name),
+        sub_status:job_statuses!sub_status_id (name)
+      `)
+      .eq('id', candidateId)
+      .maybeSingle();
+
+    if (prevError && !prevError.message.includes('No rows found')) {
+      console.error('Error fetching previous status:', prevError);
+      throw prevError;
+    }
+
+    // Update hr_job_candidates with the new status and additional data
+    const updateData = {
+      main_status_id: mainStatusId,
+      sub_status_id: subStatusId,
+      updated_by: userId || null,
+      updated_at: submissionDate,
+      ...additionalData
+    };
+
+    const { error: updateError } = await supabase
+      .from('hr_job_candidates')
+      .update(updateData)
+      .eq('id', candidateId);
+
+    if (updateError) {
+      console.error('Error updating candidate status:', updateError);
+      throw updateError;
+    }
+
+    // Check if a count entry exists in hr_status_change_counts
+    const { data: existingCount, error: countError } = await supabase
+      .from('hr_status_change_counts')
+      .select('*')
+      .eq('candidate_id', candidateId)
+      .eq('job_id', jobId)
+      .eq('main_status_id', mainStatusId)
+      .eq('sub_status_id', subStatusId)
+      .maybeSingle();
+
+    if (countError) {
+      console.error('Error checking status count:', countError);
+      throw countError;
+    }
+
+    if (existingCount) {
+      // Update existing count
+      const { error: updateCountError } = await supabase
+        .from('hr_status_change_counts')
+        .update({
+          count: existingCount.count + 1,
+          updated_at: submissionDate,
+        })
+        .eq('id', existingCount.id);
+
+      if (updateCountError) {
+          console.error('Error updating status count:', updateCountError);
+          throw updateCountError;
+      }
+    } else {
+      // Create new count entry
+      const { error: insertCountError } = await supabase
+        .from('hr_status_change_counts')
+        .insert({
+          candidate_id: candidateId,
+          job_id: jobId,
+          main_status_id: mainStatusId,
+          sub_status_id: subStatusId,
+          employee_id: userId,
+          count: 1,
+          created_at: submissionDate,
+          updated_at: submissionDate,
+          organization_id: organization_id,
+        });
+
+      if (insertCountError) {
+          console.error('Error inserting status count:', insertCountError);
+          throw insertCountError;
+      }
+    }
+
+    // Fetch the main status name for the timeline entry
+    const { data: mainStatus, error: mainStatusError } = await supabase
+      .from('job_statuses')
+      .select('name')
+      .eq('id', mainStatusId)
+      .single();
+
+    if (mainStatusError) {
+      console.error('Error fetching main status:', mainStatusError);
+    }
+
+    // Create timeline entry for status change
+    const currentTime = new Date().toISOString();
+    const eventData = {
+      action: 'Status updated',
+      timestamp: currentTime,
+      client_budget: additionalData.accrual_ctc || null,
+    };
+
+    const { error: timelineError } = await supabase
+      .from('hr_candidate_timeline')
+      .insert({
+        candidate_id: candidateId,
+        created_by: userId || 'System',
+        event_type: 'status_change',
+        previous_state: prevCandidateData ? {
+          mainStatusId: prevCandidateData.main_status_id,
+          subStatusId: prevCandidateData.sub_status_id,
+          mainStatusName: prevCandidateData.main_status?.name,
+          subStatusName: prevCandidateData.sub_status?.name,
+        } : null,
+        new_state: {
+          mainStatusId,
+          subStatusId,
+          mainStatusName: mainStatus?.name,
+          subStatusName: subStatus.name,
+        },
+        event_data: eventData,
+        created_at: currentTime,
+        organization_id: organization_id,
+      });
+
+    if (timelineError) {
+      console.error('Error creating timeline entry:', timelineError);
+      throw timelineError;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error in updateClientSubmissionStatus:', error);
     return false;
   }
 };

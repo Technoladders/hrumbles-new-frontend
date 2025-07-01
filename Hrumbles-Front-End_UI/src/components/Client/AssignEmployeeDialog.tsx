@@ -1,93 +1,229 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "../../components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { Select, SelectTrigger, SelectContent, SelectItem } from "../../components/ui/select";
-import { useQueryClient } from "@tanstack/react-query";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "../../components/ui/select";
+import { Badge } from "../../components/ui/badge";
+import { Calendar } from "../../components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../../components/ui/popover";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import supabase from "../../config/supabaseClient";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { CalendarIcon, X } from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "../../lib/utils";
+import { Switch } from "../../components/ui/switch";
+
+interface Client {
+  id: string;
+  display_name: string;
+  currency: string;
+}
+
+interface AssignEmployee {
+  id: string;
+  assign_employee: string;
+  project_id: string;
+  client_id: string;
+  start_date: string;
+  end_date: string;
+  salary: number;
+  salary_currency: string;
+  salary_type: string;
+  client_billing: number;
+  status: string;
+  sow: string | null;
+  duration: number;
+    working_hours?: number;
+  billing_type?: string;
+  hr_employees?: {
+    first_name: string;
+    last_name: string;
+  } | null;
+}
 
 interface AssignEmployeeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
   clientId: string;
+  editEmployee?: AssignEmployee | null;
+  project: string | any;
 }
 
-const AssignEmployeeDialog = ({ open, onOpenChange, projectId, clientId }: AssignEmployeeDialogProps) => {
+const AssignEmployeeDialog = ({ open, onOpenChange, projectId, clientId, editEmployee, project }: AssignEmployeeDialogProps) => {
   const queryClient = useQueryClient();
   const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
-    const [sowFile, setSowFile] = useState<File | null>(null);
 
-  // State for multiple employee rows
-  const [employeesList, setEmployeesList] = useState([
-    {
-      assign_employee: "",
-      start_date: "",
-      end_date: "",
-      salary: "",
-      client_billing: "",
-      status: "active",
-      sowFile: null as File | null,
-      noOfDays: 0,
-    },
-  ]);
+  const projectData = typeof project === "string" ? JSON.parse(project) : project;
+  const projectStartDate = projectData?.start_date ? new Date(projectData.start_date) : new Date();
+  const projectEndDate = projectData?.end_date ? new Date(projectData.end_date) : null;
 
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [employees, setEmployees] = useState<any[]>([]);
+  const [employeeAssignments, setEmployeeAssignments] = useState<
+    {
+      assign_employee: string;
+      start_date: string;
+      end_date: string;
+      salary: string;
+      salary_currency: string;
+      salary_type: string;
+      client_billing: string;
+      billing_type: string;
+      status: string;
+      sowFile: File | null;
+      noOfDays: number;
+      working_hours: string;
+      isSalaryEditable: boolean;
+    }[]
+  >([]);
 
-  // Fetch employees from `hr_employees`
-  React.useEffect(() => {
+  const { data: clients = [], isLoading: loadingClients, error: clientsError } = useQuery<Client[]>({
+    queryKey: ["clients", organization_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("hr_clients")
+        .select("id, display_name, currency")
+        .eq("organization_id", organization_id);
+      if (error) throw error;
+      return data as Client[];
+    },
+    enabled: !!organization_id,
+  });
+
+  const client = clients.find((c) => c.id === clientId);
+  const currencySymbol = client?.currency === "USD" ? "$" : "₹";
+  const billingTypeOptions = ["Monthly", "Hourly"];
+  const salaryCurrencyOptions = ["INR", "USD"];
+  const salaryTypeOptions = ["LPA", "Monthly", "Hourly"];
+
+  useEffect(() => {
     const fetchEmployees = async () => {
       const { data, error } = await supabase
         .from("hr_employees")
-        .select("id, first_name, last_name")
+        .select("id, first_name, last_name, salary, salary_type")
         .eq("organization_id", organization_id);
       if (!error && data) {
         setEmployees(data);
+      } else {
+        toast.error("Failed to fetch employees");
       }
     };
     if (organization_id) fetchEmployees();
   }, [organization_id]);
 
-  // Handle adding a new row
-  const addEmployeeRow = () => {
-    setEmployeesList([...employeesList, {
-      assign_employee: "",
-      start_date: "",
-      end_date: "",
-      salary: "",
-      client_billing: "",
-      status: "active",
-      sowFile: null,
-      noOfDays: 0,
-    }]);
+  useEffect(() => {
+    if (clientsError) {
+      toast.error("Failed to fetch clients");
+      console.error("Clients fetch error:", clientsError);
+    }
+  }, [clientsError]);
+
+  useEffect(() => {
+    if (editEmployee) {
+      setSelectedEmployeeIds([editEmployee.assign_employee]);
+      setEmployeeAssignments([
+        {
+          assign_employee: editEmployee.assign_employee,
+          start_date: editEmployee.start_date,
+          end_date: editEmployee.end_date,
+          salary: editEmployee.salary.toString(),
+          salary_currency: editEmployee.salary_currency || "INR",
+          salary_type: editEmployee.salary_type || "Monthly",
+          client_billing: editEmployee.client_billing.toString(),
+          billing_type: editEmployee.billing_type || "Monthly",
+          status: editEmployee.status,
+          sowFile: null,
+          noOfDays: editEmployee.duration,
+          isSalaryEditable: false,
+          working_hours: editEmployee.working_hours?.toString() || "0",
+        },
+      ]);
+    } else {
+      setSelectedEmployeeIds([]);
+      setEmployeeAssignments([]);
+    }
+  }, [editEmployee]);
+
+  const handleDialogClose = (open: boolean) => {
+    onOpenChange(open);
+    if (!open) {
+      setSelectedEmployeeIds([]);
+      setEmployeeAssignments([]);
+      setSelectedEmployeeId("");
+    }
   };
 
-  // Handle removing a row
-  const removeEmployeeRow = (index: number) => {
-    setEmployeesList(employeesList.filter((_, i) => i !== index));
+  const handleEmployeeSelection = (employeeId: string) => {
+    if (editEmployee) return;
+    if (!employeeId || selectedEmployeeIds.includes(employeeId)) return;
+
+    const employee = employees.find((e) => e.id === employeeId);
+    if (employee) {
+      setSelectedEmployeeIds((prev) => [...prev, employeeId]);
+      setEmployeeAssignments((prev) => [
+        ...prev,
+        {
+          assign_employee: employeeId,
+          start_date: projectData.start_date || "",
+          end_date: projectData.end_date || "",
+          salary: employee.salary?.toString() || "0",
+          salary_currency: employee.salary_currency || "INR",
+          salary_type: employee.salary_type || "Monthly",
+          client_billing: "",
+          billing_type: "Monthly",
+          status: "Working",
+          sowFile: null,
+          noOfDays: projectData.duration || 0,
+          isSalaryEditable: false,
+          working_hours: "8",
+        },
+      ]);
+    }
+    setSelectedEmployeeId("");
   };
 
+  const handleRemoveEmployee = (employeeId: string, index: number) => {
+    if (editEmployee) return;
+    setSelectedEmployeeIds((prev) => prev.filter((id) => id !== employeeId));
+    setEmployeeAssignments((prev) => prev.filter((_, i) => i !== index));
+  };
 
-  // Handle field changes
   const handleFieldChange = (index: number, field: string, value: any) => {
-    const updatedList = [...employeesList];
-    updatedList[index][field] = value;
+    const updatedList = [...employeeAssignments];
+    if (field === "start_date" || field === "end_date") {
+      const dateStr = value instanceof Date ? format(value, "yyyy-MM-dd") : "";
+      updatedList[index][field] = dateStr;
+    } else {
+      updatedList[index][field] = value;
+    }
 
-    // Calculate duration dynamically when start or end date changes
     if (field === "start_date" || field === "end_date") {
       if (updatedList[index].start_date && updatedList[index].end_date) {
         const duration = Math.ceil(
-          (new Date(updatedList[index].end_date).getTime() - new Date(updatedList[index].start_date).getTime()) /
+          (new Date(updatedList[index].end_date).getTime() -
+            new Date(updatedList[index].start_date).getTime()) /
             (1000 * 60 * 60 * 24)
         );
         updatedList[index].noOfDays = duration > 0 ? duration : 0;
@@ -96,14 +232,24 @@ const AssignEmployeeDialog = ({ open, onOpenChange, projectId, clientId }: Assig
       }
     }
 
-    setEmployeesList(updatedList);
+    setEmployeeAssignments(updatedList);
   };
 
+  const toggleSalaryEditable = (index: number) => {
+    const updatedList = [...employeeAssignments];
+    updatedList[index].isSalaryEditable = !updatedList[index].isSalaryEditable;
+    setEmployeeAssignments(updatedList);
+  };
 
+  const handleFileUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFieldChange(index, "sowFile", e.target.files[0]);
+    }
+  };
 
-  // Handle Form Submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
 
     try {
       if (!user || !organization_id) {
@@ -111,149 +257,456 @@ const AssignEmployeeDialog = ({ open, onOpenChange, projectId, clientId }: Assig
         return;
       }
 
-      const newAssignments = await Promise.all(
-        employeesList.map(async (employee) => {
-          let sowUrl: string | null = null;
-          if (employee.sowFile) {
-            const fileName = `assignments/${Date.now()}-${employee.sowFile.name}`;
-            const { data, error } = await supabase.storage
-              .from("hr_project_files")
-              .upload(fileName, employee.sowFile);
-            if (error) throw error;
-            sowUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/hr_project_files/${fileName}`;
-          }
+      if (employeeAssignments.length === 0) {
+        toast.error("Please select at least one employee");
+        return;
+      }
 
-          return {
-            id: crypto.randomUUID(),
-            project_id: projectId,
-            client_id: clientId,
-            assign_employee: employee.assign_employee,
-            start_date: employee.start_date,
-            end_date: employee.end_date,
-            salary: parseFloat(employee.salary) || 0,
-            client_billing: parseFloat(employee.client_billing) || 0,
-            status: employee.status,
-            sow: sowUrl,
-            organization_id,
-            created_by: user.id,
+      for (const assignment of employeeAssignments) {
+        if (
+          !assignment.assign_employee ||
+          !assignment.start_date ||
+          !assignment.end_date ||
+          !assignment.client_billing ||
+          !assignment.billing_type ||
+          !assignment.salary_currency ||
+          !assignment.salary_type ||
+           !assignment.working_hours
+        ) {
+          toast.error("Please fill in all required fields (Employee, Start Date, End Date, Client Billing, Billing Type, Salary Currency, Salary Type, Working Hours)");
+          return;
+        }
+
+        const startDate = new Date(assignment.start_date);
+        const endDate = new Date(assignment.end_date);
+        if (startDate < projectStartDate || (projectEndDate && endDate > projectEndDate)) {
+          toast.error(
+            `Assignment dates must be within project range (${format(projectStartDate, "PPP")} to ${projectEndDate ? format(projectEndDate, "PPP") : "ongoing"})`
+          );
+          return;
+        }
+        if (startDate > endDate) {
+          toast.error("End date must be after start date");
+          return;
+        }
+      }
+
+      if (editEmployee) {
+        const assignment = employeeAssignments[0];
+        const { error } = await supabase
+          .from("hr_project_employees")
+          .update({
+            start_date: assignment.start_date,
+            end_date: assignment.end_date,
+            salary: parseFloat(assignment.salary) || 0,
+            salary_currency: assignment.salary_currency,
+            salary_type: assignment.salary_type,
+            client_billing: parseFloat(assignment.client_billing) || 0,
+            working_hours: parseFloat(assignment.working_hours) || 8,
+            billing_type: assignment.billing_type,
+            status: assignment.status,
             updated_by: user.id,
-            created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          };
-        })
-      );
+          })
+          .eq("id", editEmployee.id)
+          .eq("organization_id", organization_id);
 
-      const { error } = await supabase.from("hr_project_employees").insert(newAssignments);
-      if (error) throw error;
+        if (error) throw error;
 
-      toast.success("Employees assigned successfully");
-      queryClient.invalidateQueries({ queryKey: ["project-employees"] });
-      onOpenChange(false);
-      setEmployeesList([
-        {
-          assign_employee: "",
-          start_date: "",
-          end_date: "",
-          salary: "",
-          client_billing: "",
-          status: "active",
-          sowFile: null,
-          noOfDays: 0,
-        },
-      ]);
+        let sowUrl: string | null = editEmployee.sow;
+        if (assignment.sowFile) {
+          const fileName = `assignments/${Date.now()}-${assignment.sowFile.name}`;
+          const { data, error: uploadError } = await supabase.storage
+            .from("hr_project_files")
+            .upload(fileName, assignment.sowFile);
+          if (uploadError) throw uploadError;
+          sowUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/hr_project_files/${fileName}`;
+
+          const { error: sowUpdateError } = await supabase
+            .from("hr_project_employees")
+            .update({ sow: sowUrl })
+            .eq("id", editEmployee.id)
+            .eq("organization_id", organization_id);
+          if (sowUpdateError) throw sowUpdateError;
+        }
+
+        toast.success("Employee assignment updated successfully");
+      } else {
+        const newAssignments = await Promise.all(
+          employeeAssignments.map(async (employee) => {
+            let sowUrl: string | null = null;
+            if (employee.sowFile) {
+              const fileName = `assignments/${Date.now()}-${employee.sowFile.name}`;
+              const { data, error } = await supabase.storage
+                .from("hr_project_files")
+                .upload(fileName, employee.sowFile);
+              if (error) throw error;
+              sowUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/hr_project_files/${fileName}`;
+            }
+
+            return {
+              id: crypto.randomUUID(),
+              project_id: projectId,
+              client_id: clientId,
+              assign_employee: employee.assign_employee,
+              start_date: employee.start_date,
+              end_date: employee.end_date,
+              salary: parseFloat(employee.salary) || 0,
+              salary_currency: employee.salary_currency,
+              salary_type: employee.salary_type,
+              client_billing: parseFloat(employee.client_billing) || 0,
+              billing_type: employee.billing_type,
+              status: employee.status,
+             working_hours: parseFloat(employee.working_hours) || 8,
+              sow: sowUrl,
+              organization_id,
+              created_by: user.id,
+              updated_by: user.id,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+          })
+        );
+
+        const { error } = await supabase.from("hr_project_employees").insert(newAssignments);
+        if (error) throw error;
+
+        toast.success("Employees assigned successfully");
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["project-employee", projectId] });
+      handleDialogClose(false);
     } catch (error) {
       console.error("Error assigning employees:", error);
       toast.error("Failed to assign employees");
     }
   };
 
-    const handleFileUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
-       if (e.target.files && e.target.files[0]) {
-         handleFieldChange(index, "sowFile", e.target.files[0]);
-       }
-     };
+  const handleCancel = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    handleDialogClose(false);
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] max-h-[80vh] overflow-y-auto p-6 rounded-lg shadow-xl">
+    <Dialog open={open} onOpenChange={handleDialogClose}>
+     <DialogContent className="w-full max-w-[90vw] sm:max-w-5xl max-h-[80vh] overflow-y-auto p-4 sm:p-6 rounded-lg shadow-xl">
         <DialogHeader>
-          <DialogTitle>Assign Employees</DialogTitle>
+          <DialogTitle className="text-lg sm:text-xl">
+            {editEmployee ? "Edit Employee Assignment" : "Assign Employees to Project"}
+          </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {employeesList.map((employee, index) => (
-            <div key={index} className="border p-3 rounded-lg flex gap-4 items-center flex-wrap bg-white shadow-sm relative">
-              
-
-              {/* Employee Selection */}
-              <div className="w-[18%]">
-                <Label>Select Employee*</Label>
-                <Select onValueChange={(value) => handleFieldChange(index, "assign_employee", value)} value={employee.assign_employee}>
-                  <SelectTrigger>{employee.assign_employee ? employees.find((e) => e.id === employee.assign_employee)?.first_name : "Select an employee"}</SelectTrigger>
-                  <SelectContent>
-                    {employees.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id}>
-                        {emp.first_name} {emp.last_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Start & End Date */}
-            
-  <div className="w-[12%]">
-    <Label htmlFor={`start-date-${index}`}>Start Date*</Label>
-    <Input 
-      id={`start-date-${index}`} 
-      type="date" 
-      value={employee.start_date} 
-      onChange={(e) => handleFieldChange(index, "start_date", e.target.value)} 
-      required 
-    />
-  </div>
-  
-  <div className="w-[12%]">
-    <Label htmlFor={`end-date-${index}`}>End Date*</Label>
-    <Input 
-      id={`end-date-${index}`} 
-      type="date" 
-      value={employee.end_date} 
-      onChange={(e) => handleFieldChange(index, "end_date", e.target.value)} 
-      required 
-    />
-  </div>
-
-  <div className="w-[8%]">
-    <Label>Days</Label>
-    <Input type="number" value={employee.noOfDays} disabled />
-  </div>
-
-
-
-              {/* Salary & Client Billing */}
-
-                <div className="w-[12%]">
-                  <Label>Salary</Label>
-                <Input type="number" value={employee.salary} onChange={(e) => handleFieldChange(index, "salary", e.target.value)} />
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+          {!editEmployee && (
+            <div>
+              <Label htmlFor="employee" className="text-sm font-medium">
+                Select Employees*
+              </Label>
+              <Select
+                value={selectedEmployeeId}
+                onValueChange={handleEmployeeSelection}
+                disabled={!employees.length || loadingClients}
+              >
+                <SelectTrigger id="employee" className="mt-1.5">
+                  <SelectValue placeholder={loadingClients ? "Loading clients..." : "Select an employee"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.map((employee) => (
+                    <SelectItem
+                      key={employee.id}
+                      value={employee.id}
+                      disabled={selectedEmployeeIds.includes(employee.id)}
+                    >
+                      {employee.first_name} {employee.last_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedEmployeeIds.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {selectedEmployeeIds.map((employeeId, index) => {
+                    const employee = employees.find((e) => e.id === employeeId);
+                    return (
+                      <Badge key={employeeId} variant="secondary" className="p-1 px-2">
+                        <span className="truncate max-w-[150px]">
+                          {employee?.first_name} {employee?.last_name}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-4 w-4 p-0 ml-1"
+                          onClick={() => handleRemoveEmployee(employeeId, index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    );
+                  })}
                 </div>
-                <div className="w-[12%]">
-                  <Label>Client Billing</Label>
-                <Input type="number" value={employee.client_billing} onChange={(e) => handleFieldChange(index, "client_billing", e.target.value)} />
-                </div>
-           
-                {/* File Upload */}
-                <div className="w-[12%]">
-                <Label>SOW</Label>
-
-         <Input type="file"  accept=".pdf,.png,.jpg" onChange={(e) => handleFileUpload(index, e)} />
-         </div>
-         <Trash2 className="w-5 h-5 text-red-500 cursor-pointer absolute right-2 top-2" onClick={() => removeEmployeeRow(index)} />
+              )}
             </div>
-          ))}
-          <Button type="button" onClick={addEmployeeRow} className="w-full">
-            <Plus className="w-5 h-5 mr-2" /> Add Row
-          </Button>
-          <Button type="submit" className="w-full">Assign Employees</Button>
+          )}
+
+          {employeeAssignments.length > 0 && (
+            <div className="space-y-4 border rounded-md p-4">
+              {employeeAssignments.map((assignment, index) => {
+                const employee = employees.find((e) => e.id === assignment.assign_employee);
+                const startDate = assignment.start_date ? new Date(assignment.start_date) : null;
+                const endDate = assignment.end_date ? new Date(assignment.end_date) : null;
+                const salaryCurrencySymbol = assignment.salary_currency === "USD" ? "$" : "₹";
+                return (
+                  <div
+                    key={index}
+                    className="border-b last:border-b-0 pb-4 last:pb-0 space-y-4"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold">
+                        {employee?.first_name} {employee?.last_name}
+                      </h3>
+                      {!editEmployee && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => handleRemoveEmployee(assignment.assign_employee, index)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium block mb-1">Start Date*</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full justify-start text-left font-normal text-sm",
+                                !startDate && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {startDate ? format(startDate, "PPP") : "Select Date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={startDate}
+                              onSelect={(date) => handleFieldChange(index, "start_date", date)}
+                              initialFocus
+                              className="p-3 pointer-events-auto"
+                              fromDate={projectStartDate}
+                              toDate={projectEndDate}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium block mb-1">End Date*</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full justify-start text-left font-normal text-sm",
+                                !endDate && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {endDate ? format(endDate, "PPP") : "Select Date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={endDate}
+                              onSelect={(date) => handleFieldChange(index, "end_date", date)}
+                              initialFocus
+                              className="p-3 pointer-events-auto"
+                              fromDate={startDate || projectStartDate}
+                              toDate={projectEndDate}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium block mb-1">Days</Label>
+                        <Input
+                          type="number"
+                          value={assignment.noOfDays}
+                          disabled
+                          className="w-full text-sm bg-gray-100"
+                        />
+                      </div>
+                      <div>
+<div className="flex items-center justify-between mb-1">
+  <Label className="text-sm font-medium">Salary</Label>
+  <div className="flex items-center gap-2">
+    <Label className="text-sm">Editable</Label>
+    <Switch
+      checked={assignment.isSalaryEditable}
+      onCheckedChange={() => toggleSalaryEditable(index)}
+    />
+  </div>
+</div>
+
+<div className="flex items-center gap-0">
+  {/* Currency Selector */}
+  <Select
+    value={assignment.salary_currency}
+    onValueChange={(value) => handleFieldChange(index, "salary_currency", value)}
+    disabled={!assignment.isSalaryEditable}
+    required
+  >
+    <SelectTrigger
+      className={cn(
+        "w-[60px] text-sm",
+        !assignment.isSalaryEditable && "bg-gray-100 cursor-not-allowed"
+      )}
+    >
+      <SelectValue placeholder="INR" />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="INR" className="text-sm">₹</SelectItem>
+      <SelectItem value="USD" className="text-sm">$</SelectItem>
+    </SelectContent>
+  </Select>
+
+  {/* Salary Input Field */}
+  <Input
+    type="number"
+    value={assignment.salary}
+    onChange={(e) => handleFieldChange(index, "salary", e.target.value)}
+    disabled={!assignment.isSalaryEditable}
+    className={cn(
+      "w-full pl-6 text-sm",
+      !assignment.isSalaryEditable && "bg-gray-100 cursor-not-allowed"
+    )}
+  />
+
+  {/* Salary Type Selector */}
+  <Select
+    value={assignment.salary_type}
+    onValueChange={(value) => handleFieldChange(index, "salary_type", value)}
+    disabled={!assignment.isSalaryEditable}
+    required
+  >
+    <SelectTrigger
+      className={cn(
+        "w-[80px] text-sm",
+        !assignment.isSalaryEditable && "bg-gray-100 cursor-not-allowed"
+      )}
+    >
+      <SelectValue placeholder="Type" />
+    </SelectTrigger>
+    <SelectContent>
+      {salaryTypeOptions.map((type) => (
+        <SelectItem key={type} value={type} className="text-sm">
+          {type}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</div>
+
+</div>
+
+                      <div>
+                        <Label className="text-sm font-medium block mb-1">Client Billing*</Label>
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+                              {currencySymbol}
+                            </span>
+                            <Input
+                              type="number"
+                              value={assignment.client_billing}
+                              onChange={(e) => handleFieldChange(index, "client_billing", e.target.value)}
+                              placeholder="Enter billing amount"
+                              required
+                              className="w-full pl-6 text-sm rounded-r-none"
+                            />
+                          </div>
+                          <Select
+                            value={assignment.billing_type}
+                            onValueChange={(value) => handleFieldChange(index, "billing_type", value)}
+                            required
+                          >
+                            <SelectTrigger className="w-[80px] text-sm rounded-l-none border-l-0">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {billingTypeOptions.map((type) => (
+                                <SelectItem key={type} value={type} className="text-sm">
+                                  {type}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div>
+                      <Label className="text-sm font-medium block mb-1">Working Hours*</Label>
+                    <div>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={assignment.working_hours}
+                        onChange={(e) => handleFieldChange(index, "working_hours", e.target.value)}
+                        placeholder="Enter working hours (e.g., 4.2)"
+                        required
+                        className="w-full text-sm"
+                      />
+                    </div>
+                    </div>
+                      <div>
+                        <Label className="text-sm font-medium block mb-1">SOW</Label>
+                        <Input
+                          type="file"
+                          accept=".pdf,.png,.jpg"
+                          onChange={(e) => handleFileUpload(index, e)}
+                          className="w-full text-sm file:mr-2 file:text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={handleCancel}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                employeeAssignments.length === 0 ||
+                employeeAssignments.some(
+                  (a) =>
+                    !a.assign_employee ||
+                    !a.start_date ||
+                    !a.end_date ||
+                    !a.client_billing ||
+                    !a.billing_type ||
+                    !a.salary_currency ||
+                    !a.salary_type ||
+                     !a.working_hours
+                )
+              }
+              className="w-full sm:w-auto"
+            >
+              {editEmployee ? "Update Assignment" : "Assign Employees"}
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -261,3 +714,5 @@ const AssignEmployeeDialog = ({ open, onOpenChange, projectId, clientId }: Assig
 };
 
 export default AssignEmployeeDialog;
+
+// Alloted working hours

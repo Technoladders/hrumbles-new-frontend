@@ -266,7 +266,7 @@ export const createOrganizationWithSuperadmin = async (
     first_name: firstName,
     last_name: lastName,
     phone:phoneNo,
-    employee_id: "TLS-001",
+    employee_id: "Test-001",
     email: email,
   });
 

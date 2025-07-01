@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { UserCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useSelector } from "react-redux";
 
 interface PersonalDetailsEditModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export const PersonalDetailsEditModal: React.FC<PersonalDetailsEditModalProps> =
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<PersonalDetailsData | null>(null);
+  const organization_id = useSelector((state: any) => state.auth.organization_id);
 
   const handleComplete = (completed: boolean, data?: PersonalDetailsData) => {
     if (completed && data) {
@@ -114,7 +116,8 @@ export const PersonalDetailsEditModal: React.FC<PersonalDetailsEditModalProps> =
                 employee_id: employeeId,
                 name: contact.name.trim(),
                 relationship: contact.relationship.trim(),
-                phone: contact.phone.trim()
+                phone: contact.phone.trim(),
+                organization_id: 
               }))
             );
 
@@ -138,7 +141,8 @@ export const PersonalDetailsEditModal: React.FC<PersonalDetailsEditModalProps> =
                 name: member.name.trim(),
                 relationship: member.relationship.trim(),
                 occupation: member.occupation.trim(),
-                phone: member.phone.trim()
+                phone: member.phone.trim(),
+                organization_id
               }))
             );
 

@@ -8,13 +8,9 @@ import { ProfileHeader } from "@/components/employee/profile/ProfileHeader";
 import { StatsBar } from "@/components/employee/profile/StatsBar";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { QuickActions } from "@/components/employee/profile/QuickActions";
+
 import { LoadingState, ErrorState } from "@/components/employee/profile/ProfileStates";
-import { EmploymentDetailsModal } from "@/components/employee/profile/modals/EmploymentDetailsModal";
-import { PersonalInfoSection } from "@/components/employee/profile/sections/PersonalInfoSection";
-import { EmploymentInfoSection } from "@/components/employee/profile/sections/EmploymentInfoSection";
-import { EducationSection } from "@/components/employee/profile/sections/EducationSection";
-import { BankInfoSection } from "@/components/employee/profile/sections/BankInfoSection";
+
 import { MetricsSection } from "@/components/employee/profile/sections/MetricsSection";
 
 const HomePage = () => {
@@ -68,43 +64,8 @@ const HomePage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-200 p-8">
-
-     
-
-     
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-6">
-       
-        <MetricsSection employeeId={employeeData.id} />
-      </div>
-
-      <EmploymentDetailsModal
-        isOpen={isEmploymentModalOpen}
-        onClose={() => setIsEmploymentModalOpen(false)}
-        employeeId={employeeData?.id || ""}
-        initialData={{
-          employeeId: employeeData?.employee_id || "",
-          department: "Engineering",
-          position: "Software Engineer",
-          joinedDate: employeeData?.created_at || "",
-          employmentHistory: [
-            {
-              title: "Senior Developer",
-              date: "Jan 2023",
-              description: "Promoted to Senior Developer role",
-              type: "promotion",
-            },
-            {
-              title: "Developer",
-              date: "Jan 2022",
-              description: "Joined as Developer",
-              type: "join",
-            },
-          ],
-        }}
-        onUpdate={handleUpdateEmployment}
-      />
+    <div className="min-h-screen p-8">
+      <MetricsSection employeeId={employeeData.id} />
     </div>
   );
 };

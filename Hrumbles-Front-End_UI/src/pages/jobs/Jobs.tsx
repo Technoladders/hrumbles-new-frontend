@@ -149,7 +149,7 @@ const Jobs = () => {
   const userRole = useSelector((state: any) => state.auth.role);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
 
-  const isEmployee = userRole === 'employee';
+  const isEmployee = userRole === 'employee' && user?.id !== '0fa0aa1b-9cb3-482f-b679-5bd8fa355a6e';
 
   useEffect(() => {
     const loadJobs = async () => {
@@ -508,7 +508,8 @@ const AssignedToCell = ({ assignedTo }: { assignedTo: { id: string; name: string
   </div>
 </td>
 <td className="table-cell">{job.createdBy?.first_name} {job.createdBy?.last_name}</td>
-                  <td className="table-cell">{job.postedDate} ({daysSinceCreated(job.postedDate)})</td>
+                  <td className="table-cell">{moment(job.createdAt).format("DD MMM YYYY")} (
+                    {moment(job.createdAt).fromNow()})</td>
                   {/* <td className="table-cell">
                     <Badge
                       variant="outline"

@@ -36,11 +36,16 @@ export interface KPI {
   metricUnit: string;
 }
 
+export interface EmployeeGoalTarget {
+  employee: Employee;
+  targetValue: number;
+}
+
 export interface AssignedGoal {
   id: string;
   goalId: string;
   employeeId: string;
-  status: 'pending' | 'in-progress' | 'completed' | 'overdue';
+  status: 'pending' | 'in-progress' | 'completed' | 'overdue' | 'stopped';
   progress: number; // 0-100 percentage
   currentValue: number;
   targetValue: number; // Added field to match database update
@@ -49,9 +54,42 @@ export interface AssignedGoal {
   goalType: GoalType;
 }
 
+export interface GoalInstance {
+  id: string;
+  assignedGoalId: string;
+  periodStart: string;
+  periodEnd: string;
+  targetValue: number;
+  currentValue: number;
+  progress: number;
+  status: 'pending' | 'in-progress' | 'completed' | 'overdue' | 'stopped';
+  createdAt: string;
+  updatedAt: string;
+  notes?: string;
+  assigned_goal: {
+    id: string;
+    goal_type: string;
+    goal: { id: string; name: string };
+  } | null;
+}
+
 export interface GoalWithDetails extends Goal {
-  assignedTo?: Employee[];
-  assignmentDetails?: AssignedGoal;
+  id: string;
+  name: string;
+  description: string;
+  sector: string;
+  targetValue: number;
+  metricUnit: string;
+  startDate: string;
+  endDate: string;
+  assignedTo: Employee[];
+  assignments: AssignedGoal[];
+  instances: GoalInstance[];
+  activeInstance?: GoalInstance;
+  assignmentDetails: AssignedGoal[]; // Changed from AssignedGoal to AssignedGoal[]
+  totalTargetValue: number;
+  totalCurrentValue: number;
+  overallProgress: number;
 }
 
 export interface TrackingRecord {
@@ -61,4 +99,19 @@ export interface TrackingRecord {
   value: number;
   notes?: string;
   createdAt: string;
+}
+
+export interface ChartDataPoint {
+  name: string;
+  value: number;
+  color?: string;
+}
+
+export interface GoalStatistics {
+  totalGoals: number;
+  completedGoals: number;
+  inProgressGoals: number;
+  overdueGoals: number;
+  pendingGoals: number;
+  completionRate: number;
 }

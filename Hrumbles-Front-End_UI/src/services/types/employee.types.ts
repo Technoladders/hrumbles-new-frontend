@@ -27,6 +27,7 @@ export interface FamilyMember {
 }
 
 export interface Experience {
+  skills: any[];
   id?: string; // Add this if you're using an ID
   jobType: "Full Time" | "Part Time" | "Internship"; // Correct type
   company: string;

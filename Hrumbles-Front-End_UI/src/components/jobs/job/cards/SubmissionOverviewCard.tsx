@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/jobs/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
@@ -20,53 +19,47 @@ type StatusCount = {
 };
 
 const SubmissionOverviewCard = ({ job }: SubmissionOverviewCardProps) => {
-  const [viewType, setViewType] = useState<'main' | 'sub'>('main');
-  
+  const [viewType, setViewType] = useState<"main" | "sub">("main");
+
   // Fetch status counts based on the selected view type
-  const { 
-    data: statusCounts = [], 
-    isLoading, 
+  const {
+    data: statusCounts = [],
+    isLoading,
     isError,
-    refetch 
+    refetch,
   } = useQuery({
-    queryKey: ['candidate-status-counts', job.id, viewType],
+    queryKey: ["candidate-status-counts", job.id, viewType],
     queryFn: () => getCandidateStatusCounts(job.id, viewType),
     enabled: !!job.id,
   });
 
   // Format data for the pie chart
-  const chartData = statusCounts.map(status => ({
+  const chartData = statusCounts.map((status) => ({
     name: status.name,
     value: status.count,
-    color: status.color || getDefaultColor(status.name)
+    color: status.color || getDefaultColor(status.name),
   }));
 
   // Default colors for statuses without defined colors
   function getDefaultColor(statusName: string): string {
     const colorMap: Record<string, string> = {
-      'New': '#6c757d',
-      'Processed': '#007bff',
-      'Interview': '#6f42c1',
-      'Offered': '#fd7e14',
-      'Joined': '#28a745',
-      'Technical Assessment': '#17a2b8',
-      'L1': '#20c997',
-      'L2': '#e83e8c',
-      'L3': '#dc3545',
-      'End Client Round': '#6610f2'
+      New: "#6c757d",
+      Processed: "#007bff",
+      Interview: "#6f42c1",
+      Offered: "#fd7e14",
+      Joined: "#28a745",
+      "Technical Assessment": "#17a2b8",
+      L1: "#20c997",
+      L2: "#e83e8c",
+      L3: "#dc3545",
+      "End Client Round": "#6610f2",
     };
 
-    return colorMap[statusName] || '#7B43F1';
+    return colorMap[statusName] || "#7B43F1";
   }
 
   // Handle empty or error states
   const noData = isError || (!isLoading && (!statusCounts || statusCounts.length === 0));
-
-  // Pie chart options for a modern look
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-  };
 
   // Get total candidates count
   const totalCandidates = chartData.reduce((sum, item) => sum + item.value, 0);
@@ -74,7 +67,7 @@ const SubmissionOverviewCard = ({ job }: SubmissionOverviewCardProps) => {
   return (
     <Card className="md:col-span-1 shadow-lg">
       <CardHeader className="pb-2 pt-4">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center flex-wrap gap-2">
           <CardTitle className="text-lg font-semibold purple-text-color flex items-center">
             <svg
               className="mr-2"
@@ -94,11 +87,19 @@ const SubmissionOverviewCard = ({ job }: SubmissionOverviewCardProps) => {
             </svg>
             Submission Overview
           </CardTitle>
-          
-          <Tabs defaultValue="main" className="h-8" onValueChange={(value) => setViewType(value as 'main' | 'sub')}>
-            <TabsList className="grid w-[220px] grid-cols-2">
-              <TabsTrigger value="main">Main Status</TabsTrigger>
-              <TabsTrigger value="sub">Sub Status</TabsTrigger>
+
+          <Tabs
+            defaultValue="main"
+            className="h-8"
+            onValueChange={(value) => setViewType(value as "main" | "sub")}
+          >
+            <TabsList className="w-auto grid grid-cols-2 sm:flex sm:gap-1">
+              <TabsTrigger value="main" className="text-xs sm:text-sm px-2 sm:px-4">
+                Main Status
+              </TabsTrigger>
+              <TabsTrigger value="sub" className="text-xs sm:text-sm px-2 sm:px-4">
+                Sub Status
+              </TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -129,12 +130,7 @@ const SubmissionOverviewCard = ({ job }: SubmissionOverviewCardProps) => {
               />
             </svg>
             <p>No candidates found for this job</p>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => refetch()}
-              className="mt-2"
-            >
+            <Button variant="ghost" size="sm" onClick={() => refetch()} className="mt-2">
               Refresh
             </Button>
           </div>
@@ -159,28 +155,38 @@ const SubmissionOverviewCard = ({ job }: SubmissionOverviewCardProps) => {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number) => [
-                    `${value} candidate${value !== 1 ? 's' : ''}`,
-                    ''
-                  ]}
-                  contentStyle={{
-                    backgroundColor: "white",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "8px",
-                    padding: "8px",
-                  }}
-                />
-                <Legend 
-                  layout="horizontal" 
-                  verticalAlign="bottom" 
-                  align="center" 
+  formatter={(value: number, name: string) => [value, name]}
+  content={({ payload }) => {
+    if (!payload || !payload[0]) return null;
+    const { value, name } = payload[0].payload;
+    return (
+      <div
+        style={{
+          backgroundColor: "black",
+          color: "white",
+          border: "1px solid #e2e8f0",
+          borderRadius: "8px",
+          padding: "6px",
+          fontSize: "12px",
+        }}
+      >
+        <div>{name}: {value}</div>
+
+      </div>
+    );
+  }}
+/>
+                <Legend
+                  layout="horizontal"
+                  verticalAlign="bottom"
+                  align="center"
                   formatter={(value) => <span className="text-xs">{value}</span>}
                 />
               </PieChart>
             </ResponsiveContainer>
           </div>
         )}
-        
+
         <div className="mt-4 flex justify-between items-center">
           <span className="text-sm text-gray-500 flex items-center">
             <svg

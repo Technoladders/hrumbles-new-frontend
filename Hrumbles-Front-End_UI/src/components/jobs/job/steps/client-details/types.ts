@@ -5,6 +5,7 @@ export interface ClientDetailsData {
   endClient: string;
   pointOfContact: string;
   assignedTo: string;
+  currency_type: string;
 }
 
 export interface ClientDetailsStepProps {

@@ -1,59 +1,106 @@
-
+import { useState } from "react";
 import { Star } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 interface SkillRatingItemProps {
   skill: string;
   rating: number;
+  experienceYears: number | undefined;
+  experienceMonths: number | undefined;
   isJobSkill: boolean;
   onRatingChange: (rating: number) => void;
+  onExperienceYearsChange: (newExperienceYears: number) => void;
+  onExperienceMonthsChange: (newExperienceMonths: number) => void;
   onRemove: () => void;
 }
 
 const SkillRatingItem = ({
   skill,
   rating,
+  experienceYears,
+  experienceMonths,
   isJobSkill,
   onRatingChange,
-  onRemove
+  onExperienceYearsChange,
+  onExperienceMonthsChange,
+  onRemove,
 }: SkillRatingItemProps) => {
+  const [isYearsFocused, setIsYearsFocused] = useState(false);
+  const [isMonthsFocused, setIsMonthsFocused] = useState(false);
+
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-md">
-      <div className="flex flex-col mb-2 sm:mb-0">
-        <div className="flex items-center">
-          <span className="font-medium mr-2">{skill}</span>
-          {isJobSkill && (
-            <Badge variant="outline" className="text-xs">Job Skill</Badge>
-          )}
-        </div>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-md space-y-2 sm:space-y-0 sm:space-x-6">
+      <div className="flex items-center space-x-2">
+        <span className="font-medium">{skill}</span>
       </div>
-      
-      <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto">
-        <div className="flex items-center">
+
+      <div className="flex items-center justify-end space-x-4 w-full sm:w-auto">
+        <div className="flex items-center space-x-2">
+          <Input
+            type="text"
+            value={
+              isYearsFocused
+                ? experienceYears !== undefined ? experienceYears.toString() : ""
+                : experienceYears !== undefined 
+                  ? `${experienceYears} ${experienceYears === 1 ? "year" : "years"}`
+                  : ""
+            }
+            onChange={(e) => {
+              const numeric = e.target.value.replace(/[^\d]/g, "");
+              const parsed = numeric ? parseInt(numeric, 10) : 0;
+              onExperienceYearsChange(parsed);
+            }}
+            onFocus={() => setIsYearsFocused(true)}
+            onBlur={() => setIsYearsFocused(false)}
+            className="w-28"
+            placeholder="Years"
+          />
+          <Input
+            type="text"
+            value={
+              isMonthsFocused
+                ? experienceMonths !== undefined ? experienceMonths.toString() : ""
+                : experienceMonths !== undefined 
+                  ? `${experienceMonths} ${experienceMonths === 1 ? "month" : "months"}`
+                  : ""
+            }
+            onChange={(e) => {
+              const numeric = e.target.value.replace(/[^\d]/g, "");
+              const parsed = numeric ? parseInt(numeric, 10) : 0;
+              onExperienceMonthsChange(Math.min(parsed, 11));
+            }}
+            onFocus={() => setIsMonthsFocused(true)}
+            onBlur={() => setIsMonthsFocused(false)}
+            className="w-28"
+            placeholder="Months"
+          />
+        </div>
+
+        <div className="flex items-center space-x-1">
           {[1, 2, 3, 4, 5].map((star) => (
             <Star
               key={star}
               className={cn(
                 "h-5 w-5 cursor-pointer transition-colors",
-                star <= rating 
-                  ? "text-yellow-400 fill-yellow-400" 
-                  : "text-gray-300"
+                star <= rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"
               )}
               onClick={() => onRatingChange(star)}
             />
           ))}
         </div>
-        
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onRemove}
-          className="ml-4 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-        >
-          Remove
-        </Button>
+
+        {!isJobSkill && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onRemove}
+            className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+          >
+            Remove
+          </Button>
+        )}
       </div>
     </div>
   );

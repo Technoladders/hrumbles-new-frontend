@@ -60,7 +60,18 @@ const JobView = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('resume_analysis')
-        .select('candidate_id, candidate_name, overall_score, updated_at')
+        .select(`
+          candidate_id,
+          candidate_name,
+          overall_score,
+          updated_at,
+          created_by,
+          hr_employees!resume_analysis_created_by_fkey (
+            first_name,
+            last_name
+          )
+        `)
+        
         .eq('job_id', id)
         .order('updated_at', { ascending: false });
       if (error) throw error;
@@ -68,6 +79,8 @@ const JobView = () => {
     },
     enabled: !!id,
   });
+
+  console.log("historydata", historyData)
 
   // Convert CandidateData to Candidate type
   const candidates: Candidate[] = candidatesData.map(candidate => ({
@@ -279,6 +292,9 @@ const JobView = () => {
                             </p>
                             <p className="text-sm text-gray-500">
                               {formatDate(item.updated_at)}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                            Added by {item.hr_employees?.first_name} {item.hr_employees?.last_name}
                             </p>
                           </div>
                           <div className="flex items-center gap-2">

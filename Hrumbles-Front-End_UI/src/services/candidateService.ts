@@ -2,6 +2,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { CandidateStatus } from "@/lib/types";
 import { MainStatus, SubStatus } from "@/services/statusService";
+import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
 
 // Interfaces remain unchanged
 export interface HrJobCandidate {
@@ -29,6 +30,16 @@ export interface HrJobCandidate {
     currentSalary?: number;
     expectedSalary?: number;
     resume_url?: string;
+    noticePeriod?: number; // Add Notice Period (in days)
+  lastWorkingDay?: string; // Add Last Working Day (date string, e.g., "2025-05-30")
+
+  uan?: string; // Add UAN
+    pan?: string; // Add PAN
+    pf?: string; // Add PF
+    esicNumber?: string; // Add ESIC Number
+    linkedInId?: string; // Added
+    hasOffers?: "Yes" | "No"; // Added
+    offerDetails?: string; // Added
     [key: string]: any; // Allow other fields
   } | null;
   skill_ratings: Record<string, any> | Array<{ name: string; rating: number }> | null;
@@ -70,6 +81,15 @@ export interface CandidateData {
     currentSalary?: number;
     expectedSalary?: number;
     resume_url?: string;
+    noticePeriod?: number; // Add Notice Period (in days)
+  lastWorkingDay?: string; // Add Last Working Day (date string, e.g., "2025-05-30")
+  uan?: string; // Add UAN
+    pan?: string; // Add PAN
+    pf?: string; // Add PF
+    esicNumber?: string;
+    linkedInId?: string; // Added
+    hasOffers?: "Yes" | "No"; // Added
+    offerDetails?: string; // Added
     [key: string]: any; // Allow other fields
   };
   skillRatings?: Array<{ name: string; rating: number }>;
@@ -150,6 +170,15 @@ export const mapDbCandidateToData = (candidate: HrJobCandidate): CandidateData =
           currentSalary: candidate.metadata.currentSalary,
           expectedSalary: candidate.metadata.expectedSalary,
           resume_url: candidate.metadata.resume_url,
+          noticePeriod: candidate.metadata.noticePeriod,
+  lastWorkingDay: candidate.metadata.lastWorkingDay,
+  linkedInId: candidate.metadata.linkedInId, // Added
+          hasOffers: candidate.metadata.hasOffers, // Added
+          offerDetails: candidate.metadata.offerDetails, // Added
+  uan: candidate.metadata.uan, // Include UAN
+          pan: candidate.metadata.pan, // Include PAN
+          pf: candidate.metadata.pf, // Include PF
+          esicNumber: candidate.metadata.esicNumber, // Include ESIC Number
           ...candidate.metadata // Preserve other metadata fields
         }
       : undefined,
@@ -169,9 +198,9 @@ export const mapDbCandidateToData = (candidate: HrJobCandidate): CandidateData =
 // ... [Your other functions here] ...
 
 export const mapCandidateToDbData = (candidate: CandidateData): Partial<HrJobCandidate> => {
-  console.log("skillRatings in CandidateData:", candidate.skillRatings); // Debug log
+  console.log("Input CandidateData:", candidate); // Debug log
 
-  return {
+  const dbCandidate = {
     name: candidate.name,
     status: candidate.status,
     experience: candidate.experience || null,
@@ -186,13 +215,21 @@ export const mapCandidateToDbData = (candidate: CandidateData): Partial<HrJobCan
           currentLocation: candidate.metadata.currentLocation,
           preferredLocations: candidate.metadata.preferredLocations,
           totalExperience: candidate.metadata.totalExperience,
-          totalExperienceMonths: candidate.metadata.totalExperienceMonths, // Added
+          totalExperienceMonths: candidate.metadata.totalExperienceMonths,
           relevantExperience: candidate.metadata.relevantExperience,
-          relevantExperienceMonths: candidate.metadata.relevantExperienceMonths, // Added
+          relevantExperienceMonths: candidate.metadata.relevantExperienceMonths,
           currentSalary: candidate.metadata.currentSalary,
           expectedSalary: candidate.metadata.expectedSalary,
           resume_url: candidate.metadata.resume_url,
-          ...candidate.metadata // Preserve other metadata fields
+          noticePeriod: candidate.metadata.noticePeriod,
+          lastWorkingDay: candidate.metadata.lastWorkingDay,
+          uan: candidate.metadata.uan, // Include UAN
+          pan: candidate.metadata.pan, // Include PAN
+          pf: candidate.metadata.pf, // Include PF
+          esicNumber: candidate.metadata.esicNumber, // Include ESIC Number
+          linkedInId: candidate.metadata.linkedInId, // Added
+          hasOffers: candidate.metadata.hasOffers, // Added
+          offerDetails: candidate.metadata.offerDetails, // Added
         }
       : null,
     skill_ratings: candidate.skillRatings || null,
@@ -202,6 +239,9 @@ export const mapCandidateToDbData = (candidate: CandidateData): Partial<HrJobCan
     updated_by: candidate.updatedBy,
     created_by: candidate.createdBy,
   };
+
+  console.log("Mapped dbCandidate:", dbCandidate); // Debug log
+  return dbCandidate;
 };
 
 
@@ -233,10 +273,14 @@ export const getCandidatesByJobId = async (jobId: string, statusFilter?: string)
         sub_status_id,
         has_validated_resume,
         overall_score,
+        created_at,
+        ctc,
+        accrual_ctc,
         main_status:job_statuses!main_status_id(*),
         sub_status:job_statuses!sub_status_id(*)
       `)
-      .eq('job_id', jobId);
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: false });
     
     if (statusFilter) {
       query = query.eq('status', statusFilter);
@@ -335,21 +379,77 @@ export const getCandidatesByJobId = async (jobId: string, statusFilter?: string)
 export const createCandidate = async (jobId: string, candidate: CandidateData): Promise<CandidateData> => {
   try {
     const dbCandidate = mapCandidateToDbData(candidate);
-    
-    // Using raw SQL query since the table isn't in the TypeScript types yet
+
+const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id, userId } = authData;
+
+    // Fetch the main status "Processed"
+    const { data: mainStatus, error: mainStatusError } = await supabase
+      .from("job_statuses")
+      .select("id")
+      .eq("type", "main")
+      .eq("name", "Processed")
+      .single();
+
+    if (mainStatusError || !mainStatus) {
+      console.error("Error fetching Processed main status:", mainStatusError);
+      throw new Error("Could not find Processed main status");
+    }
+
+    // Fetch the sub-status "Processed (Internal)" linked to the "Processed" main status
+    const { data: subStatus, error: subStatusError } = await supabase
+      .from("job_statuses")
+      .select("id")
+      .eq("type", "sub")
+      .eq("name", "Processed (Internal)")
+      .eq("parent_id", mainStatus.id)
+      .single();
+
+    if (subStatusError || !subStatus) {
+      console.error("Error fetching Processed (Internal) sub-status:", subStatusError);
+      throw new Error("Could not find Processed (Internal) sub-status");
+    }
+
+    console.log("Payload for createCandidate:", {
+      ...dbCandidate,
+      job_id: jobId,
+      main_status_id: mainStatus.id,
+      sub_status_id: subStatus.id,
+    }); // Debug log
+
     const { data, error } = await supabase
-      .from('hr_job_candidates')
+      .from("hr_job_candidates")
       .insert({
         ...dbCandidate,
         job_id: jobId,
-        name: candidate.name // Ensure name is included
+        name: candidate.name,
+        main_status_id: mainStatus.id, // Set main status to Processed
+        sub_status_id: subStatus.id, // Set sub-status to Processed (Internal)
+        organization_id: organization_id,
       })
-      .select('*')
+      .select("*")
       .single();
 
     if (error) {
       console.error("Error creating candidate:", error);
       throw error;
+    }
+
+    // Record the status change in hr_status_change_counts
+    const statusUpdateSuccess = await updateCandidateStatusCounts(
+      data.id, // Candidate ID from the inserted record
+      jobId,
+      mainStatus.id,
+      subStatus.id,
+      candidate.createdBy // Optional: user ID who created the candidate
+    );
+
+    if (!statusUpdateSuccess) {
+      console.warn("Warning: Failed to update status change counts for candidate:", data.id);
+      // Decide whether to throw an error or continue based on your requirements
     }
 
     return mapDbCandidateToData(data as HrJobCandidate);
@@ -360,29 +460,55 @@ export const createCandidate = async (jobId: string, candidate: CandidateData): 
 };
 
 // Update a candidate
-export const updateCandidate = async (id: string, candidate: CandidateData): Promise<CandidateData> => {
+export const updateCandidate = async (
+  id: string,
+  candidate: CandidateData
+): Promise<CandidateData> => {
   try {
-    const dbCandidate = mapCandidateToDbData(candidate);
-    
-    // Using raw SQL query since the table isn't in the TypeScript types yet
-    const { data, error } = await supabase
+    // Step 1: Get the existing candidate metadata
+    const { data: existingData, error: fetchError } = await supabase
       .from('hr_job_candidates')
-      .update(dbCandidate)
+      .select('metadata')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) {
+      console.error("Error fetching existing metadata:", fetchError);
+      throw fetchError;
+    }
+
+    const existingMetadata = existingData?.metadata || {};
+
+    // Step 2: Merge the new fields into existing metadata
+    const updatedMetadata = {
+      ...existingMetadata,
+      uan: candidate.metadata?.uan || null,
+      pan: candidate.metadata?.pan || null,
+      pf: candidate.metadata?.pf || null,
+      esicNumber: candidate.metadata?.esicNumber || null,
+    };
+
+    // Step 3: Update only the metadata field
+    const { data, error: updateError } = await supabase
+      .from('hr_job_candidates')
+      .update({ metadata: updatedMetadata })
       .eq('id', id)
       .select('*')
       .single();
 
-    if (error) {
-      console.error("Error updating candidate:", error);
-      throw error;
+    if (updateError) {
+      console.error("Error updating candidate metadata:", updateError);
+      throw updateError;
     }
 
     return mapDbCandidateToData(data as HrJobCandidate);
   } catch (error) {
-    console.error(`Failed to update candidate with ID ${id}:`, error);
+    console.error(`Failed to update metadata for candidate with ID ${id}:`, error);
     throw error;
   }
 };
+
+
 export const editCandidate = async (id: string, candidate: CandidateData): Promise<CandidateData> => {
   try {
     const dbCandidate = mapCandidateToDbData(candidate);
@@ -559,6 +685,12 @@ export const updateCandidateStatusCounts = async (
   userId?: string
 ): Promise<boolean> => {
   try {
+
+const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id, userId } = authData;
     // Check if a count entry already exists
     const { data: existingCount, error: countError } = await supabase
       .from('hr_status_change_counts')
@@ -599,7 +731,8 @@ export const updateCandidateStatusCounts = async (
           employee_id: userId,
           count: 1,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          organization_id: organization_id
         });
       
       if (error) {

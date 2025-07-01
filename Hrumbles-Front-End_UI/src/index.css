@@ -4,6 +4,45 @@
 @tailwind components;
 @tailwind utilities;
 
+/* custom-date-range.css */
+
+/* Override selection range color */
+.rdrCalendarWrapper {
+  --rdrColorPrimary: #8b5cf6; /* Tailwind's purple-500 */
+  --rdrColorPrimaryDark: #7c3aed; /* Tailwind's purple-600 */
+  --rdrTextColor: #6b21a8; /* Tailwind's purple-800 */
+}
+
+/* Optional: Make text purple */
+.rdrDayNumber span {
+  color: #6b21a8;
+}
+
+
+
+/* Optional: Adjust selected day background and hover color */
+.rdrDaySelected,
+.rdrDayStartPreview,
+.rdrDayEndPreview,
+.rdrInRange,
+.rdrStartEdge {
+  background-color: #a799df !important; /* lighter purple */
+  color: white !important;
+
+}
+
+
+.rdrStartEdge,
+.rdrEndEdge {
+  background-color: #8b5cf6!important; /* Tailwind's purple-500 */
+  color: white!important;
+}
+
+.rdrDay.rdrDayActive button,
+ .rdrDay.rdrDaySelected button {
+  color: white !important; /* Tailwind's purple-600 */
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

@@ -41,6 +41,8 @@ const JobDescription = () => {
     enabled: !!id,
   });
 
+  console.log("JJJJDDDDDDDDDD", job)
+
   // Convert CandidateData[] to Candidate[]
   const candidates: Candidate[] = candidatesData.map(candidate => ({
     id: parseInt(candidate.id) || 0, // Convert string id to number

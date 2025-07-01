@@ -16,7 +16,7 @@ const fetchEmployees = createAsyncThunk("employees/fetchEmployees", async (_, { 
   
     const { data, error } = await supabase
       .from("hr_employees")
-      .select("id, first_name, last_name, email, department_id, designation_id, role_id, organization_id, phone")
+      .select("id, first_name, last_name, email, department_id, designation_id, role_id, organization_id, phone, hire_type")
       .eq("organization_id", organization_id); // ✅ Fetch employees only from this organization
   
     if (error) return rejectWithValue(error.message);
@@ -30,8 +30,17 @@ const createEmployee = createAsyncThunk("employees/createEmployee", async (emplo
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: employeeData.email,
         password: employeeData.password,
-        options: {
-          data: { first_name: employeeData.firstName, last_name: employeeData.lastName, phone: employeeData.phone, employee_id: employeeData.employee_id },
+         options: {
+          data: {
+            first_name: employeeData.firstName,
+            last_name: employeeData.lastName,
+            phone: employeeData.phone,
+            employee_id: employeeData.employee_id,
+            hire_type: employeeData.hire_type,
+            salary: employeeData.salary, // Added salary
+            salary_type: employeeData.salary_type, // Added salary_type
+            joining_date: employeeData.joining_date
+          },
         },
       });
   
@@ -53,6 +62,10 @@ const createEmployee = createAsyncThunk("employees/createEmployee", async (emplo
         department_id: employeeData.department_id,
         designation_id: employeeData.designation_id,
         role_id,
+        hire_type: employeeData.hire_type,
+        salary: Number(employeeData.salary), // Convert to number for NUMERIC column
+        salary_type: employeeData.salary_type, // Store as TEXT
+        joining_date: employeeData.joining_date
       });
   
       if (profileError) return rejectWithValue(profileError.message);

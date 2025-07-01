@@ -6,12 +6,18 @@ import { useWorkSession } from './workTime/useWorkSession';
 import { useTimeFormat } from './workTime/useTimeFormat';
 import { useTimer } from './workTime/useTimer';
 import { WorkTimeSession } from '@/types/workTime';
+import { getAuthDataFromLocalStorage } from '@/utils/localstorage';
 
 export const useWorkTime = (employeeId: string) => {
   const { activeSession, setActiveSession, isLoading, setIsLoading, checkActiveSession } = useWorkSession(employeeId);
   const { formatTime } = useTimeFormat();
   const { elapsedTime } = useTimer(activeSession);
   const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
+  const authData = getAuthDataFromLocalStorage();
+      if (!authData) {
+        throw new Error('Failed to retrieve authentication data');
+      }
+      const { organization_id, userId } = authData;
 
   const startTimer = async () => {
     setIsLoading(true);
@@ -21,6 +27,7 @@ export const useWorkTime = (employeeId: string) => {
         start_time: new Date().toISOString(),
         date: new Date().toISOString().split('T')[0],
         status: 'running' as WorkTimeSession['status'],
+        organization_id
       };
 
       const { data, error } = await supabase

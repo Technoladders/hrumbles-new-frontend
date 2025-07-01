@@ -12,6 +12,7 @@ import { JobData } from "@/lib/types";
 import { fetchEmployees, fetchDepartments, fetchVendors, assignJob, fetchJobAssignments } from "@/services/assignmentService";
 import { useSelector } from "react-redux";
 import { supabase } from "@/integrations/supabase/client";
+import { format } from 'date-fns';
 
 interface AssignJobModalProps {
   isOpen: boolean;
@@ -57,10 +58,10 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
   
       if (job?.id) {
         const assignmentData = await fetchJobAssignments(job.id);
-        console.log("Fetched assignment data:", assignmentData); // Debug log
+        console.log("Fetched assignment data:", assignmentData);
         
         const assignedTo = (await supabase.from('hr_jobs').select('assigned_to').eq('id', job.id).single()).data?.assigned_to;
-        console.log("Assigned to from direct query:", assignedTo); // Debug log
+        console.log("Assigned to from direct query:", assignedTo);
   
         if (assignedTo) {
           if (assignedTo.type === 'individual') {
@@ -77,7 +78,6 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
           }
         }
 
-        // Set budget and budgetType regardless of assignedTo
         if (assignmentData.budget !== null && assignmentData.budget !== undefined) {
           setBudget(assignmentData.budget.toString());
           console.log("Setting budget:", assignmentData.budget.toString());
@@ -156,13 +156,126 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
     
     setLoading(true);
     try {
+      // Fetch current assigned_to data
+      const { data: jobData, error: jobError } = await supabase
+        .from('hr_jobs')
+        .select('assigned_to')
+        .eq('id', job.id)
+        .single();
+      if (jobError) throw new Error("Failed to fetch current job data");
+
+      // Determine new assignees
+      let recipientEmails: string[] = [];
+      let newAssigneeIds: string[] = [];
+      let newAssigneeNames: string[] = [];
+
+      if (type === 'individual') {
+        const currentAssigneeIds = jobData.assigned_to?.id ? jobData.assigned_to.id.split(",") : [];
+        const currentAssigneeNames = jobData.assigned_to?.name ? jobData.assigned_to.name.split(",") : [];
+        const newIds = id.split(",");
+        const newNames = name.split(",");
+
+        // Identify new assignees (not in currentAssigneeIds)
+        newAssigneeIds = newIds.filter(newId => !currentAssigneeIds.includes(newId));
+        newAssigneeNames = newNames.filter((_, index) => newAssigneeIds.includes(newIds[index]));
+
+        if (newAssigneeIds.length > 0) {
+          const { data: employeeData, error } = await supabase
+            .from('hr_employees')
+            .select('email')
+            .in('id', newAssigneeIds);
+          if (error) throw new Error("Failed to fetch employee emails");
+          recipientEmails = employeeData.map(emp => emp.email);
+        }
+      } else if (type === 'team') {
+        // For team assignments, notify all members if it's a new team
+        if (jobData.assigned_to?.id !== id) {
+          const { data: teamMembers, error } = await supabase
+            .from('hr_employees')
+            .select('email')
+            .eq('department_id', id);
+          if (error) throw new Error("Failed to fetch team member emails");
+          recipientEmails = teamMembers.map(emp => emp.email);
+          newAssigneeIds = [id];
+          newAssigneeNames = [name];
+        }
+      } else if (type === 'vendor') {
+        // For vendor assignments, notify if it's a new vendor
+        if (jobData.assigned_to?.id !== id) {
+          const { data: vendorData, error } = await supabase
+            .from('vendors')
+            .select('email')
+            .eq('id', id)
+            .single();
+          if (error) throw new Error("Failed to fetch vendor email");
+          recipientEmails = [vendorData.email];
+          newAssigneeIds = [id];
+          newAssigneeNames = [name];
+        }
+      }
+
+      // Proceed with assignment
       await assignJob(job.id, type, id, name, budget, budgetType, user?.id);
-      toast.success(`Job assigned to ${type === 'vendor' ? 'vendor' : type} successfully!`);
+
+      // Send email only if there are new assignees
+      if (recipientEmails.length > 0 && newAssigneeIds.length > 0) {
+        // Fetch JWT token
+        const { data: { session }, error: authError } = await supabase.auth.getSession();
+        if (authError || !session) {
+          throw new Error('No authenticated user found');
+        }
+        const jwt = session.access_token;
+
+        // Fetch user name for assignedBy
+        const { data: employee, error: employeeError } = await supabase
+          .from('hr_employees')
+          .select('first_name, last_name')
+          .eq('id', user?.id)
+          .single();
+        if (employeeError || !employee) {
+          throw new Error('Failed to fetch user name');
+        }
+
+        // Send email notification via direct fetch
+        const emailPayload = {
+          to: recipientEmails,
+          jobDetails: {
+            title: job.title,
+            budget: budget || 'N/A',
+            budgetType: budgetType || 'N/A',
+            assignedTo: newAssigneeNames.join(", "), // Only new assignees
+            assignedBy: `${employee.first_name} ${employee.last_name || ''}`.trim(),
+            assignedDate: format(new Date(), 'yyyy-MM-dd')
+          }
+        };
+
+        const response = await fetch(
+          'https://kbpeyfietrwlhwcwqhjw.supabase.co/functions/v1/send-job-assignment-email',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImticGV5ZmlldHJ3bGh3Y3dxaGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4NDA5NjEsImV4cCI6MjA1NDQxNjk2MX0.A-K4DO6D2qQZ66qIXY4BlmoHxc-W5B0itV-HAAM84YA',
+              'Authorization': `Bearer ${jwt}`
+            },
+            body: JSON.stringify(emailPayload)
+          }
+        );
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to send assignment email');
+        }
+      }
+
+      toast.success(`Job assigned to ${type === 'vendor' ? 'vendor' : type} successfully! ${recipientEmails.length > 0 ? 'Notification email sent.' : ''}`);
       handleReset();
       onClose();
     } catch (error) {
-      console.error("Error assigning job:", error);
-      toast.error("Failed to assign job. Please try again.");
+      console.error("Error assigning job or sending email:", error.message);
+      toast.error(error.message.includes('email') 
+        ? "Job assigned successfully, but failed to send notification email."
+        : "Failed to assign job. Please try again.");
     } finally {
       setLoading(false);
     }

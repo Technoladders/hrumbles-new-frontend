@@ -7,121 +7,158 @@ import {
 import { JobData } from "@/lib/types";
 import {
   Building,
-  DollarSign,
   CalendarDays,
   Clock,
   Users,
   Briefcase,
-  Banknote,
   IndianRupee,
   CircleUser,
+  Hourglass,
+  UserPlus,
+  FileText,
+  UserCheck,
+  MapPin,
 } from "lucide-react";
 import { formatDisplayValue } from "./utils/formatUtils";
- 
+import { useSelector } from "react-redux";
+
 interface JobDetailsRightCardProps {
   job: JobData;
 }
- 
+
 const JobDetailsRightCard = ({ job }: JobDetailsRightCardProps) => {
+  const userRole = useSelector((state: any) => state.auth.role);
+  const isEmployee = userRole === 'employee';
+
+  // Format HR Budget to INR
+  const formatINR = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    }).format(amount);
+  };
+
   return (
     <Card className="h-full shadow-md">
       <CardHeader>
         <CardTitle className="text-lg">Job Information</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-8">
         {/* Company / Client Name */}
         <InfoItem
           icon={<Building className="text-blue-500" />}
           title="Company Name"
           value={formatDisplayValue(job.clientDetails?.clientName || job.clientOwner)}
         />
-       
-        {/* Client Budget - Admin Only */}
+
+        {/* Required Experience */}
         <InfoItem
-          icon={<Banknote className="text-green-500" />}
-          title="Client Budget (Admin)"
-          value={formatDisplayValue(job.clientDetails?.clientBudget)}
-          isAdmin={true}
+          icon={<Hourglass className="text-orange-500" />}
+          title="Required Experience"
+          value={formatDisplayValue(`${job.experience?.min.years} years to ${job.experience?.max.years} years`)}
         />
-       
-        {/* HR Budget */}
+
+        {/* No. of Positions */}
         <InfoItem
-          icon={<IndianRupee className="text-emerald-500" />}
-          title="Budget (HR)"
-          value={formatDisplayValue(job.budgets?.hrBudget)}
+          icon={<UserPlus className="text-teal-500" />}
+          title="No. of Positions"
+          value={formatDisplayValue(job.numberOfCandidates)}
         />
-       
-        {/* Vendor Budget */}
+
+        {/* Job Type */}
         <InfoItem
-          icon={<IndianRupee className="text-teal-500" />}
-          title="Vendor Budget"
-          value={formatDisplayValue(job.budgets?.vendorBudget)}
+          icon={<FileText className="text-gray-500" />}
+          title="Job Type"
+          value={formatDisplayValue(job.jobType)}
         />
-       
+
+        {/* Hiring Mode */}
+        <InfoItem
+          icon={<UserCheck className="text-purple-500" />}
+          title="Hiring Mode"
+          value={formatDisplayValue(job.hiringMode)}
+        />
+
+        {/* Client Budget - Admin Only, Hidden for Employee */}
+        {!isEmployee && (
+          <InfoItem
+            icon={<IndianRupee className="text-green-500" />}
+            title="Client Budget"
+            value={formatDisplayValue(job.clientDetails?.clientBudget)}
+            isAdmin={true}
+          />
+        )}
+
+        {/* HR Budget in Admin */}
+        <InfoItem
+  icon={<IndianRupee className="text-emerald-500" />}
+  title={isEmployee ? "Budget" : "Budget (HR)"}
+  value={`${formatINR(job.hr_budget)} ${job.hr_budget_type}`}
+/>
+
+
+        {/* Vendor Budget - Hidden for Employee */}
+        {!isEmployee && job.budgets?.vendorBudget && (
+          <InfoItem
+            icon={<IndianRupee className="text-teal-500" />}
+            title="Vendor Budget"
+            value={formatDisplayValue(job.budgets?.vendorBudget)}
+          />
+        )}
+
         {/* End Client */}
-        <InfoItem
-          icon={<CircleUser className="text-indigo-500" />}
-          title="End Client"
-          value={formatDisplayValue(job.clientDetails?.endClient)}
-        />
-       
+        {job.clientDetails?.endClient && (
+          <InfoItem
+            icon={<CircleUser className="text-indigo-500" />}
+            title="End Client"
+            value={formatDisplayValue(job.clientDetails.endClient)}
+          />
+        )}
+
         {/* Posted Date */}
         <InfoItem
           icon={<CalendarDays className="text-amber-500" />}
           title="Date Posted"
           value={formatDisplayValue(job.postedDate)}
         />
-       
-        {/* Due Date */}
-        <InfoItem
-          icon={<Clock className="text-red-500" />}
-          title="Due Date"
-          value={formatDisplayValue(job.dueDate)}
-        />
-       
-        {/* Department */}
-        <InfoItem
-          icon={<Users className="text-purple-500" />}
-          title="Department"
-          value={formatDisplayValue(job.department)}
-        />
-       
-        {/* Submission Type */}
-        <InfoItem
-          icon={<Briefcase className="text-gray-500" />}
-          title="Submission Type"
-          value={formatDisplayValue(job.submissionType)}
-        />
+
+        {/* Location */}
+        {job.location?.length > 0 && (
+          <InfoItem
+            icon={<MapPin className="text-red-500" />}
+            title="Location"
+            value={job.location.map(loc => formatDisplayValue(loc)).join(", ")}
+          />
+        )}
       </CardContent>
     </Card>
   );
 };
- 
+
 interface InfoItemProps {
   icon: React.ReactNode;
   title: string;
   value: string;
   isAdmin?: boolean;
 }
- 
+
 const InfoItem = ({ icon, title, value, isAdmin = false }: InfoItemProps) => {
   // Mock authorization check
   const isAuthorized = true; // In a real app, this would be from auth context
- 
+
   // If it's admin-only and user is not authorized, don't show
   if (isAdmin && !isAuthorized) {
     return null;
   }
- 
+
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-1">
-        {icon}
-        <h3 className="text-sm font-medium">{title}</h3>
-      </div>
-      <p className="pl-7 text-gray-700">{value}</p>
+    <div className="flex items-center gap-2">
+      {icon}
+      <span className="text-sm font-medium">{title}:</span>
+      <span className="text-sm text-gray-700">{value}</span>
     </div>
   );
 };
- 
+
 export default JobDetailsRightCard;

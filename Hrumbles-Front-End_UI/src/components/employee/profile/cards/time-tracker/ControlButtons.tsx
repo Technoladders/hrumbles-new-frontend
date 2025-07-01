@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Play, Pause, Square, RefreshCcw } from "lucide-react";
@@ -7,7 +6,7 @@ interface ControlButtonsProps {
   activeSession: any;
   isLoading: boolean;
   checkOfficeHours: () => boolean;
-  onAction: (action: 'start' | 'pause' | 'resume' | 'reset' | 'stop') => void;
+  onAction: (action: "start" | "pause" | "resume" | "reset" | "stop") => void;
 }
 
 export const ControlButtons: React.FC<ControlButtonsProps> = ({
@@ -21,36 +20,33 @@ export const ControlButtons: React.FC<ControlButtonsProps> = ({
       {!activeSession && (
         <Button
           size="icon"
-          variant="outline"
-          className="hover:bg-brand-accent/10 w-12 h-12"
-          onClick={() => onAction('start')}
+          className="bg-white/20 backdrop-blur-sm border-white/30 hover:bg-white/30 w-12 h-12"
+          onClick={() => onAction("start")}
           disabled={isLoading || !checkOfficeHours()}
         >
-          <Play className="h-5 w-5" />
+          <Play className="h-5 w-5 text-white" />
         </Button>
       )}
-      
-      {activeSession && activeSession.status === 'running' && (
+
+      {activeSession && activeSession.status === "running" && (
         <Button
           size="icon"
-          variant="outline"
-          className="hover:bg-orange-100 w-12 h-12"
-          onClick={() => onAction('pause')}
+          className="bg-white/20 backdrop-blur-sm border-white/30 hover:bg-white/30 w-12 h-12"
+          onClick={() => onAction("pause")}
           disabled={isLoading}
         >
-          <Pause className="h-5 w-5" />
+          <Pause className="h-5 w-5 text-white" />
         </Button>
       )}
-      
-      {activeSession && activeSession.status === 'paused' && (
+
+      {activeSession && activeSession.status === "paused" && (
         <Button
           size="icon"
-          variant="outline"
-          className="hover:bg-brand-accent/10 w-12 h-12"
-          onClick={() => onAction('resume')}
+          className="bg-white/20 backdrop-blur-sm border-white/30 hover:bg-white/30 w-12 h-12"
+          onClick={() => onAction("resume")}
           disabled={isLoading}
         >
-          <Play className="h-5 w-5" />
+          <Play className="h-5 w-5 text-white" />
         </Button>
       )}
 
@@ -58,21 +54,19 @@ export const ControlButtons: React.FC<ControlButtonsProps> = ({
         <>
           <Button
             size="icon"
-            variant="outline"
-            className="hover:bg-red-100 w-12 h-12 text-red-600 border-red-200"
-            onClick={() => onAction('stop')}
+            className="bg-white/20 backdrop-blur-sm border-white/30 hover:bg-white/30 w-12 h-12"
+            onClick={() => onAction("stop")}
             disabled={isLoading}
           >
-            <Square className="h-5 w-5" />
+            <Square className="h-5 w-5 text-red-400" />
           </Button>
           <Button
             size="icon"
-            variant="outline"
-            className="hover:bg-gray-100 w-12 h-12"
-            onClick={() => onAction('reset')}
+            className="bg-white/20 backdrop-blur-sm border-white/30 hover:bg-white/30 w-12 h-12"
+            onClick={() => onAction("reset")}
             disabled={isLoading}
           >
-            <RefreshCcw className="h-5 w-5" />
+            <RefreshCcw className="h-5 w-5 text-white" />
           </Button>
         </>
       )}

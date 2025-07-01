@@ -32,10 +32,10 @@ export const WorkTimeCard: React.FC<WorkTimeCardProps> = ({ employeeId }) => {
   const getBarColor = (date: Date) => {
     const today = new Date();
     if (isSameDay(date, today)) {
-      return "bg-white border border-gray-200";
+      return "bg-select border border-gray-200";
     }
     if (isBefore(date, today)) {
-      return "bg-black";
+      return "bg-purple border border-gray-200";
     }
     return "bg-transparent border border-gray-200";
   };

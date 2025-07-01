@@ -90,6 +90,9 @@ export const INDIAN_CITIES = [
   { value: "puducherry", label: "Puducherry" },
   { value: "ranchi", label: "Ranchi" },
   { value: "mangalore", label: "Mangalore" },
+  { value: "gurgaon", label: "Gurgaon"},
+  { value: "noida", label: "Noida" },
+
   { value: "remote", label: "Remote" }
 ];
 
@@ -122,6 +125,7 @@ export const MOCK_VENDORS = [
 
 // Import the Candidate type to fix the error
 import { Candidate } from "@/lib/types";
+import { Label } from "recharts";
 
 // Mock candidates data
 export const MOCK_CANDIDATES = [

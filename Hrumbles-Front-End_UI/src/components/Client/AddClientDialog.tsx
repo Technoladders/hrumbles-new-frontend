@@ -13,20 +13,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import ClientBasicInfo from "./form/ClientBasicInfo";
 import ClientAddress from "./form/ClientAddress";
 import ContactList from "./form/ContactList";
-
+ 
 interface AddClientDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   clientToEdit?: any;
 }
-
+ 
 const AddClientDialog = ({ open, onOpenChange, clientToEdit }: AddClientDialogProps) => {
   const [activeTab, setActiveTab] = useState("details");
   const [isSubmittingIntentionally, setIsSubmittingIntentionally] = useState(false); // New flag
   const queryClient = useQueryClient();
   const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
-
+ 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientFormSchema),
     defaultValues: {
@@ -45,7 +45,7 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit }: AddClientDialogPr
     },
     mode: "onChange",
   });
-
+ 
   useEffect(() => {
     if (clientToEdit) {
       const fetchClientDetails = async () => {
@@ -54,17 +54,17 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit }: AddClientDialogPr
           .select("*")
           .eq("id", clientToEdit.id)
           .single();
-
+ 
         const { data: contactsData, error: contactsError } = await supabase
           .from("hr_client_contacts")
           .select("*")
           .eq("client_id", clientToEdit.id);
-
+ 
         if (clientError || contactsError) {
           toast.error("Failed to load client details");
           return;
         }
-
+ 
         form.reset({
           display_name: clientData.display_name || "",
           client_name: clientData.client_name || "",
@@ -83,20 +83,20 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit }: AddClientDialogPr
       fetchClientDetails();
     }
   }, [clientToEdit, form]);
-
+ 
   const onSubmit = async (values: ClientFormValues) => {
-    console.log("onSubmit called with values:", values); // Debug log
+    console.log("onSubmit called with values:", values); 
     if (!isSubmittingIntentionally) {
       console.log("Submission blocked: Not intentional");
       return; // Prevent submission unless explicitly triggered by Save button
     }
-
+ 
     try {
       if (!user || !organization_id) {
         toast.error("Authentication error: Missing user or organization ID");
         return;
       }
-
+ 
       if (clientToEdit) {
         const clientData = {
           display_name: values.display_name,
@@ -113,30 +113,31 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit }: AddClientDialogPr
           updated_by: user.id,
           status: "active",
         };
-
+ 
         const { error: clientError } = await supabase
           .from("hr_clients")
           .update(clientData)
           .eq("id", clientToEdit.id);
-
+ 
         if (clientError) throw clientError;
-
+ 
         await supabase.from("hr_client_contacts").delete().eq("client_id", clientToEdit.id);
-
+ 
         const contactsToInsert = values.contacts.map((contact) => ({
           client_id: clientToEdit.id,
           name: contact.name,
           email: contact.email || null,
           phone: contact.phone || null,
           designation: contact.designation || null,
+          organization_id
         }));
-
+ 
         const { error: contactsError } = await supabase
           .from("hr_client_contacts")
           .insert(contactsToInsert);
-
+ 
         if (contactsError) throw contactsError;
-
+ 
         toast.success("Client updated successfully");
       } else {
         const clientData = {
@@ -156,15 +157,15 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit }: AddClientDialogPr
           updated_by: user.id,
           status: "active",
         };
-
+ 
         const { data: clientResult, error: clientError } = await supabase
           .from("hr_clients")
           .insert(clientData)
           .select("id")
           .single();
-
+ 
         if (clientError) throw clientError;
-
+ 
         const clientId = clientResult.id;
         const contactsToInsert = values.contacts.map((contact) => ({
           client_id: clientId,
@@ -172,17 +173,18 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit }: AddClientDialogPr
           email: contact.email || null,
           phone: contact.phone || null,
           designation: contact.designation || null,
+          organization_id
         }));
-
+ 
         const { error: contactsError } = await supabase
           .from("hr_client_contacts")
           .insert(contactsToInsert);
-
+ 
         if (contactsError) throw contactsError;
-
+ 
         toast.success("Client added successfully");
       }
-
+ 
       queryClient.invalidateQueries({ queryKey: ["hr_clients"] });
       form.reset();
       onOpenChange(false);
@@ -193,21 +195,21 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit }: AddClientDialogPr
       setIsSubmittingIntentionally(false); // Reset flag
     }
   };
-
+ 
   const isDetailsTabValid = () => {
     const values = form.getValues();
     const isValid = values.display_name.trim() !== "" && values.service_type.length > 0;
     console.log("Details tab valid:", isValid);
     return isValid;
   };
-
+ 
   const isContactsTabValid = () => {
     const values = form.getValues();
     const isValid = values.contacts.length > 0 && values.contacts.every(contact => contact.name.trim() !== "");
     console.log("Contacts tab valid:", isValid);
     return isValid;
   };
-
+ 
   const handleNext = () => {
     console.log("handleNext called, current tab:", activeTab); // Debug log
     if (activeTab === "details" && isDetailsTabValid()) {
@@ -218,20 +220,20 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit }: AddClientDialogPr
       toast.error("Please fill all required fields before proceeding.");
     }
   };
-
+ 
   const handleSave = () => {
     console.log("Save button clicked"); // Debug log
     setIsSubmittingIntentionally(true);
     form.handleSubmit(onSubmit)();
   };
-
+ 
   const { isSubmitting, isValid, errors } = form.formState;
-
-  if (process.env.NODE_ENV === "development") {
-    console.log("Form Errors:", errors);
-    console.log("Form Values:", form.getValues());
-  }
-
+ 
+  // if (process.env.NODE_ENV === "development") {
+  //   console.log("Form Errors:", errors);
+  //   console.log("Form Values:", form.getValues());
+  // }
+ 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl p-4">
@@ -290,17 +292,12 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit }: AddClientDialogPr
                 </Button>
               )}
             </div>
-            {process.env.NODE_ENV === "development" && (
-              <div className="text-xs text-gray-500 mt-2">
-                Form Valid: {isValid.toString()} | Submitting: {isSubmitting.toString()}
-                <pre>{JSON.stringify(errors, null, 2)}</pre>
-              </div>
-            )}
+           
           </form>
         </Form>
       </DialogContent>
     </Dialog>
   );
 };
-
+ 
 export default AddClientDialog;

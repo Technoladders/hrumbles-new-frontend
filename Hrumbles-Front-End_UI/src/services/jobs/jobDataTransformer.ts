@@ -32,6 +32,9 @@ export const transformToJobData = (jobRecord: any): JobData => {
     createdBy: jobRecord.created_by,
     assigned_to: jobRecord.assigned_to || null, 
     candidate_count: jobRecord.candidate_count,
+    hr_budget: jobRecord.budget,
+    createdAt: jobRecord.created_at,
+    hr_budget_type: jobRecord.budget_type
   };
 
  
@@ -62,5 +65,6 @@ export const transformToDbJob = (job: JobData): Record<string, any> => {
     notice_period: job.noticePeriod || null, 
     number_of_candidates: job.numberOfCandidates || 0,
     organization_id: job.organization,
+    created_at: job.createdAt
   };
 };

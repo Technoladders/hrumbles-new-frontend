@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import ProfileImageUpload from "@/components/ProfileImageUpload";
 import { useSelector } from "react-redux";
 import { Country, State, City } from 'country-state-city'; 
-import { ArrowLeft, Save, ArrowRight, Upload, Plus, X, ChevronRight, User, CalendarIcon, File, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, ArrowRight, Upload, Plus, X, ChevronRight, User, CalendarIcon, File, Loader2, FileText } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -28,6 +28,25 @@ import { format } from "date-fns";
 import { Experience } from "@/services/types/employee.types";
 import { PostgrestSingleResponse } from "@supabase/supabase-js";
 import { FaRegFilePdf } from "react-icons/fa6";
+import PhoneInput from "react-phone-number-input";
+import "react-phone-number-input/style.css";
+
+
+
+// Utility functions for INR formatting
+const formatINR = (value: string): string => {
+  if (!value) return "";
+  const num = parseFloat(value.replace(/,/g, ""));
+  if (isNaN(num)) return "";
+  return num.toLocaleString("en-IN", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  });
+};
+
+const parseINR = (value: string): string => {
+  return value.replace(/,/g, "");
+};
 
 interface EmployeeFormData {
   firstName: string;
@@ -36,12 +55,14 @@ interface EmployeeFormData {
   phone: string;
   employeeId: string;
   department: string;
+  designation: string;
   position: string;
   dateOfBirth: string;
   gender: string;
   maritalStatus: string;
   bloodGroup: string;
   employmentStatus: string;
+  hire_type: string; 
   aadharNumber: string;
   panNumber: string;
   voterIdNumber: string;
@@ -53,6 +74,9 @@ interface EmployeeFormData {
   esicUrl: string;
   uanUrl: string;
   profilePictureUrl: string;
+  salary: string; // Added
+  salary_type: string; // Added
+  joining_date: string;
   presentAddress: {
     addressLine1: string;
     addressLine2?: string;
@@ -125,12 +149,14 @@ const initialFormData: EmployeeFormData = {
   phone: "",
   employeeId: "",
   department: "",
+  designation:"",
   position: "",
   dateOfBirth: "",
   gender: "",
   maritalStatus: "",
   bloodGroup: "",
   employmentStatus: "Active",
+  hire_type: "",
   aadharNumber: "",
   panNumber: "",
   voterIdNumber: "",
@@ -142,6 +168,9 @@ const initialFormData: EmployeeFormData = {
   esicUrl: "",
   uanUrl: "",
   profilePictureUrl: "",
+  salary: "", // Added
+  salary_type: "LPA", // Added, default to LPA
+  joining_date: "",
   presentAddress: {
     addressLine1: "",
     country: "India",
@@ -199,12 +228,13 @@ const initialFormData: EmployeeFormData = {
 //validation function
 
 const VALIDATIONS = {
-  phone: /^(?:\+91)?[6-9]\d{9}$/, // Starts with 6-9, 10 digits, optional +91
+  phone: /^\+\d{10,15}$/, // Starts with 6-9, 10 digits, optional +91
   email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, // Basic email format
   aadhar: /^\d{12}$/, // 12 digits
   pan: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, // 5 letters, 4 digits, 1 letter
   uan: /^\d{12}$/, // 12 digits
   esic: /^\d{10,17}$/, // 10-17 digits (adjust as needed)
+  salary: /^\d+$/, // Positive number, optional 2 decimal places
 };
 
 // Add error state type
@@ -215,6 +245,13 @@ interface FormErrors {
   panNumber?: string;
   uanNumber?: string;
   esicNumber?: string;
+  firstName?: string;
+  lastName?: string;
+  department?: string;
+  designation?: string;
+  hire_type?: string;
+  salary?: string;
+  salary_type?: string;
 }
 
 const EmployeeForm = () => {
@@ -230,9 +267,15 @@ const EmployeeForm = () => {
   const [states, setStates] = useState([]);
   const [cities, setCities] = useState([]);
   const [errors, setErrors] = useState<FormErrors>({});
+
+  // User data for Role Based
+    const user = useSelector((state: any) => state.auth.user);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
+   const userRole = useSelector((state: any) => state.auth.role);
+      const isEmployee = userRole === 'employee';
     // Experience modal state
     const [showExperienceModal, setShowExperienceModal] = useState(false);
+    const [formattedSalary, setFormattedSalary] = useState<string>(""); // Added for INR formatting
     const [currentExperience, setCurrentExperience] = useState<Experience>({
       jobType: "Full Time",
       company: "",
@@ -253,12 +296,41 @@ const EmployeeForm = () => {
     const [endDate, setEndDate] = useState<Date | undefined>(undefined);
     const [editingExperienceIndex, setEditingExperienceIndex] = useState<number | null>(null);
     const [uploadingFile, setUploadingFile] = useState<string | null>(null);
+    const [uploadingDoc, setUploadingDoc] = useState<{ [key: string]: boolean }>({});
+
     
     // States for missing documents
     const [noSeparationLetter, setNoSeparationLetter] = useState(false);
     const [noPayslip, setNoPayslip] = useState(false);
     const [departments, setDepartments] = useState([]);
+    const [designations, setDesignations] = useState([]);
 const [selectedDepartment, setSelectedDepartment] = useState(formData.department || "");
+const [selectedDesignation, setSelectedDesignation] = useState(formData.designation || "");
+
+// Sync formattedSalary with formData.salary
+useEffect(() => {
+  setFormattedSalary(formatINR(formData.salary));
+}, [formData.salary]);
+
+// Handle salary input change
+const handleSalaryChange = (value: string) => {
+  // Allow empty input
+  if (value === "") {
+    setFormData((prev) => ({ ...prev, salary: "" }));
+    setFormattedSalary("");
+    setErrors((prev) => ({ ...prev, salary: "Salary is required" }));
+    return;
+  }
+
+  // Remove commas and validate
+  const rawValue = parseINR(value);
+  if (/^\d*$/.test(rawValue)) { // Allow only integers
+    setFormData((prev) => ({ ...prev, salary: rawValue }));
+    setFormattedSalary(formatINR(rawValue));
+    const error = validateField("salary", rawValue);
+    setErrors((prev) => ({ ...prev, salary: error }));
+  }
+};
 
 
   console.log("Formdataaa:", formData)
@@ -325,7 +397,7 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
       
       const { data: employeeData, error: employeeError } = await supabase
         .from('hr_employees')
-        .select('*, hr_departments(name)')
+        .select('*, hr_departments(id, name), hr_designations(id, name, department_id)')
         .eq('id', employeeId)
         .single();
       
@@ -377,24 +449,29 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
         email: employeeData.email || "",
         phone: employeeData.phone || "",
         employeeId: employeeData.employee_id || "",
-        department: employeeData.hr_departments?.name || "",
+        department: employeeData.department_id || "",
+        designation: employeeData.designation_id || "",
         position: employeeData.position || "",
         dateOfBirth: employeeData.date_of_birth ? new Date(employeeData.date_of_birth).toISOString().split('T')[0] : "",
         gender: employeeData.gender || "",
         maritalStatus: employeeData.marital_status || "",
         bloodGroup: employeeData.blood_group || "",
         employmentStatus: employeeData.employment_status || "Active",
+        hire_type: employeeData.hire_type || "",
         aadharNumber: employeeData.aadhar_number || "",
         panNumber: employeeData.pan_number || "",
-        voterIdNumber: employeeData.voter_id_number || "",
+        // voterIdNumber: employeeData.voter_id_number || "",
         esicNumber: employeeData.esic_number || "",
         uanNumber: employeeData.uan_number || "",
         aadharUrl: employeeData.aadhar_url || "",
         panUrl: employeeData.pan_url || "",
-        voterIdUrl: employeeData.voter_id_url || "",
+        // voterIdUrl: employeeData.voter_id_url || "",
         esicUrl: employeeData.esic_url || "",
         uanUrl: employeeData.uan_url || "",
         profilePictureUrl: employeeData.profile_picture_url || "",
+        salary: employeeData.salary ? employeeData.salary.toString() : "", // Added
+        salary_type: employeeData.salary_type || "LPA", // Added
+        joining_date: employeeData.joining_date,
         
         presentAddress: presentAddressData ? {
           addressLine1: presentAddressData.address_line1 || "",
@@ -471,11 +548,32 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
           state: bankDetailsData.state,
           city: bankDetailsData.city,
           zipCode: bankDetailsData.zip_code,
+          documentUrl: bankDetailsData.document_url
         } : initialFormData.bankDetails
       };
       
       setFormData(formattedData);
+      setFormattedSalary(formatINR(formattedData.salary)); // Set formatted salary
+      setSelectedDepartment(employeeData.department_id || "");
+      setSelectedDesignation(employeeData.designation_id || "");
       setInitialDataLoaded(true);
+
+      // Fetch designations for the department to ensure the designation is valid
+    const { data: desData, error: desError } = await supabase
+    .from("hr_designations")
+    .select("id, name, department_id")
+    .or(`department_id.eq.${employeeData.department_id},department_id.is.null`);
+  if (desError) {
+    console.error("Error fetching designations:", desError);
+  } else {
+    setDesignations(desData || []);
+    // Verify the designation_id is valid for the department
+    const isValid = desData.some((des) => des.id === employeeData.designation_id);
+    if (!isValid) {
+      setSelectedDesignation("");
+      setFormData((prev) => ({ ...prev, designation: "" }));
+    }
+  }
       
     } catch (error: any) {
       console.error("Error fetching employee data:", error);
@@ -486,25 +584,77 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
   };
 
   useEffect(() => {
-    const fetchDepartments = async () => {
-      const { data, error } = await supabase.from("hr_departments").select("id, name");
-      if (error) {
-        console.error("Error fetching departments:", error);
-      } else {
-        setDepartments(data || []);
-  
-        // Ensure the saved department ID is set as the default
-        if (formData.department) {
-          const defaultDept = data.find((dept) => dept.id === formData.department);
-          if (defaultDept) {
-            setSelectedDepartment(defaultDept.id);
+    const fetchDepartmentsAndDesignations = async () => {
+      try {
+        // Fetch departments
+        const { data: deptData, error: deptError } = await supabase
+          .from("hr_departments")
+          .select("id, name");
+        if (deptError) {
+          console.error("Error fetching departments:", deptError);
+        } else {
+          setDepartments(deptData || []);
+          if (formData.department) {
+            const defaultDept = deptData.find((dept) => dept.id === formData.department);
+            if (defaultDept) {
+              setSelectedDepartment(defaultDept.id);
+            }
           }
         }
+  
+        // Fetch designations (initially all or based on formData.department)
+        let query = supabase.from("hr_designations").select("id, name, department_id");
+        if (formData.department) {
+          query = query.or(`department_id.eq.${formData.department},department_id.is.null`);
+        }
+        const { data: desData, error: desError } = await query;
+        if (desError) {
+          console.error("Error fetching designations:", desError);
+        } else {
+          setDesignations(desData || []);
+          if (formData.designation) {
+            const defaultDes = desData.find((des) => des.id === formData.designation);
+            if (defaultDes) {
+              setSelectedDesignation(defaultDes.id);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
       }
     };
   
-    fetchDepartments();
-  }, [formData.department]);
+    fetchDepartmentsAndDesignations();
+  }, []); // Run once on mount
+
+  useEffect(() => {
+    const fetchDesignations = async () => {
+      try {
+        let query = supabase.from("hr_designations").select("id, name, department_id");
+        if (formData.department) {
+          query = query.or(`department_id.eq.${formData.department},department_id.is.null`);
+        }
+        const { data: desData, error: desError } = await query;
+        if (desError) {
+          console.error("Error fetching designations:", desError);
+        } else {
+          setDesignations(desData || []);
+          // Reset selectedDesignation if it's not valid for the new department
+          if (formData.designation) {
+            const isValid = desData.some((des) => des.id === formData.designation);
+            if (!isValid) {
+              setSelectedDesignation("");
+              setFormData((prev) => ({ ...prev, designation: "" }));
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching designations:", error);
+      }
+    };
+  
+    fetchDesignations();
+  }, [formData.department]); // Re-run when department changes
 
   // const handleInputChange = (field: string, value: string) => {
   //   setFormData(prev => ({
@@ -996,109 +1146,145 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
     }
   };
 
-  const handleBankUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-    category: 'bankDetails' // Add other categories if needed
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-  
-    try {
-      const bucketName = 'employee-documents';
-      const type = 'bank-document';
-      const fileUrl = await uploadDocument(file, bucketName, type);
-  
-      if (category === 'bankDetails') {
-        setFormData({
-          ...formData,
-          bankDetails: {
-            ...formData.bankDetails,
-            documentUrl: fileUrl, // Store the file URL
-          },
-        });
-      }
-  
-      console.log('Bank document uploaded successfully:', fileUrl);
-    } catch (error) {
-      console.error('Bank document upload failed:', error);
-    }
-  };
+  const sanitizeFileName = (fileName: string): string => {
+  // Extract the file name and extension
+  const extension = fileName.split('.').pop()?.toLowerCase() || '';
+  const name = fileName.substring(0, fileName.length - (extension.length + 1));
 
-  const handleDocumentUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-    documentType: 'aadhar' | 'pan' | 'uan' | 'esic'
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-  
-    try {
-      const bucketName = 'employee-documents';
-      const fileUrl = await uploadDocument(file, bucketName, documentType);
-  
-      // Update local form state
-      setFormData((prevData) => ({
-        ...prevData,
-        [`${documentType}Url`]: fileUrl, // Store URL in respective field
-      }));
-  
-      console.log(`${documentType} document uploaded successfully:`, fileUrl);
-  
-      // Update document URL in Supabase `hr_employees` table
-      const { error } = await supabase
-        .from('hr_employees')
-        .update({ [`${documentType}_url`]: fileUrl }) // Ensure column names match DB
-        .eq('employee_id', formData.employeeId); // Match employee
-  
-      if (error) {
-        throw error;
-      }
-  
-      console.log(`Updated ${documentType}_url in database:`, fileUrl);
-    } catch (error) {
-      console.error(`${documentType} document upload failed:`, error);
+  // Replace special characters, spaces, and non-ASCII characters
+  let sanitized = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with hyphen
+    .replace(/^-+|-+$/g, '')     // Remove leading/trailing hyphens
+    .replace(/\s+/g, '-')        // Replace spaces with hyphens
+    .substring(0, 100);          // Limit length to 100 characters
+
+  // Ensure the name is not empty
+  if (!sanitized) {
+    sanitized = 'file';
+  }
+
+  // Add timestamp and short random string for uniqueness
+  const timestamp = Date.now();
+  const randomStr = Math.random().toString(36).substring(2, 8); // 6-char random string
+  const uniqueName = `${sanitized}-${timestamp}-${randomStr}`;
+
+  return `${uniqueName}.${extension}`;
+};
+
+const handleBankUpload = async (
+  event: React.ChangeEvent<HTMLInputElement>,
+  category: 'bankDetails' // Add other categories if needed
+) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const bucketName = 'employee-documents';
+    const sanitizedFileName = sanitizeFileName(file.name); // Sanitize file name
+    const filePath = `bank-documents/${sanitizedFileName}`; // Construct file path
+    const fileUrl = await uploadDocument(file, bucketName, filePath); // Use filePath instead of type
+
+    if (category === 'bankDetails') {
+      setFormData({
+        ...formData,
+        bankDetails: {
+          ...formData.bankDetails,
+          documentUrl: fileUrl, // Store the file URL
+        },
+      });
     }
-  };
-  
-  const handleExpUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-    category: 'offerLetter' | 'separationLetter' | 'hikeLetter' | 'payslip1' | 'payslip2' | 'payslip3',
-    experienceId: string
-  ) => {
-    const file = event.target.files?.[0];
-    setUploadingFile(category);
-    if (!file) return;
-  
-    try {
-      const bucketName = 'employee-documents';
-      const type = category;
-      const fileUrl = await uploadDocument(file, bucketName, type);
-  
-      // Update currentExperience state
-      setCurrentExperience((prev) => ({
-        ...prev,
-        ...(category === 'payslip1' && { payslip_1_url: fileUrl }),
-        ...(category === 'payslip2' && { payslip_2_url: fileUrl }),
-        ...(category === 'payslip3' && { payslip_3_url: fileUrl }),
-        ...(category === 'offerLetter' && { offerLetterUrl: fileUrl }),
-        ...(category === 'separationLetter' && { separationLetterUrl: fileUrl }),
-        ...(category === 'hikeLetter' && { hikeLetterUrl: fileUrl }),
-      }));
-  
-      console.log(`${category} uploaded successfully:`, fileUrl);
-    } catch (error) {
-      console.error(`${category} upload failed:`, error);
-    } finally {
-      setUploadingFile(null); // Hide loader
+
+    console.log('Bank document uploaded successfully:', fileUrl);
+  } catch (error) {
+    console.error('Bank document upload failed:', error);
+  }
+};
+
+const handleDocumentUpload = async (
+  event: React.ChangeEvent<HTMLInputElement>,
+  documentType: 'aadhar' | 'pan' | 'uan' | 'esic'
+) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+
+    setUploadingDoc((prev) => ({ ...prev, [documentType]: true }));
+
+    const bucketName = 'employee-documents';
+    const sanitizedFileName = sanitizeFileName(file.name); // Sanitize file name
+    const filePath = `identity-documents/${formData.employeeId || 'new'}/${sanitizedFileName}`; // Construct file path
+    const fileUrl = await uploadDocument(file, bucketName, filePath); // Use filePath instead of documentType
+
+    // Update local form state
+    setFormData((prevData) => ({
+      ...prevData,
+      [`${documentType}Url`]: fileUrl, // Store URL in respective field
+    }));
+
+    console.log(`${documentType} document uploaded successfully:`, fileUrl);
+
+    // Update document URL in Supabase `hr_employees` table
+    const { error } = await supabase
+      .from('hr_employees')
+      .update({ [`${documentType}_url`]: fileUrl }) // Ensure column names match DB
+      .eq('employee_id', formData.employeeId); // Match employee
+
+    if (error) {
+      throw error;
     }
-  };
+
+    console.log(`Updated ${documentType}_url in database:`, fileUrl);
+  } catch (error) {
+    console.error(`${documentType} document upload failed:`, error);
+  }finally {
+    // 🔵 Stop uploading (set uploading false)
+    setUploadingDoc((prev) => ({ ...prev, [documentType]: false }));
+  }
+};
+  
+const handleExpUpload = async (
+  event: React.ChangeEvent<HTMLInputElement>,
+  category: 'offerLetter' | 'separationLetter' | 'hikeLetter' | 'payslip1' | 'payslip2' | 'payslip3',
+  experienceId: string
+) => {
+  const file = event.target.files?.[0];
+  setUploadingFile(category);
+  if (!file) return;
+
+  try {
+    const bucketName = 'employee-documents';
+    const sanitizedFileName = sanitizeFileName(file.name); // Sanitize file name
+    const filePath = `experience-documents/${experienceId}/${sanitizedFileName}`; // Construct file path
+    const fileUrl = await uploadDocument(file, bucketName, filePath); // Use filePath instead of type
+
+    // Update currentExperience state
+    setCurrentExperience((prev) => ({
+      ...prev,
+      ...(category === 'payslip1' && { payslip_1_url: fileUrl }),
+      ...(category === 'payslip2' && { payslip_2_url: fileUrl }),
+      ...(category === 'payslip3' && { payslip_3_url: fileUrl }),
+      ...(category === 'offerLetter' && { offerLetterUrl: fileUrl }),
+      ...(category === 'separationLetter' && { separationLetterUrl: fileUrl }),
+      ...(category === 'hikeLetter' && { hikeLetterUrl: fileUrl }),
+    }));
+
+    console.log(`${category} uploaded successfully:`, fileUrl);
+  } catch (error) {
+    console.error(`${category} upload failed:`, error);
+  } finally {
+    setUploadingFile(null); // Hide loader
+  }
+};
 
   // Validation function
   const validateField = (field: keyof FormErrors, value: string): string | undefined => {
     switch (field) {
       case "phone":
-        if (!value) return "Phone number is required";
-        if (!VALIDATIONS.phone.test(value)) return "Enter a valid 10-digit phone number (e.g., 9876543210 or +919876543210)";
-        break;
+      if (!value) return "Phone number is required";
+      if (!VALIDATIONS.phone.test(value)) return "Enter a valid phone number with country code (e.g., +919876543210)";
+      break;
       case "email":
         if (!value) return "Email is required";
         if (!VALIDATIONS.email.test(value)) return "Enter a valid email address";
@@ -1115,6 +1301,16 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
       case "esicNumber":
         if (value && !VALIDATIONS.esic.test(value)) return "ESIC number must be 10-17 digits";
         break;
+        case "hire_type":
+      if (!value) return "Hire type is required";
+      break;
+    case "salary":
+      if (!value) return "Salary is required";
+      if (!VALIDATIONS.salary.test(value)) return "Enter a valid positive integer salary";
+      break;
+    case "salary_type":
+      if (!value) return "Salary type is required";
+      break;
       default:
         return undefined;
     }
@@ -1123,7 +1319,7 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
   // Handle input change with validation
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-
+  
     // Validate on change
     const error = validateField(field as keyof FormErrors, value);
     setErrors((prev) => ({ ...prev, [field]: error }));
@@ -1132,6 +1328,14 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
   // Validate all fields on submit
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
+
+    // Add required field validations
+  if (!formData.firstName) newErrors.firstName = "First Name is required";
+  if (!formData.lastName) newErrors.lastName = "Last Name is required";
+  if (!formData.email) newErrors.email = "Email is required";
+  if (!formData.phone) newErrors.phone = "Phone number is required";
+  if (!formData.department) newErrors.department = "Department is required";
+  if (!formData.designation) newErrors.designation = "Designation is required";
     const fieldsToValidate: (keyof FormErrors)[] = [
       "phone",
       "email",
@@ -1139,6 +1343,9 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
       "panNumber",
       "uanNumber",
       "esicNumber",
+      "hire_type",
+    "salary",
+    "salary_type",
     ];
 
     fieldsToValidate.forEach((field) => {
@@ -1168,22 +1375,27 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
         phone: formData.phone,
         employee_id: formData.employeeId,
         department_id: formData.department || null,
+        designation_id: formData.designation || null,
         position: formData.position,
-        date_of_birth: formData.dateOfBirth,
+        date_of_birth: formData.dateOfBirth || null,
         gender: formData.gender,
         marital_status: formData.maritalStatus,
         blood_group: formData.bloodGroup,
         employment_status: formData.employmentStatus,
-        aadhar_number: formData.aadharNumber,
-        pan_number: formData.panNumber,
-        esic_number: formData.esicNumber,
-        uan_number: formData.uanNumber,
-        aadhar_url: formData.aadharUrl,
+        hire_type: formData.hire_type || null, 
+        aadhar_number: formData.aadharNumber || null,
+        pan_number: formData.panNumber || null,
+        esic_number: formData.esicNumber || null,
+        uan_number: formData.uanNumber || null,
+        aadhar_url: formData.aadharUrl || null,
         pan_url: formData.panUrl,
         esic_url: formData.esicUrl,
         uan_url: formData.uanUrl,
         organization_id: organizationId,
-        profile_picture_url: formData.profilePictureUrl
+        profile_picture_url: formData.profilePictureUrl,
+        salary: Number(formData.salary) || null, // Convert to number
+        salary_type: formData.salary_type || null, // Added
+        joining_date: formData.joining_date || null,
       };
       
       let employeeId = id;
@@ -1211,6 +1423,7 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
           employee_id: employeeId,
           type: 'present',
           address_line1: formData.presentAddress.addressLine1,
+          address_line2: formData.presentAddress.addressLine2,
           country: formData.presentAddress.country,
           state: formData.presentAddress.state,
           city: formData.presentAddress.city,
@@ -1240,6 +1453,7 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
           employee_id: employeeId,
           type: 'permanent',
           address_line1: formData.permanentAddress.addressLine1,
+          address_line2: formData.permanentAddress.addressLine2,
           country: formData.permanentAddress.country,
           state: formData.permanentAddress.state,
           city: formData.permanentAddress.city,
@@ -1342,8 +1556,8 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
           company: exp.company,
           job_title: exp.position,
           location: exp.location,
-          start_date: exp.startDate,
-          end_date: exp.endDate,
+          start_date: exp.startDate || null,
+          end_date: exp.endDate || null,
           employment_type: exp.jobType,
           offer_letter_url: exp.offerLetterUrl,
           separation_letter_url: exp.separationLetterUrl,
@@ -1414,6 +1628,303 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
       setLoading(false);
     }
   };
+
+  // Render only the personal tab content since other tabs remain unchanged
+  const renderPersonalTab = () => {
+    const salarySuffix =
+      formData.salary_type === "LPA"
+        ? "₹"
+        : formData.salary_type === "Monthly"
+        ? "₹/mo"
+        : formData.salary_type === "Hourly"
+        ? "₹/hr"
+        : "₹";
+  
+    return (
+      <TabsContent value="personal" className="space-y-4">
+        <div className="flex flex-col md:flex-row gap-6 items-start">
+          {/* Profile Upload on the Left */}
+          <div className="flex-shrink-0">
+            <ProfileImageUpload
+              value={formData.profilePictureUrl}
+              onChange={handleProfilePictureChange}
+              initialLetter={formData.firstName?.[0] || "U"}
+            />
+          </div>
+  
+          {/* Compact Form Fields */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-5 w-full">
+            <div className="max-w-xs">
+              <Label htmlFor="firstName">First Name <span className="text-red-500">*</span></Label>
+              <Input
+                type="text"
+                id="firstName"
+                value={formData.firstName}
+                onChange={(e) => handleInputChange("firstName", e.target.value)}
+                required
+              />
+              {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
+            </div>
+            <div className="max-w-xs">
+              <Label htmlFor="lastName">Last Name <span className="text-red-500">*</span></Label>
+              <Input
+                type="text"
+                id="lastName"
+                value={formData.lastName}
+                onChange={(e) => handleInputChange("lastName", e.target.value)}
+                required
+              />
+              {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
+            </div>
+            <div className="max-w-xs">
+              <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
+              <Input
+                type="email"
+                id="email"
+                value={formData.email}
+                onChange={(e) => handleInputChange("email", e.target.value)}
+                required
+              />
+              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+            </div>
+            <div className="max-w-xs">
+              <Label htmlFor="phone">Phone <span className="text-red-500">*</span></Label>
+              <PhoneInput
+                id="phone"
+                international
+                countryCallingCodeEditable={false}
+                defaultCountry="IN"
+                value={formData.phone}
+                onChange={(value) => handleInputChange("phone", value || "")}
+                className="border rounded-md px-3 py-2 w-full"
+                required
+              />
+              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+            </div>
+            <div className="max-w-xs">
+              <Label htmlFor="employeeId">Employee ID</Label>
+              <Input
+                type="text"
+                id="employeeId"
+                value={formData.employeeId}
+                onChange={(e) => handleInputChange("employeeId", e.target.value)}
+                disabled={isEmployee}
+              />
+            </div>
+            <div className="max-w-xs">
+              <Label htmlFor="department">Department <span className="text-red-500">*</span></Label>
+              <Select
+                value={selectedDepartment}
+                onValueChange={(value) => {
+                  setSelectedDepartment(value);
+                  handleInputChange("department", value);
+                  setSelectedDesignation("");
+                  setFormData((prev) => ({ ...prev, designation: "" }));
+                }}
+                disabled={isEmployee}
+              >
+                <SelectTrigger>
+                  <SelectValue>
+                    {departments.find((dept) => dept.id === selectedDepartment)?.name || "Select Department"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {departments.map((dept) => (
+                    <SelectItem key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.department && <p className="text-red-500 text-xs mt-1">{errors.department}</p>}
+            </div>
+            <div className="max-w-xs">
+              <Label htmlFor="designation">Designation <span className="text-red-500">*</span></Label>
+              <Select
+                value={selectedDesignation}
+                onValueChange={(value) => {
+                  setSelectedDesignation(value);
+                  handleInputChange("designation", value);
+                }}
+                disabled={isEmployee}
+              >
+                <SelectTrigger>
+                  <SelectValue>
+                    {designations.find((des) => des.id === selectedDesignation)?.name || "Select Designation"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {designations.map((des) => (
+                    <SelectItem key={des.id} value={des.id}>
+                      {des.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.designation && <p className="text-red-500 text-xs mt-1">{errors.designation}</p>}
+            </div>
+            <div className="max-w-xs">
+              <Label htmlFor="dateOfBirth">Date of Birth</Label>
+              <Input
+                type="date"
+                id="dateOfBirth"
+                value={formData.dateOfBirth}
+                onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
+              />
+            </div>
+            <div className="max-w-xs">
+              <Label>Gender</Label>
+              <RadioGroup
+                defaultValue={formData.gender}
+                onValueChange={(value) => handleInputChange("gender", value)}
+                className="flex items-center space-x-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="Male" id="male" />
+                  <Label htmlFor="male">Male</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="Female" id="female" />
+                  <Label htmlFor="female">Female</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="Other" id="other" />
+                  <Label htmlFor="other">Other</Label>
+                </div>
+              </RadioGroup>
+            </div>
+            <div className="max-w-xs">
+              <Label htmlFor="maritalStatus">Marital Status</Label>
+              <Select
+                defaultValue={formData.maritalStatus}
+                onValueChange={(value) => handleInputChange("maritalStatus", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Single">Single</SelectItem>
+                  <SelectItem value="Married">Married</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="max-w-xs">
+              <Label htmlFor="bloodGroup">Blood Group</Label>
+              <Select
+                defaultValue={formData.bloodGroup}
+                onValueChange={(value) => handleInputChange("bloodGroup", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="A+">A+</SelectItem>
+                  <SelectItem value="A-">A-</SelectItem>
+                  <SelectItem value="B+">B+</SelectItem>
+                  <SelectItem value="B-">B-</SelectItem>
+                  <SelectItem value="O+">O+</SelectItem>
+                  <SelectItem value="O-">O-</SelectItem>
+                  <SelectItem value="AB+">AB+</SelectItem>
+                  <SelectItem value="AB-">AB-</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {!isEmployee && 
+            <div className="max-w-xs">
+              <Label htmlFor="employmentStatus">Employment Status</Label>
+              <Select
+                defaultValue={formData.employmentStatus}
+                onValueChange={(value) => handleInputChange("employmentStatus", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Inactive">Inactive</SelectItem>
+                  <SelectItem value="Terminated">Terminated</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+  }
+  {!isEmployee && 
+            <div className="max-w-xs">
+              <Label htmlFor="hire_type">Hire Type <span className="text-red-500">*</span></Label>
+              <Select
+                value={formData.hire_type}
+                onValueChange={(value) => handleInputChange("hire_type", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Hire Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Full Time">Full Time</SelectItem>
+                  <SelectItem value="Contract">Contract</SelectItem>
+                  <SelectItem value="Internship">Internship</SelectItem>
+                  <SelectItem value="Part Time">Part Time</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.hire_type && <p className="text-red-500 text-xs mt-1">{errors.hire_type}</p>}
+            </div>
+  }
+  {!isEmployee && 
+            <div className="max-w-xs relative">
+              <Label htmlFor="salary">Salary <span className="text-red-500">*</span></Label>
+              <Input
+                type="text"
+                id="salary"
+                value={formattedSalary}
+                onChange={(e) => handleSalaryChange(e.target.value)}
+                placeholder="Enter salary"
+                required
+                className="pr-12 h-10 border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+                aria-describedby="salary-suffix"
+              />
+              <span
+                id="salary-suffix"
+                className="absolute right-3 top-8 text-gray-400 text-sm pointer-events-none"
+              >
+                {salarySuffix}
+              </span>
+              {errors.salary && <p className="text-red-500 text-xs mt-1">{errors.salary}</p>}
+            </div>
+  }
+  {!isEmployee && 
+            <div className="max-w-xs">
+              <Label htmlFor="salary_type">Salary Type <span className="text-red-500">*</span></Label>
+              <Select
+                value={formData.salary_type}
+                onValueChange={(value) => handleInputChange("salary_type", value)}
+              >
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder="Select Salary Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="LPA">LPA</SelectItem>
+                  <SelectItem value="Monthly">Monthly</SelectItem>
+                  <SelectItem value="Hourly">Hourly</SelectItem>
+                  <SelectItem value="Stipend">Stipend</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.salary_type && <p className="text-red-500 text-xs mt-1">{errors.salary_type}</p>}
+            </div>
+            
+  }
+  <div className="max-w-xs">
+              <Label htmlFor="joining_date">Joining Date</Label>
+              <Input
+                type="date"
+                id="joining_date"
+                value={formData.joining_date}
+                onChange={(e) => handleInputChange("joining_date", e.target.value)}
+              />
+            </div>
+          </div>
+          
+        </div>
+      </TabsContent>
+    );
+  };
   
 
   return (
@@ -1439,198 +1950,7 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
               </TabsList>
 
               <form onSubmit={handleSubmit}>
-              <TabsContent value="personal" className="space-y-4">
-  <div className="flex flex-col md:flex-row gap-6 items-start">
-    {/* Profile Upload on the Left */}
-    <div className="flex-shrink-0">
-      <ProfileImageUpload
-        value={formData.profilePictureUrl}
-        onChange={handleProfilePictureChange}
-        initialLetter={formData.firstName?.[0] || "U"}
-      />
-    </div>
-
-    {/* Compact Form Fields */}
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-5 w-full">
-      <div className="max-w-xs">
-        <Label htmlFor="firstName">First Name <span className="text-red-500">*</span></Label>
-        <Input
-          type="text"
-          id="firstName"
-          value={formData.firstName}
-          onChange={(e) => handleInputChange("firstName", e.target.value)}
-          required
-        />
-      </div>
-      <div className="max-w-xs">
-        <Label htmlFor="lastName">Last Name <span className="text-red-500">*</span></Label>
-        <Input
-          type="text"
-          id="lastName"
-          value={formData.lastName}
-          onChange={(e) => handleInputChange("lastName", e.target.value)}
-          required
-        />
-      </div>
-      <div className="max-w-xs">
-        <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
-        <Input
-          type="email"
-          id="email"
-          value={formData.email}
-          onChange={(e) => handleInputChange("email", e.target.value)}
-          required
-        />
-        {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-      </div>
-      <div className="max-w-xs">
-        <Label htmlFor="phone">Phone <span className="text-red-500">*</span></Label>
-        <Input
-          type="tel"
-          id="phone"
-          value={formData.phone}
-          onChange={(e) => handleInputChange("phone", e.target.value)}
-          required
-        />
-        {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
-      </div>
-      <div className="max-w-xs">
-        <Label htmlFor="employeeId">Employee ID</Label>
-        <Input
-          type="text"
-          id="employeeId"
-          value={formData.employeeId}
-          onChange={(e) => handleInputChange("employeeId", e.target.value)}
-        />
-      </div>
-      <div className="max-w-xs">
-    <Label htmlFor="department">Department</Label>
-    <Select
-      value={selectedDepartment}
-      onValueChange={(value) => {
-        setSelectedDepartment(value);
-        handleInputChange("department", value); // Send ID to backend
-      }}
-    >
-      <SelectTrigger>
-        <SelectValue>
-          {departments.find((dept) => dept.id === selectedDepartment)?.name || "Select Department"}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {departments.map((dept) => (
-          <SelectItem key={dept.id} value={dept.id}>
-            {dept.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
-      <div className="max-w-xs">
-        <Label htmlFor="position">Position</Label>
-        <Input
-          type="text"
-          id="position"
-          value={formData.position}
-          onChange={(e) => handleInputChange("position", e.target.value)}
-        />
-      </div>
-      <div className="max-w-xs">
-        <Label htmlFor="dateOfBirth">Date of Birth</Label>
-        <Input
-          type="date"
-          id="dateOfBirth"
-          value={formData.dateOfBirth}
-          onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
-        />
-      </div>
-
-      {/* Gender Selection */}
-      <div className="max-w-xs">
-  <Label>Gender</Label>
-  <RadioGroup
-    defaultValue={formData.gender}
-    onValueChange={(value) => handleInputChange("gender", value)}
-    className="flex items-center space-x-4" // Added flex container
-  >
-    <div className="flex items-center space-x-2">
-      <RadioGroupItem value="Male" id="male" />
-      <Label htmlFor="male">Male</Label>
-    </div>
-    <div className="flex items-center space-x-2">
-      <RadioGroupItem value="Female" id="female" />
-      <Label htmlFor="female">Female</Label>
-    </div>
-    <div className="flex items-center space-x-2">
-      <RadioGroupItem value="Other" id="other" />
-      <Label htmlFor="other">Other</Label>
-    </div>
-  </RadioGroup>
-</div>
-
-
-      {/* Marital Status */}
-      <div className="max-w-xs">
-        <Label htmlFor="maritalStatus">Marital Status</Label>
-        <Select 
-          defaultValue={formData.maritalStatus} 
-          onValueChange={(value) => handleInputChange("maritalStatus", value)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Single">Single</SelectItem>
-            <SelectItem value="Married">Married</SelectItem>
-            <SelectItem value="Divorced">Divorced</SelectItem>
-            <SelectItem value="Widowed">Widowed</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Blood Group */}
-      <div className="max-w-xs">
-        <Label htmlFor="bloodGroup">Blood Group</Label>
-        <Select 
-          defaultValue={formData.bloodGroup} 
-          onValueChange={(value) => handleInputChange("bloodGroup", value)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="A+">A+</SelectItem>
-            <SelectItem value="A-">A-</SelectItem>
-            <SelectItem value="B+">B+</SelectItem>
-            <SelectItem value="B-">B-</SelectItem>
-            <SelectItem value="O+">O+</SelectItem>
-            <SelectItem value="O-">O-</SelectItem>
-            <SelectItem value="AB+">AB+</SelectItem>
-            <SelectItem value="AB-">AB-</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Employment Status */}
-      <div className="max-w-xs">
-        <Label htmlFor="employmentStatus">Employment Status</Label>
-        <Select 
-          defaultValue={formData.employmentStatus} 
-          onValueChange={(value) => handleInputChange("employmentStatus", value)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Active">Active</SelectItem>
-            <SelectItem value="Inactive">Inactive</SelectItem>
-            <SelectItem value="Terminated">Terminated</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-    </div>
-  </div>
-</TabsContent>
+              {renderPersonalTab()}
 
 
                 <TabsContent value="address" className="space-y-4">
@@ -1989,7 +2309,7 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
 
             {/* File Upload */}
             <div className="flex items-center gap-2">
-              <label htmlFor={`edu-upload-${index}`} className="cursor-pointer text-primary text-xs hover:underline">
+              <label htmlFor={`edu-upload-${index}`} className="cursor-pointer purple-text-color text-xs hover:underline">
                 + Upload <span className="text-gray-500">(PDF, PNG, JPG)</span>
               </label>
               <input
@@ -2001,9 +2321,18 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
               />
 
               {edu.documentUrl && (
-                <a href={edu.documentUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">
-                  View
-                </a>
+            
+                <Button
+                variant="ghost1"
+                size="xs"
+                title="View Document"
+                className="p-1"
+                onClick={() =>
+                  window.open(edu.documentUrl, "_blank", "noopener,noreferrer")
+                }
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
               )}
             </div>
           </div>
@@ -2161,57 +2490,35 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
 
         {/* Documents Section */} 
 
-        <div className="mt-3 grid grid-cols-6 gap-2 text-xs text-center"> 
+        <div className="mt-3 grid grid-cols-6 gap-2 text-xs text-center">
+  {[
+    { label: "Offer Letter", url: exp.offerLetterUrl },
+    { label: "Separation Letter", url: exp.separationLetterUrl, reason: exp.noSeparationLetterReason },
+    { label: "Payslip 1", url: exp.payslip_1_url },
+    { label: "Payslip 2", url: exp.payslip_2_url },
+    { label: "Payslip 3", url: exp.payslip_3_url, reason: exp.noPayslipReason },
+    { label: "Hike Letter", url: exp.hikeLetterUrl },
+  ].map((doc, i) => (
+    <div key={i} className="border rounded-md p-2 bg-white">
+      <p className="text-gray-500">{doc.label}</p>
+      {doc.url ? (
+        <a
+          href={doc.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-red-600 inline-block mt-1"
+        >
+          <FaRegFilePdf size={16} />
+        </a>
+      ) : doc.reason ? (
+        <p className="text-gray-400 italic">{doc.reason}</p>
+      ) : (
+        <p className="text-gray-400 italic">N/A</p>
+      )}
+    </div>
+  ))}
+</div>
 
-          {[ 
-
-            { label: "Offer Letter", url: exp.offerLetterUrl }, 
-
-            { label: "Separation Letter", url: exp.separationLetterUrl }, 
-
-            { label: "Payslip 1", url: exp.payslip_1_url }, 
-
-            { label: "Payslip 2", url: exp.payslip_2_url }, 
-
-            { label: "Payslip 3", url: exp.payslip_3_url }, 
-
-            { label: "Hike Letter", url: exp.hikeLetterUrl }, 
-
-          ].map((doc, i) => ( 
-
-            <div key={i} className="border rounded-md p-2 bg-white"> 
-
-              <p className="text-gray-500">{doc.label}</p> 
-
-              {doc.url ? ( 
-
-                <a 
-
-                  href={doc.url} 
-
-                  target="_blank" 
-
-                  rel="noopener noreferrer" 
-
-                  className="text-red-600 inline-block mt-1" 
-
-                > 
-
-                  <FaRegFilePdf size={16}/> 
-
-                </a> 
-
-              ) : ( 
-
-                <p className="text-gray-400 italic">N/A</p> 
-
-              )} 
-
-            </div> 
-
-          ))} 
-
-        </div> 
 
       </div> 
 
@@ -2395,28 +2702,42 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Supporting Document (optional)</Label>
-                  <div className="flex items-center gap-3 mt-1">
-                    <div className="py-3 px-4 bg-gray-50 rounded-md text-sm text-gray-500">
-                      Cancel Cheque / Passbook First Page
-                    </div>
-                    <div className="relative">
-                    <input
-  type="file"
-  id="bank-document-upload"
-  className="sr-only"
-  onChange={(e) => handleBankUpload(e, 'bankDetails')}
-  accept=".pdf,.png,.jpg,.jpeg"
-/>
-                      <Label
-                        htmlFor="bank-document-upload"
-                        className="cursor-pointer text-primary hover:underline"
-                      >
-                        + Upload File <span className="text-xs text-gray-500">(Supported format: PDF, PNG, JPG)</span>
-                      </Label>
-                    </div>
-                  </div>
-                </div>
+  <Label>Supporting Document (optional)</Label>
+  <div className="flex items-center gap-3 mt-1">
+    <div className="py-3 px-4 bg-gray-50 rounded-md text-sm text-gray-500">
+      Cancel Cheque / Passbook First Page
+    </div>
+    <div className="relative flex items-center gap-3">
+      <input
+        type="file"
+        id="bank-document-upload"
+        className="sr-only"
+        onChange={(e) => handleBankUpload(e, 'bankDetails')}
+        accept=".pdf,.png,.jpg,.jpeg"
+      />
+      <Label
+        htmlFor="bank-document-upload"
+        className="cursor-pointer purple-text-color hover:underline"
+      >
+        + Upload File <span className="text-xs text-gray-500">(Supported format: PDF, PNG, JPG)</span>
+      </Label>
+      {formData.bankDetails.documentUrl && (
+        <Button
+          variant="ghost1"
+          size="xs"
+          title="View Bank Document"
+          className="p-1"
+          onClick={() =>
+            window.open(formData.bankDetails.documentUrl, "_blank", "noopener,noreferrer")
+          }
+        >
+        <FileText className="h-4 w-4" />
+        </Button>
+      )}
+    </div>
+  </div>
+</div>
+
               </div>
 
              
@@ -2446,22 +2767,36 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
               }
               required
             />
-            <div className="relative">
-              <input
-                type="file"
-                id={`${docType}Upload`}
-                className="sr-only"
-                onChange={(e) => handleDocumentUpload(e, docType)}
-                accept=".pdf,.png,.jpg,.jpeg"
-              />
-              <Label
-                htmlFor={`${docType}Upload`}
-                className="cursor-pointer inline-flex items-center h-10 px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Upload
-              </Label>
-            </div>
+           <div className="relative">
+  <input
+    type="file"
+    id={`${docType}Upload`}
+    className="sr-only"
+    onChange={(e) => handleDocumentUpload(e, docType)}
+    accept=".pdf,.png,.jpg,.jpeg"
+  />
+<Button
+  variant="default"
+  type="button"
+  disabled={uploadingDoc[docType]}
+  onClick={() => document.getElementById(`${docType}Upload`)?.click()}
+  className="inline-flex items-center gap-2"
+>
+  {uploadingDoc[docType] ? (
+    <>
+      <Upload className="h-4 w-4 animate-spin" />
+      Uploading...
+    </>
+  ) : (
+    <>
+      <Upload className="h-4 w-4" />
+      Upload
+    </>
+  )}
+</Button>
+
+</div>
+
           </div>
           {errors[`${docType}Number`] && (
                             <p className="text-red-500 text-xs mt-1">{errors[`${docType}Number`]}</p>
@@ -2470,15 +2805,17 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
           {/* View Document Link */}
           {formData[`${docType}Url`] && (
             <div className="mt-2">
-              <a
-                href={formData[`${docType}Url`]}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline flex items-center gap-2"
-              >
-                <File className="h-4 w-4" />
-                View {docType.toUpperCase()} Document
-              </a>  
+              <Button
+    variant="ghost1"
+    size="xs"
+    title="View uploaded Documents"
+    className="p-1"
+    onClick={() =>
+      window.open(formData[`${docType}Url`], "_blank", "noopener,noreferrer")
+    }
+  >
+    view <FileText className="h-4 w-4" />
+  </Button>
             </div>
           )}
         </div>
@@ -2505,15 +2842,21 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
                   className="flex space-x-4"
                 >
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Full Time" id="fullTime" />
+                    <RadioGroupItem value="Full Time" id="fullTime" 
+                   className="border-purple data-[state=checked]:border-purple data-[state=checked]:purple-text-color"
+/>
                     <Label htmlFor="fullTime">Full Time</Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Part Time" id="partTime" />
+                    <RadioGroupItem value="Part Time" id="partTime" 
+                   className="border-purple data-[state=checked]:border-purple data-[state=checked]:purple-text-color"
+                   />
                     <Label htmlFor="partTime">Part Time</Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Internship" id="internship" />
+                    <RadioGroupItem value="Internship" id="internship" 
+                   className="border-purple data-[state=checked]:border-purple data-[state=checked]:purple-text-color"
+                   />
                     <Label htmlFor="internship">Internship</Label>
                   </div>
                 </RadioGroup>
@@ -2621,25 +2964,31 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
               disabled={uploadingFile !== null}
               onChange={(event) => handleExpUpload(event, "offerLetter", currentExperience.id)}
             />
-            <Label htmlFor="offerLetter" className={`cursor-pointer text-primary hover:underline ${uploadingFile ? "opacity-50 cursor-not-allowed" : ""}`}>
+            <Label htmlFor="offerLetter" className={`cursor-pointer purple-text-color hover:underline ${uploadingFile ? "opacity-50 cursor-not-allowed" : ""}`}>
               {uploadingFile === "offerLetter" ? (
                 <span className="flex items-center gap-1">
                   <Loader2 className="animate-spin w-4 h-4" /> Uploading...
                 </span>
               ) : (
-                "+ Upload File"
+                <span>
+                + Upload File{" "}
+                <span className="text-xs text-gray-500">(Supported format: PDF, PNG, JPG)</span>
+              </span>
               )}
             </Label>
           </div>
           {currentExperience.offerLetterUrl && (
-            <a
-              href={currentExperience.offerLetterUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 underline"
-            >
-              View Document
-            </a>
+             <Button
+             variant="ghost1"
+             size="xs"
+             title="View Offer Letter"
+             className="p-1"
+             onClick={() =>
+               window.open(currentExperience.offerLetterUrl, "_blank", "noopener,noreferrer")
+             }
+           >
+             <FileText className="h-4 w-4" />
+           </Button>
           )}
         </div>
                   </div>
@@ -2661,7 +3010,7 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
                         <Label
                           htmlFor="separationLetter"
                           className={cn(
-                            "cursor-pointer text-primary hover:underline",
+                            "cursor-pointer purple-text-color hover:underline",
                             noSeparationLetter && "opacity-50 cursor-not-allowed"
                           )}
                         >
@@ -2680,6 +3029,8 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
                           handleExperienceChange('separationLetterUrl', null);
                         }
                       }}
+ className="data-[state=checked]:bg-purple data-[state=checked]:border-purple border-purple"
+
                     />
                     <Label htmlFor="noSeparationLetter" className="text-sm">Separation Letter</Label>
                   </div>
@@ -2698,44 +3049,67 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
                 )}
                 
                 <div className="flex justify-between items-center">
-                  <div className="space-y-2">
-                    <Label htmlFor="payslip1">Payslip 1*</Label>
-                    <div className="flex gap-3 items-center">
-                      <div className="relative">
-                      <input
-        type="file"
-        id="payslip1"
-        className="sr-only"
-        accept=".pdf,.png,.jpg,.jpeg"
-        disabled={noPayslip}
-        onChange={(event) => handleExpUpload(event, 'payslip1', currentExperience.id)}
-      />
-                        <Label
-                          htmlFor="payslip1"
-                          className={cn(
-                            "cursor-pointer text-primary hover:underline",
-                            noPayslip && "opacity-50 cursor-not-allowed"
-                          )}
-                        >
-                          + Upload File <span className="text-xs text-gray-500">(Supported format: PDF, PNG, JPG)</span>
-                        </Label>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox 
-                      id="noPayslip" 
-                      checked={noPayslip}
-                      onCheckedChange={(checked) => {
-                        setNoPayslip(checked === true);
-                        if (checked) {
-                          handleExperienceChange('payslips', []);
-                        }
-                      }}
-                    />
-                    <Label htmlFor="noPayslip" className="text-sm">Payslip </Label>
-                  </div>
-                </div>
+  <div className="space-y-2">
+    <Label htmlFor="payslip1">Payslip 1<span className="text-red-500">*</span></Label>
+    <div className="flex gap-3 items-center">
+      <div className="relative">
+        <input
+          type="file"
+          id="payslip1"
+          className="sr-only"
+          accept=".pdf,.png,.jpg,.jpeg"
+          disabled={noPayslip || uploadingFile !== null}
+          onChange={(event) => handleExpUpload(event, 'payslip1', currentExperience.id)}
+        />
+        <Label
+          htmlFor="payslip1"
+          className={cn(
+            "cursor-pointer purple-text-color hover:underline",
+            (noPayslip || uploadingFile) && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          {uploadingFile === "payslip1" ? (
+            <span className="flex items-center gap-1">
+              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
+            </span>
+          ) : (
+            "+ Upload File"
+          )}
+          <span className="text-xs text-gray-500"> (Supported format: PDF, PNG, JPG)</span>
+        </Label>
+      </div>
+      {currentExperience.payslip_1_url && (
+  <Button
+    variant="ghost1"
+    size="xs"
+    title="View Payslip 1"
+    className="p-1"
+    onClick={() =>
+      window.open(currentExperience.payslip_1_url, "_blank", "noopener,noreferrer")
+    }
+  >
+    <FileText className="h-4 w-4" />
+  </Button>
+)}
+    </div>
+  </div>
+  <div className="flex items-center space-x-2">
+  <Checkbox 
+  id="noPayslip" 
+  checked={noPayslip}
+  onCheckedChange={(checked) => {
+    setNoPayslip(checked === true);
+    if (checked) {
+      handleExperienceChange('payslip_1_url', "");
+      handleExperienceChange('payslip_2_url', "");
+      handleExperienceChange('payslip_3_url', "");
+    }
+  }}
+ className="data-[state=checked]:bg-purple data-[state=checked]:border-purple border-purple"
+/>
+    <Label htmlFor="noPayslip" className="text-sm">No Payslip</Label>
+  </div>
+</div>
                 
                 {noPayslip && (
                   <div className="space-y-2">
@@ -2750,71 +3124,143 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
                 )}
                 
                 {!noPayslip && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="payslip2">Payslip 2<span className="text-red-500">*</span></Label>
-                      <div className="flex gap-3 items-center">
-                        <div className="relative">
-                        <input
-        type="file"
-        id="payslip2"
-        className="sr-only"
-        accept=".pdf,.png,.jpg,.jpeg"
-        onChange={(event) => handleExpUpload(event, 'payslip2', currentExperience.id)}
-      />
-                          <Label
-                            htmlFor="payslip2"
-                            className="cursor-pointer text-primary hover:underline"
-                          >
-                            + Upload File <span className="text-xs text-gray-500">(Supported format: PDF, PNG, JPG)</span>
-                          </Label>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="payslip3">Payslip 3<span className="text-red-500">*</span></Label>
-                      <div className="flex gap-3 items-center">
-                        <div className="relative">
-                        <input
-        type="file"
-        id="payslip3"
-        className="sr-only"
-        accept=".pdf,.png,.jpg,.jpeg"
-        onChange={(event) => handleExpUpload(event, 'payslip3', currentExperience.id)}
-      />
-                          <Label
-                            htmlFor="payslip3"
-                            className="cursor-pointer text-primary hover:underline"
-                          >
-                            + Upload File <span className="text-xs text-gray-500">(Supported format: PDF, PNG, JPG)</span>
-                          </Label>
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                )}
+  <div className="space-y-2">
+    <Label htmlFor="payslip2">Payslip 2<span className="text-red-500">*</span></Label>
+    <div className="flex gap-3 items-center">
+      <div className="relative">
+        <input
+          type="file"
+          id="payslip2"
+          className="sr-only"
+          accept=".pdf,.png,.jpg,.jpeg"
+          disabled={uploadingFile !== null}
+          onChange={(event) => handleExpUpload(event, 'payslip2', currentExperience.id)}
+        />
+        <Label
+          htmlFor="payslip2"
+          className={cn(
+            "cursor-pointer purple-text-color hover:underline",
+            uploadingFile && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          {uploadingFile === "payslip2" ? (
+            <span className="flex items-center gap-1">
+              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
+            </span>
+          ) : (
+            "+ Upload File"
+          )}
+          <span className="text-xs text-gray-500"> (Supported format: PDF, PNG, JPG)</span>
+        </Label>
+      </div>
+      {currentExperience.payslip_2_url && (
+        <Button
+        variant="ghost1"
+        size="xs"
+        title="View Payslip 2"
+        className="p-1"
+        onClick={() =>
+          window.open(currentExperience.payslip_2_url, "_blank", "noopener,noreferrer")
+        }
+      >
+        <FileText className="h-4 w-4" />
+      </Button>
+      )}
+    </div>
+  </div>
+)}
+
+{!noPayslip && (
+  <div className="space-y-2">
+    <Label htmlFor="payslip3">Payslip 3<span className="text-red-500">*</span></Label>
+    <div className="flex gap-3 items-center">
+      <div className="relative">
+        <input
+          type="file"
+          id="payslip3"
+          className="sr-only"
+          accept=".pdf,.png,.jpg,.jpeg"
+          disabled={uploadingFile !== null}
+          onChange={(event) => handleExpUpload(event, 'payslip3', currentExperience.id)}
+        />
+        <Label
+          htmlFor="payslip3"
+          className={cn(
+            "cursor-pointer purple-text-color hover:underline",
+            uploadingFile && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          {uploadingFile === "payslip3" ? (
+            <span className="flex items-center gap-1">
+              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
+            </span>
+          ) : (
+            "+ Upload File"
+          )}
+          <span className="text-xs text-gray-500"> (Supported format: PDF, PNG, JPG)</span>
+        </Label>
+      </div>
+      {currentExperience.payslip_3_url && (
+       <Button
+       variant="ghost1"
+       size="xs"
+       title="View Payslip 3"
+       className="p-1"
+       onClick={() =>
+         window.open(currentExperience.payslip_3_url, "_blank", "noopener,noreferrer")
+       }
+     >
+       <FileText className="h-4 w-4" />
+     </Button>
+      )}
+    </div>
+  </div>
+)}
                 
                 <div className="space-y-2">
-                  <Label htmlFor="hikeLetter">Hike Letter</Label>
-                  <div className="flex gap-3 items-center">
-                    <div className="relative">
-                      <input
-                        type="file"
-                        id="hikeLetter"
-                        className="sr-only"
-                        accept=".pdf,.png,.jpg,.jpeg"
-                        onChange={(event) => handleExpUpload(event, 'hikeLetter', currentExperience.id)}
-                      />
-                      <Label
-                        htmlFor="hikeLetter"
-                        className="cursor-pointer text-primary hover:underline"
-                      >
-                        + Upload File <span className="text-xs text-gray-500">(Supported format: PDF, PNG, JPG)</span>
-                      </Label>
-                    </div>
-                  </div>
-                </div>
+  <Label htmlFor="hikeLetter">Hike Letter</Label>
+  <div className="flex gap-3 items-center">
+    <div className="relative">
+      <input
+        type="file"
+        id="hikeLetter"
+        className="sr-only"
+        accept=".pdf,.png,.jpg,.jpeg"
+        disabled={uploadingFile !== null}
+        onChange={(event) => handleExpUpload(event, 'hikeLetter', currentExperience.id)}
+      />
+      <Label
+        htmlFor="hikeLetter"
+        className={cn(
+          "cursor-pointer purple-text-color hover:underline",
+          uploadingFile && "opacity-50 cursor-not-allowed"
+        )}
+      >
+        {uploadingFile === "hikeLetter" ? (
+          <span className="flex items-center gap-1">
+            <Loader2 className="animate-spin w-4 h-4" /> Uploading...
+          </span>
+        ) : (
+          "+ Upload File"
+        )}
+        <span className="text-xs text-gray-500"> (Supported format: PDF, PNG, JPG)</span>
+      </Label>
+    </div>
+    {currentExperience.hikeLetterUrl && (
+      <Button
+      variant="ghost1"
+      size="xs"
+      title="View Hike Letter"
+      className="p-1"
+      onClick={() =>
+        window.open(currentExperience.hikeLetterUrl, "_blank", "noopener,noreferrer")
+      }
+    >
+      <FileText className="h-4 w-4" />
+    </Button>
+    )}
+  </div>
+</div>
               </div>
             </div>
             
@@ -2829,7 +3275,7 @@ const [selectedDepartment, setSelectedDepartment] = useState(formData.department
               <Button 
                 type="button" 
                 onClick={saveExperience}
-                className="bg-red-600 hover:bg-red-700 text-white"
+              
               >
                 Save
               </Button>

@@ -1,104 +1,108 @@
-import React, { useRef } from "react";
-import html2pdf from "html2pdf.js";
+import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Download } from "lucide-react";
-
+ 
 interface SummaryModalProps {
   analysisData: {
+    report_url?: string | null; // Ensure this is passed from parent
     overall_score: number;
-    skills_score: number;
-    skills_summary: string;
-    work_experience_score: number;
-    work_experience_summary: string;
-    education_score: number;
-    education_summary: string;
-    projects_score: number;
-    projects_summary: string;
+    summary: string;
+    top_skills: string[];
+    missing_or_weak_areas: string[];
+    // Add other fields if needed, e.g., candidate_name for filename
+    candidate_name?: string;
   };
   onClose: () => void;
 }
-
+ 
 const SummaryModal: React.FC<SummaryModalProps> = ({ analysisData, onClose }) => {
-  const summaryRef = useRef<HTMLDivElement>(null);
-
-  const handleDownload = () => {
-    if (summaryRef.current) {
-      console.log("Downloading report...", summaryRef.current);
-      html2pdf()
-        .set({
-          margin: 0.5,
-          filename: "resume_summary.pdf",
-          image: { type: "jpeg", quality: 0.98 },
-          html2canvas: { scale: 2 },
-          jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
-        })
-        .from(summaryRef.current)
-        .save()
-        .then(() => console.log("PDF generated successfully"))
-        .catch((error) => console.error("Error generating PDF:", error));
-    } else {
-      console.error("summaryRef is not set");
-    }
-  };
-
+  const reportUrl = analysisData?.report_url;
+  const candidateName = analysisData?.candidate_name || 'Candidate'; // Get name for filename
+  const score = analysisData?.overall_score || 0;
+ 
+  console.log("Report url", reportUrl)
+  // Construct a suggested filename
+  const suggestedFilename = `Resume Analysis - ${candidateName.replace(/[^a-z0-9]/gi, '_')} - Score ${score}.pdf`;
+ 
+  console.log('Modal received analysisData:', analysisData); // Debug log
+  console.log('Extracted reportUrl:', reportUrl); // Debug log
+ 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl rounded-xl p-6">
-        <DialogHeader className="flex justify-between items-center">
-          <DialogTitle className="text-xl font-semibold">Resume Analysis</DialogTitle>
-          <button
-            onClick={handleDownload}
-            className="flex items-center gap-1 text-sm font-medium text-purple-700 hover:underline"
-          >
-            <Download className="w-4 h-4" />
-            Download Report
-          </button>
+      <DialogContent className="max-w-5xl rounded-xl p-6 overflow-y-auto max-h-[85vh]">
+        <DialogHeader className="flex justify-between items-center mb-4">
+          <DialogTitle className="text-xl font-semibold">Resume Analysis Summary</DialogTitle>
+ 
+          {/* --- USE <a> TAG WITH download ATTRIBUTE --- */}
+          {reportUrl ? (
+            <a
+              href={reportUrl}
+              // Remove target="_blank" if you DON'T want a new tab attempt first
+              target="_blank"
+              rel="noopener noreferrer" // Still good practice
+              download={suggestedFilename} // Add the download attribute with a filename
+              className="flex items-center gap-1 text-sm font-medium text-purple-700 hover:underline"
+            >
+              <Download className="w-4 h-4" />
+              Download Full Report PDF
+            </a>
+          ) : (
+            // Render disabled button if URL is missing
+            <button
+              disabled
+              title="Report URL not available" // Add a tooltip
+              className="flex items-center gap-1 text-sm font-medium text-gray-400 cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              Download Full Report PDF
+            </button>
+          )}
+          {/* --- END <a> TAG --- */}
+ 
         </DialogHeader>
-
-        {/* Content to export */}
-        <div ref={summaryRef}>
-          {/* Overall Score */}
-          <div className="bg-purple-100 text-purple-700 font-semibold p-4 rounded-lg flex justify-between items-center">
+ 
+        {/* Display Content */}
+        <div>
+          {/* Score */}
+          <div className="bg-purple-100 text-purple-700 font-semibold p-4 rounded-lg flex justify-between items-center mb-4">
             <span>Overall Score</span>
             <span className="text-xl">{analysisData.overall_score}%</span>
           </div>
-
-          {/* Grid Layout for Sections */}
-          <div className="grid grid-cols-2 gap-4 mt-4">
-            {/* Skills Match */}
-            <div className="border border-purple-300 p-4 rounded-lg">
-              <h3 className="font-medium">Skills Match</h3>
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Score: {analysisData.skills_score}%</span>
-              </div>
-              <p className="text-sm text-gray-800 mt-1">{analysisData.skills_summary}</p>
+ 
+          {/* Summary */}
+          <div className="mb-4 border border-gray-200 p-4 rounded-lg">
+            <h3 className="font-semibold text-lg mb-1">Overall Summary</h3>
+            <p className="text-sm text-gray-700">{analysisData.summary || "No summary available"}</p>
+          </div>
+ 
+          {/* Skills Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Top Skills */}
+            <div className="border border-gray-200 p-4 rounded-lg">
+              <h3 className="font-semibold text-lg mb-2">Top Skills</h3>
+              {analysisData.top_skills && analysisData.top_skills.length > 0 ? (
+                <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+                  {analysisData.top_skills.map((skill, index) => (
+                    <li key={`top-${index}`}>{skill}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-500 italic">No top skills identified</p>
+              )}
             </div>
-
-            {/* Experience Relevance */}
-            <div className="border border-purple-300 p-4 rounded-lg">
-              <h3 className="font-medium">Experience Relevance</h3>
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Score: {analysisData.work_experience_score}%</span>
-              </div>
-              <p className="text-sm text-gray-800 mt-1">{analysisData.work_experience_summary}</p>
-            </div>
-
-            {/* Education */}
-            <div className="border border-purple-300 p-4 rounded-lg">
-              <h3 className="font-medium">Education</h3>
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Score: {analysisData.education_score}%</span>
-              </div>
-              <p className="text-sm text-gray-800 mt-1">{analysisData.education_summary}</p>
-            </div>
-
-            {/* Projects */}
-            <div className="border border-purple-300 p-4 rounded-lg">
-              <h3 className="font-medium">Projects</h3>
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Score: {analysisData.projects_score}%</span>
-              </div>
-              <p className="text-sm text-gray-800 mt-1">{analysisData.projects_summary}</p>
+ 
+            {/* Missed Skills */}
+            <div className="border border-gray-200 p-4 rounded-lg">
+              <h3 className="font-semibold text-lg mb-2">Missed Skills / Weak Areas</h3>
+              {analysisData.missing_or_weak_areas && analysisData.missing_or_weak_areas.length > 0 ? (
+                <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+                  {analysisData.missing_or_weak_areas.map((area, index) => (
+                    <li key={`missed-${index}`}>{area}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-500 italic">No missed skills identified</p>
+              )}
             </div>
           </div>
         </div>
@@ -106,5 +110,5 @@ const SummaryModal: React.FC<SummaryModalProps> = ({ analysisData, onClose }) =>
     </Dialog>
   );
 };
-
+ 
 export default SummaryModal;

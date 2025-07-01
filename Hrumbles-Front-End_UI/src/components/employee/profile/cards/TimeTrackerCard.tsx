@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,16 +35,16 @@ export const TimeTrackerCard: React.FC<TimeTrackerCardProps> = ({ employeeId }) 
   const fetchWorkTimeEntries = async () => {
     try {
       const { data, error } = await supabase
-        .from('hr_employee_work_times')
-        .select('*')
-        .eq('employee_id', employeeId)
-        .order('start_time', { ascending: false });
+        .from("hr_employee_work_times")
+        .select("*")
+        .eq("employee_id", employeeId)
+        .order("start_time", { ascending: false });
 
       if (error) throw error;
       setWorkTimeEntries(data || []);
     } catch (error) {
-      console.error('Error fetching work time entries:', error);
-      toast.error('Failed to load work history');
+      console.error("Error fetching work time entries:", error);
+      toast.error("Failed to load work history");
     }
   };
 
@@ -53,7 +52,6 @@ export const TimeTrackerCard: React.FC<TimeTrackerCardProps> = ({ employeeId }) 
     fetchWorkTimeEntries();
   }, [employeeId]);
 
-  // Refresh work time entries when active session changes
   useEffect(() => {
     if (activeSession) {
       fetchWorkTimeEntries();
@@ -66,28 +64,28 @@ export const TimeTrackerCard: React.FC<TimeTrackerCardProps> = ({ employeeId }) 
     return hours >= 10 && hours < 18;
   };
 
-  const handleAction = async (action: 'start' | 'pause' | 'resume' | 'reset' | 'stop') => {
+  const handleAction = async (action: "start" | "pause" | "resume" | "reset" | "stop") => {
     if (isLoading) return;
 
-    if (action === 'start' && !checkOfficeHours()) {
+    if (action === "start" && !checkOfficeHours()) {
       toast.error("Work can only be started between 10 AM and 6 PM");
       return;
     }
 
     try {
       switch (action) {
-        case 'start':
+        case "start":
           await startTimer();
           break;
-        case 'pause':
+        case "pause":
           setIsPauseModalOpen(true);
           break;
-        case 'resume':
+        case "resume":
           await resumeTimer();
           setPauseDuration(0);
           break;
-        case 'reset':
-        case 'stop':
+        case "reset":
+        case "stop":
           await resetTimer();
           setPauseDuration(0);
           break;
@@ -110,7 +108,7 @@ export const TimeTrackerCard: React.FC<TimeTrackerCardProps> = ({ employeeId }) 
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (activeSession?.status === 'paused' && activeSession.pause_start_time) {
+    if (activeSession?.status === "paused" && activeSession.pause_start_time) {
       interval = setInterval(() => {
         const pauseStart = new Date(activeSession.pause_start_time!).getTime();
         const currentTime = new Date().getTime();
@@ -122,26 +120,28 @@ export const TimeTrackerCard: React.FC<TimeTrackerCardProps> = ({ employeeId }) 
 
   return (
     <>
-      <Card className="p-6 hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm h-full flex flex-col justify-between relative">
+      <Card
+        className="p-6 bg-gradient-to-br from-purple-600 to-pink-500 border-none rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 h-full flex flex-col justify-between relative"
+      >
         <Button
           size="icon"
           variant="ghost"
-          className="absolute top-4 right-4 hover:bg-brand-accent/10"
+          className="absolute top-4 right-4 hover:bg-white/20 rounded-full"
           onClick={() => setIsHistoryModalOpen(true)}
         >
-          <List className="h-4 w-4" />
+          <List className="h-4 w-4 text-gray-200" />
         </Button>
 
         <div className="flex-1 flex flex-col items-center justify-center">
-          <h3 className="font-medium mb-6">Time Tracker</h3>
-          
+          <h3 className="font-medium mb-6 text-white text-lg">Time Tracker</h3>
+
           <TimerDisplay
             elapsedTime={elapsedTime}
             status={activeSession?.status || null}
             formatTime={formatTime}
           />
 
-          {activeSession?.status === 'paused' && (
+          {activeSession?.status === "paused" && (
             <BreakStatus
               pauseReason={activeSession.pause_reason}
               pauseDuration={pauseDuration}

@@ -134,6 +134,30 @@ const mainConfig: Config = {
 					"0%": { transform: "scale(0.95)", opacity: "0" },
 					"100%": { transform: "scale(1)", opacity: "1" },
 				},
+				floatLoop: {
+					'0%, 100%': {
+					  transform: 'translateY(0px)',
+					  opacity: '1',
+					},
+					'50%': {
+					  transform: 'translateY(-4px)',
+					  opacity: '0.9',
+					},
+				  },
+				  slideText: {
+					'0%': {
+					  transform: 'translateX(-100%)',
+					  opacity: '0',
+					},
+					'50%': {
+					  transform: 'translateX(0)',
+					  opacity: '1',
+					},
+					'100%': {
+					  transform: 'translateX(100%)',
+					  opacity: '0',
+					},
+				  },
 			},
 			animation: {
 				"accordion-down": "accordion-down 0.2s ease-out",
@@ -145,6 +169,8 @@ const mainConfig: Config = {
 				"fade-in": "fade-in 0.3s ease-out",
 				"slide-up": "slide-up 0.3s ease-out",
 				"slide-down": "slide-down 0.3s ease-out",
+				floatLoop: 'floatLoop 1.6s ease-in-out infinite',
+        slideText: 'slideText 2s ease-in-out',
 				
 			},
 			backgroundImage: {

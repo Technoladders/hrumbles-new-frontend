@@ -12,8 +12,9 @@ export interface DataSharingOptions {
   contactInfo: boolean;
   documentsInfo: boolean;
   workInfo: boolean;
-  activityInfo: boolean;
-  assignedInfo: boolean;
+  // activityInfo: boolean;
+  // assignedInfo: boolean;
+  skillinfo: boolean;
 }
 
 interface EmployeeDataSelectionProps {
@@ -34,8 +35,9 @@ const EmployeeDataSelection: React.FC<EmployeeDataSelectionProps> = ({
     contactInfo: defaultOptions?.contactInfo ?? true,
     documentsInfo: defaultOptions?.documentsInfo ?? true,
     workInfo: defaultOptions?.workInfo ?? false,
-    activityInfo: defaultOptions?.activityInfo ?? false,
-    assignedInfo: defaultOptions?.assignedInfo ?? false
+    // activityInfo: defaultOptions?.activityInfo ?? false,
+    // assignedInfo: defaultOptions?.assignedInfo ?? false,
+    skillinfo: defaultOptions?.skillinfo ?? false,
   });
 
   const handleConfirm = () => {
@@ -115,13 +117,13 @@ const EmployeeDataSelection: React.FC<EmployeeDataSelectionProps> = ({
           )}
           
           {renderCheckboxItem(
-            "workInfo",
-            "Work Information",
-            "Current tasks, projects, and deadlines",
+            "skillinfo",
+            "Skill Information",
+            "Job Skill and Skill Ratings",
             <Briefcase className="h-4 w-4 text-indigo-500" />
           )}
           
-          {renderCheckboxItem(
+          {/* {renderCheckboxItem(
             "assignedInfo",
             "Assignment Information",
             "Reporting manager, HR contact, and team details",
@@ -133,7 +135,7 @@ const EmployeeDataSelection: React.FC<EmployeeDataSelectionProps> = ({
             "Activity Information",
             "Recent activities and history log",
             <FileCheck className="h-4 w-4 text-indigo-500" />
-          )}
+          )} */}
         </div>
 
         <Separator />

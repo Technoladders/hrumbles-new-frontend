@@ -107,7 +107,7 @@ function Calendar({
     <div className={cn("rounded-md border bg-white shadow-lg w-[300px]", className)}>
       {/* Header with Quick Selection */}
       <div className="p-3 border-b bg-gray-50">
-        <div className="flex flex-wrap gap-2 mb-2">
+        {/* <div className="flex flex-wrap gap-2 mb-2">
           {["today", "yesterday", "week", "month"].map((type) => (
             <button
               key={type}
@@ -120,7 +120,7 @@ function Calendar({
               {type.charAt(0).toUpperCase() + type.slice(1)}
             </button>
           ))}
-        </div>
+        </div> */}
         {selectedDate && (
           <div className="text-sm text-gray-600 font-medium">
             {format(selectedDate, "MMMM d, yyyy")}

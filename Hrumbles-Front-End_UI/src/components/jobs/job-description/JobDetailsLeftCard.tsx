@@ -31,7 +31,7 @@ const JobDetailsLeftCard = ({ job, candidates }: JobDetailsLeftCardProps) => {
                   ID: {job.jobId}
                 </Badge>
                 <Badge variant="outline" className="text-xs px-2 bg-purple-50 border-purple-200">
-                  {job.type}
+                  {job.jobType}
                 </Badge>
                 <Badge variant="outline" className="text-xs px-2 bg-amber-50 border-amber-200">
                   {job.hiringMode}
@@ -102,7 +102,7 @@ const JobDetailsLeftCard = ({ job, candidates }: JobDetailsLeftCardProps) => {
             <div className="flex flex-wrap gap-2">
               {job.skills && job.skills.length > 0 ? (
                 job.skills.map((skill, index) => (
-                  <Badge key={index} variant="secondary" className="bg-gray-100">
+                  <Badge key={index} variant="outline">
                     {skill}
                   </Badge>
                 ))

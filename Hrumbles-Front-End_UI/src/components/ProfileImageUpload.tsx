@@ -15,6 +15,7 @@ const ProfileImageUpload = ({ value, onChange, initialLetter = "U" }: ProfileIma
   const [uploading, setUploading] = useState(false);
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.preventDefault(); // Add to be safe
     try {
       setUploading(true);
       
@@ -57,13 +58,14 @@ const ProfileImageUpload = ({ value, onChange, initialLetter = "U" }: ProfileIma
       </Avatar>
       
       <div className="flex flex-col gap-2 items-center">
-        <Button 
-          variant="outline" 
-          disabled={uploading}
-          onClick={() => document.getElementById('profile-upload')?.click()}
-        >
-          {uploading ? "Uploading..." : "Change Profile Picture"}
-        </Button>
+      <Button 
+  variant="outline" 
+  disabled={uploading}
+  type="button" // Explicitly set to prevent form submission
+  onClick={() => document.getElementById('profile-upload')?.click()}
+>
+  {uploading ? "Uploading..." : "Change Profile Picture"}
+</Button>
         <input
           id="profile-upload"
           type="file"

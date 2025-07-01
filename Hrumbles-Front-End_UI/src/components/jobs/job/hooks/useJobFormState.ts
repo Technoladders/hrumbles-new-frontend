@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { JobData } from "@/lib/types";
+import { Currency } from "lucide-react";
 
 interface UseJobFormStateProps {
   jobType: "Internal" | "External";
@@ -31,6 +32,7 @@ export interface ClientDetailsData {
   pointOfContact: string;
   assignedTo: string;
   clientProjectId: string;
+  currency_type: string;
 }
 
 export interface JobDescriptionData {
@@ -68,6 +70,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
       pointOfContact: "",
       assignedTo: "",
       clientProjectId: "",
+      currency_type: "",
     },
     jobDescription: {
       description: "",
@@ -100,6 +103,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
           pointOfContact: editJob.clientDetails?.pointOfContact || "",
           assignedTo: editJob.assignedTo?.name || "",
           clientProjectId: editJob.clientProjectId || "",
+          Currency: editJob.clientDetails?.currency_type || "",
         },
         jobDescription: {
           description: editJob.description || "",

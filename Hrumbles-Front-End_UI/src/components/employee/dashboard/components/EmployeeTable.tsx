@@ -81,6 +81,8 @@ export const EmployeeTable: React.FC<EmployeeTableProps> = ({
     navigate(`/employee/${employeeId}`);
   };
 
+  console.log('Employees:', employees);
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center py-8">

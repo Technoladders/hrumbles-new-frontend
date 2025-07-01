@@ -3,7 +3,7 @@ import Modal from 'react-modal';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { supabase } from '../../integrations/supabase/client'; // Adjust import path as needed
 import { v4 as uuidv4 } from 'uuid';
-
+ 
 function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = () => {}, initialData }) {
   const [resumeText, setResumeText] = useState(initialData?.resume_text || '');
   const [jobDescription, setJobDescription] = useState('');
@@ -18,13 +18,13 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [isAnalysisComplete, setIsAnalysisComplete] = useState(false);
-
+ 
   // Gemini setup
-  const geminiApiKey = 'AIzaSyCPKQst10C4qlQ8hPinNI3LANSVPEuwGN4';
+  const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const geminiModel = 'gemini-1.5-pro';
   const genAI = new GoogleGenerativeAI(geminiApiKey);
   const model = genAI.getGenerativeModel({ model: geminiModel });
-
+ 
   useEffect(() => {
     const getJobDescription = async () => {
       if (!jobId) {
@@ -46,13 +46,13 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
     };
     getJobDescription();
   }, [jobId, setError]);
-
+ 
   const cleanResponse = (text) => {
     const jsonMatch = text.match(/{[\s\S]*}/);
     if (!jsonMatch) throw new Error('No valid JSON found in response');
     return jsonMatch[0];
   };
-
+ 
   const analyzeResume = async () => {
       if (!jobDescription || !resumeText) {
         setError('Please provide both job description and resume.');
@@ -124,24 +124,66 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
         const parsedResult = JSON.parse(cleanedText);
    
         // Normalize company names
+        // const normalizeCompanyName = (name) => {
+        //   const lowerName = name.toLowerCase().trim();
+        //   if (lowerName === "infosys" || lowerName === "infosys ltd") return "Infosys";
+        //   if (lowerName === "infosys infotech") return "Infosys Infotech";
+        //   return name.trim();
+        // };
+ 
         const normalizeCompanyName = (name) => {
-          const lowerName = name.toLowerCase().trim();
-          if (lowerName === "infosys" || lowerName === "infosys ltd") return "Infosys";
-          if (lowerName === "infosys infotech") return "Infosys Infotech";
-          return name.trim();
+          if (!name || typeof name !== 'string') {
+            return ""; // Handle empty or non-string input
+          }
+          let normalized = name.toLowerCase().trim();
+          // Remove common company suffixes (case-insensitive) like ltd, inc, corp, llc, co
+          normalized = normalized.replace(/\s*(ltd|limited|inc|corp|corporation|llc|co)\.?\s*$/i, '');
+          // Remove characters that are not word characters (alphanumeric + _), whitespace, or hyphens
+          normalized = normalized.replace(/[^\w\s-]/g, '');
+          // Normalize whitespace (replace multiple spaces with single space, trim again)
+          normalized = normalized.split(/\s+/).join(' ').trim();
+          return normalized;
         };
+        // END: Updated Normalization Function
+ 
    
-        const companyData = parsedResult.companies.map(company => ({
-          name: normalizeCompanyName(company.name),
-          designation: company.designation || '-',
-          years: company.years || '-',
-        }));
+        // const companyData = parsedResult.companies.map(company => ({
+        //   name: normalizeCompanyName(company.name),
+        //   designation: company.designation || '-',
+        //   years: company.years || '-',
+        // }));
+ 
+        const companyData = (parsedResult.companies || []).map(company => {
+          const normalizedName = normalizeCompanyName(company.name);
+          // Filter out entries with empty normalized names if necessary
+          if (!normalizedName) return null;
+          return {
+            name: normalizedName, // Store the normalized name
+            original_name: company.name, // Keep original if needed elsewhere, but normalization is primary
+            designation: company.designation || '-',
+            years: company.years || '-',
+          }
+        }).filter(Boolean); // Remove null entries resulting from empty names
    
+ 
+        // const uniqueCompanies = Array.from(
+        //   new Map(companyData.map(item => [item.name, item])).values()
+        // ); // Deduplicate by name, keeping latest designation/years
+ 
+                // Deduplicate based on the *normalized* name, keeping the first occurrence
+        // (or adjust logic if you need latest/combined data)
         const uniqueCompanies = Array.from(
           new Map(companyData.map(item => [item.name, item])).values()
-        ); // Deduplicate by name, keeping latest designation/years
+        );
+ 
+        // Prepare final structure for saving (using normalized name)
+        const companiesToSave = uniqueCompanies.map(c => ({
+            name: c.name, // Use the normalized name for saving/lookup
+            designation: c.designation,
+            years: c.years,
+        }));
        
-        setAnalysisResult({...parsedResult, companies: uniqueCompanies});
+        setAnalysisResult({...parsedResult, companies: companiesToSave});
         setUpdatedSkills(parsedResult.matched_skills || []);
         setCandidateName(parsedResult.candidate_name || 'Unknown');
         setEmail(parsedResult.email || '');
@@ -216,71 +258,176 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
           throw new Error(`Resume upsert failed: ${resumeError.message}`);
         }
    
-        // Step 3: Save and check company associations in candidate_companies
+        // // Step 3: Save and check company associations in candidate_companies
+        // if (result.companies && Array.isArray(result.companies)) {
+        //   const companyEntries = [];
+        //   for (const company of result.companies) {
+        //     const { data: existingCompany, error: companyError } = await supabase
+        //       .from('companies')
+        //       .select('id')
+        //       .eq('name', company.name)
+        //       .single();
+   
+        //     if (companyError && companyError.code !== 'PGRST116') {
+        //       console.error('Supabase Company Error:', JSON.stringify(companyError, null, 2));
+        //       throw new Error(`Company query failed: ${companyError.message}`);
+        //     }
+   
+        //     let companyId;
+        //     if (existingCompany) {
+        //       companyId = existingCompany.id;
+        //     } else {
+        //       const { data: newCompany, error: insertError } = await supabase
+        //         .from('companies')
+        //         .insert({ name: company.name })
+        //         .select('id')
+        //         .single();
+        //       if (insertError) {
+        //         console.error('Supabase Company Insert Error:', JSON.stringify(insertError, null, 2));
+        //         throw new Error(`Company insert failed: ${insertError.message}`);
+        //       }
+        //       companyId = newCompany.id;
+        //     }
+   
+        //     companyEntries.push({
+        //       candidate_id: candidateId,
+        //       job_id: jobId,
+        //       company_id: companyId,
+        //       designation: company.designation || '-',
+        //       years: company.years || '-',
+        //     });
+        //   }
+   
+        //   if (companyEntries.length > 0) {
+        //     const { error: linkError } = await supabase
+        //       .from('candidate_companies')
+        //       .upsert(companyEntries, { onConflict: ['candidate_id', 'job_id', 'company_id'] });
+   
+        //     if (linkError) {
+        //       console.error('Supabase Candidate Companies Error:', JSON.stringify(linkError, null, 2));
+        //       throw new Error(`Candidate companies upsert failed: ${linkError.message}`);
+        //     }
+   
+        //     // Step 4: Verify saved company data
+        //     const { data: savedCompanies, error: fetchError } = await supabase
+        //       .from('candidate_companies')
+        //       .select('company_id, designation, years, companies (name)')
+        //       .eq('candidate_id', candidateId)
+        //       .eq('job_id', jobId);
+   
+        //     if (fetchError) {
+        //       console.error('Supabase Fetch Error:', JSON.stringify(fetchError, null, 2));
+        //       throw new Error(`Failed to verify company data: ${fetchError.message}`);
+        //     }
+   
+        //     console.log('Verified Saved Companies:', JSON.stringify(savedCompanies, null, 2));
+        //   }
+        // }
+   
+        // START: Updated Step 3 - Company Association Logic using Upsert
+        // ****************************************************************
         if (result.companies && Array.isArray(result.companies)) {
           const companyEntries = [];
+          const companyErrors = []; // Collect errors without stopping immediately
+ 
           for (const company of result.companies) {
-            const { data: existingCompany, error: companyError } = await supabase
-              .from('companies')
-              .select('id')
-              .eq('name', company.name)
-              .single();
-   
-            if (companyError && companyError.code !== 'PGRST116') {
-              console.error('Supabase Company Error:', JSON.stringify(companyError, null, 2));
-              throw new Error(`Company query failed: ${companyError.message}`);
+            // Company name is expected to be already normalized here
+            const normalizedCompanyName = company.name;
+            if (!normalizedCompanyName) {
+              console.warn("Skipping company entry with empty normalized name.");
+              continue; // Skip if name is empty after normalization
             }
-   
-            let companyId;
-            if (existingCompany) {
-              companyId = existingCompany.id;
-            } else {
-              const { data: newCompany, error: insertError } = await supabase
+ 
+            try {
+                // Use upsert for companies based on the normalized name
+                // Assumes 'companies' table has a unique constraint on 'name'
+                const { data: companyUpsertData, error: companyUpsertError } = await supabase
                 .from('companies')
-                .insert({ name: company.name })
-                .select('id')
-                .single();
-              if (insertError) {
-                console.error('Supabase Company Insert Error:', JSON.stringify(insertError, null, 2));
-                throw new Error(`Company insert failed: ${insertError.message}`);
+                .upsert({ name: normalizedCompanyName /* add other company fields if needed */ }, { onConflict: 'name' }) // Use 'name' as the conflict target
+                .select('id') // Select the ID after upsert
+                .single(); // Expecting a single row back
+ 
+              if (companyUpsertError) {
+                 // Log specific error but continue processing others
+                 console.error(`Supabase Company Upsert Error for "${normalizedCompanyName}":`, JSON.stringify(companyUpsertError, null, 2));
+                 companyErrors.push(`Failed upsert for company "${normalizedCompanyName}": ${companyUpsertError.message}`);
+                 continue; // Skip adding this company to entries
               }
-              companyId = newCompany.id;
+ 
+              if (!companyUpsertData || !companyUpsertData.id) {
+                  // Log specific error but continue processing others
+                  console.error('Supabase Company Upsert Warning: Did not return ID for', normalizedCompanyName);
+                  companyErrors.push(`Upsert ok but no ID returned for company "${normalizedCompanyName}"`);
+                  continue; // Skip adding this company to entries
+              }
+ 
+              const companyId = companyUpsertData.id;
+ 
+              // Add entry for the candidate_companies junction table
+              companyEntries.push({
+                candidate_id: currentCandidateId,
+                job_id: jobId,
+                company_id: companyId,
+                designation: company.designation || '-',
+                years: company.years || '-',
+              });
+ 
+            } catch (loopError) {
+                 // Catch any unexpected error during the loop for one company
+                 console.error(`Unexpected error processing company "${normalizedCompanyName}":`, loopError);
+                 companyErrors.push(`Unexpected error for company "${normalizedCompanyName}": ${loopError.message}`);
             }
-   
-            companyEntries.push({
-              candidate_id: candidateId,
-              job_id: jobId,
-              company_id: companyId,
-              designation: company.designation || '-',
-              years: company.years || '-',
-            });
-          }
-   
+          } // End FOR loop for companies
+ 
+          // After processing all companies, check if there are entries to save
           if (companyEntries.length > 0) {
+            console.log('Saving to Supabase - Candidate Companies Payload:', JSON.stringify(companyEntries, null, 2));
             const { error: linkError } = await supabase
               .from('candidate_companies')
-              .upsert(companyEntries, { onConflict: ['candidate_id', 'job_id', 'company_id'] });
-   
+              .upsert(companyEntries, { onConflict: 'candidate_id,job_id,company_id' }); // Corrected onConflict
+ 
             if (linkError) {
-              console.error('Supabase Candidate Companies Error:', JSON.stringify(linkError, null, 2));
+              console.error('Supabase Candidate Companies Upsert Error:', JSON.stringify(linkError, null, 2));
+              // Decide if this error should stop the whole save process or just be logged
+              // Throwing here makes it critical
               throw new Error(`Candidate companies upsert failed: ${linkError.message}`);
             }
-   
-            // Step 4: Verify saved company data
+            console.log("Candidate company associations saved successfully.");
+ 
+            // Optional: Log any non-critical errors encountered during individual company upserts
+            if (companyErrors.length > 0) {
+                console.warn("Non-critical errors encountered during company processing:", companyErrors);
+                // Optionally bubble up a warning, but don't mark save as failed
+                // setError("Warning: Some company data might not have been saved correctly.");
+            }
+ 
+            // Step 4: Verify saved company data (Optional but good for debugging)
+            // Removed the throw new Error from fetchError to make verification non-critical
             const { data: savedCompanies, error: fetchError } = await supabase
               .from('candidate_companies')
-              .select('company_id, designation, years, companies (name)')
-              .eq('candidate_id', candidateId)
+              .select('company_id, designation, years, companies (id, name)') // Select company name too
+              .eq('candidate_id', currentCandidateId)
               .eq('job_id', jobId);
-   
+ 
             if (fetchError) {
-              console.error('Supabase Fetch Error:', JSON.stringify(fetchError, null, 2));
-              throw new Error(`Failed to verify company data: ${fetchError.message}`);
+              console.warn('Supabase Fetch Warning: Failed to verify company data after save:', JSON.stringify(fetchError, null, 2));
+            } else {
+                 console.log('Verified Saved Companies:', JSON.stringify(savedCompanies, null, 2));
             }
-   
-            console.log('Verified Saved Companies:', JSON.stringify(savedCompanies, null, 2));
+ 
+          } else {
+             console.log("No valid candidate company entries to save after processing.");
+             if (companyErrors.length > 0) {
+                 console.warn("Non-critical errors encountered during company processing (no entries saved):", companyErrors);
+                 // setError("Warning: Could not process company data."); // Optional warning
+             }
           }
+        } else {
+            console.log("No 'companies' array found in the result or it's empty.");
         }
+        // ****************************************************************
+        // END: Updated Step 3 - Company Association Logic
+        // ****************************************************************
    
         return true;
       } catch (err) {
@@ -430,7 +577,7 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
         setIsLoading(false);
       }
     };
-
+ 
   return (
     <Modal
       isOpen={true}
@@ -505,7 +652,7 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
               <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 text-purple-600">
                 {analysisResult.summary || 'No summary available'}
               </div>
-
+ 
             <h4 className="text-lg font-semibold text-purple-800 mt-6 mb-4">🔑 Matched Skills & Experiences</h4>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[600px] text-left border-collapse">
@@ -553,21 +700,21 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
                   </tbody>
                 </table>
               </div>
-
+ 
               <h4 className="text-lg font-semibold text-purple-800 mt-6 mb-4">⚠️ Missing or Weak Areas</h4>
               <ul className="list-disc pl-5 text-purple-600">
                 {Array.isArray(analysisResult.missing_or_weak_areas) && analysisResult.missing_or_weak_areas.length > 0
                   ? analysisResult.missing_or_weak_areas.map((area, idx) => <li key={idx} className="mb-2">{area}</li>)
                   : <li>No data</li>}
               </ul>
-
+ 
               <h4 className="text-lg font-semibold text-purple-800 mt-6 mb-4">🏷️ Top Skills</h4>
               <ul className="list-disc pl-5 text-purple-600">
                 {Array.isArray(analysisResult.top_skills) && analysisResult.top_skills.length > 0
                   ? analysisResult.top_skills.map((skill, idx) => <li key={idx} className="mb-2">{skill}</li>)
                   : <li>No data</li>}
               </ul>
-
+ 
               <h4 className="text-lg font-semibold text-purple-800 mt-6 mb-4">📜 Additional Certifications (Not Required by JD)</h4>
               {Array.isArray(analysisResult.additional_certifications) && analysisResult.additional_certifications.length > 0 ? (
                 <ul className="list-disc pl-5 text-purple-600">
@@ -576,14 +723,14 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
               ) : (
                 <p className="text-purple-600">None listed</p>
               )}
-
+ 
               <h4 className="text-lg font-semibold text-purple-800 mt-6 mb-4">⚠️ Development Gaps</h4>
               <ul className="list-disc pl-5 text-purple-600">
                 {Array.isArray(analysisResult.development_gaps) && analysisResult.development_gaps.length > 0
                   ? analysisResult.development_gaps.map((gap, idx) => <li key={idx} className="mb-2">{gap}</li>)
                   : <li>No data</li>}
               </ul>
-
+ 
               <h4 className="text-lg font-semibold text-purple-800 mt-6 mb-4">📊 Section-wise Scoring Rubric</h4>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[700px] text-left border-collapse">
@@ -633,9 +780,9 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
                   </tbody>
                 </table>
               </div>
-
+ 
              
-
+ 
               {!isRevalidated && (
                 <button
                   onClick={revalidateSkills}
@@ -656,5 +803,6 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
     </Modal>
   );
 }
-
+ 
 export default ResumeAnalysisModal;
+ 

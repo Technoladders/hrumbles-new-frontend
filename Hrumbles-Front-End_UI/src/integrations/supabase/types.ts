@@ -671,6 +671,7 @@ export type Database = {
           start_date: string
           status: string | null
           upload_date: string | null
+          skills: []
         }
         Insert: {
           company: string
@@ -697,6 +698,8 @@ export type Database = {
           start_date: string
           status?: string | null
           upload_date?: string | null
+          skills: []
+
         }
         Update: {
           company?: string
@@ -723,6 +726,7 @@ export type Database = {
           start_date?: string
           status?: string | null
           upload_date?: string | null
+          skills: []
         }
         Relationships: [
           {
@@ -2386,6 +2390,7 @@ export type Database = {
           summary: string | null
           top_skills: string[] | null
           updated_at: string | null
+          created_by: string | null 
         }
         Insert: {
           additional_certifications?: string[] | null
@@ -2404,6 +2409,7 @@ export type Database = {
           summary?: string | null
           top_skills?: string[] | null
           updated_at?: string | null
+          created_by: string | null 
         }
         Update: {
           additional_certifications?: string[] | null
@@ -2422,8 +2428,16 @@ export type Database = {
           summary?: string | null
           top_skills?: string[] | null
           updated_at?: string | null
+          created_by: string | null 
         }
-        Relationships: []
+        Relationships: [ 
+          {
+          foreignKeyName: "resume_analysis_created_by_fkey",
+          columns: ["created_by"],
+          referencedRelation: "hr_employees",
+          referencedColumns: ["id"]
+        }
+      ]
       }
       search_params: {
         Row: {
@@ -2559,6 +2573,242 @@ export type Database = {
           message_sent?: boolean | null
           phone_number?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      shares: {
+        Row: {
+          id: string;
+          share_id: string;
+          expiry_date: number;
+          data_options: Json;
+          candidate: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          share_id: string;
+          expiry_date: number;
+          data_options: Json;
+          candidate: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          share_id?: string;
+          expiry_date?: number;
+          data_options?: Json;
+          candidate?: Json;
+          created_at?: string;
+        };
+        Relationships: [];
+      }
+      payment_custom_deductions: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          name: string
+          payment_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          name: string
+          payment_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          name?: string
+          payment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_custom_deductions_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payment_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_custom_earnings: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          name: string
+          payment_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          name: string
+          payment_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          name?: string
+          payment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_custom_earnings_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payment_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_deductions: {
+        Row: {
+          created_at: string
+          id: string
+          income_tax: number
+          loan_deduction: number
+          lop_days: number
+          paid_days: number
+          payment_id: string
+          professional_tax: number
+          provident_fund: number
+          total_deductions: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          income_tax?: number
+          loan_deduction?: number
+          lop_days?: number
+          paid_days?: number
+          payment_id: string
+          professional_tax?: number
+          provident_fund?: number
+          total_deductions: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          income_tax?: number
+          loan_deduction?: number
+          lop_days?: number
+          paid_days?: number
+          payment_id?: string
+          professional_tax?: number
+          provident_fund?: number
+          total_deductions?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_deductions_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payment_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_earnings: {
+        Row: {
+          basic_salary: number
+          conveyance_allowance: number
+          created_at: string
+          fixed_allowance: number
+          hourly_rate: number | null
+          house_rent_allowance: number
+          id: string
+          is_ctc_mode: boolean
+          payment_id: string
+          total_earnings: number
+          total_hours_worked: number | null
+          updated_at: string
+        }
+        Insert: {
+          basic_salary: number
+          conveyance_allowance: number
+          created_at?: string
+          fixed_allowance: number
+          hourly_rate?: number | null
+          house_rent_allowance: number
+          id?: string
+          is_ctc_mode?: boolean
+          payment_id: string
+          total_earnings: number
+          total_hours_worked?: number | null
+          updated_at?: string
+        }
+        Update: {
+          basic_salary?: number
+          conveyance_allowance?: number
+          created_at?: string
+          fixed_allowance?: number
+          hourly_rate?: number | null
+          house_rent_allowance?: number
+          id?: string
+          is_ctc_mode?: boolean
+          payment_id?: string
+          total_earnings?: number
+          total_hours_worked?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_earnings_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payment_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_records: {
+        Row: {
+          created_at: string
+          designation: string | null
+          employee_id: string
+          employee_name: string
+          id: string
+          joining_date: string | null
+          payment_amount: number
+          payment_category: string
+          payment_date: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          designation?: string | null
+          employee_id: string
+          employee_name: string
+          id?: string
+          joining_date?: string | null
+          payment_amount: number
+          payment_category: string
+          payment_date: string
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          designation?: string | null
+          employee_id?: string
+          employee_name?: string
+          id?: string
+          joining_date?: string | null
+          payment_amount?: number
+          payment_category?: string
+          payment_date?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: []
       }
