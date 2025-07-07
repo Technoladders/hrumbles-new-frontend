@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       host: "::",
-      port: 8080,
+      port: 8081,
       proxy: {
         // ... (your existing /api/proxy rule)
 
@@ -47,6 +47,7 @@ export default defineConfig(({ mode }) => {
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
+      dedupe: ['react', 'react-dom']
     },
     define: {
       __APP_VERSION__: JSON.stringify(env.VITE_APP_VERSION),

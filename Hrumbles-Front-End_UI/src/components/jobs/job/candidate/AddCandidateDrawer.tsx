@@ -22,14 +22,15 @@ import { createCandidate, updateCandidate, updateCandidateSkillRatings } from "@
 import { useSelector } from "react-redux";
 import { supabase } from "@/integrations/supabase/client";
 import ProofIdTab from "./ProofIdTab";
-
+import * as z from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 
 interface AddCandidateDrawerProps {
   job: JobData;
   onCandidateAdded: () => void;
   candidate?: Candidate;
-  open?: boolean;        // Add this
-  onOpenChange?: (open: boolean) => void;  // Add this
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export type CandidateFormData = {
@@ -45,31 +46,121 @@ export type CandidateFormData = {
   relevantExperienceMonths?: number;
   experience?: string; 
   resume: string | null; 
-  skills: Array<{
+  skills?: Array<{
     name: string;
     rating: number;
     experienceYears: number;
     experienceMonths: number;
   }>;
-  location?: string;       // Make optional
-  expectedSalary?: number; // Make optional
-  currentSalary?: number;  // Make optional
+  location?: string;
+  expectedSalary?: number;
+  currentSalary?: number;
   noticePeriod?: string;
   lastWorkingDay?: string;
-  linkedInId?: string; // Added
-  hasOffers?: "Yes" | "No"; // Added
-  offerDetails?: string; // Added
-  uan?: string; // Add UAN (optional)
-  pan?: string; // Add PAN (optional)
-  pf?: string; // Add PF (optional)
-  esicNumber?: string; // Add ESIC Number (optional)
+  linkedInId: string;
+  isLinkedInRequired?: boolean;
+  hasOffers?: "Yes" | "No";
+  offerDetails?: string;
+  uan?: string;
+  pan?: string;
+  pf?: string;
+  esicNumber?: string;
 };
+
+// Zod schema for Basic Information tab (excludes skills)
+const basicInfoSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z.string().email("Invalid email format"),
+  phone: z
+    .string()
+    .regex(/^\+\d{10,15}$/, "Phone number must include country code and be 10-15 digits")
+    .min(1, "Phone number is required"),
+  currentLocation: z.string().min(1, "Current location is required"),
+  preferredLocations: z.array(z.string()).min(1, "At least one preferred location is required"),
+  totalExperience: z
+    .number()
+    .min(0, "Cannot be negative")
+    .optional(),
+  totalExperienceMonths: z
+    .number()
+    .min(0)
+    .max(11, "Max 11 months")
+    .optional(),
+  relevantExperience: z
+    .number()
+    .min(0, "Cannot be negative")
+    .optional(),
+  relevantExperienceMonths: z
+    .number()
+    .min(0)
+    .max(11, "Max 11 months")
+    .optional(),
+  currentSalary: z
+    .number()
+    .min(0, "Cannot be negative")
+    .optional(),
+  expectedSalary: z
+    .number()
+    .min(0, "Cannot be negative")
+    .optional(),
+  resume: z.string().url("Resume URL is required"),
+  noticePeriod: z
+    .enum(["Immediate", "15 days", "30 days", "45 days", "60 days", "90 days"])
+    .optional(),
+  lastWorkingDay: z.string().optional(),
+  // **FIX STARTS HERE**
+  // 1. Define as a simple optional string. All logic will be in superRefine.
+  linkedInId: z.string().optional(), 
+  isLinkedInRequired: z.boolean().optional(),
+  // **FIX ENDS HERE**
+  hasOffers: z.enum(["Yes", "No"]).optional(),
+  offerDetails: z.string().optional(),
+}).superRefine((data, ctx) => {
+  // 2. Implement the full conditional logic here.
+  const { isLinkedInRequired, linkedInId } = data;
+
+  // Rule 1: If the field has a value (is not empty), it MUST be a valid URL format.
+  // This applies whether it's required or not.
+  if (linkedInId && linkedInId.trim() !== '') {
+    const urlCheck = z.string().url().safeParse(linkedInId);
+    if (!urlCheck.success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Please enter a valid LinkedIn URL.",
+        path: ["linkedInId"],
+      });
+    }
+  }
+
+  // Rule 2: If the toggle is ON, the field cannot be empty.
+  if (isLinkedInRequired && (!linkedInId || linkedInId.trim() === '')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "LinkedIn URL is required.",
+      path: ["linkedInId"],
+    });
+  }
+});
+
+
+// Zod schema for Skills Information tab
+const skillsSchema = z.object({
+  skills: z.array(
+    z.object({
+      name: z.string(),
+      rating: z.number().min(0, "Rating cannot be negative").max(5, "Rating cannot exceed 5"),
+      experienceYears: z.number().min(0, "Experience years cannot be negative").optional(),
+      experienceMonths: z.number().min(0, "Experience months cannot be negative").max(11, "Max 11 months").optional(),
+    })
+  ).min(1, "At least one skill is required"),
+});
 
 const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChange }: AddCandidateDrawerProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("basic-info");
   const [candidateId, setCandidateId] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false); // Added loading state
+  const [isSaving, setIsSaving] = useState(false);
   const user = useSelector((state: any) => state.auth.user);
   const isEditMode = !!candidate;
 
@@ -77,9 +168,8 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
   const controlledOpen = open !== undefined ? open : isOpen;
   const controlledOnOpenChange = onOpenChange || setIsOpen;
 
-  console.log("user", user)
-
   const basicInfoForm = useForm<CandidateFormData>({
+    resolver: zodResolver(basicInfoSchema),
     defaultValues: {
       firstName: "",
       lastName: "",
@@ -87,29 +177,30 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
       phone: "",
       currentLocation: "",
       preferredLocations: [],
-      totalExperience: undefined, // Changed to undefined
-    totalExperienceMonths: undefined,
-    relevantExperience: undefined, // Changed to undefined
-    relevantExperienceMonths: undefined,
-    currentSalary: undefined, // Changed to undefined
-    expectedSalary: undefined,
+      totalExperience: undefined,
+      totalExperienceMonths: undefined,
+      relevantExperience: undefined,
+      relevantExperienceMonths: undefined,
+      currentSalary: undefined,
+      expectedSalary: undefined,
       resume: null,
-      skills: [],
-      noticePeriod: candidate?.metadata?.noticePeriod || undefined, // Add Notice Period
-    lastWorkingDay: candidate?.metadata?.lastWorkingDay || "", // Add Last Working Day
-    linkedInId: candidate?.metadata?.linkedInId || "", // Initialize for edit mode
-      hasOffers: candidate?.metadata?.hasOffers || undefined, // Initialize for edit mode
-      offerDetails: candidate?.metadata?.offerDetails || "", 
-    uan: candidate?.metadata?.uan || "", // Initialize for edit mode
-      pan: candidate?.metadata?.pan || "", // Initialize for edit mode
-      pf: candidate?.metadata?.pf || "", // Initialize for edit mode
-      esicNumber: candidate?.metadata?.esicNumber || "", // Initialize for edit mode
+      noticePeriod: candidate?.metadata?.noticePeriod || undefined,
+      lastWorkingDay: candidate?.metadata?.lastWorkingDay || "",
+      linkedInId: candidate?.metadata?.linkedInId || "",
+      isLinkedInRequired: true, // Default to true
+      hasOffers: candidate?.metadata?.hasOffers || undefined,
+      offerDetails: candidate?.metadata?.offerDetails || "",
+      uan: candidate?.metadata?.uan || "",
+      pan: candidate?.metadata?.pan || "",
+      pf: candidate?.metadata?.pf || "",
+      esicNumber: candidate?.metadata?.esicNumber || "",
     }
   });
 
   const skillsForm = useForm<CandidateFormData>({
+    resolver: zodResolver(skillsSchema),
     defaultValues: {
-      skills: job.skills?.map(skill => ({ name: skill, rating: 0, experienceYears: 0, experienceMonths: 0 })) || []
+      skills: job.skills?.map(skill => ({ name: skill, rating: 0, experienceYears: undefined, experienceMonths: undefined })) || []
     }
   });
 
@@ -128,189 +219,204 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
     proofIdForm.reset();
     setCandidateId(isEditMode ? candidate?.id.toString() : null);
     setActiveTab("basic-info");
-    controlledOnOpenChange(false); // Use controlled handler
+    controlledOnOpenChange(false);
   };
   
-// Inside the component
-const watchedValues = basicInfoForm.watch(); // Watches all form fields
+  const watchedValues = basicInfoForm.watch();
 
-useEffect(() => {
-  console.log("Basic Information Tab Data:", watchedValues);
-}, [watchedValues]); // Logs whenever the form values change
+  useEffect(() => {
+    console.log("Basic Information Tab Data:", watchedValues);
+  }, [watchedValues]);
 
-const checkDuplicateCandidate = async (jobId: string, email: string, phone: string) => {
-  const { data, error } = await supabase
-    .from("hr_job_candidates")
-    .select("id, email, phone")
-    .eq("job_id", jobId)
-    .or(`email.eq.${email},phone.eq.${phone}`);
+  const checkDuplicateCandidate = async (jobId: string, email: string, phone: string) => {
+    const { data, error } = await supabase
+      .from("hr_job_candidates")
+      .select("id, email, phone")
+      .eq("job_id", jobId)
+      .or(`email.eq.${email},phone.eq.${phone}`);
 
-  if (error) {
-    console.error("Error checking duplicate candidate:", error);
-    throw error;
-  }
+    if (error) {
+      console.error("Error checking duplicate candidate:", error);
+      throw error;
+    }
 
-  return data && data.length > 0;
-};
+    return data && data.length > 0;
+  };
 
+  const handleSaveBasicInfo = async (data: CandidateFormData) => {
+    console.log("Form Data Before Saving:", data);
 
-const handleSaveBasicInfo = async (data: CandidateFormData) => {
-  console.log("Form Data Before Saving:", data);
+    // Validate form data against schema
+    try {
+      await basicInfoSchema.parseAsync(data);
+    } catch (error) {
+      console.error("Validation error:", error);
+      toast.error("Please fill all required fields correctly.");
+      return;
+    }
 
-  if (!data.resume) {
-    toast.error("Resume is required. Please upload your resume.");
-    return;
-  }
+    if (!data.resume) {
+      toast.error("Resume is required. Please upload your resume.");
+      return;
+    }
 
-  if (!job.id) {
-    toast.error("Job ID is missing");
-    return;
-  }
+    if (!job.id) {
+      toast.error("Job ID is missing");
+      return;
+    }
 
-  try {
-    const appliedFrom = user?.user_metadata
-      ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
-      : "Unknown";
-    const createdby = user?.id;
+    try {
+      const appliedFrom = user?.user_metadata
+        ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
+        : "Unknown";
+      const createdby = user?.id;
 
-    const formatExperience = (years: number, months?: number) => {
-      const yearsStr = years > 0 ? `${years} year${years === 1 ? "" : "s"}` : "";
-      const monthsStr = months && months > 0 ? `${months} month${months === 1 ? "" : "s"}` : "";
-      return [yearsStr, monthsStr].filter(Boolean).join(" and ") || "0 years";
-    };
+      const formatExperience = (years: number, months?: number) => {
+        const yearsStr = years > 0 ? `${years} year${years === 1 ? "" : "s"}` : "";
+        const monthsStr = months && months > 0 ? `${months} month${months === 1 ? "" : "s"}` : "";
+        return [yearsStr, monthsStr].filter(Boolean).join(" and ") || "0 years";
+      };
 
-    const candidateData = {
-      id: candidateId || "",
-      name: `${data.firstName} ${data.lastName}`,
-      status: "Screening" as CandidateStatus,
-      experience: formatExperience(data.totalExperience, data.totalExperienceMonths),
-      matchScore: 0,
-      appliedDate: new Date().toISOString().split('T')[0],
-      skills: [],
-      email: data.email,
-      phone: data.phone,
-      currentSalary: data.currentSalary,
-      expectedSalary: data.expectedSalary,
-      location: data.currentLocation,
-      appliedFrom,
-      resumeUrl: data.resume,
-      createdBy: createdby,
-      metadata: {
-        currentLocation: data.currentLocation,
-        preferredLocations: data.preferredLocations,
-        totalExperience: data.totalExperience,
-        totalExperienceMonths: data.totalExperienceMonths,
-        relevantExperience: data.relevantExperience,
-        relevantExperienceMonths: data.relevantExperienceMonths,
+      const candidateData = {
+        id: candidateId || "",
+        name: `${data.firstName} ${data.lastName}`,
+        status: "Screening" as CandidateStatus,
+        experience: formatExperience(data.totalExperience, data.totalExperienceMonths),
+        matchScore: 0,
+        appliedDate: new Date().toISOString().split('T')[0],
+        skills: [],
+        email: data.email,
+        phone: data.phone,
         currentSalary: data.currentSalary,
         expectedSalary: data.expectedSalary,
-        resume_url: data.resume,
-        noticePeriod: data.noticePeriod,
-        lastWorkingDay: data.lastWorkingDay,
-        linkedInId: data.linkedInId || undefined,
-        hasOffers: data.hasOffers || undefined,
-        offerDetails: data.offerDetails || undefined,
-        uan: data.uan || undefined,
-        pan: data.pan || undefined,
-        pf: data.pf || undefined,
-        esicNumber: data.esicNumber || undefined,
-      }
-    };
+        location: data.currentLocation,
+        appliedFrom,
+        resumeUrl: data.resume,
+        createdBy: createdby,
+        metadata: {
+          currentLocation: data.currentLocation,
+          preferredLocations: data.preferredLocations,
+          totalExperience: data.totalExperience,
+          totalExperienceMonths: data.totalExperienceMonths,
+          relevantExperience: data.relevantExperience,
+          relevantExperienceMonths: data.relevantExperienceMonths,
+          currentSalary: data.currentSalary,
+          expectedSalary: data.expectedSalary,
+          resume_url: data.resume,
+          noticePeriod: data.noticePeriod,
+          lastWorkingDay: data.lastWorkingDay,
+          linkedInId: data.linkedInId,
+          hasOffers: data.hasOffers,
+          offerDetails: data.offerDetails,
+          uan: data.uan,
+          pan: data.pan,
+          pf: data.pf,
+          esicNumber: data.esicNumber,
+        }
+      };
 
-    // ✅ Prevent duplicate if not in edit mode
-    if (!candidateId) {
-      const isDuplicate = await checkDuplicateCandidate(job.id, data.email, data.phone);
-      if (isDuplicate) {
-        toast.error("Candidate with same email or phone already exists for this job.");
+      if (!candidateId) {
+        const isDuplicate = await checkDuplicateCandidate(job.id, data.email, data.phone);
+        if (isDuplicate) {
+          toast.error("Candidate with same email or phone already exists for this job.");
+          return;
+        }
+
+        const newCandidate = await createCandidate(job.id, candidateData);
+        setCandidateId(newCandidate.id);
+        toast.success("Basic information saved successfully");
+      } else {
+        await updateCandidate(candidateId, candidateData);
+        toast.success("Basic information updated successfully");
+      }
+
+      // Transfer skills to skillsForm for the next tab
+      if (data.skills && data.skills.length > 0) {
+        skillsForm.setValue("skills", data.skills);
+      }
+
+      setActiveTab("skills-info");
+
+    } catch (error) {
+      console.error("Error saving candidate basic info:", error);
+      toast.error("Failed to save basic information");
+    }
+  };
+
+  const handleSaveSkills = async (data: CandidateFormData) => {
+    try {
+      if (!candidateId || !job.id) {
+        toast.error("Candidate ID or Job ID is missing");
         return;
       }
 
-      const newCandidate = await createCandidate(job.id, candidateData);
-      setCandidateId(newCandidate.id);
-      toast.success("Basic information saved successfully");
-    } else {
-      // Edit mode - safe to update
+      // Validate skills data
+      try {
+        skillsSchema.parse(data);
+      } catch (error) {
+        console.error("Skills validation error:", error);
+        toast.error("Please provide valid skill ratings.");
+        return;
+      }
+
+      await updateCandidateSkillRatings(candidateId, data.skills);
+      
+      toast.success("Skills updated successfully");
+      setActiveTab("proof-id");
+    } catch (error) {
+      console.error("Error saving candidate skills:", error);
+      toast.error("Failed to save skills information");
+    }
+  };
+
+  const handleSaveProofId = async (data: CandidateFormData) => {
+    try {
+      setIsSaving(true);
+      if (!candidateId || !job.id) {
+        toast.error("Candidate ID or Job ID is missing");
+        return;
+      }
+
+      const candidateData = {
+        metadata: {
+          uan: data.uan || undefined,
+          pan: data.pan || undefined,
+          pf: data.pf || undefined,
+          esicNumber: data.esicNumber || undefined,
+        },
+      };
+
       await updateCandidate(candidateId, candidateData);
-      toast.success("Basic information updated successfully");
+      toast.success("Proof ID information saved successfully");
+      handleClose();
+      onCandidateAdded();
+    } catch (error) {
+      console.error("Error saving proof ID information:", error);
+      toast.error("Failed to save proof ID information");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const fetchCandidateById = async (id: string) => {
+    const { data, error } = await supabase
+      .from('hr_job_candidates')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error("Error fetching candidate:", error);
+      return null;
     }
 
-    setActiveTab("skills-info");
-
-  } catch (error) {
-    console.error("Error saving candidate basic info:", error);
-    toast.error("Failed to save basic information");
-  }
-};
-
+    return data;
+  };
   
-const handleSaveSkills = async (data: CandidateFormData) => {
-  try {
-    if (!candidateId || !job.id) {
-      toast.error("Candidate ID or Job ID is missing");
-      return;
-    }
-
-    // Update only the skill_ratings field
-    await updateCandidateSkillRatings(candidateId, data.skills);
-    
-    toast.success("Skills updated successfully");
-    setActiveTab("proof-id");
-  } catch (error) {
-    console.error("Error saving candidate skills:", error);
-    toast.error("Failed to save skills information");
-  }
-};
-
-const handleSaveProofId = async (data: CandidateFormData) => {
-  try {
-    setIsSaving(true); // Set loading state
-    if (!candidateId || !job.id) {
-      toast.error("Candidate ID or Job ID is missing");
-      return;
-    }
-
-    const candidateData = {
-      metadata: {
-        uan: data.uan || undefined,
-        pan: data.pan || undefined,
-        pf: data.pf || undefined,
-        esicNumber: data.esicNumber || undefined,
-      },
-    };
-
-    await updateCandidate(candidateId, candidateData);
-    toast.success("Proof ID information saved successfully");
-    handleClose(); // Close drawer after final step
-    onCandidateAdded(); // Trigger refresh in parent
-  } catch (error) {
-    console.error("Error saving proof ID information:", error);
-    toast.error("Failed to save proof ID information");
-  } finally {
-    setIsSaving(false); // Reset loading state
-  }
-};
-
-// Function to fetch candidate by ID
-const fetchCandidateById = async (id: string) => {
-  const { data, error } = await supabase
-    .from('hr_job_candidates')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (error) {
-    console.error("Error fetching candidate:", error);
-    return null;
-  }
-
-  return data;
-};
-  
-  // Calculate a simple match score based on skill ratings (0-100)
   const calculateMatchScore = (skills: Array<{name: string, rating: number}>) => {
     if (skills.length === 0) return 0;
     
-    const totalPossibleScore = skills.length * 5; // 5 is max rating
+    const totalPossibleScore = skills.length * 5;
     const actualScore = skills.reduce((sum, skill) => sum + skill.rating, 0);
     
     return Math.round((actualScore / totalPossibleScore) * 100);
@@ -367,7 +473,7 @@ const fetchCandidateById = async (id: string) => {
               form={proofIdForm}
               onSave={(data) => handleSaveProofId(data)}
               onCancel={handleClose}
-              isSaving={isSaving} // Pass loading state
+              isSaving={isSaving}
             />
           </TabsContent>
         </Tabs>
@@ -377,5 +483,3 @@ const fetchCandidateById = async (id: string) => {
 };
 
 export default AddCandidateDrawer;
-
-// Resume parse details

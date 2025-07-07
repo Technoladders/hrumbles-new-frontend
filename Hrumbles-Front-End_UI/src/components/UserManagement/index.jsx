@@ -1,24 +1,25 @@
-import { Box, Button, useDisclosure } from "@chakra-ui/react";
-import AddDepartmentModal from "./AddDepartmentModal";
-import AddDesignationModal from "./AddDesignationModal"; 
-import UserManagementTree from "./UserManagementTree";
+
+import { useSelector } from "react-redux";
+import EnhancedUserManagement from "./EnhancedUserManagement";
 
 const UserManagement = () => {
-  const { isOpen: isDepartmentOpen, onOpen: openDepartment, onClose: closeDepartment } = useDisclosure();
-  const { isOpen: isDesignationOpen, onOpen: openDesignation, onClose: closeDesignation } = useDisclosure();
+  const { role } = useSelector((state) => state.auth);
 
-  return (
-    <Box p={4}>
-      <Button colorScheme="blue" onClick={openDepartment} mr={2}>+ Add Department</Button>
-      <Button colorScheme="green" onClick={openDesignation}>+ Add Designation</Button>
-      
-      <AddDepartmentModal isOpen={isDepartmentOpen} onClose={closeDepartment} />
-      <AddDesignationModal isOpen={isDesignationOpen} onClose={closeDesignation} />
-
-      {/* Collapsible Tree View */}
-      <UserManagementTree />
-    </Box>
-  );
+  switch (role) {
+    case "organization_superadmin":
+      return <EnhancedUserManagement />;
+    case "admin":
+      return <EnhancedUserManagement />;
+    default:
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-gray-800 mb-2">Unauthorized Access</h2>
+            <p className="text-gray-600">You don't have permission to access user management.</p>
+          </div>
+        </div>
+      );
+  }
 };
 
 export default UserManagement;

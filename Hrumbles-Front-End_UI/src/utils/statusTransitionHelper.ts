@@ -54,10 +54,6 @@ export const getRequiredInteractionType = (
   oldSubStatusName: string | undefined, 
   newSubStatusName: string
 ): 'interview-schedule' | 'interview-feedback' | 'reschedule' | 'joining' | 'reject' | 'actual-ctc' | null => {
-  if (!requiresSpecialInteraction(oldSubStatusName, newSubStatusName)) {
-    return null;
-  }
-  
   if (newSubStatusName.startsWith('Reschedule ')) {
     return 'reschedule';
   }
@@ -70,8 +66,7 @@ export const getRequiredInteractionType = (
     return 'interview-schedule';
   }
   
-  if (newSubStatusName.includes('Selected') || 
-      newSubStatusName.includes('Rejected')) {
+  if (newSubStatusName.includes('Selected') || newSubStatusName.includes('Rejected')) {
     return 'interview-feedback';
   }
   
@@ -79,7 +74,8 @@ export const getRequiredInteractionType = (
     return 'joining';
   }
   
-  if (newSubStatusName.includes('Reject')) {
+  // **MODIFICATION: "Candidate Dropped" should trigger the reject modal**
+  if (newSubStatusName.includes('Reject') || newSubStatusName === 'Candidate Dropped') {
     return 'reject';
   }
   
@@ -89,6 +85,7 @@ export const getRequiredInteractionType = (
   
   return null;
 };
+
 
 /**
  * Determines the round name based on the status
@@ -133,5 +130,9 @@ export const getRoundNameFromResult = (statusName: string): string | null => {
 export const isTerminalStatus = (statusName: string | undefined): boolean => {
   if (!statusName) return false;
   
-  return statusName.includes('Reject') || statusName === 'No Show';
+  // **MODIFICATION: Add new terminal status checks**
+  return statusName.includes('Reject') || 
+         statusName.includes('No Show') ||
+         statusName === 'Offer Declined' ||
+         statusName === 'Candidate Dropped';
 };

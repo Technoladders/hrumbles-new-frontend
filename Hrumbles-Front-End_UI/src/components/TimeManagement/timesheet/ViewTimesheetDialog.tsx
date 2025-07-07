@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { TimeLog, DetailedTimesheetEntry } from "@/types/time-tracker-types";
 import { toast } from "sonner";
 import { TimeLogDetails } from "./dialog/TimeLogDetails";
@@ -15,6 +16,8 @@ import { fetchHrProjectEmployees, submitTimesheet } from '@/api/timeTracker';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import Papa from 'papaparse';
+import { fetchEmployees } from '@/api/user';
+import { MultiSelect } from '@/components/ui/multi-selector';
 
 interface ViewTimesheetDialogProps {
   open: boolean;
@@ -57,6 +60,12 @@ interface Submission {
   client_name: string;
 }
 
+interface EmployeeOption {
+  value: string; // employee id
+  label: string; // employee name
+}
+
+
 export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
   open,
   onOpenChange,
@@ -67,38 +76,69 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
   const user = useSelector((state: any) => state.auth.user);
     const organization_id = useSelector((state: any) => state.auth.organization_id);
   const employeeId = user?.id || "";
-  const [isEditing, setIsEditing] = useState(!timesheet?.is_submitted);
   const [date, setDate] = useState<Date>(new Date(timesheet?.date || Date.now()));
-  const [title, setTitle] = useState(timesheet?.notes || '');
-  const [totalWorkingHours, setTotalWorkingHours] = useState(timesheet?.total_working_hours || 8);
-  const [workReport, setWorkReport] = useState(timesheet?.notes || '');
-  const [detailedEntries, setDetailedEntries] = useState<DetailedTimesheetEntry[]>(timesheet?.project_time_data?.projects || []);
-  const [projectEntries, setProjectEntries] = useState<
-    { projectId: string; hours: number; report: string; clientId?: string }[]
-  >(timesheet?.project_time_data?.projects || []);
-  const [hrProjectEmployees, setHrProjectEmployees] = useState<any[]>([]);
+  
+  // Core State
+  const [isEditing, setIsEditing] = useState(!timesheet?.is_submitted);
   const [isLoading, setIsLoading] = useState(false);
   const [isFormValid, setIsFormValid] = useState(true);
+
+  // Project-based employee state
+  const [title, setTitle] = useState(timesheet?.title || '');
+  const [workReport, setWorkReport] = useState(timesheet?.notes || '');
+  const [totalWorkingHours, setTotalWorkingHours] = useState(timesheet?.total_working_hours || 8);
+  const [detailedEntries, setDetailedEntries] = useState<DetailedTimesheetEntry[]>(timesheet?.project_time_data?.projects || []);
+  const [projectEntries, setProjectEntries] = useState<any[]>(timesheet?.project_time_data?.projects || []);
+  const [hrProjectEmployees, setHrProjectEmployees] = useState<any[]>([]);
+
+  // Non-project employee state
+  const [formData, setFormData] = useState({ workReport: timesheet?.notes || '' });
+
+  // EOD Report State
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [emailStatus, setEmailStatus] = useState<string | null>(null);
+  const [isRecruiter, setIsRecruiter] = useState(false);
+  const [allEmployees, setAllEmployees] = useState<EmployeeOption[]>([]);
+  const [additionalRecipients, setAdditionalRecipients] = useState<string[]>([]);
 
-  const [formData, setFormData] = useState({
-    workReport: timesheet?.notes || '',
-    projectAllocations: timesheet?.project_time_data?.projects || [],
-    totalHours: timesheet?.total_working_hours || 0,
-  });
+  const { validateForm } = useTimesheetValidation();
+  const { isSubmitting, submitTimesheet: submitTimesheetHook } = useTimesheetSubmission();
 
+
+ // Combined data fetching and setup effect
   useEffect(() => {
-    const fetchData = async () => {
-      if (employeeId && employeeHasProjects) {
+    if (open && organization_id && employeeId) {
+      const setupDialog = async () => {
         setIsLoading(true);
-        const data = await fetchHrProjectEmployees(employeeId);
-        setHrProjectEmployees(data);
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  }, [employeeId, employeeHasProjects]);
+        try {
+          // Fetch data for project-based employees
+          if (employeeHasProjects) {
+            const data = await fetchHrProjectEmployees(employeeId);
+            setHrProjectEmployees(data);
+          }
+
+          // Fetch all employees for recipient dropdown
+          const employees = await fetchEmployees(organization_id);
+          setAllEmployees(employees.map(e => ({ value: e.email, label: `${e.first_name} ${e.last_name}` })));
+          
+          // Determine if user is a recruiter to show candidate submissions
+          const { data: employeeData } = await supabase.from("hr_employees").select("department_id").eq("id", employeeId).single();
+          if (employeeData?.department_id) {
+            const { data: deptData } = await supabase.from("hr_departments").select("name").eq("id", employeeData.department_id).single();
+            const recruiterStatus = deptData?.name === "Human Resource";
+            setIsRecruiter(recruiterStatus);
+            if (recruiterStatus) await fetchSubmissions();
+          }
+        } catch (error) {
+          console.error("Error setting up dialog:", error);
+          toast.error("Failed to load necessary data.");
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      setupDialog();
+    }
+  }, [open, organization_id, employeeId, employeeHasProjects]);
 
   useEffect(() => {
     if (timesheet?.clock_in_time && timesheet?.clock_out_time) {
@@ -113,7 +153,7 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     setIsFormValid(employeeHasProjects || formData.workReport.trim().length > 0);
   }, [timesheet, employeeHasProjects, formData.workReport]);
 
-  useEffect(() => {
+
     const fetchSubmissions = async () => {
       if (!employeeId || !timesheet) return;
       setIsLoading(true);
@@ -203,8 +243,9 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
         setIsLoading(false);
       }
     };
-    fetchSubmissions();
-  }, [employeeId, timesheet]);
+
+
+
 
   const generateCSV = (data: Submission[]) => {
     const headers = [
@@ -255,65 +296,61 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     });
   };
 
-  const sendEODReport = async () => {
+ const sendEODReport = async (finalWorkReport: string) => {
+    setEmailStatus('Sending EOD report...');
     try {
-      setEmailStatus('Sending EOD report...');
       const { data: { session }, error: authError } = await supabase.auth.getSession();
-      if (authError || !session) {
-        throw new Error('No authenticated user found');
-      }
-      const jwt = session.access_token;
+      if (authError || !session) throw new Error('Authentication session not found.');
 
-      const { data: employee, error: employeeError } = await supabase
-        .from('hr_employees')
-        .select('first_name, last_name')
-        .eq('id', employeeId)
-        .single();
-      if (employeeError || !employee) {
-        throw new Error('Failed to fetch user name');
+      let defaultRecipientEmails: string[] = [];
+      const { data: config } = await supabase.from('hr_email_configurations').select('recipients').eq('organization_id', organization_id).eq('report_type', 'eod_report').single();
+      if (config?.recipients?.length > 0) {
+        const { data: recipientEmployees } = await supabase.from('hr_employees').select('email').in('id', config.recipients);
+        if (recipientEmployees) defaultRecipientEmails = recipientEmployees.map(e => e.email);
       }
 
-      const dateStart = startOfDay(new Date(timesheet.date));
-      const dateEnd = endOfDay(new Date(timesheet.date));
-      const csvContent = generateCSV(submissions);
+      const allRecipientEmails = [user.email, ...additionalRecipients, ...defaultRecipientEmails];
+      const uniqueRecipients = [...new Set(allRecipientEmails.filter(Boolean))];
+
       const payload = {
-        reportType: 'EOD',
-        reportData: submissions,
-        userEmail: user.email,
-        userName: employee.first_name || 'User',
-        dateRange: {
-          start: format(dateStart, 'yyyy-MM-dd'),
-          end: format(dateEnd, 'yyyy-MM-dd'),
+        userName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
+        isRecruiter,
+        submissions: isRecruiter ? submissions : [],
+        workReport: finalWorkReport,
+        timesheetDetails: {
+          date: timesheet.date,
+          duration_minutes: timesheet.duration_minutes,
+          clock_in_time: timesheet.clock_in_time,
+          clock_out_time: timesheet.clock_out_time,
         },
-        csvContent,
-        workReport: formData.workReport
+        allRecipients: uniqueRecipients,
+        csvContent: isRecruiter && submissions.length > 0 ? generateCSV(submissions) : null,
       };
 
-      const response = await fetch(
-        'https://kbpeyfietrwlhwcwqhjw.supabase.co/functions/v1/report-manager',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImticGV5ZmlldHJ3bGh3Y3dxaGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4NDA5NjEsImV4cCI6MjA1NDQxNjk2MX0.A-K4DO6D2qQZ66qIXY4BlmoHxc-W5B0itV-HAAM84YA',
-            'Authorization': `Bearer ${jwt}`,
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/report-manager`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-      const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to send EOD report');
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Request failed with status ${response.status}`);
       }
-
+      
       setEmailStatus('EOD report sent successfully!');
-      console.log('EOD report sent successfully!', data);
     } catch (err) {
       setEmailStatus(`Failed to send EOD report: ${err.message}`);
-      console.error('Failed to send EOD report:', err.message);
+      toast.error(`EOD Send Failed: ${err.message}`);
     }
   };
+
+
+
 
   const handleClose = () => {
     setDate(new Date(timesheet?.date || Date.now()));
@@ -333,150 +370,113 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     onOpenChange(false);
   };
 
-  const handleSubmit = async () => {
+    const handleSubmit = async () => {
     if (!timesheet?.employee_id) {
-      toast.error('User not authenticated. Please log in to submit a timesheet.');
-      console.log('Submission blocked: No employeeId');
+      toast.error('User not authenticated.');
       return;
     }
 
-    if (employeeHasProjects) {
-      if (!validateForm({
-        title,
-        workReport,
-        employeeHasProjects,
-        projectEntries,
-        detailedEntries,
-        totalWorkingHours,
-      })) {
-        console.log('Validation failed:', { title, workReport, employeeHasProjects, projectEntries, detailedEntries, totalWorkingHours });
-        return;
-      }
+    let isSubmissionSuccessful = false;
+    let finalWorkReport = '';
+    setIsLoading(true);
 
-      const success = await submitTimesheetHook({
-        employeeId: timesheet.employee_id,
-        title,
-        workReport,
-        totalWorkingHours,
-        employeeHasProjects,
-        projectEntries,
-        detailedEntries,
-        timeLogId: timesheet.id,
-        
-      }, organization_id);
-
-      if (success) {
-        await sendEODReport();
-        toast.success('Timesheet and EOD report submitted successfully');
-        onSubmitTimesheet();
-        handleClose();
+    try {
+      if (employeeHasProjects) {
+        // --- Project-based submission logic ---
+        if (!validateForm({ title, workReport, employeeHasProjects, projectEntries, detailedEntries, totalWorkingHours })) {
+          toast.error("Validation failed. Please fill all required project fields.");
+          setIsLoading(false);
+          return;
+        }
+        finalWorkReport = workReport;
+        isSubmissionSuccessful = await submitTimesheetHook({
+          employeeId: timesheet.employee_id, title, workReport, totalWorkingHours,
+          employeeHasProjects, projectEntries, detailedEntries, timeLogId: timesheet.id,
+        }, organization_id);
       } else {
-        toast.error('Failed to submit timesheet');
-        console.log('Submission failed:', { employeeId: timesheet.employee_id, title, workReport, totalWorkingHours });
+        // --- Non-project-based submission logic ---
+        if (!formData.workReport.trim()) {
+          toast.error('Work Summary is required');
+          setIsLoading(false);
+          return;
+        }
+        finalWorkReport = formData.workReport;
+        const { error } = await supabase.from('time_logs').update({
+          notes: formData.workReport, is_submitted: true,
+        }).eq('id', timesheet.id);
+        
+        if (error) throw error;
+        isSubmissionSuccessful = true;
       }
-    } else {
-      if (!formData.workReport.trim()) {
-        toast.error('Work Summary is required');
-        return;
-      }
 
-      setIsLoading(true);
-      try {
-        const success = await submitTimesheet(timesheet.id, {
-          ...formData,
-          approval_id: timesheet.id,
-          employeeId: timesheet.employee_id,
-        });
-
-        const { data: employeeData, error: employeeError } = await supabase
-          .from("hr_employees")
-          .select("department_id")
-          .eq("id", employeeId)
-          .single();
-
-        if (employeeError) throw employeeError;
-
-        const { data: departmentData, error: departmentError } = await supabase
-          .from("hr_departments")
-          .select("name")
-          .eq("id", employeeData.department_id)
-          .single();
-
-        if (departmentError) throw departmentError;
-
-        const isRecruiter = departmentData.name === "Human Resource";
-
-        if (success) {
-          if (isRecruiter) {
-            await sendEODReport();
-          }
+      if (isSubmissionSuccessful) {
+        await sendEODReport(finalWorkReport);
+        
+        if (emailStatus && emailStatus.startsWith('Failed')) {
+           // Error is already displayed
+        } else {
           toast.success("Timesheet and EOD report submitted successfully");
           onSubmitTimesheet();
-          handleClose();
-        } else {
-          toast.error("Failed to submit timesheet");
+          onOpenChange(false);
         }
-      } catch (error) {
-        console.error("Error submitting timesheet:", error);
-        toast.error("An error occurred while submitting the timesheet");
-      } finally {
-        setIsLoading(false);
+      } else {
+        toast.error('Failed to submit timesheet');
       }
+    } catch (error) {
+      console.error("Error during submission:", error);
+      toast.error(`Submission Failed: ${error.message}`);
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  const { validateForm } = useTimesheetValidation();
-  const { isSubmitting, submitTimesheet: submitTimesheetHook } = useTimesheetSubmission();
 
   const canSubmit = !timesheet?.is_submitted && !isSubmitting && isFormValid;
   const canEdit = !timesheet?.is_submitted && !timesheet?.is_approved;
 
-  return (
+return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>
-            {timesheet?.is_submitted && !employeeHasProjects ? "View Timesheet" : "Submit Timesheet"}
-          </DialogTitle>
+          <DialogTitle>{timesheet?.is_submitted ? "View Timesheet" : "Submit Timesheet"}</DialogTitle>
         </DialogHeader>
         
         <div className="flex-1 overflow-y-auto space-y-4 p-4">
-          {isLoading ? (
-            <div>Loading...</div>
-          ) : (
+          {isLoading && isEditing ? <div>Loading...</div> : (
             <>
               <TimesheetBasicInfo timesheet={timesheet} />
               
-              {isEditing && employeeHasProjects ? (
-                <TimesheetDialogContent
-                  date={date}
-                  setDate={setDate}
-                  title={title}
-                  setTitle={setTitle}
-                  totalWorkingHours={totalWorkingHours}
-                  setTotalWorkingHours={setTotalWorkingHours}
-                  workReport={workReport}
-                  setWorkReport={setWorkReport}
-                  detailedEntries={detailedEntries}
-                  setDetailedEntries={setDetailedEntries}
-                  projectEntries={projectEntries}
-                  setProjectEntries={setProjectEntries}
-                  employeeHasProjects={employeeHasProjects}
-                  isSubmitting={isSubmitting}
-                  handleClose={handleClose}
-                  handleSubmit={handleSubmit}
-                  employeeId={employeeId}
-                  hrProjectEmployees={hrProjectEmployees}
-                />
-              ) : isEditing && !employeeHasProjects ? (
-                <TimesheetEditForm
-                  formData={formData}
-                  setFormData={setFormData}
-                  timesheet={timesheet}
-                  onValidationChange={setIsFormValid}
-                />
+              {isEditing ? (
+                <>
+                  {employeeHasProjects ? (
+                    <TimesheetDialogContent
+                      date={date} setDate={setDate} title={title} setTitle={setTitle}
+                      totalWorkingHours={totalWorkingHours} setTotalWorkingHours={setTotalWorkingHours}
+                      workReport={workReport} setWorkReport={setWorkReport}
+                      detailedEntries={detailedEntries} setDetailedEntries={setDetailedEntries}
+                      projectEntries={projectEntries} setProjectEntries={setProjectEntries}
+                      employeeHasProjects={employeeHasProjects} isSubmitting={isSubmitting}
+                      handleClose={() => onOpenChange(false)} handleSubmit={handleSubmit}
+                      employeeId={employeeId} hrProjectEmployees={hrProjectEmployees}
+                    />
+                  ) : (
+                    <TimesheetEditForm
+                      formData={formData} setFormData={setFormData}
+                      timesheet={timesheet} onValidationChange={setIsFormValid}
+                    />
+                  )}
+                  <div className="space-y-2 pt-4 border-t mt-4">
+                    <Label htmlFor="recipients">Add More Recipients for EOD (Optional)</Label>
+                    <MultiSelect
+                        id="recipients"
+                        options={allEmployees}
+                        selected={additionalRecipients}
+                        onChange={setAdditionalRecipients}
+                        placeholder="Select employees to notify..."
+                    />
+                  </div>
+                </>
               ) : (
-                   <>
+                <>
                   <TimeLogDetails timeLog={timesheet} employeeHasProjects={employeeHasProjects} />
                   <TimesheetProjectDetails timesheet={timesheet} employeeHasProjects={employeeHasProjects} />
                 </>
@@ -486,27 +486,15 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
         </div>
 
         <DialogFooter className="border-t pt-4">
-          {emailStatus && (
-            <div className="text-sm text-gray-600 mr-4">{emailStatus}</div>
-          )}
-          {canEdit && !isEditing && !employeeHasProjects && (
-            <Button variant="outline" onClick={() => setIsEditing(true)}>
-              Edit
-            </Button>
+          {emailStatus && <div className="text-sm text-gray-600 mr-4">{emailStatus}</div>}
+          
+          {!timesheet?.is_submitted && !isEditing && (
+            <Button variant="outline" onClick={() => setIsEditing(true)}>Edit</Button>
           )}
           
-          {(isEditing || employeeHasProjects) && !timesheet?.is_submitted && (
-            <Button variant="outline" onClick={() => setIsEditing(false)}>
-              View Details
-            </Button>
-          )}
-          
-          {canSubmit && (
-            <Button 
-              onClick={handleSubmit} 
-              disabled={isSubmitting || isLoading || !isFormValid}
-            >
-              {isSubmitting ? "Submitting..." : "Submit Timesheet and EOD Report"}
+          {canSubmit && isEditing && (
+            <Button onClick={handleSubmit} disabled={isSubmitting || isLoading || !isFormValid}>
+              {isSubmitting || isLoading ? "Submitting..." : "Submit and Send EOD"}
             </Button>
           )}
         </DialogFooter>

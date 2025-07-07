@@ -11,6 +11,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { EmployeeProvider } from "./context/EmployeeContext";
+import { ThemeProvider } from "@material-tailwind/react";
 
 const queryClient = new QueryClient();
 
@@ -24,11 +25,13 @@ createRoot(document.getElementById('root')).render(
         <EmployeeProvider>
       <Toaster />
       <Sonner />
-    <App />
-    </EmployeeProvider>
-   </TooltipProvider>
-    </QueryClientProvider>
-    </Provider>
-    </ChakraProvider>
-  </StrictMode>,
+      <ThemeProvider>
+      <App />
+      </ThemeProvider>
+      </EmployeeProvider>
+     </TooltipProvider>
+      </QueryClientProvider>
+      </Provider>
+      </ChakraProvider>
+    </StrictMode>,
 )

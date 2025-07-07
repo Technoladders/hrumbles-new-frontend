@@ -1,4 +1,3 @@
-// components/SkillMatrixSection.tsx
 import React from "react";
 import { cn } from "@/lib/utils";
 
@@ -14,29 +13,36 @@ interface SkillMatrixSectionProps {
 export const SkillMatrixSection: React.FC<SkillMatrixSectionProps> = ({
   skillRatings,
 }) => {
+  console.log("skillMatrix rating", skillRatings);
+
+  // Sort skills by rating in descending order
+  const sortedSkills = [...skillRatings].sort((a, b) => b.rating - a.rating);
+
   return (
     <div className="space-y-6">
       <h3 className="text-lg font-medium mb-4">Skill Matrix</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {skillRatings.map((skill, index) => (
+        {sortedSkills.map((skill, index) => (
           <div
             key={index}
             className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow"
           >
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-              <p className="text-sm font-medium">{skill.name}</p>
-              {skill.experienceYears !== undefined &&
-                skill.experienceMonths !== undefined && (
-                  <span className="text-xs text-gray-500 mt-1 sm:mt-0">
-                    {`${skill.experienceYears}.${skill.experienceMonths} years`}
-                  </span>
-                )}
+              <p className="text-xs font-sm">
+                {skill.name}{" "}
+                {skill.experienceYears !== undefined &&
+                  skill.experienceMonths !== undefined && (
+                    <span className="text-xs text-gray-500 mt-1 sm:mt-0">
+                      ({`${skill.experienceYears}.${skill.experienceMonths} years`})
+                    </span>
+                  )}
+              </p>
               <div className="flex mt-2 sm:mt-0">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <svg
                     key={star}
                     className={cn(
-                      "w-5 h-5",
+                      "w-3 h-3",
                       star <= skill.rating ? "text-yellow-400" : "text-gray-300"
                     )}
                     fill="currentColor"

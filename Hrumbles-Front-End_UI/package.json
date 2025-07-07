@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "resolutions": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
   "scripts": {
     "dev": "vite",
     "set-version": "echo \"VITE_APP_VERSION=$(git rev-parse --short HEAD)\" > .env.version",
@@ -17,7 +21,9 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@google/generative-ai": "^0.24.0",
+    "@heroicons/react": "^2.2.0",
     "@hookform/resolvers": "^4.0.0",
+    "@material-tailwind/react": "^2.1.10",
     "@radix-ui/react-accordion": "^1.2.3",
     "@radix-ui/react-alert-dialog": "^1.1.6",
     "@radix-ui/react-aspect-ratio": "^1.1.2",

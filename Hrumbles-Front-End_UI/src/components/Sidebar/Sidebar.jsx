@@ -38,6 +38,9 @@ const Sidebar = ({ isExpanded, setExpanded }) => {
   const activeTextColor = useColorModeValue("#7B43F1", "base.primary1");
   const scrolbarColor = useColorModeValue("#F6F6FC", "base.bgboxdark");
 
+  console.log("Role:", role);
+  console.log("Department Name:", departmentName);
+
   // Fetch department name from Supabase
   useEffect(() => {
     const fetchDepartmentName = async () => {

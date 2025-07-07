@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import { useAccountsStore, Invoice, InvoiceItem } from '@/lib/accounts-data';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +14,8 @@ interface InvoiceFormProps {
   onClose: () => void;
 }
 
+const USD_TO_INR_RATE = 84;
+
 const generateInvoiceNumber = () => {
   const prefix = 'INV';
   const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -20,14 +23,12 @@ const generateInvoiceNumber = () => {
   return `${prefix}-${randomNum}${timestamp}`;
 };
 
-// Convert DD-MM-YYYY to YYYY-MM-DD for HTML date input
 const formatToHTMLDate = (dateStr: string): string => {
   if (!dateStr) return '';
   const [day, month, year] = dateStr.split('-');
   return `${year}-${month}-${day}`;
 };
 
-// Convert YYYY-MM-DD to DD-MM-YYYY for display and storage
 const formatToDisplayDate = (dateStr: string): string => {
   if (!dateStr) return '';
   const [year, month, day] = dateStr.split('-');
@@ -41,7 +42,6 @@ const formatDateString = (date: Date): string => {
   return `${day}-${month}-${year}`;
 };
 
-// Compare dates in DD-MM-YYYY format
 const isDateBefore = (date1: string, date2: string): boolean => {
   if (!date1 || !date2) return false;
   const [day1, month1, year1] = date1.split('-').map(Number);
@@ -53,27 +53,24 @@ const isDateBefore = (date1: string, date2: string): boolean => {
 
 const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
   const { addInvoice, updateInvoice, clients, fetchClients } = useAccountsStore();
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
   
-  // Form state
   const [invoiceNumber, setInvoiceNumber] = useState(invoice?.invoiceNumber || generateInvoiceNumber());
   const [clientId, setClientId] = useState(invoice?.clientId || '');
   const [clientName, setClientName] = useState(invoice?.clientName || '');
-  const [currency, setCurrency] = useState<'USD' | 'INR'>(invoice?.clientId 
-    ? clients.find(c => c.id === invoice.clientId)?.currency || 'INR' 
-    : 'INR');
+  const [currency, setCurrency] = useState<'USD' | 'INR'>(invoice?.currency || 
+    (invoice?.clientId ? clients.find(c => c.id === invoice.clientId)?.currency || 'INR' : 'INR'));
   const [invoiceDate, setInvoiceDate] = useState(invoice?.invoiceDate || formatDateString(new Date()));
   const [dueDate, setDueDate] = useState(invoice?.dueDate || '');
-  const [items, setItems] = useState<InvoiceItem[]>(invoice?.items || [{ id: '1', description: '', quantity: 1, rate: 0, amount: 0 }]);
+  const [items, setItems] = useState<InvoiceItem[]>(invoice?.items || [{ id: '1', description: '', quantity: 1, rate: 0, amount: 0, organizationId }]);
   const [notes, setNotes] = useState(invoice?.notes || '');
   const [terms, setTerms] = useState(invoice?.terms || '');
-  const [taxRate, setTaxRate] = useState(invoice?.taxRate || 18);
+  const [taxRate, setTaxRate] = useState(invoice?.taxRate || (currency === 'INR' ? 18 : 0));
   
-  // Calculated values
   const [subtotal, setSubtotal] = useState(0);
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
 
-  // Validation errors state
   const [errors, setErrors] = useState<{
     clientId?: string;
     invoiceNumber?: string;
@@ -83,7 +80,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
     itemErrors?: { description?: string; quantity?: string; rate?: string }[];
   }>({});
 
-  // Fetch clients on component mount
   useEffect(() => {
     console.log('InvoiceForm mounted, fetching clients...');
     fetchClients().then(() => {
@@ -93,36 +89,32 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
     });
   }, [fetchClients]);
 
-  // Log clients whenever they change
   useEffect(() => {
     console.log('Clients state updated:', clients);
   }, [clients]);
 
-  // Update currency and clientName when client changes
   useEffect(() => {
     const selectedClient = clients.find(client => client.id === clientId);
     if (selectedClient) {
       setCurrency(selectedClient.currency);
       setClientName(selectedClient.client_name);
+      setTaxRate(selectedClient.currency === 'INR' ? 18 : 0);
     }
   }, [clientId, clients]);
 
-  // Update calculations when items or tax rate changes
   useEffect(() => {
     const calculatedSubtotal = items.reduce((sum, item) => sum + item.amount, 0);
-    const calculatedTaxAmount = calculatedSubtotal * (taxRate / 100);
+    const calculatedTaxAmount = currency === 'INR' ? calculatedSubtotal * (taxRate / 100) : 0;
     const calculatedTotal = calculatedSubtotal + calculatedTaxAmount;
     
     setSubtotal(calculatedSubtotal);
     setTaxAmount(calculatedTaxAmount);
     setTotalAmount(calculatedTotal);
-  }, [items, taxRate]);
+  }, [items, taxRate, currency]);
 
-  // Validate form fields
   const validateForm = () => {
     const newErrors: typeof errors = {};
 
-    // Validate top-level fields
     if (!clientId) newErrors.clientId = 'Client selection is required';
     if (!invoiceNumber.trim()) newErrors.invoiceNumber = 'Invoice number is required';
     if (!invoiceDate.trim()) newErrors.invoiceDate = 'Invoice date is required';
@@ -131,7 +123,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
       newErrors.dueDate = 'Due date must be on or after the invoice date';
     }
 
-    // Validate items
     if (items.length === 0) {
       newErrors.items = 'At least one invoice item is required';
     } else {
@@ -151,51 +142,43 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Run validation on mount and when fields change
   useEffect(() => {
     validateForm();
   }, [clientId, invoiceNumber, invoiceDate, dueDate, items]);
 
-  // Handle changes to invoice date and adjust due date if necessary
   const handleInvoiceDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = formatToDisplayDate(e.target.value);
     setInvoiceDate(newDate);
 
-    // If due date is before the new invoice date, reset it
     if (dueDate && isDateBefore(dueDate, newDate)) {
       setDueDate(newDate);
     }
   };
 
-  // Handle client selection
   const handleClientChange = (value: string) => {
     setClientId(value);
-    // Client name and currency are updated via useEffect
   };
 
-  // Handle item amount calculation
   const updateItemAmount = (index: number, quantity: number, rate: number) => {
     const newItems = [...items];
     newItems[index].quantity = quantity;
     newItems[index].rate = rate;
     newItems[index].amount = quantity * rate;
+    newItems[index].organizationId = organizationId;
     setItems(newItems);
   };
   
-  // Add a new item
   const handleAddItem = () => {
     const newId = `item-${Date.now()}`;
-    setItems([...items, { id: newId, description: '', quantity: 1, rate: 0, amount: 0 }]);
+    setItems([...items, { id: newId, description: '', quantity: 1, rate: 0, amount: 0, organizationId }]);
   };
   
-  // Remove an item
   const handleRemoveItem = (index: number) => {
     const newItems = [...items];
     newItems.splice(index, 1);
     setItems(newItems);
   };
   
-  // Handle form submission
   const handleSubmit = (status: 'Draft' | 'Unpaid') => {
     if (!validateForm()) {
       toast.error('Please fill in all required fields and add at least one valid invoice item.');
@@ -206,6 +189,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
       invoiceNumber,
       clientId,
       clientName,
+      currency,
       invoiceDate,
       dueDate,
       items,
@@ -213,9 +197,10 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
       totalAmount,
       notes,
       terms,
-      taxRate,
-      taxAmount,
+      taxRate: currency === 'INR' ? taxRate : undefined,
+      taxAmount: currency === 'INR' ? taxAmount : undefined,
       subtotal,
+      organizationId
     };
     
     if (invoice) {
@@ -227,7 +212,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
     onClose();
   };
 
-  // Helper to get currency symbol
   const getCurrencySymbol = () => {
     return currency === 'USD' ? (
       <DollarSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -236,7 +220,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
     );
   };
 
-  // Helper to format amount with currency
   const formatAmount = (amount: number) => {
     return currency === 'USD' 
       ? `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -427,27 +410,29 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
             <span className="financial-amount">{formatAmount(subtotal)}</span>
           </div>
           
-          <div className="flex items-center gap-4">
-            <Label htmlFor="taxRate">Tax Rate:</Label>
-            <div className="w-32">
-              <Select value={taxRate.toString()} onValueChange={(value) => setTaxRate(Number(value))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select tax rate" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">0%</SelectItem>
-                  <SelectItem value="5">5%</SelectItem>
-                  <SelectItem value="12">12%</SelectItem>
-                  <SelectItem value="18">18%</SelectItem>
-                  <SelectItem value="28">28%</SelectItem>
-                </SelectContent>
-              </Select>
+          {currency === 'INR' && (
+            <div className="flex items-center gap-4">
+              <Label htmlFor="taxRate">Tax Rate:</Label>
+              <div className="w-32">
+                <Select value={taxRate.toString()} onValueChange={(value) => setTaxRate(Number(value))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select tax rate" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">0%</SelectItem>
+                    <SelectItem value="5">5%</SelectItem>
+                    <SelectItem value="12">12%</SelectItem>
+                    <SelectItem value="18">18%</SelectItem>
+                    <SelectItem value="28">28%</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1 flex justify-between">
+                <span>Tax:</span>
+                <span className="financial-amount">{formatAmount(taxAmount)}</span>
+              </div>
             </div>
-            <div className="flex-1 flex justify-between">
-              <span>Tax:</span>
-              <span className="financial-amount">{formatAmount(taxAmount)}</span>
-            </div>
-          </div>
+          )}
           
           <div className="flex justify-between p-4 bg-blue-50 rounded-md font-semibold">
             <span>Total Amount:</span>

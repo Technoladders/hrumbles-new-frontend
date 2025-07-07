@@ -26,6 +26,8 @@ import {
 import { generateInvoicePDF, generateBatchInvoicePDF } from '@/utils/pdf-utils';
 import { toast } from 'sonner';
 
+const USD_TO_INR_RATE = 84;
+
 const InvoicesPage: React.FC = () => {
   const {
     invoices,
@@ -51,7 +53,30 @@ const InvoicesPage: React.FC = () => {
     ? invoices.find((inv) => inv.id === selectedInvoiceId)
     : null;
 
-  // Fetch invoices on mount and when timeFilter changes
+  const convertToINR = (amount: number, currency: string) => {
+    return currency === 'USD' ? amount * USD_TO_INR_RATE : amount;
+  };
+
+ const formatAmountWithTooltip = (amount: number, currency: string) => {
+  const inrAmount = convertToINR(amount, currency);
+  return (
+    <div className="group relative inline-block cursor-pointer">
+      {currency === 'USD' ? (
+        <>
+          <span>$ {amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block bg-gray-800 text-white text-xs rounded p-2 z-10 whitespace-nowrap shadow-md">
+            ₹ {inrAmount.toLocaleString('en-IN')}
+          </div>
+        </>
+      ) : (
+        <span>₹ {amount.toLocaleString('en-IN')}</span>
+      )}
+    </div>
+  );
+};
+
+
+
   useEffect(() => {
     fetchInvoices(timeFilter);
   }, [fetchInvoices, timeFilter]);
@@ -82,6 +107,40 @@ const InvoicesPage: React.FC = () => {
 
     return true;
   });
+
+  const calculateStatsInINR = () => {
+    const totalInvoiced = invoices.reduce((sum, inv) => {
+      return sum + convertToINR(inv.totalAmount, inv.currency);
+    }, 0);
+
+    const totalPaid = invoices
+      .filter((inv) => inv.status === 'Paid')
+      .reduce((sum, inv) => {
+        return sum + convertToINR(inv.paidAmount || inv.totalAmount, inv.currency);
+      }, 0);
+
+    const totalOverdue = invoices
+      .filter((inv) => inv.status === 'Overdue')
+      .reduce((sum, inv) => {
+        return sum + convertToINR(inv.totalAmount, inv.currency);
+      }, 0);
+
+    const totalDraft = invoices
+      .filter((inv) => inv.status === 'Draft')
+      .reduce((sum, inv) => {
+        return sum + convertToINR(inv.totalAmount, inv.currency);
+      }, 0);
+
+    return {
+      ...stats,
+      totalInvoiced,
+      totalPaid,
+      totalOverdue,
+      totalDraft
+    };
+  };
+
+  const inrStats = calculateStatsInINR();
 
   const handleViewInvoice = (id: string) => {
     setSelectedInvoiceId(id);
@@ -180,7 +239,7 @@ const InvoicesPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Invoices</p>
-                  <h3 className="text-2xl font-bold financial-amount">{formatINR(stats.totalInvoiced)}</h3>
+                  <h3 className="text-2xl font-bold financial-amount">₹{inrStats.totalInvoiced.toLocaleString('en-IN')}</h3>
                   <p className="text-xs text-muted-foreground mt-1">No. of invoices: {stats.invoiceCount.all}</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
@@ -194,7 +253,7 @@ const InvoicesPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Paid</p>
-                  <h3 className="text-2xl font-bold financial-amount">{formatINR(stats.totalPaid)}</h3>
+                  <h3 className="text-2xl font-bold financial-amount">₹{inrStats.totalPaid.toLocaleString('en-IN')}</h3>
                   <p className="text-xs text-muted-foreground mt-1">No. of invoices: {stats.invoiceCount.paid}</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-success-light flex items-center justify-center">
@@ -208,7 +267,7 @@ const InvoicesPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Overdue</p>
-                  <h3 className="text-2xl font-bold financial-amount">{formatINR(stats.totalOverdue)}</h3>
+                  <h3 className="text-2xl font-bold financial-amount">₹{inrStats.totalOverdue.toLocaleString('en-IN')}</h3>
                   <p className="text-xs text-muted-foreground mt-1">No. of invoices: {stats.invoiceCount.overdue}</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-danger-light flex items-center justify-center">
@@ -222,7 +281,7 @@ const InvoicesPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Draft</p>
-                  <h3 className="text-2xl font-bold financial-amount">{formatINR(stats.totalDraft)}</h3>
+                  <h3 className="text-2xl font-bold financial-amount">₹{inrStats.totalDraft.toLocaleString('en-IN')}</h3>
                   <p className="text-xs text-muted-foreground mt-1">No. of drafts: {stats.invoiceCount.draft}</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center">
@@ -322,15 +381,13 @@ const InvoicesPage: React.FC = () => {
                           <TableCell>{invoice.clientName}</TableCell>
                           <TableCell className="financial-amount">
                             <div className="flex items-center">
-                              <IndianRupee className="h-3 w-3 mr-1" />
-                              {invoice.totalAmount.toLocaleString()}
+                              {formatAmountWithTooltip(invoice.totalAmount, invoice.currency)}
                             </div>
                           </TableCell>
                           <TableCell className="financial-amount">
                             {invoice.status === 'Paid' ? (
                               <div className="flex items-center">
-                                <IndianRupee className="h-3 w-3 mr-1" />
-                                {(invoice.paidAmount || invoice.totalAmount).toLocaleString()}
+                                {formatAmountWithTooltip(invoice.paidAmount || invoice.totalAmount, invoice.currency)}
                               </div>
                             ) : '-'}
                           </TableCell>
@@ -404,7 +461,7 @@ const InvoicesPage: React.FC = () => {
                                 disabled={exportingInvoiceIds.includes(invoice.id)}
                               >
                                 {exportingInvoiceIds.includes(invoice.id) ? (
-                                  <Loader2 className="h-4 w責任-4 animate-spin" />
+                                  <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
                                   <Download className="h-4 w-4" />
                                 )}

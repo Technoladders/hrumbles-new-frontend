@@ -2487,7 +2487,8 @@ const { data: clientData } = useQuery({
   };
 
   const handleInterviewSubmit = async () => {
-    if (!currentCandidateId || !currentSubStatusId || !currentRound) return;
+    // Add a check for currentSubStatus to the guard clause
+    if (!currentCandidateId || !currentSubStatusId || !currentRound || !currentSubStatus) return;
     
     const interviewData = {
       interview_date: interviewDate,
@@ -2499,9 +2500,10 @@ const { data: clientData } = useQuery({
     };
     
     try {
+      // First, find if an interview record for this round already exists
       const { data: existingInterviews, error: fetchError } = await supabase
         .from('hr_candidate_interviews')
-        .select('*')
+        .select('id')
         .eq('candidate_id', currentCandidateId)
         .eq('interview_round', currentRound)
         .order('created_at', { ascending: false })
@@ -2509,7 +2511,11 @@ const { data: clientData } = useQuery({
       
       if (fetchError) throw fetchError;
 
-      if (needsReschedule && existingInterviews && existingInterviews.length > 0) {
+      // Determine if this is a new schedule or a reschedule/update
+      const isUpdateAction = needsReschedule || (existingInterviews && existingInterviews.length > 0);
+
+      if (isUpdateAction) {
+        // Update the existing interview record
         const { error } = await supabase
           .from('hr_candidate_interviews')
           .update({
@@ -2526,6 +2532,7 @@ const { data: clientData } = useQuery({
           
         if (error) throw error;
       } else {
+        // Insert a new interview record
         const { error } = await supabase
           .from('hr_candidate_interviews')
           .insert({
@@ -2539,12 +2546,35 @@ const { data: clientData } = useQuery({
             status: 'scheduled',
             created_by: user.id,
             organization_id: organizationId
+            
           });
           
         if (error) throw error;
       }
       
-      await updateCandidateStatus(currentCandidateId, currentSubStatusId, user.id, interviewData);
+      // --- FIX: Determine the correct final status for the candidate ---
+      let finalSubStatusId = currentSubStatusId;
+
+      // If this was a 'reschedule' action, we must set the status back to the
+      // actual scheduled state (e.g., 'L1') instead of leaving it as 'Reschedule L1'.
+      if (needsReschedule) {
+        const statuses = await fetchAllStatuses();
+        const targetScheduledStatus = statuses
+          .flatMap(main => main.subStatuses || [])
+          .find(sub => sub.name === currentRound); // currentRound holds the base name like 'L1'
+
+        if (targetScheduledStatus) {
+          finalSubStatusId = targetScheduledStatus.id;
+        } else {
+          // Fallback in case of inconsistent data.
+          console.warn(`Could not find a matching status for round: '${currentRound}'. The candidate might remain in a 'Reschedule' state.`);
+          toast.error(`Error: Could not find the target status for '${currentRound}'.`);
+          // We proceed with the original 'Reschedule...' status ID, but the bug will persist for this one instance.
+        }
+      }
+
+      // Update candidate status using the determined finalSubStatusId
+      await updateCandidateStatus(currentCandidateId, finalSubStatusId, user.id, interviewData);
       
       setShowInterviewModal(false);
       resetInterviewForm();

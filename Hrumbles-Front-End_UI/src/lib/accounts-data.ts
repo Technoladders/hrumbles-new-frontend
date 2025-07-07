@@ -5,7 +5,6 @@ import { generateCSV, formatDateForFilename } from '@/utils/export-utils';
 import { supabase } from '@/integrations/supabase/client';
 import { getAuthDataFromLocalStorage } from '@/utils/localstorage';
 
-
 export type InvoiceStatus = 'Paid' | 'Unpaid' | 'Overdue' | 'Draft';
 export type ExpenseCategory = 'Rent' | 'Utilities' | 'Salary' | 'Office Supplies' | 'Travel' | 'Marketing' | 'Software' | 'Hardware' | 'Other';
 export type PaymentMethod = 'Cash' | 'Credit Card' | 'Debit Card' | 'Bank Transfer' | 'UPI' | 'Check' | 'Other';
@@ -15,6 +14,7 @@ export interface Invoice {
   clientId: string;
   invoiceNumber: string;
   clientName: string;
+  currency: 'USD' | 'INR';
   invoiceDate: string;
   dueDate: string;
   items: InvoiceItem[];
@@ -41,13 +41,14 @@ export interface InvoiceItem {
   rate: number;
   amount: number;
   taxable?: boolean;
+  organizationId?: string;
 }
 
-// Added Client interface
 export interface Client {
   id: string;
   client_name: string;
   display_name: string;
+  currency: 'USD' | 'INR';
 }
 
 export interface Expense {
@@ -114,6 +115,11 @@ interface AccountsState {
   exportData: (type: 'invoices' | 'expenses', format: 'csv') => void;
 }
 
+// Helper function to format USD amounts
+const formatUSD = (amount: number): string => {
+  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
 // Helper function to convert "DD-MM-YYYY" to "YYYY-MM-DD" for Supabase
 const parseDate = (dateStr: string): string => {
   const [day, month, year] = dateStr.split('-').map(Number);
@@ -129,17 +135,27 @@ const formatDate = (dateStr: string): string => {
   return `${day}-${month}-${year}`;
 };
 
+const USD_TO_INR_RATE = 84;
+
 const calculateStats = (invoices: Invoice[], expenses: Expense[]): AccountsStats => {
-  const totalInvoiced = invoices.reduce((total, inv) => total + inv.totalAmount, 0);
+  const totalInvoiced = invoices.reduce((total, inv) => {
+    return total + (inv.currency === 'USD' ? inv.totalAmount * USD_TO_INR_RATE : inv.totalAmount);
+  }, 0);
   const totalPaid = invoices
     .filter((inv) => inv.status === 'Paid')
-    .reduce((total, inv) => total + (inv.paidAmount || inv.totalAmount), 0);
+    .reduce((total, inv) => {
+      return total + (inv.currency === 'USD' ? (inv.paidAmount || inv.totalAmount) * USD_TO_INR_RATE : (inv.paidAmount || inv.totalAmount));
+    }, 0);
   const totalOverdue = invoices
     .filter((inv) => inv.status === 'Overdue')
-    .reduce((total, inv) => total + inv.totalAmount, 0);
+    .reduce((total, inv) => {
+      return total + (inv.currency === 'USD' ? inv.totalAmount * USD_TO_INR_RATE : inv.totalAmount);
+    }, 0);
   const totalDraft = invoices
     .filter((inv) => inv.status === 'Draft')
-    .reduce((total, inv) => total + inv.totalAmount, 0);
+    .reduce((total, inv) => {
+      return total + (inv.currency === 'USD' ? inv.totalAmount * USD_TO_INR_RATE : inv.totalAmount);
+    }, 0);
   const totalExpenses = expenses.reduce((total, exp) => total + exp.amount, 0);
 
   return {
@@ -175,43 +191,41 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
   selectedInvoice: null,
   selectedExpense: null,
 
-  // Added fetchClients action
   fetchClients: async () => {
-  try {
-    console.log('Fetching clients from hr_clients...');
-    const { data, error } = await supabase
-      .from('hr_clients')
-      .select('id, client_name, display_name, currency')
-      .eq('status', 'active')
-      .order('client_name', { ascending: true });
-    
-    if (error) {
-      console.error('Supabase error details:', error);
-      throw new Error(`Error fetching clients: ${error.message}`);
-    }
+    try {
+      console.log('Fetching clients from hr_clients...');
+      const { data, error } = await supabase
+        .from('hr_clients')
+        .select('id, client_name, display_name, currency')
+        .eq('status', 'active')
+        .order('client_name', { ascending: true });
+      
+      if (error) {
+        console.error('Supabase error details:', error);
+        throw new Error(`Error fetching clients: ${error.message}`);
+      }
 
-    console.log('Raw data from Supabase:', data);
-    const clients: Client[] = data.map((client: any) => ({
-      id: client.id,
-      client_name: client.client_name,
-      display_name: client.display_name,
-      currency: client.currency,
-    }));
+      console.log('Raw data from Supabase:', data);
+      const clients: Client[] = data.map((client: any) => ({
+        id: client.id,
+        client_name: client.client_name,
+        display_name: client.display_name,
+        currency: client.currency,
+      }));
 
-    console.log('Mapped clients:', clients);
-    set({ clients });
-  } catch (error) {
-    console.error('Error fetching clients:', error);
-    toast.error('Failed to fetch clients. Please try again.');
+      console.log('Mapped clients:', clients);
+      set({ clients });
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+      toast.error('Failed to fetch clients. Please try again.');
     }
   },
 
-  // Fetch invoices with optional time filter
   fetchInvoices: async (timeFilter = 'all') => {
     try {
       let query = supabase
         .from('hr_invoices')
-        .select('*, hr_clients!hr_invoices_client_id_fkey(client_name, display_name)')
+        .select('*, hr_clients!hr_invoices_client_id_fkey(client_name, display_name, currency)')
         .order('created_at', { ascending: false });
 
       // Apply time filter
@@ -265,8 +279,9 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
       const invoices: Invoice[] = invoicesData.map((invoice: any) => ({
         id: invoice.id,
         invoiceNumber: invoice.invoice_number,
-        clientName: invoice.client_name,
-        clientId: invoice.client_id, // Added
+        clientName: invoice.hr_clients?.client_name || invoice.client_name,
+        clientId: invoice.client_id,
+        currency: invoice.currency || 'INR', // Default to INR if not set
         invoiceDate: formatDate(invoice.invoice_date),
         dueDate: formatDate(invoice.due_date),
         status: invoice.status as InvoiceStatus,
@@ -287,6 +302,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
             rate: item.rate,
             amount: item.amount,
             taxable: item.taxable || false,
+            organizationId: item.organization_id,
           })),
         organizationId: invoice.organization_id || undefined,
         createdBy: invoice.created_by || undefined,
@@ -310,7 +326,12 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
       if (userError) {
         console.warn('User not authenticated, setting created_by to null');
       }
-  
+
+      const authData = getAuthDataFromLocalStorage();
+      if (!authData) {
+        throw new Error('Failed to retrieve authentication data');
+      }
+      const { organization_id, userId } = authData;
 
       const { data: newInvoice, error: invoiceError } = await supabase
         .from('hr_invoices')
@@ -318,6 +339,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
           invoice_number: invoice.invoiceNumber,
           client_name: invoice.clientName,
           client_id: invoice.clientId,
+          currency: invoice.currency,
           invoice_date: parseDate(invoice.invoiceDate),
           due_date: parseDate(invoice.dueDate),
           subtotal: invoice.subtotal || 0,
@@ -330,7 +352,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
           created_by: userData?.user?.id || null,
           paid_amount: invoice.status === 'Paid' ? invoice.totalAmount : 0,
           payment_date: invoice.status === 'Paid' ? new Date().toISOString().split('T')[0] : null,
-          organization_id: organization_id|| null,
+          organization_id: organization_id,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -341,14 +363,13 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         throw new Error(`Error adding invoice: ${invoiceError.message}`);
       }
 
-  
-
       const itemsToInsert = invoice.items.map((item) => ({
         invoice_id: newInvoice.id,
         description: item.description,
         quantity: item.quantity,
         rate: item.rate,
         amount: item.amount,
+        taxable: item.taxable || false,
         organization_id: organization_id,
       }));
 
@@ -371,10 +392,17 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
 
   updateInvoice: async (id, data) => {
     try {
+      const authData = getAuthDataFromLocalStorage();
+      if (!authData) {
+        throw new Error('Failed to retrieve authentication data');
+      }
+      const { organization_id } = authData;
+
       const updateData: any = {};
       if (data.invoiceNumber) updateData.invoice_number = data.invoiceNumber;
       if (data.clientName) updateData.client_name = data.clientName;
-      if (data.clientId) updateData.client_id = data.clientId; // Added
+      if (data.clientId) updateData.client_id = data.clientId;
+      if (data.currency) updateData.currency = data.currency;
       if (data.invoiceDate) updateData.invoice_date = parseDate(data.invoiceDate);
       if (data.dueDate) updateData.due_date = parseDate(data.dueDate);
       if (data.subtotal !== undefined) updateData.subtotal = data.subtotal;
@@ -397,7 +425,8 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
       const { error: invoiceError } = await supabase
         .from('hr_invoices')
         .update(updateData)
-        .eq('id', id);
+        .eq('id', id)
+        .eq('organization_id', organization_id);
 
       if (invoiceError) {
         throw new Error(`Error updating invoice: ${invoiceError.message}`);
@@ -407,7 +436,8 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         const { error: deleteItemsError } = await supabase
           .from('hr_invoice_items')
           .delete()
-          .eq('invoice_id', id);
+          .eq('invoice_id', id)
+          .eq('organization_id', organization_id);
 
         if (deleteItemsError) {
           throw new Error(`Error deleting existing items: ${deleteItemsError.message}`);
@@ -419,6 +449,8 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
           quantity: item.quantity,
           rate: item.rate,
           amount: item.amount,
+          taxable: item.taxable || false,
+          organization_id: organization_id,
         }));
 
         const { error: itemsError } = await supabase
@@ -440,7 +472,6 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
 
   deleteInvoice: async (id) => {
     try {
-      // Ensure user is authenticated
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
         throw new Error('You must be signed in to delete an invoice.');
@@ -449,12 +480,18 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
       console.log('Authenticated User ID:', userData.user.id);
       console.log('Attempting to delete invoice with ID:', id);
 
-      // Step 1: Fetch the invoice to be deleted
+      const authData = getAuthDataFromLocalStorage();
+      if (!authData) {
+        throw new Error('Failed to retrieve authentication data');
+      }
+      const { organization_id, userId } = authData;
+
       const { data: invoiceData, error: fetchInvoiceError } = await supabase
         .from('hr_invoices')
         .select('*')
         .eq('id', id)
         .eq('created_by', userData.user.id)
+        .eq('organization_id', organization_id)
         .single();
 
       if (fetchInvoiceError) {
@@ -468,22 +505,16 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         throw new Error('Invoice not found or you do not have permission to delete it.');
       }
 
-      // Step 2: Fetch the associated items
       const { data: itemsData, error: fetchItemsError } = await supabase
         .from('hr_invoice_items')
         .select('*')
-        .eq('invoice_id', id);
+        .eq('invoice_id', id)
+        .eq('organization_id', organization_id);
 
       if (fetchItemsError) {
         throw new Error(`Error fetching invoice items: ${fetchItemsError.message}`);
       }
-      const authData = getAuthDataFromLocalStorage();
-              if (!authData) {
-                throw new Error('Failed to retrieve authentication data');
-              }
-              const { organization_id, userId } = authData;
 
-      // Step 3: Insert the invoice into backup_invoices
       const { error: backupInvoiceError } = await supabase
         .from('backup_invoices')
         .insert({
@@ -491,6 +522,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
           invoice_number: invoiceData.invoice_number,
           client_name: invoiceData.client_name,
           client_id: invoiceData.client_id,
+          currency: invoiceData.currency,
           invoice_date: invoiceData.invoice_date,
           due_date: invoiceData.due_date,
           subtotal: invoiceData.subtotal,
@@ -502,19 +534,17 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
           terms: invoiceData.terms,
           created_at: invoiceData.created_at,
           updated_at: invoiceData.updated_at,
-          organization_id: invoiceData.organization_id,
+          organization_id: organization_id,
           created_by: invoiceData.created_by,
           paid_amount: invoiceData.paid_amount,
           payment_date: invoiceData.payment_date,
           deleted_at: new Date().toISOString(),
-          organization_id: organization_id,
         });
 
       if (backupInvoiceError) {
         throw new Error(`Error backing up invoice: ${backupInvoiceError.message}`);
       }
 
-      // Step 4: Insert the items into backup_invoice_items (if any)
       if (itemsData && itemsData.length > 0) {
         const itemsToInsert = itemsData.map((item: any) => ({
           id: item.id,
@@ -523,6 +553,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
           quantity: item.quantity,
           rate: item.rate,
           amount: item.amount,
+          taxable: item.taxable,
           created_at: item.created_at,
           deleted_at: new Date().toISOString(),
           organization_id: organization_id,
@@ -533,7 +564,6 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
           .insert(itemsToInsert);
 
         if (backupItemsError) {
-          // Roll back the backup_invoices entry if items backup fails
           await supabase
             .from('backup_invoices')
             .delete()
@@ -542,15 +572,14 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         }
       }
 
-      // Step 5: Delete the invoice from hr_invoices (this will cascade delete items from hr_invoice_items)
       const { error: deleteError } = await supabase
         .from('hr_invoices')
         .delete()
         .eq('id', id)
-        .eq('created_by', userData.user.id);
+        .eq('created_by', userData.user.id)
+        .eq('organization_id', organization_id);
 
       if (deleteError) {
-        // Roll back the backups if deletion fails
         await supabase
           .from('backup_invoices')
           .delete()
@@ -562,10 +591,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         throw new Error(`Error deleting invoice: ${deleteError.message}`);
       }
 
-      // Step 6: Update the local state by refetching invoices
       await get().fetchInvoices();
-
-      // Step 7: Update selectedInvoice if necessary
       set((state) => ({
         selectedInvoice: state.selectedInvoice?.id === id ? null : state.selectedInvoice,
       }));
@@ -590,6 +616,12 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         throw new Error('Invoice not found');
       }
 
+      const authData = getAuthDataFromLocalStorage();
+      if (!authData) {
+        throw new Error('Failed to retrieve authentication data');
+      }
+      const { organization_id } = authData;
+
       const updateData: any = { status };
       if (status === 'Paid') {
         updateData.paid_amount = invoice.totalAmount;
@@ -598,11 +630,13 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         updateData.paid_amount = 0;
         updateData.payment_date = null;
       }
+      updateData.updated_at = new Date().toISOString();
 
       const { error } = await supabase
         .from('hr_invoices')
         .update(updateData)
-        .eq('id', id);
+        .eq('id', id)
+        .eq('organization_id', organization_id);
 
       if (error) {
         throw new Error(`Error updating invoice status: ${error.message}`);
@@ -631,21 +665,22 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
 
       if (format === 'csv') {
         const invoiceData = [
-          ['Invoice Number', 'Client Name', 'Invoice Date', 'Due Date', 'Status', 'Total Amount'],
+          ['Invoice Number', 'Client Name', 'Currency', 'Invoice Date', 'Due Date', 'Status', 'Total Amount'],
           [
             invoice.invoiceNumber,
-            invoice.clientId, // Added
             invoice.clientName,
+            invoice.currency,
             invoice.invoiceDate,
             invoice.dueDate,
             invoice.status,
-            formatINR(invoice.totalAmount),
+            invoice.currency === 'USD' ? formatUSD(invoice.totalAmount) : formatINR(invoice.totalAmount),
           ],
+          ['Item Description', 'Quantity', 'Rate', 'Amount'],
           ...invoice.items.map((item) => [
             item.description,
             item.quantity,
-            item.rate,
-            formatINR(item.amount),
+            invoice.currency === 'USD' ? formatUSD(item.rate) : formatINR(item.rate),
+            invoice.currency === 'USD' ? formatUSD(item.amount) : formatINR(item.amount),
           ]),
         ];
 
@@ -660,7 +695,6 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
     }
   },
 
-  // Fetch expenses with optional time filter
   fetchExpenses: async (timeFilter = 'all') => {
     try {
       let query = supabase
@@ -668,7 +702,6 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         .select('*')
         .order('created_at', { ascending: false });
 
-      // Apply time filter
       const now = new Date();
       if (timeFilter === 'today') {
         const today = now.toISOString().split('T')[0];
@@ -704,7 +737,6 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         return;
       }
 
-      // Map Supabase data to Expense type
       const expenses: Expense[] = expensesData.map((expense: any) => ({
         id: expense.id,
         category: expense.category as ExpenseCategory,
@@ -734,7 +766,6 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
 
   addExpense: async (expense, receiptFile) => {
     try {
-      // Ensure user is authenticated
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
         throw new Error('You must be signed in to add an expense.');
@@ -757,11 +788,12 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
 
         receiptUrl = publicUrlData.publicUrl;
       }
+
       const authData = getAuthDataFromLocalStorage();
-              if (!authData) {
-                throw new Error('Failed to retrieve authentication data');
-              }
-              const { organization_id, userId } = authData;
+      if (!authData) {
+        throw new Error('Failed to retrieve authentication data');
+      }
+      const { organization_id } = authData;
 
       const expenseData = {
         category: expense.category,
@@ -774,7 +806,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         vendor: expense.vendor || null,
         created_by: userData.user.id,
         status: 'Pending',
-        organization_id: organization_id || null,
+        organization_id: organization_id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -797,7 +829,6 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
 
   updateExpense: async (id, data, receiptFile) => {
     try {
-      // Ensure user is authenticated
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
         throw new Error('You must be signed in to update an expense.');
@@ -821,6 +852,12 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         receiptUrl = publicUrlData.publicUrl;
       }
 
+      const authData = getAuthDataFromLocalStorage();
+      if (!authData) {
+        throw new Error('Failed to retrieve authentication data');
+      }
+      const { organization_id } = authData;
+
       const updateData: any = {};
       if (data.category) updateData.category = data.category;
       if (data.description) updateData.description = data.description;
@@ -838,7 +875,8 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         .from('hr_expenses')
         .update(updateData)
         .eq('id', id)
-        .eq('created_by', userData.user.id);
+        .eq('created_by', userData.user.id)
+        .eq('organization_id', organization_id);
 
       if (error) {
         throw new Error(`Error updating expense: ${error.message}`);
@@ -859,18 +897,23 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
 
   deleteExpense: async (id) => {
     try {
-      // Ensure user is authenticated
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
         throw new Error('You must be signed in to delete an expense.');
       }
 
-      // Step 1: Fetch the expense to be deleted
+      const authData = getAuthDataFromLocalStorage();
+      if (!authData) {
+        throw new Error('Failed to retrieve authentication data');
+      }
+      const { organization_id } = authData;
+
       const { data: expenseData, error: fetchError } = await supabase
         .from('hr_expenses')
         .select('*')
         .eq('id', id)
         .eq('created_by', userData.user.id)
+        .eq('organization_id', organization_id)
         .single();
 
       if (fetchError) {
@@ -880,12 +923,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
       if (!expenseData) {
         throw new Error('Expense not found or you do not have permission to delete it.');
       }
-const authData = getAuthDataFromLocalStorage();
-              if (!authData) {
-                throw new Error('Failed to retrieve authentication data');
-              }
-              const { organization_id, userId } = authData;
-      // Step 2: Insert the expense into backup_expenses
+
       const { error: backupError } = await supabase
         .from('backup_expenses')
         .insert({
@@ -910,15 +948,14 @@ const authData = getAuthDataFromLocalStorage();
         throw new Error(`Error backing up expense: ${backupError.message}`);
       }
 
-      // Step 3: Delete the expense from hr_expenses
       const { error: deleteError } = await supabase
         .from('hr_expenses')
         .delete()
         .eq('id', id)
-        .eq('created_by', userData.user.id);
+        .eq('created_by', userData.user.id)
+        .eq('organization_id', organization_id);
 
       if (deleteError) {
-        // Roll back the backup if deletion fails
         await supabase
           .from('backup_expenses')
           .delete()
@@ -926,10 +963,7 @@ const authData = getAuthDataFromLocalStorage();
         throw new Error(`Error deleting expense: ${deleteError.message}`);
       }
 
-      // Step 4: Update the local state by refetching expenses
       await get().fetchExpenses();
-
-      // Step 5: Update selectedExpense if necessary
       set((state) => ({
         selectedExpense: state.selectedExpense?.id === id ? null : state.selectedExpense,
       }));
@@ -949,11 +983,16 @@ const authData = getAuthDataFromLocalStorage();
 
   uploadReceipt: async (id, receiptFile) => {
     try {
-      // Ensure user is authenticated
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
         throw new Error('You must be signed in to upload a receipt.');
       }
+
+      const authData = getAuthDataFromLocalStorage();
+      if (!authData) {
+        throw new Error('Failed to retrieve authentication data');
+      }
+      const { organization_id } = authData;
 
       const fileName = `${Date.now()}-${receiptFile.name}`;
       const { error: uploadError } = await supabase.storage
@@ -974,7 +1013,8 @@ const authData = getAuthDataFromLocalStorage();
         .from('hr_expenses')
         .update({ receipt_url: receiptUrl, updated_at: new Date().toISOString() })
         .eq('id', id)
-        .eq('created_by', userData.user.id);
+        .eq('created_by', userData.user.id)
+        .eq('organization_id', organization_id);
 
       if (updateError) {
         throw new Error(`Error updating receipt: ${updateError.message}`);
@@ -1008,15 +1048,15 @@ const authData = getAuthDataFromLocalStorage();
       if (format === 'csv') {
         if (type === 'invoices') {
           const invoicesData = [
-            ['Invoice Number', 'Client Name', 'Invoice Date', 'Due Date', 'Status', 'Total Amount'],
+            ['Invoice Number', 'Client Name', 'Currency', 'Invoice Date', 'Due Date', 'Status', 'Total Amount'],
             ...get().invoices.map((inv) => [
               inv.invoiceNumber,
               inv.clientName,
-              inv.clientId, // Added
+              inv.currency,
               inv.invoiceDate,
               inv.dueDate,
               inv.status,
-              formatINR(inv.totalAmount),
+              inv.currency === 'USD' ? formatUSD(inv.totalAmount) : formatINR(inv.totalAmount),
             ]),
           ];
 

@@ -9,9 +9,12 @@ const mainConfig: Config = {
 		"./components/**/*.{ts,tsx}",
 		"./app/**/*.{ts,tsx}",
 		"./src/**/*.{ts,tsx}",
+		"./node_modules/@material-tailwind/react/components/**/*.{js,tsx}",
+    "./node_modules/@material-tailwind/react/theme/components/**/*.{js,tsx}",
 		"./subproject/**/*.{ts,tsx}",
 		"!./pages/careerPage/**/*.{ts,tsx}", // Exclude subproject content
 		"!./components/careerPage/**/*.{ts,tsx}",
+		
 	],
 	prefix: "",
 	theme: {

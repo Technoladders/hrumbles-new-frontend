@@ -14,11 +14,12 @@ import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue
 } from '@/components/ui/select';
-import { generateInvoicePDF } from '@/utils/pdf-utils';
 import { toast } from 'sonner';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import TechnoladdersLogo from '../../../public/hrumbles_logo2.png';
+
+const USD_TO_INR_RATE = 84;
 
 interface InvoiceDetailsProps {
   invoice: Invoice;
@@ -34,6 +35,34 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
   const { exportInvoice } = useAccountsStore();
   const [isExporting, setIsExporting] = useState(false);
   const invoiceRef = useRef<HTMLDivElement>(null);
+
+  const convertToINR = (amount: number) => {
+    return invoice.currency === 'USD' ? amount * USD_TO_INR_RATE : amount;
+  };
+
+  const formatAmount = (amount: number) => {
+    return invoice.currency === 'USD' 
+      ? `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : `₹${amount.toLocaleString('en-IN')}`;
+  };
+
+  const formatAmountWithTooltip = (amount: number) => {
+    const inrAmount = convertToINR(amount);
+    return (
+      <div className="group relative">
+        {invoice.currency === 'USD' ? (
+          <>
+            <span>{formatAmount(amount)}</span>
+            <div className="absolute hidden group-hover:block bg-gray-800 text-white text-xs rounded p-2 z-10">
+              ₹ {inrAmount.toLocaleString('en-IN')}
+            </div>
+          </>
+        ) : (
+          <span>{formatAmount(amount)}</span>
+        )}
+      </div>
+    );
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
@@ -77,7 +106,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
         format: 'a4',
       });
 
-      const imgWidth = 210; // A4 width in mm
+      const imgWidth = 210;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
       pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
@@ -122,8 +151,6 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
           </div>
 
         <div className="flex gap-1">
-          
-
           <Select
             value={invoice.status}
             onValueChange={(value) => onStatusChange(invoice.id, value as InvoiceStatus)}
@@ -163,20 +190,18 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
         </div>
       </div>
 
-      {/* Invoice document styled to match PayslipView */}
       <div ref={invoiceRef} className="bg-white border rounded-lg shadow-sm p-8 print:shadow-none print:border-none">
-        {/* Company Header with Logo and Details */}
         <div className="flex items-start justify-between border-b pb-6 mb-6">
           <div className="flex gap-4">
             <div className="w-20 h-14 flex-shrink-0 pt-7">
               <img src={TechnoladdersLogo} alt="Company Logo" className="w-full" />
             </div>
             <div className="max-w-md">
-  <h1 className="text-xl font-bold">Technoladders Solutions Private Limited</h1>
-  <p className="text-sm text-gray-600 whitespace-normal break-words">
-    Tidel Park, 1st Floor D Block, Module 115, D North Block, 1st Floor, No.4 Rajiv Gandhi Salai, Taramani Chennai Tamil Nadu 600113 India.
-  </p>
-</div>
+              <h1 className="text-xl font-bold">Technoladders Solutions Private Limited</h1>
+              <p className="text-sm text-gray-600 whitespace-normal break-words">
+                Tidel Park, 1st Floor D Block, Module 115, D North Block, 1st Floor, No.4 Rajiv Gandhi Salai, Taramani Chennai Tamil Nadu 600113 India.
+              </p>
+            </div>
           </div>
           <div className="text-right">
             <p className="text-sm text-gray-600">Invoice</p>
@@ -189,7 +214,6 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
           </div>
         </div>
 
-        {/* Invoice Summary */}
         <h2 className="text-gray-700 font-bold mb-4 uppercase">INVOICE SUMMARY</h2>
         <div className="flex mb-6">
           <div className="w-2/3 pr-4">
@@ -223,14 +247,13 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
           <div className="w-1/3">
             <div className="h-full border rounded-lg bg-green-50 flex flex-col items-center justify-center p-6">
               <p className="text-4xl font-bold text-gray-800">
-                {formatINR(invoice.totalAmount).replace('₹', '')}
+                {formatAmountWithTooltip(invoice.totalAmount)}
               </p>
               <p className="text-sm text-gray-600 mt-1">Invoice Total</p>
             </div>
           </div>
         </div>
 
-        {/* Items Table */}
         <div className="mb-6 border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -247,10 +270,10 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
                   <td className="p-3">{item.description}</td>
                   <td className="p-3 text-right font-mono">{item.quantity}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatINR(item.rate).replace('₹', '₹')}
+                    {formatAmountWithTooltip(item.rate)}
                   </td>
                   <td className="p-3 text-right font-mono">
-                    {formatINR(item.amount).replace('₹', '₹')}
+                    {formatAmountWithTooltip(item.amount)}
                   </td>
                 </tr>
               ))}
@@ -258,7 +281,6 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
           </table>
         </div>
 
-        {/* Totals Section */}
         <div className="border rounded-lg p-4 mb-6">
           <div className="flex justify-between items-center">
             <div>
@@ -266,28 +288,29 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
               <div className="text-sm text-gray-600">Subtotal + Tax</div>
             </div>
             <div className="text-right bg-green-50 p-4 rounded">
-              <div className="font-bold text-2xl">{formatINR(invoice.totalAmount).replace('₹', '₹')}</div>
+              <div className="font-bold text-2xl">{formatAmountWithTooltip(invoice.totalAmount)}</div>
             </div>
           </div>
           <div className="mt-4 space-y-2">
             <div className="flex justify-between">
               <span className="font-medium">Subtotal:</span>
-              <span className="font-mono">{formatINR(invoice.subtotal || 0).replace('₹', '₹')}</span>
+              <span className="font-mono">{formatAmountWithTooltip(invoice.subtotal || 0)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="font-medium">Tax ({invoice.taxRate || 0}%):</span>
-              <span className="font-mono">{formatINR(invoice.taxAmount || 0).replace('₹', '₹')}</span>
-            </div>
+            {invoice.currency === 'INR' && invoice.taxRate && (
+              <div className="flex justify-between">
+                <span className="font-medium">Tax ({invoice.taxRate || 0}%):</span>
+                <span className="font-mono">{formatAmountWithTooltip(invoice.taxAmount || 0)}</span>
+              </div>
+            )}
             {invoice.status === 'Paid' && (
               <div className="flex justify-between">
                 <span className="font-medium">Paid Amount:</span>
-                <span className="font-mono">{formatINR(invoice.paidAmount || invoice.totalAmount).replace('₹', '₹')}</span>
+                <span className="font-mono">{formatAmountWithTooltip(invoice.paidAmount || invoice.totalAmount)}</span>
               </div>
             )}
           </div>
         </div>
 
-        {/* Notes and Terms */}
         {(invoice.notes || invoice.terms) && (
           <div className="mb-6 text-sm">
             {invoice.notes && (
@@ -305,7 +328,6 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
           </div>
         )}
 
-        {/* Footer */}
         <div className="text-center text-xs text-gray-500 mt-10 pt-4 border-t">
           <p>-- This is a system-generated document. --</p>
         </div>

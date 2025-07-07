@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select';
 import { fetchAllStatuses, MainStatus, SubStatus } from '@/services/statusService';
 import { toast } from 'sonner';
+import { isTerminalStatus } from '@/utils/statusTransitionHelper'; // Import the helper
 
 interface StatusSelectorProps {
   value: string;
@@ -29,13 +30,12 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
   const [selectedSubStatus, setSelectedSubStatus] = useState<SubStatus | null>(null);
   const [selectedMainStatus, setSelectedMainStatus] = useState<MainStatus | null>(null);
 
-  // Load all statuses on mount
+  // Load all statuses on mount (No changes here)
   useEffect(() => {
     const loadStatuses = async () => {
       try {
         setLoading(true);
         const data = await fetchAllStatuses();
-        // Ensure we have our 5-stage pipeline loaded and sorted correctly
         const pipelineOrder = ['New', 'Processed', 'Interview', 'Offered', 'Joined'];
         const sortedData = [...data].sort((a, b) => {
           const aIndex = pipelineOrder.indexOf(a.name);
@@ -45,7 +45,6 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
         
         setStatuses(sortedData);
         
-        // Find the current selected status
         if (value) {
           let found = false;
           for (const main of sortedData) {
@@ -59,10 +58,7 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
               }
             }
           }
-          
-          if (!found && value) {
-            console.warn(`Status with ID ${value} not found`);
-          }
+          if (!found) console.warn(`Status with ID ${value} not found`);
         }
       } catch (error) {
         console.error('Error loading statuses:', error);
@@ -71,12 +67,10 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
         setLoading(false);
       }
     };
-
     loadStatuses();
   }, [value]);
 
-  const handleStatusChange = (newValue: string) => {
-    // Find the selected sub-status and its main parent status
+  const handleStatusChange = (newValue: string) => { // (No changes here)
     for (const main of statuses) {
       if (main.subStatuses) {
         const sub = main.subStatuses.find(s => s.id === newValue);
@@ -87,279 +81,159 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
         }
       }
     }
-    
     onChange(newValue);
   };
 
-  // Function to filter sub-statuses based on the strict job status flow requirements
-  const getFilteredSubStatuses = (mainStatus: MainStatus) => {
+  // *** MODIFIED LOGIC STARTS HERE ***
+
+  const getFilteredSubStatuses = (mainStatus: MainStatus): SubStatus[] => {
     if (!mainStatus.subStatuses || mainStatus.subStatuses.length === 0) return [];
-  
-    // If no selection yet, only show New option as the entry point
-    if (!selectedMainStatus) {
+    if (!selectedMainStatus || !selectedSubStatus) {
       return mainStatus.name === 'New' ? mainStatus.subStatuses : [];
     }
   
-    // If current status includes "Reject" or "Offer Declined", don't allow further changes
-    if (selectedSubStatus?.name.includes('Reject') || selectedSubStatus?.name === 'Offer Declined') {
+    // Use the helper to check for any terminal status
+    if (isTerminalStatus(selectedSubStatus.name)) {
       return [];
     }
   
-    const pipelineOrder = ['New', 'Processed', 'Interview', 'Offered', 'Joined'];
-    const currentMainStatusIndex = pipelineOrder.indexOf(selectedMainStatus?.name || '');
-    const targetMainStatusIndex = pipelineOrder.indexOf(mainStatus.name);
+    let baseOptions: SubStatus[] = [];
   
-    // New -> Processed (Internal)
+    // --- Start of Your Original Logic (modified to populate baseOptions) ---
     if (selectedMainStatus.name === 'New' && mainStatus.name === 'Processed') {
-      return mainStatus.subStatuses.filter(s => s.name === 'Processed (Internal)');
-    }
-  
-    // Processed (Internal) or Internal Hold or Candidate on hold -> Processed (Client), Duplicate (Internal), Internal Reject, Internal Hold
-    if ((selectedSubStatus?.name === 'Processed (Internal)' || 
-         selectedSubStatus?.name === 'Internal Hold' || 
-         selectedSubStatus?.name === 'Candidate on hold') && 
-        mainStatus.name === 'Processed') {
-      return mainStatus.subStatuses.filter(s => 
-        s.name === 'Processed (Client)' || 
-        s.name === 'Duplicate (Internal)' || 
-        s.name === 'Internal Reject' ||
-        s.name === 'Internal Hold'
-      );
-    }
-  
-    // Processed (Client) or Client Hold or Candidate on hold -> Duplicate (Client), Client Reject, Client Hold, or all Interview statuses
-    if (selectedSubStatus?.name === 'Processed (Client)' || 
-        selectedSubStatus?.name === 'Client Hold' || 
-        selectedSubStatus?.name === 'Candidate on hold') {
+      baseOptions = mainStatus.subStatuses.filter(s => s.name === 'Processed (Internal)');
+    } else if ((selectedSubStatus.name === 'Processed (Internal)' || selectedSubStatus.name === 'Internal Hold' || selectedSubStatus.name === 'Candidate on hold') && mainStatus.name === 'Processed') {
+      baseOptions = mainStatus.subStatuses.filter(s => ['Processed (Client)', 'Duplicate (Internal)', 'Internal Reject', 'Internal Hold'].includes(s.name));
+    } else if (selectedSubStatus.name === 'Processed (Client)' || selectedSubStatus.name === 'Client Hold' || selectedSubStatus.name === 'Candidate on hold') {
       if (mainStatus.name === 'Processed') {
-        return mainStatus.subStatuses.filter(s => 
-          s.name === 'Duplicate (Client)' || 
-          s.name === 'Client Reject' ||
-          s.name === 'Client Hold'
-        );
+        baseOptions = mainStatus.subStatuses.filter(s => ['Duplicate (Client)', 'Client Reject', 'Client Hold'].includes(s.name));
+      } else if (mainStatus.name === 'Interview') {
+        baseOptions = mainStatus.subStatuses.filter(s => ['Technical Assessment', 'L1', 'L2', 'L3', 'End Client Round'].includes(s.name));
       }
+    } else if ((selectedSubStatus.name === 'Technical Assessment' || selectedSubStatus.name === 'Technical Hold' || selectedSubStatus.name === 'Reschedule Technical Assessment') && mainStatus.name === 'Interview') {
+      baseOptions = mainStatus.subStatuses.filter(s => ['Technical Assessment', 'Reschedule Technical Assessment', 'Technical Assessment Selected', 'Technical Assessment Rejected', 'Technical Hold', 'L1', 'L2', 'L3', 'End Client Round'].includes(s.name));
+    } else if (selectedSubStatus.name === 'Technical Assessment Selected') {
       if (mainStatus.name === 'Interview') {
-        return mainStatus.subStatuses.filter(s => [
-          'Technical Assessment',
-          'L1',
-          'L2',
-          'L3',
-          'End Client Round',
-        ].includes(s.name));
+        baseOptions = mainStatus.subStatuses.filter(s => ['L1', 'L2', 'L3', 'End Client Round'].includes(s.name));
+      } else if (mainStatus.name === 'Offered') {
+        baseOptions = mainStatus.subStatuses.filter(s => ['Offer Issued', 'Offer On Hold', 'Offer Declined'].includes(s.name));
       }
-    }
-  
-    // Technical Assessment or Technical Hold or Reschedule Technical Assessment -> Technical Assessment, Reschedule Technical Assessment, Selected, Rejected, Technical Hold, or all Interview statuses
-    if ((selectedSubStatus?.name === 'Technical Assessment' || 
-         selectedSubStatus?.name === 'Technical Hold' || 
-         selectedSubStatus?.name === 'Reschedule Technical Assessment') && 
-        mainStatus.name === 'Interview') {
-      return mainStatus.subStatuses.filter(s => [
-        'Technical Assessment',
-        'Reschedule Technical Assessment',
-        'Technical Assessment Selected',
-        'Technical Assessment Rejected',
-        'Technical Hold',
-        'L1',
-        'L2',
-        'L3',
-        'End Client Round',
-      ].includes(s.name));
-    }
-  
-    // Technical Assessment Selected -> L1 or all Interview statuses, or all Offered statuses
-    if (selectedSubStatus?.name === 'Technical Assessment Selected') {
+    } else if ((selectedSubStatus.name === 'L1' || selectedSubStatus.name === 'L1 Hold' || selectedSubStatus.name === 'Reschedule L1') && mainStatus.name === 'Interview') {
+      baseOptions = mainStatus.subStatuses.filter(s => ['L1', 'L1 Selected', 'L1 Rejected', 'L1 Hold', 'Reschedule L1'].includes(s.name));
+    } else if (selectedSubStatus.name === 'L1 Selected') {
       if (mainStatus.name === 'Interview') {
-        return mainStatus.subStatuses.filter(s => [
-          'L1',
-          'L2',
-          'L3',
-          'End Client Round',
-        ].includes(s.name));
+        baseOptions = mainStatus.subStatuses.filter(s => ['L2', 'L3', 'End Client Round'].includes(s.name));
+      } else if (mainStatus.name === 'Offered') {
+        baseOptions = mainStatus.subStatuses.filter(s => ['Offer Issued', 'Offer On Hold', 'Offer Declined'].includes(s.name));
       }
-      if (mainStatus.name === 'Offered') {
-        return mainStatus.subStatuses.filter(s => [
-          'Offer Issued',
-          'Offer On Hold',
-          'Offer Declined'
-        ].includes(s.name));
-      }
-    }
-  
-    // L1 or L1 Hold or Reschedule L1 -> L1, L1 Selected, L1 Rejected, L1 Hold, Reschedule L1
-    if ((selectedSubStatus?.name === 'L1' || 
-         selectedSubStatus?.name === 'L1 Hold' || 
-         selectedSubStatus?.name === 'Reschedule L1') && 
-        mainStatus.name === 'Interview') {
-      return mainStatus.subStatuses.filter(s => [
-        'L1',
-        'L1 Selected',
-        'L1 Rejected',
-        'L1 Hold',
-        'Reschedule L1',
-      ].includes(s.name));
-    }
-  
-    // L1 Selected -> L2 or all Interview statuses except Technical Assessment, or all Offered statuses
-    if (selectedSubStatus?.name === 'L1 Selected') {
+    } else if ((selectedSubStatus.name === 'L2' || selectedSubStatus.name === 'L2 Hold' || selectedSubStatus.name === 'Reschedule L2') && mainStatus.name === 'Interview') {
+      baseOptions = mainStatus.subStatuses.filter(s => ['L2', 'L2 Selected', 'L2 Rejected', 'L2 Hold', 'Reschedule L2'].includes(s.name));
+    } else if (selectedSubStatus.name === 'L2 Selected') {
       if (mainStatus.name === 'Interview') {
-        return mainStatus.subStatuses.filter(s => [
-          'L2',
-          'L3',
-          'End Client Round',
-        ].includes(s.name));
+        baseOptions = mainStatus.subStatuses.filter(s => ['L3', 'End Client Round'].includes(s.name));
+      } else if (mainStatus.name === 'Offered') {
+        baseOptions = mainStatus.subStatuses.filter(s => ['Offer Issued', 'Offer On Hold', 'Offer Declined'].includes(s.name));
       }
-      if (mainStatus.name === 'Offered') {
-        return mainStatus.subStatuses.filter(s => [
-          'Offer Issued',
-          'Offer On Hold',
-          'Offer Declined'
-        ].includes(s.name));
-      }
-    }
-  
-    // L2 or L2 Hold or Reschedule L2 -> L2, L2 Selected, L2 Rejected, L2 Hold, Reschedule L2
-    if ((selectedSubStatus?.name === 'L2' || 
-         selectedSubStatus?.name === 'L2 Hold' || 
-         selectedSubStatus?.name === 'Reschedule L2') && 
-        mainStatus.name === 'Interview') {
-      return mainStatus.subStatuses.filter(s => [
-        'L2',
-        'L2 Selected',
-        'L2 Rejected',
-        'L2 Hold',
-        'Reschedule L2',
-      ].includes(s.name));
-    }
-  
-    // L2 Selected -> L3 or all Interview statuses except Technical Assessment, L1, or all Offered statuses
-    if (selectedSubStatus?.name === 'L2 Selected') {
+    } else if ((selectedSubStatus.name === 'L3' || selectedSubStatus.name === 'L3 Hold' || selectedSubStatus.name === 'Reschedule L3') && mainStatus.name === 'Interview') {
+      baseOptions = mainStatus.subStatuses.filter(s => ['L3', 'L3 Selected', 'L3 Rejected', 'L3 Hold', 'Reschedule L3'].includes(s.name));
+    } else if (selectedSubStatus.name === 'L3 Selected') {
       if (mainStatus.name === 'Interview') {
-        return mainStatus.subStatuses.filter(s => [
-          'L3',
-          'End Client Round',
-        ].includes(s.name));
+        baseOptions = mainStatus.subStatuses.filter(s => ['End Client Round'].includes(s.name));
+      } else if (mainStatus.name === 'Offered') {
+        baseOptions = mainStatus.subStatuses.filter(s => ['Offer Issued', 'Offer On Hold', 'Offer Declined'].includes(s.name));
       }
-      if (mainStatus.name === 'Offered') {
-        return mainStatus.subStatuses.filter(s => [
-          'Offer Issued',
-          'Offer On Hold',
-          'Offer Declined'
-        ].includes(s.name));
-      }
-    }
-  
-    // L3 or L3 Hold or Reschedule L3 -> L3, L3 Selected, L3 Rejected, L3 Hold, Reschedule L3
-    if ((selectedSubStatus?.name === 'L3' || 
-         selectedSubStatus?.name === 'L3 Hold' || 
-         selectedSubStatus?.name === 'Reschedule L3') && 
-        mainStatus.name === 'Interview') {
-      return mainStatus.subStatuses.filter(s => [
-        'L3',
-        'L3 Selected',
-        'L3 Rejected',
-        'L3 Hold',
-        'Reschedule L3',
-      ].includes(s.name));
-    }
-  
-    // L3 Selected -> End Client Round, or all Offered statuses
-    if (selectedSubStatus?.name === 'L3 Selected') {
+    } else if ((selectedSubStatus.name === 'End Client Round' || selectedSubStatus.name === 'End Client Hold' || selectedSubStatus.name === 'Reschedule End Client Round') && (mainStatus.name === 'Interview' || mainStatus.name === 'Offered')) {
       if (mainStatus.name === 'Interview') {
-        return mainStatus.subStatuses.filter(s => [
-          'End Client Round',
-        ].includes(s.name));
+        baseOptions = mainStatus.subStatuses.filter(s => ['End Client Round', 'End Client Selected', 'End Client Rejected', 'End Client Hold', 'Reschedule End Client Round'].includes(s.name));
+      } else if (mainStatus.name === 'Offered') {
+        baseOptions = mainStatus.subStatuses.filter(s => ['Offer Issued', 'Offer On Hold', 'Offer Declined'].includes(s.name));
       }
-      if (mainStatus.name === 'Offered') {
-        return mainStatus.subStatuses.filter(s => [
-          'Offer Issued',
-          'Offer On Hold',
-          'Offer Declined'
-        ].includes(s.name));
+    } else if (selectedSubStatus.name === 'End Client Selected' && mainStatus.name === 'Offered') {
+      baseOptions = mainStatus.subStatuses.filter(s => ['Offer Issued', 'Offer On Hold', 'Offer Declined'].includes(s.name));
+    } else if (selectedSubStatus.name === 'Offer Issued' && mainStatus.name === 'Joined') {
+      baseOptions = mainStatus.subStatuses.filter(s => ['Joined', 'No Show'].includes(s.name));
+    } else if (selectedSubStatus.name === 'Offer On Hold' && mainStatus.name === 'Offered') {
+      baseOptions = mainStatus.subStatuses.filter(s => s.name === 'Offer Issued');
+    }
+    // --- End of Your Original Logic ---
+  
+    // --- Augmentation Step: Add "No Show" and "Dropped" statuses ---
+    let finalOptions = [...baseOptions];
+    const allSubStatuses = statuses.flatMap(ms => ms.subStatuses || []);
+  
+    // 1. Add "No Show" status if we are in a relevant interview step
+    if (mainStatus.name === 'Interview') {
+      const interviewMap: { [key: string]: string } = {
+        'Technical Assessment': 'Technical Assessment No Show',
+        'L1': 'L1 No Show',
+        'L2': 'L2 No Show',
+        'L3': 'L3 No Show',
+        'End Client Round': 'End Client Round No Show',
+      };
+      // Find which interview step we are currently in
+      const currentInterviewStepName = Object.keys(interviewMap).find(step => selectedSubStatus.name.includes(step));
+      if (currentInterviewStepName) {
+        const noShowStatusName = interviewMap[currentInterviewStepName];
+        const noShowStatus = allSubStatuses.find(s => s.name === noShowStatusName);
+        if (noShowStatus && !finalOptions.some(opt => opt.id === noShowStatus.id)) {
+            finalOptions.push(noShowStatus);
+        }
       }
     }
   
-    // End Client Round or End Client Hold or Reschedule End Client Round -> End Client Round, End Client Selected, End Client Rejected, End Client Hold, Reschedule End Client Round, or all Offered statuses
-    if (selectedSubStatus?.name === 'End Client Round' || 
-        selectedSubStatus?.name === 'End Client Hold' || 
-        selectedSubStatus?.name === 'Reschedule End Client Round') {
-      if (mainStatus.name === 'Interview') {
-        return mainStatus.subStatuses.filter(s => [
-          'End Client Round',
-          'End Client Selected',
-          'End Client Rejected',
-          'End Client Hold',
-          'Reschedule End Client Round'
-        ].includes(s.name));
-      }
-      if (mainStatus.name === 'Offered') {
-        return mainStatus.subStatuses.filter(s => [
-          'Offer Issued',
-          'Offer On Hold',
-          'Offer Declined'
-        ].includes(s.name));
-      }
+    // 2. *** MODIFIED LOGIC HERE ***
+    // Add "Candidate Dropped" status only to the CURRENT main status group
+    const droppedStatus = allSubStatuses.find(s => s.name === 'Candidate Dropped');
+    
+    // This condition checks:
+    // a) "Candidate Dropped" status exists.
+    // b) The main status group we are currently rendering (`mainStatus`) is the same as the candidate's current main status (`selectedMainStatus`).
+    // c) The candidate's current main status is one where dropping is a valid action.
+    if (
+        droppedStatus &&
+        mainStatus.id === selectedMainStatus.id && 
+        ['Processed', 'Interview', 'Offered', 'Joined'].includes(selectedMainStatus.name)
+    ) {
+        if (!finalOptions.some(opt => opt.id === droppedStatus.id)) {
+            finalOptions.push(droppedStatus);
+        }
     }
   
-    // End Client Selected -> all Offered statuses
-    if (selectedSubStatus?.name === 'End Client Selected' && mainStatus.name === 'Offered') {
-      return mainStatus.subStatuses.filter(s => [
-        'Offer Issued',
-        'Offer On Hold',
-        'Offer Declined'
-      ].includes(s.name));
-    }
-  
-    // Offer Issued -> Joined, No Show
-    if (selectedSubStatus?.name === 'Offer Issued' && mainStatus.name === 'Joined') {
-      return mainStatus.subStatuses.filter(s => [
-        'Joined',
-        'No Show'
-      ].includes(s.name));
-    }
-  
-    // Offer On Hold -> Offer Issued
-    if (selectedSubStatus?.name === 'Offer On Hold' && mainStatus.name === 'Offered') {
-      return mainStatus.subStatuses.filter(s => s.name === 'Offer Issued');
-    }
-  
-    // Default: no skipping stages or invalid transitions
-    return [];
+    return finalOptions;
   };
+  
+  // *** MODIFIED LOGIC ENDS HERE ***
 
-  const getStatusStyle = () => {
+  const getStatusStyle = () => { // (No changes here)
     if (selectedSubStatus?.color) {
       return {
-        backgroundColor: `${selectedSubStatus.color}20`, // 20% opacity
+        backgroundColor: `${selectedSubStatus.color}20`,
         borderColor: selectedSubStatus.color,
         color: selectedSubStatus.color
       };
     }
-    
     if (selectedMainStatus?.color) {
       return {
-        backgroundColor: `${selectedMainStatus.color}20`, // 20% opacity
+        backgroundColor: `${selectedMainStatus.color}20`,
         borderColor: selectedMainStatus.color,
         color: selectedMainStatus.color
       };
     }
-    
     return {};
   };
 
-  if (loading) {
+  if (loading) { // (No changes here)
     return (
       <div className="h-9 bg-gray-100 rounded-md animate-pulse"></div>
     );
   }
 
-  return (
+  return ( // (No changes here)
     <Select value={value} onValueChange={handleStatusChange}>
       <SelectTrigger 
         className={`${className} text-left`} 
         style={getStatusStyle()}
       >
-        {/* Display the current main status and sub-status */}
         <SelectValue>
           {selectedMainStatus && selectedSubStatus 
             ? `${selectedSubStatus.name}`
@@ -381,7 +255,6 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
                   className="w-3 h-3 rounded-sm flex-shrink-0" 
                   style={{ backgroundColor: mainStatus.color || '#777777' }}
                 />
-                {/* Display current sub-status if it belongs to this main status */}
                 {mainStatus.name}
                 {selectedMainStatus?.id === mainStatus.id && selectedSubStatus && (
                   <span className="ml-2 text-sm opacity-75">

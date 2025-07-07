@@ -2,7 +2,7 @@ import { Box, Flex, IconButton, Input, InputGroup, InputLeftElement, Avatar, Men
 import { FiSearch, FiBell, FiSun, FiLogOut, FiUser, FiMenu } from "react-icons/fi";
 import { useState, useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom"; 
-import Sidebar from "../components/Sidebar/Sidebar";
+import NewSidebar from "../components/Sidebar/NewSidebar"; 
 import { signOut } from "../utils/api";
 import { useSelector, useDispatch } from "react-redux"; 
 import { logout } from "../Redux/authSlice";
@@ -11,15 +11,23 @@ import { toast } from "sonner";
 import { isSameDay } from "date-fns";
 
 const MainLayout = () => {
-  const { colorMode, toggleColorMode } = useColorMode();
+ const { colorMode, toggleColorMode } = useColorMode();
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const [isSidebarExpanded, setSidebarExpanded] = useState(false);
+  // Default to expanded on desktop, collapsed on mobile
   const [isMobile] = useMediaQuery("(max-width: 768px)");
+  const [isSidebarExpanded, setSidebarExpanded] = useState(!isMobile);
   const [interviews, setInterviews] = useState([]);
   const [hasTodayInterview, setHasTodayInterview] = useState(false);
 
+
   const user = useSelector((state) => state.auth.user);
+
+  console.log("userrrrrrrr", user)
+    // Update sidebar state if screen size changes
+  useEffect(() => {
+    setSidebarExpanded(!isMobile);
+  }, [isMobile]);
 
   // Fetch interviews for the logged-in employee
   useEffect(() => {
@@ -92,6 +100,7 @@ const MainLayout = () => {
     dispatch(logout());
     navigate("/login");
   };
+  
 
   // Format interview date as "MMM D"
   const formatInterviewDate = (date) => {
@@ -110,60 +119,63 @@ const MainLayout = () => {
   };
 
   // Dynamically Adjust Sidebar Width Based on Expansion and Screen Size
-  const sidebarWidth = isMobile ? (isSidebarExpanded ? "200px" : "0px") : isSidebarExpanded ? "200px" : "80px";
+ // --- Define New Sidebar Widths ---
+  const expandedSidebarWidth = "250px";
+  const collapsedSidebarWidth = "80px";
+  const sidebarWidth = isSidebarExpanded ? expandedSidebarWidth : collapsedSidebarWidth;
+  
+  const toggleSidebar = () => {
+    setSidebarExpanded(!isSidebarExpanded);
+  };
 
-  return (
-    <Flex height="100vh" overflow="hidden">
-      {/* Mobile Toggle Button */}
-      {isMobile && (
-        <IconButton
-          icon={<FiMenu />}
-          aria-label="Toggle Sidebar"
+    return (
+    <Flex height="100vh" overflow="hidden" bg={colorMode === "dark" ? "gray.800" : "gray.50"}>
+      {/* --- Mobile-only Overlay to close sidebar --- */}
+      {isMobile && isSidebarExpanded && (
+        <Box
           position="fixed"
-          top="70px"
-          left="10px"
-          zIndex="1000"
-          onClick={() => setSidebarExpanded(!isSidebarExpanded)}
-          size="lg"
-          variant="ghost"
-          color="gray.600"
+          top={0}
+          left={0}
+          right={0}
+          bottom={0}
+          bg="blackAlpha.600"
+          zIndex={15}
+          onClick={toggleSidebar}
         />
       )}
+      
+      {/* --- Render the New Sidebar --- */}
+      {/* The sidebar is now controlled by the layout */}
+      <NewSidebar isExpanded={isSidebarExpanded} toggleSidebar={toggleSidebar} />
 
-      {/* Fixed Sidebar */}
-      <Box
-        as="nav"
-        position="fixed"
-        left={0}
-        top={0}
-        bottom={0}
-        width={sidebarWidth}
-        transition="width 0.3s ease"
-        bg={colorMode === "dark" ? "base.bgdark" : "#F6F6FC"}
-        display={isMobile && !isSidebarExpanded ? "none" : "block"}
-      >
-        <Sidebar isExpanded={isSidebarExpanded} setExpanded={setSidebarExpanded} />
-      </Box>
-
-      {/* Main Content Area */}
-      <Flex direction="column" flex="1" ml={sidebarWidth} transition="margin-left 0.3s ease">
+      {/* --- Main Content Area --- */}
+      <Flex direction="column" flex="1" ml={{ base: isMobile ? "0" : sidebarWidth, md: sidebarWidth }} transition="margin-left 0.2s ease-in-out">
         {/* Fixed Header */}
         <Flex
           as="header"
-          width={`calc(100% - ${sidebarWidth})`}
-          justify="space-between"
           align="center"
-          p={4}
-          bg={colorMode === "dark" ? "base.bgdark" : "white"}
+          justify="space-between"
+          w={{ base: "100%", md: `calc(100% - ${sidebarWidth})` }}
           position="fixed"
           top={0}
-          height="60px"
+          p={4}
+          height="70px"
+          bg={colorMode === "dark" ? "base.bgdark" : "white"}
           zIndex={10}
-          transition="width 0.3s ease"
+          transition="width 0.2s ease-in-out"
+          boxShadow="sm"
         >
-          {/* Left Section - Search Bar */}
-          <Flex align="center" gap={2} minWidth="250px">
-            <InputGroup width="20em" height="2.5em">
+          {/* Left Section - Mobile Menu Toggle & Search */}
+          <Flex align="center" gap={2}>
+            {isMobile && (
+              <IconButton
+                icon={<FiMenu />}
+                aria-label="Toggle Sidebar"
+                onClick={toggleSidebar}
+                variant="ghost"
+              />
+            )}
+            <InputGroup width={{ base: "150px", md: "20em" }} height="2.5em">
               <InputLeftElement pointerEvents="none">
                 <FiSearch color="gray.500" />
               </InputLeftElement>
