@@ -1,5 +1,17 @@
 
+// App.jsx (Modified for Redux)
+
+import { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { useDispatch } from "react-redux";
+
+// Import the Redux action and the utility
+import { setOrganization } from "./Redux/organizationSlice";
+import { getOrganizationSubdomain } from "./utils/subdomain";
+
+// Import your pages
+import DomainVerificationPage from "./pages/DomainVerificationPage";
+
 import Login from "./pages/LoginPage";
 import SignUp from "./pages/GlobalSuperAdmin";
 import PrivateRoutes from "./utils/PrivateRoutes";
@@ -16,7 +28,6 @@ import Index from "./pages/Index";
 
 // Password change
 import PasswordChange from "./pages/ChangeEmployeePassword";
-import SetPassword from "./pages/SetPassword"
 // import EmployeeProfile from "./pages/EmployeeProfile";
 import ProfilePageEmployee from "./pages/ProfilePageEmployee";
 import EmployeeList from "./pages/EmployeeList";
@@ -85,6 +96,29 @@ import Holidays from "./pages/TimeManagement/admin/Holidays";
 import Projects from "./pages/TimeManagement/admin/Projects";
 
 function App() {
+
+  const organizationSubdomain = getOrganizationSubdomain();
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    // If a subdomain is found, dispatch it to the Redux store.
+    // This makes it available globally to any component connected to Redux.
+    if (organizationSubdomain) {
+      dispatch(setOrganization(organizationSubdomain));
+    }
+  }, [organizationSubdomain, dispatch]);
+
+    // If no subdomain is detected, show ONLY the verification page.
+  if (!organizationSubdomain) {
+    return (
+      <Router>
+        <Routes>
+          <Route path="*" element={<DomainVerificationPage />} />
+        </Routes>
+      </Router>
+    ); 
+  }
+
   return (
     <Router>
       <Routes>
@@ -92,7 +126,6 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
-         <Route path="/set-password" element={<SetPassword />} />
 
         {/* career page */}
         <Route path="/careers" element={<Career />} />
