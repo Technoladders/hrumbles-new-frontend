@@ -14,6 +14,7 @@ interface CalendarCardProps {
   employeeId: string;
   isHumanResourceEmployee: boolean;
   role?: string; // Add role prop
+   organizationId?: string;
 }
 
 interface Holiday {
@@ -227,7 +228,7 @@ const AllEventsList: React.FC<{ interviewDates: string[], holidays: Holiday[], l
   );
 };
 
-export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanResourceEmployee, role }) => {
+export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanResourceEmployee, role, organizationId }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [interviewDates, setInterviewDates] = useState<string[]>([]);
@@ -265,7 +266,9 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
             .from('hr_job_candidates')
             .select('interview_date')
             .eq('main_status_id', 'f72e13f8-7825-4793-85e0-e31d669f8097')
-            .not('interview_date', 'is', null);
+            .not('interview_date', 'is', null)
+            .eq('organization_id', organizationId);
+
 
           if (role !== 'organization_superadmin') {
             query.eq('applied_from', fullName);
@@ -464,7 +467,7 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
             </TabsContent>
             {(isHumanResourceEmployee || role === 'organization_superadmin') && (
               <TabsContent value="interviews" className="flex-1">
-                <InterviewsList employeeId={employeeId} selectedDate={selectedDate} role={role} />
+                <InterviewsList employeeId={employeeId} selectedDate={selectedDate} role={role} organizationId={organizationId} />
               </TabsContent>
             )}
           </Tabs>

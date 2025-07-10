@@ -30,7 +30,10 @@ function OrganizationSuperadminDashboard() {
   const [timeFilter, setTimeFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState<boolean>(true); // Loading state
     const { role, user } = useSelector((state) => state.auth);
+      const organizationId = useSelector((state: any) => state.auth.organization_id);
     const id = user?.id; // Ensure the user ID is available
+
+    console.log("orguser", organizationId)
 
   useEffect(() => {
     const fetchData = async (filter: string) => {
@@ -62,7 +65,8 @@ function OrganizationSuperadminDashboard() {
             hr_employees!hr_job_candidates_created_by_fkey (
               first_name
             )
-          `);
+          `)
+          .eq('organization_id', organizationId);
 
         if (filter !== 'all') {
           candidateQuery = candidateQuery
@@ -104,7 +108,8 @@ function OrganizationSuperadminDashboard() {
                 first_name
               )
             )
-          `);
+          `)
+          .eq('organization_id', organizationId)
 
         if (filter !== 'all') {
           analysisQuery = analysisQuery
@@ -168,6 +173,7 @@ function OrganizationSuperadminDashboard() {
           const { data: withAttachmentData, error: withAttachmentError } = await supabase
             .from('candidate_resume_analysis')
             .select('report_url')
+            .eq('organization_id', organizationId)
             .not('report_url', 'is', null);
 
           if (withAttachmentError) {
@@ -180,6 +186,7 @@ function OrganizationSuperadminDashboard() {
           const { data: resumeTextData, error: resumeTextError } = await supabase
             .from('resume_analysis')
             .select('resume_text')
+            .eq('organization_id', organizationId)
             .not('resume_text', 'is', null);
 
           if (resumeTextError) {
@@ -348,7 +355,7 @@ return (
         </Card>
         
        <div className="h-full">
-                  <CalendarCard employeeId={user.id} isHumanResourceEmployee={false} role={role} />
+                  <CalendarCard employeeId={user.id} isHumanResourceEmployee={false} role={role} organizationId={organizationId} />
                   </div>
           <div className="h-full">
                   <TimelineCard />

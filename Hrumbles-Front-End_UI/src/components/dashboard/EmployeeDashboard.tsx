@@ -17,6 +17,8 @@ import { MetricsSection } from "@/components/employee/profile/sections/MetricsSe
 const HomePage = () => {
   const dispatch = useDispatch();
   const { role, user } = useSelector((state) => state.auth);
+        const organizationId = useSelector((state: any) => state.auth.organization_id);
+  
   const id = user?.id; // Ensure the user ID is available
   const navigate = useNavigate();
   const { isLoading, employeeData, error, fetchEmployeeData, updateEmployee } = useEmployeeData(id);
@@ -116,7 +118,7 @@ const HomePage = () => {
 
   return (
     <div className="min-h-screen p-8">
-      <MetricsSection employeeId={employeeData.id} department={departmentName} role={role} />
+      <MetricsSection employeeId={employeeData.id} department={departmentName} role={role} organizationId={organizationId} />
     </div>
   );
 };

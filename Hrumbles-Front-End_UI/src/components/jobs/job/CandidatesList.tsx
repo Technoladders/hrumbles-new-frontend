@@ -2321,14 +2321,11 @@ const { data: clientData } = useQuery({
       organization_id: organizationId,
     };
     console.log("Sending payload to proxy /api/proxy:", payload);
- 
-    // --- Call the Vercel Proxy (POST) ---
     const response = await fetch("/api/proxy", { // Relative path to your proxy function
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(payload),
     });
-    // ---
  
     if (!response.ok) { // Check if response status is 2xx
       const errorText = await response.text();

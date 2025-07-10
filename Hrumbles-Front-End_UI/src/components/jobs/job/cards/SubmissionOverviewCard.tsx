@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/jobs/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { Button } from "@/components/jobs/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/jobs/ui/tabs";
 import { Skeleton } from "@/components/jobs/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { getCandidateStatusCounts } from "@/services/candidateService";
@@ -19,17 +18,15 @@ type StatusCount = {
 };
 
 const SubmissionOverviewCard = ({ job }: SubmissionOverviewCardProps) => {
-  const [viewType, setViewType] = useState<"main" | "sub">("main");
-
-  // Fetch status counts based on the selected view type
+  // Fetch sub status counts
   const {
     data: statusCounts = [],
     isLoading,
     isError,
     refetch,
   } = useQuery({
-    queryKey: ["candidate-status-counts", job.id, viewType],
-    queryFn: () => getCandidateStatusCounts(job.id, viewType),
+    queryKey: ["candidate-status-counts", job.id, "sub"],
+    queryFn: () => getCandidateStatusCounts(job.id, "sub"),
     enabled: !!job.id,
   });
 
@@ -87,21 +84,6 @@ const SubmissionOverviewCard = ({ job }: SubmissionOverviewCardProps) => {
             </svg>
             Submission Overview
           </CardTitle>
-
-          <Tabs
-            defaultValue="main"
-            className="h-8"
-            onValueChange={(value) => setViewType(value as "main" | "sub")}
-          >
-            <TabsList className="w-auto grid grid-cols-2 sm:flex sm:gap-1">
-              <TabsTrigger value="main" className="text-xs sm:text-sm px-2 sm:px-4">
-                Main Status
-              </TabsTrigger>
-              <TabsTrigger value="sub" className="text-xs sm:text-sm px-2 sm:px-4">
-                Sub Status
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
         </div>
       </CardHeader>
       <CardContent className="pt-2">
@@ -155,27 +137,26 @@ const SubmissionOverviewCard = ({ job }: SubmissionOverviewCardProps) => {
                   ))}
                 </Pie>
                 <Tooltip
-  formatter={(value: number, name: string) => [value, name]}
-  content={({ payload }) => {
-    if (!payload || !payload[0]) return null;
-    const { value, name } = payload[0].payload;
-    return (
-      <div
-        style={{
-          backgroundColor: "black",
-          color: "white",
-          border: "1px solid #e2e8f0",
-          borderRadius: "8px",
-          padding: "6px",
-          fontSize: "12px",
-        }}
-      >
-        <div>{name}: {value}</div>
-
-      </div>
-    );
-  }}
-/>
+                  formatter={(value: number, name: string) => [value, name]}
+                  content={({ payload }) => {
+                    if (!payload || !payload[0]) return null;
+                    const { value, name } = payload[0].payload;
+                    return (
+                      <div
+                        style={{
+                          backgroundColor: "black",
+                          color: "white",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "8px",
+                          padding: "6px",
+                          fontSize: "12px",
+                        }}
+                      >
+                        <div>{name}: {value}</div>
+                      </div>
+                    );
+                  }}
+                />
                 <Legend
                   layout="horizontal"
                   verticalAlign="bottom"

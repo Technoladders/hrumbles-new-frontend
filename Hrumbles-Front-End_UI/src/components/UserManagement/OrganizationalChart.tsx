@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useSelector } from 'react-redux';
 
 interface Employee {
   id: string;
@@ -37,6 +38,8 @@ interface OrganizationalChartProps {
 }
 
 const OrganizationalChart: React.FC<OrganizationalChartProps> = ({ onEmployeeSelect }) => {
+        const organizationId = useSelector((state: any) => state.auth.organization_id);
+  
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [hierarchyData, setHierarchyData] = useState<Employee[]>([]);
   const [directUsers, setDirectUsers] = useState<Employee[]>([]);
@@ -73,6 +76,7 @@ const OrganizationalChart: React.FC<OrganizationalChartProps> = ({ onEmployeeSel
           role:hr_roles(name)
         `)
         .eq('status', 'active')
+        .eq('organization_id', organizationId)
         .order('first_name');
 
       if (error) throw error;

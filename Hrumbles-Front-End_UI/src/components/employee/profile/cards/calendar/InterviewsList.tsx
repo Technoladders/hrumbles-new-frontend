@@ -20,9 +20,10 @@ interface InterviewsListProps {
   employeeId: string;
   selectedDate: Date;
   role?: string;
+  organizationId: string;
 }
 
-export const InterviewsList: React.FC<InterviewsListProps> = ({ employeeId, selectedDate, role }) => {
+export const InterviewsList: React.FC<InterviewsListProps> = ({ employeeId, selectedDate, role, organizationId }) => {
   const [interviews, setInterviews] = useState<Interview[]>([]);
 
   useEffect(() => {
@@ -45,7 +46,8 @@ export const InterviewsList: React.FC<InterviewsListProps> = ({ employeeId, sele
 
         const query = supabase
           .from("hr_job_candidates")
-          .select("id, job_id, name, interview_date, interview_time, interview_location, interview_type, round, applied_from");
+          .select("id, job_id, name, interview_date, interview_time, interview_location, interview_type, round, applied_from")
+          .eq("organization_id", organizationId);
 
         if (role !== 'organization_superadmin') {
           query.eq("applied_from", fullName);

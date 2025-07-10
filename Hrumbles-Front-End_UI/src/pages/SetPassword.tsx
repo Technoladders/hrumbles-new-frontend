@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+// We no longer need useLocation, so it's removed from the import.
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,24 +13,28 @@ const SetPassword = () => {
   const [message, setMessage] = React.useState<string | null>(null);
   const [isSessionSet, setIsSessionSet] = React.useState(false);
   const navigate = useNavigate();
-  const location = useLocation();
+  // const location = useLocation(); // <- This line is removed.
   const { toast } = useToast();
 
   React.useEffect(() => {
     const setAuthSession = async () => {
       try {
-        const params = new URLSearchParams(location.hash.substring(1));
+        // --- THIS IS THE FIX ---
+        // Read the hash directly from the browser's window object
+        // to avoid race conditions with the React Router.
+        const hash = window.location.hash;
+        const params = new URLSearchParams(hash.substring(1));
+        // --- END OF FIX ---
+        
         const accessToken = params.get('access_token');
         const refreshToken = params.get('refresh_token');
         
-        // --- IMPROVEMENT: Check for and display Supabase errors ---
         const errorDescription = params.get('error_description');
         if (errorDescription) {
           // Replace '+' with spaces for a clean message
           const decodedError = errorDescription.replace(/\+/g, ' ');
-          throw new Error(decodedError);
+          throw new Error(`Link Invalid: ${decodedError}`);
         }
-        // --- END IMPROVEMENT ---
 
         if (!accessToken) {
           throw new Error('Invalid or missing verification token. Please check the link or request a new one.');
@@ -58,7 +63,9 @@ const SetPassword = () => {
     };
 
     setAuthSession();
-  }, [location.hash, toast]);
+    // The dependency array is updated because `location.hash` is no longer used.
+    // The hook will now run only once when the component mounts.
+  }, [toast]);
 
   const handleSetPassword = async (e: React.FormEvent) => {
     e.preventDefault();

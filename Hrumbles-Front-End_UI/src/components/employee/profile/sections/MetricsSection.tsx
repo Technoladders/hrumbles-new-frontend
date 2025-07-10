@@ -11,9 +11,10 @@ interface MetricsSectionProps {
   employeeId: string;
   department: string;
   role: string; // Added role prop
+  organizationId: string;
 }
 
-export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, department, role }) => {
+export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, department, role, organizationId }) => {
   console.log("dashboardRole", department, role);
 
   const isHumanResourceEmployee = department === "Human Resource" && role === "employee";
@@ -28,7 +29,7 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, depa
         {!isHumanResourceEmployee && (
         
          <div className="h-full">
-            <CalendarCard employeeId={employeeId} isHumanResourceEmployee={isHumanResourceEmployee} />
+            <CalendarCard employeeId={employeeId} isHumanResourceEmployee={isHumanResourceEmployee} organizationId={organizationId} />
             </div>
         )}
         {isHumanResourceEmployee && (
@@ -45,7 +46,7 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, depa
               <OnboardingTasksCard employeeId={employeeId} />
             </div>
             <div className="h-full">
-            <CalendarCard employeeId={employeeId} isHumanResourceEmployee={isHumanResourceEmployee} />
+            <CalendarCard employeeId={employeeId} isHumanResourceEmployee={isHumanResourceEmployee} organizationId={organizationId} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 h-[300px] md:h-[325px] lg:h-[300px]">

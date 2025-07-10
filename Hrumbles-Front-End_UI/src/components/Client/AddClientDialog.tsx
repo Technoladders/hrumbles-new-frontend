@@ -18,9 +18,10 @@ interface AddClientDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   clientToEdit?: any;
+  onClientAdded?: () => void;
 }
  
-const AddClientDialog = ({ open, onOpenChange, clientToEdit }: AddClientDialogProps) => {
+const AddClientDialog = ({ open, onOpenChange, clientToEdit, onClientAdded }: AddClientDialogProps) => {
   const [activeTab, setActiveTab] = useState("details");
   const [isSubmittingIntentionally, setIsSubmittingIntentionally] = useState(false); // New flag
   const queryClient = useQueryClient();
@@ -186,6 +187,7 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit }: AddClientDialogPr
       }
  
       queryClient.invalidateQueries({ queryKey: ["hr_clients"] });
+      onClientAdded?.();
       form.reset();
       onOpenChange(false);
     } catch (error) {

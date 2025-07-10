@@ -28,6 +28,8 @@ import Index from "./pages/Index";
 
 // Password change
 import PasswordChange from "./pages/ChangeEmployeePassword";
+import SetPassword from "./pages/SetPassword"
+
 // import EmployeeProfile from "./pages/EmployeeProfile";
 import ProfilePageEmployee from "./pages/ProfilePageEmployee";
 import EmployeeList from "./pages/EmployeeList";
@@ -126,6 +128,8 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
+                 <Route path="/set-password" element={<SetPassword />} />
+
 
         {/* career page */}
         <Route path="/careers" element={<Career />} />

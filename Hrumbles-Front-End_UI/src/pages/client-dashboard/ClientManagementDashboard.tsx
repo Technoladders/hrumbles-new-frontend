@@ -663,6 +663,10 @@ const fetchMetrics = async () => {
     navigate(`/client-dashboard/${encodeURIComponent(clientName)}/candidates`);
   };
 
+  const handleClientAdded = () => {
+  fetchClients(); // Trigger fetchClients when a client is added
+};
+
   const getStatusBadgeColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case "active":
@@ -1411,6 +1415,7 @@ const fetchMetrics = async () => {
             if (!open) setEditClient(null);
           }}
           clientToEdit={editClient}
+          onClientAdded={handleClientAdded}
         />
 
         {/* Delete Confirmation Dialog */}

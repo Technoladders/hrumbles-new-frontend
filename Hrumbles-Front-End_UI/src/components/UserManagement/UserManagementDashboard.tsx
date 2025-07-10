@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast";
 import AddUserModal from './AddUserModal';
 import UserDetailsModal from './UserDetailsModal';
 import BulkActionsBar from './BulkActionsBar';
+import { useSelector } from 'react-redux';
 
 interface Employee {
   id: string;
@@ -57,6 +58,8 @@ interface Employee {
 }
 
 const UserManagementDashboard = () => {
+        const organizationId = useSelector((state: any) => state.auth.organization_id);
+  
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -87,7 +90,8 @@ const UserManagementDashboard = () => {
   hr_departments(name),
   hr_team_members!hr_team_members_employee_id_fkey(team:hr_teams(name))
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .eq('organization_id', organizationId);
 
       if (error) throw error;
 
