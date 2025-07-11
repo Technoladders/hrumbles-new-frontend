@@ -261,7 +261,11 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
             </Flex>
             <Collapse in={isProfileMenuOpen} animateOpacity>
               <VStack align="stretch" spacing={1} mt={2} pl={2}>
-                <Text as={Link} to="/profile" p={2} borderRadius="md" _hover={{bg: hoverBg}}>My Profile</Text>
+                {departmentName !== "Finance" && (
+          <Text as={Link} to="/profile" p={2} borderRadius="md" _hover={{ bg: hoverBg }}>
+            My Profile
+          </Text>
+        )}
                 <Text onClick={handleLogout} p={2} borderRadius="md" cursor="pointer" _hover={{bg: hoverBg}}>Logout</Text>
               </VStack>
             </Collapse>

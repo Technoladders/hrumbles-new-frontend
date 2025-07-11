@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAccountsStore } from '@/lib/accounts-data';
 import AccountsLayout from '@/components/accounts/AccountsLayout';
 import { Button } from '@/components/ui/button';
@@ -19,17 +18,68 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 const AccountsOverview: React.FC = () => {
   const { invoices, expenses, stats } = useAccountsStore();
   const [timeRange, setTimeRange] = useState('month');
-  
-  // Prepare data for charts
-  const incomeVsExpensesData = [
-    { name: 'Jan', income: 42000, expenses: 25000 },
-    { name: 'Feb', income: 52000, expenses: 22000 },
-    { name: 'Mar', income: 48000, expenses: 30000 },
-    { name: 'Apr', income: 70000, expenses: 35000 },
-    { name: 'May', income: 65000, expenses: 28000 },
-    { name: 'Jun', income: 75000, expenses: 40000 },
-    { name: 'Jul', income: stats.totalPaid, expenses: stats.totalExpenses },
-  ];
+  const USD_TO_INR_RATE = 84;
+
+  const chartData = useMemo(() => {
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const dataByMonth: { [key: string]: { name: string; income: number; expenses: number } } = {};
+    const today = new Date();
+
+    // Initialize the last 7 months to ensure they appear in the chart
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const monthName = monthNames[d.getMonth()];
+        const year = d.getFullYear().toString().slice(-2);
+        const key = `${monthName} '${year}`;
+        dataByMonth[key] = { name: key, income: 0, expenses: 0 };
+    }
+
+    // Helper to parse 'DD-MM-YYYY' string to a Date object
+    const parseDate = (dateString: string): Date | null => {
+        const parts = dateString.split('-');
+        if (parts.length === 3) {
+            // new Date(year, monthIndex, day)
+            return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
+        return null;
+    };
+
+    // Process paid invoices for income
+    invoices
+        .filter(inv => inv.status === 'Paid' && inv.paymentDate)
+        .forEach(inv => {
+            const paymentDate = parseDate(inv.paymentDate!);
+            if (paymentDate) {
+                const monthName = monthNames[paymentDate.getMonth()];
+                const year = paymentDate.getFullYear().toString().slice(-2);
+                const key = `${monthName} '${year}`;
+                if (dataByMonth[key]) {
+                    const amountInINR = inv.currency === 'USD'
+                        ? (inv.paidAmount || inv.totalAmount) * USD_TO_INR_RATE
+                        : (inv.paidAmount || inv.totalAmount);
+                    dataByMonth[key].income += amountInINR;
+                }
+            }
+        });
+
+    // Process expenses
+    expenses.forEach(exp => {
+        const expenseDate = parseDate(exp.date);
+        if (expenseDate) {
+            const monthName = monthNames[expenseDate.getMonth()];
+            const year = expenseDate.getFullYear().toString().slice(-2);
+            const key = `${monthName} '${year}`;
+            if (dataByMonth[key]) {
+                dataByMonth[key].expenses += exp.amount;
+            }
+        }
+    });
+    
+    return Object.values(dataByMonth);
+
+  }, [invoices, expenses]);
+
+  const incomeVsExpensesData = chartData;
   
   const profitData = incomeVsExpensesData.map(item => ({
     name: item.name,

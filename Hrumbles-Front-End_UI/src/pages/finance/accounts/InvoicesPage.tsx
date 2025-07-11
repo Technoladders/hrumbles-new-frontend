@@ -13,7 +13,8 @@ import {
 } from '@/components/ui/tabs';
 import {
   FileText, Download, Eye, Edit, Trash2, Plus, Search,
-  IndianRupee, AlertTriangle, CheckCircle, Clock, Loader2
+  IndianRupee, AlertTriangle, CheckCircle, Clock, Loader2,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { formatINR } from '@/utils/currency';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -48,6 +49,10 @@ const InvoicesPage: React.FC = () => {
   const [timeFilter, setTimeFilter] = useState('all');
   const [exportingInvoiceIds, setExportingInvoiceIds] = useState<string[]>([]);
   const [isBatchExporting, setIsBatchExporting] = useState(false);
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const selectedInvoice = selectedInvoiceId
     ? invoices.find((inv) => inv.id === selectedInvoiceId)
@@ -75,18 +80,13 @@ const InvoicesPage: React.FC = () => {
   );
 };
 
-
-
   useEffect(() => {
     fetchInvoices(timeFilter);
   }, [fetchInvoices, timeFilter]);
 
   useEffect(() => {
     if (isAddDialogOpen) {
-      console.log('Add Invoice dialog opened, fetching clients...');
-      fetchClients().then(() => {
-        console.log('Clients fetch completed');
-      }).catch((error) => {
+      fetchClients().catch((error) => {
         console.error('Error fetching clients in InvoicesPage:', error);
       });
     }
@@ -96,7 +96,6 @@ const InvoicesPage: React.FC = () => {
     if (currentTab !== 'all' && invoice.status.toLowerCase() !== currentTab) {
       return false;
     }
-
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       return (
@@ -104,40 +103,30 @@ const InvoicesPage: React.FC = () => {
         invoice.clientName.toLowerCase().includes(query)
       );
     }
-
     return true;
   });
+  
+  // Pagination Logic
+  const totalPages = Math.ceil(filteredInvoices.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedInvoices = filteredInvoices.slice(startIndex, startIndex + itemsPerPage);
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(Number(value));
+    setCurrentPage(1);
+  };
+  
+  const handleTabChange = (tab: string) => {
+    setCurrentTab(tab);
+    setCurrentPage(1);
+  };
 
   const calculateStatsInINR = () => {
-    const totalInvoiced = invoices.reduce((sum, inv) => {
-      return sum + convertToINR(inv.totalAmount, inv.currency);
-    }, 0);
-
-    const totalPaid = invoices
-      .filter((inv) => inv.status === 'Paid')
-      .reduce((sum, inv) => {
-        return sum + convertToINR(inv.paidAmount || inv.totalAmount, inv.currency);
-      }, 0);
-
-    const totalOverdue = invoices
-      .filter((inv) => inv.status === 'Overdue')
-      .reduce((sum, inv) => {
-        return sum + convertToINR(inv.totalAmount, inv.currency);
-      }, 0);
-
-    const totalDraft = invoices
-      .filter((inv) => inv.status === 'Draft')
-      .reduce((sum, inv) => {
-        return sum + convertToINR(inv.totalAmount, inv.currency);
-      }, 0);
-
-    return {
-      ...stats,
-      totalInvoiced,
-      totalPaid,
-      totalOverdue,
-      totalDraft
-    };
+    const totalInvoiced = invoices.reduce((sum, inv) => sum + convertToINR(inv.totalAmount, inv.currency), 0);
+    const totalPaid = invoices.filter((inv) => inv.status === 'Paid').reduce((sum, inv) => sum + convertToINR(inv.paidAmount || inv.totalAmount, inv.currency), 0);
+    const totalOverdue = invoices.filter((inv) => inv.status === 'Overdue').reduce((sum, inv) => sum + convertToINR(inv.totalAmount, inv.currency), 0);
+    const totalDraft = invoices.filter((inv) => inv.status === 'Draft').reduce((sum, inv) => sum + convertToINR(inv.totalAmount, inv.currency), 0);
+    return { ...stats, totalInvoiced, totalPaid, totalOverdue, totalDraft };
   };
 
   const inrStats = calculateStatsInINR();
@@ -176,58 +165,92 @@ const InvoicesPage: React.FC = () => {
       exportInvoice(id, format);
       return;
     }
-
     setExportingInvoiceIds((prev) => [...prev, id]);
-
     const invoice = invoices.find((inv) => inv.id === id);
     if (!invoice) {
       toast.error('Invoice not found');
       setExportingInvoiceIds((prev) => prev.filter((i) => i !== id));
       return;
     }
-
     generateInvoicePDF(invoice)
-      .then(() => {
-        toast.success(`Invoice #${invoice.invoiceNumber} PDF generated successfully`);
-      })
+      .then(() => toast.success(`Invoice #${invoice.invoiceNumber} PDF generated successfully`))
       .catch((error) => {
         console.error('Error generating PDF:', error);
         toast.error('Failed to generate PDF. Please try again.');
       })
-      .finally(() => {
-        setExportingInvoiceIds((prev) => prev.filter((i) => i !== id));
-      });
+      .finally(() => setExportingInvoiceIds((prev) => prev.filter((i) => i !== id)));
   };
 
   const handleBatchExport = () => {
     setIsBatchExporting(true);
-
     generateBatchInvoicePDF(filteredInvoices)
-      .then(() => {
-        toast.success(`Exported ${filteredInvoices.length} invoices successfully`);
-      })
+      .then(() => toast.success(`Exported ${filteredInvoices.length} invoices successfully`))
       .catch((error) => {
         console.error('Error generating batch PDF:', error);
         toast.error('Failed to generate batch PDF. Please try again.');
       })
-      .finally(() => {
-        setIsBatchExporting(false);
-      });
+      .finally(() => setIsBatchExporting(false));
   };
 
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'paid':
-        return <CheckCircle className="h-4 w-4 text-success-dark" />;
-      case 'unpaid':
-        return <Clock className="h-4 w-4 text-warning-dark" />;
-      case 'overdue':
-        return <AlertTriangle className="h-4 w-4 text-danger-dark" />;
-      case 'draft':
-        return <FileText className="h-4 w-4 text-gray-500" />;
-      default:
-        return null;
+      case 'paid': return <CheckCircle className="h-4 w-4 text-success-dark" />;
+      case 'unpaid': return <Clock className="h-4 w-4 text-warning-dark" />;
+      case 'overdue': return <AlertTriangle className="h-4 w-4 text-danger-dark" />;
+      case 'draft': return <FileText className="h-4 w-4 text-gray-500" />;
+      default: return null;
     }
+  };
+  
+  const renderPagination = () => {
+    return (
+      <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4 px-2 py-2 border-t">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">Show</span>
+          <Select
+            value={itemsPerPage.toString()}
+            onValueChange={handleItemsPerPageChange}
+          >
+            <SelectTrigger className="w-[70px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="5">5</SelectItem>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-sm text-gray-600">per page</span>
+        </div>
+  
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm text-gray-600">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+  
+        <span className="text-sm text-gray-600">
+          Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredInvoices.length)} of {filteredInvoices.length} invoices
+        </span>
+      </div>
+    );
   };
 
   return (
@@ -303,19 +326,6 @@ const InvoicesPage: React.FC = () => {
             />
           </div>
           <div className="flex gap-2">
-            <Select value={timeFilter} onValueChange={setTimeFilter}>
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Time period" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="week">Week</SelectItem>
-                <SelectItem value="month">Month</SelectItem>
-                <SelectItem value="year">Year</SelectItem>
-                <SelectItem value="custom">Custom</SelectItem>
-                <SelectItem value="all">All Time</SelectItem>
-              </SelectContent>
-            </Select>
             {filteredInvoices.length > 0 && (
               <Button
                 variant="outline"
@@ -339,7 +349,7 @@ const InvoicesPage: React.FC = () => {
         <Tabs
           defaultValue="all"
           value={currentTab}
-          onValueChange={setCurrentTab}
+          onValueChange={handleTabChange}
           className="w-full"
         >
           <TabsList className="grid grid-cols-5 w-full max-w-md">
@@ -351,48 +361,42 @@ const InvoicesPage: React.FC = () => {
           </TabsList>
 
           <TabsContent value={currentTab} className="mt-6">
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
+          <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                <div className="overflow-x-auto">
+                <Table className="min-w-full divide-y divide-gray-200">
+                  <TableHeader className="bg-gray-50">
                     <TableRow>
-                      <TableHead>Invoice No</TableHead>
-                      <TableHead>Invoice Date</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Billed</TableHead>
-                      <TableHead>Paid</TableHead>
-                      <TableHead>Due Date</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Action</TableHead>
+                      <TableHead className="table-header-cell">Invoice No</TableHead>
+                      <TableHead className="table-header-cell">Invoice Date</TableHead>
+                      <TableHead className="table-header-cell">Customer</TableHead>
+                      <TableHead className="table-header-cell">Billed</TableHead>
+                      <TableHead className="table-header-cell">Paid</TableHead>
+                      <TableHead className="table-header-cell">Due Date</TableHead>
+                      <TableHead className="table-header-cell">Status</TableHead>
+                      <TableHead className="table-header-cell">Action</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>
-                    {filteredInvoices.length === 0 ? (
+                  <TableBody className="bg-white divide-y divide-gray-200">
+                    {paginatedInvoices.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
                           No invoices found
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredInvoices.map((invoice) => (
-                        <TableRow key={invoice.id}>
-                          <TableCell>{invoice.invoiceNumber}</TableCell>
-                          <TableCell>{invoice.invoiceDate}</TableCell>
-                          <TableCell>{invoice.clientName}</TableCell>
-                          <TableCell className="financial-amount">
-                            <div className="flex items-center">
-                              {formatAmountWithTooltip(invoice.totalAmount, invoice.currency)}
-                            </div>
+                      paginatedInvoices.map((invoice) => (
+                        <TableRow key={invoice.id} className="hover:bg-gray-50 transition">
+                          <TableCell className="table-cell">{invoice.invoiceNumber}</TableCell>
+                          <TableCell className="table-cell">{invoice.invoiceDate}</TableCell>
+                          <TableCell className="table-cell">{invoice.clientName}</TableCell>
+                          <TableCell className="table-cell financial-amount">
+                            {formatAmountWithTooltip(invoice.totalAmount, invoice.currency)}
                           </TableCell>
-                          <TableCell className="financial-amount">
-                            {invoice.status === 'Paid' ? (
-                              <div className="flex items-center">
-                                {formatAmountWithTooltip(invoice.paidAmount || invoice.totalAmount, invoice.currency)}
-                              </div>
-                            ) : '-'}
+                          <TableCell className="table-cell financial-amount">
+                            {invoice.status === 'Paid' ? formatAmountWithTooltip(invoice.paidAmount || invoice.totalAmount, invoice.currency) : '-'}
                           </TableCell>
-                          <TableCell>{invoice.dueDate}</TableCell>
-                          <TableCell>
+                          <TableCell className="table-cell">{invoice.dueDate}</TableCell>
+                          <TableCell className="table-cell">
                             <Select
                               value={invoice.status}
                               onValueChange={(value) => handleStatusChange(invoice.id, value as 'Paid' | 'Unpaid' | 'Overdue' | 'Draft')}
@@ -411,68 +415,21 @@ const InvoicesPage: React.FC = () => {
                                 </SelectValue>
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="Paid">
-                                  <div className="flex items-center">
-                                    <CheckCircle className="h-4 w-4 text-success-dark mr-2" />
-                                    Paid
-                                  </div>
-                                </SelectItem>
-                                <SelectItem value="Unpaid">
-                                  <div className="flex items-center">
-                                    <Clock className="h-4 w-4 text-warning-dark mr-2" />
-                                    Unpaid
-                                  </div>
-                                </SelectItem>
-                                <SelectItem value="Overdue">
-                                  <div className="flex items-center">
-                                    <AlertTriangle className="h-4 w-4 text-danger-dark mr-2" />
-                                    Overdue
-                                  </div>
-                                </SelectItem>
-                                <SelectItem value="Draft">
-                                  <div className="flex items-center">
-                                    <FileText className="h-4 w-4 text-gray-500 mr-2" />
-                                    Draft
-                                  </div>
-                                </SelectItem>
+                                <SelectItem value="Paid"><div className="flex items-center"><CheckCircle className="h-4 w-4 text-success-dark mr-2" />Paid</div></SelectItem>
+                                <SelectItem value="Unpaid"><div className="flex items-center"><Clock className="h-4 w-4 text-warning-dark mr-2" />Unpaid</div></SelectItem>
+                                <SelectItem value="Overdue"><div className="flex items-center"><AlertTriangle className="h-4 w-4 text-danger-dark mr-2" />Overdue</div></SelectItem>
+                                <SelectItem value="Draft"><div className="flex items-center"><FileText className="h-4 w-4 text-gray-500 mr-2" />Draft</div></SelectItem>
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="table-cell">
                             <div className="flex items-center space-x-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleViewInvoice(invoice.id)}
-                              >
-                                <Eye className="h-4 w-4" />
+                              <Button variant="ghost" size="icon" onClick={() => handleViewInvoice(invoice.id)}><Eye className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleEditInvoice(invoice.id)}><Edit className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleExportInvoice(invoice.id, 'pdf')} disabled={exportingInvoiceIds.includes(invoice.id)}>
+                                {exportingInvoiceIds.includes(invoice.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEditInvoice(invoice.id)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleExportInvoice(invoice.id, 'pdf')}
-                                disabled={exportingInvoiceIds.includes(invoice.id)}
-                              >
-                                {exportingInvoiceIds.includes(invoice.id) ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Download className="h-4 w-4" />
-                                )}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteInvoice(invoice.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteInvoice(invoice.id)} className="text-red-500 hover:text-red-700"><Trash2 className="h-4 w-4" /></Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -480,28 +437,23 @@ const InvoicesPage: React.FC = () => {
                     )}
                   </TableBody>
                 </Table>
-              </CardContent>
-            </Card>
+                </div>
+                {filteredInvoices.length > 0 && renderPagination()}
+            </div>
           </TabsContent>
         </Tabs>
       </div>
 
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add New Invoice</DialogTitle>
-          </DialogHeader>
-          <InvoiceForm
-            onClose={() => setIsAddDialogOpen(false)}
-          />
+          <DialogHeader><DialogTitle>Add New Invoice</DialogTitle></DialogHeader>
+          <InvoiceForm onClose={() => setIsAddDialogOpen(false)} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Invoice Details</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Invoice Details</DialogTitle></DialogHeader>
           {selectedInvoice && (
             <InvoiceDetails
               invoice={selectedInvoice}
@@ -514,9 +466,7 @@ const InvoicesPage: React.FC = () => {
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Invoice</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Edit Invoice</DialogTitle></DialogHeader>
           {selectedInvoice && (
             <InvoiceForm
               invoice={selectedInvoice}

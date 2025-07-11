@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Calendar, IndianRupee, Upload } from 'lucide-react';
+import { IndianRupee, Upload } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -29,21 +29,21 @@ interface ExpenseFormProps {
   onClose: () => void;
 }
 
-const formatDateString = (date: Date): string => {
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-  return `${day}-${month}-${year}`;
-};
-
 const ExpenseForm: React.FC<ExpenseFormProps> = ({ expense, onClose }) => {
   const { addExpense, updateExpense } = useAccountsStore();
 
   // Form state
   const [category, setCategory] = useState<ExpenseCategory>(expense?.category || 'Office Supplies');
   const [description, setDescription] = useState(expense?.description || '');
-  const [date, setDate] = useState(expense?.date || formatDateString(new Date()));
-  const [amount, setAmount] = useState(expense?.amount?.toString() || '');
+  const [date, setDate] = useState<string>(
+    expense?.date || new Date().toISOString().split('T')[0]
+  );
+  const [amount, setAmount] = useState<string>(expense?.amount?.toString() || '');
+  const [displayAmount, setDisplayAmount] = useState<string>(
+    expense?.amount
+      ? new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(expense.amount)
+      : ''
+  );
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(expense?.paymentMethod || 'Cash');
   const [vendor, setVendor] = useState(expense?.vendor || '');
   const [notes, setNotes] = useState(expense?.notes || '');
@@ -88,17 +88,37 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ expense, onClose }) => {
     }
   };
 
+  // Handle amount input (remove INR formatting for raw number)
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Remove non-numeric characters except decimal point
+    const rawValue = value.replace(/[^0-9.]/g, '');
+    setAmount(rawValue);
+    // Format for display
+    if (rawValue) {
+      const num = parseFloat(rawValue);
+      if (!isNaN(num)) {
+        setDisplayAmount(
+          new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(num)
+        );
+      } else {
+        setDisplayAmount(value);
+      }
+    } else {
+      setDisplayAmount('');
+    }
+  };
+
   // Upload file to Supabase storage and get signed URL
   const uploadReceipt = async (file: File): Promise<string | null> => {
     try {
       setIsUploading(true);
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-      const filePath = `receipts/${fileName}`; // Path for upload
+      const filePath = `receipts/${fileName}`;
 
       console.log('Uploading file:', fileName, 'to path:', filePath);
 
-      // Upload the file to Supabase storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('receipts')
         .upload(filePath, file, {
@@ -114,7 +134,6 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ expense, onClose }) => {
 
       console.log('Upload successful:', uploadData);
 
-      // Verify the file exists in the bucket
       let retries = 3;
       let listData: any[] = [];
       let listError: any = null;
@@ -155,7 +174,6 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ expense, onClose }) => {
 
       console.log('File verified in bucket:', fileName);
 
-      // Generate a signed URL for the uploaded file
       const { data: signedUrlData, error: signedUrlError } = await supabase.storage
         .from('receipts')
         .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1-year expiry
@@ -190,10 +208,12 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ expense, onClose }) => {
       toast.error('Description is required.');
       return;
     }
-    if (!date.trim()) {
+
+    if (!date) {
       toast.error('Date is required.');
       return;
     }
+
     if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
       toast.error('Please enter a valid amount greater than 0.');
       return;
@@ -209,48 +229,28 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ expense, onClose }) => {
         return;
       }
       finalReceiptUrl = uploadedUrl;
-      console.log('Uploaded receipt URL:', finalReceiptUrl);
     } else if (!fileToUpload && !receiptUrl && expense?.receiptUrl) {
       finalReceiptUrl = expense.receiptUrl;
-      console.log('Keeping existing receipt URL:', finalReceiptUrl);
     } else if (!fileToUpload && !receiptUrl) {
       finalReceiptUrl = undefined;
-      console.log('No receipt uploaded, setting receiptUrl to undefined');
-    }
-
-    let parsedDate: string;
-    try {
-      const [day, month, year] = date.split('-').map(Number);
-      const dateObj = new Date(year, month - 1, day);
-      if (isNaN(dateObj.getTime())) {
-        throw new Error('Invalid date');
-      }
-      parsedDate = dateObj.toISOString().split('T')[0];
-    } catch (error) {
-      toast.error('Invalid date format. Please use DD-MM-YYYY.');
-      return;
     }
 
     const expenseData = {
       category,
       description,
-      date: parsedDate,
-      amount: parseFloat(amount),
+      date, // Already in YYYY-MM-DD format
+      amount: parseFloat(amount), // Send raw number
       paymentMethod,
       vendor: vendor || undefined,
       notes: notes || undefined,
       receiptUrl: finalReceiptUrl,
     };
 
-    console.log('Expense data to be saved:', expenseData);
-
     try {
       if (expense) {
-        console.log('Updating expense with ID:', expense.id);
         await updateExpense(expense.id, expenseData);
         toast.success('Expense updated successfully.');
       } else {
-        console.log('Adding new expense');
         await addExpense(expenseData);
         toast.success('Expense added successfully.');
       }
@@ -318,12 +318,10 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ expense, onClose }) => {
           <div>
             <Label htmlFor="date">Date</Label>
             <div className="relative">
-              <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input 
                 id="date"
-                type="text"
-                placeholder="DD-MM-YYYY"
-                className="pl-10"
+                type="date"
+                className="w-full"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
@@ -339,8 +337,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ expense, onClose }) => {
                 type="text"
                 placeholder="0.00"
                 className="pl-10"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                value={displayAmount}
+                onChange={handleAmountChange}
               />
             </div>
           </div>
@@ -419,3 +417,4 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ expense, onClose }) => {
 };
 
 export default ExpenseForm;
+// 

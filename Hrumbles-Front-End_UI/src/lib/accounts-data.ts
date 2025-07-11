@@ -121,9 +121,19 @@ const formatUSD = (amount: number): string => {
 };
 
 // Helper function to convert "DD-MM-YYYY" to "YYYY-MM-DD" for Supabase
-const parseDate = (dateStr: string): string => {
-  const [day, month, year] = dateStr.split('-').map(Number);
-  return new Date(year, month - 1, day).toISOString().split('T')[0];
+const parseDate = (dateString: string): string => {
+  // Expect date in YYYY-MM-DD format from the form
+  const dateRegex = /^(\d{4})-(\d{2})-(\d{2})$/;
+  if (!dateRegex.test(dateString)) {
+    throw new Error('Invalid date format. Expected YYYY-MM-DD.');
+  }
+
+  const dateObj = new Date(dateString);
+  if (isNaN(dateObj.getTime())) {
+    throw new Error('Invalid date.');
+  }
+
+  return dateObj.toISOString().split('T')[0]; // Ensure YYYY-MM-DD
 };
 
 // Helper function to convert "YYYY-MM-DD" from Supabase to "DD-MM-YYYY"
@@ -764,29 +774,11 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
     }
   },
 
-  addExpense: async (expense, receiptFile) => {
+ addExpense: async (expense: Omit<Expense, 'id'>) => {
     try {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
         throw new Error('You must be signed in to add an expense.');
-      }
-
-      let receiptUrl = undefined;
-      if (receiptFile) {
-        const fileName = `${Date.now()}-${receiptFile.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from('receipts')
-          .upload(fileName, receiptFile);
-
-        if (uploadError) {
-          throw new Error(`Error uploading receipt: ${uploadError.message}`);
-        }
-
-        const { data: publicUrlData } = supabase.storage
-          .from('receipts')
-          .getPublicUrl(fileName);
-
-        receiptUrl = publicUrlData.publicUrl;
       }
 
       const authData = getAuthDataFromLocalStorage();
@@ -794,14 +786,15 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         throw new Error('Failed to retrieve authentication data');
       }
       const { organization_id } = authData;
-
+      
+      // The expense object now contains the receiptUrl directly from the form
       const expenseData = {
         category: expense.category,
         description: expense.description,
         date: parseDate(expense.date),
         amount: expense.amount,
         payment_method: expense.paymentMethod,
-        receipt_url: receiptUrl || null,
+        receipt_url: expense.receiptUrl || null, // Use the URL from the payload
         notes: expense.notes || null,
         vendor: expense.vendor || null,
         created_by: userData.user.id,
@@ -826,6 +819,58 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
       toast.error(error.message || 'Failed to add expense. Please try again.');
     }
   },
+  
+  // FIX: Simplified signature
+  updateExpense: async (id: string, data: Partial<Expense>) => {
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        throw new Error('You must be signed in to update an expense.');
+      }
+
+      const authData = getAuthDataFromLocalStorage();
+      if (!authData) {
+        throw new Error('Failed to retrieve authentication data');
+      }
+      const { organization_id } = authData;
+
+      const updateData: any = {};
+      if (data.category) updateData.category = data.category;
+      if (data.description) updateData.description = data.description;
+      if (data.date) updateData.date = parseDate(data.date);
+      if (data.amount !== undefined) updateData.amount = data.amount;
+      if (data.paymentMethod) updateData.payment_method = data.paymentMethod;
+      // Handle the receiptUrl passed in the data object
+      if (data.receiptUrl !== undefined) updateData.receipt_url = data.receiptUrl || null;
+      if (data.notes !== undefined) updateData.notes = data.notes;
+      if (data.vendor !== undefined) updateData.vendor = data.vendor;
+      if (data.status !== undefined) updateData.status = data.status;
+      updateData.updated_at = new Date().toISOString();
+
+      const { error } = await supabase
+        .from('hr_expenses')
+        .update(updateData)
+        .eq('id', id)
+        .eq('created_by', userData.user.id)
+        .eq('organization_id', organization_id);
+
+      if (error) {
+        throw new Error(`Error updating expense: ${error.message}`);
+      }
+
+      await get().fetchExpenses();
+      set((state) => ({
+        selectedExpense: state.selectedExpense?.id === id
+          ? { ...state.selectedExpense, ...data }
+          : state.selectedExpense,
+      }));
+      toast.success('Expense updated successfully');
+    } catch (error) {
+      console.error('Error updating expense:', error);
+      toast.error(error.message || 'Failed to update expense. Please try again.');
+    }
+  },
+
 
   updateExpense: async (id, data, receiptFile) => {
     try {

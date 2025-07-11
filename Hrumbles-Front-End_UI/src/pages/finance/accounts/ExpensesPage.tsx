@@ -5,21 +5,22 @@ import AccountsLayout from '@/components/accounts/AccountsLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { 
-  Table, TableBody, TableCell, TableHead, 
-  TableHeader, TableRow 
+import {
+  Table, TableBody, TableCell, TableHead,
+  TableHeader, TableRow
 } from '@/components/ui/table';
-import { 
-  Search, IndianRupee, Eye, Edit, 
-  Trash2, Download, Receipt, MoreVertical, RefreshCw, CheckCircle, Clock
+import {
+  Search, IndianRupee, Eye, Edit,
+  Trash2, Download, Receipt, MoreVertical, RefreshCw, CheckCircle, Clock,
+  ChevronLeft, ChevronRight, ArrowUpDown
 } from 'lucide-react';
 import { formatINR } from '@/utils/currency';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ExpenseForm from '@/components/accounts/ExpenseForm';
 import ExpenseDetails from '@/components/accounts/ExpenseDetails';
-import { 
-  Select, SelectContent, SelectItem, 
-  SelectTrigger, SelectValue 
+import {
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -46,8 +47,8 @@ interface EmployeePaymentAmount {
 }
 
 const ExpensesPage: React.FC = () => {
-  const { 
-    expenses, 
+  const {
+    expenses,
     stats,
     fetchExpenses,
     deleteExpense,
@@ -76,10 +77,17 @@ const ExpensesPage: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
 
+  // Pagination State
+  const [expenseCurrentPage, setExpenseCurrentPage] = useState(1);
+  const [expenseItemsPerPage, setExpenseItemsPerPage] = useState(10);
+  const [salaryCurrentPage, setSalaryCurrentPage] = useState(1);
+  const [salaryItemsPerPage, setSalaryItemsPerPage] = useState(10);
+
+
   const navigate = useNavigate();
 
-  const selectedExpense = selectedExpenseId 
-    ? expenses.find(exp => exp.id === selectedExpenseId) 
+  const selectedExpense = selectedExpenseId
+    ? expenses.find(exp => exp.id === selectedExpenseId)
     : null;
 
   // Check authentication status
@@ -505,7 +513,6 @@ const ExpensesPage: React.FC = () => {
           incomeTax: 0,
           customDeductions: [],
           loanDeduction: 0,
-          totalDeductions: 0,
           netPayable: paymentAmount,
         };
 
@@ -633,13 +640,13 @@ const ExpensesPage: React.FC = () => {
   };
 
   const paidPayments = filterPaymentsByMonth(
-    filteredPayments.filter(payment => 
+    filteredPayments.filter(payment =>
       payment.status && payment.status.toLowerCase() === 'success'
     )
   );
 
   const unpaidPayments = filterPaymentsByMonth(
-    filteredPayments.filter(payment => 
+    filteredPayments.filter(payment =>
       payment.status && ['pending', 'unpaid'].includes(payment.status.toLowerCase())
     )
   );
@@ -666,7 +673,6 @@ const ExpensesPage: React.FC = () => {
       try {
         await deleteExpense(id);
         toast.success('Expense deleted successfully.');
-        // Fetch expenses again to ensure the UI is in sync with the database
         await fetchExpenses();
       } catch (error: any) {
         console.error('Error deleting expense:', error.message);
@@ -781,7 +787,7 @@ const ExpensesPage: React.FC = () => {
       }
       setIsEditMode(false);
       setSelectedPayment(null);
-      const searchInput = document.querySelector('input[placeholder="Search expenses..."]') as HTMLInputElement;
+      const searchInput = document.querySelector('input[placeholder="Search..."]') as HTMLInputElement;
       if (searchInput) {
         searchInput.focus();
       }
@@ -793,7 +799,7 @@ const ExpensesPage: React.FC = () => {
     if (!open) {
       setSelectedPaymentId(null);
       setSelectedPayment(null);
-      const searchInput = document.querySelector('input[placeholder="Search expenses..."]') as HTMLInputElement;
+      const searchInput = document.querySelector('input[placeholder="Search..."]') as HTMLInputElement;
       if (searchInput) {
         searchInput.focus();
       }
@@ -804,20 +810,44 @@ const ExpensesPage: React.FC = () => {
     setIsPayslipDialogOpen(open);
     if (!open) {
       setPayslipData(null);
-      const searchInput = document.querySelector('input[placeholder="Search expenses..."]') as HTMLInputElement;
+      const searchInput = document.querySelector('input[placeholder="Search..."]') as HTMLInputElement;
       if (searchInput) {
         searchInput.focus();
       }
     }
   };
+  
+    // Pagination Logic for Expenses Table
+    const expenseTotalPages = Math.ceil(filteredExpenses.length / expenseItemsPerPage);
+    const expenseStartIndex = (expenseCurrentPage - 1) * expenseItemsPerPage;
+    const paginatedExpenses = filteredExpenses.slice(expenseStartIndex, expenseStartIndex + expenseItemsPerPage);
+  
+    const handleExpenseItemsPerPageChange = (value: string) => {
+      setExpenseItemsPerPage(Number(value));
+      setExpenseCurrentPage(1);
+    };
+  
+    // Pagination Logic for Salary Table
+    const displayedPayments = activeSalaryCategory === 'Paid Salary' ? paidPayments : unpaidPayments;
+    const salaryTotalPages = Math.ceil(displayedPayments.length / salaryItemsPerPage);
+    const salaryStartIndex = (salaryCurrentPage - 1) * salaryItemsPerPage;
+    const paginatedSalaryPayments = displayedPayments.slice(salaryStartIndex, salaryStartIndex + salaryItemsPerPage);
+  
+    const handleSalaryItemsPerPageChange = (value: string) => {
+      setSalaryItemsPerPage(Number(value));
+      setSalaryCurrentPage(1);
+    };
+  
+    const handleActiveSalaryCategoryChange = (category: string) => {
+      setActiveSalaryCategory(category);
+      setSalaryCurrentPage(1);
+    };
 
   const statusClasses = {
     Success: 'text-green-600 bg-green-50 px-2 py-1 rounded-full text-xs font-medium',
     Pending: 'text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full text-xs font-medium',
     Unpaid: 'text-red-600 bg-red-50 px-2 py-1 rounded-full text-xs font-medium',
   };
-
-  const displayedPayments = activeSalaryCategory === 'Paid Salary' ? paidPayments : unpaidPayments;
 
   if (isAuthenticated === null) {
     return <div>Loading...</div>;
@@ -831,6 +861,68 @@ const ExpensesPage: React.FC = () => {
       </div>
     );
   }
+
+  const renderPagination = (
+    currentPage: number,
+    setCurrentPage: (page: number) => void,
+    totalPages: number,
+    itemsPerPage: number,
+    handleItemsPerPageChange: (value: string) => void,
+    totalItems: number,
+    startIndex: number,
+    itemType: string
+  ) => {
+    return (
+      <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4 px-2 py-2 border-t">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">Show</span>
+          <Select
+            value={itemsPerPage.toString()}
+            onValueChange={handleItemsPerPageChange}
+          >
+            <SelectTrigger className="w-[70px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="5">5</SelectItem>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-sm text-gray-600">per page</span>
+        </div>
+  
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          
+          <div className="flex items-center gap-1">
+            <span className="text-sm text-gray-600">Page {currentPage} of {totalPages}</span>
+          </div>
+  
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
+            disabled={currentPage === totalPages}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+  
+        <span className="text-sm text-gray-600">
+          Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, totalItems)} of {totalItems} {itemType}
+        </span>
+      </div>
+    );
+  };
 
   return (
     <AccountsLayout title="Expenses">
@@ -886,7 +978,7 @@ const ExpensesPage: React.FC = () => {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search expenses..."
+              placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -894,7 +986,7 @@ const ExpensesPage: React.FC = () => {
           </div>
           <div className="flex gap-2">
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-full sm:w-[150px]">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>
@@ -904,132 +996,109 @@ const ExpensesPage: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={timeFilter} onValueChange={setTimeFilter}>
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Time period" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="week">Week</SelectItem>
-                <SelectItem value="month">Month</SelectItem>
-                <SelectItem value="year">Year</SelectItem>
-                <SelectItem value="custom">Custom</SelectItem>
-                <SelectItem value="all">All Time</SelectItem>
-              </SelectContent>
-            </Select>
             <Button variant="outline" onClick={handleExportExpenses}>
               <Download className="mr-2 h-4 w-4" /> Export
             </Button>
             <Button onClick={() => setIsAddDialogOpen(true)}>
-              Add New Expense
+              Add Expense
             </Button>
           </div>
         </div>
 
         <div className="w-full">
-          <div className="flex justify-start gap-2 overflow-x-auto pb-2 mb-4">
-            <Button 
-              variant="outline"
+          <div className="flex justify-start gap-2 overflow-x-auto pb-2 mb-4 border-b">
+            <Button
+              variant="ghost"
               onClick={() => setActiveTab('expense')}
-              className={`text-sm font-medium h-8 px-4 py-1 rounded-md ${activeTab === 'expense' ? 'bg-purple-600 text-white border-purple-600' : ''}`}
+              className={`text-sm font-medium rounded-none ${activeTab === 'expense' ? 'border-b-2 border-purple-600 text-purple-600' : 'text-muted-foreground'}`}
             >
               Expense
             </Button>
-            <Button 
-              variant="outline"
+            <Button
+              variant="ghost"
               onClick={() => setActiveTab('salary-expense')}
-              className={`text-sm font-medium h-8 px-4 py-1 rounded-md ${activeTab === 'salary-expense' ? 'bg-purple-600 text-white border-purple-600' : ''}`}
+              className={`text-sm font-medium rounded-none ${activeTab === 'salary-expense' ? 'border-b-2 border-purple-600 text-purple-600' : 'text-muted-foreground'}`}
             >
               Salary Expense
             </Button>
           </div>
 
           {activeTab === 'expense' && (
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Vendor</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Payment Method</TableHead>
-                      <TableHead>Receipt</TableHead>
-                      <TableHead>Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredExpenses.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
-                          No expenses found
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredExpenses.map((expense) => (
-                        <TableRow key={expense.id}>
-                          <TableCell>{expense.date}</TableCell>
-                          <TableCell>{expense.category}</TableCell>
-                          <TableCell>{expense.description}</TableCell>
-                          <TableCell>{expense.vendor || '-'}</TableCell>
-                          <TableCell className="financial-amount">
-                            <div className="flex items-center">
-                              <IndianRupee className="h-3 w-3 mr-1" />
-                              {expense.amount.toLocaleString()}
-                            </div>
-                          </TableCell>
-                          <TableCell>{expense.paymentMethod}</TableCell>
-                          <TableCell>
-                            {expense.receiptUrl ? (
-                              <Button variant="ghost" size="icon" asChild>
-                                <a href={expense.receiptUrl} target="_blank" rel="noopener noreferrer">
-                                  <Receipt className="h-4 w-4" />
-                                </a>
-                              </Button>
-                            ) : (
-                              <span className="text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-1">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleViewExpense(expense.id)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleEditExpense(expense.id)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleDeleteExpense(expense.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
+            <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                <div className="overflow-x-auto">
+                    <Table className="min-w-full divide-y divide-gray-200">
+                      <TableHeader className="bg-gray-50">
+                        <TableRow>
+                          <TableHead className="table-header-cell">Date</TableHead>
+                          <TableHead className="table-header-cell">Category</TableHead>
+                          <TableHead className="table-header-cell">Description</TableHead>
+                          <TableHead className="table-header-cell">Vendor</TableHead>
+                          <TableHead className="table-header-cell">Amount</TableHead>
+                          <TableHead className="table-header-cell">Payment Method</TableHead>
+                          <TableHead className="table-header-cell">Receipt</TableHead>
+                          <TableHead className="table-header-cell">Action</TableHead>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                      </TableHeader>
+                      <TableBody className="bg-white divide-y divide-gray-200">
+                        {paginatedExpenses.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
+                              No expenses found
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          paginatedExpenses.map((expense) => (
+                            <TableRow key={expense.id} className="hover:bg-gray-50 transition">
+                              <TableCell className="table-cell">{expense.date}</TableCell>
+                              <TableCell className="table-cell">{expense.category}</TableCell>
+                              <TableCell className="table-cell">{expense.description}</TableCell>
+                              <TableCell className="table-cell">{expense.vendor || '-'}</TableCell>
+                              <TableCell className="table-cell financial-amount">
+                                <div className="flex items-center">
+                                  <IndianRupee className="h-3 w-3 mr-1" />
+                                  {expense.amount.toLocaleString()}
+                                </div>
+                              </TableCell>
+                              <TableCell className="table-cell">{expense.paymentMethod}</TableCell>
+                              <TableCell className="table-cell">
+                                {expense.receiptUrl ? (
+                                  <Button variant="ghost" size="icon" asChild>
+                                    <a href={expense.receiptUrl} target="_blank" rel="noopener noreferrer">
+                                      <Receipt className="h-4 w-4" />
+                                    </a>
+                                  </Button>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="table-cell">
+                                <div className="flex items-center space-x-1">
+                                  <Button variant="ghost" size="icon" onClick={() => handleViewExpense(expense.id)}>
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" onClick={() => handleEditExpense(expense.id)}>
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" onClick={() => handleDeleteExpense(expense.id)} className="text-red-500 hover:text-red-700">
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                </div>
+                {filteredExpenses.length > 0 && renderPagination(expenseCurrentPage, setExpenseCurrentPage, expenseTotalPages, expenseItemsPerPage, handleExpenseItemsPerPageChange, filteredExpenses.length, expenseStartIndex, "expenses")}
+            </div>
           )}
 
           {activeTab === 'salary-expense' && (
-            <div className="w-full">
-              <div className="flex justify-between items-center mb-4">
-                <div className="flex justify-start gap-2">
+            <div>
+              <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+                  <div className="flex justify-start gap-2 border border-gray-200 rounded-lg p-1">
+                     
                   <Button 
                     variant="outline"
                     onClick={() => setActiveSalaryCategory('Paid Salary')}
@@ -1044,132 +1113,102 @@ const ExpensesPage: React.FC = () => {
                   >
                     Unpaid Salary
                   </Button>
-                </div>
-                <div className="flex justify-end">
-                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue placeholder="Select month" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {monthOptions.map(option => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+               
+                  </div>
+                  <div className="flex justify-end">
+                      <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                          <SelectTrigger className="w-[200px]">
+                              <SelectValue placeholder="Select month" />
+                          </SelectTrigger>
+                          <SelectContent>
+                              {monthOptions.map(option => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                  </SelectItem>
+                              ))}
+                          </SelectContent>
+                      </Select>
+                  </div>
               </div>
 
-              <div className="rounded-lg border overflow-hidden bg-white">
-                <div className="overflow-x-auto">
-                  <Table className="w-full financial-table">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Profile</TableHead>
-                        <TableHead>Payday</TableHead>
-                        <TableHead>Payment Amount</TableHead>
-                        <TableHead>Payment Category</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {loading ? (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8">
-                            <div className="flex flex-col items-center justify-center">
-                              <RefreshCw className="h-8 w-8 animate-spin text-primary mb-2" />
-                              <p className="text-sm text-muted-foreground">Loading payment data...</p>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ) : displayedPayments.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8">
-                            <p className="text-muted-foreground">
-                              No {activeSalaryCategory.toLowerCase()} records found for the selected month
-                            </p>
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        displayedPayments.map((payment) => (
-                          <TableRow key={payment.id} className="group">
-                            <TableCell>
-                              <div className="flex items-center space-x-3">
-                                <Avatar className="h-10 w-10 border">
-                                  <AvatarImage 
-                                    src={payment.avatar} 
-                                    alt={payment.employeeName} 
-                                  />
-                                  <AvatarFallback>
-                                    {generateAvatarFallback(payment.employeeName)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <div className="font-medium">{payment.employeeName}</div>
-                                  <div className="text-xs text-gray-500">{payment.employeeId}</div>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>{payment.paymentDate}</TableCell>
-                            <TableCell className="financial-amount font-medium">
-                              {formatINR(payment.paymentAmount)}
-                            </TableCell>
-                            <TableCell>{payment.paymentCategory} Payday</TableCell>
-                            <TableCell>
-                              <span className={statusClasses[payment.status as keyof typeof statusClasses] || 'text-gray-600 bg-gray-50 px-2 py-1 rounded-full text-xs font-medium'}>
-                                {payment.status}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer">
-                                    <MoreVertical className="h-4 w-4" />
-                                    <span className="sr-only">Open menu</span>
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-[160px]">
-                                  <DropdownMenuItem 
-                                    onClick={() => handleViewPayment(payment)}
-                                    className="cursor-pointer"
-                                  >
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    <span>View</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={() => handleEditPayment(payment)}
-                                    className="cursor-pointer"
-                                  >
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    <span>Edit</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={() => handleDownloadPayment(payment)}
-                                    className="cursor-pointer"
-                                  >
-                                    <Download className="mr-2 h-4 w-4" />
-                                    <span>Download</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={() => handleDeletePayment(payment)}
-                                    className="cursor-pointer text-destructive focus:text-destructive"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    <span>Delete</span>
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+              <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                  <div className="overflow-x-auto">
+                      <Table className="min-w-full divide-y divide-gray-200">
+                          <TableHeader className="bg-gray-50">
+                              <TableRow>
+                                  <TableHead className="table-header-cell">Profile</TableHead>
+                                  <TableHead className="table-header-cell">Payday</TableHead>
+                                  <TableHead className="table-header-cell">Payment Amount</TableHead>
+                                  <TableHead className="table-header-cell">Payment Category</TableHead>
+                                  <TableHead className="table-header-cell">Status</TableHead>
+                                  <TableHead className="table-header-cell text-right">Action</TableHead>
+                              </TableRow>
+                          </TableHeader>
+                          <TableBody className="bg-white divide-y divide-gray-200">
+                              {loading ? (
+                                  <TableRow>
+                                      <TableCell colSpan={6} className="text-center py-8">
+                                          <div className="flex flex-col items-center justify-center">
+                                              <RefreshCw className="h-8 w-8 animate-spin text-primary mb-2" />
+                                              <p className="text-sm text-muted-foreground">Loading payment data...</p>
+                                          </div>
+                                      </TableCell>
+                                  </TableRow>
+                              ) : paginatedSalaryPayments.length === 0 ? (
+                                  <TableRow>
+                                      <TableCell colSpan={6} className="text-center py-8">
+                                          <p className="text-muted-foreground">
+                                              No {activeSalaryCategory.toLowerCase()} records found for the selected month
+                                          </p>
+                                      </TableCell>
+                                  </TableRow>
+                              ) : (
+                                  paginatedSalaryPayments.map((payment) => (
+                                      <TableRow key={payment.id} className="hover:bg-gray-50 transition">
+                                          <TableCell className="table-cell">
+                                              <div className="flex items-center space-x-3">
+                                                  <Avatar className="h-10 w-10 border">
+                                                      <AvatarImage src={payment.avatar} alt={payment.employeeName} />
+                                                      <AvatarFallback>{generateAvatarFallback(payment.employeeName)}</AvatarFallback>
+                                                  </Avatar>
+                                                  <div>
+                                                      <div className="font-medium">{payment.employeeName}</div>
+                                                      <div className="text-xs text-gray-500">{payment.employeeId}</div>
+                                                  </div>
+                                              </div>
+                                          </TableCell>
+                                          <TableCell className="table-cell">{payment.paymentDate}</TableCell>
+                                          <TableCell className="table-cell font-medium financial-amount">{formatINR(payment.paymentAmount)}</TableCell>
+                                          <TableCell className="table-cell">{payment.paymentCategory} Payday</TableCell>
+                                          <TableCell className="table-cell">
+                                              <span className={statusClasses[payment.status as keyof typeof statusClasses] || 'text-gray-600 bg-gray-50 px-2 py-1 rounded-full text-xs font-medium'}>
+                                                  {payment.status}
+                                              </span>
+                                          </TableCell>
+                                          <TableCell className="table-cell text-right">
+                                              <DropdownMenu>
+                                                  <DropdownMenuTrigger asChild>
+                                                      <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer">
+                                                          <MoreVertical className="h-4 w-4" />
+                                                      </Button>
+                                                  </DropdownMenuTrigger>
+                                                  <DropdownMenuContent align="end">
+                                                      <DropdownMenuItem onClick={() => handleViewPayment(payment)} className="cursor-pointer"><Eye className="mr-2 h-4 w-4" />View</DropdownMenuItem>
+                                                      <DropdownMenuItem onClick={() => handleEditPayment(payment)} className="cursor-pointer"><Edit className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
+                                                      <DropdownMenuItem onClick={() => handleDownloadPayment(payment)} className="cursor-pointer"><Download className="mr-2 h-4 w-4" />Download</DropdownMenuItem>
+                                                      <DropdownMenuItem onClick={() => handleDeletePayment(payment)} className="cursor-pointer text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
+                                                  </DropdownMenuContent>
+                                              </DropdownMenu>
+                                          </TableCell>
+                                      </TableRow>
+                                  ))
+                              )}
+                          </TableBody>
+                      </Table>
+                  </div>
+                  {displayedPayments.length > 0 && renderPagination(salaryCurrentPage, setSalaryCurrentPage, salaryTotalPages, salaryItemsPerPage, handleSalaryItemsPerPageChange, displayedPayments.length, salaryStartIndex, "payments")}
               </div>
-            </div>
+          </div>
           )}
         </div>
       </div>

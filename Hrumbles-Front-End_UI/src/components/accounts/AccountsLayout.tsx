@@ -16,7 +16,7 @@ const AccountsLayout: React.FC<AccountsLayoutProps> = ({ children, title }) => {
   const navItems = [
     { 
       label: 'Finance Dashboard', 
-      path: '/accounts/overall', 
+      path: '/finance', 
       icon: Home 
     },
     { 
