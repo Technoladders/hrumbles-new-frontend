@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
 import {
   Calendar,
   Briefcase,
@@ -21,13 +22,13 @@ import {
   Share2,
   Loader2,
   CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { FaLinkedin } from "react-icons/fa";
 import { useToast } from "@/components/ui/use-toast";
-import { DataSharingOptions } from "@/components/MagicLinkView/types"; // Assuming this type is available
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataSharingOptions } from "@/components/MagicLinkView/types";
 
+// Updated Interface for Employee Info
 interface EmployeeInfo {
   id: string;
   name: string;
@@ -58,8 +59,10 @@ interface EmployeeInfo {
   noticePeriod: string;
   hasOffers: string;
   offerDetails: string;
+  consentStatus: string; // New property
 }
 
+// Updated Interface for Component Props
 interface EmployeeInfoCardProps {
   employee: EmployeeInfo;
   shareMode: boolean;
@@ -70,7 +73,8 @@ interface EmployeeInfoCardProps {
   isCopied: boolean;
   onCopyMagicLink: () => void;
   navigateBack: () => void;
-    isUanLoading: boolean;
+  // Props for UAN Lookup are kept for completeness, though the UI is commented out
+  isUanLoading: boolean;
   uanError: string | null;
   uanData: any | null;
   lookupMethod: 'mobile' | 'pan';
@@ -78,6 +82,12 @@ interface EmployeeInfoCardProps {
   lookupValue: string;
   setLookupValue: (value: string) => void;
   onUanLookup: () => void;
+  // New props for Consent Link functionality
+  isRequestingConsent: boolean;
+  consentLink: string | null;
+  isConsentLinkCopied: boolean;
+  onGenerateConsentLink: () => void;
+  onCopyConsentLink: () => void;
 }
 
 const formatINR = (amount: number | string) => {
@@ -101,6 +111,7 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
   isCopied,
   onCopyMagicLink,
   navigateBack,
+  // UAN props (unused in this component's UI but kept for prop integrity)
   isUanLoading,
   uanError,
   uanData,
@@ -109,57 +120,14 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
   lookupValue,
   setLookupValue,
   onUanLookup,
+  // Destructure new consent link props
+  isRequestingConsent,
+  consentLink,
+  isConsentLinkCopied,
+  onGenerateConsentLink,
+  onCopyConsentLink,
 }) => {
   const { toast } = useToast();
-
-//   const renderUanLookup = () => (
-//     <div className="mt-6">
-//       <h3 className="text-sm font-medium mb-2">UAN Lookup</h3>
-//       <Card className="border border-gray-200 bg-white shadow-sm p-4">
-//         <div className="flex flex-col sm:flex-row gap-2 items-end">
-//           <div className="w-full sm:w-1/4">
-//             <label className="text-xs font-medium text-gray-600">Method</label>
-//             <Select value={lookupMethod} onValueChange={(val: 'mobile' | 'pan') => setLookupMethod(val)}>
-//               <SelectTrigger>
-//                 <SelectValue placeholder="Select method" />
-//               </SelectTrigger>
-//               <SelectContent>
-//                 <SelectItem value="mobile">Mobile</SelectItem>
-//                 <SelectItem value="pan">PAN</SelectItem>
-//               </SelectContent>
-//             </Select>
-//           </div>
-//           <div className="flex-grow">
-//              <label className="text-xs font-medium text-gray-600">
-//                 {lookupMethod === 'mobile' ? 'Mobile Number' : 'PAN Number'}
-//             </label>
-//             <Input
-//               type="text"
-//               placeholder={`Enter ${lookupMethod === 'mobile' ? 'Mobile Number' : 'PAN Number'}`}
-//               value={lookupValue}
-//               onChange={(e) => setLookupValue(e.target.value)}
-//               disabled={isUanLoading}
-//             />
-//           </div>
-//           <Button onClick={onUanLookup} disabled={isUanLoading || !lookupValue}>
-//             {isUanLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Get UAN'}
-//           </Button>
-//         </div>
-//         {/* Result Display Area */}
-//         <div className="mt-4">
-//           {isUanLoading && <p className="text-sm text-gray-500">Verifying...</p>}
-//           {uanData && (
-//              <div>
-//                 <h4 className="font-semibold text-md mb-2">Verification Result</h4>
-//                 <pre className="bg-gray-50 p-3 rounded-md text-xs overflow-x-auto">
-//                     {JSON.stringify(uanData, null, 2)}
-//                 </pre>
-//              </div>
-//           )}
-//         </div>
-//       </Card>
-//     </div>
-//   );
 
   const renderSkills = () => {
     if (shareMode && !sharedDataOptions?.personalInfo) return null;
@@ -181,6 +149,21 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
     );
   };
 
+  // New helper function to render the consent status badge
+  const renderConsentStatusBadge = () => {
+    switch (employee.consentStatus) {
+      case 'granted':
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100"><CheckCircle2 className="w-3 h-3 mr-1"/>Consent Granted</Badge>;
+      case 'pending':
+        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Loader2 className="w-3 h-3 mr-1 animate-spin"/>Consent Pending</Badge>;
+      case 'denied':
+        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100"><XCircle className="w-3 h-3 mr-1"/>Consent Denied</Badge>;
+      default:
+        return <Badge variant="outline">Consent Not Requested</Badge>;
+    }
+  };
+
+
   return (
     <Card className="bg-white w-full">
       <CardHeader>
@@ -190,21 +173,26 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
               <h2 className="text-xl font-bold text-gray-900">
                 {employee.name}
               </h2>
-              <Button onClick={navigateBack} variant="outline" size="sm">
-                Back
-              </Button>
+              <div className="flex items-center gap-2">
+                {/* Render the status badge in the header for visibility */}
+                {!shareMode && renderConsentStatusBadge()}
+                <Button onClick={navigateBack} variant="outline" size="sm">
+                  Back
+                </Button>
+              </div>
             </div>
             <div className="flex items-center mt-1 text-sm text-gray-500">
               <Calendar className="w-4 h-4 mr-1" />
               <span>Applied: {employee.joinDate}</span>
             </div>
             {!shareMode && (
-              <div className="mt-2">
+              <div className="mt-4 space-y-4">
+                {/* --- SHARE LINK SECTION (EXISTING) --- */}
                 <Button
                   variant="outline"
-                  className="flex items-center justify-center bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200"
+                  className="flex items-center justify-center bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 w-full"
                   onClick={onShareClick}
-                  disabled={isSharing || employee.id === "emp001"} // Disable if no candidate
+                  disabled={isSharing || employee.id === "emp001"}
                 >
                   {isSharing ? (
                     <>
@@ -213,13 +201,12 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
                     </>
                   ) : (
                     <>
-                      <Share2 className="mr-2 h-4 w-4" /> Create Shareable
-                      Magic Link
+                      <Share2 className="mr-2 h-4 w-4" /> Create Shareable Magic Link
                     </>
                   )}
                 </Button>
                 {magicLink && (
-                  <div className="mt-2 p-3 bg-indigo-50 rounded-md border border-indigo-100 relative">
+                  <div className="p-3 bg-indigo-50 rounded-md border border-indigo-100 relative">
                     <p className="text-xs text-indigo-700 mb-1 font-medium">
                       Magic Link (expires in 2 days):
                     </p>
@@ -229,15 +216,46 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
                         readOnly
                         className="text-xs bg-white border-indigo-200 w-full"
                       />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onCopyMagicLink}
-                      >
+                      <Button variant="ghost" size="sm" onClick={onCopyMagicLink}>
                         {isCopied ? (
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                         ) : (
                           <Copy className="h-4 w-4 text-indigo-500" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                 {/* --- CONSENT LINK SECTION (NEW) --- */}
+                 <Button
+                    variant="outline"
+                    className="flex items-center justify-center bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200 w-full"
+                    onClick={onGenerateConsentLink}
+                    disabled={isRequestingConsent || employee.id === "emp001" || employee.consentStatus === 'granted'}
+                >
+                  {isRequestingConsent ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="mr-2 h-4 w-4" /> 
+                      {employee.consentStatus === 'pending' || employee.consentStatus === 'denied' ? 'Resend Consent Request' : 'Request Candidate Consent'}
+                    </>
+                  )}
+                </Button>
+                {consentLink && (
+                  <div className="p-3 bg-blue-50 rounded-md border border-blue-100 relative">
+                    <p className="text-xs text-blue-700 mb-1 font-medium">
+                      Consent Link (send to candidate):
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input value={consentLink} readOnly className="text-xs bg-white border-blue-200 w-full" />
+                      <Button variant="ghost" size="sm" onClick={onCopyConsentLink}>
+                        {isConsentLinkCopied ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4 text-blue-500" />
                         )}
                       </Button>
                     </div>
@@ -342,95 +360,58 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mt-4">
                       <div className="flex items-center">
                         <FileBadge className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">
-                          Total Experience
-                        </span>
+                        <span className="font-medium text-gray-700">Total Experience</span>
                         <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">
-                          {employee.experience}
-                        </span>
+                        <span className="text-gray-600">{employee.experience}</span>
                       </div>
                       <div className="flex items-center">
                         <Award className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">
-                          Relevant Experience
-                        </span>
+                        <span className="font-medium text-gray-700">Relevant Experience</span>
                         <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">
-                          {employee.relvantExpyears} years and{" "}
-                          {employee.relvantExpmonths} months
-                        </span>
+                        <span className="text-gray-600">{employee.relvantExpyears} years and {employee.relvantExpmonths} months</span>
                       </div>
                       <div className="flex items-center">
                         <MapPin className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">
-                          Current Location
-                        </span>
+                        <span className="font-medium text-gray-700">Current Location</span>
                         <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">
-                          {employee.location}
-                        </span>
+                        <span className="text-gray-600">{employee.location}</span>
                       </div>
                       <div className="flex items-center">
                         <MapPinPlus className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">
-                          Preferred Location
-                        </span>
+                        <span className="font-medium text-gray-700">Preferred Location</span>
                         <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">
-                          {employee.preferedLocation}
-                        </span>
+                        <span className="text-gray-600">{employee.preferedLocation}</span>
                       </div>
                       <div className="flex items-center">
                         <Banknote className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">
-                          Current Salary
-                        </span>
+                        <span className="font-medium text-gray-700">Current Salary</span>
                         <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">
-                          {formatINR(employee.currentSalary)} LPA
-                        </span>
+                        <span className="text-gray-600">{formatINR(employee.currentSalary)} LPA</span>
                       </div>
                       <div className="flex items-center">
                         <Banknote className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">
-                          Expected Salary
-                        </span>
+                        <span className="font-medium text-gray-700">Expected Salary</span>
                         <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">
-                          {formatINR(employee.expectedSalary)} LPA
-                        </span>
+                        <span className="text-gray-600">{formatINR(employee.expectedSalary)} LPA</span>
                       </div>
                       <div className="flex items-center">
                         <Calendar className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">
-                          Notice Period
-                        </span>
+                        <span className="font-medium text-gray-700">Notice Period</span>
                         <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">
-                          {employee.noticePeriod} days
-                        </span>
+                        <span className="text-gray-600">{employee.noticePeriod} days</span>
                       </div>
                       <div className="flex items-center">
                         <Briefcase className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">
-                          Has Offers
-                        </span>
+                        <span className="font-medium text-gray-700">Has Offers</span>
                         <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">
-                          {employee.hasOffers}
-                        </span>
+                        <span className="text-gray-600">{employee.hasOffers}</span>
                       </div>
                       {employee.hasOffers === "Yes" && (
                         <div className="flex items-center col-span-1 sm:col-span-2">
                           <FileText className="w-4 h-4 mr-2 text-indigo-500" />
-                          <span className="font-medium text-gray-700">
-                            Offer Details
-                          </span>
+                          <span className="font-medium text-gray-700">Offer Details</span>
                           <span className="mx-2 text-gray-300">•</span>
-                          <span className="text-gray-600">
-                            {employee.offerDetails}
-                          </span>
+                          <span className="text-gray-600">{employee.offerDetails}</span>
                         </div>
                       )}
                     </div>
@@ -439,7 +420,6 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
               </CardContent>
             </Card>
             {(!shareMode || sharedDataOptions?.personalInfo) && renderSkills()}
-             {/* {!shareMode && renderUanLookup()} */}
           </div>
         )}
       </CardHeader>

@@ -53,6 +53,7 @@ import ResumeAnalysisDetailView from "./pages/jobs/ResumeAnalysisDetailView";
 import SharedProfile from "./pages/jobs/SharedProfile"
 import ReportsPage from "./pages/reports/Index";
 import EmployeeProfilePage from "./components/MagicLinkView/EmployeeProfileDrawer";
+import CandidateConsentPage from './components/MagicLinkView/CandidateConsentPage';
 // Finance & Accounts
 import FinanceIndex from "./pages/finance/Index";
 import PayrollEdit from "./pages/finance/PayrollEdit";
@@ -138,6 +139,8 @@ function App() {
 
           {/* Candidate Profile Magic Link */}
           <Route path="/share/:shareId" element={<SharedProfile />} />
+            <Route path="/consent/:consentId" element={<CandidateConsentPage />} />
+
 
 
         {/* Protected Routes */}

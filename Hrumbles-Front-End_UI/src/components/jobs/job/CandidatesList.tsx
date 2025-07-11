@@ -2281,181 +2281,165 @@ const { data: clientData } = useQuery({
 
 
  // --- UPDATED handleValidateResume using Proxy for POST, Direct for GET ---
- const handleValidateResume = async (candidateId: string) => {
-  let rqJobId: string | null = null; // RQ Job ID from backend response
- 
-  // Prevent re-validation if already loading
+const handleValidateResume = async (candidateId: string) => {
+  let rqJobId: string | null = null;
+
   if (validatingId) return;
- 
+
   try {
-    setValidatingId(candidateId); // Show loading state
+    setValidatingId(candidateId);
     toast.info("Starting resume validation...");
- 
-    // Find candidate data locally first
+
     const candidate = filteredCandidates.find((c) => c.id === candidateId);
-    // Ensure candidate and resume URL exist
     if (!candidate || !candidate.resume) {
       throw new Error("Candidate or resume data missing.");
     }
- 
+
     const resumeUrlParts = candidate.resume.split("candidate_resumes/");
     const extractedResumeUrl = resumeUrlParts.length > 1 ? resumeUrlParts[1] : candidate.resume;
- 
-    // Get the TEXT job ID (e.g., ASC022) needed for the initial POST payload
-    // Assumes `jobId` prop passed to CandidatesList is the UUID
+
     const { data: jobData, error: jobError } = await supabase
       .from("hr_jobs")
-      .select("job_id") // Select the text job_id
-      .eq("id", jobId) // Filter by the UUID jobId passed as prop
-      .single(); // Expect exactly one job
- 
-    if (jobError || !jobData) { throw new Error("Invalid job configuration. Could not find job details."); }
-    const jobTextId = jobData.job_id; // e.g., ASC022
- 
-    // Payload for the backend API via proxy
+      .select("job_id")
+      .eq("id", jobId)
+      .single();
+
+    if (jobError || !jobData) {
+      throw new Error("Invalid job configuration. Could not find job details.");
+    }
+    const jobTextId = jobData.job_id;
+
     const payload = {
       job_id: jobTextId,
       candidate_id: candidateId,
       resume_url: extractedResumeUrl,
-      job_description: jobdescription, // Pass the description prop
+      job_description: jobdescription,
       organization_id: organizationId,
     };
     console.log("Sending payload to proxy /api/proxy:", payload);
-    const response = await fetch("/api/proxy", { // Relative path to your proxy function
+
+    // Dynamically construct the proxy URL based on the current subdomain
+    const baseUrl = `${window.location.protocol}//${window.location.host}`;
+    const proxyUrl = `${baseUrl}/api/proxy`;
+    console.log(`Using proxy URL: ${proxyUrl}`);
+
+    const response = await fetch(proxyUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(payload),
     });
- 
-    if (!response.ok) { // Check if response status is 2xx
+
+    const contentType = response.headers.get("Content-Type");
+    if (!response.ok || !contentType?.includes("application/json")) {
       const errorText = await response.text();
-      console.error(`Proxy validation request failed: ${response.status} - ${errorText}`);
-      try { const errorJson = JSON.parse(errorText); throw new Error(errorJson.error || `Validation start failed: ${response.status}`); }
-      catch { throw new Error(`Validation start request failed: ${response.status}`); }
+      console.error(`Proxy validation request failed: ${response.status} - ${response.statusText}`);
+      console.error("Content-Type:", contentType);
+      console.error("Response headers:", Object.fromEntries(response.headers.entries()));
+      console.error("Response body:", errorText.slice(0, 200));
+      throw new Error(
+        `Invalid response: Expected JSON, received ${contentType || "unknown"} - ${errorText.slice(0, 200)}`
+      );
     }
- 
+
     const responseData = await response.json();
     console.log("Proxy validation response:", responseData);
-    if (!responseData.job_id) { throw new Error("Backend did not return a job ID to track."); }
-    rqJobId = responseData.job_id; // Store the RQ job ID
- 
-    // --- Start Polling Job Status (Directly to Backend - GET) ---
+    if (!responseData.job_id) {
+      throw new Error("Backend did not return a job ID to track.");
+    }
+    rqJobId = responseData.job_id;
+
     let attempts = 0;
-    const maxAttempts = 24; // ~2 minutes
-    const interval = 5000; // 5 seconds
- 
+    const maxAttempts = 24;
+    const interval = 5000;
+
     const pollJobStatus = (): Promise<string> => {
       return new Promise(async (resolve, reject) => {
-        // Check attempt count before making the call
         if (attempts >= maxAttempts) {
-           console.error(`Polling timed out after ${maxAttempts} attempts for job ${rqJobId}.`);
-           return reject(new Error("Validation timed out. Check server logs."));
+          console.error(`Polling timed out after ${maxAttempts} attempts for job ${rqJobId}.`);
+          return reject(new Error("Validation timed out. Check server logs."));
         }
         attempts++;
         console.log(`Polling attempt ${attempts}/${maxAttempts} for job ${rqJobId}...`);
- 
+
         try {
-          // --- Poll the backend status endpoint DIRECTLY ---
-          const statusApiUrl = `/api/job-status-proxy?jobId=${encodeURIComponent(rqJobId)}`;
+          // Dynamically construct the job-status-proxy URL
+          const statusApiUrl = `${baseUrl}/api/job-status-proxy?jobId=${encodeURIComponent(rqJobId)}`;
           console.log(`Polling URL: ${statusApiUrl}`);
           const statusResponse = await fetch(statusApiUrl);
-          // ---
- 
-          console.log(`Polling response status: ${statusResponse.status}`);
- 
-          if (!statusResponse.ok) {
+
+          const statusContentType = statusResponse.headers.get("Content-Type");
+          if (!statusResponse.ok || !statusContentType?.includes("application/json")) {
             const pollErrorText = await statusResponse.text();
             console.warn(`Polling status check failed (attempt ${attempts}): ${statusResponse.status} - ${pollErrorText}`);
-            // Retry until maxAttempts
             setTimeout(() => pollJobStatus().then(resolve).catch(reject), interval);
             return;
           }
- 
+
           const statusData = await statusResponse.json();
           console.log(`Polling status data:`, statusData);
- 
-          if (statusData.status === 'finished') {
+
+          if (statusData.status === "finished") {
             console.log("Job finished!");
-            return resolve(statusData.status); // Resolve the promise
-          } else if (statusData.status === 'failed') {
+            return resolve(statusData.status);
+          } else if (statusData.status === "failed") {
             console.error("Backend job failed:", statusData.result?.error);
-            // Try fetching logs DIRECTLY for better error message
             try {
-                const logApiUrl = `/api/job-logs-proxy?jobId=${encodeURIComponent(rqJobId)}`;
-                console.log(`Fetching failure logs from: ${logApiUrl}`);
-                const logResponse = await fetch(logApiUrl);
-                if (logResponse.ok) {
-                    const logsJson = await logResponse.json();
-                    console.log("Failure Logs:", logsJson.logs);
-                    // Look for specific error step in logs
-                    const errorLog = logsJson.logs?.find((log: any) => log.step?.includes("error"));
-                    const errorMessage = errorLog?.data?.error_message || statusData.result?.error || "Analysis failed on backend.";
-                    return reject(new Error(errorMessage)); // Reject with specific error
-                } else {
-                    console.warn(`Failed to fetch logs (${logResponse.status}), using original error.`);
-                    return reject(new Error(statusData.result?.error || "Analysis failed (could not fetch logs)."));
-                }
+              // Dynamically construct the job-logs-proxy URL
+              const logApiUrl = `${baseUrl}/api/job-logs-proxy?jobId=${encodeURIComponent(rqJobId)}`;
+              console.log(`Fetching failure logs from: ${logApiUrl}`);
+              const logResponse = await fetch(logApiUrl);
+              if (logResponse.ok) {
+                const logsJson = await logResponse.json();
+                console.log("Failure Logs:", logsJson.logs);
+                const errorLog = logsJson.logs?.find((log: any) => log.step?.includes("error"));
+                const errorMessage = errorLog?.data?.error_message || statusData.result?.error || "Analysis failed on backend.";
+                return reject(new Error(errorMessage));
+              } else {
+                console.warn(`Failed to fetch logs (${logResponse.status}), using original error.`);
+                return reject(new Error(statusData.result?.error || "Analysis failed (could not fetch logs)."));
+              }
             } catch (logError) {
-                console.warn("Error fetching failure logs:", logError);
-                return reject(new Error(statusData.result?.error || "Analysis failed (log fetch error)."));
+              console.warn("Error fetching failure logs:", logError);
+              return reject(new Error(statusData.result?.error || "Analysis failed (log fetch error)."));
             }
           } else {
-            // Still queued or started, schedule next poll
             setTimeout(() => pollJobStatus().then(resolve).catch(reject), interval);
           }
         } catch (error) {
           console.error("Network or other error during polling attempt:", error);
-           if (error instanceof TypeError && error.message.includes('fetch')) {
-               return reject(new Error("Network error polling job status. Check backend connectivity/CORS."));
-           }
-          // Retry for other errors until max attempts
+          if (error instanceof TypeError && error.message.includes("fetch")) {
+            return reject(new Error("Network error polling job status. Check backend connectivity."));
+          }
           if (attempts < maxAttempts) {
-             setTimeout(() => pollJobStatus().then(resolve).catch(reject), interval);
+            setTimeout(() => pollJobStatus().then(resolve).catch(reject), interval);
           } else {
-             reject(new Error("Polling failed after multiple retry attempts."));
+            reject(new Error("Polling failed after multiple retry attempts."));
           }
         }
       });
     };
- 
-    // Wait for polling to finish or fail
+
     await pollJobStatus();
- 
-    // --- Polling Succeeded ---
     toast.success("Resume validation process completed successfully!");
- 
-    // Refetch main candidate list data to update UI (e.g., show checkmark)
-    // This should now reflect the has_validated_resume=true set by the backend
-    await refetch();
- 
-    // Fetch final detailed analysis data for the modal
+
     const finalAnalysisData = await fetchAnalysisData(candidateId);
     if (finalAnalysisData) {
       console.log("Displaying modal with final data:", finalAnalysisData);
-      // Update local states to ensure modal has the latest data
       setAnalysisDataAvailable((prev) => ({ ...prev, [candidateId]: true }));
-      // Update the potentially less strict state if needed elsewhere
       setCandidateAnalysisData((prev) => ({ ...prev, [candidateId]: finalAnalysisData }));
-      // Set data for and open the modal
       setAnalysisData(finalAnalysisData);
       setIsSummaryModalOpen(true);
     } else {
-       // Handle case where job finished but fetching final data from DB failed
-       toast.warn("Validation complete, but failed to load final analysis details.");
-       // Ensure analysis available state is false if data couldn't be loaded
-       setAnalysisDataAvailable((prev) => ({ ...prev, [candidateId]: false }));
+      toast.warn("Validation complete, but failed to load final analysis details.");
+      setAnalysisDataAvailable((prev) => ({ ...prev, [candidateId]: false }));
     }
- 
   } catch (error: any) {
-    // Catch errors from initial POST or the polling promise rejection
     console.error("Overall validation error in handleValidateResume:", error);
     toast.error(error.message || "Failed to validate resume");
-    // No DB updates from frontend on failure
   } finally {
-    setValidatingId(null); // Stop loading indicator regardless of outcome
+    setValidatingId(null);
   }
-}; // --- END handleValidateResume ---
- 
+};
 
 
 

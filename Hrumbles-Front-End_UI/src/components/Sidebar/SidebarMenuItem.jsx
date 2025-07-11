@@ -169,6 +169,13 @@ export const menuItemsByRole = {
         { icon: VscOrganization, label: "Contacts", path: "/contacts" }
       );
     }
+     if (departmentName === "Finance") {
+      return [
+        { icon: MdOutlineAccountBalance, label: "Finance", path: "/finance" },
+        { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices" },
+        { icon: FaSackDollar, label: "Expenses", path: "/accounts/expenses" },
+      ];
+    }
     return baseMenu;
   },
 };

@@ -87,6 +87,8 @@ export const VerificationProcessSection: React.FC<VerificationProcessSectionProp
   // Derived state to know if the final verification is complete
   const isFullHistoryVerified = fullHistoryData?.status === 1 && Array.isArray(fullHistoryData.msg);
 
+  console.log("uanData", uanData)
+
   // This powerful useEffect handles initial data, queue checks, AND real-time updates.
   useEffect(() => {
     if (!candidate?.id) return;
@@ -326,14 +328,24 @@ export const VerificationProcessSection: React.FC<VerificationProcessSectionProp
             <Card className="border border-gray-200 bg-white shadow-sm p-4 mt-[-1rem] mb-4">
               {/* 1. Show Basic Info if available from a mobile/PAN lookup */}
               {isUanBasicVerifiedAndDataAvailable && (
-                <div className="mb-4">
-                  <h4 className="font-semibold text-md mb-2">Basic Employee Info (from UAN Lookup)</h4>
-                  <div className="p-3 bg-green-50 border border-green-200 rounded-md text-sm text-green-800 space-y-1">
-                    <p><strong>Name:</strong> {uanData.msg.uan_details[0].name}</p>
-                    <p><strong>Company:</strong> {uanData.msg.employment_details[0].establishment_name}</p>
-                    <p><strong>Date of Joining:</strong> {uanData.msg.employment_details[0].date_of_joining}</p>
-                  </div>
-                </div>
+               <div className="mb-4">
+  <h4 className="font-semibold text-md mb-2">Basic Employee Info (from UAN Lookup)</h4>
+  <div className="p-3 bg-green-50 border border-green-200 rounded-md text-sm text-green-800 space-y-1">
+    <p><strong>Name:</strong> {uanData.msg.uan_details[0].name}</p>
+    <p><strong>Date of Birth:</strong> {uanData.msg.uan_details[0].date_of_birth}</p>
+    <p><strong>Gender:</strong> {uanData.msg.uan_details[0].gender}</p>
+
+    {/* Current Employment Section */}
+    <div className="pt-3">
+      <h5 className="font-semibold text-md mb-1">Current Employment</h5>
+      <p><strong>Company:</strong> {uanData.msg.employment_details[0].establishment_name}</p>
+      <p><strong>Date of Joining:</strong> {uanData.msg.employment_details[0].date_of_joining}</p>
+      <p><strong>Establishment ID:</strong> {uanData.msg.employment_details[0].establishment_id}</p>
+      <p><strong>Member ID:</strong> {uanData.msg.employment_details[0].member_id}</p>
+    </div>
+  </div>
+</div>
+
               )}
 
               {/* 2. Full History Verification Area */}

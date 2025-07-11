@@ -20,17 +20,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     console.log('Backend response status:', response.status);
+    console.log('Backend response headers:', Object.fromEntries(response.headers.entries()));
 
-    if (!response.ok) {
+    const contentType = response.headers.get('Content-Type');
+    if (!response.ok || !contentType?.includes('application/json')) {
       const errorText = await response.text();
-      console.error('Backend error:', response.status, errorText);
-      throw new Error(`Backend responded with status: ${response.status} - ${errorText}`);
+      console.error('Backend error:', response.status, response.statusText, errorText.slice(0, 200));
+      return res.status(response.status).json({
+        error: `Backend responded with non-JSON or error: ${response.status} - ${response.statusText}`,
+        details: errorText.slice(0, 200),
+      });
     }
 
     const data = await response.json();
     console.log('Backend response data:', data);
     res.status(200).json(data);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Proxy error:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }

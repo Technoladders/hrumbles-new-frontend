@@ -15,6 +15,7 @@ import { ProfileTabs } from "./ProfileTabs";
 import { Candidate } from "@/components/MagicLinkView/types";
 import { VerificationProcessSection } from "./VerificationProcessSection";
 import { useUanLookup } from "@/components/MagicLinkView/hooks/useUanLookup";
+import { useConsentLink } from "@/components/MagicLinkView/hooks/useConsentLink";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -81,6 +82,16 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
     currentDataOptions,
     setCurrentDataOptions,
   } = useShareLink(initialSharedDataOptions);
+
+    // ADD THE NEW HOOK
+  const {
+    isRequesting: isRequestingConsent,
+    consentLink,
+    isCopied: isConsentLinkCopied,
+    generateConsentLink,
+    copyConsentLink,
+    setConsentLink,
+  } = useConsentLink();
 
 const handleSaveUanResult = useCallback(async (
     dataToSave: any,
@@ -226,6 +237,7 @@ const handleSaveUanResult = useCallback(async (
         noticePeriod: candidate.metadata?.noticePeriod || "N/A",
         hasOffers: candidate.metadata?.hasOffers || "N/A",
         offerDetails: candidate.metadata?.offerDetails || "N/A",
+         consentStatus: candidate.consent_status || 'not_requested', // Add this
       }
     : ({
         id: "emp001",
@@ -249,7 +261,8 @@ const handleSaveUanResult = useCallback(async (
         noticePeriod: "N/A",
         hasOffers: "N/A",
         offerDetails: "N/A",
-      } as Candidate);
+        consentStatus: 'not_requested',
+      } as Candidate & { consentStatus: string });
 
   const employee = shareMode
     ? {
@@ -366,6 +379,11 @@ const handleSaveUanResult = useCallback(async (
                 lookupValue={lookupValue}
                 setLookupValue={setLookupValue}
                 onUanLookup={onUanLookup}
+                isRequestingConsent={isRequestingConsent}
+  consentLink={consentLink}
+  isConsentLinkCopied={isConsentLinkCopied}
+  onGenerateConsentLink={() => generateConsentLink(candidate!, organization_id)}
+  onCopyConsentLink={copyConsentLink}
               />
 
               <ProfileTabs
@@ -424,6 +442,7 @@ const handleSaveUanResult = useCallback(async (
                 onSaveDocuments={() => saveDocuments(candidateId || '', candidate?.metadata)}
                 isSavingDocuments={isSavingDocuments}
                isUanQueued={isUanQueued}
+               consentStatus={candidate?.consent_status}
               />
             </div>
           </div>
