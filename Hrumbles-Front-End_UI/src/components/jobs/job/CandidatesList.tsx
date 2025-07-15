@@ -2291,6 +2291,7 @@ const handleValidateResume = async (candidateId: string) => {
     toast.info("Starting resume validation...");
 
     const candidate = filteredCandidates.find((c) => c.id === candidateId);
+    console.log("candidate", candidate)
     if (!candidate || !candidate.resume) {
       throw new Error("Candidate or resume data missing.");
     }
@@ -2316,14 +2317,12 @@ const handleValidateResume = async (candidateId: string) => {
       job_description: jobdescription,
       organization_id: organizationId,
     };
-    console.log("Sending payload to proxy /api/proxy:", payload);
+    console.log("Sending payload to backend:", payload);
 
-    // Dynamically construct the proxy URL based on the current subdomain
-    const baseUrl = `${window.location.protocol}//${window.location.host}`;
-    const proxyUrl = `${baseUrl}/api/proxy`;
-    console.log(`Using proxy URL: ${proxyUrl}`);
+    const backendUrl = 'https://dev.hrumbles.ai/api/validate-candidate';
+    console.log(`Using backend URL: ${backendUrl}`);
 
-    const response = await fetch(proxyUrl, {
+    const response = await fetch(backendUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(payload),
@@ -2332,7 +2331,7 @@ const handleValidateResume = async (candidateId: string) => {
     const contentType = response.headers.get("Content-Type");
     if (!response.ok || !contentType?.includes("application/json")) {
       const errorText = await response.text();
-      console.error(`Proxy validation request failed: ${response.status} - ${response.statusText}`);
+      console.error(`Backend validation request failed: ${response.status} - ${response.statusText}`);
       console.error("Content-Type:", contentType);
       console.error("Response headers:", Object.fromEntries(response.headers.entries()));
       console.error("Response body:", errorText.slice(0, 200));
@@ -2342,7 +2341,7 @@ const handleValidateResume = async (candidateId: string) => {
     }
 
     const responseData = await response.json();
-    console.log("Proxy validation response:", responseData);
+    console.log("Backend validation response:", responseData);
     if (!responseData.job_id) {
       throw new Error("Backend did not return a job ID to track.");
     }
@@ -2362,8 +2361,7 @@ const handleValidateResume = async (candidateId: string) => {
         console.log(`Polling attempt ${attempts}/${maxAttempts} for job ${rqJobId}...`);
 
         try {
-          // Dynamically construct the job-status-proxy URL
-          const statusApiUrl = `${baseUrl}/api/job-status-proxy?jobId=${encodeURIComponent(rqJobId)}`;
+          const statusApiUrl = `https://dev.hrumbles.ai/api/job-status?jobId=${encodeURIComponent(rqJobId)}`;
           console.log(`Polling URL: ${statusApiUrl}`);
           const statusResponse = await fetch(statusApiUrl);
 
@@ -2384,8 +2382,7 @@ const handleValidateResume = async (candidateId: string) => {
           } else if (statusData.status === "failed") {
             console.error("Backend job failed:", statusData.result?.error);
             try {
-              // Dynamically construct the job-logs-proxy URL
-              const logApiUrl = `${baseUrl}/api/job-logs-proxy?jobId=${encodeURIComponent(rqJobId)}`;
+              const logApiUrl = `https://dev.hrumbles.ai/api/job-logs?jobId=${encodeURIComponent(rqJobId)}`;
               console.log(`Fetching failure logs from: ${logApiUrl}`);
               const logResponse = await fetch(logApiUrl);
               if (logResponse.ok) {

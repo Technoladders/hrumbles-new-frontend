@@ -10,18 +10,18 @@ import { CalendarCard } from "../employee/profile/cards/CalendarCard";
 import { TimelineCard } from "../employee/profile/cards/SuperadminTimeline";
 import { SubmissionChartCard } from "../employee/profile/cards/SubmissionChartCard";
 import {OnboardingChartCard} from "../employee/profile/cards/OnboardingChartCard";
-
+ 
 interface RecruiterData {
   recruiter: string;
   total_resumes_analyzed: number;
 }
-
+ 
 interface ResumeStatsData {
   name: string;
   value: number;
   fill: string;
 }
-
+ 
 function OrganizationSuperadminDashboard() {
   const [recruiterData, setRecruiterData] = useState<RecruiterData[]>([]);
   const [resumeStatsData, setResumeStatsData] = useState<ResumeStatsData[]>([]);
@@ -30,11 +30,10 @@ function OrganizationSuperadminDashboard() {
   const [timeFilter, setTimeFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState<boolean>(true); // Loading state
     const { role, user } = useSelector((state) => state.auth);
-      const organizationId = useSelector((state: any) => state.auth.organization_id);
+     const organizationId = useSelector((state: any) => state.auth.organization_id);
     const id = user?.id; // Ensure the user ID is available
-
-    console.log("orguser", organizationId)
-
+    
+ 
   useEffect(() => {
     const fetchData = async (filter: string) => {
       setIsLoading(true);
@@ -43,7 +42,7 @@ function OrganizationSuperadminDashboard() {
         const today = new Date();
         const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
         const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-
+ 
         if (filter === 'today') {
           dateFilter = { gte: startOfDay, lte: endOfDay };
         } else if (filter === 'this_week') {
@@ -56,7 +55,7 @@ function OrganizationSuperadminDashboard() {
           const startOfYear = new Date(today.getFullYear(), 0, 1).toISOString();
           dateFilter = { gte: startOfYear, lte: endOfDay };
         }
-
+ 
         let candidateQuery = supabase
           .from('hr_job_candidates')
           .select(`
@@ -65,24 +64,23 @@ function OrganizationSuperadminDashboard() {
             hr_employees!hr_job_candidates_created_by_fkey (
               first_name
             )
-          `)
-          .eq('organization_id', organizationId);
-
+          `);
+ 
         if (filter !== 'all') {
           candidateQuery = candidateQuery
             .gte('created_at', dateFilter.gte!)
             .lte('created_at', dateFilter.lte!);
         }
-
+ 
         const { data: candidateData, error: candidateError } = await candidateQuery;
-
+ 
         if (candidateError) {
           console.error("Supabase query error (hr_job_candidates):", candidateError);
           throw new Error(`Error fetching candidate data: ${candidateError.message}`);
         }
-
+ 
         // console.log("Raw candidate data from Supabase:", candidateData);
-
+ 
         const candidateCounts: { [key: string]: number } = candidateData?.reduce((acc: any, record: any) => {
           if (!record.created_by) {
             console.warn("Skipping record with null created_by in hr_job_candidates");
@@ -96,7 +94,7 @@ function OrganizationSuperadminDashboard() {
           acc[recruiterName] = (acc[recruiterName] || 0) + 1;
           return acc;
         }, {}) || {};
-
+ 
         let analysisQuery = supabase
           .from('candidate_resume_analysis')
           .select(`
@@ -108,24 +106,23 @@ function OrganizationSuperadminDashboard() {
                 first_name
               )
             )
-          `)
-          .eq('organization_id', organizationId)
-
+          `);
+ 
         if (filter !== 'all') {
           analysisQuery = analysisQuery
             .gte('updated_at', dateFilter.gte!)
             .lte('updated_at', dateFilter.lte!);
         }
-
+ 
         const { data: analysisData, error: analysisError } = await analysisQuery;
-
+ 
         if (analysisError) {
           console.error("Supabase query error (candidate_resume_analysis):", analysisError);
           throw new Error(`Error fetching resume analysis data: ${analysisError.message}`);
         }
-
+ 
         // console.log("Raw analysis data from Supabase:", analysisData);
-
+ 
         const seenCandidateIds = new Set<string>();
         const analysisCounts: { [key: string]: number } = analysisData?.reduce((acc: any, record: any) => {
           if (!record.hr_job_candidates) {
@@ -145,22 +142,22 @@ function OrganizationSuperadminDashboard() {
             return acc;
           }
           seenCandidateIds.add(record.candidate_id);
-
+ 
           const recruiterName = record.hr_job_candidates.hr_employees.first_name;
           acc[recruiterName] = (acc[recruiterName] || 0) + 1;
           return acc;
         }, {}) || {};
-
+ 
         const allRecruiters = new Set([
           ...Object.keys(candidateCounts),
           ...Object.keys(analysisCounts),
         ]);
-
+ 
         const formattedRecruiterData: RecruiterData[] = Array.from(allRecruiters).map(recruiter => ({
           recruiter,
           total_resumes_analyzed: (candidateCounts[recruiter] || 0) + (analysisCounts[recruiter] || 0),
         }));
-
+ 
         if (formattedRecruiterData.length === 0) {
           setRecruiterData([]);
           setErrorMessage("No valid recruiter data found.");
@@ -168,39 +165,37 @@ function OrganizationSuperadminDashboard() {
           setRecruiterData(formattedRecruiterData);
           setErrorMessage(null);
         }
-
+ 
         try {
           const { data: withAttachmentData, error: withAttachmentError } = await supabase
             .from('candidate_resume_analysis')
             .select('report_url')
-            .eq('organization_id', organizationId)
             .not('report_url', 'is', null);
-
+ 
           if (withAttachmentError) {
             console.error("Supabase query error (candidate_resume_analysis report_url):", withAttachmentError);
             throw new Error(`Error fetching report_url data: ${withAttachmentError.message}`);
           }
-
+ 
           const withAttachmentCount = withAttachmentData?.length || 0;
-
+ 
           const { data: resumeTextData, error: resumeTextError } = await supabase
             .from('resume_analysis')
             .select('resume_text')
-            .eq('organization_id', organizationId)
             .not('resume_text', 'is', null);
-
+ 
           if (resumeTextError) {
             console.error("Supabase query error (resume_analysis resume_text):", resumeTextError);
             throw new Error(`Error fetching resume_text data: ${resumeTextError.message}`);
           }
-
+ 
           const resumeTextCount = resumeTextData?.length || 0;
-
+ 
           const pieData: ResumeStatsData[] = [
             { name: 'With Attachment', value: withAttachmentCount, fill: '#4f46e5' },
             { name: 'Without Attachment', value: resumeTextCount, fill: '#a5b4fc' },
           ];
-
+ 
           setResumeStatsData(pieData);
           setResumeStatsError(null);
         } catch (err) {
@@ -216,18 +211,18 @@ function OrganizationSuperadminDashboard() {
         setIsLoading(false);
       }
     };
-
+ 
     fetchData(timeFilter);
   }, [timeFilter]);
-
+ 
   const hasNoResumeStatsData = resumeStatsData.every(item => item.value === 0);
-
+ 
 return (
   <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-6 md:p-10">
     <h1 className="text-3xl md:text-4xl font-extrabold text-gray-800 text-center mb-10 tracking-tight">
       Organization SuperAdmin Dashboard
     </h1>
-
+ 
     <div className="w-full max-w-9xl mx-auto space-y-8">
       <div className="w-full">
         <RevenueExpenseChart />
@@ -235,9 +230,9 @@ return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Bar Chart: Resumes Analyzed by Recruiter */}
         <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-6">
+          <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-4">
             <div className="flex justify-between items-center">
-              <CardTitle className="text-xl md:text-2xl font-semibold">
+              <CardTitle className="text-xl md:text-xl font-semibold">
                 Resumes Analyzed by Recruiter
               </CardTitle>
               <Select value={timeFilter} onValueChange={setTimeFilter}>
@@ -254,7 +249,7 @@ return (
               </Select>
             </div>
           </CardHeader>
-          <CardContent className="p-6">
+          <CardContent className="p-4 overflow-x-auto">
             {isLoading ? (
               <div className="flex items-center justify-center h-[400px]">
                 <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
@@ -266,7 +261,7 @@ return (
                 <p>No recruiter data available.</p>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={400}>
+              <ResponsiveContainer width="100%" height={450}>
                 <BarChart
                   data={recruiterData}
                   margin={{ top: 20, right: 20, left: 0, bottom: 60 }}
@@ -294,22 +289,22 @@ return (
                     dataKey="total_resumes_analyzed"
                     fill="#4f46e5"
                     name="Resumes Analyzed"
-                    radius={[4, 4, 0, 0]}
+                    radius={[12, 12, 0, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
-
+ 
         {/* Pie Chart: Total Resumes in Database */}
         <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
           <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-6">
-            <CardTitle className="text-xl md:text-2xl font-semibold">
+            <CardTitle className="text-xl md:text-xl font-semibold">
               Total Resumes in Database
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             {isLoading ? (
               <div className="flex items-center justify-center h-[400px]">
                 <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
@@ -355,12 +350,12 @@ return (
         </Card>
         
        <div className="h-full">
-                  <CalendarCard employeeId={user.id} isHumanResourceEmployee={false} role={role} organizationId={organizationId} />
+                  <CalendarCard employeeId={user.id} isHumanResourceEmployee={false} role={role} organizationId={organizationId}/>
                   </div>
           <div className="h-full">
                   <TimelineCard />
                   </div>
-
+ 
                    <div className="h-full">
                                 <SubmissionChartCard employeeId={user.id} role={role} />
                               </div>
@@ -368,12 +363,13 @@ return (
                                 <OnboardingChartCard employeeId={user.id} role={role} />
                               </div>
       </div>
-
+ 
       {/* Revenue and Expense Chart */}
       
     </div>
   </div>
 );
 }
-
+ 
 export default OrganizationSuperadminDashboard;
+ 

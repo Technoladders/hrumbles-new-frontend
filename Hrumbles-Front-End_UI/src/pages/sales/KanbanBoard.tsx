@@ -1,0 +1,121 @@
+// src/pages/sales/KanbanBoard.tsx
+import React, { useState, useEffect, useMemo } from 'react';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+import { useSimpleContacts } from '@/hooks/sales/useSimpleContacts';
+import { useContactStages } from '@/hooks/sales/useContactStages';
+import { useUpdateSimpleContact } from '@/hooks/sales/useUpdateSimpleContact';
+import { KanbanColumn } from '@/components/sales/contacts-kanban/KanbanColumn';
+import { KanbanToolbar } from '@/components/sales/contacts-kanban/KanbanToolbar';
+import { SimpleContact } from '@/types/simple-contact.types';
+import { useToast } from '@/hooks/use-toast';
+import { useSelector } from 'react-redux';
+import { produce } from 'immer';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+
+type BoardData = Record<string, SimpleContact[]>;
+
+const KanbanBoard: React.FC = () => {
+  const { data: contacts = [], isLoading: isLoadingContacts } = useSimpleContacts();
+  const { data: stages = [], isLoading: isLoadingStages } = useContactStages();
+  const updateContactMutation = useUpdateSimpleContact();
+  const { toast } = useToast();
+  const currentUser = useSelector((state: any) => state.auth.user);
+
+  const [boardData, setBoardData] = useState<BoardData>({});
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortOption, setSortOption] = useState('created_at_desc');
+
+  const processedContacts = useMemo(() => {
+    let filtered = contacts.filter(c =>
+      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.company_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const [key, direction] = sortOption.split('_');
+    filtered.sort((a, b) => {
+      const valA = a[key as keyof SimpleContact] || '';
+      const valB = b[key as keyof SimpleContact] || '';
+      if (valA < valB) return direction === 'asc' ? -1 : 1;
+      if (valA > valB) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return filtered;
+  }, [contacts, searchTerm, sortOption]);
+
+  useEffect(() => {
+    const data: BoardData = {};
+    stages.forEach(stage => { data[stage.name] = []; });
+    processedContacts.forEach(contact => {
+      const stageName = contact.contact_stage || 'Uncategorized';
+      if (!data[stageName]) data[stageName] = [];
+      data[stageName].push(contact);
+    });
+    setBoardData(data);
+  }, [processedContacts, stages]);
+
+  const handleDrop = (item: { contact: SimpleContact }, newStageName: string) => {
+    const { contact } = item;
+    const oldStageName = contact.contact_stage || 'Uncategorized';
+
+    if (oldStageName === newStageName) return;
+
+    setBoardData(produce(draft => {
+      const oldColumn = draft[oldStageName];
+      const newColumn = draft[newStageName];
+      const cardIndex = oldColumn.findIndex(c => c.id === contact.id);
+      if (cardIndex > -1) {
+        const [movedCard] = oldColumn.splice(cardIndex, 1);
+        movedCard.contact_stage = newStageName;
+        newColumn.unshift(movedCard);
+      }
+    }));
+
+    updateContactMutation.mutate(
+      { item: contact, updates: { contact_stage: newStageName, updated_by: currentUser?.id } },
+      {
+        onSuccess: () => toast({ title: "Contact Updated", description: `${contact.name} moved to ${newStageName}.` }),
+        onError: (error) => {
+          toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+          setBoardData(boardData);
+        },
+      }
+    );
+  };
+
+  if (isLoadingContacts || isLoadingStages) {
+    return <div className="p-4 text-center text-muted-foreground">Loading Board...</div>;
+  }
+
+  return (
+    <DndProvider backend={HTML5Backend}>
+      <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl rounded-2xl">
+        <CardHeader className="p-6">
+          <h2 className="text-xl md:text-2xl font-semibold text-gray-800">Kanban Board</h2>
+        </CardHeader>
+        <CardContent className="p-6 overflow-x-auto">
+          <KanbanToolbar
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            sortOption={sortOption}
+            onSortChange={setSortOption}
+          />
+          <div className="flex space-x-4 min-w-max">
+            {stages.map(stage => (
+              <KanbanColumn
+                key={stage.id}
+                stage={stage}
+                contacts={boardData[stage.name] || []}
+                onDrop={handleDrop}
+                style={{ minWidth: '250px', maxWidth: '300px' }}
+              />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </DndProvider>
+  );
+};
+
+export default KanbanBoard;

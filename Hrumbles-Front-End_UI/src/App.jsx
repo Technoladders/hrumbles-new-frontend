@@ -71,6 +71,9 @@ import CompaniesPage from "./pages/sales/CompaniesPage";
 import CompanyDetail from "./pages/sales/CompanyDetail";
 import CompanyEdit from "./pages/sales/CompanyEdit";
 import ContactsPage from "./pages/sales/ContactsPage";
+import EditableContactsPage from './pages/sales/EditableContactsPage';
+import TanstackContactsPage from './pages/sales/TanstackContactsPage';
+import ContactsView from './pages/sales/ContactsView';
 
 // Clients
 import ClientPage from "./pages/clients/ClientDashboard";
@@ -229,7 +232,7 @@ function App() {
 
           {/* Sales Companies and Contacts */}
           <Route path="/companies" element={<CompaniesPage />} />
-          <Route path="/contacts" element={<ContactsPage />} />
+          <Route path="/contacts" element={<ContactsView />} />
           <Route path="/companies/:id" element={<CompanyDetail />} />
           <Route path="/companies/:id/edit" element={<CompanyEdit />} />
 

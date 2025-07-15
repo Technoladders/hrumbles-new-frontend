@@ -87,7 +87,7 @@ export const VerificationProcessSection: React.FC<VerificationProcessSectionProp
   // Derived state to know if the final verification is complete
   const isFullHistoryVerified = fullHistoryData?.status === 1 && Array.isArray(fullHistoryData.msg);
 
-  console.log("uanData", uanData)
+  console.log("uanData", fullHistoryData)
 
   // This powerful useEffect handles initial data, queue checks, AND real-time updates.
   useEffect(() => {
@@ -378,15 +378,30 @@ export const VerificationProcessSection: React.FC<VerificationProcessSectionProp
                   <div className="space-y-4">
                     {fullHistoryData.msg.map((entry: FullHistoryEmploymentEntry, index: number) => (
                       <div key={index} className="pb-2 border-b last:border-b-0 text-gray-800">
-                        <p className="text-sm font-medium text-indigo-700">{entry['Establishment Name'] || 'Not Available'}</p>
-                        <div className="grid grid-cols-2 gap-x-4 text-xs text-muted-foreground mt-1">
-                           <p><strong>Join Date:</strong> {entry.Doj}</p>
-                           <p><strong>Exit Date:</strong> {entry.DateOfExitEpf || 'Current'}</p>
-                           <p><strong>Member ID:</strong> {entry.MemberId}</p>
-                           <p><strong>UAN:</strong> {entry.uan}</p>
-                        </div>
-                        {entry.Overlapping && <Badge variant="destructive" className="mt-1">Overlapping Employment</Badge>}
-                      </div>
+  {/* Show Name */}
+  <p className="text-sm font-semibold text-amber-600">{entry.name || 'Name Not Available'}</p>
+
+  {/* Establishment Name */}
+  <p className="text-sm font-medium text-indigo-700">
+    {entry['Establishment Name'] || 'Not Available'}
+  </p>
+
+  {/* Employment Details */}
+  <div className="grid grid-cols-2 gap-x-4 text-xs text-muted-foreground mt-1">
+    <p><strong>Join Date:</strong> {entry.Doj}</p>
+    <p><strong>Exit Date:</strong> {entry.DateOfExitEpf || 'Current'}</p>
+    <p><strong>Member ID:</strong> {entry.MemberId}</p>
+    <p><strong>UAN:</strong> {entry.uan}</p>
+  </div>
+
+  {/* Overlapping Badge */}
+  {entry.Overlapping && (
+    <Badge variant="destructive" className="mt-1">
+      Overlapping Employment
+    </Badge>
+  )}
+</div>
+
                     ))}
                   </div>
                 ) : fullHistoryData && typeof fullHistoryData.msg === 'string' ? (
