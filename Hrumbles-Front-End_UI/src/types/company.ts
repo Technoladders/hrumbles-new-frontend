@@ -29,6 +29,9 @@ export interface Company {
   products?: string[];
   services?: string[];
   key_people?: { name: string; title: string }[] | string;
+    created_by_employee: EmployeeName | null;
+  updated_by_employee: EmployeeName | null;
+  organization_id: string | null;
 }
 export interface EmployeeAssociation {
   id: number;
@@ -78,4 +81,9 @@ export interface CandidateDetail {
   association_end_date?: string | null;
   association_is_current?: boolean | null;
   association_created_by?: string | null;
+}
+
+export interface EmployeeName {
+  first_name: string;
+  last_name: string;
 }

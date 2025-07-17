@@ -127,6 +127,23 @@ export const getCustomCell = (dataType: 'text' | 'date' | 'number') => {
     }
 };
 
+const DisplayDateCell: React.FC<any> = ({ getValue }) => {
+    const date = getValue();
+    if (!date) {
+        return <span className="text-muted-foreground">-</span>;
+    }
+    // Format date as MM/DD/YY for a compact view
+    return (
+        <span className="text-muted-foreground">
+            {new Date(date).toLocaleDateString('en-US', {
+                month: '2-digit',
+                day: '2-digit',
+                year: '2-digit',
+            })}
+        </span>
+    );
+};
+
 const StageSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
     if (row.getIsGrouped()) return null;
     const initialValue = getValue();
@@ -134,7 +151,6 @@ const StageSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
     const onValueChange = (newValue: string) => table.options.meta?.updateData(row.index, column.id, newValue);
 
     const stageInfo = stages.find(s => s.name === initialValue);
-    
     
     return (
         <Select value={initialValue || ""} onValueChange={onValueChange}>
@@ -156,7 +172,6 @@ const StageSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
     );
 };
 
-// FIX: This cell now correctly displays the company name and only shows the combobox on click.
 const CompanyCell: React.FC<any> = ({ getValue, row, column, table }) => {
     if (row.getIsGrouped()) return null;
     const initialCompanyId = row.original.company_id;
@@ -168,32 +183,14 @@ const CompanyCell: React.FC<any> = ({ getValue, row, column, table }) => {
     return <CompanyCombobox value={initialCompanyId} onSelect={onSelect} initialName={companyName} />;
 };
 
-const EmployeeAvatarCell: React.FC<any> = ({ getValue, row }) => {
-    if (row.getIsGrouped()) return null;
-    const employee = getValue();
-    if (!employee) return <span className="text-muted-foreground">-</span>;
-    const fallback = (employee.first_name?.[0] || '') + (employee.last_name?.[0] || '');
-    return (
-        <TooltipProvider><Tooltip><TooltipTrigger>
-            <Avatar className="h-7 w-7"><AvatarImage src={employee.profile_picture_url} /><AvatarFallback>{fallback}</AvatarFallback></Avatar>
-        </TooltipTrigger><TooltipContent>{employee.first_name} {employee.last_name}</TooltipContent></Tooltip></TooltipProvider>
-    );
-};
-
-// const DateCell: React.FC<any> = ({ getValue, row }) => {
-//     if (row.getIsGrouped()) return null;
-//     const date = getValue();
-//     if (!date) return <span className="text-muted-foreground">-</span>;
-//     return <span className="text-muted-foreground">{new Date(date).toLocaleDateString()}</span>;
-// };
-
 // --- FINAL Column Definitions ---
 export const columns: ColumnDef<SimpleContact>[] = [
-  { id: 'select', size: 40, enableSorting: false, enableHiding: false, header: ({ table }) => (<div className="px-1"><Checkbox checked={table.getIsAllPageRowsSelected()} onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)} aria-label="Select all" /></div>), cell: ({ row }) => (<div className="px-1"><Checkbox checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(!!value)} aria-label="Select row" /></div>) },
+  { id: 'select', size: 35, enableSorting: false, enableHiding: false, header: ({ table }) => (<div className="px-1"><Checkbox checked={table.getIsAllPageRowsSelected()} onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)} aria-label="Select all" /></div>), cell: ({ row }) => (<div className="px-1"><Checkbox checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(!!value)} aria-label="Select row" /></div>) },
   {
     accessorKey: 'name',
     header: ReorderableHeader,
-    size: 280,
+    size: 220,
+    minSize: 180,
     cell: ({ row, ...props }) => {
       if (row.getIsGrouped()) {
         const { data: stages = [] } = useContactStages();
@@ -208,29 +205,69 @@ export const columns: ColumnDef<SimpleContact>[] = [
           </div>
         );
       }
-      return (<div style={{ paddingLeft: `${row.depth * 2}rem` }}><EditableCell row={row} {...props} /></div>);
+      return (<div style={{ paddingLeft: `${row.depth * 1.5}rem` }}><EditableCell row={row} {...props} /></div>);
     },
   },
-  { accessorKey: 'email', header: ReorderableHeader, cell: EditableCell, size: 250 },
-  { accessorKey: 'mobile', header: ReorderableHeader, cell: PhoneCell, size: 180 },
-  { accessorKey: 'linkedin_url', header: ReorderableHeader, cell: LinkedInCell, size: 220 },
-  { accessorKey: 'company_name', header: ReorderableHeader, size: 200, cell: CompanyCell },
-  { accessorKey: 'job_title', header: ReorderableHeader, cell: EditableCell, size: 200 },
-  { accessorKey: 'contact_stage', header: ReorderableHeader, size: 180, cell: StageSelectCell },
+  { accessorKey: 'email', header: ReorderableHeader, cell: EditableCell, size: 220, minSize: 180 },
+  { accessorKey: 'mobile', header: ReorderableHeader, cell: PhoneCell, size: 150 },
+  { accessorKey: 'linkedin_url', header: ReorderableHeader, cell: LinkedInCell, size: 200, minSize: 160 },
+  { accessorKey: 'company_name', header: ReorderableHeader, size: 180, minSize: 150, cell: CompanyCell },
+  { accessorKey: 'job_title', header: ReorderableHeader, cell: EditableCell, size: 180, minSize: 150 },
+  { accessorKey: 'contact_stage', header: ReorderableHeader, size: 140, cell: StageSelectCell },
   
-  { accessorKey: 'created_by_employee', header: "Created By", cell: EmployeeAvatarCell, enableSorting: false, size: 100 },
-  { accessorKey: 'updated_by_employee', header: "Updated By", cell: EmployeeAvatarCell, enableSorting: false, size: 100 },
-  { accessorKey: 'created_at', header: "Created At", cell: DateCell, enableSorting: true, size: 150 },
-  { accessorKey: 'updated_at', header: "Updated At", cell: DateCell, enableSorting: true, size: 150 },
+  // --- RE-ORDERED SECTION ---
+  { 
+    accessorFn: (row) => row.created_by ?? null,
+    id: 'created_by_employee',
+    header: "Created By",
+    cell: ({ row }) => {
+        const employee = row.original.created_by_employee;
+        if (!employee) return <span className="text-muted-foreground">-</span>;
+        const fallback = (employee.first_name?.[0] || '') + (employee.last_name?.[0] || '');
+        return (
+            <TooltipProvider>
+                <Tooltip><TooltipTrigger>
+                    <Avatar className="h-7 w-7"><AvatarImage src={employee.profile_picture_url} /><AvatarFallback>{fallback}</AvatarFallback></Avatar>
+                </TooltipTrigger><TooltipContent>{employee.first_name} {employee.last_name}</TooltipContent></Tooltip>
+            </TooltipProvider>
+        );
+    },
+    enableSorting: false,
+    enableFiltering: true,
+    size: 90,
+    filterFn: 'arrIncludesSome',
+  },
+  // Use the new non-editable date cell
+  { accessorKey: 'created_at', header: "Created At", cell: DisplayDateCell, enableSorting: true, size: 130 },
+  { 
+    accessorKey: 'updated_by_employee', 
+    header: "Updated By", 
+    cell: ({ row }) => {
+        const employee = row.original.updated_by_employee;
+        if (!employee) return <span className="text-muted-foreground">-</span>;
+        const fallback = (employee.first_name?.[0] || '') + (employee.last_name?.[0] || '');
+        return (
+            <TooltipProvider>
+                <Tooltip><TooltipTrigger>
+                    <Avatar className="h-7 w-7"><AvatarImage src={employee.profile_picture_url} /><AvatarFallback>{fallback}</AvatarFallback></Avatar>
+                </TooltipTrigger><TooltipContent>{employee.first_name} {employee.last_name}</TooltipContent></Tooltip>
+            </TooltipProvider>
+        );
+    }, 
+    enableSorting: false, 
+    size: 90 
+  },
+  // Use the new non-editable date cell
+  { accessorKey: 'updated_at', header: "Updated At", cell: DisplayDateCell, enableSorting: true, size: 130 },
 ];
 
-// NEW Action Column (to be added at the end)
+// This column is added at the end automatically by `TanstackContactsPage.tsx`
 export const ActionColumn: ColumnDef<SimpleContact> = {
     id: 'actions',
-    size: 60,
+    size: 40,
     cell: ({ row, table }) => {
         const contact = row.original;
-        const meta = table.options.meta as any; // Cast to access custom meta properties
+        const meta = table.options.meta as any;
 
         if (row.getIsGrouped()) return null;
 

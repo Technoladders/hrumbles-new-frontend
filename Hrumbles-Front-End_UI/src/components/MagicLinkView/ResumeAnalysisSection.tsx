@@ -165,8 +165,8 @@ export const ResumeAnalysisSection: React.FC<ResumeAnalysisSectionProps> = ({
                           <td className="px-4 py-3">{submenu.score}/10</td>
                           <td className="px-4 py-3">{submenu.weightage}%</td>
                           <td className="px-4 py-3">
-                            {submenu.weighted_score.toFixed(1)}
-                          </td>
+  {typeof submenu.weighted_score === 'number' ? submenu.weighted_score.toFixed(1) : 'N/A'}
+</td>
                           <td className="px-4 py-3">{submenu.remarks}</td>
                         </tr>
                       ))}

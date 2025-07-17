@@ -20,6 +20,7 @@ import {
   getExpandedRowModel,
   getFacetedRowModel,
   getFacetedUniqueValues,
+  ColumnFiltersState
 } from '@tanstack/react-table';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -36,6 +37,7 @@ import { AddContactForm } from '@/components/sales/contacts-table/AddContactForm
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { getCustomCell } from '@/components/sales/contacts-table/columns';
 import { useDeleteContact } from '@/hooks/sales/useDeleteContact';
+import { DataTablePagination } from '@/components/ui/data-table-pagination'; 
 
 const TanstackContactsPage: React.FC = () => {
   const { toast } = useToast();
@@ -57,6 +59,7 @@ const TanstackContactsPage: React.FC = () => {
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const [grouping, setGrouping] = React.useState<GroupingState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+    const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
 
   const { data: customFields = [] } = useQuery({
     queryKey: ['customContactFields', organization_id],
@@ -67,6 +70,45 @@ const TanstackContactsPage: React.FC = () => {
     },
     enabled: !!organization_id,
   });
+
+    React.useEffect(() => {
+    console.log('[DEBUG-1] Raw server data received:', serverContacts);
+    setData(serverContacts);
+  }, [serverContacts]);
+
+  // --- DEBUG LOG #2: See how the filter state changes ---
+  React.useEffect(() => {
+    console.log('[DEBUG-2] Column filter state changed:', columnFilters);
+  }, [columnFilters]);
+
+  // ADD: Fetch employees to use as filter options
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employeesForFilter', organization_id],
+    queryFn: async () => {
+        if (!organization_id) return [];
+        const { data, error } = await supabase
+            .from('hr_employees')
+            .select('id, first_name, last_name')
+            .eq('organization_id', organization_id)
+            .order('first_name', { ascending: true });
+        
+        if (error) {
+            console.error("Error fetching employees:", error);
+            return [];
+        }
+        return data;
+    },
+    enabled: !!organization_id,
+  });
+
+  // ADD: Memoize the options for the filter component
+  const createdByOptions = React.useMemo(() => {
+      return employees.map(emp => ({
+          value: emp.id,
+          label: `${emp.first_name} ${emp.last_name}`,
+      }));
+  }, [employees]);
+
 
   const memoizedColumns = React.useMemo<ColumnDef<SimpleContact>[]>(() => {
     const dynamicColumns: ColumnDef<SimpleContact>[] = customFields.map(field => ({
@@ -86,12 +128,14 @@ const TanstackContactsPage: React.FC = () => {
       pagination: {
         pageSize: 20,
       },
+      
     },
     state: {
       columnOrder,
       columnSizing,
       grouping,
       columnVisibility,
+      columnFilters,
     },
     meta: {
       updateData: (rowIndex: number, columnId: string, value: unknown) => {
@@ -102,6 +146,7 @@ const TanstackContactsPage: React.FC = () => {
       },
     },
     columnResizeMode: 'onChange',
+    onColumnFiltersChange: setColumnFilters,
     onColumnSizingChange: setColumnSizing,
     onColumnOrderChange: setColumnOrder,
     onGroupingChange: setGrouping,
@@ -188,48 +233,50 @@ const TanstackContactsPage: React.FC = () => {
 
   const handleToggleGrouping = () => setGrouping(prev => (prev.length ? [] : ['contact_stage']));
 
-  return (
-    <DndProvider backend={HTML5Backend}>
-      <div className="h-full w-full p-4 md:p-6 flex flex-col space-y-4">
+ return (
+    // Changed: This is now the main container for the entire table view component.
+    // It fills the height given by ContactsView and handles its children's layout.
+    // overflow-hidden is crucial to ensure scrolling happens ONLY in the designated area.
+    <div className="flex h-full flex-col overflow-hidden rounded-lg border bg-white">
+      {/* Part 1: Fixed Toolbar */}
+      <div className="p-4 border-b">
         <DataTableToolbar
           table={table}
           onOpenAddContactDialog={() => setIsAddContactOpen(true)}
-          onAddColumn={() => setIsAddColumnOpen(true)}
+          onAddColumn={() => setIsAddColumnOpen(true)} // You might need to pass this down if it's used
           onToggleGrouping={handleToggleGrouping}
+           createdByOptions={createdByOptions}
         />
-        <div className="flex-1 overflow-y-auto max-h-[calc(100vh-250px)] rounded-md border bg-white">
-          <DataTable
-            data={data}
-            columns={memoizedColumns}
-            meta={{
-              updateData: handleRowUpdate,
-              deleteRow: handleDeleteRow,
-            }}
-            onRowUpdate={handleRowUpdate}
-            columnOrder={columnOrder}
-            setColumnOrder={handleColumnOrderChange}
-            columnSizing={columnSizing}
-            setColumnSizing={handleColumnSizingChange}
-            columnVisibility={columnVisibility}
-            setColumnVisibility={setColumnVisibility}
-            grouping={grouping}
-            setGrouping={setGrouping}
-          />
-        </div>
-        <AddColumnDialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen} />
-        <Dialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>
-          <DialogContent className="sm:max-w-[600px]">
-            <DialogHeader>
-              <DialogTitle>Add New Contact</DialogTitle>
-            </DialogHeader>
-            <AddContactForm
-              onClose={() => setIsAddContactOpen(false)}
-              onSuccess={(newContact) => setData(currentData => [newContact, ...currentData])}
-            />
-          </DialogContent>
-        </Dialog>
       </div>
-    </DndProvider>
+
+      {/* Part 2: Scrolling Content Area */}
+      {/* flex-1 makes this div grow to fill available space. */}
+      {/* overflow-auto enables vertical and horizontal scrolling for the table inside. */}
+      <div className="flex-1 overflow-auto">
+        <DataTable table={table} />
+      </div>
+
+      {/* Part 3: Fixed Pagination */}
+      <div className="p-2 border-t">
+        <DataTablePagination table={table} />
+      </div>
+
+      {/* Dialogs can remain at this level */}
+      <AddColumnDialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen} />
+      <Dialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Add New Contact</DialogTitle>
+          </DialogHeader>
+          <AddContactForm
+            onClose={() => setIsAddContactOpen(false)}
+            onSuccess={(newContact) => setData(currentData => [newContact, ...currentData])}
+          />
+        </DialogContent>
+      </Dialog>
+    </div>
+    // Note: The DndProvider should ideally be moved up to ContactsView.tsx
+    // to wrap both views, but it can stay here if only used for the table.
   );
 };
 

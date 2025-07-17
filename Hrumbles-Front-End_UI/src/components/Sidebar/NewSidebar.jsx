@@ -18,7 +18,7 @@ import { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { logout } from "../../Redux/authSlice";
-import { ChevronDownIcon, ChevronUpIcon, ChevronLeftIcon, ChevronRightIcon } from "@chakra-ui/icons";
+import { ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
 import { menuItemsByRole } from "./SidebarMenuItem";
 import { ArrowRightFromLine, ArrowLeftToLine} from 'lucide-react';
 import supabase from "../../config/supabaseClient";
@@ -86,21 +86,15 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const [openDropdown, setOpenDropdown] = useState(null);
   const [isMobile] = useMediaQuery("(max-width: 768px)");
 
-  console.log('Role', role)
-  console.log('departmentName', departmentName)
-
-
-  // --- NEW: State for employee profile and profile menu toggle ---
   const [employeeProfile, setEmployeeProfile] = useState(null);
   const { isOpen: isProfileMenuOpen, onToggle: toggleProfileMenu } = useDisclosure();
 
-  // --- Theme Colors ---
   const bgColor = "#364153";
   const activeBg = "#7B43F1";
   const hoverBg = "#4A5568";
   const textColor = "white";
 
-  // --- NEW: Fetch employee profile data ---
+  // Fetch employee profile data (no changes needed here)
   useEffect(() => {
     const fetchEmployeeProfile = async () => {
       if (!user?.id) {
@@ -129,62 +123,62 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
     fetchEmployeeProfile();
   }, [user?.id]);
 
+  // Fetch department name (no changes needed here)
   useEffect(() => {
     const fetchDepartmentName = async () => {
       if (!user?.id) {
         setDepartmentName("Unknown Department");
         return;
       }
-
       try {
-        // Step 1: Fetch department_id from hr_employees where id matches user.id
         const { data: employeeData, error: employeeError } = await supabase
           .from("hr_employees")
           .select("department_id")
           .eq("id", user.id)
           .single();
-
-        if (employeeError) {
-          console.error("Error fetching employee data:", employeeError);
-          setDepartmentName("Unknown Department");
-          return;
-        }
-
+        if (employeeError) { throw employeeError; }
         if (!employeeData?.department_id) {
           setDepartmentName("Unknown Department");
           return;
         }
-
-        // Step 2: Fetch department name from hr_departments using department_id
         const { data: departmentData, error: departmentError } = await supabase
           .from("hr_departments")
           .select("name")
           .eq("id", employeeData.department_id)
           .single();
-
-        if (departmentError) {
-          console.error("Error fetching department data:", departmentError);
-          setDepartmentName("Unknown Department");
-          return;
-        }
-
+        if (departmentError) { throw departmentError; }
         setDepartmentName(departmentData.name || "Unknown Department");
       } catch (error) {
-        console.error("Unexpected error:", error);
+        console.error("Error fetching department:", error.message);
         setDepartmentName("Unknown Department");
       }
     };
-
     fetchDepartmentName();
   }, [user?.id]);
 
+  // Menu configuration logic (no changes needed here)
   const menuConfig =
     role === "employee" || role === "admin"
       ? menuItemsByRole[role](departmentName)
       : menuItemsByRole[role] || [];
   
-  const isCategorized = role === 'organization_superadmin';
-  const [activeSuite, setActiveSuite] = useState(isCategorized ? menuConfig[0].title : null);
+  // --- ✅ START: APPLIED FIXES ---
+  // 1. Check for 'admin' role in addition to 'organization_superadmin'
+  const isCategorized = role === 'organization_superadmin' || role === 'admin';
+  
+  // 2. Safely initialize activeSuite state using optional chaining
+  const [activeSuite, setActiveSuite] = useState(isCategorized ? menuConfig?.[0]?.title : null);
+  // --- ✅ END: APPLIED FIXES ---
+
+  // Update activeSuite if menuConfig changes and the current suite doesn't exist anymore
+  useEffect(() => {
+    if (isCategorized) {
+      const suiteExists = menuConfig.some(suite => suite.title === activeSuite);
+      if (!suiteExists && menuConfig.length > 0) {
+        setActiveSuite(menuConfig[0].title);
+      }
+    }
+  }, [menuConfig, activeSuite, isCategorized]);
   
   const itemsToRender = isCategorized
     ? menuConfig.find(suite => suite.title === activeSuite)?.items || []
@@ -196,7 +190,6 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
     setOpenDropdown(openDropdown === label ? null : label);
   };
   
-  // --- NEW: Handlers for profile menu actions ---
   const handleLogout = () => {
     dispatch(logout());
     navigate("/login");
@@ -210,7 +203,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       width={isExpanded ? "250px" : "80px"} transition="width 0.2s ease-in-out"
       position="fixed" left={0} top={0} p={isExpanded ? 4 : 2} zIndex={20}
     >
-      {/* Header (unchanged) */}
+      {/* Header */}
       <Flex align="center" mb={8} minH="40px" px={isExpanded ? 0 : 1}>
         {isExpanded && <Image src="/2-cropped.svg" alt="Logo" width="160px" />}
         <Spacer />
@@ -221,7 +214,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
         )}
       </Flex>
       
-      {/* Main Menu Area - Pushes footer down */}
+      {/* Main Menu Area */}
       <VStack
         spacing={2} align="stretch" flex="1" overflowY="auto" overflowX="hidden"
         css={{ "&::-webkit-scrollbar": { display: "none" }, "scrollbar-width": "none" }}
@@ -240,18 +233,14 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
         ))}
       </VStack>
 
-      {/* --- MODIFIED: Footer section with Profile Menu and Suite Switcher --- */}
+      {/* Footer section with Profile Menu and Suite Switcher */}
       <VStack spacing={2} align="stretch" mt={4}>
-        {/* User Profile Menu - Visible only when expanded */}
+        {/* User Profile Menu */}
         {isExpanded && (
            <Box>
             <Flex
-              align="center"
-              p={2}
-              bg="gray.700"
-              borderRadius="lg"
-              cursor="pointer"
-              _hover={{ bg: "gray.600" }}
+              align="center" p={2} bg="gray.700" borderRadius="lg"
+              cursor="pointer" _hover={{ bg: "gray.600" }}
               onClick={toggleProfileMenu}
             >
               <Avatar size="sm" name={fullName} src={employeeProfile?.avatarUrl} />
@@ -262,10 +251,10 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
             <Collapse in={isProfileMenuOpen} animateOpacity>
               <VStack align="stretch" spacing={1} mt={2} pl={2}>
                 {departmentName !== "Finance" && (
-          <Text as={Link} to="/profile" p={2} borderRadius="md" _hover={{ bg: hoverBg }}>
-            My Profile
-          </Text>
-        )}
+                  <Text as={Link} to="/profile" p={2} borderRadius="md" _hover={{ bg: hoverBg }}>
+                    My Profile
+                  </Text>
+                )}
                 <Text onClick={handleLogout} p={2} borderRadius="md" cursor="pointer" _hover={{bg: hoverBg}}>Logout</Text>
               </VStack>
             </Collapse>
@@ -281,17 +270,13 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
             borderRadius="lg"
             bg="rgba(0,0,0,0.2)"
           >
-            {/* --- MODIFIED: Show all suites when expanded, only active when collapsed --- */}
             {(isExpanded ? menuConfig : menuConfig.filter(s => s.title === activeSuite)).map((suite) => (
               <Tooltip key={suite.title} label={suite.title} placement="top" isDisabled={isExpanded}>
                 <IconButton
                   aria-label={suite.title}
                   icon={<Icon as={suite.icon} fontSize="20px" />}
-                  isRound
-                  size="md"
-                  bg={activeSuite === suite.title ? activeBg : 'transparent'}
-                  color="white"
-                  _hover={{ bg: activeSuite !== suite.title && hoverBg }}
+                  isRound size="md" bg={activeSuite === suite.title ? activeBg : 'transparent'}
+                  color="white" _hover={{ bg: activeSuite !== suite.title && hoverBg }}
                   onClick={() => setActiveSuite(suite.title)}
                   flex="1"
                 />

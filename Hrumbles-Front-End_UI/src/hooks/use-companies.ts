@@ -9,6 +9,7 @@ import {
 } from '@/types/company';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { Database } from '@/types/database.types'; 
+import { v4 as uuidv4 } from 'uuid';
 
 // --- Gemini Config & Helper Functions ---
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
@@ -135,7 +136,7 @@ export const useCompanies = () => { /* ... (your existing hook) ... */
     queryFn: async (): Promise<Company[]> => {
       const { data, error } = await supabase
         .from('companies')
-        .select('id, name, logo_url, employee_count, industry, stage, location, account_owner, website, linkedin, created_at, revenue, cashflow, founded_as, employee_count_date, competitors, products, services, key_people, about, domain, status')
+        .select('id, name, logo_url, employee_count, industry, stage, location, account_owner, website, linkedin, created_at, revenue, cashflow, founded_as, employee_count_date, competitors, products, services, key_people, about, domain, status, created_by_employee:hr_employees!companies_created_by_fkey(first_name, last_name), updated_by_employee:hr_employees!companies_updated_by_fkey(first_name, last_name)')
         .order('created_at', { ascending: false })
         .order('id', { ascending: true });
       if (error) { console.error('Error fetching ordered companies:', error); throw error; }
@@ -470,10 +471,11 @@ export const useFetchCompanyDetails = () => { /* ... (your existing hook) ... */
         17. Key Products/Platforms (array of strings, key: "products")
         18. Main Services Offered (array of strings, key: "services")
         19. Key People (array of objects {name: string, title: string}, THIS SHOULD INCLUDE THE CEO IF KNOWN, key: "key_people"). If none known, use null or an empty array.
-        20. Publicly accessible Logo URL (key: "logo_url")
+        
+        20. **Logo URL (key: "logo_url"): First, try to construct a logo URL from a reliable logo service like Clearbit using the company's domain (e.g., 'https://logo.clearbit.com/DOMAIN_NAME'). If you cannot determine the domain, then find the best publicly accessible, non-temporary logo URL you can find.**
 
         Return ONLY a single, valid JSON object with these keys. Use null if info not found. No extra text or markdown.
-        Example: {"name":"Accenture", "start_date":"1989", "key_people":[{"name":"Julie Sweet", "title":"Chair & CEO"}]}
+        Example: {"name":"Accenture", "domain":"accenture.com", "logo_url":"https://logo.clearbit.com/accenture.com"}
       `;
 
     try {
@@ -497,7 +499,8 @@ export const useFetchCompanyDetails = () => { /* ... (your existing hook) ... */
 
       const validatedWebsite = await validateUrl(data.website);
       const validatedLinkedIn = await validateUrl(data.linkedin);
-      const validatedLogoUrl = await validateUrl(data.logo_url);
+     
+      const selfHostedLogoUrl = await uploadLogoFromUrl(data.logo_url);
 
       const mappedDetails: Partial<CompanyDetailTypeFromTypes> = {
           name: data.name.trim(),
@@ -517,7 +520,7 @@ export const useFetchCompanyDetails = () => { /* ... (your existing hook) ... */
           products: Array.isArray(data.products) ? data.products.map((p: any) => String(p || '').trim()).filter(Boolean) : null,
           services: Array.isArray(data.services) ? data.services.map((s: any) => String(s || '').trim()).filter(Boolean) : null,
           key_people: data.key_people === "-" || data.key_people === null ? null : (Array.isArray(data.key_people) ? data.key_people.map((kp: any) => ({ name: String(kp.name || '').trim(), title: String(kp.title || '').trim() })).filter((kp: KeyPerson) => kp.name && kp.title) : null),
-          logo_url: validatedLogoUrl,
+         logo_url: selfHostedLogoUrl, 
       };
 
       if (Array.isArray(mappedDetails.key_people)) {
@@ -533,4 +536,35 @@ export const useFetchCompanyDetails = () => { /* ... (your existing hook) ... */
       throw new Error(`Failed to fetch details from Gemini: ${error.message}`);
     }
   };
+}
+
+// --- ADD THIS NEW HELPER FUNCTION ---
+// This function will download an image from a URL and upload it to your Supabase Storage.
+async function uploadLogoFromUrl(url: string | null | undefined): Promise<string | null> {
+  if (!url) return null;
+
+  try {
+    // Invoke the 'image-proxy' function with the target URL
+    const { data, error } = await supabase.functions.invoke('image-proxy', {
+      body: { imageUrl: url },
+    });
+
+    if (error) {
+      // This will catch network errors or if the function itself throws an unhandled error
+      throw new Error(`Edge function invocation failed: ${error.message}`);
+    }
+    
+    // The function returns JSON, so 'data' will have our object
+    if (data.error) {
+        // This catches errors returned deliberately from our function logic
+        throw new Error(`Image proxy error: ${data.error}`);
+    }
+
+    console.log('Successfully proxied and uploaded logo:', data.publicUrl);
+    return data.publicUrl || null;
+
+  } catch (error: any) {
+    console.error(`Error processing logo via proxy for ${url}:`, error.message);
+    return null; // Return null on failure
+  }
 }

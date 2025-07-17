@@ -88,34 +88,39 @@ const KanbanBoard: React.FC = () => {
     return <div className="p-4 text-center text-muted-foreground">Loading Board...</div>;
   }
 
-  return (
-    <DndProvider backend={HTML5Backend}>
-      <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl rounded-2xl">
-        <CardHeader className="p-6">
-          <h2 className="text-xl md:text-2xl font-semibold text-gray-800">Kanban Board</h2>
-        </CardHeader>
-        <CardContent className="p-6 overflow-x-auto">
-          <KanbanToolbar
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            sortOption={sortOption}
-            onSortChange={setSortOption}
-          />
-          <div className="flex space-x-4 min-w-max">
-            {stages.map(stage => (
-              <KanbanColumn
-                key={stage.id}
-                stage={stage}
-                contacts={boardData[stage.name] || []}
-                onDrop={handleDrop}
-                style={{ minWidth: '250px', maxWidth: '300px' }}
-              />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </DndProvider>
-  );
+return (
+        <DndProvider backend={HTML5Backend}>
+            {/* Changed: Main container now fills height and uses flexbox */}
+            <div className="h-full w-full flex flex-col bg-white rounded-lg border">
+                {/* KanbanToolbar now has a border */}
+                <div className="p-4 border-b">
+                     <KanbanToolbar
+                        searchTerm={searchTerm}
+                        onSearchChange={setSearchTerm}
+                        sortOption={sortOption}
+                        onSortChange={setSortOption}
+                    />
+                </div>
+
+                {/* Changed: This is the main scrolling container for the board */}
+                {/* flex-1: takes available height */}
+                {/* overflow-x-auto: allows horizontal scrolling for columns */}
+                {/* p-4: adds some padding around the columns */}
+                <div className="flex-1 overflow-x-auto p-4">
+                    <div className="flex h-full space-x-4">
+                        {stages.map(stage => (
+                            <KanbanColumn
+                                key={stage.id}
+                                stage={stage}
+                                contacts={boardData[stage.name] || []}
+                                onDrop={handleDrop}
+                            />
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </DndProvider>
+    );
 };
 
 export default KanbanBoard;

@@ -6,7 +6,7 @@ import { Company } from "@/types/company";
 import { useCompanies, useCompanyCounts } from "@/hooks/use-companies";
 import {
   Edit, Building2, Users, Search, Plus, ArrowUp, Globe, Linkedin, Link as LinkIcon,
-  Upload, Loader2, Download, ChevronDown,
+  Upload, Loader2, Download, ChevronDown, Sparkles, PenSquare
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,6 +34,18 @@ import CompanyAddForm from "@/components/sales/CompanyAddForm";
 import EffectivePagination from "@/components/sales/EffectivePagination";
 import Papa from 'papaparse';
 import { z } from 'zod';
+import { useSelector } from 'react-redux';
+import moment from "moment";
+import { useMemo } from 'react'; // ADD THIS
+import { Calendar as CalendarIcon, Filter, X } from "lucide-react"; // ADD/UPDATE THIS
+import { DateRange } from "react-day-picker"; // ADD THIS
+import { format } from "date-fns"; // ADD THIS
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // ADD THIS
+import { Calendar } from "@/components/ui/calendar"; // ADD THIS
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // ADD THIS
+import { cn } from "@/lib/utils"; // ADD THIS (if not already present)
+import CompanyCreatorChart from "@/components/sales/CompanyCreatorChart"; // ADD THIS
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 const companyCsvSchema = z.object({
   name: z.string().min(1, { message: "Company Name is required" }),
@@ -114,18 +126,27 @@ const getDisplayValue = (value: string | number | null | undefined, fallback: st
 const CompaniesPage = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const user = useSelector((state: any) => state.auth.user);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
   const { data: companies = [], isLoading, isError, error } = useCompanies();
   const { data: counts, isLoading: isCountsLoading } = useCompanyCounts();
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [editCompany, setEditCompany] = useState<Company | null>(null);
+const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+ const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCreatorId, setSelectedCreatorId] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+const [editCompany, setEditCompany] = useState<CompanyDetail | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
-  const itemsPerPage = 10;
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+    // --- ADD THESE LINES ---
+  const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false);
+  const [companyToReview, setCompanyToReview] = useState<Partial<Company> | null>(null);
+   const [isManualAddDialogOpen, setIsManualAddDialogOpen] = useState(false);
+   const currentUserId = user?.id || null;
 
   useEffect(() => {
     const handleScroll = () => setShowBackToTop(window.scrollY > 300);
@@ -142,36 +163,80 @@ const CompaniesPage = () => {
 
   useEffect(() => { setCurrentPage(1); }, [searchTerm]);
 
-  const updateStageMutation = useMutation({
+   const updateStageMutation = useMutation({
     mutationFn: async ({ companyId, stage }: { companyId: number; stage: string }) => {
-      const { error: updateError } = await supabase.from('companies').update({ stage }).eq('id', companyId);
+      const { error: updateError } = await supabase.from('companies').update({ stage, updated_by: currentUserId }).eq('id', companyId);
       if (updateError) throw updateError;
-      return { companyId, stage };
     },
-    onSuccess: (_, variables) => {
-      toast({ title: "Stage Updated", description: `Company stage set to ${variables.stage}.` });
-      queryClient.invalidateQueries({ queryKey: ['companies'] });
-      queryClient.invalidateQueries({ queryKey: ['company', variables.companyId] });
-    },
-    onError: (updateError: any) => {
-      toast({ title: "Update Failed", description: updateError.message, variant: "destructive" });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['companies'] }),
+    onError: (e: any) => toast({ title: "Update Failed", description: e.message, variant: "destructive" }),
   });
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
   const handleStageChange = (companyId: number, newStage: string) => updateStageMutation.mutate({ companyId, stage: newStage });
-  const handleEditClick = (company: Company) => { setEditCompany(company); setIsEditDialogOpen(true); };
+  const handleEditClick = (company: CompanyDetail) => { setEditCompany(company); setIsEditDialogOpen(true); };
+
   const handleCloseEditDialog = () => setIsEditDialogOpen(false);
   const handleAddClick = () => setIsAddDialogOpen(true);
   const handleCloseAddDialog = () => setIsAddDialogOpen(false);
 
-  const filteredCompanies = companies?.filter(company =>
-    (company.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (company.industry?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (company.location?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (company.account_owner?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-  ) || [];
-  const totalFilteredPages = Math.ceil(filteredCompanies.length / itemsPerPage);
+    const handleCreatorClick = (creatorId: string | null) => {
+    if (creatorId) {
+      setSelectedCreatorId(creatorId);
+      setCurrentPage(1); // Reset to the first page to show results
+    }
+  };
+
+  const uniqueCreators = useMemo(() => {
+    const creators = new Map<string, { id: string; name: string }>();
+    companies.forEach(company => {
+      if ( company.created_by_employee) {
+        const name = `${company.created_by_employee.first_name} ${company.created_by_employee.last_name}`;
+        creators.set(company.created_by, { id: company.created_by, name });
+      }
+    });
+    return Array.from(creators.values());
+  }, [companies]);
+
+  console.log("Unique creators", companies);
+
+  // Memoize the stats for the chart
+  const creatorStats = useMemo(() => {
+    const stats: { [key: string]: number } = {};
+    companies.forEach(company => {
+      if (company.created_by_employee) {
+        const name = `${company.created_by_employee.first_name} ${company.created_by_employee.last_name}`;
+        stats[name] = (stats[name] || 0) + 1;
+      } else {
+        stats['System'] = (stats['System'] || 0) + 1;
+      }
+    });
+    return Object.entries(stats).map(([name, count]) => ({ name, count })).sort((a,b) => b.count - a.count);
+  }, [companies]);
+
+const filteredCompanies = useMemo(() => {
+    return companies.filter(company => {
+      // Search Term Filter
+      const searchMatch = (
+        (company.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (company.industry?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+      );
+      
+      // Creator Filter
+      const creatorMatch = selectedCreatorId === 'all' || company.created_by === selectedCreatorId;
+
+      // Date Range Filter
+      const dateMatch = !dateRange?.from || (
+        new Date(company.created_at) >= dateRange.from &&
+        (!dateRange.to || new Date(company.created_at) <= dateRange.to)
+      );
+
+      return searchMatch && creatorMatch && dateMatch;
+    });
+  }, [companies, searchTerm, selectedCreatorId, dateRange]);
+
+  const totalPages = Math.ceil(filteredCompanies.length / itemsPerPage);
+  const paginatedCompanies = filteredCompanies.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalFilteredPages) {
@@ -179,7 +244,7 @@ const CompaniesPage = () => {
       document.getElementById('company-list-top')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
-  const paginatedCompanies = filteredCompanies.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
 
   const downloadCsvTemplate = () => {
     const sampleRow = `"Acme Corp","https://acme.com","acme.com","Customer","Leading innovator in widget manufacturing.","1990-01-15","Previously Acme Widgets","500","2023-10-01","123 Innovation Drive, Techville, CA","https://linkedin.com/company/acme","Technology","Active Opportunity","Techville, USA","Jane Doe","50M","10M","Globex Corp,Stark Industries","Widget Pro,Widget Ultra","Consulting,Support","[{\"name\":\"John Smith\",\"title\":\"CEO\"},{\"name\":\"Alice Brown\",\"title\":\"CTO\"}]"`;
@@ -198,6 +263,13 @@ const CompaniesPage = () => {
     } else {
       toast({ title: "Download Failed", description: "Browser doesn't support download.", variant: "destructive" });
     }
+  };
+
+  // --- ADD THIS ENTIRE FUNCTION ---
+  const handleCompanyDataFetched = (fetchedData: Partial<Company>) => {
+    setCompanyToReview(fetchedData); // Store the fetched data
+    setIsAddDialogOpen(false);      // Close the initial "fetch" dialog
+    setIsReviewDialogOpen(true);    // Open the new "review and save" dialog
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -227,6 +299,11 @@ const CompaniesPage = () => {
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
     });
+  };
+
+        const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(Number(value));
+    setCurrentPage(1); // Reset to first page when items per page changes
   };
 
   const processCsvData = async (data: Record<string, any>[]) => {
@@ -351,6 +428,8 @@ const CompaniesPage = () => {
       return null;
     };
 
+
+
     const iconsToRender = [
       renderSingleIcon(company.website, "Website", LinkIcon),
       renderSingleIcon(company.linkedin, "LinkedIn", Linkedin),
@@ -362,54 +441,24 @@ const CompaniesPage = () => {
 
     return (<div className="flex items-center gap-1 mt-1">{iconsToRender}</div>);
   };
-
-  // This function renderUrlIcons is no longer needed if the "Links" column is removed.
-  // const renderUrlIcons = (company: Company) => (
-  //   <div className="flex items-center justify-end gap-2 text-muted-foreground">
-  //     <a
-  //       href={`https://www.google.com/search?q=${encodeURIComponent(company.name)}`}
-  //       target="_blank"
-  //       rel="noreferrer"
-  //       title={`Search ${company.name}`}
-  //       className="hover:text-primary"
-  //     >
-  //       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-  //         <path d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.18,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.18,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.18,22C17.6,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z" />
-  //       </svg>
-  //     </a>
-  //     {company.linkedin && typeof company.linkedin === 'string' && company.linkedin.trim() !== '' && (
-  //       <a
-  //         href={company.linkedin.startsWith('http') ? company.linkedin : `https://${company.linkedin}`}
-  //         target="_blank"
-  //         rel="noreferrer"
-  //         title="LinkedIn Profile"
-  //         className="hover:text-primary"
-  //       >
-  //         <Linkedin className="h-4 w-4" />
-  //       </a>
-  //     )}
-  //   </div>
-  // );
-
+  
   return (
     <div className="container mx-auto px-4 py-6 max-w-full">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-2">
         <h1 className="text-2xl font-bold">Companies</h1>
         <div className="flex gap-2 flex-wrap">
-          {/* <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="h-9" onClick={handleAddClick}>
-                <Plus className="h-4 w-4 mr-2" /> Add Company
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Add New Company</DialogTitle>
-                <DialogDescription>Enter details.</DialogDescription>
-              </DialogHeader>
-              <CompanyAddForm onAdd={handleCloseAddDialog} onCancel={handleCloseAddDialog} />
-            </DialogContent>
-          </Dialog> */}
+          {/* --- ✅ BUTTON AND DIALOG UNCOMMENTED --- */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button className="h-9"><Plus className="h-4 w-4 mr-2" />Add Company<ChevronDown className="h-4 w-4 ml-2" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setIsAddDialogOpen(true)}><Sparkles className="mr-2 h-4 w-4" /><span>Fetch with AI</span></DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setIsManualAddDialogOpen(true)}><PenSquare className="mr-2 h-4 w-4" /><span>Enter Manually</span></DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {/* --- ✅ END OF CHANGE --- */}
+
+          
+   
           <Button variant="outline" className="h-9" onClick={downloadCsvTemplate}>
             <Download className="h-4 w-4 mr-2" />Template
           </Button>
@@ -446,140 +495,229 @@ const CompaniesPage = () => {
         </Card>
       </div>
 
-      <div className="mb-4">
+ <div className="mb-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-          <Input placeholder="Search companies..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 h-9" />
+          <Input placeholder="Search companies, industries..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 h-9" />
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="text-center py-10 text-muted-foreground">Loading...</div>
-      ) : isError ? (
-        <div className="text-center py-10 text-red-600">Error: {error?.message}</div>
-      ) : (
-        <div id="company-list-top" className="border rounded-lg overflow-hidden shadow-sm min-w-[800px]">
-          <div className="flex items-center bg-muted/50 px-4 py-2 border-b text-xs font-medium text-muted-foreground sticky top-0 z-10">
-            <div className="w-[30%] xl:w-[25%] pr-4 flex-shrink-0">Company</div>
-            <div className="w-[12%] xl:w-[10%] text-right pr-4 flex-shrink-0"># Emp.</div>
-            <div className="w-[18%] xl:w-[15%] pr-4 flex-shrink-0">Industry</div>
-            <div className="w-[15%] xl:w-[15%] pr-4 flex-shrink-0">Stage</div>
-            <div className="w-[15%] xl:w-[15%] pr-4 flex-shrink-0">Account Owner</div>
-            <div className="w-[15%] xl:w-[15%] pr-4 flex-shrink-0">Location</div>
-            {/* <div className="w-[5%] text-right flex-shrink-0">Links</div> */} {/* REMOVED Links Header */}
-            <div className="w-[5%] pl-2 text-right flex-shrink-0">Action</div>
-          </div>
-          <div className="divide-y">
-            {paginatedCompanies.length > 0 ? (
-              paginatedCompanies.map((company) => (
-                <div key={company.id} className="flex items-center px-4 py-3 hover:bg-muted/30 text-sm">
-                  <div className="w-[30%] xl:w-[25%] pr-4 flex items-center gap-3 min-w-0 flex-shrink-0">
-                    <Avatar className="h-8 w-8 border flex-shrink-0">
-                      <AvatarImage src={company.logo_url || undefined} alt={company.name} />
-                      <AvatarFallback className="text-xs">{company.name?.charAt(0).toUpperCase() || '?'}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <Link to={`/companies/${company.id}`} className="font-medium text-primary hover:underline truncate block" title={company.name}>
-                        {getDisplayValue(company.name, 'Unnamed Company')}
-                      </Link>
-                      {renderSocialIcons(company)}
+      {/* --- ADD THIS NEW FILTER BAR --- */}
+      <div className="flex flex-wrap items-center gap-4 mb-6 p-4 border rounded-lg bg-muted/50">
+        <Filter className="h-5 w-5 text-muted-foreground" />
+        <h3 className="text-sm font-semibold">Filters:</h3>
+
+        <Select value={selectedCreatorId} onValueChange={setSelectedCreatorId}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by Creator" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Creators</SelectItem>
+            {uniqueCreators.map(creator => (
+              <SelectItem key={creator.id} value={creator.id}>{creator.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              id="date"
+              variant={"outline"}
+              className={cn("w-[300px] justify-start text-left font-normal", !dateRange && "text-muted-foreground")}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {dateRange?.from ? (
+                dateRange.to ? (
+                  <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</>
+                ) : (
+                  format(dateRange.from, "LLL dd, y")
+                )
+              ) : (
+                <span>Pick a date range</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              initialFocus
+              mode="range"
+              defaultMonth={dateRange?.from}
+              selected={dateRange}
+              onSelect={setDateRange}
+              numberOfMonths={2}
+            />
+          </PopoverContent>
+        </Popover>
+        {(selectedCreatorId !== 'all' || dateRange) && (
+          <Button variant="ghost" size="icon" onClick={() => { setSelectedCreatorId('all'); setDateRange(undefined); }}>
+            <X className="h-4 w-4" />
+            <span className="sr-only">Clear filters</span>
+          </Button>
+        )} */}
+      </div>
+
+      {/* --- ADD THE NEW CHART CARD --- */}
+      {/* <div className="mb-6">
+        <CompanyCreatorChart data={creatorStats} />
+      </div> */}
+
+ {/* NEW TABLE STRUCTURE */}
+      <div className="border rounded-lg overflow-hidden shadow-sm">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stage</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
+              <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {isLoading && <tr><td colSpan={5} className="text-center p-4">Loading...</td></tr>}
+            {isError && <tr><td colSpan={5} className="text-center p-4 text-red-500">Error loading data.</td></tr>}
+            {!isLoading && paginatedCompanies.length === 0 && (
+              <tr><td colSpan={5} className="text-center p-4 text-gray-500">No companies found.</td></tr>
+            )}
+            {paginatedCompanies.map((company) => (
+              <tr key={company.id} className="hover:bg-gray-50">
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0 h-10 w-10">
+                      <Avatar><AvatarImage src={company.logo_url || undefined} /><AvatarFallback>{company.name?.charAt(0)}</AvatarFallback></Avatar>
+                    </div>
+                    <div className="ml-4">
+                      <div className="text-sm font-medium text-gray-900 hover:text-primary"><Link to={`/companies/${company.id}`}>{company.name}</Link></div>
+                      <div className="text-xs text-gray-500">{getDisplayValue(company.industry, 'No Industry')}</div>
                     </div>
                   </div>
-                  <div className="w-[12%] xl:w-[10%] text-right pr-4 text-muted-foreground flex-shrink-0">
-                    {getDisplayValue(company.employee_count, '-')}
-                  </div>
-                  <div className="w-[18%] xl:w-[15%] pr-4 truncate text-muted-foreground flex-shrink-0" title={getDisplayValue(company.industry, '')}>
-                    {getDisplayValue(company.industry, '-')}
-                  </div>
-                  <div className="w-[15%] xl:w-[15%] pr-4 flex-shrink-0">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className={`h-7 px-2 text-xs w-full justify-between truncate border ${stageColors[getDisplayValue(company.stage, 'default')] ?? stageColors['default']}`}
-                          disabled={updateStageMutation.isPending && updateStageMutation.variables?.companyId === company.id}
-                        >
-                          <span className="truncate">{getDisplayValue(company.stage, 'Select Stage')}</span>
-                          <ChevronDown className="h-3 w-3 ml-1 flex-shrink-0" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start">
-                        <DropdownMenuLabel>Set Stage</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        {STAGES.map(stage => (
-                          <DropdownMenuItem key={stage} onSelect={() => handleStageChange(company.id, stage)} disabled={company.stage === stage}>
-                            {stage}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div className="w-[15%] xl:w-[15%] pr-4 truncate text-muted-foreground flex-shrink-0" title={getDisplayValue(company.account_owner, '')}>
-                    {getDisplayValue(company.account_owner, '-')}
-                  </div>
-                  <div className="w-[15%] xl:w-[15%] pr-4 truncate text-muted-foreground flex-shrink-0" title={getDisplayValue(company.location, '')}>
-                    {getDisplayValue(company.location, '-')}
-                  </div>
-                  {/* <div className="w-[5%] text-right flex-shrink-0"> */} {/* REMOVED Links Column Data */}
-                    {/* {renderUrlIcons(company)} */}
-                  {/* </div> */}
-                  <div className="w-[5%] pl-2 text-right flex-shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
-                      onClick={() => handleEditClick(company)}
-                      title="Edit Company"
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className={`h-7 px-2 text-xs w-full max-w-[150px] justify-between truncate border ${stageColors[getDisplayValue(company.stage, 'default')] ?? stageColors['default']}`} disabled={updateStageMutation.isPending && updateStageMutation.variables?.companyId === company.id}>
+                        <span className="truncate">{getDisplayValue(company.stage, 'Select Stage')}</span><ChevronDown className="h-3 w-3 ml-1 flex-shrink-0" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {STAGES.map(stage => <DropdownMenuItem key={stage} onSelect={() => handleStageChange(company.id, stage)}>{stage}</DropdownMenuItem>)}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </td>
+               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {company.created_by_employee ? (
+                    <button
+                      onClick={() => handleCreatorClick(company.created_by)}
+                      className="text-left hover:text-primary hover:underline focus:outline-none"
+                      title={`Filter by ${company.created_by_employee.first_name}`}
                     >
-                      <Edit className="h-3.5 w-3.5" />
-                      <span className="sr-only">Edit</span>
-                    </Button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-10 text-muted-foreground">
-                {searchTerm ? "No matching companies." : "No companies."}
-              </div>
-            )}
-          </div>
+                      {`${company.created_by_employee.first_name} ${company.created_by_employee.last_name}`}
+                    </button>
+                  ) : (
+                    <span>System</span>
+                  )}
+                  <div className="text-xs">{moment(company.created_at).format("DD MMM YYYY")}</div>
+                </td>
+
+                {/* === MODIFIED "Last Updated" CELL === */}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {company.updated_by_employee ? (
+                    <button
+                      onClick={() => handleCreatorClick(company.updated_by)}
+                      className="text-left hover:text-primary hover:underline focus:outline-none"
+                      title={`Filter by ${company.updated_by_employee.first_name}`}
+                    >
+                      {`${company.updated_by_employee.first_name} ${company.updated_by_employee.last_name}`}
+                    </button>
+                  ) : (
+                    <span>N/A</span>
+                  )}
+                  <div className="text-xs">{moment(company.updated_at).fromNow()}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <Button variant="ghost" size="icon" onClick={() => handleEditClick(company as CompanyDetail)}><Edit className="h-4 w-4" /></Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+   <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4 p-2 border-t">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Rows per page</span>
+          <Select
+            value={itemsPerPage.toString()}
+            onValueChange={handleItemsPerPageChange}
+          >
+            <SelectTrigger className="w-[70px] h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      )}
-      {totalFilteredPages > 1 && !isLoading && (
-        <EffectivePagination
-          className="mt-6"
-          currentPage={currentPage}
-          totalCount={filteredCompanies.length}
-          pageSize={itemsPerPage}
-          onPageChange={handlePageChange}
-          siblingCount={1}
-        />
-      )}
-      {showBackToTop && (
-        <Button
-          variant="outline"
-          size="icon"
-          className="fixed bottom-6 right-6 h-10 w-10 rounded-full shadow-lg z-50 border-border bg-background/80 backdrop-blur-sm"
-          onClick={scrollToTop}
-          title="Scroll to top"
-        >
-          <ArrowUp className="h-5 w-5" />
-          <span className="sr-only">Scroll to top</span>
-        </Button>
-      )}
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          
+          <span className="text-sm">
+            Page {currentPage} of {totalPages}
+          </span>
+  
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+  
+        <span className="text-sm text-muted-foreground">
+          Showing {filteredCompanies.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} 
+          to {Math.min(currentPage * itemsPerPage, filteredCompanies.length)} of {filteredCompanies.length} companies
+        </span>
+      </div>
+      {/* DIALOGS */}
+      {/* ✅ FIX: ADDED THE DIALOG FOR THE INITIAL FETCH STEP */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Fetch Company Data</DialogTitle><DialogDescription>Enter a company name to fetch details using AI.</DialogDescription></DialogHeader>
+          <CompanyAddForm onAdd={handleCompanyDataFetched} onCancel={() => setIsAddDialogOpen(false)} />
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Review and Create Company</DialogTitle><DialogDescription>Review the AI-fetched data then save.</DialogDescription></DialogHeader>
+          {companyToReview && <CompanyEditForm company={companyToReview} onClose={() => setIsReviewDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} />}
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={isManualAddDialogOpen} onOpenChange={setIsManualAddDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Add Company Manually</DialogTitle><DialogDescription>Fill out the form and click "Create Company" to save.</DialogDescription></DialogHeader>
+          <CompanyEditForm company={{}} onClose={() => setIsManualAddDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Company</DialogTitle>
-            <DialogDescription>Update details for {editCompany?.name ?? 'company'}.</DialogDescription>
-          </DialogHeader>
-          {editCompany && (
-            <CompanyEditForm
-              company={editCompany}
-              onClose={handleCloseEditDialog} // Ensure CompanyEditForm uses onClose
-            />
-          )}
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Edit Company</DialogTitle><DialogDescription>Update details for {editCompany?.name}.</DialogDescription></DialogHeader>
+          {editCompany && <CompanyEditForm company={editCompany} onClose={() => setIsEditDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} />}
         </DialogContent>
       </Dialog>
     </div>
@@ -587,3 +725,4 @@ const CompaniesPage = () => {
 };
 
 export default CompaniesPage;
+// 
