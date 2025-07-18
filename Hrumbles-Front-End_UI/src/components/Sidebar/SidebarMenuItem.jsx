@@ -10,7 +10,7 @@ import { TbCheckbox } from "react-icons/tb";
 import { GoOrganization } from "react-icons/go";
 import { VscOrganization } from "react-icons/vsc";
 import { GrDocumentTime } from "react-icons/gr";
-import { LuCalendarPlus } from "react-icons/lu";
+import { LuCalendarPlus, LuUserSearch } from "react-icons/lu";
 import { BsShieldLock } from "react-icons/bs";
 import { FaUserShield, FaProjectDiagram } from 'react-icons/fa';
 import { RiCustomerService2Fill } from 'react-icons/ri';
@@ -24,6 +24,7 @@ const orgSuperAdminAllItems = [
   { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" },
   { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+  { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
   { icon: GoGoal, label: "Goals", path: "/goals" },
   { icon: ImProfile, label: "My Profile", path: "/profile" },
   { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
@@ -109,6 +110,7 @@ const adminAllItems = [
     { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
     { icon: FiUsers, label: "Employees", path: "/employee", department: "Human Resource", },
     { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+  { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
     { icon: GoGoal, label: "Goals", path: "/goals" },
     { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
     { icon: ImProfile, label: "My Profile", path: "/profile" },
@@ -142,7 +144,7 @@ const adminAllItems = [
 ];
 
 // 2. Define labels for each suite for the Admin role
-const adminHrSuiteLabels = ["Dashboard", "Employees", "Jobs", "Goals", "Reports", "My Profile", "Time Sheet", "Regularization", "Leave", "Attendance", "Calendar", "Settings"];
+const adminHrSuiteLabels = ["Dashboard", "Employees", "Jobs", "Talent Pool", "Goals", "Reports", "My Profile", "Time Sheet", "Regularization", "Leave", "Attendance", "Calendar", "Settings"];
 const adminProjectSuiteLabels = ["Clients", "Projects"];
 const adminSalesSuiteLabels = ["Company", "Contacts"];
 const adminFinanceSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll"];
@@ -225,6 +227,7 @@ export const menuItemsByRole = {
     if (departmentName === "Human Resource") {
       baseMenu.splice(1, 0,
       { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+  { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
       { icon: GoGoal, label: "Goals", path: "/goalsview" },
       );
     }

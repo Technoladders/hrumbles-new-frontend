@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { DetailedTimesheetEntry } from '@/types/time-tracker-types';
-import { submitTimesheet } from '@/api/timeTracker';
 import { getAuthDataFromLocalStorage } from '@/utils/localstorage';
 import { DateTime } from 'luxon';
 
@@ -138,27 +137,20 @@ export const useTimesheetSubmission = () => {
       });
 
       function parsePackedHours(hoursStrOrNum: string | number): number {
-  const str = String(hoursStrOrNum);
-  const [hourPart, minutePart] = str.split('.').map(Number);
-  const hours = hourPart || 0;
-  const minutes = minutePart || 0;
-
-  // interpret `.25` as 25 minutes (not 0.25 * 60)
-  return hours * 60 + minutes;
-}
-
+        const str = String(hoursStrOrNum);
+        const [hourPart, minutePart] = str.split('.').map(Number);
+        const hours = hourPart || 0;
+        const minutes = minutePart || 0;
+        return hours * 60 + minutes;
+      }
 
       // Calculate duration_minutes
-    const durationMinutes = parsePackedHours(totalWorkingHours);
+      const durationMinutes = parsePackedHours(totalWorkingHours);
 
-
-      const formData = {
-        employeeId,
-        title,
-        workReport,
-        totalWorkingHours,
-        projectEntries: employeeHasProjects
-          ? projectEntries
+      const notesObject = { title, workReport };
+      const projectTimeData = employeeHasProjects
+        ? {
+            projects: projectEntries
               .filter((entry) => entry.projectId && entry.hours > 0)
               .map(({ projectId, hours, report, clockIn, clockOut, clientId }) => ({
                 projectId,
@@ -167,46 +159,13 @@ export const useTimesheetSubmission = () => {
                 clockIn,
                 clockOut,
                 clientId,
-              }))
-          : [],
-        detailedEntries,
-      };
+              })),
+          }
+        : { entries: detailedEntries };
 
       let targetTimeLogId = timeLogId;
 
       if (!targetTimeLogId) {
-        const { data: existingLogs, error: fetchError } = await supabase
-          .from('time_logs')
-          .select('id')
-          .eq('employee_id', employeeId)
-          .eq('date', dateString)
-          .eq('is_submitted', false)
-          .single();
-
-        if (fetchError && fetchError.code !== 'PGRST116') {
-          throw fetchError;
-        }
-
-        targetTimeLogId = existingLogs?.id;
-      }
-
-      if (!targetTimeLogId) {
-        const notesObject = { title, workReport };
-        const projectTimeData = employeeHasProjects
-          ? {
-              projects: projectEntries
-                .filter((entry) => entry.projectId && entry.hours > 0)
-                .map(({ projectId, hours, report, clockIn, clockOut, clientId }) => ({
-                  projectId,
-                  hours,
-                  report,
-                  clockIn,
-                  clockOut,
-                  clientId,
-                })),
-            }
-          : { entries: detailedEntries };
-
         // Log insertion payload
         const insertPayload = {
           employee_id: employeeId,
@@ -218,7 +177,7 @@ export const useTimesheetSubmission = () => {
           duration_minutes: durationMinutes,
           project_time_data: projectTimeData,
           status: 'normal',
-          is_submitted: false,
+          is_submitted: true, // Set to true since we're submitting
           organization_id,
         };
         console.log('Debug: Supabase insert payload', insertPayload);
@@ -234,25 +193,29 @@ export const useTimesheetSubmission = () => {
           throw insertError;
         }
         targetTimeLogId = data.id;
-      } else {
-        // Update existing time_log with clock_in_time and clock_out_time
-        const notesObject = { title, workReport };
-        const projectTimeData = employeeHasProjects
-          ? {
-              projects: projectEntries
-                .filter((entry) => entry.projectId && entry.hours > 0)
-                .map(({ projectId, hours, report, clockIn, clockOut, clientId }) => ({
-                  projectId,
-                  hours,
-                  report,
-                  clockIn,
-                  clockOut,
-                  clientId,
-                })),
-            }
-          : { entries: detailedEntries };
 
-        // Log update payload
+        // Insert into timesheet_approvals
+        const approvalPayload = {
+          time_log_id: targetTimeLogId,
+          employee_id: employeeId,
+          status: 'pending',
+          submitted_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          organization_id,
+        };
+        console.log('Debug: Supabase timesheet_approvals insert payload', approvalPayload);
+
+        const { error: approvalError } = await supabase
+          .from('timesheet_approvals')
+          .insert(approvalPayload);
+
+        if (approvalError) {
+          console.error('Debug: Supabase timesheet_approvals insert error', approvalError);
+          throw approvalError;
+        }
+      } else {
+        // Update existing time_log
         const updatePayload = {
           clock_in_time: clockInTime,
           clock_out_time: clockOutTime,
@@ -260,6 +223,7 @@ export const useTimesheetSubmission = () => {
           total_working_hours: totalWorkingHours,
           duration_minutes: durationMinutes,
           project_time_data: projectTimeData,
+          is_submitted: true, // Set to true since we're submitting
           updated_at: new Date().toISOString(),
         };
         console.log('Debug: Supabase update payload', updatePayload);
@@ -275,16 +239,59 @@ export const useTimesheetSubmission = () => {
           console.error('Debug: Supabase update error', updateError);
           throw updateError;
         }
-      }
 
-      // Log formData before submitTimesheet
-      console.log('Debug: formData for submitTimesheet', formData);
+        // Check if timesheet_approvals record exists
+        const { data: existingApproval, error: fetchApprovalError } = await supabase
+          .from('timesheet_approvals')
+          .select('id')
+          .eq('time_log_id', targetTimeLogId)
+          .single();
 
-      const success = await submitTimesheet(targetTimeLogId, formData);
+        if (fetchApprovalError && fetchApprovalError.code !== 'PGRST116') {
+          console.error('Debug: Supabase timesheet_approvals fetch error', fetchApprovalError);
+          throw fetchApprovalError;
+        }
 
-      if (!success) {
-        console.error('Debug: submitTimesheet failed', { targetTimeLogId, formData });
-        throw new Error('Failed to submit timesheet');
+        if (!existingApproval) {
+          // Insert into timesheet_approvals
+          const approvalPayload = {
+            time_log_id: targetTimeLogId,
+            employee_id: employeeId,
+            status: 'pending',
+            submitted_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            organization_id,
+          };
+          console.log('Debug: Supabase timesheet_approvals insert payload', approvalPayload);
+
+          const { error: approvalError } = await supabase
+            .from('timesheet_approvals')
+            .insert(approvalPayload);
+
+          if (approvalError) {
+            console.error('Debug: Supabase timesheet_approvals insert error', approvalError);
+            throw approvalError;
+          }
+        } else {
+          // Update existing timesheet_approvals record
+          const approvalUpdatePayload = {
+            status: 'pending',
+            submitted_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          console.log('Debug: Supabase timesheet_approvals update payload', approvalUpdatePayload);
+
+          const { error: approvalUpdateError } = await supabase
+            .from('timesheet_approvals')
+            .update(approvalUpdatePayload)
+            .eq('time_log_id', targetTimeLogId);
+
+          if (approvalUpdateError) {
+            console.error('Debug: Supabase timesheet_approvals update error', approvalUpdateError);
+            throw approvalUpdateError;
+          }
+        }
       }
 
       toast.success('Timesheet submitted successfully');

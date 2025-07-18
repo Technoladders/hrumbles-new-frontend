@@ -10,7 +10,6 @@ import { TimesheetDialogContent } from './dialog/TimesheetDialogContent';
 import { TimesheetEditForm } from "./dialog/TimesheetEditForm";
 import { TimesheetProjectDetails } from "./TimesheetProjectDetails";
 import { useTimesheetValidation } from './hooks/useTimesheetValidation';
-import { useTimesheetSubmission } from './hooks/useTimesheetSubmission';
 import { useSelector } from 'react-redux';
 import { fetchHrProjectEmployees, submitTimesheet } from '@/api/timeTracker';
 import { format, startOfDay, endOfDay } from 'date-fns';
@@ -18,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import Papa from 'papaparse';
 import { fetchEmployees } from '@/api/user';
 import { MultiSelect } from '@/components/ui/multi-selector';
+import { DateTime } from 'luxon';
 
 interface ViewTimesheetDialogProps {
   open: boolean;
@@ -65,7 +65,6 @@ interface EmployeeOption {
   label: string; // employee name
 }
 
-
 export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
   open,
   onOpenChange,
@@ -74,7 +73,7 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
   employeeHasProjects,
 }) => {
   const user = useSelector((state: any) => state.auth.user);
-    const organization_id = useSelector((state: any) => state.auth.organization_id);
+  const organization_id = useSelector((state: any) => state.auth.organization_id);
   const employeeId = user?.id || "";
   const [date, setDate] = useState<Date>(new Date(timesheet?.date || Date.now()));
   
@@ -102,10 +101,8 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
   const [additionalRecipients, setAdditionalRecipients] = useState<string[]>([]);
 
   const { validateForm } = useTimesheetValidation();
-  const { isSubmitting, submitTimesheet: submitTimesheetHook } = useTimesheetSubmission();
 
-
- // Combined data fetching and setup effect
+  // Combined data fetching and setup effect
   useEffect(() => {
     if (open && organization_id && employeeId) {
       const setupDialog = async () => {
@@ -150,102 +147,98 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
       setFormData((prev) => ({ ...prev, totalHours }));
       console.log('Calculated login hours:', { totalHours, clockIn, clockOut });
     }
-    setIsFormValid(employeeHasProjects || formData.workReport.trim().length > 0);
-  }, [timesheet, employeeHasProjects, formData.workReport]);
+    setIsFormValid(validateForm({ title, workReport: formData.workReport, totalWorkingHours, employeeHasProjects, projectEntries, detailedEntries }));
+  }, [timesheet, employeeHasProjects, formData.workReport, title, totalWorkingHours, projectEntries, detailedEntries]);
 
+  const fetchSubmissions = async () => {
+    if (!employeeId || !timesheet) return;
+    setIsLoading(true);
+    try {
+      const targetDate = timesheet.date;
+      const dateStart = startOfDay(new Date(targetDate));
+      const dateEnd = endOfDay(new Date(targetDate));
 
-    const fetchSubmissions = async () => {
-      if (!employeeId || !timesheet) return;
-      setIsLoading(true);
-      try {
-        const targetDate = timesheet.date;
-        const dateStart = startOfDay(new Date(targetDate));
-        const dateEnd = endOfDay(new Date(targetDate));
+      const { data: candidates, error } = await supabase
+        .from("hr_job_candidates")
+        .select(`
+          name,
+          email,
+          phone,
+          experience,
+          skills,
+          match_score,
+          overall_score,
+          applied_date,
+          submission_date,
+          applied_from,
+          current_salary,
+          expected_salary,
+          location,
+          preferred_location,
+          notice_period,
+          resume_url,
+          main_status_id,
+          sub_status_id,
+          interview_date,
+          interview_time,
+          interview_type,
+          round,
+          interviewer_name,
+          interview_result,
+          reject_reason,
+          ctc,
+          joining_date,
+          created_at,
+          status:job_statuses!hr_job_candidates_main_status_id_fkey(name),
+          sub_status:job_statuses!hr_job_candidates_sub_status_id_fkey(name),
+          hr_jobs!hr_job_candidates_job_id_fkey(title, client_owner)
+        `)
+        .eq("created_by", employeeId)
+        .gte("created_at", format(dateStart, "yyyy-MM-dd'T'HH:mm:ss"))
+        .lte("created_at", format(dateEnd, "yyyy-MM-dd'T'HH:mm:ss"));
 
-        const { data: candidates, error } = await supabase
-          .from("hr_job_candidates")
-          .select(`
-            name,
-            email,
-            phone,
-            experience,
-            skills,
-            match_score,
-            overall_score,
-            applied_date,
-            submission_date,
-            applied_from,
-            current_salary,
-            expected_salary,
-            location,
-            preferred_location,
-            notice_period,
-            resume_url,
-            main_status_id,
-            sub_status_id,
-            interview_date,
-            interview_time,
-            interview_type,
-            round,
-            interviewer_name,
-            interview_result,
-            reject_reason,
-            ctc,
-            joining_date,
-            created_at,
-            status:job_statuses!hr_job_candidates_main_status_id_fkey(name),
-            sub_status:job_statuses!hr_job_candidates_sub_status_id_fkey(name),
-            hr_jobs!hr_job_candidates_job_id_fkey(title, client_owner)
-          `)
-          .eq("created_by", employeeId)
-          .gte("created_at", format(dateStart, "yyyy-MM-dd'T'HH:mm:ss"))
-          .lte("created_at", format(dateEnd, "yyyy-MM-dd'T'HH:mm:ss"));
+      if (error) throw error;
 
-        if (error) throw error;
+      const formattedSubmissions: Submission[] = candidates.map((candidate: any) => ({
+        candidate_name: candidate.name || 'n/a',
+        email: candidate.email || 'n/a',
+        phone: candidate.phone || 'n/a',
+        experience: candidate.experience || 'n/a',
+        skills: candidate.skills?.length ? candidate.skills.join(', ') : 'n/a',
+        match_score: candidate.match_score?.toString() || 'n/a',
+        overall_score: candidate.overall_score?.toString() || 'n/a',
+        applied_date: candidate.applied_date ? format(new Date(candidate.applied_date), 'dd:MM:yyyy') : 'n/a',
+        submission_date: candidate.submission_date || 'n/a',
+        applied_from: candidate.applied_from || 'n/a',
+        current_salary: candidate.current_salary ? `₹${candidate.current_salary}` : 'n/a',
+        expected_salary: candidate.expected_salary ? `₹${candidate.expected_salary}` : 'n/a',
+        location: candidate.location || 'n/a',
+        preferred_location: candidate.preferred_location || 'n/a',
+        notice_period: candidate.notice_period || 'n/a',
+        resume_url: candidate.resume_url || 'n/a',
+        main_status: candidate.status?.name || 'n/a',
+        sub_status: candidate.sub_status?.name || 'n/a',
+        interview_date: candidate.interview_date || 'n/a',
+        interview_time: candidate.interview_time || 'n/a',
+        interview_type: candidate.interview_type || 'n/a',
+        interview_round: candidate.round || 'n/a',
+        interviewer_name: candidate.interviewer_name || 'n/a',
+        interview_result: candidate.interview_result || 'n/a',
+        reject_reason: candidate.reject_reason || 'n/a',
+        ctc: candidate.ctc || 'n/a',
+        joining_date: candidate.joining_date || 'n/a',
+        created_at: candidate.created_at || 'n/a',
+        job_title: candidate.hr_jobs?.title || 'n/a',
+        client_name: candidate.hr_jobs?.client_owner || 'n/a'
+      }));
 
-        const formattedSubmissions: Submission[] = candidates.map((candidate: any) => ({
-          candidate_name: candidate.name || 'n/a',
-          email: candidate.email || 'n/a',
-          phone: candidate.phone || 'n/a',
-          experience: candidate.experience || 'n/a',
-          skills: candidate.skills?.length ? candidate.skills.join(', ') : 'n/a',
-          match_score: candidate.match_score?.toString() || 'n/a',
-          overall_score: candidate.overall_score?.toString() || 'n/a',
-          applied_date: candidate.applied_date ? format(new Date(candidate.applied_date), 'dd:MM:yyyy') : 'n/a',
-          submission_date: candidate.submission_date || 'n/a',
-          applied_from: candidate.applied_from || 'n/a',
-          current_salary: candidate.current_salary ? `₹${candidate.current_salary}` : 'n/a',
-          expected_salary: candidate.expected_salary ? `₹${candidate.expected_salary}` : 'n/a',
-          location: candidate.location || 'n/a',
-          preferred_location: candidate.preferred_location || 'n/a',
-          notice_period: candidate.notice_period || 'n/a',
-          resume_url: candidate.resume_url || 'n/a',
-          main_status: candidate.status?.name || 'n/a',
-          sub_status: candidate.sub_status?.name || 'n/a',
-          interview_date: candidate.interview_date || 'n/a',
-          interview_time: candidate.interview_time || 'n/a',
-          interview_type: candidate.interview_type || 'n/a',
-          interview_round: candidate.round || 'n/a',
-          interviewer_name: candidate.interviewer_name || 'n/a',
-          interview_result: candidate.interview_result || 'n/a',
-          reject_reason: candidate.reject_reason || 'n/a',
-          ctc: candidate.ctc || 'n/a',
-          joining_date: candidate.joining_date || 'n/a',
-          created_at: candidate.created_at || 'n/a',
-          job_title: candidate.hr_jobs?.title || 'n/a',
-          client_name: candidate.hr_jobs?.client_owner || 'n/a'
-        }));
-
-        setSubmissions(formattedSubmissions);
-      } catch (error) {
-        console.error("Error fetching submissions:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-
-
+      setSubmissions(formattedSubmissions);
+    } catch (error) {
+      console.error("Error fetching submissions:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const generateCSV = (data: Submission[]) => {
     const headers = [
@@ -296,7 +289,7 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     });
   };
 
- const sendEODReport = async (finalWorkReport: string) => {
+  const sendEODReport = async (finalWorkReport: string) => {
     setEmailStatus('Sending EOD report...');
     try {
       const { data: { session }, error: authError } = await supabase.auth.getSession();
@@ -349,12 +342,9 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     }
   };
 
-
-
-
   const handleClose = () => {
     setDate(new Date(timesheet?.date || Date.now()));
-    setTitle(timesheet?.notes || '');
+    setTitle(timesheet?.title || '');
     setTotalWorkingHours(timesheet?.total_working_hours || 8);
     setWorkReport(timesheet?.notes || '');
     setDetailedEntries(timesheet?.project_time_data?.projects || []);
@@ -370,7 +360,7 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     onOpenChange(false);
   };
 
-    const handleSubmit = async () => {
+  const handleSubmit = async () => {
     if (!timesheet?.employee_id) {
       toast.error('User not authenticated.');
       return;
@@ -381,39 +371,83 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     setIsLoading(true);
 
     try {
+      // Format clockIn and clockOut to HH:mm format
+      const clockIn = timesheet.clock_in_time
+        ? DateTime.fromISO(timesheet.clock_in_time, { zone: 'utc' }).setZone('Asia/Kolkata').toFormat('HH:mm')
+        : undefined;
+      const clockOut = timesheet.clock_out_time
+        ? DateTime.fromISO(timesheet.clock_out_time, { zone: 'utc' }).setZone('Asia/Kolkata').toFormat('HH:mm')
+        : undefined;
+
       if (employeeHasProjects) {
         // --- Project-based submission logic ---
-        if (!validateForm({ title, workReport, employeeHasProjects, projectEntries, detailedEntries, totalWorkingHours })) {
+        if (!validateForm({ title, workReport, totalWorkingHours, employeeHasProjects, projectEntries, detailedEntries })) {
           toast.error("Validation failed. Please fill all required project fields.");
           setIsLoading(false);
           return;
         }
         finalWorkReport = workReport;
-        isSubmissionSuccessful = await submitTimesheetHook({
-          employeeId: timesheet.employee_id, title, workReport, totalWorkingHours,
-          employeeHasProjects, projectEntries, detailedEntries, timeLogId: timesheet.id,
-        }, organization_id);
+
+        const timesheetData = {
+          employeeId: timesheet.employee_id,
+          title,
+          workReport,
+          totalWorkingHours,
+          projectEntries,
+          detailedEntries,
+          date: new Date(timesheet.date),
+          clockIn,
+          clockOut,
+        };
+
+        console.log('Debug: Submitting timesheet for project-based employee', {
+          timeLogId: timesheet.id,
+          timesheetData,
+          organization_id,
+          date: timesheet.date,
+          clockIn,
+          clockOut,
+        });
+
+        isSubmissionSuccessful = await submitTimesheet(timesheet.id, timesheetData, organization_id);
       } else {
         // --- Non-project-based submission logic ---
-        if (!formData.workReport.trim()) {
+        if (!validateForm({ title: '', workReport: formData.workReport, totalWorkingHours: timesheet.total_working_hours || 8, employeeHasProjects, projectEntries: [], detailedEntries: [] })) {
           toast.error('Work Summary is required');
           setIsLoading(false);
           return;
         }
         finalWorkReport = formData.workReport;
-        const { error } = await supabase.from('time_logs').update({
-          notes: formData.workReport, is_submitted: true,
-        }).eq('id', timesheet.id);
-        
-        if (error) throw error;
-        isSubmissionSuccessful = true;
+
+        const timesheetData = {
+          employeeId: timesheet.employee_id,
+          title: '',
+          workReport: formData.workReport,
+          totalWorkingHours: timesheet.total_working_hours || 8,
+          projectEntries: [],
+          detailedEntries: [],
+          date: new Date(timesheet.date),
+          clockIn,
+          clockOut,
+        };
+
+        console.log('Debug: Submitting timesheet for non-project-based employee', {
+          timeLogId: timesheet.id,
+          timesheetData,
+          organization_id,
+          date: timesheet.date,
+          clockIn,
+          clockOut,
+        });
+
+        isSubmissionSuccessful = await submitTimesheet(timesheet.id, timesheetData, organization_id);
       }
 
       if (isSubmissionSuccessful) {
         await sendEODReport(finalWorkReport);
         
         if (emailStatus && emailStatus.startsWith('Failed')) {
-           // Error is already displayed
+          // Error is already displayed
         } else {
           toast.success("Timesheet and EOD report submitted successfully");
           onSubmitTimesheet();
@@ -430,10 +464,10 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     }
   };
 
-  const canSubmit = !timesheet?.is_submitted && !isSubmitting && isFormValid;
+  const canSubmit = !timesheet?.is_submitted && !isLoading && isFormValid;
   const canEdit = !timesheet?.is_submitted && !timesheet?.is_approved;
 
-return (
+  return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[80vh] flex flex-col">
         <DialogHeader>
@@ -449,29 +483,41 @@ return (
                 <>
                   {employeeHasProjects ? (
                     <TimesheetDialogContent
-                      date={date} setDate={setDate} title={title} setTitle={setTitle}
-                      totalWorkingHours={totalWorkingHours} setTotalWorkingHours={setTotalWorkingHours}
-                      workReport={workReport} setWorkReport={setWorkReport}
-                      detailedEntries={detailedEntries} setDetailedEntries={setDetailedEntries}
-                      projectEntries={projectEntries} setProjectEntries={setProjectEntries}
-                      employeeHasProjects={employeeHasProjects} isSubmitting={isSubmitting}
-                      handleClose={() => onOpenChange(false)} handleSubmit={handleSubmit}
-                      employeeId={employeeId} hrProjectEmployees={hrProjectEmployees}
+                      date={date}
+                      setDate={setDate}
+                      title={title}
+                      setTitle={setTitle}
+                      totalWorkingHours={totalWorkingHours}
+                      setTotalWorkingHours={setTotalWorkingHours}
+                      workReport={workReport}
+                      setWorkReport={setWorkReport}
+                      detailedEntries={detailedEntries}
+                      setDetailedEntries={setDetailedEntries}
+                      projectEntries={projectEntries}
+                      setProjectEntries={setProjectEntries}
+                      employeeHasProjects={employeeHasProjects}
+                      isSubmitting={isLoading}
+                      handleClose={() => onOpenChange(false)}
+                      handleSubmit={handleSubmit}
+                      employeeId={employeeId}
+                      hrProjectEmployees={hrProjectEmployees}
                     />
                   ) : (
                     <TimesheetEditForm
-                      formData={formData} setFormData={setFormData}
-                      timesheet={timesheet} onValidationChange={setIsFormValid}
+                      formData={formData}
+                      setFormData={setFormData}
+                      timesheet={timesheet}
+                      onValidationChange={setIsFormValid}
                     />
                   )}
                   <div className="space-y-2 pt-4 border-t mt-4">
                     <Label htmlFor="recipients">Add More Recipients for EOD (Optional)</Label>
                     <MultiSelect
-                        id="recipients"
-                        options={allEmployees}
-                        selected={additionalRecipients}
-                        onChange={setAdditionalRecipients}
-                        placeholder="Select employees to notify..."
+                      id="recipients"
+                      options={allEmployees}
+                      selected={additionalRecipients}
+                      onChange={setAdditionalRecipients}
+                      placeholder="Select employees to notify..."
                     />
                   </div>
                 </>
@@ -493,8 +539,8 @@ return (
           )}
           
           {canSubmit && isEditing && (
-            <Button onClick={handleSubmit} disabled={isSubmitting || isLoading || !isFormValid}>
-              {isSubmitting || isLoading ? "Submitting..." : "Submit and Send EOD"}
+            <Button onClick={handleSubmit} disabled={isLoading || !isFormValid}>
+              {isLoading ? "Submitting..." : "Submit and Send EOD"}
             </Button>
           )}
         </DialogFooter>

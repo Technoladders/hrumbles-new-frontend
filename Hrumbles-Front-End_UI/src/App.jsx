@@ -54,6 +54,11 @@ import SharedProfile from "./pages/jobs/SharedProfile"
 import ReportsPage from "./pages/reports/Index";
 import EmployeeProfilePage from "./components/MagicLinkView/EmployeeProfileDrawer";
 import CandidateConsentPage from './components/MagicLinkView/CandidateConsentPage';
+
+// Candidates
+import TalentPoolPage from "./pages/candidates/TalentPoolPage"; // Create this new page
+import CandidateProfilePage from "./pages/candidates/CandidateProfilePage"; 
+
 // Finance & Accounts
 import FinanceIndex from "./pages/finance/Index";
 import PayrollEdit from "./pages/finance/PayrollEdit";
@@ -211,6 +216,10 @@ function App() {
             <Route path="/jobs/edit/:id" element={<JobDescription />} />
             <Route path="/jobstatuses" element={<StatusSettings />} />
             <Route path="/employee/:candidateId/:jobId" element={<EmployeeProfilePage />} />
+
+            {/* Candidates */}
+            <Route path="/talent-pool" element={<TalentPoolPage />} />
+            <Route path="/talent-pool/:candidateId" element={<CandidateProfilePage />} />
 
 
 

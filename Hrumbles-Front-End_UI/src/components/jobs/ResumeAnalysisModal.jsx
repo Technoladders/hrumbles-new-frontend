@@ -3,6 +3,7 @@ import Modal from 'react-modal';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { supabase } from '../../integrations/supabase/client'; // Adjust import path as needed
 import { v4 as uuidv4 } from 'uuid';
+import { useSelector } from 'react-redux';
  
 function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = () => {}, initialData }) {
   const [resumeText, setResumeText] = useState(initialData?.resume_text || '');
@@ -18,6 +19,8 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [isAnalysisComplete, setIsAnalysisComplete] = useState(false);
+    const user = useSelector((state) => state.auth.user);
+  const organizationId = useSelector((state) => state.auth.organization_id);
  
   // Gemini setup
   const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -244,6 +247,9 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
           github: result.github || '',
           linkedin: result.linkedin || '',
           updated_at: new Date().toISOString(),
+           updated_by: user.id, // Always set the user who updated it
+        organization_id: organizationId, // Add organization_id
+         ...(isInitial && { created_by: user.id }),
         };
    
         console.log('Saving to Supabase - Resume Analysis Payload:', JSON.stringify(resumePayload, null, 2));
