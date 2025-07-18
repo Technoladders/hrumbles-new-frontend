@@ -18,75 +18,68 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 type View = 'table' | 'kanban';
 
 const ContactsView: React.FC = () => {
-    const [view, setView] = useState<View>('table');
-    const [isManageStagesOpen, setIsManageStagesOpen] = React.useState(false);
-    const [isAddColumnOpen, setIsAddColumnOpen] = React.useState(false);
+  const [view, setView] = useState<View>('table');
+  const [isManageStagesOpen, setIsManageStagesOpen] = React.useState(false);
+  const [isAddColumnOpen, setIsAddColumnOpen] = React.useState(false);
 
-    // Changed: Removed all layout-controlling classes (flex, h-screen, overflow, etc.)
-    // This component now just renders its content, and MainLayout handles the scrolling.
-    return (
-        <DndProvider backend={HTML5Backend}>
-            <div className="w-full space-y-4">
-                <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 tracking-tight">
-                            Contacts
-                        </h1>
-                        <p className="text-gray-500 text-sm mt-1">
-                            Your centralized contact database.
-                        </p>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                        <div className="p-1 bg-slate-200 rounded-lg flex items-center">
-                            <Button
-                                variant={view === 'table' ? 'secondary' : 'ghost'}
-                                size="sm"
-                                className="h-8 w-8 md:w-auto px-2 md:px-3"
-                                onClick={() => setView('table')}
-                            >
-                                <List className="h-4 w-4 md:mr-2" />
-                                <span className="hidden md:inline">Table</span>
-                            </Button>
-                            <Button
-                                variant={view === 'kanban' ? 'secondary' : 'ghost'}
-                                size="sm"
-                                className="h-8 w-8 md:w-auto px-2 md:px-3"
-                                onClick={() => setView('kanban')}
-                            >
-                                <LayoutGrid className="h-4 w-4 md:mr-2" />
-                                <span className="hidden md:inline">Kanban</span>
-                            </Button>
-                        </div>
-
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="icon" className="h-9 w-9">
-                                    <MoreHorizontal className="h-5 w-5" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => setIsManageStagesOpen(true)}>
-                                    Manage Stages
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setIsAddColumnOpen(true)}>
-                                    Add Column
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                </header>
-
-                {/* This will now render its content, and MainLayout will scroll it if it's too tall. */}
-                <div>
-                    {view === 'table' ? <TanstackContactsPage /> : <KanbanBoard />}
-                </div>
-
-                {/* Dialogs can stay here */}
-                <ManageStagesDialog open={isManageStagesOpen} onOpenChange={setIsManageStagesOpen} />
-                <AddColumnDialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen} />
+  return (
+    <DndProvider backend={HTML5Backend}>
+      <div className="w-full max-w-full space-y-4">
+        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-800 tracking-tight">
+              Contacts
+            </h1>
+            <p className="text-gray-500 text-sm mt-1">
+              Your centralized contact database.
+            </p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="p-1 bg-slate-200 rounded-lg flex items-center">
+              <Button
+                variant={view === 'table' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8 w-8 md:w-auto px-2 md:px-3"
+                onClick={() => setView('table')}
+              >
+                <List className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Table</span>
+              </Button>
+              <Button
+                variant={view === 'kanban' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8 w-8 md:w-auto px-2 md:px-3"
+                onClick={() => setView('kanban')}
+              >
+                <LayoutGrid className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Kanban</span>
+              </Button>
             </div>
-        </DndProvider>
-    );
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-9 w-9">
+                  <MoreHorizontal className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setIsManageStagesOpen(true)}>
+                  Manage Stages
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsAddColumnOpen(true)}>
+                  Add Column
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </header>
+        <div>
+          {view === 'table' ? <TanstackContactsPage /> : <KanbanBoard />}
+        </div>
+        <ManageStagesDialog open={isManageStagesOpen} onOpenChange={setIsManageStagesOpen} />
+        <AddColumnDialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen} />
+      </div>
+    </DndProvider>
+  );
 };
 
 export default ContactsView;

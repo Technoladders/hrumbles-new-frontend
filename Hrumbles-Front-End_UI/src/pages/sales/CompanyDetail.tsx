@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { CompanyDetail as CompanyDetailType, CandidateDetail } from "@/types/company";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useSelector } from 'react-redux';
 
 // Helper to format currency
 const formatCurrency = (
@@ -112,6 +113,8 @@ const CompanyDetail = () => {
   const { id } = useParams<{ id: string }>();
   const companyId = parseInt(id || "0");
   const queryClient = useQueryClient();
+    const user = useSelector((state: any) => state.auth.user);
+      const currentUserId = user?.id || null;
 
   const { data: company, isLoading, error: companyError, refetch } = useCompanyDetails(companyId);
   const { data: employees = [], isLoading: isLoadingEmployees, error: employeesError } = useCompanyEmployees(companyId);
@@ -162,6 +165,10 @@ const CompanyDetail = () => {
       }
 
       if (Object.keys(updatesToApply).length > 0) {
+
+        updatesToApply.updated_by = currentUserId;
+        updatesToApply.updated_at = new Date().toISOString(); 
+        
         const { error: updateError } = await supabase.from('companies').update(updatesToApply).eq('id', companyId);
         if (updateError) throw updateError;
         refetch();

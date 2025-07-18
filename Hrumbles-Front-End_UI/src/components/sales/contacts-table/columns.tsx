@@ -1,6 +1,7 @@
 // src/components/sales/contacts-table/columns.tsx
 "use client";
 import React from 'react';
+import { useState } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
 import { useDrag, useDrop } from 'react-dnd';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -16,6 +17,9 @@ import { CompanyCombobox } from './CompanyCombobox';
 import type { SimpleContact } from '@/types/simple-contact.types';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useDeleteContact } from '@/hooks/sales/useDeleteContact';
+import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 
 // --- Re-orderable Header ---
 export const ReorderableHeader: React.FC<any> = ({ header, table }) => {
@@ -183,14 +187,96 @@ const CompanyCell: React.FC<any> = ({ getValue, row, column, table }) => {
     return <CompanyCombobox value={initialCompanyId} onSelect={onSelect} initialName={companyName} />;
 };
 
-// --- FINAL Column Definitions ---
+
+export const ActionColumn: ColumnDef<SimpleContact> = {
+  id: 'actions',
+  size: 60,
+  minSize: 60,
+  enableSorting: false,
+  enableHiding: false,
+  header: '',
+  cell: ({ row }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const deleteContactMutation = useDeleteContact();
+    const { toast } = useToast();
+
+    const handleDelete = () => {
+      deleteContactMutation.mutate(row.original.id, {
+        onSuccess: () => {
+          toast({ title: "Contact Deleted", description: "The contact has been permanently removed." });
+          setIsOpen(false);
+        },
+        onError: (err: any) => {
+          toast({ title: "Delete Failed", variant: "destructive", description: err.message });
+        },
+      });
+    };
+
+    return (
+      <>
+        <Button variant="ghost" size="icon" onClick={() => setIsOpen(true)}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="1" />
+            <circle cx="12" cy="5" r="1" />
+            <circle cx="12" cy="19" r="1" />
+          </svg>
+        </Button>
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Contact</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete {row.original.name}? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDelete}>
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  },
+};
+
 export const columns: ColumnDef<SimpleContact>[] = [
-  { id: 'select', size: 35, enableSorting: false, enableHiding: false, header: ({ table }) => (<div className="px-1"><Checkbox checked={table.getIsAllPageRowsSelected()} onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)} aria-label="Select all" /></div>), cell: ({ row }) => (<div className="px-1"><Checkbox checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(!!value)} aria-label="Select row" /></div>) },
+  {
+    id: 'select',
+    size: 35,
+    minSize: 35,
+    maxSize: 50,
+    enableSorting: false,
+    enableHiding: false,
+    header: ({ table }) => (
+      <div className="px-1">
+        <Checkbox
+          checked={table.getIsAllPageRowsSelected()}
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all"
+        />
+      </div>
+    ),
+    cell: ({ row }) => (
+      <div className="px-1">
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(!!value)}
+          aria-label="Select row"
+        />
+      </div>
+    ),
+  },
   {
     accessorKey: 'name',
     header: ReorderableHeader,
-    size: 220,
-    minSize: 180,
+    size: 150,
+    minSize: 100,
+    maxSize: 200,
     cell: ({ row, ...props }) => {
       if (row.getIsGrouped()) {
         const { data: stages = [] } = useContactStages();
@@ -198,7 +284,7 @@ export const columns: ColumnDef<SimpleContact>[] = [
         const stageInfo = stages.find(s => s.name === stageName);
         return (
           <div onClick={() => row.toggleExpanded()} className="flex items-center gap-3 font-semibold text-gray-800 cursor-pointer">
-            {row.getIsExpanded() ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            {row.getIsExpanded() ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stageInfo?.color ?? '#ccc' }}></span>
             {stageName}
             <span className="text-muted-foreground font-normal">({row.subRows.length})</span>
@@ -208,91 +294,69 @@ export const columns: ColumnDef<SimpleContact>[] = [
       return (<div style={{ paddingLeft: `${row.depth * 1.5}rem` }}><EditableCell row={row} {...props} /></div>);
     },
   },
-  { accessorKey: 'email', header: ReorderableHeader, cell: EditableCell, size: 220, minSize: 180 },
-  { accessorKey: 'mobile', header: ReorderableHeader, cell: PhoneCell, size: 150 },
-  { accessorKey: 'linkedin_url', header: ReorderableHeader, cell: LinkedInCell, size: 200, minSize: 160 },
-  { accessorKey: 'company_name', header: ReorderableHeader, size: 180, minSize: 150, cell: CompanyCell },
-  { accessorKey: 'job_title', header: ReorderableHeader, cell: EditableCell, size: 180, minSize: 150 },
-  { accessorKey: 'contact_stage', header: ReorderableHeader, size: 140, cell: StageSelectCell },
-  
-  // --- RE-ORDERED SECTION ---
-  { 
+  { accessorKey: 'email', header: ReorderableHeader, cell: EditableCell, size: 150, minSize: 100, maxSize: 200 },
+  { accessorKey: 'mobile', header: ReorderableHeader, cell: PhoneCell, size: 100, minSize: 80, maxSize: 150 },
+  { accessorKey: 'linkedin_url', header: ReorderableHeader, cell: LinkedInCell, size: 120, minSize: 80, maxSize: 150 },
+  { accessorKey: 'company_name', header: ReorderableHeader, size: 120, minSize: 80, maxSize: 150, cell: CompanyCell },
+  { accessorKey: 'job_title', header: ReorderableHeader, cell: EditableCell, size: 120, minSize: 80, maxSize: 150 },
+  { accessorKey: 'contact_stage', header: ReorderableHeader, size: 100, minSize: 80, maxSize: 150, cell: StageSelectCell },
+  {
     accessorFn: (row) => row.created_by ?? null,
     id: 'created_by_employee',
     header: "Created By",
     cell: ({ row }) => {
-        const employee = row.original.created_by_employee;
-        if (!employee) return <span className="text-muted-foreground">-</span>;
-        const fallback = (employee.first_name?.[0] || '') + (employee.last_name?.[0] || '');
-        return (
-            <TooltipProvider>
-                <Tooltip><TooltipTrigger>
-                    <Avatar className="h-7 w-7"><AvatarImage src={employee.profile_picture_url} /><AvatarFallback>{fallback}</AvatarFallback></Avatar>
-                </TooltipTrigger><TooltipContent>{employee.first_name} {employee.last_name}</TooltipContent></Tooltip>
-            </TooltipProvider>
-        );
+      const employee = row.original.created_by_employee;
+      if (!employee) return <span className="text-muted-foreground">-</span>;
+      const fallback = (employee.first_name?.[0] || '') + (employee.last_name?.[0] || '');
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Avatar className="h-6 w-6">
+                <AvatarImage src={employee.profile_picture_url} />
+                <AvatarFallback className="text-[10px]">{fallback}</AvatarFallback>
+              </Avatar>
+            </TooltipTrigger>
+            <TooltipContent>{employee.first_name} {employee.last_name}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
     },
     enableSorting: false,
     enableFiltering: true,
-    size: 90,
+    size: 60,
+    minSize: 50,
+    maxSize: 80,
     filterFn: 'arrIncludesSome',
   },
-  // Use the new non-editable date cell
-  { accessorKey: 'created_at', header: "Created At", cell: DisplayDateCell, enableSorting: true, size: 130 },
-  { 
-    accessorKey: 'updated_by_employee', 
-    header: "Updated By", 
+  { accessorKey: 'created_at', header: "Created At", cell: DisplayDateCell, enableSorting: true, size: 80, minSize: 60, maxSize: 100 },
+  {
+    accessorKey: 'updated_by_employee',
+    header: "Updated By",
     cell: ({ row }) => {
-        const employee = row.original.updated_by_employee;
-        if (!employee) return <span className="text-muted-foreground">-</span>;
-        const fallback = (employee.first_name?.[0] || '') + (employee.last_name?.[0] || '');
-        return (
-            <TooltipProvider>
-                <Tooltip><TooltipTrigger>
-                    <Avatar className="h-7 w-7"><AvatarImage src={employee.profile_picture_url} /><AvatarFallback>{fallback}</AvatarFallback></Avatar>
-                </TooltipTrigger><TooltipContent>{employee.first_name} {employee.last_name}</TooltipContent></Tooltip>
-            </TooltipProvider>
-        );
-    }, 
-    enableSorting: false, 
-    size: 90 
+      const employee = row.original.updated_by_employee;
+      if (!employee) return <span className="text-muted-foreground">-</span>;
+      const fallback = (employee.first_name?.[0] || '') + (employee.last_name?.[0] || '');
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Avatar className="h-6 w-6">
+                <AvatarImage src={employee.profile_picture_url} />
+                <AvatarFallback className="text-[10px]">{fallback}</AvatarFallback>
+              </Avatar>
+            </TooltipTrigger>
+            <TooltipContent>{employee.first_name} {employee.last_name}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    },
+    enableSorting: false,
+    size: 60,
+    minSize: 50,
+    maxSize: 80,
   },
-  // Use the new non-editable date cell
-  { accessorKey: 'updated_at', header: "Updated At", cell: DisplayDateCell, enableSorting: true, size: 130 },
+  { accessorKey: 'updated_at', header: "Updated At", cell: DisplayDateCell, enableSorting: true, size: 80, minSize: 60, maxSize: 100 },
 ];
 
-// This column is added at the end automatically by `TanstackContactsPage.tsx`
-export const ActionColumn: ColumnDef<SimpleContact> = {
-    id: 'actions',
-    size: 40,
-    cell: ({ row, table }) => {
-        const contact = row.original;
-        const meta = table.options.meta as any;
-
-        if (row.getIsGrouped()) return null;
-
-        return (
-            <AlertDialog>
-                <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <Trash2 className="h-4 w-4 text-muted-foreground hover:text-red-500" />
-                    </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will permanently delete the contact for <span className="font-bold">{contact.name}</span>. This action cannot be undone.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => meta?.deleteRow(contact.id)} className="bg-red-500 hover:bg-red-600">
-                            Delete
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-        );
-    },
-};
+// L

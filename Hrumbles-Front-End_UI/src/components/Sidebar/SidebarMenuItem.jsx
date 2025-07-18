@@ -107,7 +107,7 @@ const categorizedOrgSuperAdminMenu = [
 // 1. Define all possible items for an Admin in one place
 const adminAllItems = [
     { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
-    { icon: FiUsers, label: "Employees", path: "/employee" },
+    { icon: FiUsers, label: "Employees", path: "/employee", department: "Human Resource", },
     { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
     { icon: GoGoal, label: "Goals", path: "/goals" },
     { icon: AiOutlineProfile, label: "Reports", path: "/reports" },

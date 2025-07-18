@@ -136,9 +136,9 @@ export const useCompanies = () => { /* ... (your existing hook) ... */
     queryFn: async (): Promise<Company[]> => {
       const { data, error } = await supabase
         .from('companies')
-        .select('id, name, logo_url, employee_count, industry, stage, location, account_owner, website, linkedin, created_at, revenue, cashflow, founded_as, employee_count_date, competitors, products, services, key_people, about, domain, status, created_by_employee:hr_employees!companies_created_by_fkey(first_name, last_name), updated_by_employee:hr_employees!companies_updated_by_fkey(first_name, last_name)')
+        .select('id, name, logo_url, employee_count, industry, stage, location, created_by, updated_by, account_owner, website, linkedin, created_at, revenue, cashflow, founded_as, employee_count_date, competitors, products, services, key_people, about, domain, status, created_by_employee:hr_employees!companies_created_by_fkey(id, first_name, last_name), updated_by_employee:hr_employees!companies_updated_by_fkey(id, first_name, last_name)')
         .order('created_at', { ascending: false })
-        .order('id', { ascending: true });
+        .order('id', { ascending: true })
       if (error) { console.error('Error fetching ordered companies:', error); throw error; }
       return data || [];
     },
@@ -513,7 +513,7 @@ export const useFetchCompanyDetails = () => { /* ... (your existing hook) ... */
           address: typeof data.address === 'string' ? data.address.trim() : null,
           location: typeof data.location === 'string' ? (data.location.trim().toLowerCase() === "anytown, usa" ? null : data.location.trim()) : null,
           industry: typeof data.industry === 'string' ? data.industry.trim() : null,
-          stage: typeof data.stage === 'string' ? data.stage.trim() : null, 
+          stage: 'New', 
           linkedin: validatedLinkedIn,
           revenue: parseFinancialValue(data.revenue), cashflow: parseFinancialValue(data.cashflow),
           competitors: Array.isArray(data.competitors) ? data.competitors.map((c: any) => String(c || '').trim()).filter(Boolean) : null,

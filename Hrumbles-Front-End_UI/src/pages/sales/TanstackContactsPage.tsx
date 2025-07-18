@@ -20,7 +20,7 @@ import {
   getExpandedRowModel,
   getFacetedRowModel,
   getFacetedUniqueValues,
-  ColumnFiltersState
+  ColumnFiltersState,
 } from '@tanstack/react-table';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -29,15 +29,29 @@ import { supabase } from '@/integrations/supabase/client';
 import { DataTable } from '@/components/ui/data-table';
 import { columns as defaultColumns, ActionColumn } from '@/components/sales/contacts-table/columns';
 import { DataTableToolbar } from '@/components/sales/contacts-table/data-table-toolbar';
-import { ManageStagesDialog } from '@/components/sales/contacts-table/ManageStagesDialog';
 import { AddColumnDialog } from '@/components/sales/contacts-table/AddColumnDialog';
 import { EditableCell, ReorderableHeader } from '@/components/sales/contacts-table/columns';
 import type { SimpleContact } from '@/types/simple-contact.types';
 import { AddContactForm } from '@/components/sales/contacts-table/AddContactForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { getCustomCell } from '@/components/sales/contacts-table/columns';
 import { useDeleteContact } from '@/hooks/sales/useDeleteContact';
-import { DataTablePagination } from '@/components/ui/data-table-pagination'; 
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
+import { DateRangePickerField } from '@/components/sales/chart/dateRangePickerField';
+import CreatorPerformanceChart from '@/components/sales/chart/ContactsPerformanceChart';
+import CompanyStagePieChart from '@/components/sales/chart/ContactsStagePieChart';
+import { startOfMonth } from 'date-fns';
+
+interface DateRange {
+  from: Date;
+  to: Date;
+  key?: string;
+}
+
+interface ChartData {
+  name: string;
+  companies_created?: number;
+  value?: number;
+}
 
 const TanstackContactsPage: React.FC = () => {
   const { toast } = useToast();
@@ -48,18 +62,50 @@ const TanstackContactsPage: React.FC = () => {
   const deleteContactMutation = useDeleteContact();
 
   const [data, setData] = React.useState<SimpleContact[]>([]);
-  const [isManageStagesOpen, setIsManageStagesOpen] = React.useState(false);
   const [isAddColumnOpen, setIsAddColumnOpen] = React.useState(false);
   const [isAddContactOpen, setIsAddContactOpen] = React.useState(false);
-
-  const { data: savedColumnOrder, set: saveColumnOrder } = useUserPreferences<ColumnOrderState>('contactsColumnOrderV2');
-  const { data: savedColumnSizing, set: saveColumnSizing } = useUserPreferences<ColumnSizingState>('contactsColumnSizing');
-
   const [columnOrder, setColumnOrder] = React.useState<ColumnOrderState>([]);
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const [grouping, setGrouping] = React.useState<GroupingState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-    const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [chartDateRange, setChartDateRange] = React.useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: new Date(),
+    key: 'selection',
+  });
+
+  const { data: savedColumnOrder, set: saveColumnOrder } = useUserPreferences<ColumnOrderState>('contactsColumnOrderV2');
+  const { data: savedColumnSizing, set: saveColumnSizing } = useUserPreferences<ColumnSizingState>('contactsColumnSizing');
+
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employeesForFilter', organization_id],
+    queryFn: async () => {
+      if (!organization_id) return [];
+      const { data, error } = await supabase
+        .from('hr_employees')
+        .select('id, first_name, last_name')
+        .eq('organization_id', organization_id)
+        .order('first_name', { ascending: true });
+      if (error) {
+        console.error("Error fetching employees:", error);
+        return [];
+      }
+      return data;
+    },
+    enabled: !!organization_id,
+  });
+
+  const createdByOptions = React.useMemo(() => {
+    return [
+      { value: 'all', label: 'All Creators' },
+      { value: 'system', label: 'System' },
+      ...employees.map(emp => ({
+        value: emp.id,
+        label: `${emp.first_name} ${emp.last_name}`,
+      })),
+    ];
+  }, [employees]);
 
   const { data: customFields = [] } = useQuery({
     queryKey: ['customContactFields', organization_id],
@@ -71,44 +117,14 @@ const TanstackContactsPage: React.FC = () => {
     enabled: !!organization_id,
   });
 
-    React.useEffect(() => {
+  React.useEffect(() => {
     console.log('[DEBUG-1] Raw server data received:', serverContacts);
     setData(serverContacts);
   }, [serverContacts]);
 
-  // --- DEBUG LOG #2: See how the filter state changes ---
   React.useEffect(() => {
     console.log('[DEBUG-2] Column filter state changed:', columnFilters);
   }, [columnFilters]);
-
-  // ADD: Fetch employees to use as filter options
-  const { data: employees = [] } = useQuery({
-    queryKey: ['employeesForFilter', organization_id],
-    queryFn: async () => {
-        if (!organization_id) return [];
-        const { data, error } = await supabase
-            .from('hr_employees')
-            .select('id, first_name, last_name')
-            .eq('organization_id', organization_id)
-            .order('first_name', { ascending: true });
-        
-        if (error) {
-            console.error("Error fetching employees:", error);
-            return [];
-        }
-        return data;
-    },
-    enabled: !!organization_id,
-  });
-
-  // ADD: Memoize the options for the filter component
-  const createdByOptions = React.useMemo(() => {
-      return employees.map(emp => ({
-          value: emp.id,
-          label: `${emp.first_name} ${emp.last_name}`,
-      }));
-  }, [employees]);
-
 
   const memoizedColumns = React.useMemo<ColumnDef<SimpleContact>[]>(() => {
     const dynamicColumns: ColumnDef<SimpleContact>[] = customFields.map(field => ({
@@ -116,10 +132,65 @@ const TanstackContactsPage: React.FC = () => {
       accessorFn: row => (row.custom_data as any)?.[field.column_key],
       header: ReorderableHeader,
       cell: getCustomCell(field.data_type as any),
-      size: 150,
+      size: 120,
+      minSize: 80,
+      maxSize: 200,
     }));
     return [...defaultColumns, ...dynamicColumns, ActionColumn];
   }, [customFields]);
+
+  const chartFilteredData = React.useMemo(() => {
+    console.log('chartFilteredData: computing with chartDateRange:', chartDateRange);
+    const filtered = data.filter(contact => {
+      if (!chartDateRange?.from) {
+        console.log('chartFilteredData: no from date, including all contacts');
+        return true;
+      }
+      const createdAt = new Date(contact.created_at);
+      const from = chartDateRange.from;
+      const to = chartDateRange.to || new Date();
+      const inRange = createdAt >= from && createdAt <= to;
+      console.log(
+        'chartFilteredData: contact:',
+        contact.name,
+        'created_at:',
+        contact.created_at,
+        'inRange:',
+        inRange
+      );
+      return inRange;
+    });
+    console.log('chartFilteredData: filtered contacts count:', filtered.length);
+    return filtered;
+  }, [data, chartDateRange]);
+
+  const creatorStatsForChart = React.useMemo(() => {
+    const stats: { [key: string]: number } = {};
+    chartFilteredData.forEach(contact => {
+      const creatorName = contact.created_by_employee
+        ? `${contact.created_by_employee.first_name} ${contact.created_by_employee.last_name}`
+        : 'System';
+      stats[creatorName] = (stats[creatorName] || 0) + 1;
+    });
+    const result = Object.entries(stats)
+      .map(([name, count]) => ({ name, companies_created: count }))
+      .sort((a, b) => b.companies_created - a.companies_created);
+    console.log('creatorStatsForChart:', result);
+    return result;
+  }, [chartFilteredData]);
+
+  const stageStatsForChart = React.useMemo(() => {
+    const stats: { [key: string]: number } = {};
+    chartFilteredData.forEach(contact => {
+      const stage = contact.contact_stage || 'N/A';
+      stats[stage] = (stats[stage] || 0) + 1;
+    });
+    const result = Object.entries(stats)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+    console.log('stageStatsForChart:', result);
+    return result;
+  }, [chartFilteredData]);
 
   const table = useReactTable({
     data,
@@ -128,7 +199,6 @@ const TanstackContactsPage: React.FC = () => {
       pagination: {
         pageSize: 20,
       },
-      
     },
     state: {
       columnOrder,
@@ -233,38 +303,47 @@ const TanstackContactsPage: React.FC = () => {
 
   const handleToggleGrouping = () => setGrouping(prev => (prev.length ? [] : ['contact_stage']));
 
- return (
-    // Changed: This is now the main container for the entire table view component.
-    // It fills the height given by ContactsView and handles its children's layout.
-    // overflow-hidden is crucial to ensure scrolling happens ONLY in the designated area.
-    <div className="flex h-full flex-col overflow-hidden rounded-lg border bg-white">
-      {/* Part 1: Fixed Toolbar */}
+  return (
+    <div className="flex min-h-0 flex-col rounded-lg border bg-white">
+      {/* Charts and Date Range Picker */}
+      <div className="p-4 border-b">
+        <div className="flex justify-end">
+          <DateRangePickerField
+            dateRange={chartDateRange}
+            onDateRangeChange={setChartDateRange}
+            className="w-[250px] sm:w-[200px]"
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 max-w-full">
+          <CreatorPerformanceChart data={creatorStatsForChart} />
+          <CompanyStagePieChart data={stageStatsForChart} />
+        </div>
+      </div>
+
+      {/* Toolbar */}
       <div className="p-4 border-b">
         <DataTableToolbar
           table={table}
           onOpenAddContactDialog={() => setIsAddContactOpen(true)}
-          onAddColumn={() => setIsAddColumnOpen(true)} // You might need to pass this down if it's used
           onToggleGrouping={handleToggleGrouping}
-           createdByOptions={createdByOptions}
+          createdByOptions={createdByOptions}
         />
       </div>
 
-      {/* Part 2: Scrolling Content Area */}
-      {/* flex-1 makes this div grow to fill available space. */}
-      {/* overflow-auto enables vertical and horizontal scrolling for the table inside. */}
-      <div className="flex-1 overflow-auto">
+      {/* Table Content */}
+      <div className="flex-1 overflow-x-auto">
         <DataTable table={table} />
       </div>
 
-      {/* Part 3: Fixed Pagination */}
+      {/* Pagination */}
       <div className="p-2 border-t">
         <DataTablePagination table={table} />
       </div>
 
-      {/* Dialogs can remain at this level */}
+      {/* Dialogs */}
       <AddColumnDialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen} />
       <Dialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] z-50">
           <DialogHeader>
             <DialogTitle>Add New Contact</DialogTitle>
           </DialogHeader>
@@ -275,8 +354,6 @@ const TanstackContactsPage: React.FC = () => {
         </DialogContent>
       </Dialog>
     </div>
-    // Note: The DndProvider should ideally be moved up to ContactsView.tsx
-    // to wrap both views, but it can stay here if only used for the table.
   );
 };
 

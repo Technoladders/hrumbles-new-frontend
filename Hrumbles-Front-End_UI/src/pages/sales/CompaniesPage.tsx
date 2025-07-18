@@ -44,8 +44,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"; // ADD THIS
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // ADD THIS
 import { cn } from "@/lib/utils"; // ADD THIS (if not already present)
-import CompanyCreatorChart from "@/components/sales/CompanyCreatorChart"; // ADD THIS
+import CompanyCreatorChart from "@/components/sales/chart/CompanyCreatorChart"; // ADD THIS
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { startOfMonth } from "date-fns"; // ADD THIS
+import CreatorPerformanceChart from "@/components/sales/chart/CreatorPerformanceChart";
+import { DateRangePickerField } from "@/components/sales/chart/dateRangePickerField"; // 👈 ADD THIS
+import CompanyStagePieChart from "@/components/sales/chart/CompanyStagePieChart";
 
 const companyCsvSchema = z.object({
   name: z.string().min(1, { message: "Company Name is required" }),
@@ -82,7 +86,7 @@ const companyCsvSchema = z.object({
   name: data.name.trim(),
   website: data.website?.trim() || null,
   industry: data.industry?.trim() || null,
-  stage: data.stage?.trim() || 'Cold',
+  stage: data.stage?.trim() || 'New',
   location: data.location?.trim() || null,
   employee_count: data.employee_count ?? null,
   linkedin: data.linkedin?.trim() || null,
@@ -103,9 +107,10 @@ const companyCsvSchema = z.object({
 }));
 type CompanyCsvRow = z.infer<typeof companyCsvSchema>;
 
-const STAGES = ['Current Client', 'Cold', 'Active Opportunity', 'Dead Opportunity', 'Do Not Prospect'];
+const STAGES = ['New', 'Current Client', 'Cold', 'Active Opportunity', 'Dead Opportunity', 'Do Not Prospect'];
 const stageColors: Record<string, string> = {
   'Current Client': 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200',
+  'New': 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200',
   'Cold': 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200',
   'Active Opportunity': 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200',
   'Dead Opportunity': 'bg-red-100 text-red-700 border-red-200 hover:bg-red-200',
@@ -148,6 +153,16 @@ const [editCompany, setEditCompany] = useState<CompanyDetail | null>(null);
    const [isManualAddDialogOpen, setIsManualAddDialogOpen] = useState(false);
    const currentUserId = user?.id || null;
 
+const [chartDateRange, setChartDateRange] = useState<DateRange | undefined>({
+  from: startOfMonth(new Date()),
+  to: new Date(),
+  key: 'selection', // Add key to match DateRangePickerField
+});
+    // -- RENAME your old dateRange state to avoid confusion --
+  const [tableDateRange, setTableDateRange] = useState<DateRange | undefined>(undefined);
+
+  console.log("selectedcreator", selectedCreatorId)
+
   useEffect(() => {
     const handleScroll = () => setShowBackToTop(window.scrollY > 300);
     window.addEventListener('scroll', handleScroll);
@@ -180,70 +195,139 @@ const [editCompany, setEditCompany] = useState<CompanyDetail | null>(null);
   const handleAddClick = () => setIsAddDialogOpen(true);
   const handleCloseAddDialog = () => setIsAddDialogOpen(false);
 
-    const handleCreatorClick = (creatorId: string | null) => {
-    if (creatorId) {
-      setSelectedCreatorId(creatorId);
-      setCurrentPage(1); // Reset to the first page to show results
+    // Inside CompaniesPage component
+
+// Debug handleCreatorClick
+const handleCreatorClick = (creatorId: string | null | undefined) => {
+  console.log('handleCreatorClick: creatorId clicked:', creatorId);
+  const newCreatorId = creatorId ?? 'system'; // Map null/undefined to 'system'
+  setSelectedCreatorId(newCreatorId);
+  setCurrentPage(1); // Reset to the first page
+  console.log('handleCreatorClick: selectedCreatorId set to:', newCreatorId);
+};
+
+// Debug uniqueCreators
+const uniqueCreators = useMemo(() => {
+  const creators = new Map<string, { id: string; name: string }>();
+  creators.set('system', { id: 'system', name: 'System' });
+
+  console.log('uniqueCreators: companies being processed:', companies.length);
+  companies.forEach(company => {
+    console.log('uniqueCreators: company.created_by:', company.created_by, 'employee:', company.created_by_employee);
+    const creatorId = company.created_by ?? 'system'; // Map undefined to 'system'
+    let name = 'System';
+    if (company.created_by_employee?.first_name) {
+      name = `${company.created_by_employee.first_name} ${company.created_by_employee.last_name}`.trim();
     }
-  };
+    if (!creators.has(creatorId)) {
+      creators.set(creatorId, { id: creatorId, name });
+      console.log('uniqueCreators: added creator:', { id: creatorId, name });
+    }
+  });
 
-  const uniqueCreators = useMemo(() => {
-    const creators = new Map<string, { id: string; name: string }>();
-    companies.forEach(company => {
-      if ( company.created_by_employee) {
-        const name = `${company.created_by_employee.first_name} ${company.created_by_employee.last_name}`;
-        creators.set(company.created_by, { id: company.created_by, name });
-      }
-    });
-    return Array.from(creators.values());
-  }, [companies]);
+  const creatorArray = Array.from(creators.values());
+  console.log('uniqueCreators: final creators array:', creatorArray);
+  return creatorArray;
+}, [companies]);
 
-  console.log("Unique creators", companies);
+// Debug tableFilteredData
+const tableFilteredData = useMemo(() => {
+  console.log('tableFilteredData: selectedCreatorId:', selectedCreatorId);
+  console.log('tableFilteredData: searchTerm:', searchTerm);
+  console.log('tableFilteredData: total companies before filter:', companies.length);
 
-  // Memoize the stats for the chart
-  const creatorStats = useMemo(() => {
+  const filtered = companies.filter(company => {
+    const searchMatch = (
+      (company.name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+    );
+
+    let creatorMatch = false;
+    console.log('tableFilteredData: company.created_by:', company.created_by, 'comparing with selectedCreatorId:', selectedCreatorId);
+    if (selectedCreatorId === 'all') {
+      creatorMatch = true;
+      console.log('tableFilteredData: creatorMatch true (all selected)');
+    } else if (selectedCreatorId === 'system') {
+      creatorMatch = company.created_by === null || company.created_by === undefined;
+      console.log('tableFilteredData: system check, creatorMatch:', creatorMatch, 'company.created_by:', company.created_by);
+    } else {
+      creatorMatch = company.created_by === selectedCreatorId;
+      console.log('tableFilteredData: specific creator check, creatorMatch:', creatorMatch, 'company.created_by:', company.created_by);
+    }
+
+    const result = searchMatch && creatorMatch;
+    console.log('tableFilteredData: company:', company.name, 'searchMatch:', searchMatch, 'creatorMatch:', creatorMatch, 'included:', result);
+    return result;
+  });
+
+  console.log('tableFilteredData: filtered companies count:', filtered.length);
+  return filtered;
+}, [companies, searchTerm, selectedCreatorId]);
+
+
+  
+
+
+   // --- 1. DATA FOR THE CHART (only uses date filter) ---
+const chartFilteredData = useMemo(() => {
+  console.log('chartFilteredData: computing with chartDateRange:', chartDateRange);
+  const filtered = companies.filter(company => {
+    if (!chartDateRange?.from) {
+      console.log('chartFilteredData: no from date, including all companies');
+      return true; // Show all if no date is set
+    }
+    const createdAt = new Date(company.created_at);
+    const from = chartDateRange.from;
+    const to = chartDateRange.to || new Date(); // Use today if 'to' is not set
+    const inRange = createdAt >= from && createdAt <= to;
+    console.log(
+      'chartFilteredData: company:',
+      company.name,
+      'created_at:',
+      company.created_at,
+      'inRange:',
+      inRange
+    );
+    return inRange;
+  });
+  console.log('chartFilteredData: filtered companies count:', filtered.length);
+  return filtered;
+}, [companies, chartDateRange]);
+
+  const creatorStatsForChart = useMemo(() => {
     const stats: { [key: string]: number } = {};
-    companies.forEach(company => {
+    chartFilteredData.forEach(company => {
       if (company.created_by_employee) {
         const name = `${company.created_by_employee.first_name} ${company.created_by_employee.last_name}`;
         stats[name] = (stats[name] || 0) + 1;
-      } else {
-        stats['System'] = (stats['System'] || 0) + 1;
       }
     });
-    return Object.entries(stats).map(([name, count]) => ({ name, count })).sort((a,b) => b.count - a.count);
-  }, [companies]);
+    return Object.entries(stats)
+      .map(([name, count]) => ({ name, companies_created: count }))
+      .sort((a, b) => b.companies_created - a.companies_created);
+  }, [chartFilteredData]);
 
-const filteredCompanies = useMemo(() => {
-    return companies.filter(company => {
-      // Search Term Filter
-      const searchMatch = (
-        (company.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-        (company.industry?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-      );
-      
-      // Creator Filter
-      const creatorMatch = selectedCreatorId === 'all' || company.created_by === selectedCreatorId;
-
-      // Date Range Filter
-      const dateMatch = !dateRange?.from || (
-        new Date(company.created_at) >= dateRange.from &&
-        (!dateRange.to || new Date(company.created_at) <= dateRange.to)
-      );
-
-      return searchMatch && creatorMatch && dateMatch;
+    // --- 2. Add `stageStatsForChart` logic ---
+  const stageStatsForChart = useMemo(() => {
+    const stats: { [key: string]: number } = {};
+    chartFilteredData.forEach(company => {
+      const stage = company.stage || 'N/A';
+      stats[stage] = (stats[stage] || 0) + 1;
     });
-  }, [companies, searchTerm, selectedCreatorId, dateRange]);
+    return Object.entries(stats)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [chartFilteredData]);
 
-  const totalPages = Math.ceil(filteredCompanies.length / itemsPerPage);
-  const paginatedCompanies = filteredCompanies.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+ 
 
-  const handlePageChange = (page: number) => {
-    if (page >= 1 && page <= totalFilteredPages) {
-      setCurrentPage(page);
-      document.getElementById('company-list-top')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
+
+  // --- 2. DATA FOR THE TABLE (uses search and creator filter) ---
+
+
+  // --- UPDATE PAGINATION TO USE THE NEW TABLE-SPECIFIC DATA ---
+   const totalPages = Math.ceil(tableFilteredData.length / itemsPerPage);
+  const paginatedCompanies = tableFilteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
 
 
   const downloadCsvTemplate = () => {
@@ -380,7 +464,10 @@ const filteredCompanies = useMemo(() => {
             competitors: restOfVc.competitors,
             products: restOfVc.products,
             services: restOfVc.services,
-            key_people: keyPeople
+            key_people: keyPeople,
+            organization_id: organizationId,
+  created_by: currentUserId,
+  updated_by: currentUserId, 
           };
         });
 
@@ -495,154 +582,177 @@ const filteredCompanies = useMemo(() => {
         </Card>
       </div>
 
- <div className="mb-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-          <Input placeholder="Search companies, industries..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 h-9" />
+    {/* --- DASHBOARD & DATE PICKER SECTION --- */}
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold">Performance Dashboard</h2>
+         <DateRangePickerField dateRange={chartDateRange} onDateRangeChange={setChartDateRange} />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <CreatorPerformanceChart data={creatorStatsForChart} />
+          <CompanyStagePieChart data={stageStatsForChart} />
         </div>
       </div>
 
-      {/* --- ADD THIS NEW FILTER BAR --- */}
-      <div className="flex flex-wrap items-center gap-4 mb-6 p-4 border rounded-lg bg-muted/50">
-        <Filter className="h-5 w-5 text-muted-foreground" />
-        <h3 className="text-sm font-semibold">Filters:</h3>
-
-        <Select value={selectedCreatorId} onValueChange={setSelectedCreatorId}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by Creator" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Creators</SelectItem>
-            {uniqueCreators.map(creator => (
-              <SelectItem key={creator.id} value={creator.id}>{creator.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              id="date"
-              variant={"outline"}
-              className={cn("w-[300px] justify-start text-left font-normal", !dateRange && "text-muted-foreground")}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {dateRange?.from ? (
-                dateRange.to ? (
-                  <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</>
-                ) : (
-                  format(dateRange.from, "LLL dd, y")
-                )
-              ) : (
-                <span>Pick a date range</span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              initialFocus
-              mode="range"
-              defaultMonth={dateRange?.from}
-              selected={dateRange}
-              onSelect={setDateRange}
-              numberOfMonths={2}
-            />
-          </PopoverContent>
-        </Popover>
-        {(selectedCreatorId !== 'all' || dateRange) && (
-          <Button variant="ghost" size="icon" onClick={() => { setSelectedCreatorId('all'); setDateRange(undefined); }}>
-            <X className="h-4 w-4" />
-            <span className="sr-only">Clear filters</span>
-          </Button>
-        )} */}
+      {/* --- TABLE FILTER & SEARCH SECTION --- */}
+      <div className="p-4 border rounded-lg bg-muted/5 mb-6">
+        <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-grow">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Input placeholder="Search companies..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 h-9" />
+            </div>
+           <Select
+  value={selectedCreatorId ?? 'all'} // Fallback to 'all' if undefined
+  onValueChange={(value) => {
+    console.log('Select onValueChange: new value:', value);
+    setSelectedCreatorId(value);
+  }}
+>
+  <SelectTrigger className="w-full sm:w-[220px]">
+    <SelectValue placeholder="Filter by Creator" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="all">All Creators</SelectItem>
+    {uniqueCreators.map(creator => (
+      <SelectItem key={creator.id} value={creator.id}>{creator.name}</SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+        </div>
       </div>
-
-      {/* --- ADD THE NEW CHART CARD --- */}
-      {/* <div className="mb-6">
-        <CompanyCreatorChart data={creatorStats} />
-      </div> */}
 
  {/* NEW TABLE STRUCTURE */}
-      <div className="border rounded-lg overflow-hidden shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stage</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
-              <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {isLoading && <tr><td colSpan={5} className="text-center p-4">Loading...</td></tr>}
-            {isError && <tr><td colSpan={5} className="text-center p-4 text-red-500">Error loading data.</td></tr>}
-            {!isLoading && paginatedCompanies.length === 0 && (
-              <tr><td colSpan={5} className="text-center p-4 text-gray-500">No companies found.</td></tr>
-            )}
-            {paginatedCompanies.map((company) => (
-              <tr key={company.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-10 w-10">
-                      <Avatar><AvatarImage src={company.logo_url || undefined} /><AvatarFallback>{company.name?.charAt(0)}</AvatarFallback></Avatar>
-                    </div>
-                    <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900 hover:text-primary"><Link to={`/companies/${company.id}`}>{company.name}</Link></div>
-                      <div className="text-xs text-gray-500">{getDisplayValue(company.industry, 'No Industry')}</div>
-                    </div>
+<div className="border rounded-lg overflow-x-auto shadow-sm">
+  <table className="min-w-full divide-y divide-gray-200">
+    <thead className="bg-gray-50">
+      <tr>
+        <th className="px-4 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider">Company</th>
+        <th className="px-4 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider">Industry</th>
+        <th className="px-4 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider">Headquarters</th>
+        <th className="px-4 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider">Company Size</th>
+        <th className="px-4 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider">Stage</th>
+        <th className="px-4 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider">Created By</th>
+        <th scope="col" className="px-4 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
+        <th className="px-4 py-2 text-right text-[10px] font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody className="bg-white divide-y divide-gray-200">
+      {isLoading && (
+        <tr>
+          <td colSpan={7} className="text-center p-3 text-[11px] text-gray-500">
+            Loading...
+          </td>
+        </tr>
+      )}
+      {!isLoading &&
+        paginatedCompanies.map((company) => (
+          <tr key={company.id} className="hover:bg-gray-50">
+            <td className="px-4 py-2 whitespace-nowrap">
+              <div className="flex items-center">
+                <Avatar className="h-8 w-8 flex-shrink-0">
+                  <AvatarImage src={company.logo_url || undefined} />
+                  <AvatarFallback className="text-[10px]">{company.name?.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <div className="ml-3">
+                  <div className="text-[11px] font-medium text-gray-900 hover:text-primary">
+                    <Link to={`/companies/${company.id}`}>{company.name}</Link>
                   </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className={`h-7 px-2 text-xs w-full max-w-[150px] justify-between truncate border ${stageColors[getDisplayValue(company.stage, 'default')] ?? stageColors['default']}`} disabled={updateStageMutation.isPending && updateStageMutation.variables?.companyId === company.id}>
-                        <span className="truncate">{getDisplayValue(company.stage, 'Select Stage')}</span><ChevronDown className="h-3 w-3 ml-1 flex-shrink-0" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                      {STAGES.map(stage => <DropdownMenuItem key={stage} onSelect={() => handleStageChange(company.id, stage)}>{stage}</DropdownMenuItem>)}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
-               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {company.created_by_employee ? (
-                    <button
-                      onClick={() => handleCreatorClick(company.created_by)}
-                      className="text-left hover:text-primary hover:underline focus:outline-none"
-                      title={`Filter by ${company.created_by_employee.first_name}`}
+                  <div className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                    {company.website && (
+                      <a
+                        href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Website"
+                      >
+                        <LinkIcon className="h-3 w-3 text-gray-400 hover:text-primary" />
+                      </a>
+                    )}
+                    {company.linkedin && (
+                      <a
+                        href={company.linkedin.startsWith('http') ? company.linkedin : `https://${company.linkedin}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="LinkedIn"
+                      >
+                        <Linkedin className="h-3 w-3 text-gray-400 hover:text-primary" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </td>
+            <td className="px-4 py-2 whitespace-nowrap text-[11px] text-gray-500">{getDisplayValue(company.industry)}</td>
+            <td className="px-4 py-2 whitespace-nowrap text-[11px] text-gray-500">{getDisplayValue(company.location)}</td>
+            <td className="px-4 py-2 whitespace-nowrap text-[11px] text-gray-500">
+              <div>{getDisplayValue(company.employee_count?.toLocaleString())}</div>
+              {company.employee_count_date && (
+                <div className="text-[10px] text-gray-400">as of {format(new Date(company.employee_count_date), "MMM yyyy")}</div>
+              )}
+            </td>
+            <td className="px-4 py-2 whitespace-nowrap">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={`h-6 px-2 text-[10px] w-full max-w-[140px] justify-between truncate border ${
+                      stageColors[getDisplayValue(company.stage, 'default')] ?? stageColors['default']
+                    }`}
+                    disabled={updateStageMutation.isPending && updateStageMutation.variables?.companyId === company.id}
+                  >
+                    <span className="truncate">{getDisplayValue(company.stage, 'Select Stage')}</span>
+                    <ChevronDown className="h-2.5 w-2.5 ml-1 flex-shrink-0" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {STAGES.map((stage) => (
+                    <DropdownMenuItem
+                      key={stage}
+                      onSelect={() => handleStageChange(company.id, stage)}
+                      className="text-[11px]"
                     >
-                      {`${company.created_by_employee.first_name} ${company.created_by_employee.last_name}`}
-                    </button>
-                  ) : (
-                    <span>System</span>
-                  )}
-                  <div className="text-xs">{moment(company.created_at).format("DD MMM YYYY")}</div>
-                </td>
-
-                {/* === MODIFIED "Last Updated" CELL === */}
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {company.updated_by_employee ? (
-                    <button
-                      onClick={() => handleCreatorClick(company.updated_by)}
-                      className="text-left hover:text-primary hover:underline focus:outline-none"
-                      title={`Filter by ${company.updated_by_employee.first_name}`}
-                    >
-                      {`${company.updated_by_employee.first_name} ${company.updated_by_employee.last_name}`}
-                    </button>
-                  ) : (
-                    <span>N/A</span>
-                  )}
-                  <div className="text-xs">{moment(company.updated_at).fromNow()}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <Button variant="ghost" size="icon" onClick={() => handleEditClick(company as CompanyDetail)}><Edit className="h-4 w-4" /></Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                      {stage}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </td>
+            <td className="px-4 py-2 whitespace-nowrap text-[11px] text-gray-500">
+              <button
+                onClick={() => handleCreatorClick(company.created_by)}
+                className="text-left hover:text-primary hover:underline focus:outline-none"
+              >
+                {company.created_by_employee
+                  ? `${company.created_by_employee.first_name} ${company.created_by_employee.last_name}`
+                  : 'System'}
+              </button>
+              <div className="text-[10px]">{moment(company.created_at).format("DD MMM YYYY")}</div>
+            </td>
+            <td className="px-4 py-2 whitespace-nowrap text-[11px] text-gray-500">
+              {company.updated_by_employee ? (
+                <button
+                  onClick={() => handleCreatorClick(company.updated_by)}
+                  className="text-left hover:text-primary hover:underline focus:outline-none"
+                  title={`Filter by ${company.updated_by_employee.first_name}`}
+                >
+                  {`${company.updated_by_employee.first_name} ${company.updated_by_employee.last_name}`}
+                </button>
+              ) : (
+                <span>N/A</span>
+              )}
+              <div className="text-[10px]">{moment(company.updated_at).fromNow()}</div>
+            </td>
+            <td className="px-4 py-2 whitespace-nowrap text-right text-[11px] font-medium">
+              <Button variant="ghost" size="icon" onClick={() => handleEditClick(company as CompanyDetail)}>
+                <Edit className="h-3.5 w-3.5" />
+              </Button>
+            </td>
+          </tr>
+        ))}
+    </tbody>
+  </table>
+</div>
 
    <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4 p-2 border-t">
         <div className="flex items-center gap-2">
@@ -686,9 +796,9 @@ const filteredCompanies = useMemo(() => {
           </Button>
         </div>
   
-        <span className="text-sm text-muted-foreground">
-          Showing {filteredCompanies.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} 
-          to {Math.min(currentPage * itemsPerPage, filteredCompanies.length)} of {filteredCompanies.length} companies
+       <span className="text-sm text-muted-foreground">
+          Showing {tableFilteredData.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} 
+          to {Math.min(currentPage * itemsPerPage, tableFilteredData.length)} of {tableFilteredData.length} companies
         </span>
       </div>
       {/* DIALOGS */}
