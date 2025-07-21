@@ -7,6 +7,8 @@ import { ReportType } from '@/types/reports';
 import ClientWiseReport from '@/components/reports/ClientWiseReport';
 import IndividualReport from '@/components/reports/IndividualReport';
 import RecruiterReportPage from '@/components/reports/RecruiterReportPage';
+import TalentProfileReport from '@/components/reports/TalentProfileReport';
+import TalentTrendsReport from '@/components/reports/TalentTrendsReport';
 
 const ReportsPage: React.FC = () => {
   const [selectedReportType, setSelectedReportType] = useState<ReportType | null>(null);
@@ -21,6 +23,10 @@ const ReportsPage: React.FC = () => {
         return <IndividualReport />;
       case 'recruiter':
         return <RecruiterReportPage />;
+         case 'talent':
+        return <TalentProfileReport />; 
+        case 'talent_trends':
+        return <TalentTrendsReport />;
       default:
         return null;
     }
@@ -73,6 +79,32 @@ const ReportsPage: React.FC = () => {
               Track recruiter performance with detailed metrics and visualizations
             </CardContent>
           </Card>
+          <Card
+            onClick={() => setSelectedReportType('talent')}
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <UserCheck className="mr-2" /> Talent Profile Report
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              View candidate status counts and distributions by individual employees
+            </CardContent>
+          </Card>
+          <Card
+            onClick={() => setSelectedReportType('talent_trends')}
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <UserCheck className="mr-2" /> Talent Trends Report
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              View candidate status counts and distributions by individual employees
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -84,6 +116,8 @@ const ReportsPage: React.FC = () => {
           {renderReportContent()}
         </div>
       )}
+
+      
     </div>
   );
 };

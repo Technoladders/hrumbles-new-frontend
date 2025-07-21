@@ -188,7 +188,7 @@ const handleSaveUanResult = useCallback(async (
     setLookupValue,
     handleLookup: onUanLookup,
     isQueued: isUanQueued,
-  } = useUanLookup(candidate, organization_id, handleSaveUanResult);
+  } = useUanLookup(candidate, organization_id, user?.id, handleSaveUanResult);
 
   console.log("UAN Data:", uanData);
 
@@ -424,6 +424,7 @@ const handleSaveUanResult = useCallback(async (
               <VerificationProcessSection
                 candidate={candidate}
                 organizationId={organization_id}
+                userId={user?.id}
                 isUanLoading={isUanLoading}
                 uanData={uanData}
                 lookupMethod={lookupMethod}

@@ -34,6 +34,7 @@ interface TruthScreenFullHistoryResponse {
 interface VerificationProcessSectionProps {
   candidate: Candidate | null;
   organizationId: string | null;
+   userId: string | null; 
   isUanLoading: boolean;
   uanData: any | null;
   lookupMethod: 'mobile' | 'pan';
@@ -59,6 +60,7 @@ interface VerificationProcessSectionProps {
 export const VerificationProcessSection: React.FC<VerificationProcessSectionProps> = ({
   candidate,
   organizationId,
+   userId, 
   isUanLoading,
   uanData,
   lookupMethod,
@@ -171,8 +173,8 @@ export const VerificationProcessSection: React.FC<VerificationProcessSectionProp
 
   // This function now just starts the process. The result will arrive via the real-time listener.
   const initiateFullEmployeeHistoryCheck = useCallback(async () => {
-    if (!candidate?.id || !organizationId || !candidateUanFromMetadata) {
-      toast({ title: 'Error', description: 'UAN not available. Please fetch UAN first.', variant: 'destructive' });
+    if (!candidate?.id || !organizationId || !userId || !candidateUanFromMetadata) {
+      toast({ title: 'Error', description: 'User, UAN, or Organization is missing.', variant: 'destructive' });
       return;
     }
     
@@ -187,6 +189,7 @@ export const VerificationProcessSection: React.FC<VerificationProcessSectionProp
           uan: candidateUanFromMetadata,
           candidateId: candidate.id,
           organizationId: organizationId,
+          userId: userId,
         },
       });
 
@@ -208,7 +211,7 @@ export const VerificationProcessSection: React.FC<VerificationProcessSectionProp
       toast({ title: 'Error', description: `Failed to start verification: ${errorMessage}`, variant: 'destructive' });
       setIsFullHistoryLoading(false);
     }
-  }, [candidate, organizationId, candidateUanFromMetadata, toast]);
+  }, [candidate, organizationId, userId, candidateUanFromMetadata, toast]);
 
   const renderVerificationStatus = (doc: DocumentState) => {
     // This function remains the same

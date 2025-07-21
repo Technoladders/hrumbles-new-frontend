@@ -28,16 +28,11 @@ const orgSuperAdminAllItems = [
   { icon: GoGoal, label: "Goals", path: "/goals" },
   { icon: ImProfile, label: "My Profile", path: "/profile" },
   { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
-  {
-    icon: MdOutlineAccountBalance,
-    label: "Finance",
-    path: "/finance",
-    dropdown: [
-      { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices" },
-      { icon: FaSackDollar, label: "Expenses", path: "/accounts/expenses" },
-      { icon: FiBriefcase , label:"Payroll", path: "/payroll"},
-    ],
-  },
+  { icon: MdOutlineAccountBalance, label: "Finance", path: "/finance",  },
+  
+            { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices",  },
+            { icon: FaSackDollar, label: "Expenses", path: "/accounts/expenses",  },
+            { icon: FiBriefcase, label: "Payroll", path: "/payroll",  },
   {
     icon: TbCheckbox,
     label: "Approvals",
@@ -66,15 +61,16 @@ const orgSuperAdminAllItems = [
 
 // 2. Define the items for each suite
 const projectSuiteLabels = ["Clients", "Projects"];
-const salesSuiteLabels = ["Company", "Contacts", "Finance"];
+const salesSuiteLabels = ["Company", "Contacts",];
+const financeSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll"];
 
 const projectSuiteItems = orgSuperAdminAllItems.filter(item => projectSuiteLabels.includes(item.label));
 const salesSuiteItems = orgSuperAdminAllItems.filter(item => salesSuiteLabels.includes(item.label));
-const financeSuiteItems = orgSuperAdminAllItems.filter(item => item.label === "Finance");
+const financeSuiteItems = orgSuperAdminAllItems.filter(item => financeSuiteLabels.includes(item.label));
 
 // 3. The HR suite contains everything else
 const hrSuiteItems = orgSuperAdminAllItems.filter(
-  item => !projectSuiteLabels.includes(item.label) && !salesSuiteLabels.includes(item.label)
+  item => !projectSuiteLabels.includes(item.label) && !salesSuiteLabels.includes(item.label) && !financeSuiteLabels.includes(item.label)
 );
 
 // 4. Structure the final menu data with categories AND ICONS

@@ -12,6 +12,7 @@ const sanitizeMobile = (phone: string | null | undefined): string => {
 export const useUanLookup = (
   candidate: Candidate | null,
   organizationId: string | null,
+  userId: string | null,
   onSaveResult: (data: any, method: 'mobile' | 'pan', value: string) => Promise<void>
 ) => {
   const { toast } = useToast();
@@ -85,15 +86,23 @@ export const useUanLookup = (
       ).subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [candidate?.id, candidate?.phone, toast, onSaveResult]);
+  }, [candidate?.id, candidate?.phone, toast, onSaveResult, organizationId]);
 
   const handleLookup = useCallback(async () => {
-    if (!candidate?.id || !organizationId) return;
+   if (!candidate?.id || !organizationId || !userId) {
+      toast({ title: 'Error', description: 'Missing critical IDs.', variant: 'destructive' });
+      return;
+    }
 
     const sanitizedValue = lookupMethod === 'mobile' ? sanitizeMobile(lookupValue) : lookupValue;
     if (lookupMethod === 'mobile' && sanitizedValue.length !== 10) {
       toast({ title: 'Invalid Mobile Number', description: 'Please enter a valid 10-digit mobile number.', variant: 'destructive' });
       return;
+    }
+    // New validation for PAN lookup
+    if (lookupMethod === 'pan' && !candidate.phone) {
+        toast({ title: 'Missing Mobile Number', description: 'The candidate\'s mobile number is required to perform a PAN lookup.', variant: 'destructive' });
+        return;
     }
 
     setIsLoading(true);
@@ -118,7 +127,7 @@ export const useUanLookup = (
 
     try {
       const { data, error } = await supabase.functions.invoke('uan-lookup', {
-        body: { lookupMethod, lookupValue: sanitizedValue, candidateId: candidate.id, organizationId },
+        body: { lookupMethod, lookupValue: sanitizedValue, candidateId: candidate.id, organizationId, userId, candidateMobile: lookupMethod === 'pan' ? sanitizeMobile(candidate.phone) : null, },
       });
 
       if (error) throw error;
@@ -135,7 +144,8 @@ export const useUanLookup = (
       // ... error handling ...
       setIsLoading(false);
     }
-  }, [lookupValue, lookupMethod, candidate, organizationId, onSaveResult, toast]);
+  }, [lookupValue, lookupMethod, candidate, organizationId, userId, onSaveResult, toast]);
+
 
   // Combine isLoading and isQueued for the UI
   const isProcessing = isLoading || isQueued;

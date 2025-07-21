@@ -20,10 +20,10 @@ import { useLocation, Link, useNavigate } from "react-router-dom";
 import { logout } from "../../Redux/authSlice";
 import { ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
 import { menuItemsByRole } from "./SidebarMenuItem";
-import { ArrowRightFromLine, ArrowLeftToLine} from 'lucide-react';
+import { ArrowRightFromLine, ArrowLeftToLine } from 'lucide-react';
 import supabase from "../../config/supabaseClient";
 
-// MenuItem component remains the same as before.
+// MenuItem component remains unchanged
 const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownToggle }) => {
   const { icon, label, path, dropdown } = item;
   const isActive = location.pathname === path || (dropdown && dropdown.some(sub => location.pathname.startsWith(sub.path)));
@@ -75,7 +75,6 @@ const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownTogg
   );
 };
 
-
 const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -85,7 +84,6 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const [departmentName, setDepartmentName] = useState("Unknown Department");
   const [openDropdown, setOpenDropdown] = useState(null);
   const [isMobile] = useMediaQuery("(max-width: 768px)");
-
   const [employeeProfile, setEmployeeProfile] = useState(null);
   const { isOpen: isProfileMenuOpen, onToggle: toggleProfileMenu } = useDisclosure();
 
@@ -94,7 +92,58 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const hoverBg = "#4A5568";
   const textColor = "white";
 
-  // Fetch employee profile data (no changes needed here)
+  // Initialize activeSuite from localStorage or default to null
+  const [activeSuite, setActiveSuite] = useState(() => {
+    return localStorage.getItem('activeSuite') || null;
+  });
+
+  // Menu configuration
+  const menuConfig =
+    role === "employee" || role === "admin"
+      ? menuItemsByRole[role](departmentName)
+      : menuItemsByRole[role] || [];
+
+  const isCategorized = role === 'organization_superadmin' || role === 'admin';
+
+  // Function to find the suite containing the current pathname
+  const findSuiteForPath = (pathname) => {
+    if (!isCategorized) return null;
+    for (const suite of menuConfig) {
+      // Check if any item or dropdown item matches the current pathname
+      const hasMatchingItem = suite.items.some(
+        item =>
+          item.path === pathname ||
+          (item.dropdown && item.dropdown.some(subItem => pathname.startsWith(subItem.path)))
+      );
+      if (hasMatchingItem) return suite.title;
+    }
+    return menuConfig[0]?.title; // Fallback to first suite if no match
+  };
+
+  // Function to get the default path for a suite
+  const getDefaultPathForSuite = (suiteTitle) => {
+    const suite = menuConfig.find(s => s.title === suiteTitle);
+    if (!suite || !suite.items || suite.items.length === 0) return '/dashboard';
+    
+    // Return the path of the first item in the suite
+    return suite.items[0].path;
+  };
+
+  // Update activeSuite based on current pathname and persist to localStorage
+  useEffect(() => {
+    const newSuite = findSuiteForPath(location.pathname);
+    if (newSuite && newSuite !== activeSuite) {
+      setActiveSuite(newSuite);
+      localStorage.setItem('activeSuite', newSuite);
+    } else if (!newSuite && menuConfig.length > 0) {
+      // If no suite matches, set to first available suite
+      const defaultSuite = menuConfig[0].title;
+      setActiveSuite(defaultSuite);
+      localStorage.setItem('activeSuite', defaultSuite);
+    }
+  }, [location.pathname, menuConfig, activeSuite]);
+
+  // Fetch employee profile data
   useEffect(() => {
     const fetchEmployeeProfile = async () => {
       if (!user?.id) {
@@ -123,7 +172,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
     fetchEmployeeProfile();
   }, [user?.id]);
 
-  // Fetch department name (no changes needed here)
+  // Fetch department name
   useEffect(() => {
     const fetchDepartmentName = async () => {
       if (!user?.id) {
@@ -145,6 +194,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
           .from("hr_departments")
           .select("name")
           .eq("id", employeeData.department_id)
+ bond
           .single();
         if (departmentError) { throw departmentError; }
         setDepartmentName(departmentData.name || "Unknown Department");
@@ -156,30 +206,6 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
     fetchDepartmentName();
   }, [user?.id]);
 
-  // Menu configuration logic (no changes needed here)
-  const menuConfig =
-    role === "employee" || role === "admin"
-      ? menuItemsByRole[role](departmentName)
-      : menuItemsByRole[role] || [];
-  
-  // --- ✅ START: APPLIED FIXES ---
-  // 1. Check for 'admin' role in addition to 'organization_superadmin'
-  const isCategorized = role === 'organization_superadmin' || role === 'admin';
-  
-  // 2. Safely initialize activeSuite state using optional chaining
-  const [activeSuite, setActiveSuite] = useState(isCategorized ? menuConfig?.[0]?.title : null);
-  // --- ✅ END: APPLIED FIXES ---
-
-  // Update activeSuite if menuConfig changes and the current suite doesn't exist anymore
-  useEffect(() => {
-    if (isCategorized) {
-      const suiteExists = menuConfig.some(suite => suite.title === activeSuite);
-      if (!suiteExists && menuConfig.length > 0) {
-        setActiveSuite(menuConfig[0].title);
-      }
-    }
-  }, [menuConfig, activeSuite, isCategorized]);
-  
   const itemsToRender = isCategorized
     ? menuConfig.find(suite => suite.title === activeSuite)?.items || []
     : menuConfig;
@@ -189,11 +215,24 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
     e.stopPropagation();
     setOpenDropdown(openDropdown === label ? null : label);
   };
-  
+
   const handleLogout = () => {
     dispatch(logout());
+    localStorage.removeItem('activeSuite'); // Clear stored suite on logout
     navigate("/login");
   };
+
+  // Handle suite change with navigation to default item
+  const handleSuiteChange = (suiteTitle) => {
+    if (suiteTitle !== activeSuite) {
+      setActiveSuite(suiteTitle);
+      localStorage.setItem('activeSuite', suiteTitle);
+      
+      // Navigate to the default item of the new suite
+      const defaultPath = getDefaultPathForSuite(suiteTitle);
+      navigate(defaultPath);
+    }
+  }; 
 
   const fullName = employeeProfile ? `${employeeProfile.firstName} ${employeeProfile.lastName}` : "User Name";
 
@@ -237,10 +276,11 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       <VStack spacing={2} align="stretch" mt={4}>
         {/* User Profile Menu */}
         {isExpanded && (
-           <Box>
+          <Box>
             <Flex
               align="center" p={2} bg="gray.700" borderRadius="lg"
               cursor="pointer" _hover={{ bg: "gray.600" }}
+             com
               onClick={toggleProfileMenu}
             >
               <Avatar size="sm" name={fullName} src={employeeProfile?.avatarUrl} />
@@ -277,7 +317,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
                   icon={<Icon as={suite.icon} fontSize="20px" />}
                   isRound size="md" bg={activeSuite === suite.title ? activeBg : 'transparent'}
                   color="white" _hover={{ bg: activeSuite !== suite.title && hoverBg }}
-                  onClick={() => setActiveSuite(suite.title)}
+                  onClick={() => handleSuiteChange(suite.title)}
                   flex="1"
                 />
               </Tooltip>
