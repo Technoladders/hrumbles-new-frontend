@@ -23,7 +23,6 @@ import { menuItemsByRole } from "./SidebarMenuItem";
 import { ArrowRightFromLine, ArrowLeftToLine } from 'lucide-react';
 import supabase from "../../config/supabaseClient";
 
-// MenuItem component remains unchanged
 const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownToggle }) => {
   const { icon, label, path, dropdown } = item;
   const isActive = location.pathname === path || (dropdown && dropdown.some(sub => location.pathname.startsWith(sub.path)));
@@ -103,13 +102,12 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       ? menuItemsByRole[role](departmentName)
       : menuItemsByRole[role] || [];
 
-  const isCategorized = role === 'organization_superadmin' || role === 'admin';
+  const isCategorized = role === 'organization_superadmin' || (role === 'admin' && departmentName !== "Finance");
 
   // Function to find the suite containing the current pathname
   const findSuiteForPath = (pathname) => {
     if (!isCategorized) return null;
     for (const suite of menuConfig) {
-      // Check if any item or dropdown item matches the current pathname
       const hasMatchingItem = suite.items.some(
         item =>
           item.path === pathname ||
@@ -117,31 +115,15 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       );
       if (hasMatchingItem) return suite.title;
     }
-    return menuConfig[0]?.title; // Fallback to first suite if no match
+    return menuConfig[0]?.title || null; // Fallback to first suite or null
   };
 
   // Function to get the default path for a suite
   const getDefaultPathForSuite = (suiteTitle) => {
     const suite = menuConfig.find(s => s.title === suiteTitle);
     if (!suite || !suite.items || suite.items.length === 0) return '/dashboard';
-    
-    // Return the path of the first item in the suite
     return suite.items[0].path;
   };
-
-  // Update activeSuite based on current pathname and persist to localStorage
-  useEffect(() => {
-    const newSuite = findSuiteForPath(location.pathname);
-    if (newSuite && newSuite !== activeSuite) {
-      setActiveSuite(newSuite);
-      localStorage.setItem('activeSuite', newSuite);
-    } else if (!newSuite && menuConfig.length > 0) {
-      // If no suite matches, set to first available suite
-      const defaultSuite = menuConfig[0].title;
-      setActiveSuite(defaultSuite);
-      localStorage.setItem('activeSuite', defaultSuite);
-    }
-  }, [location.pathname, menuConfig, activeSuite]);
 
   // Fetch employee profile data
   useEffect(() => {
@@ -172,7 +154,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
     fetchEmployeeProfile();
   }, [user?.id]);
 
-  // Fetch department name
+  // Fetch department name and update menu
   useEffect(() => {
     const fetchDepartmentName = async () => {
       if (!user?.id) {
@@ -185,7 +167,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
           .select("department_id")
           .eq("id", user.id)
           .single();
-        if (employeeError) { throw employeeError; }
+        if (employeeError) throw employeeError;
         if (!employeeData?.department_id) {
           setDepartmentName("Unknown Department");
           return;
@@ -194,17 +176,41 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
           .from("hr_departments")
           .select("name")
           .eq("id", employeeData.department_id)
- bond
           .single();
-        if (departmentError) { throw departmentError; }
-        setDepartmentName(departmentData.name || "Unknown Department");
+        if (departmentError) throw departmentError;
+        const newDepartment = departmentData.name || "Unknown Department";
+        setDepartmentName(newDepartment);
+        // Reset activeSuite if department changes to ensure valid suite
+        const currentSuite = localStorage.getItem('activeSuite');
+        const newMenuConfig = menuItemsByRole[role](newDepartment);
+        const suiteExists = newMenuConfig.some(suite => suite.title === currentSuite);
+        if (!suiteExists && newMenuConfig.length > 0) {
+          const defaultSuite = newMenuConfig[0].title;
+          setActiveSuite(defaultSuite);
+          localStorage.setItem('activeSuite', defaultSuite);
+        }
       } catch (error) {
         console.error("Error fetching department:", error.message);
         setDepartmentName("Unknown Department");
       }
     };
     fetchDepartmentName();
-  }, [user?.id]);
+  }, [user?.id, role]);
+
+  // Update activeSuite based on current pathname
+  useEffect(() => {
+    if (isCategorized && menuConfig.length > 0) {
+      const newSuite = findSuiteForPath(location.pathname);
+      if (newSuite && newSuite !== activeSuite) {
+        setActiveSuite(newSuite);
+        localStorage.setItem('activeSuite', newSuite);
+      } else if (!newSuite && menuConfig.length > 0) {
+        const defaultSuite = menuConfig[0].title;
+        setActiveSuite(defaultSuite);
+        localStorage.setItem('activeSuite', defaultSuite);
+      }
+    }
+  }, [location.pathname, menuConfig, activeSuite, isCategorized]);
 
   const itemsToRender = isCategorized
     ? menuConfig.find(suite => suite.title === activeSuite)?.items || []
@@ -218,21 +224,22 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
 
   const handleLogout = () => {
     dispatch(logout());
-    localStorage.removeItem('activeSuite'); // Clear stored suite on logout
+    localStorage.removeItem('activeSuite');
     navigate("/login");
   };
 
-  // Handle suite change with navigation to default item
   const handleSuiteChange = (suiteTitle) => {
     if (suiteTitle !== activeSuite) {
       setActiveSuite(suiteTitle);
       localStorage.setItem('activeSuite', suiteTitle);
-      
-      // Navigate to the default item of the new suite
-      const defaultPath = getDefaultPathForSuite(suiteTitle);
-      navigate(defaultPath);
+      // Only navigate if the current path is not in the selected suite
+      const currentSuite = findSuiteForPath(location.pathname);
+      if (currentSuite !== suiteTitle) {
+        const defaultPath = getDefaultPathForSuite(suiteTitle);
+        navigate(defaultPath);
+      }
     }
-  }; 
+  };
 
   const fullName = employeeProfile ? `${employeeProfile.firstName} ${employeeProfile.lastName}` : "User Name";
 
@@ -260,16 +267,22 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       >
         {isCategorized && isExpanded && (
           <Text px={3} py={2} fontSize="sm" fontWeight="bold" color="gray.400">
-            {activeSuite}
+            {activeSuite || "Select a Suite"}
           </Text>
         )}
-        {itemsToRender.map((item) => (
-          <MenuItem 
-            key={item.label} item={item} isExpanded={isExpanded}
-            location={location} openDropdown={openDropdown}
-            handleDropdownToggle={handleDropdownToggle}
-          />
-        ))}
+        {itemsToRender.length > 0 ? (
+          itemsToRender.map((item) => (
+            <MenuItem 
+              key={item.label} item={item} isExpanded={isExpanded}
+              location={location} openDropdown={openDropdown}
+              handleDropdownToggle={handleDropdownToggle}
+            />
+          ))
+        ) : (
+          <Text px={3} py={2} fontSize="sm" color="gray.400">
+            No menu items available
+          </Text>
+        )}
       </VStack>
 
       {/* Footer section with Profile Menu and Suite Switcher */}
@@ -280,7 +293,6 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
             <Flex
               align="center" p={2} bg="gray.700" borderRadius="lg"
               cursor="pointer" _hover={{ bg: "gray.600" }}
-             com
               onClick={toggleProfileMenu}
             >
               <Avatar size="sm" name={fullName} src={employeeProfile?.avatarUrl} />
