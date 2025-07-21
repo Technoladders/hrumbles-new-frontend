@@ -1,6 +1,6 @@
 import { UUID } from "crypto";
 
-export type ReportType = 'client' | 'individual' | 'recruiter' | 'talent' | 'talent_trends';
+export type ReportType = 'client' | 'individual' | 'recruiter' | 'talent' | 'talent_trends' | 'verification';
 
 export interface ReportData {
   name: string;

@@ -9,6 +9,7 @@ import IndividualReport from '@/components/reports/IndividualReport';
 import RecruiterReportPage from '@/components/reports/RecruiterReportPage';
 import TalentProfileReport from '@/components/reports/TalentProfileReport';
 import TalentTrendsReport from '@/components/reports/TalentTrendsReport';
+import VerificationReportPage from '@/components/reports/VerificationReportPage';
 
 const ReportsPage: React.FC = () => {
   const [selectedReportType, setSelectedReportType] = useState<ReportType | null>(null);
@@ -27,6 +28,8 @@ const ReportsPage: React.FC = () => {
         return <TalentProfileReport />; 
         case 'talent_trends':
         return <TalentTrendsReport />;
+        case 'verification':
+        return <VerificationReportPage />;
       default:
         return null;
     }
@@ -99,6 +102,19 @@ const ReportsPage: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <UserCheck className="mr-2" /> Talent Trends Report
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              View candidate status counts and distributions by individual employees
+            </CardContent>
+          </Card>
+          <Card
+            onClick={() => setSelectedReportType('verification')}
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <UserCheck className="mr-2" /> Verification Report
               </CardTitle>
             </CardHeader>
             <CardContent>
