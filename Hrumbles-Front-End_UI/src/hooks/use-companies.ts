@@ -445,13 +445,19 @@ export const useFetchCompanyDetails = () => { /* ... (your existing hook) ... */
     };
   }
 
-  return async (companyName: string): Promise<Partial<CompanyDetailTypeFromTypes>> => {
-    if (!companyName || companyName.trim() === "") {
-      throw new Error("Company name is required for AI fetch.");
+return async (identifier: string): Promise<Partial<CompanyDetailTypeFromTypes>> => {
+    // ✅ Updated error message
+    if (!identifier || identifier.trim() === "") {
+      throw new Error("Company name, domain, or LinkedIn URL is required for AI fetch.");
     }
 
-    const prompt = `
-        Provide comprehensive details for the company named "${companyName}":
+ const prompt = `
+        You will be given a single identifier which could be a company name, a website domain, or a LinkedIn company page URL.
+        Your task is to first identify the precise company from this identifier and then provide comprehensive details for it.
+
+        The identifier is: "${identifier}"
+
+        Based on that identifier, find the company and provide the following details:
         1.  Official Company Name (key: "name")
         2.  Primary Website URL (key: "website")
         3.  Primary Domain (if different, key: "domain")
@@ -471,14 +477,13 @@ export const useFetchCompanyDetails = () => { /* ... (your existing hook) ... */
         17. Key Products/Platforms (array of strings, key: "products")
         18. Main Services Offered (array of strings, key: "services")
         19. Key People (array of objects {name: string, title: string}, THIS SHOULD INCLUDE THE CEO IF KNOWN, key: "key_people"). If none known, use null or an empty array.
-        
         20. **Logo URL (key: "logo_url"): First, try to construct a logo URL from a reliable logo service like Clearbit using the company's domain (e.g., 'https://logo.clearbit.com/DOMAIN_NAME'). If you cannot determine the domain, then find the best publicly accessible, non-temporary logo URL you can find.**
 
         Return ONLY a single, valid JSON object with these keys. Use null if info not found. No extra text or markdown.
-        Example: {"name":"Accenture", "domain":"accenture.com", "logo_url":"https://logo.clearbit.com/accenture.com"}
+        Example for identifier "accenture.com": {"name":"Accenture", "domain":"accenture.com", "logo_url":"https://logo.clearbit.com/accenture.com"}
       `;
 
-    try {
+  try {
       const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
       const model = genAI.getGenerativeModel({ model: GEMINI_MODEL_NAME });
       const generationConfig = { temperature: 0.2, topK: 1, topP: 1, maxOutputTokens: 3000 };
@@ -493,7 +498,9 @@ export const useFetchCompanyDetails = () => { /* ... (your existing hook) ... */
 
       if (!result.response?.candidates?.length) { throw new Error("Gemini: AI service did not provide a valid response."); }
       const responseText = result.response.text();
-      const data = extractJsonWithFallback(responseText, companyName);
+      
+      // ✅ Pass the original identifier as a fallback name
+      const data = extractJsonWithFallback(responseText, identifier);
 
       if (!data || typeof data !== 'object' || !data.name || typeof data.name !== 'string') { throw new Error("Gemini: AI failed to return valid or correctly structured JSON.");}
 
@@ -532,7 +539,8 @@ export const useFetchCompanyDetails = () => { /* ... (your existing hook) ... */
       return mappedDetails;
 
     } catch (error: any) {
-      console.error(`Error fetching company details via Gemini for "${companyName}":`, error);
+      // ✅ Updated error log
+      console.error(`Error fetching company details via Gemini for identifier "${identifier}":`, error);
       throw new Error(`Failed to fetch details from Gemini: ${error.message}`);
     }
   };

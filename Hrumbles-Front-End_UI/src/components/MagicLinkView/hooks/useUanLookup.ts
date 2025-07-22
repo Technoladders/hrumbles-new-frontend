@@ -137,7 +137,7 @@ export const useUanLookup = (
         toast({ title: 'UAN Lookup In Progress', description: data.message, variant: 'default' });
       } else if (data.status === 'completed') {
         setUanData(data.data);
-        await onSaveResult(data.data, lookupMethod, sanitizedValue);
+       
         setIsLoading(false);
       }
     } catch (error: any) {

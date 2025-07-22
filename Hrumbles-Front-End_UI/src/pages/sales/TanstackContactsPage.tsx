@@ -30,7 +30,7 @@ import { DataTable } from '@/components/ui/data-table';
 import { columns as defaultColumns, ActionColumn } from '@/components/sales/contacts-table/columns';
 import { DataTableToolbar } from '@/components/sales/contacts-table/data-table-toolbar';
 import { AddColumnDialog } from '@/components/sales/contacts-table/AddColumnDialog';
-import { EditableCell, ReorderableHeader } from '@/components/sales/contacts-table/columns';
+import { EditableCell, ReorderableHeader, getCustomCell } from '@/components/sales/contacts-table/columns';
 import type { SimpleContact } from '@/types/simple-contact.types';
 import { AddContactForm } from '@/components/sales/contacts-table/AddContactForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';

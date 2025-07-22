@@ -94,89 +94,61 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
   } = useConsentLink();
 
 const handleSaveUanResult = useCallback(async (
-    dataToSave: any,
-    lookupMethod: 'mobile' | 'pan',
-    lookupValue: string
+    dataToSave: any
   ) => {
-    if (!candidate?.id || !organization_id) {
-      toast({ title: 'Error', description: 'Missing candidate ID or organization ID.', variant: 'destructive' });
+    // This is the corrected function. It no longer saves to the database.
+    // Its only responsibility is to update the user interface (UI).
+
+    // 1. Only proceed to update the UI if the lookup was successful.
+    if (dataToSave.status !== 1) {
+      console.log("UAN lookup was not successful, skipping UI update.");
       return;
     }
 
-    try {
-      // 1. Save the full lookup result to our history table
-      const { error: uanLookupError } = await supabase
-        .from('uanlookups')
-        .insert({
-          candidate_id: candidate.id,
-          organization_id: organization_id,
-          lookup_type: lookupMethod,
-          lookup_value: lookupValue,
-          status: dataToSave.status,
-          ts_trans_id: dataToSave.tsTransId,
-          response_data: dataToSave,
-        });
-
-      if (uanLookupError) {
-        // We can log this but don't need to block the UI update
-        console.error('Error saving UAN lookup result to history:', uanLookupError);
-      }
-      
-      // 2. Only proceed to update the candidate profile if the lookup was successful
-      if (dataToSave.status !== 1) {
-        console.log("UAN lookup was not successful (status != 1), skipping candidate profile update.");
-        return;
-      }
-
-      const uanNumber = dataToSave?.msg?.uan_details?.[0]?.uan || null;
-      if (!uanNumber) {
-        console.log("Successful lookup but no UAN number found in the response.");
-        return;
-      }
-      
-      // 3. Prepare the updated metadata object
-      // This safely merges the new UAN into the existing metadata
-      const updatedMetadata = {
-        ...candidate.metadata, // Keep all existing metadata
-        uan: uanNumber,         // Add or overwrite the uan field
-      };
-
-      // 4. Update the candidate's metadata in the database
-      const { error: updateCandidateError } = await supabase
-        .from('hr_job_candidates')
-        .update({ metadata: updatedMetadata })
-        .eq('id', candidate.id);
-
-      if (updateCandidateError) {
-        throw new Error(`Failed to update candidate profile: ${updateCandidateError.message}`);
-      }
-
-      // 5. Update the local state to reflect the change immediately in the UI
-      setCandidate({
-        ...candidate,
-        metadata: updatedMetadata,
-      });
-
-      setDocuments((prev: any) => ({
-        ...prev,
-        uan: { ...prev.uan, value: uanNumber },
-      }));
-
-      toast({
-        title: 'Success',
-        description: `UAN ${uanNumber} has been saved to the profile.`,
-        variant: 'success',
-      });
-
-    } catch (error: any) {
-      console.error("Failed to save UAN result to profile:", error);
-      toast({
-        title: "Profile Update Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+    const uanNumber = dataToSave?.msg?.uan_details?.[0]?.uan || null;
+    if (!uanNumber) {
+      console.log("No UAN number found in the response, skipping UI update.");
+      return;
     }
-  }, [candidate, organization_id, setCandidate, setDocuments, toast]);
+    
+    // 2. Prepare the updated metadata for the candidate profile.
+    const updatedMetadata = {
+      ...candidate.metadata, // Keep existing metadata
+      uan: uanNumber,         // Add or update the uan field
+    };
+
+    // 3. Update the candidate's METADATA in the database.
+    // This is okay because it updates a different table (hr_job_candidates),
+    // which does not trigger the real-time loop.
+    const { error: updateCandidateError } = await supabase
+      .from('hr_job_candidates')
+      .update({ metadata: updatedMetadata })
+      .eq('id', candidate.id);
+
+    if (updateCandidateError) {
+      toast({ title: "Profile Update Failed", description: updateCandidateError.message, variant: "destructive" });
+      // We can still try to update the local state even if DB update fails
+    }
+
+    // 4. Update the local UI state to reflect the change immediately.
+    setCandidate((prevCandidate) => ({
+      ...prevCandidate,
+      metadata: updatedMetadata,
+    }));
+
+    setDocuments((prev) => ({
+      ...prev,
+      uan: { ...prev.uan, value: uanNumber },
+    }));
+
+    toast({
+      title: 'Success',
+      description: `UAN ${uanNumber} has been updated on the profile.`,
+      variant: 'success',
+    });
+
+}, [candidate, setCandidate, setDocuments, toast]); // Corrected dependencies
+
 
 
   const {

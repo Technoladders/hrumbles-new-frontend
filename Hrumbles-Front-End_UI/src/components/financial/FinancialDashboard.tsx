@@ -24,7 +24,7 @@ const FinancialDashboard: React.FC = () => {
       <FinancialStats />
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div className="relative w-full sm:w-64 md:w-80">
+        {/* <div className="relative w-full sm:w-64 md:w-80">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
           <Input
             placeholder="Search Member or Category"
@@ -32,9 +32,9 @@ const FinancialDashboard: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-        </div>
+        </div> */}
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        {/* <div className="flex items-center gap-2 sm:gap-3">
           <ViewToggleButton
             active={viewMode === 'grid'}
             onClick={() => setViewMode('grid')}
@@ -59,7 +59,7 @@ const FinancialDashboard: React.FC = () => {
             <span className="hidden sm:inline">Add Payment</span>
             <span className="sm:hidden">Add</span>
           </Button>
-        </div>
+        </div> */}
       </div>
 
       <FinanceOverview />
