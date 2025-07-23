@@ -20,6 +20,7 @@ import { SimpleContactInsert } from '@/types/simple-contact.types';
 interface AddContactFormProps {
   onClose: () => void;
   onSuccess: (newContact: any) => void;
+  fileId: string;
 }
 
 const addContactSchema = z.object({
@@ -35,7 +36,7 @@ const addContactSchema = z.object({
 
 type AddContactFormValues = z.infer<typeof addContactSchema>;
 
-export const AddContactForm: React.FC<AddContactFormProps> = ({ onClose, onSuccess }) => {
+export const AddContactForm: React.FC<AddContactFormProps> = ({ onClose, onSuccess, fileId }) => {
     const { toast } = useToast();
     const organization_id = useSelector((state: any) => state.auth.organization_id);
     const currentUser = useSelector((state: any) => state.auth.user);
@@ -53,14 +54,16 @@ export const AddContactForm: React.FC<AddContactFormProps> = ({ onClose, onSucce
     });
 
     const onSubmit = (formData: AddContactFormValues) => {
-        if (!currentUser?.id || !organization_id) return;
+        if (!currentUser?.id || !organization_id || !fileId) return;
         
         const newContactData: SimpleContactInsert = {
             ...formData,
+
             email: formData.email || null,
             organization_id: organization_id,
             created_by: currentUser.id,
             updated_by: currentUser.id,
+            file_id: fileId,
         };
 
         addContactMutation.mutate(newContactData, {

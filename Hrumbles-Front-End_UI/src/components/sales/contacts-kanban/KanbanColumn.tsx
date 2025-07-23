@@ -1,4 +1,3 @@
-// src/components/sales/contacts-kanban/KanbanColumn.tsx
 import React from 'react';
 import { useDrop } from 'react-dnd';
 import { KanbanCard, ItemTypes } from './KanbanCard';
@@ -26,22 +25,25 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({ stage, contacts, onD
     <div
       ref={drop}
       className={cn(
-        "w-full sm:w-64 md:w-72 min-w-[200px] max-w-[300px] h-full flex-shrink-0 bg-slate-100/60 rounded-lg flex flex-col transition-colors",
+        "w-72 flex-shrink-0 h-full flex flex-col bg-slate-100/60 rounded-lg",
         isOver && canDrop && "bg-blue-100"
       )}
+      style={{ minWidth: '288px' }} // Ensure minimum width matches w-72 + padding
     >
+      {/* Header is sticky within this column */}
       <div className="p-3 border-b flex items-center gap-2 sticky top-0 bg-slate-100/80 rounded-t-lg backdrop-blur-sm z-10">
-        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }}></span>
-        <h3 className="font-semibold text-gray-700 text-sm">{stage.name}</h3>
-        <span className="text-sm text-muted-foreground ml-1 px-2 py-0.5 bg-slate-200 rounded-full">{contacts.length}</span>
+        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color || '#ccc' }}></span>
+        <h3 className="font-semibold text-gray-700 text-sm truncate">{stage.name}</h3>
+        <span className="text-sm text-muted-foreground ml-auto flex-shrink-0 px-2 py-0.5 bg-slate-200 rounded-full">{contacts.length}</span>
       </div>
+      {/* Scrollable content within the column */}
       <div className="flex-grow p-1.5 overflow-y-auto">
         {contacts.map((contact) => (
           <KanbanCard key={contact.id} contact={contact} />
         ))}
-        {contacts.length === 0 && (
-          <div className="flex items-center justify-center h-full text-center text-sm text-gray-400 p-4 border-2 border-dashed border-gray-300 rounded-md">
-            Drop contacts here
+        {contacts.length === 0 && !isOver && (
+          <div className="flex items-center justify-center h-20 text-center text-xs text-gray-400 p-2 mt-2 mx-2 border-2 border-dashed border-gray-300/80 rounded-md">
+            Drop here
           </div>
         )}
       </div>

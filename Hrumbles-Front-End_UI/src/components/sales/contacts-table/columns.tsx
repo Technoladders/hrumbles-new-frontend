@@ -1,7 +1,7 @@
 // src/components/sales/contacts-table/columns.tsx
 "use client";
 import React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
 import { useDrag, useDrop } from 'react-dnd';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useContactStages } from '@/hooks/sales/useContactStages';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronRight, GripVertical, Link as LinkIcon, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, GripVertical, Link as LinkIcon, Trash2, Lock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from './data-table-column-header';
@@ -87,7 +87,7 @@ export const EditableCell: React.FC<any> = ({ getValue, row, column, table }) =>
     const [value, setValue] = React.useState(initialValue);
     const onBlur = () => table.options.meta?.updateData(row.index, column.id, value);
     React.useEffect(() => setValue(initialValue), [initialValue]);
-    return <Input value={value} onChange={(e) => setValue(e.target.value)} onBlur={onBlur} className="h-full border-none bg-transparent focus-visible:ring-1 focus-visible:ring-blue-500 focus-visible:ring-offset-0 rounded-none p-0" />;
+    return <Input value={value} onChange={(e) => setValue(e.target.value)} onBlur={onBlur} className="h-full border-none bg-transparent focus-visible:ring-0 rounded-none p-0 truncate" />;
 };
 
 const PhoneCell: React.FC<any> = ({ getValue, row, column, table }) => {
@@ -121,6 +121,7 @@ const LinkedInCell: React.FC<any> = ({ getValue, row, column, table }) => {
         </div>
     );
 };
+
 
 // NEW helper function to get the right editor for a custom field
 export const getCustomCell = (dataType: 'text' | 'date' | 'number') => {
@@ -187,6 +188,36 @@ const CompanyCell: React.FC<any> = ({ getValue, row, column, table }) => {
     return <CompanyCombobox value={initialCompanyId} onSelect={onSelect} initialName={companyName} />;
 };
 
+const AccessCell = ({ getValue, children }: { getValue: () => any, children: React.ReactNode }) => {
+    const initialValue = getValue();
+    // Start revealed if there's no data to hide.
+    const [isRevealed, setIsRevealed] = useState(!initialValue);
+
+    // If data changes (e.g., from an API update), re-evaluate if the cell should be hidden.
+    useEffect(() => {
+        setIsRevealed(!initialValue);
+    }, [initialValue]);
+
+    if (isRevealed) {
+        return <>{children}</>;
+    }
+
+    return (
+        <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs font-normal text-gray-600"
+            onClick={(e) => {
+                e.stopPropagation(); // Prevent row selection or other events
+                setIsRevealed(true);
+            }}
+        >
+            <Lock className="h-3 w-3 mr-2" />
+            Access
+        </Button>
+    );
+};
+
 
 export const ActionColumn: ColumnDef<SimpleContact> = {
   id: 'actions',
@@ -245,11 +276,11 @@ export const ActionColumn: ColumnDef<SimpleContact> = {
 };
 
 export const columns: ColumnDef<SimpleContact>[] = [
-  {
+   {
     id: 'select',
-    size: 35,
-    minSize: 35,
-    maxSize: 50,
+    size: 40, // Slightly increased for better clicking
+    minSize: 40,
+    maxSize: 40,
     enableSorting: false,
     enableHiding: false,
     header: ({ table }) => (
@@ -274,9 +305,9 @@ export const columns: ColumnDef<SimpleContact>[] = [
   {
     accessorKey: 'name',
     header: ReorderableHeader,
-    size: 150,
-    minSize: 100,
-    maxSize: 200,
+    size: 180, // Giving more space to the primary column
+    minSize: 150,
+    maxSize: 300,
     cell: ({ row, ...props }) => {
       if (row.getIsGrouped()) {
         const { data: stages = [] } = useContactStages();
@@ -291,15 +322,53 @@ export const columns: ColumnDef<SimpleContact>[] = [
           </div>
         );
       }
-      return (<div style={{ paddingLeft: `${row.depth * 1.5}rem` }}><EditableCell row={row} {...props} /></div>);
+     return (<div className="whitespace-nowrap" style={{ paddingLeft: `${row.depth * 1.5}rem` }}><EditableCell row={row} {...props} /></div>);
     },
   },
-  { accessorKey: 'email', header: ReorderableHeader, cell: EditableCell, size: 150, minSize: 100, maxSize: 200 },
-  { accessorKey: 'mobile', header: ReorderableHeader, cell: PhoneCell, size: 100, minSize: 80, maxSize: 150 },
-  { accessorKey: 'linkedin_url', header: ReorderableHeader, cell: LinkedInCell, size: 120, minSize: 80, maxSize: 150 },
-  { accessorKey: 'company_name', header: ReorderableHeader, size: 120, minSize: 80, maxSize: 150, cell: CompanyCell },
-  { accessorKey: 'job_title', header: ReorderableHeader, cell: EditableCell, size: 120, minSize: 80, maxSize: 150 },
-  { accessorKey: 'contact_stage', header: ReorderableHeader, size: 100, minSize: 80, maxSize: 150, cell: StageSelectCell },
+  {
+    accessorKey: 'email',
+    header: ReorderableHeader,
+    size: 180,
+    minSize: 120,
+    maxSize: 250,
+    // UPDATED: Wrap the original cell in our new AccessCell component
+    cell: (props) => (
+      <AccessCell getValue={props.getValue}>
+        <EditableCell {...props} />
+      </AccessCell>
+    )
+  },
+  {
+    accessorKey: 'mobile',
+    header: ReorderableHeader,
+    size: 160,
+    minSize: 120,
+    maxSize: 200,
+    // UPDATED: Wrap the original cell in our new AccessCell component
+    cell: (props) => (
+      <AccessCell getValue={props.getValue}>
+        <PhoneCell {...props} />
+      </AccessCell>
+    )
+  },
+  {
+    accessorKey: 'linkedin_url',
+    header: ReorderableHeader,
+    size: 180,
+    minSize: 150,
+    maxSize: 250,
+    // UPDATED: Wrap the original cell in our new AccessCell component
+    cell: (props) => (
+      <AccessCell getValue={props.getValue}>
+        <LinkedInCell {...props} />
+      </AccessCell>
+    )
+  },
+  { accessorKey: 'company_name', header: ReorderableHeader, size: 180, minSize: 150, maxSize: 250, cell: CompanyCell },
+  { accessorKey: 'job_title', header: ReorderableHeader, cell: EditableCell, size: 200, minSize: 150, maxSize: 300 },
+  { accessorKey: 'contact_stage', header: ReorderableHeader, size: 150, minSize: 120, maxSize: 200, cell: StageSelectCell },
+ 
+ 
   {
     accessorFn: (row) => row.created_by ?? null,
     id: 'created_by_employee',
@@ -324,12 +393,12 @@ export const columns: ColumnDef<SimpleContact>[] = [
     },
     enableSorting: false,
     enableFiltering: true,
-    size: 60,
-    minSize: 50,
-    maxSize: 80,
+    size: 100,
+    minSize: 60,
+    maxSize: 120,
     filterFn: 'arrIncludesSome',
   },
-  { accessorKey: 'created_at', header: "Created At", cell: DisplayDateCell, enableSorting: true, size: 80, minSize: 60, maxSize: 100 },
+  { accessorKey: 'created_at', header: "Created At", cell: DisplayDateCell, enableSorting: true, size: 100, minSize: 60, maxSize: 120 },
   {
     accessorKey: 'updated_by_employee',
     header: "Updated By",
@@ -352,11 +421,11 @@ export const columns: ColumnDef<SimpleContact>[] = [
       );
     },
     enableSorting: false,
-    size: 60,
-    minSize: 50,
-    maxSize: 80,
+    size: 100,
+    minSize: 60,
+    maxSize: 120,
   },
-  { accessorKey: 'updated_at', header: "Updated At", cell: DisplayDateCell, enableSorting: true, size: 80, minSize: 60, maxSize: 100 },
+  { accessorKey: 'updated_at', header: "Updated At", cell: DisplayDateCell, enableSorting: true, size: 100, minSize: 60, maxSize: 120 },
 ];
 
-// L
+// Column Enhance

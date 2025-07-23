@@ -40,6 +40,19 @@ import { DateRangePickerField } from '@/components/sales/chart/dateRangePickerFi
 import CreatorPerformanceChart from '@/components/sales/chart/ContactsPerformanceChart';
 import CompanyStagePieChart from '@/components/sales/chart/ContactsStagePieChart';
 import { startOfMonth } from 'date-fns';
+import { Button } from '@/components/ui/button';
+import { MoreHorizontal, FileText } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ManageStagesDialog } from '@/components/sales/contacts-table/ManageStagesDialog'
+import { ContactImportDialog } from '@/components/sales/contacts-table/ContactImportDialog';
+import { MoveContactsToolbar } from '@/components/sales/contacts-table/MoveContactsToolbar';
+import { Icon, Flex, IconButton, Input, InputGroup, InputLeftElement, Avatar, Menu, MenuButton, MenuList, MenuItem, useColorMode, Text, useMediaQuery } from "@chakra-ui/react";
+
 
 interface DateRange {
   from: Date;
@@ -57,13 +70,25 @@ const TanstackContactsPage: React.FC = () => {
   const { toast } = useToast();
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   const currentUser = useSelector((state: any) => state.auth.user);
-  const { data: serverContacts = [], isLoading, isError, error } = useSimpleContacts();
+
+  
+  const { selectedFileId, viewingMode } = useSelector((state: any) => state.workspace);
+
+    // Call the hook with the correct options based on the viewing mode
+    const { data: serverContacts = [], isLoading } = useSimpleContacts({ 
+        fileId: selectedFileId,
+        fetchUnfiled: viewingMode === 'unfiled'
+    });
   const updateContactMutation = useUpdateSimpleContact();
   const deleteContactMutation = useDeleteContact();
+
+    const [isManageStagesOpen, setIsManageStagesOpen] = React.useState(false);
+
 
   const [data, setData] = React.useState<SimpleContact[]>([]);
   const [isAddColumnOpen, setIsAddColumnOpen] = React.useState(false);
   const [isAddContactOpen, setIsAddContactOpen] = React.useState(false);
+   const [isImportOpen, setIsImportOpen] = React.useState(false);
   const [columnOrder, setColumnOrder] = React.useState<ColumnOrderState>([]);
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const [grouping, setGrouping] = React.useState<GroupingState>([]);
@@ -194,6 +219,7 @@ const TanstackContactsPage: React.FC = () => {
 
   const table = useReactTable({
     data,
+     enableRowSelection: true,
     columns: memoizedColumns,
     initialState: {
       pagination: {
@@ -303,58 +329,116 @@ const TanstackContactsPage: React.FC = () => {
 
   const handleToggleGrouping = () => setGrouping(prev => (prev.length ? [] : ['contact_stage']));
 
-  return (
-    <div className="flex min-h-0 flex-col rounded-lg border bg-white">
-      {/* Charts and Date Range Picker */}
-      <div className="p-4 border-b">
-        <div className="flex justify-end">
-          <DateRangePickerField
-            dateRange={chartDateRange}
-            onDateRangeChange={setChartDateRange}
-            className="w-[250px] sm:w-[200px]"
-          />
+      const selectedRowIds = Object.keys(table.getState().rowSelection);
+    const selectedContactIds = selectedRowIds.map(index => table.getRow(index).original.id);
+
+ if (viewingMode === 'file' && !selectedFileId) {
+    return (
+        <Flex direction="column" align="center" justify="center" h="full" bg="gray.50" borderRadius="lg" p={12}>
+            <Icon as={FileText} boxSize={20} color="gray.300" mb={4} />
+            <Text fontSize="2xl" fontWeight="semibold" color="gray.700">Select a File</Text>
+            <Text mt={2} fontSize="md" color="gray.500">Please choose a workspace and a file from the sidebar to view contacts.</Text>
+        </Flex>
+    );
+}
+
+// This is the main return statement with the correct layout structure.
+return (
+    <DndProvider backend={HTML5Backend}>
+        {/*
+          STEP 1: The entire page becomes a vertical flex container.
+          - `h-full` is crucial for `flex-1` to work on children.
+        */}
+        <div className="w-full h-full flex flex-col space-y-4">
+            
+            {/* Header section - does not grow or shrink. */}
+            <header className="flex-shrink-0">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 tracking-tight">
+                            {viewingMode === 'unfiled' ? 'Unfiled Contacts' : 'Contacts'}
+                        </h1>
+                        <p className="text-gray-500 text-sm mt-1">
+                            {viewingMode === 'unfiled'
+                                ? 'These contacts are not yet assigned to a file.'
+                                : 'Viewing contacts in your selected file.'}
+                        </p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <a href="#"><Button variant="outline" size="sm" className="h-9">Kanban View</Button></a>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="h-9 w-9"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setIsManageStagesOpen(true)}>Manage Stages</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setIsAddColumnOpen(true)}>Manage Columns</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                </div>
+            </header>
+
+            {/* Move Toolbar - also does not grow or shrink. */}
+            {viewingMode === 'unfiled' && selectedContactIds.length > 0 && (
+                <div className="flex-shrink-0">
+                    <MoveContactsToolbar selectedContactIds={selectedContactIds} onMoveComplete={() => table.resetRowSelection()} />
+                </div>
+            )}
+
+            {/*
+              STEP 2: The main card becomes the "flex sandwich".
+              - `flex-1`: It will grow to fill ALL available vertical space.
+              - `flex flex-col`: It arranges its children (toolbar, table, pagination) vertically.
+              - `overflow-hidden`: A safeguard to prevent any of its children from "leaking" out.
+            */}
+            <div className="flex-1 flex flex-col rounded-lg border bg-white overflow-hidden">
+                
+                {/* Table Toolbar - This is pinned to the top of the card. */}
+                <div className="p-4 border-b flex-shrink-0">
+                    <DataTableToolbar
+                        table={table}
+                        onOpenAddContactDialog={() => setIsAddContactOpen(true)}
+                        onOpenImportDialog={() => setIsImportOpen(true)}
+                        onToggleGrouping={() => table.setGrouping(prev => prev.length ? [] : ['contact_stage'])}
+                        createdByOptions={createdByOptions}
+                    />
+                </div>
+
+                {/*
+                  STEP 3: The table's direct wrapper. This is the only part that scrolls.
+                  - `flex-1`: It grows to fill the space between the toolbar and pagination.
+                  - `overflow-auto`: It will show scrollbars (both vertical and horizontal) IF its child is too big.
+                */}
+               <div className="flex-1 relative">
+                    {isLoading ? (
+                        <p className="p-4 text-center">Loading Contacts...</p>
+                    ) : (
+                        <DataTable table={table} />
+                    )}
+                </div>
+                {/* Pagination - This is pinned to the bottom of the card. */}
+                <div className="p-2 border-t flex-shrink-0">
+                    <DataTablePagination table={table} />
+                </div>
+            </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 max-w-full">
-          <CreatorPerformanceChart data={creatorStatsForChart} />
-          <CompanyStagePieChart data={stageStatsForChart} />
-        </div>
-      </div>
 
-      {/* Toolbar */}
-      <div className="p-4 border-b">
-        <DataTableToolbar
-          table={table}
-          onOpenAddContactDialog={() => setIsAddContactOpen(true)}
-          onToggleGrouping={handleToggleGrouping}
-          createdByOptions={createdByOptions}
-        />
-      </div>
+        {/* Dialogs remain at the end, outside the layout flow. */}
+        <ManageStagesDialog open={isManageStagesOpen} onOpenChange={setIsManageStagesOpen} />
+        <AddColumnDialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen} />
+        <ContactImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} fileId={selectedFileId} />
+        <Dialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>
+            <DialogContent className="sm:max-w-[600px] z-50">
+                <DialogHeader><DialogTitle>Add New Contact</DialogTitle></DialogHeader>
+                <AddContactForm
+                    onClose={() => setIsAddContactOpen(false)}
+                    onSuccess={(newContact) => setData(currentData => [newContact, ...currentData])}
+                    fileId={selectedFileId}
+                />
+            </DialogContent>
+        </Dialog>
+    </DndProvider>
+);
 
-      {/* Table Content */}
-      <div className="flex-1 overflow-x-auto">
-        <DataTable table={table} />
-      </div>
-
-      {/* Pagination */}
-      <div className="p-2 border-t">
-        <DataTablePagination table={table} />
-      </div>
-
-      {/* Dialogs */}
-      <AddColumnDialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen} />
-      <Dialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>
-        <DialogContent className="sm:max-w-[600px] z-50">
-          <DialogHeader>
-            <DialogTitle>Add New Contact</DialogTitle>
-          </DialogHeader>
-          <AddContactForm
-            onClose={() => setIsAddContactOpen(false)}
-            onSuccess={(newContact) => setData(currentData => [newContact, ...currentData])}
-          />
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
 };
 
 export default TanstackContactsPage;

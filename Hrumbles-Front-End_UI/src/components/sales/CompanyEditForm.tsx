@@ -108,6 +108,9 @@ const CompanyEditForm: React.FC<CompanyEditFormProps> = ({ company, onClose, cur
     // Create a mutable copy of the form data to add our new fields
     const dataToSave: Partial<CompanyDetail> = { ...formData };
 
+     delete (dataToSave as any).created_by_employee;
+    delete (dataToSave as any).updated_by_employee;
+
     if (currentUserId) {
       if (company.id) {
         // This is an UPDATE, so only set updated_by

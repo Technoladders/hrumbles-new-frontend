@@ -1,6 +1,6 @@
 // src/components/sales/contacts-table/data-table-toolbar.tsx
 import React from 'react';
-import { X, Plus, Columns, GripVertical } from 'lucide-react';
+import { X, Plus, Columns, GripVertical, Upload } from 'lucide-react';
 import { type Table } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { DataTableFacetedFilter } from './data-table-faceted-filter';
 interface DataTableToolbarProps<TData> {
   table: Table<TData>;
   onOpenAddContactDialog: () => void; // Prop is renamed for clarity
+  onOpenImportDialog: () => void;
   onToggleGrouping: () => void;
    createdByOptions: {
     label: string;
@@ -17,7 +18,7 @@ interface DataTableToolbarProps<TData> {
   }[];
 }
 
-export function DataTableToolbar<TData>({ table, onOpenAddContactDialog, onToggleGrouping, createdByOptions }: DataTableToolbarProps<TData>) {
+export function DataTableToolbar<TData>({ table, onOpenAddContactDialog, onToggleGrouping, createdByOptions, onOpenImportDialog }: DataTableToolbarProps<TData>) {
 
   const isFiltered = table.getState().columnFilters.length > 0;
   const isGrouped = table.getState().grouping.length > 0;
@@ -56,6 +57,9 @@ export function DataTableToolbar<TData>({ table, onOpenAddContactDialog, onToggl
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+         <Button variant="outline" size="sm" className="h-9" onClick={onOpenImportDialog}>
+            <Upload className="mr-2 h-4 w-4" /> Import
+        </Button>
         <Button size="sm" className="h-9 bg-purple-600 hover:bg-purple-700 text-white" onClick={onOpenAddContactDialog}>
           <Plus className="mr-2 h-4 w-4" /> Add Row
         </Button>

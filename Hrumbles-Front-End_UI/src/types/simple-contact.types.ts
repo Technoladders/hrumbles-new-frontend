@@ -14,6 +14,7 @@ export interface SimpleContact {
   updated_at: string;
   company_id?: number | null;
   organization_id?: string | null;
+  file_id?: string | null;
   custom_data?: Record<string, any> | null;
   
   // This is a derived/joined field, not a direct column

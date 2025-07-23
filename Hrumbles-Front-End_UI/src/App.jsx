@@ -78,7 +78,7 @@ import CompanyEdit from "./pages/sales/CompanyEdit";
 import ContactsPage from "./pages/sales/ContactsPage";
 import EditableContactsPage from './pages/sales/EditableContactsPage';
 import TanstackContactsPage from './pages/sales/TanstackContactsPage';
-import ContactsView from './pages/sales/ContactsView';
+import KanbanView from './pages/sales/KanbanBoard';
 
 // Clients
 import ClientPage from "./pages/clients/ClientDashboard";
@@ -241,7 +241,8 @@ function App() {
 
           {/* Sales Companies and Contacts */}
           <Route path="/companies" element={<CompaniesPage />} />
-          <Route path="/contacts" element={<ContactsView />} />
+          <Route path="/contacts" element={<TanstackContactsPage />} />
+          <Route path="/contacts/kanban" element={<KanbanView />} />
           <Route path="/companies/:id" element={<CompanyDetail />} />
           <Route path="/companies/:id/edit" element={<CompanyEdit />} />
 

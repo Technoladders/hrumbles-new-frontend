@@ -6,30 +6,27 @@ import NewSidebar from "../components/Sidebar/NewSidebar";
 import { signOut } from "../utils/api";
 import { useSelector, useDispatch } from "react-redux"; 
 import { logout } from "../Redux/authSlice";
-import { supabase } from "@/integrations/supabase/client"; // Import Supabase client
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isSameDay } from "date-fns";
 
 const MainLayout = () => {
- const { colorMode, toggleColorMode } = useColorMode();
+  const { colorMode, toggleColorMode } = useColorMode();
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  // Default to expanded on desktop, collapsed on mobile
   const [isMobile] = useMediaQuery("(max-width: 768px)");
   const [isSidebarExpanded, setSidebarExpanded] = useState(!isMobile);
   const [interviews, setInterviews] = useState([]);
   const [hasTodayInterview, setHasTodayInterview] = useState(false);
 
-
   const user = useSelector((state) => state.auth.user);
 
-  console.log("userrrrrrrr", user)
-    // Update sidebar state if screen size changes
+  console.log("userrrrrrrr", user);
+
   useEffect(() => {
     setSidebarExpanded(!isMobile);
   }, [isMobile]);
 
-  // Fetch interviews for the logged-in employee
   useEffect(() => {
     const fetchInterviews = async () => {
       try {
@@ -39,7 +36,6 @@ const MainLayout = () => {
 
         const fullName = `${user.user_metadata.first_name} ${user.user_metadata.last_name}`;
 
-        // Fetch interviews
         const { data: candidatesData, error: candidatesError } = await supabase
           .from("hr_job_candidates")
           .select("name, interview_date, interview_time, interview_location, interview_type, round")
@@ -51,11 +47,8 @@ const MainLayout = () => {
           throw new Error(`Failed to fetch interviews: ${candidatesError.message}`);
         }
 
-        // Filter for upcoming interviews (on or after May 20, 2025, 09:23 PM IST)
-         // Get current date in IST
         const currentDate = new Date();
-        // Adjust to IST if needed (client-side date is typically in local timezone; confirm server/client alignment)
-        const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+05:30
+        const istOffset = 5.5 * 60 * 60 * 1000;
         const istDate = new Date(currentDate.getTime() + istOffset);
         const upcomingInterviews = candidatesData
           .filter((candidate) => {
@@ -76,7 +69,6 @@ const MainLayout = () => {
 
         setInterviews(upcomingInterviews);
 
-        // Check for interviews today
         const today = new Date("2025-05-20T21:23:00+05:30");
         const hasInterviewToday = upcomingInterviews.some((interview) =>
           isSameDay(new Date(interview.interview_date), today)
@@ -95,21 +87,17 @@ const MainLayout = () => {
     }
   }, [user?.id]);
 
-  // Handle Logout Function
   const handleLogout = () => {
     dispatch(logout());
     navigate("/login");
   };
-  
 
-  // Format interview date as "MMM D"
   const formatInterviewDate = (date) => {
     const interviewDate = new Date(date);
     const options = { month: "short", day: "numeric" };
     return interviewDate.toLocaleDateString("en-US", options);
   };
 
-  // Format interview time as "h:mm A"
   const formatInterviewTime = (time) => {
     if (!time) return "N/A";
     const [hours, minutes] = time.split(":");
@@ -118,19 +106,16 @@ const MainLayout = () => {
     return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   };
 
-  // Dynamically Adjust Sidebar Width Based on Expansion and Screen Size
- // --- Define New Sidebar Widths ---
   const expandedSidebarWidth = "250px";
   const collapsedSidebarWidth = "80px";
-  const sidebarWidth = isSidebarExpanded ? expandedSidebarWidth : collapsedSidebarWidth;
-  
+  const mainSidebarWidth = isSidebarExpanded ? expandedSidebarWidth : collapsedSidebarWidth;
+
   const toggleSidebar = () => {
     setSidebarExpanded(!isSidebarExpanded);
   };
 
-    return (
+  return (
     <Flex height="100vh" overflow="hidden" bg={colorMode === "dark" ? "gray.800" : "gray.50"}>
-      {/* --- Mobile-only Overlay to close sidebar --- */}
       {isMobile && isSidebarExpanded && (
         <Box
           position="fixed"
@@ -144,18 +129,22 @@ const MainLayout = () => {
         />
       )}
       
-      {/* --- Render the New Sidebar --- */}
-      {/* The sidebar is now controlled by the layout */}
       <NewSidebar isExpanded={isSidebarExpanded} toggleSidebar={toggleSidebar} />
 
-      {/* --- Main Content Area --- */}
-      <Flex direction="column" flex="1" ml={{ base: isMobile ? "0" : sidebarWidth, md: sidebarWidth }} transition="margin-left 0.2s ease-in-out">
-        {/* Fixed Header */}
+      <Flex 
+        direction="column" 
+        flex="1" 
+        ml={{ base: isMobile ? "0" : mainSidebarWidth, md: mainSidebarWidth }}
+        transition="margin-left 0.2s ease-in-out"
+      >
         <Flex
           as="header"
           align="center"
           justify="space-between"
-          w={{ base: "100%", md: `calc(100% - ${sidebarWidth})` }}
+          w={{
+            base: "100%",
+            md: `calc(100% - ${mainSidebarWidth})`
+          }}
           position="fixed"
           top={0}
           p={4}
@@ -165,7 +154,6 @@ const MainLayout = () => {
           transition="width 0.2s ease-in-out"
           boxShadow="sm"
         >
-          {/* Left Section - Mobile Menu Toggle & Search */}
           <Flex align="center" gap={2}>
             {isMobile && (
               <IconButton
@@ -188,7 +176,6 @@ const MainLayout = () => {
             </InputGroup>
           </Flex>
 
-          {/* Right Section - Icons and User Profile */}
           <Flex align="center" gap={4}>
             <Menu>
               <MenuButton
@@ -270,7 +257,6 @@ const MainLayout = () => {
           </Flex>
         </Flex>
 
-        {/* Main Content - Only Content is Scrollable */}
         <Box flex="1" overflowY="auto" p={6} mt="60px" bg={colorMode}>
           <Outlet />
         </Box>
@@ -280,4 +266,3 @@ const MainLayout = () => {
 };
 
 export default MainLayout;
-// L

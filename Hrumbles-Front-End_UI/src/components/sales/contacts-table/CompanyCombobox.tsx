@@ -1,4 +1,3 @@
-// src/components/sales/contacts-table/CompanyCombobox.tsx
 import * as React from 'react';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -13,7 +12,7 @@ interface Company { id: number; name: string; }
 interface CompanyComboboxProps {
     value: number | null;
     onSelect: (companyId: number | null) => void;
-    initialName?: string | null; // NEW prop
+    initialName?: string | null;
 }
 
 export const CompanyCombobox: React.FC<CompanyComboboxProps> = ({ value, onSelect, initialName }) => {
@@ -21,26 +20,37 @@ export const CompanyCombobox: React.FC<CompanyComboboxProps> = ({ value, onSelec
     const [search, setSearch] = React.useState('');
     const [selectedName, setSelectedName] = React.useState(initialName || '');
 
+    // Only fetch companies when search term is non-empty
     const { data: companies = [], isLoading } = useQuery<Company[], Error>({
         queryKey: ['companies', search],
         queryFn: async () => {
-            let query = supabase.from('companies').select('id, name').limit(20);
-            if (search) query = query.ilike('name', `%${search}%`);
-            const { data, error } = await query;
+            // Only execute query if search term is provided
+            if (!search) return [];
+            const { data, error } = await supabase
+                .from('companies')
+                .select('id, name')
+                .ilike('name', `%${search}%`)
+                .limit(20);
             if (error) throw error;
-            return data;
+            return data || [];
         },
+        // Prevent query from running when search is empty
+        enabled: !!search,
     });
-    
+
     // Update displayed name if the value prop changes from the outside
     React.useEffect(() => {
-        if(value) {
+        if (value) {
             const company = companies.find(c => c.id === value);
-            if(company) setSelectedName(company.name);
-        } else if (initialName) {
-            setSelectedName(initialName);
+            if (company) {
+                setSelectedName(company.name);
+            } else if (initialName) {
+                setSelectedName(initialName);
+            } else {
+                setSelectedName('');
+            }
         } else {
-            setSelectedName('');
+            setSelectedName(initialName || '');
         }
     }, [value, initialName, companies]);
 
@@ -55,11 +65,12 @@ export const CompanyCombobox: React.FC<CompanyComboboxProps> = ({ value, onSelec
                 <Command>
                     <CommandInput placeholder="Search company..." onValueChange={setSearch} />
                     <CommandList>
-                        <CommandEmpty>{isLoading ? 'Loading...' : 'No company found.'}</CommandEmpty>
+                        <CommandEmpty>{isLoading ? 'Loading...' : search ? 'No company found.' : 'Type to search...'}</CommandEmpty>
                         <CommandGroup>
                             {companies.map((company) => (
                                 <CommandItem
-                                    key={company.id} value={company.name}
+                                    key={company.id}
+                                    value={company.name}
                                     onSelect={() => {
                                         onSelect(company.id);
                                         setSelectedName(company.name);

@@ -30,7 +30,7 @@ export function DataTableColumnHeader<TData, TValue>({
   return (
     <div className={cn('flex items-center space-x-2', className)}>
       <Button
-        variant="ghost"
+        variant="secondary"
         size="sm"
         className="-ml-3 h-8 data-[state=open]:bg-accent"
         onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
