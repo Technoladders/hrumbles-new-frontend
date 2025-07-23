@@ -31,9 +31,6 @@ export const KanbanToolbar: React.FC<KanbanToolbarProps> = ({
           onChange={(e) => onSearchChange(e.target.value)}
           className="pl-10 w-full sm:w-64"
         />
-      </div>
-      <div className="flex items-center space-x-2 w-full sm:w-auto">
-        {/* Workspace Selector */}
         <Select value={selectedWorkspaceId} onValueChange={onWorkspaceChange}>
           <SelectTrigger className="w-full flex-1 sm:w-[200px]">
             <SelectValue placeholder="Select a Workspace" />
@@ -46,6 +43,10 @@ export const KanbanToolbar: React.FC<KanbanToolbarProps> = ({
             ))}
           </SelectContent>
         </Select>
+      </div>
+      <div className="flex items-center space-x-2 w-full sm:w-auto">
+        {/* Workspace Selector */}
+        
 
         {/* Sort Selector */}
         <Select value={sortOption} onValueChange={onSortChange}>

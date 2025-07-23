@@ -7,7 +7,7 @@ import { produce } from 'immer';
 // UI Components
 import { Button } from '@/components/ui/button';
 import { KanbanColumn } from '@/components/sales/contacts-kanban/KanbanColumn';
-import  KanbanToolbar  from '@/components/sales/contacts-kanban/KanbanToolbar';
+import { KanbanToolbar } from '@/components/sales/contacts-kanban/KanbanToolbar';
 
 // Hooks
 import { useSimpleContacts } from '@/hooks/sales/useSimpleContacts';
