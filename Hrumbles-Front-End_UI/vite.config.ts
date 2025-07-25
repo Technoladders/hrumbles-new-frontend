@@ -46,9 +46,13 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
+        'pdf-parse': path.resolve(__dirname, 'node_modules/pdf-parse/lib/pdf-parse.js'),
       },
       dedupe: ['react', 'react-dom']
     },
+    optimizeDeps: {
+    include: ['pdf-parse'],
+  },
     define: {
       __APP_VERSION__: JSON.stringify(env.VITE_APP_VERSION),
       __WS_TOKEN__: JSON.stringify(process.env.VITE_WS_TOKEN || "development-token"),

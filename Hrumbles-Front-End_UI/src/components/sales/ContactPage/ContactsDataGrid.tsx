@@ -1,13 +1,6 @@
 // src/components/sales/ContactPage/ContactsDataGrid.tsx
 import React from 'react';
-import DataGrid, {
-  SelectColumn,
-  textEditor,
-  type Column,
-  type RenderEditCellProps,
-  type FillEvent,
-  type DataGridHandle,
-} from 'react-data-grid';
+
 import 'react-data-grid/lib/styles.css';
 import { Button } from '@/components/ui/button';
 import { Edit, Link as LinkIcon } from 'lucide-react';

@@ -9,56 +9,54 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSelector } from 'react-redux';
+import mammoth from 'mammoth'; // Keep this for .docx files
 
-// File parsers
+// NOTE: All client-side PDF parsing libraries are now gone.
 
-import mammoth from 'mammoth';
-
-interface AddCandidateModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onCandidateAdded: () => void;
-}
-
-const AddCandidateModal = ({ isOpen, onClose, onCandidateAdded }: AddCandidateModalProps) => {
+const AddCandidateModal = ({ isOpen, onClose, onCandidateAdded }: any) => {
   const [resumeText, setResumeText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-    const user = useSelector((state: any) => state.auth.user);
+  const user = useSelector((state: any) => state.auth.user);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
-const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-  setIsLoading(true);
-  toast.info("Parsing resume file...");
+    setIsLoading(true);
+    toast.info("Parsing resume file...");
 
-  try {
-    let text = '';
-    if (file.type === 'application/pdf') {
-      // --- START: MODIFICATION ---
-      const pdfParse = (await import('pdf-parse')).default;
-      // --- END: MODIFICATION ---
-      const arrayBuffer = await file.arrayBuffer();
-      const data = await pdfParse(arrayBuffer);
-      text = data.text;
-    } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      const arrayBuffer = await file.arrayBuffer();
-      const result = await mammoth.extractRawText({ arrayBuffer });
-      text = result.value;
-    } else {
-      throw new Error('Unsupported file type. Please upload a PDF or DOCX file.');
+    try {
+      let text = '';
+      if (file.type === 'application/pdf') {
+        // --- START: SUPABASE EDGE FUNCTION LOGIC ---
+        const { data, error } = await supabase.functions.invoke('talent-pool-parser', {
+          body: file, // The Supabase client handles sending the file correctly.
+        });
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        text = data.text;
+        // --- END: SUPABASE EDGE FUNCTION LOGIC ---
+      } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        // .docx parsing can remain on the client-side as it's reliable.
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        text = result.value;
+      } else {
+        throw new Error('Unsupported file type. Please upload a PDF or DOCX file.');
+      }
+      setResumeText(text);
+      toast.success("Resume parsed successfully!");
+    } catch (error) {
+      console.error('File parsing error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to parse file.');
+    } finally {
+      setIsLoading(false);
     }
-    setResumeText(text);
-    toast.success("Resume parsed successfully!");
-  } catch (error) {
-    console.error('File parsing error:', error);
-    toast.error(error instanceof Error ? error.message : 'Failed to parse file.');
-  } finally {
-    setIsLoading(false);
-  }
-};
-
+  };
 
   const cleanResponse = (text: string) => {
     const match = text.match(/{[\s\S]*}/);
@@ -118,21 +116,30 @@ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
       const profileData = JSON.parse(cleanedJson);
 
       // Save to Supabase
-      const { error } = await supabase.from('hr_talent_pool').insert({
-        id: uuidv4(),
+      const { data: status, error } = await supabase.rpc('upsert_candidate_with_timeframe', {
+        profile_data: profileData,
         resume_text: resumeText,
-        ...profileData,
-        created_by: user.id, // Add created_by
-        updated_by: user.id, // Add updated_by (same as creator initially)
-        organization_id: organizationId,
+        organization_id_input: organizationId,
+        user_id_input: user.id
       });
 
       if (error) {
         throw new Error(error.message);
       }
-      
-      toast.success('Candidate profile created successfully!');
-      onCandidateAdded();
+
+      // Handle the different outcomes based on the status returned by the function.
+      if (status === 'INSERTED' || status === 'UPDATED') {
+        toast.success(`Candidate profile ${status.toLowerCase()} successfully!`);
+        onCandidateAdded(); // This will refetch data and close the modal.
+      } else if (status === 'SKIPPED_RECENT') {
+        toast.info('Candidate already exists.', {
+          description: 'The profile was updated less than a month ago, so no changes were made.',
+        });
+        onClose(); // Just close the modal without refetching.
+      } else {
+        // Fallback for any unexpected status.
+        toast.error('An unknown server response was received.');
+      }
 
     } catch (error) {
       console.error('Analysis error:', error);
