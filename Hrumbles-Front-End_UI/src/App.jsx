@@ -59,6 +59,9 @@ import CandidateConsentPage from './components/MagicLinkView/CandidateConsentPag
 import TalentPoolPage from "./pages/candidates/TalentPoolPage"; // Create this new page
 import CandidateProfilePage from "./pages/candidates/CandidateProfilePage"; 
 
+import MigratedTalentPoolPage from "./pages/candidates/MigratedTalentPoolPage";
+import MigratedCandidateProfilePage from "./pages/candidates/MigratedCandidateProfilePage";
+
 // Finance & Accounts
 import FinanceIndex from "./pages/finance/Index";
 import PayrollEdit from "./pages/finance/PayrollEdit";
@@ -220,6 +223,9 @@ function App() {
             {/* Candidates */}
             <Route path="/talent-pool" element={<TalentPoolPage />} />
             <Route path="/talent-pool/:candidateId" element={<CandidateProfilePage />} />
+
+             <Route path="/migrated-talent-pool" element={<MigratedTalentPoolPage />} />
+          <Route path="/migrated-talent-pool/:candidateId" element={<MigratedCandidateProfilePage />} />
 
 
 

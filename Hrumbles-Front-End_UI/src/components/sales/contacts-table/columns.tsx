@@ -218,6 +218,32 @@ const AccessCell = ({ getValue, children }: { getValue: () => any, children: Rea
     );
 };
 
+const MediumSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
+    if (row.getIsGrouped()) return null;
+    const initialValue = getValue();
+    // Static options for the Medium column
+    const mediumOptions = ['Cold', 'LinkedIn', 'Email', 'Website', 'Referral', 'Other'];
+    const onValueChange = (newValue: string) => table.options.meta?.updateData(row.index, column.id, newValue);
+
+    return (
+        <Select value={initialValue || ""} onValueChange={onValueChange}>
+            <SelectTrigger className="h-8 border-none bg-transparent focus:ring-0 shadow-none data-[state=open]:bg-gray-100">
+                <SelectValue>
+                    {initialValue ? (
+                        <Badge variant="secondary" className="font-normal">{initialValue}</Badge>
+                    ) : ( <span className="text-muted-foreground">Select...</span> )}
+                </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+                {mediumOptions.map(option => (
+                    <SelectItem key={option} value={option}>
+                        {option}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+};
 
 export const ActionColumn: ColumnDef<SimpleContact> = {
   id: 'actions',
@@ -368,6 +394,14 @@ export const columns: ColumnDef<SimpleContact>[] = [
   { accessorKey: 'job_title', header: ReorderableHeader, cell: EditableCell, size: 200, minSize: 150, maxSize: 300 },
   { accessorKey: 'contact_stage', header: ReorderableHeader, size: 150, minSize: 120, maxSize: 200, cell: StageSelectCell },
  
+   { 
+    accessorKey: 'medium', 
+    header: ReorderableHeader, 
+    size: 150, 
+    minSize: 120, 
+    maxSize: 200, 
+    cell: MediumSelectCell 
+  },
  
   {
     accessorFn: (row) => row.created_by ?? null,

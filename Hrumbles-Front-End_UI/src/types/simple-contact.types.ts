@@ -10,6 +10,7 @@ export interface SimpleContact {
   linkedin_url?: string | null;
   contact_owner?: string | null;
   contact_stage?: string | null;
+   medium?: string | null;
   created_at: string;
   updated_at: string;
   company_id?: number | null;
@@ -25,6 +26,10 @@ export interface SimpleContact {
 export interface SimpleContactInsert {
   name: string;
   email?: string | null;
+  mobile?: string | null;
+  job_title?: string | null;
+  linkedin_url?: string | null;
+  contact_owner?: string | null;
   contact_stage?: string | null;
   organization_id?: string | null;
 }
@@ -38,6 +43,7 @@ export interface SimpleContactUpdate {
   linkedin_url?: string | null;
   contact_owner?: string | null;
   contact_stage?: string | null;
+  medium?: string | null;
   company_id?: number | null;
   custom_data?: Record<string, any> | null;
 }
