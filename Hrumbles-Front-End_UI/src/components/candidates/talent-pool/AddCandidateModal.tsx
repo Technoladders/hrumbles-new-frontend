@@ -12,7 +12,7 @@ import { useSelector } from 'react-redux';
 import mammoth from 'mammoth';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
 
 // --- TYPES ---
 interface AddCandidateModalProps {
@@ -221,21 +221,60 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     
     toast.success("Bulk processing complete. Check results below.");
     setIsLoading(false);
-    onCandidateAdded(); // Refetch the main list after the entire batch is done
+    // onCandidateAdded(); 
   };
   
-  const resetModal = () => {
+  const handleClose = () => {
+    // If a bulk process has run, we should refetch the list.
+    if (isBulkProcessing) {
+        onCandidateAdded();
+    } else {
+        onClose();
+    }
+    // Reset all state when closing
     setResumeText('');
     setBulkResults([]);
     setBulkProgress(0);
     setIsBulkProcessing(false);
-    onClose();
+    setActiveTab('paste');
   }
 
+
   return (
-    <Modal isOpen={isOpen} onRequestClose={resetModal} style={{ content: { maxWidth: '800px', margin: 'auto' } }}>
-      <div className="p-4 space-y-4">
+    <Modal 
+      isOpen={isOpen} 
+      onRequestClose={handleClose} 
+      // --- FIX: Responsive and Overflow Styling ---
+      style={{
+        content: {
+          top: '50%',
+          left: '50%',
+          right: 'auto',
+          bottom: 'auto',
+          marginRight: '-50%',
+          transform: 'translate(-50%, -50%)',
+          width: '90%', // Responsive width
+          maxWidth: '800px', // Max width for larger screens
+          maxHeight: '90vh', // Max height to prevent overflow
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '0' // Remove default padding
+        },
+        overlay: {
+          backgroundColor: 'rgba(0, 0, 0, 0.75)'
+        }
+      }}
+      contentLabel="Add Candidate Modal"
+    >
+      {/* --- FIX: Modal Layout for Scrolling --- */}
+      <div className="flex justify-between items-center p-4 border-b">
         <h2 className="text-xl font-semibold">Add Candidate to Talent Pool</h2>
+        <Button variant="ghost" size="icon" onClick={handleClose}>
+            <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="flex-grow overflow-y-auto p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="paste">Paste Resume</TabsTrigger>
@@ -245,10 +284,6 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
           
           <TabsContent value="paste">
             <Textarea placeholder="Paste the full resume text here..." rows={15} value={resumeText} onChange={(e) => setResumeText(e.target.value)} className="mt-2" disabled={isLoading} />
-            <div className="flex justify-end gap-2 mt-4">
-              <Button variant="outline" onClick={resetModal} disabled={isLoading}>Cancel</Button>
-              <Button onClick={handlePasteAndSave} disabled={isLoading || !resumeText}> {isLoading ? 'Processing...' : 'Analyse and Save'} </Button>
-            </div>
           </TabsContent>
 
           <TabsContent value="upload">
@@ -282,16 +317,21 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
                     </div>
                   ))}
                 </ScrollArea>
-                 {/* --- FIX: Close button only appears after bulk processing is done --- */}
-                 {!isLoading && isBulkProcessing && (
-                    <div className="flex justify-end mt-4">
-                        <Button onClick={resetModal}>Close Report</Button>
-                    </div>
-                 )}
               </div>
             )}
           </TabsContent>
         </Tabs>
+      </div>
+
+      <div className="p-4 border-t flex justify-end gap-2">
+        {activeTab === 'bulk' && isBulkProcessing && !isLoading ? (
+            <Button onClick={handleClose}>Close Report & Refetch List</Button>
+        ) : (
+            <>
+                <Button variant="outline" onClick={handleClose} disabled={isLoading}>Cancel</Button>
+                {activeTab === 'paste' && <Button onClick={handlePasteAndSave} disabled={isLoading || !resumeText}> {isLoading ? 'Processing...' : 'Analyse and Save'} </Button>}
+            </>
+        )}
       </div>
     </Modal>
   );
