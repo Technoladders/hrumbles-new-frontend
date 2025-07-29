@@ -219,10 +219,37 @@ const TanstackContactsPage: React.FC = () => {
   }, [grouping]);
 
 
-  const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => {
-      // (This function remains unchanged)
-  };
+const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => {
+    const oldData = [...data];
+    let updatedRow: SimpleContact;
 
+    if (customFields.some(f => f.column_key === columnId)) {
+      const originalRow = oldData[rowIndex];
+      const newCustomData = { ...(originalRow.custom_data || {}), [columnId]: value };
+      updatedRow = { ...originalRow, custom_data: newCustomData, updated_by: currentUser?.id };
+      updateContactMutation.mutate(
+        { item: updatedRow, updates: { custom_data: newCustomData, updated_by: currentUser?.id } },
+        {
+          onError: (err: any) => {
+            setData(oldData);
+            toast({ title: "Update Failed", variant: "destructive", description: err.message });
+          },
+        }
+      );
+    } else {
+      updatedRow = { ...oldData[rowIndex], [columnId]: value, updated_by: currentUser?.id };
+      updateContactMutation.mutate(
+        { item: updatedRow, updates: { [columnId]: value, updated_by: currentUser?.id } },
+        {
+          onError: (err: any) => {
+            setData(oldData);
+            toast({ title: "Update Failed", variant: "destructive", description: err.message });
+          },
+        }
+      );
+    }
+    setData(oldData.map((row, index) => (index === rowIndex ? updatedRow : row)));
+  };
   const handleDeleteRow = (contactId: string) => {
     deleteContactMutation.mutate(contactId, {
       onSuccess: () => toast({ title: "Contact Deleted" }),
