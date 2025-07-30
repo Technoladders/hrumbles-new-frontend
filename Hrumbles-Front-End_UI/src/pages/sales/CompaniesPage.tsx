@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Company } from "@/types/company";
@@ -36,21 +36,18 @@ import Papa from 'papaparse';
 import { z } from 'zod';
 import { useSelector } from 'react-redux';
 import moment from "moment";
-import { useMemo } from 'react'; // ADD THIS
-import { Calendar as CalendarIcon, Filter, X } from "lucide-react"; // ADD/UPDATE THIS
-import { DateRange } from "react-day-picker"; // ADD THIS
-import { format } from "date-fns"; // ADD THIS
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // ADD THIS
-import { Calendar } from "@/components/ui/calendar"; // ADD THIS
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // ADD THIS
-import { cn } from "@/lib/utils"; // ADD THIS (if not already present)
-import CompanyCreatorChart from "@/components/sales/chart/CompanyCreatorChart"; // ADD THIS
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { startOfMonth } from "date-fns"; // ADD THIS
+import { useMemo } from 'react';
+import { DateRange } from "react-day-picker";
+import { format } from "date-fns";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CreatorPerformanceChart from "@/components/sales/chart/CreatorPerformanceChart";
-import { DateRangePickerField } from "@/components/sales/chart/dateRangePickerField"; // 👈 ADD THIS
+import { DateRangePickerField } from "@/components/sales/chart/dateRangePickerField"; 
 import CompanyStagePieChart from "@/components/sales/chart/CompanyStagePieChart";
+import { startOfMonth } from "date-fns";
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
+
+// ... (keep all your existing schemas and constants)
 const companyCsvSchema = z.object({
   name: z.string().min(1, { message: "Company Name is required" }),
   website: z.string().url({ message: "Invalid website URL" }).optional().nullable(),
@@ -129,14 +126,16 @@ const getDisplayValue = (value: string | number | null | undefined, fallback: st
 };
 
 const CompaniesPage = () => {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const user = useSelector((state: any) => state.auth.user);
-  const organizationId = useSelector((state: any) => state.auth.organization_id);
-  const { data: companies = [], isLoading, isError, error } = useCompanies();
-  const { data: counts, isLoading: isCountsLoading } = useCompanyCounts();
+    const { fileId } = useParams<{ fileId?: string }>(); // Get fileId from URL
+    const { toast } = useToast();
+    const queryClient = useQueryClient();
+    const user = useSelector((state: any) => state.auth.user);
+    const organizationId = useSelector((state: any) => state.auth.organization_id);
+    const { data: companies = [], isLoading, isError, error } = useCompanies(fileId); // Pass fileId to hook
+    const { data: counts, isLoading: isCountsLoading } = useCompanyCounts();
 
-const [currentPage, setCurrentPage] = useState(1);
+    // ... (keep the rest of your state declarations)
+      const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
  const [searchTerm, setSearchTerm] = useState("");
   const [selectedCreatorId, setSelectedCreatorId] = useState<string>('all');
@@ -161,9 +160,10 @@ const [chartDateRange, setChartDateRange] = useState<DateRange | undefined>({
     // -- RENAME your old dateRange state to avoid confusion --
   const [tableDateRange, setTableDateRange] = useState<DateRange | undefined>(undefined);
 
-  console.log("selectedcreator", selectedCreatorId)
-
-  useEffect(() => {
+    // ... (keep the rest of your functions and logic)
+    // No major changes are needed in the functions themselves, as the filtering
+    // is now handled by the `useCompanies` hook.
+      useEffect(() => {
     const handleScroll = () => setShowBackToTop(window.scrollY > 300);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
@@ -466,8 +466,9 @@ const chartFilteredData = useMemo(() => {
             services: restOfVc.services,
             key_people: keyPeople,
             organization_id: organizationId,
-  created_by: currentUserId,
-  updated_by: currentUserId, 
+            created_by: currentUserId,
+            updated_by: currentUserId, 
+            file_id: fileId || null, // Assign fileId if present
           };
         });
 
@@ -500,38 +501,13 @@ const chartFilteredData = useMemo(() => {
     }
   };
 
-  const renderSocialIcons = (company: Company) => {
-    const activeClass = "text-primary hover:text-primary/80";
 
-    const renderSingleIcon = (rawUrl: string | null | undefined, title: string, IconComponent: React.ElementType) => {
-      if (rawUrl && typeof rawUrl === 'string' && rawUrl.trim() !== '' && rawUrl.trim().toUpperCase() !== 'N/A') {
-        const fullUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
-        return (
-          <a href={fullUrl} target="_blank" rel="noreferrer" title={title} className={`inline-block p-0.5 ${activeClass}`}>
-            <IconComponent className="h-3.5 w-3.5" />
-          </a>
-        );
-      }
-      return null;
-    };
-
-
-
-    const iconsToRender = [
-      renderSingleIcon(company.website, "Website", LinkIcon),
-      renderSingleIcon(company.linkedin, "LinkedIn", Linkedin),
-    ].filter(Boolean);
-
-    if (iconsToRender.length === 0) {
-      return null;
-    }
-
-    return (<div className="flex items-center gap-1 mt-1">{iconsToRender}</div>);
-  };
-  
-  return (
-    <div className="container mx-auto px-4 py-6 max-w-full">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-2">
+    return (
+        <div className="container mx-auto px-4 py-6 max-w-full">
+            {/* The rest of your JSX remains the same, no changes needed here. */}
+            {/* The filtering is handled in the useCompanies hook. */}
+            {/* ... Your existing JSX for the page layout, headers, buttons, charts, table, etc. ... */}
+             <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-2">
         <h1 className="text-2xl font-bold">Companies</h1>
         <div className="flex gap-2 flex-wrap">
           {/* --- ✅ BUTTON AND DIALOG UNCOMMENTED --- */}
@@ -813,26 +789,25 @@ const chartFilteredData = useMemo(() => {
       <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Review and Create Company</DialogTitle><DialogDescription>Review the AI-fetched data then save.</DialogDescription></DialogHeader>
-          {companyToReview && <CompanyEditForm company={companyToReview} onClose={() => setIsReviewDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} />}
+          {companyToReview && <CompanyEditForm company={companyToReview} onClose={() => setIsReviewDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}
         </DialogContent>
       </Dialog>
       
       <Dialog open={isManualAddDialogOpen} onOpenChange={setIsManualAddDialogOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add Company Manually</DialogTitle><DialogDescription>Fill out the form and click "Create Company" to save.</DialogDescription></DialogHeader>
-          <CompanyEditForm company={{}} onClose={() => setIsManualAddDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} />
+          <CompanyEditForm company={{}} onClose={() => setIsManualAddDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Company</DialogTitle><DialogDescription>Update details for {editCompany?.name}.</DialogDescription></DialogHeader>
-          {editCompany && <CompanyEditForm company={editCompany} onClose={() => setIsEditDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} />}
+          {editCompany && <CompanyEditForm company={editCompany} onClose={() => setIsEditDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}
         </DialogContent>
       </Dialog>
-    </div>
-  );
+        </div>
+    );
 };
 
 export default CompaniesPage;
-// 

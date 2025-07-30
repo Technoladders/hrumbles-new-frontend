@@ -15,7 +15,7 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
 
   return useQuery<SimpleContact[], Error>({
     // The query key now reflects whether we're fetching for a file or the unfiled list
-    queryKey: ['simpleContactsList', { fileId, fetchUnfiled }],
+    queryKey: ['simpleContactsList', { fileId: fileId || 'all', fetchUnfiled }],
     queryFn: async (): Promise<SimpleContact[]> => {
       if (!organization_id) return [];
 
@@ -34,17 +34,15 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
         query = query.is('file_id', null);
       } else if (fileId) {
         query = query.eq('file_id', fileId);
-      } else {
-        // If neither is specified, return empty to prevent loading all contacts by accident
-        return [];
       }
+      // If neither is specified, the query proceeds without file_id filters, fetching all contacts for the org.
       
       const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
       return (data || []).map(c => ({ ...c, company_name: c.companies?.name || null }));
     },
-    // The query is enabled only if we have an org and a valid mode (fileId or fetchUnfiled)
-    enabled: !!organization_id && (!!fileId || fetchUnfiled),
+    // The query is enabled only if we have an org ID.
+    enabled: !!organization_id,
   });
 };

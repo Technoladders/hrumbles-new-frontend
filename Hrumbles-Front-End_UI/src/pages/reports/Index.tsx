@@ -11,6 +11,10 @@ import TalentProfileReport from '@/components/reports/TalentProfileReport';
 import TalentTrendsReport from '@/components/reports/TalentTrendsReport';
 import VerificationReportPage from '@/components/reports/VerificationReportPage';
 import ConsolidatedStatusReport from '@/components/reports/ConsolidatedStatusReport';
+import ContactsReport from '@/components/reports/ContactsReport'; // New import
+import CompaniesReport from '@/components/reports/CompaniesReport'; 
+import ContactsTrendsReport from '@/components/reports/ContactsTrendsReport'; // New import
+import CompaniesTrendsReport from '@/components/reports/CompaniesTrendsReport';
 
 const ReportsPage: React.FC = () => {
   const [selectedReportType, setSelectedReportType] = useState<ReportType | null>(null);
@@ -33,6 +37,14 @@ const ReportsPage: React.FC = () => {
         return <VerificationReportPage />;
         case 'consolidated_status':
         return <ConsolidatedStatusReport />;
+        case 'contacts':
+        return <ContactsReport />;
+        case 'companies':
+        return <CompaniesReport />;
+        case 'contacts_trends':
+        return <ContactsTrendsReport />;
+        case 'companies_trends':
+        return <CompaniesTrendsReport />;
       default:
         return null;
     }
@@ -131,6 +143,58 @@ const ReportsPage: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <UserCheck className="mr-2" /> Consolidated Status Report
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              View candidate status counts and distributions by individual employees
+            </CardContent>
+          </Card>
+          <Card
+            onClick={() => setSelectedReportType('contacts')}
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <UserCheck className="mr-2" /> Contacts Report
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              View candidate status counts and distributions by individual employees
+            </CardContent>
+          </Card>
+          <Card
+            onClick={() => setSelectedReportType('companies')}
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <UserCheck className="mr-2" /> Companies Report
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              View candidate status counts and distributions by individual employees
+            </CardContent>
+          </Card>
+          <Card
+            onClick={() => setSelectedReportType('contacts_trends')}
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <UserCheck className="mr-2" /> Contacts Trends Report
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              View candidate status counts and distributions by individual employees
+            </CardContent>
+          </Card>
+          <Card
+            onClick={() => setSelectedReportType('companies_trends')}
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <UserCheck className="mr-2" /> Companies Trends Report
               </CardTitle>
             </CardHeader>
             <CardContent>

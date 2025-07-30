@@ -378,40 +378,44 @@ export const VerificationProcessSection: React.FC<VerificationProcessSectionProp
                 {fullHistoryError && <p className="text-sm text-red-600">Error: {fullHistoryError}</p>}
                 
                 {isFullHistoryVerified ? (
-                  <div className="space-y-4">
-                    {fullHistoryData.msg.map((entry: FullHistoryEmploymentEntry, index: number) => (
-                      <div key={index} className="pb-2 border-b last:border-b-0 text-gray-800">
-  {/* Show Name */}
-  <p className="text-sm font-semibold text-amber-600">{entry.name || 'Name Not Available'}</p>
+  <div className="space-y-4">
+    {/* Show Name at the top */}
+    <p className="text-sm font-semibold text-amber-600">
+      {fullHistoryData.msg.length > 0
+        ? fullHistoryData.msg[0].name || 'Name Not Available'
+        : 'Name Not Available'}
+    </p>
 
-  {/* Establishment Name */}
-  <p className="text-sm font-medium text-indigo-700">
-    {entry['Establishment Name'] || 'Not Available'}
-  </p>
+    {/* Employment Entries */}
+    {fullHistoryData.msg.map((entry: FullHistoryEmploymentEntry, index: number) => (
+      <div key={index} className="pb-2 border-b last:border-b-0 text-gray-800">
+        {/* Establishment Name */}
+        <p className="text-sm font-medium text-indigo-700">
+          {entry['Establishment Name'] || 'Not Available'}
+        </p>
 
-  {/* Employment Details */}
-  <div className="grid grid-cols-2 gap-x-4 text-xs text-muted-foreground mt-1">
-    <p><strong>Join Date:</strong> {entry.Doj}</p>
-    <p><strong>Exit Date:</strong> {entry.DateOfExitEpf || 'Current'}</p>
-    <p><strong>Member ID:</strong> {entry.MemberId}</p>
-    <p><strong>UAN:</strong> {entry.uan}</p>
+        {/* Employment Details */}
+        <div className="grid grid-cols-2 gap-x-4 text-xs text-muted-foreground mt-1">
+          <p><strong>Join Date:</strong> {entry.Doj}</p>
+          <p><strong>Exit Date:</strong> {entry.DateOfExitEpf || 'Current'}</p>
+          <p><strong>Member ID:</strong> {entry.MemberId}</p>
+          <p><strong>UAN:</strong> {entry.uan}</p>
+        </div>
+
+        {/* Overlapping Badge */}
+        {entry.Overlapping && (
+          <Badge variant="destructive" className="mt-1">
+            Overlapping Employment
+          </Badge>
+        )}
+      </div>
+    ))}
   </div>
-
-  {/* Overlapping Badge */}
-  {entry.Overlapping && (
-    <Badge variant="destructive" className="mt-1">
-      Overlapping Employment
-    </Badge>
-  )}
-</div>
-
-                    ))}
-                  </div>
-                ) : fullHistoryData && typeof fullHistoryData.msg === 'string' ? (
-                  <p className="text-sm text-gray-600">{fullHistoryData.msg}</p>
-                ) : !isFullHistoryProcessing && !fullHistoryData ? (
-                  <p className="text-sm text-gray-600">Click "Verify Full History" to retrieve detailed employment records.</p>
-                ) : null}
+) : fullHistoryData && typeof fullHistoryData.msg === 'string' ? (
+  <p className="text-sm text-gray-600">{fullHistoryData.msg}</p>
+) : !isFullHistoryProcessing && !fullHistoryData ? (
+  <p className="text-sm text-gray-600">Click "Verify Full History" to retrieve detailed employment records.</p>
+) : null}
               </div>
             </Card>
           )}

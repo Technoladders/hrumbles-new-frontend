@@ -1,4 +1,4 @@
-import { FiUsers, FiBriefcase, FiCheckSquare, FiSettings, FiLogOut } from "react-icons/fi";
+import { FiUsers, FiBriefcase, FiCheckSquare, FiSettings, FiLogOut, FiList } from "react-icons/fi";
 import { IoCalendarNumberOutline } from "react-icons/io5";
 import { SiAwsorganizations } from "react-icons/si";
 import { MdDashboardCustomize, MdOutlineManageAccounts, MdOutlineEmojiPeople, MdOutlineAccountBalance, MdMoreTime } from "react-icons/md";
@@ -44,8 +44,9 @@ const orgSuperAdminAllItems = [
       { icon: TbCheckbox, label: "Auto-Terminated Timesheets", path: "/approvals/auto-terminated" },
     ],
   },
-  { icon: GoOrganization, label: "Company", path: "/companies" },
-  { icon: VscOrganization, label: "Contacts", path: "/contacts" },
+  { icon: GoOrganization, label: "Companies", path: "/companies" },
+  { icon: VscOrganization, label: "People", path: "/contacts" },
+  { icon: FiList, label: "Lists", path: "/lists" },
   {
     icon: FiSettings,
     label: "Settings",
@@ -61,7 +62,7 @@ const orgSuperAdminAllItems = [
 
 // 2. Define the items for each suite
 const projectSuiteLabels = ["Clients", "Projects"];
-const salesSuiteLabels = ["Company", "Contacts",];
+const salesSuiteLabels = ["Companies", "People", "Lists"];
 const financeSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll"];
 
 const projectSuiteItems = orgSuperAdminAllItems.filter(item => projectSuiteLabels.includes(item.label));
@@ -118,8 +119,9 @@ const adminAllItems = [
     { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
     { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" }, // Using a different icon to avoid confusion
     // Department-specific items below
-    { icon: GoOrganization, label: "Company", path: "/companies", department: "Sales & Marketing" },
-    { icon: VscOrganization, label: "Contacts", path: "/contacts", department: "Sales & Marketing" },
+    { icon: GoOrganization, label: "Companies", path: "/companies", department: "Sales & Marketing" },
+    { icon: VscOrganization, label: "People", path: "/contacts", department: "Sales & Marketing" },
+    { icon: FiList, label: "Lists", path: "/lists", department: "Sales & Marketing" },
             { icon: MdOutlineAccountBalance, label: "Finance", path: "/finance",  department: "Human Resource", },
   
             { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices",  department: "Human Resource", },
@@ -142,7 +144,7 @@ const adminAllItems = [
 // 2. Define labels for each suite for the Admin role
 const adminHrSuiteLabels = ["Dashboard", "Employees", "Jobs", "Talent Pool", "Goals", "Reports", "My Profile", "Time Sheet", "Regularization", "Leave", "Attendance", "Calendar", "Settings"];
 const adminProjectSuiteLabels = ["Clients", "Projects"];
-const adminSalesSuiteLabels = ["Company", "Contacts"];
+const adminSalesSuiteLabels = ["Companies", "People", "Lists"];
 const adminFinanceSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll"];
 
 // 3. Create a function to generate the categorized menu for an Admin
@@ -229,8 +231,9 @@ export const menuItemsByRole = {
     }
     if (departmentName === "Sales & Marketing") {
       baseMenu.push(
-        { icon: GoOrganization, label: "Company", path: "/companies" },
-        { icon: VscOrganization, label: "Contacts", path: "/contacts" }
+        { icon: GoOrganization, label: "Companies", path: "/companies" },
+        { icon: VscOrganization, label: "People", path: "/contacts" },
+        { icon: FiList, label: "Lists", path: "/lists" }
       );
     }
      if (departmentName === "Finance") {

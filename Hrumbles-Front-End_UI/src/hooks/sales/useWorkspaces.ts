@@ -5,6 +5,11 @@ import { useSelector } from 'react-redux';
 export interface Workspace {
     id: string;
     name: string;
+    created_at: string;
+    created_by_employee: {
+        first_name: string;
+        last_name: string;
+    } | null;
 }
 
 export const useWorkspaces = () => {
@@ -17,7 +22,12 @@ export const useWorkspaces = () => {
             
             const { data, error } = await supabase
                 .from('workspaces')
-                .select('id, name')
+                .select(`
+                    id, 
+                    name, 
+                    created_at,
+                    created_by_employee:created_by (first_name, last_name)
+                `)
                 .eq('organization_id', organization_id)
                 .order('name', { ascending: true });
 

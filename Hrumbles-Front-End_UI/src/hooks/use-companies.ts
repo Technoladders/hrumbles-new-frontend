@@ -139,6 +139,8 @@ export const useCompanies = () => { /* ... (your existing hook) ... */
         .select('id, name, logo_url, employee_count, industry, stage, location, created_by, updated_by, account_owner, website, linkedin, created_at, revenue, cashflow, founded_as, employee_count_date, competitors, products, services, key_people, about, domain, status, created_by_employee:hr_employees!companies_created_by_fkey(id, first_name, last_name), updated_by_employee:hr_employees!companies_updated_by_fkey(id, first_name, last_name)')
         .order('created_at', { ascending: false })
         .order('id', { ascending: true })
+
+        
       if (error) { console.error('Error fetching ordered companies:', error); throw error; }
       return data || [];
     },

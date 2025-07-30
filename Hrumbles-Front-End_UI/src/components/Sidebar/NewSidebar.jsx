@@ -22,39 +22,14 @@ import { useLocation, Link, useNavigate } from "react-router-dom";
 import { logout } from "../../Redux/authSlice";
 import { ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
 import { menuItemsByRole } from "./SidebarMenuItem";
-import { ArrowRightFromLine, ArrowLeftToLine, PlusCircle, Inbox } from 'lucide-react';
+import { ArrowRightFromLine, ArrowLeftToLine } from 'lucide-react';
 import supabase from "../../config/supabaseClient";
-import { setSelectedWorkspace, setSelectedFile, setViewUnfiled } from '../../Redux/workspaceSlice';
-import { useWorkspaces } from '../../hooks/sales/useWorkspaces';
-import { useWorkspaceFiles } from '../../hooks/sales/useWorkspaceFiles';
-import { useQuery } from '@tanstack/react-query';
-import { AddWorkspaceItemDialog } from './AddWorkspaceItemDialog';
 
-// Hook for unfiled contacts count
-const useUnfiledContactsCount = () => {
-  const organization_id = useSelector((state) => state.auth.organization_id);
-  return useQuery({
-    queryKey: ['unfiledContactsCount', organization_id],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('contacts')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', organization_id)
-        .is('file_id', null);
-      if (error) return 0;
-      return count;
-    },
-    enabled: !!organization_id,
-  });
-};
-
-const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownToggle, isWorkspaceSubmenuOpen, toggleWorkspaceSubmenu }) => {
-  const dispatch = useDispatch();
-  const navigate = useNavigate(); // Added for navigation
+const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownToggle }) => {
   const { icon, label, path, dropdown } = item;
   const isActive = location.pathname === path || (dropdown && dropdown.some(sub => location.pathname.startsWith(sub.path)));
   const isDropdownOpen = openDropdown === label;
-  const isContactsItem = label === "Contacts";
+  
   const hoverBg = "#4A5568";
   const activeBg = "#7B43F1";
   const activeColor = "white";
@@ -62,47 +37,12 @@ const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownTogg
   const iconColor = "white";
   const hoverTextColor = "#CBD5E0";
 
-  // Workspace submenu logic for Contacts
-  const { selectedWorkspaceId, selectedFileId, viewingMode } = useSelector((state) => state.workspace);
-  const { data: unfiledCount = 0 } = useUnfiledContactsCount();
-  const { data: workspaces = [], isLoading: isLoadingWorkspaces } = useWorkspaces();
-  const { data: files = [], isLoading: isLoadingFiles } = useWorkspaceFiles(selectedWorkspaceId);
-  const { isOpen: isAddDialogOpen, onOpen: onOpenAddDialog, onClose: onCloseAddDialog } = useDisclosure();
-  const [dialogItemType, setDialogItemType] = useState('workspace');
-
-  const openAddWorkspaceDialog = (e) => {
-    e.stopPropagation();
-    setDialogItemType('workspace');
-    onOpenAddDialog();
-  };
-
-  const openAddFileDialog = (e) => {
-    e.stopPropagation();
-    setDialogItemType('file');
-    onOpenAddDialog();
-  };
-
-  const handleSelectWorkspace = (id) => {
-    dispatch(setSelectedWorkspace(id));
-    navigate('/contacts'); // Navigate to /contacts
-  };
-
-  const handleSelectFile = (id) => {
-    dispatch(setSelectedFile(id));
-    navigate('/contacts'); // Navigate to /contacts
-  };
-
-  const handleViewUnfiled = () => {
-    dispatch(setViewUnfiled());
-    navigate('/contacts'); // Navigate to /contacts
-  };
-
   return (
     <Box key={label} w="full">
       <Tooltip label={label} placement="right" isDisabled={isExpanded}>
         <Flex
-          as={isContactsItem ? "div" : Link}
-          to={isContactsItem ? undefined : path}
+          as={Link}
+          to={path}
           align="center"
           p={3}
           borderRadius="lg"
@@ -112,21 +52,20 @@ const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownTogg
           color={isActive ? activeColor : textColor}
           _hover={{ bg: !isActive && hoverBg, color: !isActive && hoverTextColor }}
           transition="background 0.2s, color 0.2s"
-          onClick={() => isContactsItem && toggleWorkspaceSubmenu()}
+          onClick={(e) => {
+            if (dropdown) {
+              handleDropdownToggle(label, e);
+            }
+          }}
         >
           <Icon as={icon} fontSize="22px" color={isActive ? activeColor : iconColor} _groupHover={{ color: hoverTextColor }} />
           {isExpanded && (
             <Flex justify="space-between" align="center" w="full" ml={4}>
               <Text fontWeight="medium">{label}</Text>
-              {(dropdown || isContactsItem) && (
+              {dropdown && (
                 <Icon
-                  as={(isDropdownOpen || (isContactsItem && isWorkspaceSubmenuOpen)) ? ChevronUpIcon : ChevronDownIcon}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (isContactsItem) toggleWorkspaceSubmenu();
-                    else handleDropdownToggle(label, e);
-                  }}
+                  as={isDropdownOpen ? ChevronUpIcon : ChevronDownIcon}
+                  onClick={(e) => handleDropdownToggle(label, e)}
                 />
               )}
             </Flex>
@@ -158,95 +97,6 @@ const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownTogg
           </VStack>
         </Collapse>
       )}
-      {isContactsItem && isExpanded && (
-        <Collapse in={isWorkspaceSubmenuOpen} animateOpacity>
-          <VStack
-            pl={10}
-            mt={2}
-            spacing={1}
-            align="stretch"
-            bg="white"
-            borderRadius="md"
-            p={3}
-            color="gray.700"
-          >
-            <Flex align="center" justify="space-between" mb={2}>
-              <Text fontSize="sm" fontWeight="semibold">Workspaces</Text>
-              <Button variant="ghost" size="xs" onClick={openAddWorkspaceDialog}>
-                <Icon as={PlusCircle} boxSize={4} color="gray.500" />
-              </Button>
-            </Flex>
-            {unfiledCount > 0 && (
-              <Button
-                justifyContent="space-between"
-                variant={viewingMode === 'unfiled' ? "solid" : "ghost"}
-                colorScheme={viewingMode === 'unfiled' ? "blue" : "gray"}
-                w="full"
-                size="sm"
-                leftIcon={<Icon as={Inbox} boxSize={4} />}
-                onClick={handleViewUnfiled}
-              >
-                Unfiled
-                <Text as="span" bg="blue.500" color="white" fontSize="xs" px={2} borderRadius="full">
-                  {unfiledCount}
-                </Text>
-              </Button>
-            )}
-            {isLoadingWorkspaces && <Flex justify="center" p={2}><Spinner size="sm" /></Flex>}
-            {workspaces.map(ws => (
-              <Box key={ws.id} w="full">
-                <Button
-                  justifyContent="start"
-                  variant={selectedWorkspaceId === ws.id ? "solid" : "ghost"}
-                  colorScheme={selectedWorkspaceId === ws.id ? "purple" : "gray"}
-                  w="full"
-                  size="sm"
-                  textAlign="left"
-                  onClick={() => handleSelectWorkspace(ws.id)}
-                  fontWeight={selectedWorkspaceId === ws.id ? "bold" : "medium"}
-                >
-                  {ws.name}
-                </Button>
-                {selectedWorkspaceId === ws.id && (
-                  <VStack pl={4} mt={1} spacing={1} align="start">
-                    {isLoadingFiles && <Text fontSize="xs" color="gray.500" pl={3} py={1}>Loading...</Text>}
-                    {files.map(file => (
-                      <Button
-                        key={file.id}
-                        justifyContent="start"
-                        variant={selectedFileId === file.id ? "subtle" : "ghost"}
-                        colorScheme={selectedFileId === file.id ? "purple" : "gray"}
-                        size="xs"
-                        w="full"
-                        onClick={() => handleSelectFile(file.id)}
-                        fontWeight="normal"
-                      >
-                        {file.name}
-                      </Button>
-                    ))}
-                    <Button 
-                      variant="link" 
-                      size="xs" 
-                      leftIcon={<Icon as={PlusCircle} boxSize={3}/>} 
-                      colorScheme="gray" 
-                      fontWeight="normal" 
-                      onClick={openAddFileDialog}
-                    >
-                      Add File
-                    </Button>
-                  </VStack>
-                )}
-              </Box>
-            ))}
-          </VStack>
-          <AddWorkspaceItemDialog
-            isOpen={isAddDialogOpen}
-            onClose={onCloseAddDialog}
-            itemType={dialogItemType}
-            workspaceId={selectedWorkspaceId}
-          />
-        </Collapse>
-      )}
     </Box>
   );
 };
@@ -259,7 +109,6 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   
   const [departmentName, setDepartmentName] = useState("Unknown Department");
   const [openDropdown, setOpenDropdown] = useState(null);
-  const [isWorkspaceSubmenuOpen, setWorkspaceSubmenuOpen] = useState(false);
   const [isMobile] = useMediaQuery("(max-width: 768px)");
   const [employeeProfile, setEmployeeProfile] = useState(null);
   const { isOpen: isProfileMenuOpen, onToggle: toggleProfileMenu } = useDisclosure();
@@ -268,7 +117,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const activeBg = "#7B43F1";
   const hoverBg = "#4A5568";
   const textColor = "white";
-
+  
   const [activeSuite, setActiveSuite] = useState(() => {
     return localStorage.getItem('activeSuite') || null;
   });
@@ -392,10 +241,6 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
     setOpenDropdown(openDropdown === label ? null : label);
   };
 
-  const toggleWorkspaceSubmenu = () => {
-    setWorkspaceSubmenuOpen(!isWorkspaceSubmenuOpen);
-  };
-
   const handleLogout = () => {
     dispatch(logout());
     localStorage.removeItem('activeSuite');
@@ -467,8 +312,6 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
               location={location}
               openDropdown={openDropdown}
               handleDropdownToggle={handleDropdownToggle}
-              toggleWorkspaceSubmenu={toggleWorkspaceSubmenu}
-              isWorkspaceSubmenuOpen={isWorkspaceSubmenuOpen}
             />
           ))
         ) : (
@@ -541,4 +384,3 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
 };
 
 export default NewSidebar;
-// 

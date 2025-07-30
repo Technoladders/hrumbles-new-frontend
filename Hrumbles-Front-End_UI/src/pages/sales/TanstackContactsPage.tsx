@@ -1,5 +1,5 @@
-// src/pages/sales/TanstackContactsPage.tsx
 import React from 'react';
+import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useToast } from "@/hooks/use-toast";
 import { useSimpleContacts } from '@/hooks/sales/useSimpleContacts';
 import { useUpdateSimpleContact } from '@/hooks/sales/useUpdateSimpleContact';
@@ -36,10 +36,7 @@ import { AddContactForm } from '@/components/sales/contacts-table/AddContactForm
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useDeleteContact } from '@/hooks/sales/useDeleteContact';
 import { DataTablePagination } from '@/components/ui/data-table-pagination';
-// --- NEW IMPORTS ---
 import { DateRangePickerField } from '@/components/sales/chart/dateRangePickerField';
-import CreatorPerformanceChart from '@/components/sales/chart/ContactsPerformanceChart';
-import CompanyStagePieChart from '@/components/sales/chart/ContactsStagePieChart';
 import { startOfMonth } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { MoreHorizontal, FileText, Download } from 'lucide-react';
@@ -48,16 +45,15 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { ManageStagesDialog } from '@/components/sales/contacts-table/ManageStagesDialog'
 import { ContactImportDialog } from '@/components/sales/contacts-table/ContactImportDialog';
 import { MoveContactsToolbar } from '@/components/sales/contacts-table/MoveContactsToolbar';
-import { Icon, Flex, Text } from "@chakra-ui/react";
+import { Flex, Text, Breadcrumb, BreadcrumbItem, BreadcrumbLink, Spinner } from "@chakra-ui/react";
+import { ChevronRightIcon } from '@chakra-ui/icons';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
-// --- END NEW IMPORTS ---
 
 interface DateRange {
   from: Date;
@@ -67,16 +63,34 @@ interface DateRange {
 
 const TanstackContactsPage: React.FC = () => {
   const { toast } = useToast();
+  const { fileId: fileIdFromUrl } = useParams<{ fileId?: string }>();
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   const currentUser = useSelector((state: any) => state.auth.user);
-  const { selectedFileId, viewingMode } = useSelector((state: any) => state.workspace);
+  const { viewingMode } = useSelector((state: any) => state.workspace);
 
   const { data: serverContacts = [], isLoading } = useSimpleContacts({ 
-      fileId: selectedFileId,
-      fetchUnfiled: viewingMode === 'unfiled'
+      fileId: fileIdFromUrl,
+      fetchUnfiled: viewingMode === 'unfiled' && !fileIdFromUrl
   });
   const updateContactMutation = useUpdateSimpleContact();
   const deleteContactMutation = useDeleteContact();
+
+  const { data: breadcrumbData, isLoading: isLoadingBreadcrumb } = useQuery({
+    queryKey: ['breadcrumbData', fileIdFromUrl],
+    queryFn: async () => {
+        if (!fileIdFromUrl) return null;
+
+        const { data: fileData, error: fileError } = await supabase
+            .from('workspace_files')
+            .select('name, workspace_id, workspaces(name)')
+            .eq('id', fileIdFromUrl)
+            .single();
+
+        if (fileError) throw fileError;
+        return fileData;
+    },
+    enabled: !!fileIdFromUrl,
+  });
 
   const [isManageStagesOpen, setIsManageStagesOpen] = React.useState(false);
   const [data, setData] = React.useState<SimpleContact[]>([]);
@@ -89,7 +103,6 @@ const TanstackContactsPage: React.FC = () => {
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   
-  // --- STATE FOR CHARTS AND DATE FILTERING ---
   const [chartDateRange, setChartDateRange] = React.useState<DateRange>({
     from: startOfMonth(new Date()),
     to: new Date(),
@@ -127,14 +140,12 @@ const TanstackContactsPage: React.FC = () => {
     enabled: !!organization_id,
   });
 
-  // --- FILTERED DATA FOR CHARTS AND TABLE ---
   const filteredData = React.useMemo(() => {
     return serverContacts.filter(contact => {
       if (!chartDateRange?.from) return true;
       const createdAt = new Date(contact.created_at);
       const from = chartDateRange.from;
       const to = chartDateRange.to || new Date();
-      // Set time to end of day for 'to' date for inclusive filtering
       to.setHours(23, 59, 59, 999);
       return createdAt >= from && createdAt <= to;
     });
@@ -155,32 +166,6 @@ const TanstackContactsPage: React.FC = () => {
     }));
     return [...defaultColumns, ...dynamicColumns, ActionColumn];
   }, [customFields]);
-
-  // --- DATA COMPUTATION FOR CHARTS ---
-  const creatorStatsForChart = React.useMemo(() => {
-    const stats: { [key: string]: number } = {};
-    filteredData.forEach(contact => {
-      const creatorName = contact.created_by_employee
-        ? `${contact.created_by_employee.first_name} ${contact.created_by_employee.last_name}`
-        : 'System';
-      stats[creatorName] = (stats[creatorName] || 0) + 1;
-    });
-    return Object.entries(stats)
-      .map(([name, count]) => ({ name, companies_created: count }))
-      .sort((a, b) => b.companies_created - a.companies_created);
-  }, [filteredData]);
-
-  const stageStatsForChart = React.useMemo(() => {
-    const stats: { [key: string]: number } = {};
-    filteredData.forEach(contact => {
-      const stage = contact.contact_stage || 'N/A';
-      stats[stage] = (stats[stage] || 0) + 1;
-    });
-    return Object.entries(stats)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [filteredData]);
-
 
   const table = useReactTable({
     data,
@@ -257,7 +242,6 @@ const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => 
     });
   };
 
-  // --- DOWNLOAD HANDLERS ---
   const handleDownloadCsv = () => {
     const visibleColumns = table.getVisibleLeafColumns().filter(c => !['select', 'actions'].includes(c.id));
     const header = visibleColumns.map(c => c.id);
@@ -291,35 +275,43 @@ const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => 
     doc.save('contacts.pdf');
   };
 
-
- if (viewingMode === 'file' && !selectedFileId) {
-    return (
-        <Flex direction="column" align="center" justify="center" h="full" bg="gray.50" borderRadius="lg" p={12}>
-            <Icon as={FileText} boxSize={20} color="gray.300" mb={4} />
-            <Text fontSize="2xl" fontWeight="semibold" color="gray.700">Select a File</Text>
-            <Text mt={2} fontSize="md" color="gray.500">Please choose a workspace and a file from the sidebar to view contacts.</Text>
-        </Flex>
-    );
-}
-
 return (
     <DndProvider backend={HTML5Backend}>
         <div className="w-full h-full flex flex-col space-y-4">
             
+            {fileIdFromUrl && (
+                <Breadcrumb spacing="8px" separator={<ChevronRightIcon color="gray.500" />} mb={-2}>
+                    <BreadcrumbItem>
+                        <BreadcrumbLink as={RouterLink} to="/lists">Workspaces</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    {isLoadingBreadcrumb ? <Spinner size="xs" /> : breadcrumbData && (
+                        <>
+                            <BreadcrumbItem>
+                                <BreadcrumbLink as={RouterLink} to="/lists">{breadcrumbData.workspaces?.name || 'Workspace'}</BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbItem isCurrentPage>
+                                <BreadcrumbLink href="#">{breadcrumbData.name}</BreadcrumbLink>
+                            </BreadcrumbItem>
+                        </>
+                    )}
+                </Breadcrumb>
+            )}
+
             <header className="flex-shrink-0">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
                         <h1 className="text-2xl md:text-3xl font-bold text-gray-800 tracking-tight">
-                            {viewingMode === 'unfiled' ? 'Unfiled Contacts' : 'Contacts'}
+                            {fileIdFromUrl ? (breadcrumbData?.name || 'File People') : (viewingMode === 'unfiled' ? 'Unfiled People' : 'All People')}
                         </h1>
                         <p className="text-gray-500 text-sm mt-1">
-                            {viewingMode === 'unfiled'
-                                ? 'These contacts are not yet assigned to a file.'
-                                : 'Viewing contacts in your selected file.'}
+                            {fileIdFromUrl
+                                ? `Viewing poeple in the file: ${breadcrumbData?.name || ''}`
+                                : viewingMode === 'unfiled'
+                                    ? 'These contacts are not yet assigned to a file.'
+                                    : 'Viewing all people in your organization.'}
                         </p>
                     </div>
                     <div className="flex items-center space-x-2">
-                        {/* --- DATE PICKER AND DOWNLOADS --- */}
                         <DateRangePickerField dateRange={chartDateRange} onDateRangeChange={setChartDateRange} />
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="h-9"><Download className="mr-2 h-4 w-4" /> Export</Button></DropdownMenuTrigger>
@@ -338,18 +330,6 @@ return (
                     </div>
                 </div>
             </header>
-
-            {/* --- CHARTS SECTION --- */}
-            {/* <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-shrink-0">
-                <CreatorPerformanceChart data={creatorStatsForChart} />
-                <CompanyStagePieChart data={stageStatsForChart} />
-            </div> */}
-
-            {viewingMode === 'unfiled' && table.getState().rowSelection.length > 0 && (
-                <div className="flex-shrink-0">
-                    <MoveContactsToolbar selectedContactIds={Object.keys(table.getState().rowSelection).map(index => table.getRow(index).original.id)} onMoveComplete={() => table.resetRowSelection()} />
-                </div>
-            )}
             
             <div className="flex-1 flex flex-col rounded-lg border bg-white overflow-hidden">
                 <div className="p-4 border-b flex-shrink-0">
@@ -375,17 +355,16 @@ return (
             </div>
         </div>
 
-        {/* Dialogs remain at the end, outside the layout flow. */}
         <ManageStagesDialog open={isManageStagesOpen} onOpenChange={setIsManageStagesOpen} />
         <AddColumnDialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen} />
-        <ContactImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} fileId={selectedFileId} />
+        <ContactImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} fileId={fileIdFromUrl} />
         <Dialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>
             <DialogContent className="sm:max-w-[600px] z-50">
                 <DialogHeader><DialogTitle>Add New Contact</DialogTitle></DialogHeader>
                 <AddContactForm
                     onClose={() => setIsAddContactOpen(false)}
                     onSuccess={(newContact) => setData(currentData => [newContact, ...currentData])}
-                    fileId={selectedFileId}
+                    fileId={fileIdFromUrl}
                 />
             </DialogContent>
         </Dialog>

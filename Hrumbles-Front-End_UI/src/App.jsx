@@ -82,6 +82,7 @@ import ContactsPage from "./pages/sales/ContactsPage";
 import EditableContactsPage from './pages/sales/EditableContactsPage';
 import TanstackContactsPage from './pages/sales/TanstackContactsPage';
 import KanbanView from './pages/sales/KanbanBoard';
+import ListsPage from './pages/sales/ListsPage';
 
 // Clients
 import ClientPage from "./pages/clients/ClientDashboard";
@@ -247,10 +248,13 @@ function App() {
 
           {/* Sales Companies and Contacts */}
           <Route path="/companies" element={<CompaniesPage />} />
+           <Route path="/companies/file/:fileId" element={<CompaniesPage />} />
           <Route path="/contacts" element={<TanstackContactsPage />} />
           <Route path="/contacts/kanban" element={<KanbanView />} />
           <Route path="/companies/:id" element={<CompanyDetail />} />
           <Route path="/companies/:id/edit" element={<CompanyEdit />} />
+          <Route path="/lists" element={<ListsPage />} />
+          <Route path="/contacts/file/:fileId" element={<TanstackContactsPage />} />
 
           {/* TimeTracker, Timesheet, Attendance and Leave */}
             {/* Employee routes */}
