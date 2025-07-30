@@ -15,6 +15,7 @@ import ContactsReport from '@/components/reports/ContactsReport'; // New import
 import CompaniesReport from '@/components/reports/CompaniesReport'; 
 import ContactsTrendsReport from '@/components/reports/ContactsTrendsReport'; // New import
 import CompaniesTrendsReport from '@/components/reports/CompaniesTrendsReport';
+import AttendanceReportsPage from '@/components/reports/attendance/AttendanceReportsPage';
 
 const ReportsPage: React.FC = () => {
   const [selectedReportType, setSelectedReportType] = useState<ReportType | null>(null);
@@ -45,6 +46,8 @@ const ReportsPage: React.FC = () => {
         return <ContactsTrendsReport />;
         case 'companies_trends':
         return <CompaniesTrendsReport />;
+        case 'attendance':
+        return <AttendanceReportsPage />;
       default:
         return null;
     }
@@ -195,6 +198,19 @@ const ReportsPage: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <UserCheck className="mr-2" /> Companies Trends Report
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              View candidate status counts and distributions by individual employees
+            </CardContent>
+          </Card>
+          <Card
+            onClick={() => setSelectedReportType('attendance')}
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <UserCheck className="mr-2" /> Attendance Report
               </CardTitle>
             </CardHeader>
             <CardContent>

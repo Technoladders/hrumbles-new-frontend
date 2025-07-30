@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useContactStages } from '@/hooks/sales/useContactStages';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronRight, GripVertical, Link as LinkIcon, Trash2, Lock } from 'lucide-react';
+import { ChevronDown, ChevronRight, GripVertical, Link as LinkIcon, Trash2, Lock, MessageSquare, Phone, Mail, UserPlus, Globe, MessageCircle, MoreHorizontal } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from './data-table-column-header';
@@ -221,23 +221,48 @@ const AccessCell = ({ getValue, children }: { getValue: () => any, children: Rea
 const MediumSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
     if (row.getIsGrouped()) return null;
     const initialValue = getValue();
-    // Static options for the Medium column
-    const mediumOptions = ['Cold', 'LinkedIn', 'Email', 'Website', 'Referral', 'Other'];
+    const mediumOptions = [
+        { name: 'LinkedIn', color: '#0A66C2', icon: LinkIcon },
+        { name: 'Cold Call', color: '#413a3aff', icon: Phone },
+        { name: 'Email Campaign', color: '#10B981', icon: Mail },
+        { name: 'Referral', color: '#8B5CF6', icon: UserPlus },
+        { name: 'Website Form', color: '#3B82F6', icon: Globe },
+        { name: 'WhatsApp / SMS', color: '#25D366', icon: MessageCircle },
+        { name: 'Other', color: '#6B7280', icon: MoreHorizontal },
+    ];
     const onValueChange = (newValue: string) => table.options.meta?.updateData(row.index, column.id, newValue);
 
+    const selectedMedium = mediumOptions.find(option => option.name === initialValue);
+    
     return (
         <Select value={initialValue || ""} onValueChange={onValueChange}>
             <SelectTrigger className="h-8 border-none bg-transparent focus:ring-0 shadow-none data-[state=open]:bg-gray-100">
                 <SelectValue>
                     {initialValue ? (
-                        <Badge variant="secondary" className="font-normal">{initialValue}</Badge>
-                    ) : ( <span className="text-muted-foreground">Select...</span> )}
+                        <Badge
+                            variant="outline"
+                            className="border font-normal flex items-center gap-1"
+                            style={{
+                                backgroundColor: selectedMedium?.color + '20',
+                                color: selectedMedium?.color,
+                                borderColor: selectedMedium?.color + '40'
+                            }}
+                        >
+                            {selectedMedium && <selectedMedium.icon size={14} />}
+                            {initialValue}
+                        </Badge>
+                    ) : (
+                        <span className="text-muted-foreground">Select...</span>
+                    )}
                 </SelectValue>
             </SelectTrigger>
             <SelectContent>
                 {mediumOptions.map(option => (
-                    <SelectItem key={option} value={option}>
-                        {option}
+                    <SelectItem key={option.name} value={option.name}>
+                        <div className="flex items-center gap-2">
+                            <option.icon size={14} style={{ color: option.color }} />
+                            {option.name}
+                        </div>
                     </SelectItem>
                 ))}
             </SelectContent>

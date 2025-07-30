@@ -104,16 +104,34 @@ const companyCsvSchema = z.object({
 }));
 type CompanyCsvRow = z.infer<typeof companyCsvSchema>;
 
-const STAGES = ['New', 'Current Client', 'Cold', 'Active Opportunity', 'Dead Opportunity', 'Do Not Prospect'];
+const STAGES = [
+  'Identified',
+  'Targeting',
+  'In Outreach',
+  'Warm',
+  'Qualified Company',
+  'Proposal Sent / In Discussion',
+  'Negotiation',
+  'Closed - Won',
+  'Closed - Lost',
+  'Re-engage Later'
+];
+
 const stageColors: Record<string, string> = {
-  'Current Client': 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200',
-  'New': 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200',
-  'Cold': 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200',
-  'Active Opportunity': 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200',
-  'Dead Opportunity': 'bg-red-100 text-red-700 border-red-200 hover:bg-red-200',
-  'Do Not Prospect': 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200',
-  'default': 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200',
+  'Identified': 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200',
+  'Targeting': 'bg-indigo-100 text-indigo-700 border-indigo-200 hover:bg-indigo-200',
+  'In Outreach': 'bg-teal-100 text-teal-700 border-teal-200 hover:bg-teal-200',
+  'Warm': 'bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200',
+  'Qualified Company': 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200',
+  'Proposal Sent / In Discussion': 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200',
+  'Negotiation': 'bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200',
+  'Closed - Won': 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200',
+  'Closed - Lost': 'bg-red-100 text-red-700 border-red-200 hover:bg-red-200',
+  'Re-engage Later': 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200',
+  'default': 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
 };
+
+
 
 const CSV_TEMPLATE_HEADER = "Company Name,Website,Domain,Status,About,Founded Date,Founded As,Employee Count,Employee Count Date,Address,LinkedIn,Industry,Stage,Location,Account Owner,Revenue,Cashflow,Competitors (comma-separated),Products (comma-separated),Services (comma-separated),Key People (JSON string)";
 
