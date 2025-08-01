@@ -14,6 +14,7 @@ import { LuCalendarPlus, LuUserSearch } from "react-icons/lu";
 import { BsShieldLock } from "react-icons/bs";
 import { FaUserShield, FaProjectDiagram } from 'react-icons/fa';
 import { RiCustomerService2Fill } from 'react-icons/ri';
+import { TbDatabaseSearch } from "react-icons/tb";
 
 // --- START: organization_superadmin categorization logic ---
 
@@ -25,6 +26,7 @@ const orgSuperAdminAllItems = [
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" },
   { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+  { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x" },
   { icon: GoGoal, label: "Goals", path: "/goals" },
   { icon: ImProfile, label: "My Profile", path: "/profile" },
   { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
@@ -108,6 +110,7 @@ const adminAllItems = [
     { icon: FiUsers, label: "Employees", path: "/employee", department: "Human Resource", },
     { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+  { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", department:"Human Resource" },
     { icon: GoGoal, label: "Goals", path: "/goals" },
     { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
     { icon: ImProfile, label: "My Profile", path: "/profile" },
@@ -142,7 +145,7 @@ const adminAllItems = [
 ];
 
 // 2. Define labels for each suite for the Admin role
-const adminHrSuiteLabels = ["Dashboard", "Employees", "Jobs", "Talent Pool", "Goals", "Reports", "My Profile", "Time Sheet", "Regularization", "Leave", "Attendance", "Calendar", "Settings"];
+const adminHrSuiteLabels = ["Dashboard", "Employees", "Jobs", "Talent Pool", "Zive-X", "Goals", "Reports", "My Profile", "Time Sheet", "Regularization", "Leave", "Attendance", "Calendar", "Settings"];
 const adminProjectSuiteLabels = ["Clients", "Projects"];
 const adminSalesSuiteLabels = ["Companies", "People", "Lists"];
 const adminFinanceSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll"];
@@ -213,11 +216,8 @@ export const menuItemsByRole = {
      const baseMenu = [
       { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
       { icon: ImProfile, label: "My Profile", path: "/profile" },
-      { icon: GrDocumentTime, label: "Time Sheet", path: "/employee/timesheet",
-        dropdown: [
-                { icon: MdMoreTime, label: "Regularization", path: "/employee/regularization",},
-        ],
-       },
+      { icon: GrDocumentTime, label: "Time Sheet", path: "/employee/timesheet"},
+      { icon: MdMoreTime, label: "Regularization", path: "/employee/regularization",},
       { icon: LuCalendarPlus, label: "Leave", path: "/employee/leave" },
       { icon: FaRegCalendarCheck, label: "Attendance", path: "/employee/attendance" },
       { icon: IoCalendarNumberOutline, label: "Calendar", path: "/employee/calendar" },
@@ -226,6 +226,7 @@ export const menuItemsByRole = {
       baseMenu.splice(1, 0,
       { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+  { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x" },
       { icon: GoGoal, label: "Goals", path: "/goalsview" },
       );
     }

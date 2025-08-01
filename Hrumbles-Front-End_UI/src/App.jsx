@@ -62,6 +62,10 @@ import CandidateProfilePage from "./pages/candidates/CandidateProfilePage";
 import MigratedTalentPoolPage from "./pages/candidates/MigratedTalentPoolPage";
 import MigratedCandidateProfilePage from "./pages/candidates/MigratedCandidateProfilePage";
 
+// Zive-X
+import ZiveXSearchPage from "./pages/candidates/ZiveXSearchPage";
+import ZiveXResultsPage from "./pages/candidates/ZiveXResultsPage";
+
 // Finance & Accounts
 import FinanceIndex from "./pages/finance/Index";
 import PayrollEdit from "./pages/finance/PayrollEdit";
@@ -228,7 +232,9 @@ function App() {
              <Route path="/migrated-talent-pool" element={<MigratedTalentPoolPage />} />
           <Route path="/migrated-talent-pool/:candidateId" element={<MigratedCandidateProfilePage />} />
 
-
+{/* Zive-X */}
+<Route path="/zive-x" element={<ZiveXSearchPage />} />
+<Route path="/zive-x-search/results" element={<ZiveXResultsPage />} />
 
                         {/* Reports */}
         <Route path="/reports" element={<ReportsPage />} />
