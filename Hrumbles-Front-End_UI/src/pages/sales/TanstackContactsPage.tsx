@@ -1,3 +1,5 @@
+// TanstackContactPage.tsx
+
 import React from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useToast } from "@/hooks/use-toast";
@@ -27,10 +29,10 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { DataTable } from '@/components/ui/data-table';
-import { columns as defaultColumns, ActionColumn } from '@/components/sales/contacts-table/columns';
+import { columns as defaultColumns, ActionColumn, getCustomCell } from '@/components/sales/contacts-table/columns';
 import { DataTableToolbar } from '@/components/sales/contacts-table/data-table-toolbar';
 import { AddColumnDialog } from '@/components/sales/contacts-table/AddColumnDialog';
-import { EditableCell, ReorderableHeader, getCustomCell } from '@/components/sales/contacts-table/columns';
+import { ReorderableHeader } from '@/components/sales/contacts-table/columns';
 import type { SimpleContact } from '@/types/simple-contact.types';
 import { AddContactForm } from '@/components/sales/contacts-table/AddContactForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -162,8 +164,19 @@ const TanstackContactsPage: React.FC = () => {
       accessorFn: row => (row.custom_data as any)?.[field.column_key],
       header: ReorderableHeader,
       cell: getCustomCell(field.data_type as any),
-      size: 120, minSize: 80, maxSize: 200,
+      size: 150, minSize: 100, maxSize: 250,
     }));
+    
+    // Position custom fields before the audit trail columns (created at/by, updated at/by)
+    const auditStartIndex = defaultColumns.findIndex(col => col.id === 'created_by_employee');
+
+    if (auditStartIndex !== -1) {
+        const preAuditColumns = defaultColumns.slice(0, auditStartIndex);
+        const auditColumns = defaultColumns.slice(auditStartIndex);
+        return [...preAuditColumns, ...dynamicColumns, ...auditColumns, ActionColumn];
+    }
+
+    // Fallback to original order if audit columns aren't found
     return [...defaultColumns, ...dynamicColumns, ActionColumn];
   }, [customFields]);
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link, useParams } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link as RouterLink, useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Company } from "@/types/company";
 import { useCompanies, useCompanyCounts } from "@/hooks/use-companies";
@@ -44,7 +44,8 @@ import CreatorPerformanceChart from "@/components/sales/chart/CreatorPerformance
 import { DateRangePickerField } from "@/components/sales/chart/dateRangePickerField"; 
 import CompanyStagePieChart from "@/components/sales/chart/CompanyStagePieChart";
 import { startOfMonth } from "date-fns";
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronRightIcon } from 'lucide-react';
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, Spinner } from "@chakra-ui/react";
 
 
 // ... (keep all your existing schemas and constants)
@@ -144,7 +145,7 @@ const getDisplayValue = (value: string | number | null | undefined, fallback: st
 };
 
 const CompaniesPage = () => {
-    const { fileId } = useParams<{ fileId?: string }>(); // Get fileId from URL
+    const { fileId } = useParams<{ fileId?: string }>();
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const user = useSelector((state: any) => state.auth.user);
@@ -181,6 +182,22 @@ const [chartDateRange, setChartDateRange] = useState<DateRange | undefined>({
     // ... (keep the rest of your functions and logic)
     // No major changes are needed in the functions themselves, as the filtering
     // is now handled by the `useCompanies` hook.
+
+     const { data: breadcrumbData, isLoading: isLoadingBreadcrumb } = useQuery({
+        queryKey: ['companyBreadcrumb', fileId],
+        queryFn: async () => {
+            if (!fileId) return null;
+            const { data, error } = await supabase
+                .from('workspace_files')
+                .select('name, workspaces(name)')
+                .eq('id', fileId)
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!fileId,
+    });
+
       useEffect(() => {
     const handleScroll = () => setShowBackToTop(window.scrollY > 300);
     window.addEventListener('scroll', handleScroll);
@@ -201,7 +218,7 @@ const [chartDateRange, setChartDateRange] = useState<DateRange | undefined>({
       const { error: updateError } = await supabase.from('companies').update({ stage, updated_by: currentUserId }).eq('id', companyId);
       if (updateError) throw updateError;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['companies'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['companies', fileId || 'all'] }),
     onError: (e: any) => toast({ title: "Update Failed", description: e.message, variant: "destructive" }),
   });
 
@@ -522,34 +539,48 @@ const chartFilteredData = useMemo(() => {
 
     return (
         <div className="container mx-auto px-4 py-6 max-w-full">
-            {/* The rest of your JSX remains the same, no changes needed here. */}
-            {/* The filtering is handled in the useCompanies hook. */}
-            {/* ... Your existing JSX for the page layout, headers, buttons, charts, table, etc. ... */}
-             <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-2">
-        <h1 className="text-2xl font-bold">Companies</h1>
-        <div className="flex gap-2 flex-wrap">
-          {/* --- ✅ BUTTON AND DIALOG UNCOMMENTED --- */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button className="h-9"><Plus className="h-4 w-4 mr-2" />Add Company<ChevronDown className="h-4 w-4 ml-2" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setIsAddDialogOpen(true)}><Sparkles className="mr-2 h-4 w-4" /><span>Fetch with AI</span></DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setIsManualAddDialogOpen(true)}><PenSquare className="mr-2 h-4 w-4" /><span>Enter Manually</span></DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {/* --- ✅ END OF CHANGE --- */}
+            {/* ✅ BREADCRUMB RENDER */}
+            {fileId && (
+                <Breadcrumb spacing="8px" separator={<ChevronRightIcon className="h-4 w-4" />} className="mb-4">
+                    <BreadcrumbItem>
+                        <BreadcrumbLink as={RouterLink} to="/lists">Lists</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    {isLoadingBreadcrumb ? <Spinner size="xs" /> : breadcrumbData && (
+                        <>
+                            <BreadcrumbItem>
+                                <BreadcrumbLink as={RouterLink} to="/lists">{breadcrumbData.workspaces?.name || 'Folder'}</BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbItem isCurrentPage>
+                                <BreadcrumbLink href="#">{breadcrumbData.name}</BreadcrumbLink>
+                            </BreadcrumbItem>
+                        </>
+                    )}
+                </Breadcrumb>
+            )}
 
-          
-   
-          <Button variant="outline" className="h-9" onClick={downloadCsvTemplate}>
-            <Download className="h-4 w-4 mr-2" />Template
-          </Button>
-          <Button variant="outline" className="h-9" onClick={() => fileInputRef.current?.click()} disabled={isImporting}>
-            {isImporting ? (<Loader2 className="h-4 w-4 mr-2 animate-spin" />) : (<Upload className="h-4 w-4 mr-2" />)}
-            {isImporting ? 'Importing...' : 'Import CSV'}
-          </Button>
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".csv, text/csv" style={{ display: 'none' }} />
-        </div>
-      </div>
+         <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-2">
+                {/* ✅ DYNAMIC PAGE TITLE */}
+                <h1 className="text-2xl font-bold">
+                    {fileId ? (breadcrumbData?.name || 'Loading List...') : 'All Companies'}
+                </h1>
+                <div className="flex gap-2 flex-wrap">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild><Button className="h-9"><Plus className="h-4 w-4 mr-2" />Add Company<ChevronDown className="h-4 w-4 ml-2" /></Button></DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => setIsAddDialogOpen(true)}><Sparkles className="mr-2 h-4 w-4" /><span>Fetch with AI</span></DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setIsManualAddDialogOpen(true)}><PenSquare className="mr-2 h-4 w-4" /><span>Enter Manually</span></DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button variant="outline" className="h-9" onClick={downloadCsvTemplate}>
+                    <Download className="h-4 w-4 mr-2" />Template
+                  </Button>
+                  <Button variant="outline" className="h-9" onClick={() => fileInputRef.current?.click()} disabled={isImporting}>
+                    {isImporting ? (<Loader2 className="h-4 w-4 mr-2 animate-spin" />) : (<Upload className="h-4 w-4 mr-2" />)}
+                    {isImporting ? 'Importing...' : 'Import CSV'}
+                  </Button>
+                  <input type="file" ref={fileInputRef} onChange={() => {}} accept=".csv, text/csv" style={{ display: 'none' }} />
+                </div>
+            </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <Card className="shadow-sm border-l-4 border-l-primary">
@@ -649,7 +680,7 @@ const chartFilteredData = useMemo(() => {
                 </Avatar>
                 <div className="ml-3">
                   <div className="text-[11px] font-medium text-gray-900 hover:text-primary">
-                    <Link to={`/companies/${company.id}`}>{company.name}</Link>
+                    <RouterLink to={`/companies/${company.id}`}>{company.name}</RouterLink>
                   </div>
                   <div className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
                     {company.website && (
@@ -797,33 +828,24 @@ const chartFilteredData = useMemo(() => {
       </div>
       {/* DIALOGS */}
       {/* ✅ FIX: ADDED THE DIALOG FOR THE INITIAL FETCH STEP */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Fetch Company Data</DialogTitle><DialogDescription>Enter a company name to fetch details using AI.</DialogDescription></DialogHeader>
-          <CompanyAddForm onAdd={handleCompanyDataFetched} onCancel={() => setIsAddDialogOpen(false)} />
-        </DialogContent>
-      </Dialog>
-      
       <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Review and Create Company</DialogTitle><DialogDescription>Review the AI-fetched data then save.</DialogDescription></DialogHeader>
-          {companyToReview && <CompanyEditForm company={companyToReview} onClose={() => setIsReviewDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}
-        </DialogContent>
-      </Dialog>
-      
-      <Dialog open={isManualAddDialogOpen} onOpenChange={setIsManualAddDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Add Company Manually</DialogTitle><DialogDescription>Fill out the form and click "Create Company" to save.</DialogDescription></DialogHeader>
-          <CompanyEditForm company={{}} onClose={() => setIsManualAddDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Edit Company</DialogTitle><DialogDescription>Update details for {editCompany?.name}.</DialogDescription></DialogHeader>
-          {editCompany && <CompanyEditForm company={editCompany} onClose={() => setIsEditDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}
-        </DialogContent>
-      </Dialog>
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader><DialogTitle>Review and Create Company</DialogTitle></DialogHeader>
+                    {companyToReview && <CompanyEditForm company={companyToReview} onClose={() => setIsReviewDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}
+                </DialogContent>
+            </Dialog>
+            <Dialog open={isManualAddDialogOpen} onOpenChange={setIsManualAddDialogOpen}>
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader><DialogTitle>Add Company Manually</DialogTitle></DialogHeader>
+                    <CompanyEditForm company={{}} onClose={() => setIsManualAddDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />
+                </DialogContent>
+            </Dialog>
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader><DialogTitle>Edit Company</DialogTitle></DialogHeader>
+                    {editCompany && <CompanyEditForm company={editCompany} onClose={() => setIsEditDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

@@ -27,6 +27,7 @@ const buttonVariants = cva(
         "purple-gradient text-white cursor-default hover:purple-gradient-viceversa hover:text-neutral-600",
         outline1:
           "bg-gray-600 text-primary-foreground hover:bg-transparent hover:text-gray-600",
+          datepicker:  "bg-purple-500 text-white hover:bg-purple-700 hover:text-white hover:shadow-md cursor-pointer transition duration-200",
       },
       size: {
         default: "h-10 px-4 py-2",

@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/select';
 import { DateRangePickerField } from './DateRangePickerField';
 import { format, isValid } from 'date-fns';
-import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, Calendar, ChevronLeft, ChevronRight, Sigma, ArrowUp, Activity, TrendingUp, CheckCircle, Tag, Building, User } from 'lucide-react';
+import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, Calendar, ChevronLeft, ChevronRight, Sigma, ArrowUp, Activity, TrendingUp, CheckCircle, Tag, User } from 'lucide-react';
 import {
   ResponsiveContainer,
   PieChart,
@@ -47,30 +47,26 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 // --- Type Definitions ---
-interface Candidate {
+interface Contact {
   id: string;
   name: string;
   created_at: string;
   updated_at: string;
-  main_status_id: string | null;
-  sub_status_id: string | null;
+  contact_stage: string | null;
   job_title: string | null;
-  recruiter_name: string | null;
-  client_name: string | null;
-  current_salary: number | null;
-  expected_salary: number | null;
-  location: string | null;
-  notice_period: string | null;
-  overall_score: number | null;
+  creator_name: string | null;
+  company_name: string | null;
+  email: string | null;
+  mobile: string | null;
 }
 
 interface StatusMap { [key: string]: string; }
-interface GroupedData { [statusName: string]: Candidate[]; }
+interface GroupedData { [statusName: string]: Contact[]; }
 interface TableRowData {
   type: 'header' | 'data';
   statusName?: string;
   count?: number;
-  candidate?: Candidate;
+  contact?: Contact;
 }
 
 // --- Chart Colors ---
@@ -81,7 +77,7 @@ const CustomTooltip = ({ active, payload }: any) => {
     return (
       <div className="p-2 text-sm bg-white/80 backdrop-blur-sm border border-gray-200 rounded-md shadow-lg">
         <p className="font-bold">{`${payload[0].name}`}</p>
-        <p className="text-gray-600">{`Candidates: ${payload[0].value}`}</p>
+        <p className="text-gray-600">{`Contacts: ${payload[0].value}`}</p>
       </div>
     );
   }
@@ -89,15 +85,6 @@ const CustomTooltip = ({ active, payload }: any) => {
 };
 
 // --- Helper Functions ---
-const formatCurrency = (value: number | null | undefined) => {
-  if (value == null) return 'N/A';
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 const formatValue = (value: string | number | null | undefined) => {
   return value != null ? String(value) : 'N/A';
 };
@@ -108,10 +95,9 @@ const formatDate = (date: string) => {
 };
 
 // --- Main Component ---
-const ConsolidatedStatusReport: React.FC = () => {
+const ContactsStatusReport: React.FC = () => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [statuses, setStatuses] = useState<StatusMap>({});
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isGrouped, setIsGrouped] = useState(false);
@@ -123,10 +109,8 @@ const ConsolidatedStatusReport: React.FC = () => {
   const [appliedDateRange, setAppliedDateRange] = useState(draftDateRange);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [clientFilter, setClientFilter] = useState('all');
-  const [recruiterFilter, setRecruiterFilter] = useState('all');
-  const [clientOptions, setClientOptions] = useState<string[]>([]);
-  const [recruiterOptions, setRecruiterOptions] = useState<string[]>([]);
+  const [creatorFilter, setCreatorFilter] = useState('all');
+  const [creatorOptions, setCreatorOptions] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
@@ -138,55 +122,36 @@ const ConsolidatedStatusReport: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        const [candidatesResponse, statusesResponse] = await Promise.all([
-          supabase
-            .from('hr_job_candidates')
-            .select(
-              `
-              id, name, created_at, updated_at, main_status_id, sub_status_id,
-              current_salary, expected_salary, location, notice_period, overall_score,
-              job:hr_jobs!hr_job_candidates_job_id_fkey(title, client_details),
-              recruiter:hr_employees!hr_job_candidates_created_by_fkey(first_name, last_name)
-            `
-            )
-            .eq('organization_id', organizationId)
-            .gte('created_at', appliedDateRange.startDate.toISOString())
-            .lte('created_at', appliedDateRange.endDate.toISOString())
-            .order('created_at', { ascending: false }),
-          supabase.from('job_statuses').select('id, name').eq('organization_id', organizationId),
-        ]);
+        const { data, error: dataError } = await supabase
+          .from('contacts')
+          .select(`
+            id, name, created_at, updated_at, contact_stage, job_title, email, mobile,
+            hr_employees!contacts_created_by_fkey(first_name, last_name),
+            companies(name)
+          `)
+          .eq('organization_id', organizationId)
+          .gte('created_at', appliedDateRange.startDate.toISOString())
+          .lte('created_at', appliedDateRange.endDate.toISOString())
+          .order('created_at', { ascending: false });
 
-        if (candidatesResponse.error) throw candidatesResponse.error;
-        if (statusesResponse.error) throw statusesResponse.error;
-        
-        const formattedCandidates: Candidate[] = candidatesResponse.data.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          created_at: c.created_at,
-          updated_at: c.updated_at,
-          main_status_id: c.main_status_id,
-          sub_status_id: c.sub_status_id,
-          job_title: c.job?.title || 'N/A',
-          recruiter_name: c.recruiter ? `${c.recruiter.first_name} ${c.recruiter.last_name}`.trim() : 'N/A',
-          client_name: c.job?.client_details?.clientName || 'N/A',
-          current_salary: c.current_salary,
-          expected_salary: c.expected_salary,
-          location: c.location,
-          notice_period: c.notice_period,
-          overall_score: c.overall_score,
+        if (dataError) throw dataError;
+
+        const formattedContacts: Contact[] = data.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+          contact_stage: item.contact_stage,
+          job_title: item.job_title || 'N/A',
+          creator_name: item.hr_employees ? `${item.hr_employees.first_name} ${item.hr_employees.last_name}`.trim() : 'N/A',
+          company_name: item.companies?.name || 'N/A',
+          email: item.email || 'N/A',
+          mobile: item.mobile || 'N/A',
         }));
-        setCandidates(formattedCandidates);
+        setContacts(formattedContacts);
 
-        const statusMap = statusesResponse.data.reduce((acc: StatusMap, status) => {
-          acc[status.id] = status.name;
-          return acc;
-        }, {});
-        setStatuses(statusMap);
-
-        const uniqueClients = [...new Set(formattedCandidates.map(c => c.client_name).filter(c => c && c !== 'N/A'))].sort();
-        const uniqueRecruiters = [...new Set(formattedCandidates.map(c => c.recruiter_name).filter(r => r && r !== 'N/A'))].sort();
-        setClientOptions(uniqueClients);
-        setRecruiterOptions(uniqueRecruiters);
+        const uniqueCreators = [...new Set(formattedContacts.map(c => c.creator_name).filter(r => r && r !== 'N/A'))].sort();
+        setCreatorOptions(uniqueCreators);
 
       } catch (err: any) {
         setError(err.message || 'An unknown error occurred.');
@@ -198,14 +163,12 @@ const ConsolidatedStatusReport: React.FC = () => {
   }, [organizationId, appliedDateRange]);
 
   // --- Memoized Data Transformations ---
-  const filteredCandidates = useMemo(() => {
-    return candidates
+  const filteredContacts = useMemo(() => {
+    return contacts
       .filter(c => {
-        const statusName = statuses[c.sub_status_id || ''] || 'Uncategorized';
-        const statusMatch = statusFilter === 'all' || statusName === statusFilter;
-        const clientMatch = clientFilter === 'all' || c.client_name === clientFilter;
-        const recruiterMatch = recruiterFilter === 'all' || c.recruiter_name === recruiterFilter;
-        return statusMatch && clientMatch && recruiterMatch;
+        const statusMatch = statusFilter === 'all' || c.contact_stage === statusFilter;
+        const creatorMatch = creatorFilter === 'all' || c.creator_name === creatorFilter;
+        return statusMatch && creatorMatch;
       })
       .filter(c => {
         if (!searchTerm) return true;
@@ -213,58 +176,59 @@ const ConsolidatedStatusReport: React.FC = () => {
         return (
           c.name?.toLowerCase().includes(search) ||
           c.job_title?.toLowerCase().includes(search) ||
-          c.client_name?.toLowerCase().includes(search) ||
-          c.recruiter_name?.toLowerCase().includes(search) ||
-          c.location?.toLowerCase().includes(search)
+          c.company_name?.toLowerCase().includes(search) ||
+          c.creator_name?.toLowerCase().includes(search) ||
+          c.email?.toLowerCase().includes(search) ||
+          c.mobile?.toLowerCase().includes(search)
         );
       });
-  }, [candidates, searchTerm, statuses, statusFilter, clientFilter, recruiterFilter]);
+  }, [contacts, searchTerm, statusFilter, creatorFilter]);
 
-  const groupedBySubStatus = useMemo<GroupedData>(() => {
-    return filteredCandidates.reduce((acc: GroupedData, candidate) => {
-      const statusName = statuses[candidate.sub_status_id || ''] || 'Uncategorized';
+  const groupedByStatus = useMemo<GroupedData>(() => {
+    return filteredContacts.reduce((acc: GroupedData, contact) => {
+      const statusName = contact.contact_stage || 'Uncategorized';
       if (!acc[statusName]) acc[statusName] = [];
-      acc[statusName].push(candidate);
+      acc[statusName].push(contact);
       return acc;
     }, {});
-  }, [filteredCandidates, statuses]);
+  }, [filteredContacts]);
 
   const chartData = useMemo(() => {
-    return Object.entries(groupedBySubStatus)
+    return Object.entries(groupedByStatus)
       .map(([name, group]) => ({ name, value: group.length }))
       .sort((a, b) => b.value - a.value);
-  }, [groupedBySubStatus]);
+  }, [groupedByStatus]);
 
   const tableRows = useMemo<TableRowData[]>(() => {
     if (!isGrouped) {
-      return filteredCandidates.map(c => ({
+      return filteredContacts.map(c => ({
         type: 'data',
-        candidate: c,
-        statusName: statuses[c.sub_status_id || ''] || 'Uncategorized',
+        contact: c,
+        statusName: c.contact_stage || 'Uncategorized',
       }));
     }
-    return Object.entries(groupedBySubStatus)
+    return Object.entries(groupedByStatus)
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .flatMap(([statusName, candidatesInGroup]) => [
+      .flatMap(([statusName, contactsInGroup]) => [
         {
           type: 'header',
           statusName,
-          count: candidatesInGroup.length,
+          count: contactsInGroup.length,
         },
         ...expandedGroups.includes(statusName)
-          ? candidatesInGroup.map(c => ({
+          ? contactsInGroup.map(c => ({
               type: 'data',
-              candidate: c,
+              contact: c,
               statusName,
             }))
           : [],
       ]);
-  }, [isGrouped, filteredCandidates, groupedBySubStatus, expandedGroups, statuses]);
+  }, [isGrouped, filteredContacts, groupedByStatus, expandedGroups]);
 
   // --- Summary Metrics ---
-  const totalCandidates = filteredCandidates.length;
+  const totalContacts = filteredContacts.length;
   const peakStatus = chartData.reduce((max, item) => item.value > max.value ? item : max, { name: 'N/A', value: 0 });
-  const averageCandidates = chartData.length > 0 ? (totalCandidates / chartData.length).toFixed(1) : '0.0';
+  const averageContacts = chartData.length > 0 ? (totalContacts / chartData.length).toFixed(1) : '0.0';
   const topStatus = chartData[0] || { name: 'N/A', value: 0 };
 
   // --- Pagination Logic ---
@@ -274,52 +238,46 @@ const ConsolidatedStatusReport: React.FC = () => {
 
   // --- Export Functions ---
   const exportToCSV = () => {
-    const dataForExport = filteredCandidates.map(c => ({
-      'Candidate Name': c.name,
-      'Status': statuses[c.sub_status_id || ''] || 'Uncategorized',
-      'AI Score': formatValue(c.overall_score),
+    const dataForExport = filteredContacts.map(c => ({
+      'Contact Name': c.name,
+      'Status': c.contact_stage || 'Uncategorized',
       'Job Title': formatValue(c.job_title),
-      'Client': formatValue(c.client_name),
-      'Recruiter': formatValue(c.recruiter_name),
-      'Applied': formatDate(c.created_at),
-      'CCTC (INR)': formatCurrency(c.current_salary),
-      'ECTC (INR)': formatCurrency(c.expected_salary),
-      'Notice Period': formatValue(c.notice_period),
-      'Location': formatValue(c.location),
+      'Company': formatValue(c.company_name),
+      'Creator': formatValue(c.creator_name),
+      'Created At': formatDate(c.created_at),
+      'Email': formatValue(c.email),
+      'Mobile': formatValue(c.mobile),
     }));
     const csv = Papa.unparse(dataForExport, { header: true });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `consolidated_status_report_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `contacts_status_report_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
   };
 
   const exportToPDF = () => {
     const doc = new jsPDF({ orientation: 'landscape' });
-    doc.text('Consolidated Status Report', 14, 20);
-    const tableData = filteredCandidates.map(c => [
+    doc.text('Contacts Status Report', 14, 20);
+    const tableData = filteredContacts.map(c => [
       c.name,
-      statuses[c.sub_status_id || ''] || 'Uncategorized',
-      formatValue(c.overall_score),
+      c.contact_stage || 'Uncategorized',
       formatValue(c.job_title),
-      formatValue(c.client_name),
-      formatValue(c.recruiter_name),
+      formatValue(c.company_name),
+      formatValue(c.creator_name),
       formatDate(c.created_at),
-      formatCurrency(c.current_salary),
-      formatCurrency(c.expected_salary),
-      formatValue(c.notice_period),
-      formatValue(c.location),
+      formatValue(c.email),
+      formatValue(c.mobile),
     ]);
     (doc as any).autoTable({
-      head: [['Candidate Name', 'Status', 'AI Score', 'Job Title', 'Client', 'Recruiter', 'Applied', 'CCTC (INR)', 'ECTC (INR)', 'Notice Period', 'Location']],
+      head: [['Contact Name', 'Status', 'Job Title', 'Company', 'Creator', 'Created At', 'Email', 'Mobile']],
       body: tableData,
       startY: 30,
       theme: 'grid',
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: [123, 67, 241] },
     });
-    doc.save(`consolidated_status_report_${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`contacts_status_report_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   // --- Toggle Group Expansion ---
@@ -342,7 +300,7 @@ const ConsolidatedStatusReport: React.FC = () => {
     setCurrentPage(1);
   };
 
-  if (isLoading && candidates.length === 0 && !error) {
+  if (isLoading && contacts.length === 0 && !error) {
     return (
       <div className="flex h-screen items-center justify-center">
         <LoadingSpinner size={60} className="border-[6px] animate-spin text-indigo-600" />
@@ -365,8 +323,8 @@ const ConsolidatedStatusReport: React.FC = () => {
       <main className="w-full max-w-8xl mx-auto space-y-8">
         {/* Title Section */}
         <div>
-          <h1 className="text-xl md:text-2xl font-semibold text-gray-800">Consolidated Candidate Status Report</h1>
-          <p className="text-sm text-gray-500 mt-2">Analyze candidate distribution by status within the selected period.</p>
+          <h1 className="text-xl md:text-2xl font-semibold text-gray-800">Contacts Status Report</h1>
+          <p className="text-sm text-gray-500 mt-2">Analyze contact distribution by status within the selected period.</p>
         </div>
 
         {/* Summary Cards */}
@@ -374,8 +332,8 @@ const ConsolidatedStatusReport: React.FC = () => {
           <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
             <CardContent className="p-6 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Total Candidates</p>
-                <h3 className="text-2xl font-bold text-gray-800">{totalCandidates}</h3>
+                <p className="text-sm font-medium text-gray-500 mb-2">Total Contacts</p>
+                <h3 className="text-2xl font-bold text-gray-800">{totalContacts}</h3>
                 <p className="text-xs text-gray-500 mt-1">in selected period</p>
               </div>
               <div className="bg-gradient-to-br from-purple-400 to-purple-600 p-3 rounded-full">
@@ -388,7 +346,7 @@ const ConsolidatedStatusReport: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-2">Peak Status</p>
                 <h3 className="text-2xl font-bold text-gray-800 truncate" title={peakStatus.name}>{peakStatus.name}</h3>
-                <p className="text-xs text-gray-500.mount mt-1">{peakStatus.value} candidates</p>
+                <p className="text-xs text-gray-500 mt-1">{peakStatus.value} contacts</p>
               </div>
               <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full">
                 <ArrowUp size={24} className="text-white" />
@@ -398,8 +356,8 @@ const ConsolidatedStatusReport: React.FC = () => {
           <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
             <CardContent className="p-6 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Average Candidates</p>
-                <h3 className="text-2xl font-bold text-gray-800">{averageCandidates}</h3>
+                <p className="text-sm font-medium text-gray-500 mb-2">Average Contacts</p>
+                <h3 className="text-2xl font-bold text-gray-800">{averageContacts}</h3>
                 <p className="text-xs text-gray-500 mt-1">per status</p>
               </div>
               <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-full">
@@ -412,7 +370,7 @@ const ConsolidatedStatusReport: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-2">Top Status</p>
                 <h3 className="text-2xl font-bold text-gray-800 truncate" title={topStatus.name}>{topStatus.name}</h3>
-                <p className="text-xs text-gray-500 mt-1">{topStatus.value} candidates</p>
+                <p className="text-xs text-gray-500 mt-1">{topStatus.value} contacts</p>
               </div>
               <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full">
                 <TrendingUp size={24} className="text-white" />
@@ -458,7 +416,7 @@ const ConsolidatedStatusReport: React.FC = () => {
                           boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
                         }}
                         itemStyle={{ color: '#4b5563' }}
-                        formatter={(value: number) => `${value} candidates`}
+                        formatter={(value: number) => `${value} contacts`}
                       />
                     </PieChart>
                   </ResponsiveContainer>
@@ -476,7 +434,7 @@ const ConsolidatedStatusReport: React.FC = () => {
 
           <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
             <CardHeader className="bg-purple-500 text-white p-3">
-              <CardTitle className="text-base">Candidates per Status</CardTitle>
+              <CardTitle className="text-base">Contacts per Status</CardTitle>
             </CardHeader>
             <CardContent className="p-6">
               <div className="max-h-[300px] overflow-y-auto">
@@ -499,9 +457,9 @@ const ConsolidatedStatusReport: React.FC = () => {
                           boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
                         }}
                         itemStyle={{ color: '#4b5563' }}
-                        formatter={(value: number) => [`${value} candidates`, 'Candidates']}
+                        formatter={(value: number) => [`${value} contacts`, 'Contacts']}
                       />
-                      <Bar dataKey="value" name="Candidates" fill="#7B43F1" radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="value" name="Contacts" fill="#7B43F1" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -538,35 +496,21 @@ const ConsolidatedStatusReport: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  {Object.values(statuses).sort().map(s => (
+                  {[...new Set(contacts.map(c => c.contact_stage).filter(s => s))].sort().map(s => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={clientFilter} onValueChange={onFilterChange(setClientFilter)}>
-                <SelectTrigger>
-                  <div className="flex items-center gap-2">
-                    <Building size={16} className="text-gray-500" />
-                    <SelectValue placeholder="Filter by Client" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Clients</SelectItem>
-                  {clientOptions.map(c => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={recruiterFilter} onValueChange={onFilterChange(setRecruiterFilter)}>
+              <Select value={creatorFilter} onValueChange={onFilterChange(setCreatorFilter)}>
                 <SelectTrigger>
                   <div className="flex items-center gap-2">
                     <User size={16} className="text-gray-500" />
-                    <SelectValue placeholder="Filter by Recruiter" />
+                    <SelectValue placeholder="Filter by Creator" />
                   </div>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Recruiters</SelectItem>
-                  {recruiterOptions.map(r => (
+                  <SelectItem value="all">All Creators</SelectItem>
+                  {creatorOptions.map(r => (
                     <SelectItem key={r} value={r}>{r}</SelectItem>
                   ))}
                 </SelectContent>
@@ -583,7 +527,7 @@ const ConsolidatedStatusReport: React.FC = () => {
               <div className="relative flex-grow w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <Input
-                  placeholder="Search name, job, client..."
+                  placeholder="Search name, job, company..."
                   className="pl-10 h-10"
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
@@ -611,18 +555,15 @@ const ConsolidatedStatusReport: React.FC = () => {
                   <TableHeader>
                     <TableRow className="bg-gray-50">
                       <TableHead className="sticky left-0 bg-gray-50 z-10 text-left font-medium text-gray-500 px-4 py-2 w-[200px]">
-                        Candidate
+                        Contact Name
                       </TableHead>
                       <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Status</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">AI Score</TableHead>
                       <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Job Title</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Client</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Recruiter</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Applied</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">CCTC</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">ECTC</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Notice</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Location</TableHead>
+                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Company</TableHead>
+                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Creator</TableHead>
+                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Created At</TableHead>
+                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Email</TableHead>
+                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Mobile</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -631,7 +572,7 @@ const ConsolidatedStatusReport: React.FC = () => {
                         if (row.type === 'header') {
                           return (
                             <TableRow key={row.statusName} className="bg-gray-50 hover:bg-gray-100 transition">
-                              <TableCell colSpan={11} className="sticky left-0 bg-gray-50 z-10 font-bold text-gray-800 px-4 py-2">
+                              <TableCell colSpan={8} className="sticky left-0 bg-gray-50 z-10 font-bold text-gray-800 px-4 py-2">
                                 <div className="flex items-center gap-2">
                                   <Button
                                     variant="ghost"
@@ -651,32 +592,25 @@ const ConsolidatedStatusReport: React.FC = () => {
                             </TableRow>
                           );
                         }
-                        const { candidate, statusName } = row;
+                        const { contact, statusName } = row;
                         return (
-                          <TableRow key={candidate!.id} className="hover:bg-gray-50 transition">
+                          <TableRow key={contact!.id} className="hover:bg-gray-50 transition">
                             <TableCell className="sticky left-0 bg-white z-10 font-medium text-gray-800 px-4 py-2">
-                              {candidate!.name}
+                              {contact!.name}
                             </TableCell>
                             <TableCell className="text-gray-600 px-4 py-2">{statusName}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">
-                              <Badge variant={candidate!.overall_score && candidate!.overall_score > 75 ? "default" : "secondary"}>
-                                {formatValue(candidate!.overall_score)}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.job_title)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.client_name)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.recruiter_name)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatDate(candidate!.created_at)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatCurrency(candidate!.current_salary)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatCurrency(candidate!.expected_salary)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.notice_period)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.location)}</TableCell>
+                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(contact!.job_title)}</TableCell>
+                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(contact!.company_name)}</TableCell>
+                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(contact!.creator_name)}</TableCell>
+                            <TableCell className="text-gray-600 px-4 py-2">{formatDate(contact!.created_at)}</TableCell>
+                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(contact!.email)}</TableCell>
+                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(contact!.mobile)}</TableCell>
                           </TableRow>
                         );
                       })
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={11} className="h-24 text-center text-gray-500">
+                        <TableCell colSpan={8} className="h-24 text-center text-gray-500">
                           No data found matching your criteria.
                         </TableCell>
                       </TableRow>
@@ -732,4 +666,4 @@ const ConsolidatedStatusReport: React.FC = () => {
   );
 };
 
-export default ConsolidatedStatusReport;
+export default ContactsStatusReport;

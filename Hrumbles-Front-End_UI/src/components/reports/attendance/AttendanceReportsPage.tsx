@@ -1,4 +1,3 @@
-// src/components/reports/attendance/AttendanceReportsPage.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -14,9 +13,13 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { Download } from 'lucide-react';
 import DailyAttendanceReport from './DailyAttendanceReport';
 import MonthlyAttendanceReport from './MonthlyAttendanceReport';
 import MonthlyInOutReport from './MonthlyInOutReport';
+import Papa from 'papaparse';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 export interface TimeLog {
   id: string;
@@ -51,10 +54,16 @@ const AttendanceReportsPage: React.FC = () => {
     const fetchEmployees = async () => {
       if (!organizationId) return;
       try {
-        const { data, error } = await supabase.from('hr_employees').select('id, first_name, last_name').eq('organization_id', organizationId).order('first_name');
+        const { data, error } = await supabase
+          .from('hr_employees')
+          .select('id, first_name, last_name')
+          .eq('organization_id', organizationId)
+          .order('first_name');
         if (error) throw error;
         setEmployees(data.map(e => ({ id: e.id, name: `${e.first_name} ${e.last_name}` })));
-      } catch (err: any) { setError('Failed to fetch employee list.'); }
+      } catch (err: any) {
+        setError('Failed to fetch employee list.');
+      }
     };
     fetchEmployees();
   }, [organizationId]);
@@ -62,7 +71,7 @@ const AttendanceReportsPage: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       if (!organizationId) return;
-      
+
       let startDate, endDate;
       if (activeTab === 'daily') {
         startDate = endDate = selectedDate;
@@ -87,7 +96,7 @@ const AttendanceReportsPage: React.FC = () => {
           .order('date', { ascending: false });
 
         if (error) throw error;
-        
+
         const formattedData: TimeLog[] = data.map((log: any) => ({
           id: log.id,
           date: log.date,
@@ -119,13 +128,51 @@ const AttendanceReportsPage: React.FC = () => {
     return { value: `${d.getFullYear()}-${String(i + 1).padStart(2, '0')}`, label: format(d, 'MMMM yyyy') };
   });
 
+  const exportToCSV = () => {
+    const csvData = filteredLogs.map(log => ({
+      Date: format(new Date(log.date), 'yyyy-MM-dd'),
+      Employee: log.employee_name,
+      'Clock In': log.clock_in_time || 'N/A',
+      'Clock Out': log.clock_out_time || 'N/A',
+      'Duration (minutes)': log.duration_minutes || 'N/A',
+      'Billable': log.is_billable ? 'Yes' : 'No',
+    }));
+    const csv = Papa.unparse(csvData, { header: true });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `attendance_report_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.click();
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    doc.text('Attendance Report', 14, 20);
+    (doc as any).autoTable({
+      head: [['Date', 'Employee', 'Clock In', 'Clock Out', 'Duration (minutes)', 'Billable']],
+      body: filteredLogs.map(log => [
+        format(new Date(log.date), 'yyyy-MM-dd'),
+        log.employee_name,
+        log.clock_in_time || 'N/A',
+        log.clock_out_time || 'N/A',
+        log.duration_minutes?.toString() || 'N/A',
+        log.is_billable ? 'Yes' : 'No',
+      ]),
+      startY: 30,
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [123, 67, 241] },
+    });
+    doc.save(`attendance_report_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  };
+
   return (
-    <Card>
+    <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl animate-scale-in">
       <CardHeader>
         <CardTitle>Attendance & In-Out Reports</CardTitle>
         <CardDescription>Analyze daily and monthly attendance records for your team.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <TabsList>
@@ -155,19 +202,45 @@ const AttendanceReportsPage: React.FC = () => {
                 </PopoverContent>
               </Popover>
               {activeTab === 'daily' ? (
-                <input type="date" value={format(selectedDate, 'yyyy-MM-dd')} onChange={e => setSelectedDate(new Date(e.target.value))} className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"/>
+                <input
+                  type="date"
+                  value={format(selectedDate, 'yyyy-MM-dd')}
+                  onChange={(e) => setSelectedDate(new Date(e.target.value))}
+                  className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
               ) : (
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                  <SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Month" /></SelectTrigger>
-                  <SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {monthOptions.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               )}
+              <div className="flex gap-2 flex-shrink-0">
+                <Button variant="outline" size="sm" onClick={exportToCSV}>
+                  <Download className="w-4 h-4 mr-2" /> Export CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportToPDF}>
+                  <Download className="w-4 h-4 mr-2" /> Export PDF
+                </Button>
+              </div>
             </div>
           </div>
           {isLoading ? (
-            <div className="flex justify-center items-center h-64"><LoadingSpinner /></div>
+            <div className="flex justify-center items-center h-64 animate-fade-in">
+              <LoadingSpinner size={60} className="border-[6px] animate-spin text-indigo-600" />
+            </div>
           ) : error ? (
-            <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>
+            <Alert variant="destructive" className="animate-fade-in">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           ) : (
             <>
               <TabsContent value="daily" className="mt-4">

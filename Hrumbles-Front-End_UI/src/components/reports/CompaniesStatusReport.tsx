@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/select';
 import { DateRangePickerField } from './DateRangePickerField';
 import { format, isValid } from 'date-fns';
-import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, Calendar, ChevronLeft, ChevronRight, Sigma, ArrowUp, Activity, TrendingUp, CheckCircle, Tag, Building, User } from 'lucide-react';
+import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, Calendar, ChevronLeft, ChevronRight, Sigma, ArrowUp, Activity, TrendingUp, CheckCircle, Tag, User } from 'lucide-react';
 import {
   ResponsiveContainer,
   PieChart,
@@ -47,30 +47,25 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 // --- Type Definitions ---
-interface Candidate {
+interface Company {
   id: string;
   name: string;
   created_at: string;
   updated_at: string;
-  main_status_id: string | null;
-  sub_status_id: string | null;
-  job_title: string | null;
-  recruiter_name: string | null;
-  client_name: string | null;
-  current_salary: number | null;
-  expected_salary: number | null;
-  location: string | null;
-  notice_period: string | null;
-  overall_score: number | null;
+  status: string | null;
+  industry: string | null;
+  employee_count: number | null;
+  revenue: string | null;
+  creator_name: string | null;
 }
 
 interface StatusMap { [key: string]: string; }
-interface GroupedData { [statusName: string]: Candidate[]; }
+interface GroupedData { [statusName: string]: Company[]; }
 interface TableRowData {
   type: 'header' | 'data';
   statusName?: string;
   count?: number;
-  candidate?: Candidate;
+  company?: Company;
 }
 
 // --- Chart Colors ---
@@ -81,7 +76,7 @@ const CustomTooltip = ({ active, payload }: any) => {
     return (
       <div className="p-2 text-sm bg-white/80 backdrop-blur-sm border border-gray-200 rounded-md shadow-lg">
         <p className="font-bold">{`${payload[0].name}`}</p>
-        <p className="text-gray-600">{`Candidates: ${payload[0].value}`}</p>
+        <p className="text-gray-600">{`Companies: ${payload[0].value}`}</p>
       </div>
     );
   }
@@ -89,17 +84,17 @@ const CustomTooltip = ({ active, payload }: any) => {
 };
 
 // --- Helper Functions ---
-const formatCurrency = (value: number | null | undefined) => {
-  if (value == null) return 'N/A';
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 const formatValue = (value: string | number | null | undefined) => {
   return value != null ? String(value) : 'N/A';
+};
+
+const formatCurrency = (value: string | number | null | undefined) => {
+  if (value == null) return 'N/A';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(Number(value));
 };
 
 const formatDate = (date: string) => {
@@ -108,10 +103,9 @@ const formatDate = (date: string) => {
 };
 
 // --- Main Component ---
-const ConsolidatedStatusReport: React.FC = () => {
+const CompaniesStatusReport: React.FC = () => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [statuses, setStatuses] = useState<StatusMap>({});
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isGrouped, setIsGrouped] = useState(false);
@@ -123,10 +117,8 @@ const ConsolidatedStatusReport: React.FC = () => {
   const [appliedDateRange, setAppliedDateRange] = useState(draftDateRange);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [clientFilter, setClientFilter] = useState('all');
-  const [recruiterFilter, setRecruiterFilter] = useState('all');
-  const [clientOptions, setClientOptions] = useState<string[]>([]);
-  const [recruiterOptions, setRecruiterOptions] = useState<string[]>([]);
+  const [creatorFilter, setCreatorFilter] = useState('all');
+  const [creatorOptions, setCreatorOptions] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
@@ -138,55 +130,34 @@ const ConsolidatedStatusReport: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        const [candidatesResponse, statusesResponse] = await Promise.all([
-          supabase
-            .from('hr_job_candidates')
-            .select(
-              `
-              id, name, created_at, updated_at, main_status_id, sub_status_id,
-              current_salary, expected_salary, location, notice_period, overall_score,
-              job:hr_jobs!hr_job_candidates_job_id_fkey(title, client_details),
-              recruiter:hr_employees!hr_job_candidates_created_by_fkey(first_name, last_name)
-            `
-            )
-            .eq('organization_id', organizationId)
-            .gte('created_at', appliedDateRange.startDate.toISOString())
-            .lte('created_at', appliedDateRange.endDate.toISOString())
-            .order('created_at', { ascending: false }),
-          supabase.from('job_statuses').select('id, name').eq('organization_id', organizationId),
-        ]);
+        const { data, error: dataError } = await supabase
+          .from('companies')
+          .select(`
+            id, name, created_at, updated_at, status, industry, employee_count, revenue,
+            hr_employees!companies_created_by_fkey(first_name, last_name)
+          `)
+          .eq('organization_id', organizationId)
+          .gte('created_at', appliedDateRange.startDate.toISOString())
+          .lte('created_at', appliedDateRange.endDate.toISOString())
+          .order('created_at', { ascending: false });
 
-        if (candidatesResponse.error) throw candidatesResponse.error;
-        if (statusesResponse.error) throw statusesResponse.error;
-        
-        const formattedCandidates: Candidate[] = candidatesResponse.data.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          created_at: c.created_at,
-          updated_at: c.updated_at,
-          main_status_id: c.main_status_id,
-          sub_status_id: c.sub_status_id,
-          job_title: c.job?.title || 'N/A',
-          recruiter_name: c.recruiter ? `${c.recruiter.first_name} ${c.recruiter.last_name}`.trim() : 'N/A',
-          client_name: c.job?.client_details?.clientName || 'N/A',
-          current_salary: c.current_salary,
-          expected_salary: c.expected_salary,
-          location: c.location,
-          notice_period: c.notice_period,
-          overall_score: c.overall_score,
+        if (dataError) throw dataError;
+
+        const formattedCompanies: Company[] = data.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+          status: item.status || 'N/A',
+          industry: item.industry || 'N/A',
+          employee_count: item.employee_count,
+          revenue: item.revenue,
+          creator_name: item.hr_employees ? `${item.hr_employees.first_name} ${item.hr_employees.last_name}`.trim() : 'N/A',
         }));
-        setCandidates(formattedCandidates);
+        setCompanies(formattedCompanies);
 
-        const statusMap = statusesResponse.data.reduce((acc: StatusMap, status) => {
-          acc[status.id] = status.name;
-          return acc;
-        }, {});
-        setStatuses(statusMap);
-
-        const uniqueClients = [...new Set(formattedCandidates.map(c => c.client_name).filter(c => c && c !== 'N/A'))].sort();
-        const uniqueRecruiters = [...new Set(formattedCandidates.map(c => c.recruiter_name).filter(r => r && r !== 'N/A'))].sort();
-        setClientOptions(uniqueClients);
-        setRecruiterOptions(uniqueRecruiters);
+        const uniqueCreators = [...new Set(formattedCompanies.map(c => c.creator_name).filter(r => r && r !== 'N/A'))].sort();
+        setCreatorOptions(uniqueCreators);
 
       } catch (err: any) {
         setError(err.message || 'An unknown error occurred.');
@@ -198,73 +169,69 @@ const ConsolidatedStatusReport: React.FC = () => {
   }, [organizationId, appliedDateRange]);
 
   // --- Memoized Data Transformations ---
-  const filteredCandidates = useMemo(() => {
-    return candidates
+  const filteredCompanies = useMemo(() => {
+    return companies
       .filter(c => {
-        const statusName = statuses[c.sub_status_id || ''] || 'Uncategorized';
-        const statusMatch = statusFilter === 'all' || statusName === statusFilter;
-        const clientMatch = clientFilter === 'all' || c.client_name === clientFilter;
-        const recruiterMatch = recruiterFilter === 'all' || c.recruiter_name === recruiterFilter;
-        return statusMatch && clientMatch && recruiterMatch;
+        const statusMatch = statusFilter === 'all' || c.status === statusFilter;
+        const creatorMatch = creatorFilter === 'all' || c.creator_name === creatorFilter;
+        return statusMatch && creatorMatch;
       })
       .filter(c => {
         if (!searchTerm) return true;
         const search = searchTerm.toLowerCase();
         return (
           c.name?.toLowerCase().includes(search) ||
-          c.job_title?.toLowerCase().includes(search) ||
-          c.client_name?.toLowerCase().includes(search) ||
-          c.recruiter_name?.toLowerCase().includes(search) ||
-          c.location?.toLowerCase().includes(search)
+          c.industry?.toLowerCase().includes(search) ||
+          c.creator_name?.toLowerCase().includes(search)
         );
       });
-  }, [candidates, searchTerm, statuses, statusFilter, clientFilter, recruiterFilter]);
+  }, [companies, searchTerm, statusFilter, creatorFilter]);
 
-  const groupedBySubStatus = useMemo<GroupedData>(() => {
-    return filteredCandidates.reduce((acc: GroupedData, candidate) => {
-      const statusName = statuses[candidate.sub_status_id || ''] || 'Uncategorized';
+  const groupedByStatus = useMemo<GroupedData>(() => {
+    return filteredCompanies.reduce((acc: GroupedData, company) => {
+      const statusName = company.status || 'Uncategorized';
       if (!acc[statusName]) acc[statusName] = [];
-      acc[statusName].push(candidate);
+      acc[statusName].push(company);
       return acc;
     }, {});
-  }, [filteredCandidates, statuses]);
+  }, [filteredCompanies]);
 
   const chartData = useMemo(() => {
-    return Object.entries(groupedBySubStatus)
+    return Object.entries(groupedByStatus)
       .map(([name, group]) => ({ name, value: group.length }))
       .sort((a, b) => b.value - a.value);
-  }, [groupedBySubStatus]);
+  }, [groupedByStatus]);
 
   const tableRows = useMemo<TableRowData[]>(() => {
     if (!isGrouped) {
-      return filteredCandidates.map(c => ({
+      return filteredCompanies.map(c => ({
         type: 'data',
-        candidate: c,
-        statusName: statuses[c.sub_status_id || ''] || 'Uncategorized',
+        company: c,
+        statusName: c.status || 'Uncategorized',
       }));
     }
-    return Object.entries(groupedBySubStatus)
+    return Object.entries(groupedByStatus)
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .flatMap(([statusName, candidatesInGroup]) => [
+      .flatMap(([statusName, companiesInGroup]) => [
         {
           type: 'header',
           statusName,
-          count: candidatesInGroup.length,
+          count: companiesInGroup.length,
         },
         ...expandedGroups.includes(statusName)
-          ? candidatesInGroup.map(c => ({
+          ? companiesInGroup.map(c => ({
               type: 'data',
-              candidate: c,
+              company: c,
               statusName,
             }))
           : [],
       ]);
-  }, [isGrouped, filteredCandidates, groupedBySubStatus, expandedGroups, statuses]);
+  }, [isGrouped, filteredCompanies, groupedByStatus, expandedGroups]);
 
   // --- Summary Metrics ---
-  const totalCandidates = filteredCandidates.length;
+  const totalCompanies = filteredCompanies.length;
   const peakStatus = chartData.reduce((max, item) => item.value > max.value ? item : max, { name: 'N/A', value: 0 });
-  const averageCandidates = chartData.length > 0 ? (totalCandidates / chartData.length).toFixed(1) : '0.0';
+  const averageCompanies = chartData.length > 0 ? (totalCompanies / chartData.length).toFixed(1) : '0.0';
   const topStatus = chartData[0] || { name: 'N/A', value: 0 };
 
   // --- Pagination Logic ---
@@ -274,52 +241,44 @@ const ConsolidatedStatusReport: React.FC = () => {
 
   // --- Export Functions ---
   const exportToCSV = () => {
-    const dataForExport = filteredCandidates.map(c => ({
-      'Candidate Name': c.name,
-      'Status': statuses[c.sub_status_id || ''] || 'Uncategorized',
-      'AI Score': formatValue(c.overall_score),
-      'Job Title': formatValue(c.job_title),
-      'Client': formatValue(c.client_name),
-      'Recruiter': formatValue(c.recruiter_name),
-      'Applied': formatDate(c.created_at),
-      'CCTC (INR)': formatCurrency(c.current_salary),
-      'ECTC (INR)': formatCurrency(c.expected_salary),
-      'Notice Period': formatValue(c.notice_period),
-      'Location': formatValue(c.location),
+    const dataForExport = filteredCompanies.map(c => ({
+      'Company Name': c.name,
+      'Status': c.status || 'Uncategorized',
+      'Industry': formatValue(c.industry),
+      'Employee Count': formatValue(c.employee_count),
+      'Revenue': formatCurrency(c.revenue),
+      'Creator': formatValue(c.creator_name),
+      'Created At': formatDate(c.created_at),
     }));
     const csv = Papa.unparse(dataForExport, { header: true });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `consolidated_status_report_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `companies_status_report_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
   };
 
   const exportToPDF = () => {
     const doc = new jsPDF({ orientation: 'landscape' });
-    doc.text('Consolidated Status Report', 14, 20);
-    const tableData = filteredCandidates.map(c => [
+    doc.text('Companies Status Report', 14, 20);
+    const tableData = filteredCompanies.map(c => [
       c.name,
-      statuses[c.sub_status_id || ''] || 'Uncategorized',
-      formatValue(c.overall_score),
-      formatValue(c.job_title),
-      formatValue(c.client_name),
-      formatValue(c.recruiter_name),
+      c.status || 'Uncategorized',
+      formatValue(c.industry),
+      formatValue(c.employee_count),
+      formatCurrency(c.revenue),
+      formatValue(c.creator_name),
       formatDate(c.created_at),
-      formatCurrency(c.current_salary),
-      formatCurrency(c.expected_salary),
-      formatValue(c.notice_period),
-      formatValue(c.location),
     ]);
     (doc as any).autoTable({
-      head: [['Candidate Name', 'Status', 'AI Score', 'Job Title', 'Client', 'Recruiter', 'Applied', 'CCTC (INR)', 'ECTC (INR)', 'Notice Period', 'Location']],
+      head: [['Company Name', 'Status', 'Industry', 'Employee Count', 'Revenue', 'Creator', 'Created At']],
       body: tableData,
       startY: 30,
       theme: 'grid',
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: [123, 67, 241] },
     });
-    doc.save(`consolidated_status_report_${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`companies_status_report_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   // --- Toggle Group Expansion ---
@@ -342,7 +301,7 @@ const ConsolidatedStatusReport: React.FC = () => {
     setCurrentPage(1);
   };
 
-  if (isLoading && candidates.length === 0 && !error) {
+  if (isLoading && companies.length === 0 && !error) {
     return (
       <div className="flex h-screen items-center justify-center">
         <LoadingSpinner size={60} className="border-[6px] animate-spin text-indigo-600" />
@@ -365,8 +324,8 @@ const ConsolidatedStatusReport: React.FC = () => {
       <main className="w-full max-w-8xl mx-auto space-y-8">
         {/* Title Section */}
         <div>
-          <h1 className="text-xl md:text-2xl font-semibold text-gray-800">Consolidated Candidate Status Report</h1>
-          <p className="text-sm text-gray-500 mt-2">Analyze candidate distribution by status within the selected period.</p>
+          <h1 className="text-xl md:text-2xl font-semibold text-gray-800">Companies Status Report</h1>
+          <p className="text-sm text-gray-500 mt-2">Analyze company distribution by status within the selected period.</p>
         </div>
 
         {/* Summary Cards */}
@@ -374,8 +333,8 @@ const ConsolidatedStatusReport: React.FC = () => {
           <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
             <CardContent className="p-6 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Total Candidates</p>
-                <h3 className="text-2xl font-bold text-gray-800">{totalCandidates}</h3>
+                <p className="text-sm font-medium text-gray-500 mb-2">Total Companies</p>
+                <h3 className="text-2xl font-bold text-gray-800">{totalCompanies}</h3>
                 <p className="text-xs text-gray-500 mt-1">in selected period</p>
               </div>
               <div className="bg-gradient-to-br from-purple-400 to-purple-600 p-3 rounded-full">
@@ -388,7 +347,7 @@ const ConsolidatedStatusReport: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-2">Peak Status</p>
                 <h3 className="text-2xl font-bold text-gray-800 truncate" title={peakStatus.name}>{peakStatus.name}</h3>
-                <p className="text-xs text-gray-500.mount mt-1">{peakStatus.value} candidates</p>
+                <p className="text-xs text-gray-500 mt-1">{peakStatus.value} companies</p>
               </div>
               <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full">
                 <ArrowUp size={24} className="text-white" />
@@ -398,8 +357,8 @@ const ConsolidatedStatusReport: React.FC = () => {
           <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
             <CardContent className="p-6 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Average Candidates</p>
-                <h3 className="text-2xl font-bold text-gray-800">{averageCandidates}</h3>
+                <p className="text-sm font-medium text-gray-500 mb-2">Average Companies</p>
+                <h3 className="text-2xl font-bold text-gray-800">{averageCompanies}</h3>
                 <p className="text-xs text-gray-500 mt-1">per status</p>
               </div>
               <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-full">
@@ -412,7 +371,7 @@ const ConsolidatedStatusReport: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-2">Top Status</p>
                 <h3 className="text-2xl font-bold text-gray-800 truncate" title={topStatus.name}>{topStatus.name}</h3>
-                <p className="text-xs text-gray-500 mt-1">{topStatus.value} candidates</p>
+                <p className="text-xs text-gray-500 mt-1">{topStatus.value} companies</p>
               </div>
               <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full">
                 <TrendingUp size={24} className="text-white" />
@@ -458,7 +417,7 @@ const ConsolidatedStatusReport: React.FC = () => {
                           boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
                         }}
                         itemStyle={{ color: '#4b5563' }}
-                        formatter={(value: number) => `${value} candidates`}
+                        formatter={(value: number) => `${value} companies`}
                       />
                     </PieChart>
                   </ResponsiveContainer>
@@ -476,7 +435,7 @@ const ConsolidatedStatusReport: React.FC = () => {
 
           <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
             <CardHeader className="bg-purple-500 text-white p-3">
-              <CardTitle className="text-base">Candidates per Status</CardTitle>
+              <CardTitle className="text-base">Companies per Status</CardTitle>
             </CardHeader>
             <CardContent className="p-6">
               <div className="max-h-[300px] overflow-y-auto">
@@ -499,9 +458,9 @@ const ConsolidatedStatusReport: React.FC = () => {
                           boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
                         }}
                         itemStyle={{ color: '#4b5563' }}
-                        formatter={(value: number) => [`${value} candidates`, 'Candidates']}
+                        formatter={(value: number) => [`${value} companies`, 'Companies']}
                       />
-                      <Bar dataKey="value" name="Candidates" fill="#7B43F1" radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="value" name="Companies" fill="#7B43F1" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -538,35 +497,21 @@ const ConsolidatedStatusReport: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  {Object.values(statuses).sort().map(s => (
+                  {[...new Set(companies.map(c => c.status).filter(s => s))].sort().map(s => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={clientFilter} onValueChange={onFilterChange(setClientFilter)}>
-                <SelectTrigger>
-                  <div className="flex items-center gap-2">
-                    <Building size={16} className="text-gray-500" />
-                    <SelectValue placeholder="Filter by Client" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Clients</SelectItem>
-                  {clientOptions.map(c => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={recruiterFilter} onValueChange={onFilterChange(setRecruiterFilter)}>
+              <Select value={creatorFilter} onValueChange={onFilterChange(setCreatorFilter)}>
                 <SelectTrigger>
                   <div className="flex items-center gap-2">
                     <User size={16} className="text-gray-500" />
-                    <SelectValue placeholder="Filter by Recruiter" />
+                    <SelectValue placeholder="Filter by Creator" />
                   </div>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Recruiters</SelectItem>
-                  {recruiterOptions.map(r => (
+                  <SelectItem value="all">All Creators</SelectItem>
+                  {creatorOptions.map(r => (
                     <SelectItem key={r} value={r}>{r}</SelectItem>
                   ))}
                 </SelectContent>
@@ -583,7 +528,7 @@ const ConsolidatedStatusReport: React.FC = () => {
               <div className="relative flex-grow w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <Input
-                  placeholder="Search name, job, client..."
+                  placeholder="Search name, industry..."
                   className="pl-10 h-10"
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
@@ -611,18 +556,14 @@ const ConsolidatedStatusReport: React.FC = () => {
                   <TableHeader>
                     <TableRow className="bg-gray-50">
                       <TableHead className="sticky left-0 bg-gray-50 z-10 text-left font-medium text-gray-500 px-4 py-2 w-[200px]">
-                        Candidate
+                        Company Name
                       </TableHead>
                       <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Status</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">AI Score</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Job Title</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Client</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Recruiter</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Applied</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">CCTC</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">ECTC</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Notice</TableHead>
-                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Location</TableHead>
+                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Industry</TableHead>
+                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Employee Count</TableHead>
+                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Revenue</TableHead>
+                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Creator</TableHead>
+                      <TableHead className="text-left font-medium text-gray-500 px-4 py-2">Created At</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -631,7 +572,7 @@ const ConsolidatedStatusReport: React.FC = () => {
                         if (row.type === 'header') {
                           return (
                             <TableRow key={row.statusName} className="bg-gray-50 hover:bg-gray-100 transition">
-                              <TableCell colSpan={11} className="sticky left-0 bg-gray-50 z-10 font-bold text-gray-800 px-4 py-2">
+                              <TableCell colSpan={7} className="sticky left-0 bg-gray-50 z-10 font-bold text-gray-800 px-4 py-2">
                                 <div className="flex items-center gap-2">
                                   <Button
                                     variant="ghost"
@@ -651,32 +592,24 @@ const ConsolidatedStatusReport: React.FC = () => {
                             </TableRow>
                           );
                         }
-                        const { candidate, statusName } = row;
+                        const { company, statusName } = row;
                         return (
-                          <TableRow key={candidate!.id} className="hover:bg-gray-50 transition">
+                          <TableRow key={company!.id} className="hover:bg-gray-50 transition">
                             <TableCell className="sticky left-0 bg-white z-10 font-medium text-gray-800 px-4 py-2">
-                              {candidate!.name}
+                              {company!.name}
                             </TableCell>
                             <TableCell className="text-gray-600 px-4 py-2">{statusName}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">
-                              <Badge variant={candidate!.overall_score && candidate!.overall_score > 75 ? "default" : "secondary"}>
-                                {formatValue(candidate!.overall_score)}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.job_title)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.client_name)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.recruiter_name)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatDate(candidate!.created_at)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatCurrency(candidate!.current_salary)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatCurrency(candidate!.expected_salary)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.notice_period)}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.location)}</TableCell>
+                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(company!.industry)}</TableCell>
+                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(company!.employee_count)}</TableCell>
+                            <TableCell className="text-gray-600 px-4 py-2">{formatCurrency(company!.revenue)}</TableCell>
+                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(company!.creator_name)}</TableCell>
+                            <TableCell className="text-gray-600 px-4 py-2">{formatDate(company!.created_at)}</TableCell>
                           </TableRow>
                         );
                       })
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={11} className="h-24 text-center text-gray-500">
+                        <TableCell colSpan={7} className="h-24 text-center text-gray-500">
                           No data found matching your criteria.
                         </TableCell>
                       </TableRow>
@@ -732,4 +665,4 @@ const ConsolidatedStatusReport: React.FC = () => {
   );
 };
 
-export default ConsolidatedStatusReport;
+export default CompaniesStatusReport;

@@ -61,7 +61,7 @@ export function DataTableToolbar<TData>({ table, onOpenAddContactDialog, onToggl
             <Upload className="mr-2 h-4 w-4" /> Import
         </Button>
         <Button size="sm" className="h-9 bg-purple-600 hover:bg-purple-700 text-white" onClick={onOpenAddContactDialog}>
-          <Plus className="mr-2 h-4 w-4" /> Add Row
+          <Plus className="mr-2 h-4 w-4" /> Add People
         </Button>
       </div>
     </div>

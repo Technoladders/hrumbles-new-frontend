@@ -9,6 +9,7 @@ import {
 } from '@/types/company';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { Database } from '@/types/database.types'; 
+import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
 import { v4 as uuidv4 } from 'uuid';
 
 // --- Gemini Config & Helper Functions ---
@@ -130,20 +131,45 @@ async function validateUrl(url: string | null): Promise<string | null> { /* ... 
 }
 
 // --- Hook to fetch the list of companies ---
-export const useCompanies = () => { /* ... (your existing hook) ... */ 
+export const useCompanies = (fileId?: string) => { /* ... (your existing hook) ... */ 
+   const authData = getAuthDataFromLocalStorage();
+          if (!authData) {
+            throw new Error('Failed to retrieve authentication data');
+          }
+          const { organization_id, userId } = authData;
   return useQuery<Company[], Error>({
-    queryKey: ['companies'],
+    queryKey: ['companies', organization_id, fileId || 'all'],
     queryFn: async (): Promise<Company[]> => {
-      const { data, error } = await supabase
+      if (!organization_id) {
+        console.log("[useCompanies] No organizationId, returning empty array.");
+        return [];
+      }
+
+      let query = supabase
         .from('companies')
         .select('id, name, logo_url, employee_count, industry, stage, location, created_by, updated_by, account_owner, website, linkedin, created_at, revenue, cashflow, founded_as, employee_count_date, competitors, products, services, key_people, about, domain, status, created_by_employee:hr_employees!companies_created_by_fkey(id, first_name, last_name), updated_by_employee:hr_employees!companies_updated_by_fkey(id, first_name, last_name)')
         .order('created_at', { ascending: false })
         .order('id', { ascending: true })
-
+        .eq('organization_id', organization_id);
         
-      if (error) { console.error('Error fetching ordered companies:', error); throw error; }
+      if (fileId) {
+        console.log(`[useCompanies] Fetching companies for fileId: ${fileId}`);
+        query = query.eq('file_id', fileId);
+      } else {
+        console.log("[useCompanies] Fetching all companies for the organization.");
+      }
+        
+      const { data, error } = await query.order('created_at', { ascending: false });
+        
+      if (error) { 
+        console.error('Error fetching companies:', error); 
+        throw error; 
+      }
+      
+      console.log(`[useCompanies] Fetched ${data?.length || 0} companies.`);
       return data || [];
     },
+    enabled: !!organization_id, // Only run if organizationId is available
   });
 }
 

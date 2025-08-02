@@ -8,28 +8,21 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Search, User, BarChart2, SlidersHorizontal, CheckCircle } from 'lucide-react';
-import { DateRangePickerField } from './DateRangePickerField';
-import { supabase } from '@/integrations/supabase/client';
+import { AlertCircle, Search, User, BarChart2, SlidersHorizontal, CheckCircle, Download, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { DateRangePickerField } from './DateRangePickerField'; // Assuming this component exists
+import { supabase } from '@/integrations/supabase/client'; // Assuming this client exists
 import { format } from 'date-fns';
-import { debounce } from 'lodash';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  CartesianGrid
+  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell
 } from 'recharts';
 
-// Define the types for our data
+// --- TYPE DEFINITIONS ---
 interface TalentProfile {
   id: string;
   created_at: string;
@@ -43,140 +36,116 @@ interface Recruiter {
 }
 
 interface AggregatedData {
-    recruiter_name: string;
-    count: number;
-    lastAdded: string; // Add lastAdded date
+  recruiter_name: string;
+  count: number;
+  lastAdded: string;
 }
 
+// --- MAIN COMPONENT ---
 const TalentProfileReport: React.FC = () => {
-    const organizationId = useSelector((state: any) => state.auth.organization_id);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
   const [reportData, setReportData] = useState<TalentProfile[]>([]);
   const [allRecruiters, setAllRecruiters] = useState<Recruiter[]>([]);
   const [totalProfileCount, setTotalProfileCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters State
-  // Use a draft and an applied state for the date range to control fetching
-  const [draftDateRange, setDraftDateRange] = useState({
-    startDate: new Date(new Date().getFullYear(), 0, 1),
-    endDate: new Date(),
-    key: 'selection',
-  });
+  // --- FILTERS STATE ---
+  const [draftDateRange, setDraftDateRange] = useState({ startDate: new Date(new Date().getFullYear(), 0, 1), endDate: new Date(), key: 'selection' });
   const [appliedDateRange, setAppliedDateRange] = useState(draftDateRange);
-  const [searchTerm, setSearchTerm] = useState('');
   const [selectedRecruiters, setSelectedRecruiters] = useState<string[]>([]);
-  
-  // Function to apply filters and trigger data fetch
+  const [searchTerm, setSearchTerm] = useState(''); // For table search
+
+  // --- PAGINATION STATE ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
   const handleApplyFilters = () => {
     setAppliedDateRange(draftDateRange);
+    setCurrentPage(1); // Reset to first page on new filter application
   };
 
-  const fetchInitialData = async () => {
-    setIsLoading(true);
-    try {
-      // Fetch total count of all profiles (all-time)
-      const { count, error: countError } = await supabase
-        .from('hr_talent_pool')
-        .select('*', { count: 'exact', head: true });
-      if (countError) throw countError;
-      setTotalProfileCount(count ?? 0);
+  // --- DATA FETCHING ---
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      if (!organizationId) return;
+      try {
+        const { count, error: countError } = await supabase.from('hr_talent_pool').select('*', { count: 'exact', head: true }).eq('organization_id', organizationId);
+        if (countError) throw countError;
+        setTotalProfileCount(count ?? 0);
 
-      // Fetch all employees to use as a filter
-      const { data: employeesData, error: employeesError } = await supabase
-        .from('hr_employees')
-        .select('id, first_name, last_name')
-        .eq('organization_id', organizationId)
-        .order('first_name');
-      if (employeesError) throw employeesError;
-      setAllRecruiters(employeesData.map((emp: any) => ({
-        id: emp.id,
-        name: `${emp.first_name} ${emp.last_name}`,
-      })));
-
-    } catch (err: any) {
+        const { data: employeesData, error: employeesError } = await supabase.from('hr_employees').select('id, first_name, last_name').eq('organization_id', organizationId).order('first_name');
+        if (employeesError) throw employeesError;
+        setAllRecruiters(employeesData.map((emp: any) => ({ id: emp.id, name: `${emp.first_name} ${emp.last_name}` })));
+      } catch (err: any) {
         setError(err.message || 'Failed to fetch initial data.');
-    } finally {
-        setIsLoading(false);
-    }
-  };
-
-  const fetchDataForRange = async (from: Date, to: Date) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const { data: talentData, error: talentError } = await supabase
-        .from('hr_talent_pool')
-        .select(`id, created_at, created_by, hr_employees!hr_talent_pool_created_by_fkey (id, first_name, last_name)`)
-        .gte('created_at', from.toISOString())
-        .lte('created_at', to.toISOString());
-      if (talentError) throw talentError;
-
-      const formattedData: TalentProfile[] = talentData.map((item: any) => ({
-        id: item.id,
-        created_at: item.created_at,
-        created_by: item.created_by,
-        recruiter_name: item.hr_employees ? `${item.hr_employees.first_name} ${item.hr_employees.last_name}` : 'N/A',
-      }));
-      setReportData(formattedData);
-
-    } catch (err: any) {
-      setError(err.message || 'An unknown error occurred.');
-      setReportData([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  // Fetch initial total counts and recruiter list on mount
-  useEffect(() => {
+      }
+    };
     fetchInitialData();
-  }, []);
+  }, [organizationId]);
 
-  // Fetch data only when appliedDateRange changes
   useEffect(() => {
-    if (appliedDateRange.startDate && appliedDateRange.endDate) {
-        fetchDataForRange(appliedDateRange.startDate, appliedDateRange.endDate);
-    }
-  }, [appliedDateRange]);
+    const fetchDataForRange = async () => {
+      if (!appliedDateRange.startDate || !appliedDateRange.endDate || !organizationId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const { data, error } = await supabase.from('hr_talent_pool').select(`id, created_at, created_by, hr_employees!hr_talent_pool_created_by_fkey (id, first_name, last_name)`).eq('organization_id', organizationId).gte('created_at', appliedDateRange.startDate.toISOString()).lte('created_at', appliedDateRange.endDate.toISOString());
+        if (error) throw error;
 
-  const filteredRawData = useMemo(() => {
-    return reportData.filter(profile => {
-      const matchesRecruiter = selectedRecruiters.length === 0 || selectedRecruiters.includes(profile.created_by);
-      const matchesSearch = searchTerm === '' || profile.recruiter_name?.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesRecruiter && matchesSearch;
-    });
-  }, [reportData, searchTerm, selectedRecruiters]);
+        const formattedData: TalentProfile[] = data.map((item: any) => ({
+          id: item.id,
+          created_at: item.created_at,
+          created_by: item.created_by,
+          recruiter_name: item.hr_employees ? `${item.hr_employees.first_name} ${item.hr_employees.last_name}` : 'N/A',
+        }));
+        setReportData(formattedData);
+      } catch (err: any) {
+        setError(err.message || 'An unknown error occurred.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchDataForRange();
+  }, [appliedDateRange, organizationId]);
 
+  // --- DATA PROCESSING & MEMOIZATION ---
   const aggregatedData: AggregatedData[] = useMemo(() => {
-    const counts = filteredRawData.reduce((acc, profile) => {
-        const name = profile.recruiter_name || 'Unknown';
-        if (!acc[name]) {
-            acc[name] = { count: 0, lastAdded: new Date(0).toISOString() };
-        }
-        acc[name].count += 1;
-        if (new Date(profile.created_at) > new Date(acc[name].lastAdded)) {
-            acc[name].lastAdded = profile.created_at;
-        }
-        return acc;
+    const globallyFilteredData = reportData.filter(profile => (selectedRecruiters.length === 0 || selectedRecruiters.includes(profile.created_by)));
+    const counts = globallyFilteredData.reduce((acc, profile) => {
+      const name = profile.recruiter_name || 'Unknown';
+      if (!acc[name]) acc[name] = { count: 0, lastAdded: new Date(0).toISOString() };
+      acc[name].count++;
+      if (new Date(profile.created_at) > new Date(acc[name].lastAdded)) acc[name].lastAdded = profile.created_at;
+      return acc;
     }, {} as Record<string, { count: number; lastAdded: string }>);
+    return Object.entries(counts).map(([recruiter_name, data]) => ({ recruiter_name, ...data })).sort((a, b) => b.count - a.count);
+  }, [reportData, selectedRecruiters]);
 
-    return Object.entries(counts)
-        .map(([recruiter_name, data]) => ({ recruiter_name, ...data }))
-        .sort((a, b) => b.count - a.count);
-  }, [filteredRawData]);
+  const filteredTableData = useMemo(() =>
+    aggregatedData.filter(item =>
+      item.recruiter_name.toLowerCase().includes(searchTerm.toLowerCase())
+    ), [aggregatedData, searchTerm]);
 
+  const pieChartData = useMemo(() => {
+    const topN = 4;
+    const topContributors = aggregatedData.slice(0, topN);
+    const otherCount = aggregatedData.slice(topN).reduce((acc, curr) => acc + curr.count, 0);
+    const finalData = topContributors.map(d => ({ name: d.recruiter_name, value: d.count }));
+    if (otherCount > 0) finalData.push({ name: 'Others', value: otherCount });
+    return finalData;
+  }, [aggregatedData]);
 
+  // Pagination Logic
+  const totalPages = Math.ceil(filteredTableData.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedData = filteredTableData.slice(startIndex, startIndex + itemsPerPage);
+
+  // --- EXPORT FUNCTIONS ---
   const exportToCSV = () => {
-    const dataForExport = aggregatedData.map(d => ({
-        'Recruiter Name': d.recruiter_name,
-        'Profiles Added': d.count,
-        'Last Added Date': format(new Date(d.lastAdded), 'PPP')
-    }));
-    const csv = Papa.unparse(dataForExport, { header: true });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const csv = Papa.unparse(filteredTableData.map(d => ({ 'Recruiter': d.recruiter_name, 'Profiles Added': d.count, 'Last Added': format(new Date(d.lastAdded), 'PPP') })));
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     link.download = 'talent_contribution_report.csv';
     link.click();
   };
@@ -185,179 +154,179 @@ const TalentProfileReport: React.FC = () => {
     const doc = new jsPDF();
     doc.text('Talent Contribution Report', 14, 20);
     (doc as any).autoTable({
-        head: [['Recruiter Name', 'Profiles Added', 'Last Added Date']],
-        body: aggregatedData.map(d => [d.recruiter_name, d.count, format(new Date(d.lastAdded), 'yyyy-MM-dd')]),
-        startY: 30
+      head: [['Recruiter', 'Profiles Added', 'Last Added']],
+      body: filteredTableData.map(d => [d.recruiter_name, d.count, format(new Date(d.lastAdded), 'yyyy-MM-dd')]),
+      startY: 30,
     });
     doc.save('talent_contribution_report.pdf');
   };
 
-  if (isLoading && reportData.length === 0) return <LoadingSpinner />;
+  if (isLoading && reportData.length === 0 && !error) {
+    return <div className="flex h-screen items-center justify-center"><LoadingSpinner /></div>;
+  }
   if (error) {
-    return <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>;
+    return <div className="p-8"><Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert></div>;
   }
 
   return (
-    <div className="space-y-6">
-       <Card>
-        <CardHeader>
-          <CardTitle>Talent Contribution Report</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Analyze talent profiles added to the pool by each recruiter.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col md:flex-row gap-4 mb-6 items-end">
-            <div className="flex-1">
-              <Label htmlFor="search-recruiter">Search Recruiter</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="search-recruiter"
-                  placeholder="Search by name..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full md:w-auto flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Filter Recruiters
-                  {selectedRecruiters.length > 0 && <Badge variant="secondary">{selectedRecruiters.length}</Badge>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-2">
-                 <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+      <main className="max-w-screen-2xl mx-auto space-y-8">
+        {/* === HEADER === */}
+        <div>
+          <h1 className="text-3xl md:text-4xl font-extrabold text-gray-800">Talent Contribution Report</h1>
+          <p className="text-gray-500 mt-1">Analyze talent profiles added by each recruiter.</p>
+        </div>
+
+        {/* === KPI CARDS GRID === */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard icon={SlidersHorizontal} title="Profiles in Period" value={aggregatedData.reduce((sum, item) => sum + item.count, 0)} subtitle="Based on filters" iconBg="from-blue-400 to-blue-600" />
+          <StatCard icon={BarChart2} title="Total All-Time Profiles" value={totalProfileCount} subtitle="In the entire talent pool" iconBg="from-purple-400 to-purple-600" />
+          <StatCard icon={User} title="Contributing Recruiters" value={aggregatedData.length} subtitle="In selected period" iconBg="from-fuchsia-400 to-fuchsia-600" />
+          <StatCard icon={TrendingUp} title="Top Contributor" value={aggregatedData[0]?.recruiter_name || 'N/A'} subtitle={`${aggregatedData[0]?.count || 0} profiles added`} iconBg="from-green-400 to-green-600" />
+        </div>
+
+        {/* === GLOBAL FILTERS BAR === */}
+        <Card className="shadow-lg border-none">
+          <CardContent className="p-4">
+            <div className="flex flex-col md:flex-row gap-4 items-center">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full md:w-auto flex-grow justify-start text-left font-normal gap-2">
+                    <User className="h-4 w-4" />
+                    <span>{selectedRecruiters.length > 0 ? `${selectedRecruiters.length} Recruiters Selected` : 'Filter Recruiters'}</span>
+                    {selectedRecruiters.length > 0 && <Badge variant="secondary" className="ml-auto">{selectedRecruiters.length}</Badge>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-2">
+                  <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
                     <Button variant="ghost" size="sm" onClick={() => setSelectedRecruiters([])}>Deselect All</Button>
-                    {allRecruiters.map(recruiter => (
-                        <Label key={recruiter.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-normal">
-                            <Checkbox
-                                checked={selectedRecruiters.includes(recruiter.id)}
-                                onCheckedChange={() => setSelectedRecruiters(prev =>
-                                    prev.includes(recruiter.id) ? prev.filter(id => id !== recruiter.id) : [...prev, recruiter.id]
-                                )}
-                            />
-                            {recruiter.name}
-                        </Label>
+                    {allRecruiters.map(r => (
+                      <Label key={r.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-normal">
+                        <Checkbox checked={selectedRecruiters.includes(r.id)} onCheckedChange={() => setSelectedRecruiters(p => p.includes(r.id) ? p.filter(id => id !== r.id) : [...p, r.id])} /> {r.name}
+                      </Label>
                     ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-            <DateRangePickerField dateRange={draftDateRange} onDateRangeChange={setDraftDateRange} />
-            <Button onClick={handleApplyFilters} className="w-full md:w-auto flex items-center gap-2">
-              <CheckCircle className="h-4 w-4" /> Apply
-            </Button>
-             <div className="flex gap-2">
-                <Button onClick={exportToCSV} variant="outline" size="sm">CSV</Button>
-                <Button onClick={exportToPDF} variant="outline" size="sm">PDF</Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <DateRangePickerField dateRange={draftDateRange} onDateRangeChange={setDraftDateRange} />
+              <Button onClick={handleApplyFilters} className="w-full md:w-auto flex-shrink-0 bg-indigo-600 hover:bg-indigo-700">
+                <CheckCircle className="h-4 w-4 mr-2" /> Apply Filters
+              </Button>
             </div>
-          </div>
+          </CardContent>
+        </Card>
 
-           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-             <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Profiles in Period</CardTitle>
-                    <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{filteredRawData.length}</div>
-                    <p className="text-xs text-muted-foreground">in selected period and filters</p>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total All-Time Profiles</CardTitle>
-                    <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{totalProfileCount}</div>
-                    <p className="text-xs text-muted-foreground">in the entire talent pool</p>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Contributing Recruiters</CardTitle>
-                    <User className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{aggregatedData.length}</div>
-                    <p className="text-xs text-muted-foreground">in selected period</p>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Top Contributor</CardTitle>
-                    <BarChart2 className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-xl font-bold">{aggregatedData[0]?.recruiter_name || 'N/A'}</div>
-                    <p className="text-xs text-muted-foreground">with {aggregatedData[0]?.count || 0} profiles added</p>
-                </CardContent>
-            </Card>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Contribution by Recruiter</CardTitle>
-          </CardHeader>
-          <CardContent>
+        {/* === CHARTS GRID === */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <ChartCard title="Contribution by Recruiter">
             <ResponsiveContainer width="100%" height={400}>
               <BarChart data={aggregatedData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" />
-                <YAxis dataKey="recruiter_name" type="category" width={120} tick={{ fontSize: 12 }} />
-                <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{backgroundColor: 'white', border: '1px solid #e2e8f0'}}/>
-                <Legend />
-                <Bar dataKey="count" name="Profiles Added" fill="#8884d8" />
+                <YAxis dataKey="recruiter_name" type="category" width={120} tick={{ fontSize: 12 }} interval={0} />
+                <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ backgroundColor: 'white', border: '1px solid #e2e8f0' }} />
+                <Bar dataKey="count" name="Profiles Added" fill="#7B43F1" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          </ChartCard>
+          <ChartCard title="Contribution Share">
+            <ResponsiveContainer width="100%" height={400}>
+              <PieChart>
+                <Pie data={pieChartData} cx="50%" cy="50%" innerRadius={80} outerRadius={130} fill="#8884d8" paddingAngle={5} dataKey="value" nameKey="name">
+                  {pieChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={['#7B43F1', '#A74BC8', '#8884d8', '#a388d8', '#c3a8d8'][index % 5]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value: number) => `${value} profiles`} />
+                <Legend wrapperStyle={{fontSize: "14px"}}/>
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
 
-        <Card className="lg:col-span-2">
-            <CardHeader>
-                <CardTitle>Detailed Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent>
-                 <div className="rounded-md border max-h-[440px] overflow-y-auto">
-                    <Table>
-                        <TableHeader className="sticky top-0 bg-background">
+        {/* === ADVANCED TABLE SECTION === */}
+        <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+                <div className="relative flex-grow w-full">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                    <Input placeholder="Search recruiters in table..." className="pl-10 h-10" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                    <Button variant="outline" size="sm" onClick={exportToCSV}><Download className="w-4 h-4 mr-2" />Export CSV</Button>
+                    <Button variant="outline" size="sm" onClick={exportToPDF}><Download className="w-4 h-4 mr-2" />Export PDF</Button>
+                </div>
+            </div>
+            <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                <div className="overflow-x-auto">
+                    <Table className="min-w-full">
+                        <TableHeader className="bg-gray-50">
                             <TableRow>
-                            <TableHead>Recruiter Name</TableHead>
-                            <TableHead>Profiles Added</TableHead>
-                            <TableHead className="text-right">Last Added Date</TableHead>
+                                <TableHead className="px-4 py-2 text-left text-sm font-medium text-gray-500">Recruiter Name</TableHead>
+                                <TableHead className="px-4 py-2 text-center text-sm font-medium text-gray-500">Profiles Added</TableHead>
+                                <TableHead className="px-4 py-2 text-right text-sm font-medium text-gray-500">Last Added Date</TableHead>
                             </TableRow>
                         </TableHeader>
-                        <TableBody>
-                            {aggregatedData.length > 0 ? (
-                            aggregatedData.map(item => (
-                                <TableRow key={item.recruiter_name}>
-                                <TableCell className="font-medium">{item.recruiter_name}</TableCell>
-                                <TableCell>{item.count}</TableCell>
-                                <TableCell className="text-right">{format(new Date(item.lastAdded), 'PPP')}</TableCell>
+                        <TableBody className="bg-white divide-y divide-gray-200">
+                            {paginatedData.length > 0 ? paginatedData.map(item => (
+                                <TableRow key={item.recruiter_name} className="hover:bg-gray-50 transition">
+                                    <TableCell className="px-4 py-3 font-medium text-gray-800">{item.recruiter_name}</TableCell>
+                                    <TableCell className="px-4 py-3 text-center">{item.count}</TableCell>
+                                    <TableCell className="px-4 py-3 text-right">{format(new Date(item.lastAdded), 'PPP')}</TableCell>
                                 </TableRow>
-                            ))
-                            ) : (
-                            <TableRow>
-                                <TableCell colSpan={3} className="h-24 text-center">
-                                No data found matching your criteria.
-                                </TableCell>
-                            </TableRow>
+                            )) : (
+                                <TableRow><TableCell colSpan={3} className="h-24 text-center text-gray-500">No data found matching your criteria.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
                 </div>
-            </CardContent>
-        </Card>
-      </div>
+            </div>
+             {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Rows per page:</span>
+                        <Select value={String(itemsPerPage)} onValueChange={(value) => { setItemsPerPage(Number(value)); setCurrentPage(1); }}>
+                            <SelectTrigger className="w-[70px]"><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="10">10</SelectItem><SelectItem value="20">20</SelectItem><SelectItem value="50">50</SelectItem></SelectContent>
+                        </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}><ChevronLeft className="h-4 w-4" /></Button>
+                        <span className="text-sm font-medium">Page {currentPage} of {totalPages}</span>
+                        <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}><ChevronRight className="h-4 w-4" /></Button>
+                    </div>
+                    <span className="text-sm text-gray-600">
+                        Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredTableData.length)} of {filteredTableData.length}
+                    </span>
+                </div>
+            )}
+        </div>
+      </main>
     </div>
   );
 };
+
+// --- HELPER COMPONENTS ---
+
+const StatCard: React.FC<{ title: string; value: string | number; subtitle: string; icon: React.ElementType; iconBg: string; }> = ({ title, value, subtitle, icon: Icon, iconBg }) => (
+  <Card className="shadow-lg border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+    <CardContent className="p-5 flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-500 mb-1">{title}</p>
+        <h3 className="text-2xl font-bold text-gray-800 truncate" title={String(value)}>{value}</h3>
+        <p className="text-xs text-gray-500 mt-1 truncate">{subtitle}</p>
+      </div>
+      <div className={`bg-gradient-to-br ${iconBg} p-3 rounded-full flex-shrink-0 ml-4`}>
+        <Icon size={22} className="text-white" />
+      </div>
+    </CardContent>
+  </Card>
+);
+
+const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <Card className="shadow-lg border-none bg-white overflow-hidden">
+    <CardHeader><CardTitle className="text-lg font-semibold text-gray-700">{title}</CardTitle></CardHeader>
+    <CardContent>{children}</CardContent>
+  </Card>
+);
 
 export default TalentProfileReport;

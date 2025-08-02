@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useContactStages } from '@/hooks/sales/useContactStages';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronRight, GripVertical, Link as LinkIcon, Trash2, Lock, MessageSquare, Phone, Mail, UserPlus, Globe, MessageCircle, MoreHorizontal } from 'lucide-react';
+import { ChevronDown, ChevronRight, GripVertical, Link as LinkIcon, Trash2, Lock, Linkedin, MessageSquare, Phone, Mail, UserPlus, Globe, MessageCircle, MoreHorizontal, PhoneIncoming } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from './data-table-column-header';
@@ -20,6 +20,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useDeleteContact } from '@/hooks/sales/useDeleteContact';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import PhoneInput from "react-phone-number-input";
+import "react-phone-number-input/style.css";
 
 // --- Re-orderable Header ---
 export const ReorderableHeader: React.FC<any> = ({ header, table }) => {
@@ -93,17 +95,48 @@ export const EditableCell: React.FC<any> = ({ getValue, row, column, table }) =>
 const PhoneCell: React.FC<any> = ({ getValue, row, column, table }) => {
     if (row.getIsGrouped()) return null;
     const initialValue = getValue() || "";
-    const [value, setValue] = React.useState(initialValue);
-    const onBlur = () => table.options.meta?.updateData(row.index, column.id, value);
-    React.useEffect(() => setValue(initialValue), [initialValue]);
-    
+    const [value, setValue] = useState(initialValue);
+
+    useEffect(() => {
+        setValue(initialValue);
+    }, [initialValue]);
+
+    const onBlur = () => {
+        if (value !== initialValue) {
+            table.options.meta?.updateData(row.index, column.id, value);
+        }
+    };
+
     return (
-        <div className="flex items-center gap-2">
-            <span role="img" aria-label="India flag">🇮🇳</span>
-            <Input value={value} onChange={(e) => setValue(e.target.value)} onBlur={onBlur} className="h-full border-none bg-transparent focus-visible:ring-1 focus-visible:ring-blue-500 focus-visible:ring-offset-0 rounded-none p-0" placeholder="+91..." />
+        <div onBlur={onBlur} className="phone-input-cell">
+             <style>{`
+                .phone-input-cell .PhoneInputInput {
+                    height: 100%;
+                    border: none;
+                    background-color: transparent;
+                    --tw-ring-color: transparent;
+                    box-shadow: none;
+                    padding: 0;
+                    font-size: 11px;
+                }
+                .phone-input-cell .PhoneInputInput:focus {
+                    outline: none;
+                     --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+                    --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+                    box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+                    --tw-ring-color: rgb(59 130 246 / 1);
+                }
+             `}</style>
+             <PhoneInput
+                international
+                defaultCountry="IN"
+                value={value}
+                onChange={(v) => setValue(v || "")}
+             />
         </div>
     );
 };
+
 
 const LinkedInCell: React.FC<any> = ({ getValue, row, column, table }) => {
     if (row.getIsGrouped()) return null;
@@ -122,12 +155,38 @@ const LinkedInCell: React.FC<any> = ({ getValue, row, column, table }) => {
     );
 };
 
+// NEW: Cell with tooltip for truncated text
+const TextWithTooltipCell: React.FC<any> = (props) => {
+    const value = props.getValue();
 
-// NEW helper function to get the right editor for a custom field
+    // No need for a tooltip if there's no content to show.
+    if (!value || typeof value !== 'string' || value.trim() === '') {
+        return <EditableCell {...props} />;
+    }
+
+    return (
+        <TooltipProvider>
+            <Tooltip delayDuration={150}>
+                <TooltipTrigger asChild>
+                    {/* This div acts as the trigger area */}
+                    <div className="w-full h-full cursor-default overflow-hidden">
+                        <EditableCell {...props} />
+                    </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>{value}</p>
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    );
+};
+
+// UPDATED helper function to get the right editor for a custom field
 export const getCustomCell = (dataType: 'text' | 'date' | 'number') => {
     switch (dataType) {
         case 'date': return DateCell;
         case 'number': return NumberCell;
+        case 'text': return TextWithTooltipCell; // Use the new cell for text
         default: return EditableCell;
     }
 };
@@ -206,15 +265,16 @@ const AccessCell = ({ getValue, children }: { getValue: () => any, children: Rea
         <Button
             variant="outline"
             size="sm"
-            className="h-7 text-xs font-normal text-gray-600"
+            className="h-8 text-xs font-normal"
             onClick={(e) => {
                 e.stopPropagation(); // Prevent row selection or other events
                 setIsRevealed(true);
             }}
         >
-            <Lock className="h-3 w-3 mr-2" />
-            Access
+            <Linkedin className="h-3.5 w-3.5 mr-2" />
+            Access Link
         </Button>
+         
     );
 };
 
@@ -296,12 +356,8 @@ export const ActionColumn: ColumnDef<SimpleContact> = {
 
     return (
       <>
-        <Button variant="ghost" size="icon" onClick={() => setIsOpen(true)}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="1" />
-            <circle cx="12" cy="5" r="1" />
-            <circle cx="12" cy="19" r="1" />
-          </svg>
+        <Button variant="copyicon" size="icon" onClick={() => setIsOpen(true)}>
+         <Trash2 className="h-3.5 w-3.5 mr-2 text-red-500" />
         </Button>
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogContent>
@@ -383,11 +439,26 @@ export const columns: ColumnDef<SimpleContact>[] = [
     minSize: 120,
     maxSize: 250,
     // UPDATED: Wrap the original cell in our new AccessCell component
-    cell: (props) => (
-      <AccessCell getValue={props.getValue}>
-        <EditableCell {...props} />
-      </AccessCell>
-    )
+    cell: (props) => {
+      const initialValue = props.getValue();
+      const [isRevealed, setIsRevealed] = useState(!initialValue);
+      useEffect(() => { setIsRevealed(!initialValue); }, [initialValue]);
+
+      if (isRevealed) {
+        return <EditableCell {...props} />;
+      }
+      return (
+        <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs font-normal"
+            onClick={(e) => { e.stopPropagation(); setIsRevealed(true); }}
+        >
+            <Mail className="h-3.5 w-3.5 mr-2" />
+            Access email
+        </Button>
+      );
+    }
   },
   {
     accessorKey: 'mobile',
@@ -396,11 +467,26 @@ export const columns: ColumnDef<SimpleContact>[] = [
     minSize: 120,
     maxSize: 200,
     // UPDATED: Wrap the original cell in our new AccessCell component
-    cell: (props) => (
-      <AccessCell getValue={props.getValue}>
-        <PhoneCell {...props} />
-      </AccessCell>
-    )
+    cell: (props) => {
+      const initialValue = props.getValue();
+      const [isRevealed, setIsRevealed] = useState(!initialValue);
+      useEffect(() => { setIsRevealed(!initialValue); }, [initialValue]);
+
+      if (isRevealed) {
+        return <PhoneCell {...props} />;
+      }
+      return (
+        <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs font-normal"
+            onClick={(e) => { e.stopPropagation(); setIsRevealed(true); }}
+        >
+            <PhoneIncoming className="h-3.5 w-3.5 mr-2" />
+            Access Mobile
+        </Button>
+      );
+    }
   },
   {
     accessorKey: 'linkedin_url',
@@ -486,5 +572,3 @@ export const columns: ColumnDef<SimpleContact>[] = [
   },
   { accessorKey: 'updated_at', header: "Updated At", cell: DisplayDateCell, enableSorting: true, size: 100, minSize: 60, maxSize: 120 },
 ];
-
-// Column Enhance
