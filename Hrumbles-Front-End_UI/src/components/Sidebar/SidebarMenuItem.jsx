@@ -210,14 +210,15 @@ export const menuItemsByRole = {
   ],
   organization_superadmin: categorizedOrgSuperAdminMenu, // Use the new categorized structure
   admin: (departmentName) => createCategorizedAdminMenu(departmentName), // Use the new categorized function
-  employee: (departmentName) => {
+  employee: (departmentName, designationName) => {
     // This logic is simple enough to remain as is, but could also be refactored
     // if it becomes more complex in the future.
      const baseMenu = [
       { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
-      { icon: ImProfile, label: "My Profile", path: "/profile" },
       { icon: GrDocumentTime, label: "Time Sheet", path: "/employee/timesheet"},
       { icon: MdMoreTime, label: "Regularization", path: "/employee/regularization",},
+      { icon: ImProfile, label: "My Profile", path: "/profile" },
+
       { icon: LuCalendarPlus, label: "Leave", path: "/employee/leave" },
       { icon: FaRegCalendarCheck, label: "Attendance", path: "/employee/attendance" },
       { icon: IoCalendarNumberOutline, label: "Calendar", path: "/employee/calendar" },
@@ -230,8 +231,13 @@ export const menuItemsByRole = {
       { icon: GoGoal, label: "Goals", path: "/goalsview" },
       );
     }
+
+    // Add Jobs for Consultant designation in Sales & Marketing department
+    if (departmentName === "Sales & Marketing" && designationName === "Consultant") {
+      baseMenu.splice(1, 0, { icon: FiBriefcase, label: "Jobs", path: "/jobs" });
+    }
     if (departmentName === "Sales & Marketing") {
-      baseMenu.push(
+      baseMenu.splice(2, 0,
         { icon: GoOrganization, label: "Companies", path: "/companies" },
         { icon: VscOrganization, label: "People", path: "/contacts" },
         { icon: FiList, label: "Lists", path: "/lists" }

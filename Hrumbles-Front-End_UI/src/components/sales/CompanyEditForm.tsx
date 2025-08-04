@@ -17,9 +17,10 @@ interface CompanyEditFormProps {
   onClose: () => void;
    currentUserId: string | null; 
    organizationId: string | null;
+   fileId?: string | null;
 }
 
-const CompanyEditForm: React.FC<CompanyEditFormProps> = ({ company, onClose, currentUserId, organizationId }) => {
+const CompanyEditForm: React.FC<CompanyEditFormProps> = ({ company, onClose, currentUserId, organizationId, fileId }) => {
   const [formData, setFormData] = useState<Partial<CompanyDetail>>(company);
   const [jsonError, setJsonError] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -50,6 +51,7 @@ const CompanyEditForm: React.FC<CompanyEditFormProps> = ({ company, onClose, cur
       // Invalidate queries to automatically refetch the list and counts
       queryClient.invalidateQueries({ queryKey: ['companies'] });
       queryClient.invalidateQueries({ queryKey: ['company-counts'] });
+       queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] }); 
       onClose();
     },
     onError: (error: Error) => {
@@ -120,6 +122,7 @@ const CompanyEditForm: React.FC<CompanyEditFormProps> = ({ company, onClose, cur
         dataToSave.created_by = currentUserId;
         dataToSave.updated_by = currentUserId;
         dataToSave.organization_id = organizationId;
+         dataToSave.file_id = fileId || null;
       }
     } else {
       // It's good practice to log a warning if the ID is missing for some reason

@@ -36,7 +36,9 @@ import { useSelector } from "react-redux";
 
 // Status IDs for Offered and Joined candidates
 const OFFERED_STATUS_ID = "9d48d0f9-8312-4f60-aaa4-bafdce067417";
+const OFFER_ISSUED_SUB_STATUS_ID = "bcc84d3b-fb76-4912-86cc-e95448269d6b";
 const JOINED_STATUS_ID = "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e";
+const JOINED_SUB_STATUS_ID = "c9716374-3477-4606-877a-dfa5704e7680";
 
 // Static USD to INR conversion rates
 const USD_TO_INR_RATE = 84;
@@ -403,7 +405,8 @@ const fetchMetrics = async () => {
             hr_jobs:hr_job_candidates_job_id_fkey(id, title, job_type_category, client_details)
           `)
         // .eq("organization_id", organization_id)
-        .in("main_status_id", [OFFERED_STATUS_ID, JOINED_STATUS_ID]);
+     .or(`main_status_id.eq.${JOINED_STATUS_ID},main_status_id.eq.${OFFERED_STATUS_ID}`)
+          .in("sub_status_id", [JOINED_SUB_STATUS_ID, OFFER_ISSUED_SUB_STATUS_ID]);
 
       if (candidatesError) throw candidatesError;
       console.log("fetchMetrics: Fetched candidates:", candidatesData);

@@ -30,11 +30,14 @@ export const useImportCsvData = () => {
         throw new Error("You must be logged in to import data.");
       }
       
-      // Prevent sending empty rows to the backend by filtering them on the client first.
-      const validCsvData = csvData.filter(row => row[mapping['name']] && row[mapping['email']]);
+      // UPDATED: Relax the client-side filter.
+      // We only ensure that a name exists and is not just empty whitespace.
+      // The backend will handle logic for empty emails or other missing fields.
+      const validCsvData = csvData.filter(row => row[mapping['name']] && String(row[mapping['name']]).trim() !== '');
 
       if (validCsvData.length === 0) {
-          // If there are no valid rows to import, return immediately.
+          // If no rows have a valid name, we can return early.
+          // The skipped summary should include all original rows.
           return { imported: 0, skipped_summary: { count: csvData.length, records: csvData } };
       }
 
@@ -43,7 +46,7 @@ export const useImportCsvData = () => {
         p_organization_id: organization_id,
         p_user_id: currentUser.id,
         p_file_id: fileId,
-        p_csv_data: validCsvData, // Send only the valid data
+        p_csv_data: validCsvData, // Send the correctly filtered data
         p_column_mapping: mapping,
       });
 

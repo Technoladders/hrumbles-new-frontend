@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -20,16 +19,19 @@ import {
   Search,
   Briefcase,
   Calendar,
-  Clock,
   ChevronLeft,
   ChevronRight,
   Pencil,
   Trash2,
-  DollarSign,
-  TrendingUp,
   FileText,
+  Users,
+  UserRoundCheck,
+  UserRoundX,
+  ReceiptIndianRupee,
+  TrendingUp,
+  Clock
 } from "lucide-react";
-import { Card, CardContent, CardHeader } from "../ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { Input } from "../ui/input";
 import { toast } from "sonner";
@@ -39,9 +41,17 @@ import "jspdf-autotable";
 import AssignEmployeeDialog from "./AssignEmployeeDialog";
 import Loader from "@/components/ui/Loader";
 import {
-ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, PieChart, Pie
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  PieChart,
+  Pie,
+  Legend
 } from "recharts";
-import RevenueProfitChart from "../Client/RevenueProfitChart";
 import {
   Tooltip,
   TooltipContent,
@@ -58,10 +68,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
-import { Calendar as CalendarIcon,UserRoundCheck, UserRoundX, ReceiptIndianRupee  } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as UICalendar } from "@/components/ui/calendar"; // Assuming available in your UI library
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, isSameDay, isWithinInterval } from "date-fns";
+import { startOfMonth, isSameDay, isWithinInterval, format, eachDayOfInterval } from "date-fns";
+import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
+import RevenueExpenseChart from "./RevenueExpenseChart";
 
 interface AssignEmployee {
   id: string;
@@ -76,6 +85,8 @@ interface AssignEmployee {
   sow: string | null;
   duration: number;
   billing_type?: string;
+  salary_type?: string;
+  salary_currency?: string;
   hr_employees?: {
     first_name: string;
     last_name: string;
@@ -86,6 +97,7 @@ interface AssignEmployee {
 interface Client {
   id: string;
   currency: string;
+  client_name: string;
 }
 
 interface Project {
@@ -109,6 +121,12 @@ interface TimeLog {
     projects: { hours: number; report: string; clientId: string; projectId: string }[];
   };
   total_working_hours: string;
+}
+
+interface DateRange {
+  startDate: Date;
+  endDate: Date;
+  key: string;
 }
 
 const EXCHANGE_RATE_USD_TO_INR = 84;
@@ -136,8 +154,16 @@ const ProjectDashboard = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
   const [calculationMode, setCalculationMode] = useState<"accrual" | "actual">("actual");
- const [timePeriod, setTimePeriod] = useState<"week" | "month" | "year">("week");
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [tempDateRange, setTempDateRange] = useState<DateRange>({
+    startDate: startOfMonth(new Date()),
+    endDate: new Date(),
+    key: "selection",
+  });
+  const [appliedDateRange, setAppliedDateRange] = useState<DateRange>({
+    startDate: startOfMonth(new Date()),
+    endDate: new Date(),
+    key: "selection",
+  });
 
   const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
@@ -236,18 +262,19 @@ const ProjectDashboard = () => {
     enabled: !!id,
   });
 
-  // Fetch time logs for actual calculations
+  // Fetch time logs for actual calculations within the applied date range
   const { data: timeLogs = [], isLoading: loadingTimeLogs, error: timeLogsError } = useQuery<
     TimeLog[]
   >({
-    queryKey: ["time_logs", id],
+    queryKey: ["time_logs", id, appliedDateRange],
     queryFn: async () => {
       if (!id) throw new Error("Project ID is missing");
       const { data, error } = await supabase
         .from("time_logs")
         .select("id, employee_id, date, project_time_data, total_working_hours")
-        // .eq("organization_id", organization_id);
-            .eq("is_approved", true)
+        .eq("is_approved", true)
+        .gte("date", appliedDateRange.startDate.toISOString())
+        .lte("date", appliedDateRange.endDate.toISOString());
       if (error) throw error;
       return data.filter((log) =>
         log.project_time_data?.projects?.some((proj) => proj.projectId === id)
@@ -262,7 +289,7 @@ const ProjectDashboard = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("hr_clients")
-        .select("id, currency")
+        .select("id, currency, client_name")
         .eq("organization_id", organization_id);
       if (error) throw error;
       return data as Client[];
@@ -286,33 +313,7 @@ const ProjectDashboard = () => {
     loadingTimeLogs,
   ]);
 
-// Calculate total hours per employee from time logs with time filter
-  const calculateEmployeeHoursWithFilter = (employeeId: string, filter: "week" | "month" | "year") => {
-    const now = new Date();
-    let startDate: Date;
-
-    if (filter === "week") {
-      startDate = new Date(now.setDate(now.getDate() - 7));
-    } else if (filter === "month") {
-      startDate = new Date(now.setMonth(now.getMonth() - 1));
-    } else {
-      startDate = new Date(now.setFullYear(now.getFullYear() - 1));
-    }
-
-    return timeLogs
-      .filter((log) => {
-        const logDate = new Date(log.date);
-        return log.employee_id === employeeId && logDate >= startDate;
-      })
-      .reduce((acc, log) => {
-        const projectEntry = log.project_time_data?.projects?.find(
-          (proj) => proj.projectId === id
-        );
-        return acc + (projectEntry?.hours || 0);
-      }, 0);
-  };
-
-  // Existing calculateEmployeeHours for table and other calculations
+  // Calculate employee hours within the applied date range
   const calculateEmployeeHours = (employeeId: string) => {
     return timeLogs
       .filter((log) => log.employee_id === employeeId)
@@ -324,71 +325,23 @@ const ProjectDashboard = () => {
       }, 0);
   };
 
-  // New function to calculate total hours by time interval
-  const calculateTotalHoursByInterval = (period: "week" | "month" | "year", referenceDate: Date) => {
-    let intervalStart: Date;
-    let intervalEnd: Date;
-    let data: { name: string; hours: number }[] = [];
-
-    if (period === "week") {
-      intervalStart = startOfWeek(referenceDate, { weekStartsOn: 1 }); // Monday start
-      intervalEnd = endOfWeek(referenceDate, { weekStartsOn: 1 });
-      const days = eachDayOfInterval({ start: intervalStart, end: intervalEnd });
-      data = days.map((day) => ({
-        name: format(day, "EEE"), // Mon, Tue, etc.
-        hours: timeLogs
-          .filter((log) => isSameDay(new Date(log.date), day))
-          .reduce((acc, log) => {
-            const projectEntry = log.project_time_data?.projects?.find(
-              (proj) => proj.projectId === id
-            );
-            return acc + (projectEntry?.hours || 0);
-          }, 0),
-      }));
-    } else if (period === "month") {
-      intervalStart = startOfMonth(referenceDate);
-      intervalEnd = endOfMonth(referenceDate);
-      const weeks = eachWeekOfInterval({ start: intervalStart, end: intervalEnd }, { weekStartsOn: 1 });
-      data = weeks.map((weekStart, index) => ({
-        name: `Week ${index + 1}`,
-        hours: timeLogs
-          .filter((log) => {
-            const logDate = new Date(log.date);
-            const weekEnd = new Date(weekStart);
-            weekEnd.setDate(weekStart.getDate() + 6);
-            return isWithinInterval(logDate, { start: weekStart, end: weekEnd });
-          })
-          .reduce((acc, log) => {
-            const projectEntry = log.project_time_data?.projects?.find(
-              (proj) => proj.projectId === id
-            );
-            return acc + (projectEntry?.hours || 0);
-          }, 0),
-      }));
-    } else {
-      intervalStart = startOfYear(referenceDate);
-      intervalEnd = endOfYear(referenceDate);
-      const months = eachMonthOfInterval({ start: intervalStart, end: intervalEnd });
-      data = months.map((month) => ({
-        name: format(month, "MMM"), // Jan, Feb, etc.
-        hours: timeLogs
-          .filter((log) => {
-            const logDate = new Date(log.date);
-            return logDate.getFullYear() === month.getFullYear() && logDate.getMonth() === month.getMonth();
-          })
-          .reduce((acc, log) => {
-            const projectEntry = log.project_time_data?.projects?.find(
-              (proj) => proj.projectId === id
-            );
-            return acc + (projectEntry?.hours || 0);
-          }, 0),
-      }));
-    }
-
-    return data;
+  // Calculate total hours by day within the applied date range
+  const calculateTotalHoursByDay = () => {
+    const days = eachDayOfInterval({ start: appliedDateRange.startDate, end: appliedDateRange.endDate });
+    return days.map((day) => ({
+      name: format(day, "MMM dd"),
+      hours: timeLogs
+        .filter((log) => isSameDay(new Date(log.date), day))
+        .reduce((acc, log) => {
+          const projectEntry = log.project_time_data?.projects?.find(
+            (proj) => proj.projectId === id
+          );
+          return acc + (projectEntry?.hours || 0);
+        }, 0),
+    }));
   };
 
-  // Convert client_billing to LPA or per-hour for accrual and actual calculations
+  // Convert client_billing to LPA or per-hour for accrual calculations
   const convertToLPA = (employee: AssignEmployee, mode: "accrual" | "actual") => {
     const client = clients.find((c) => c.id === employee.client_id);
     const currency = client?.currency || "INR";
@@ -407,7 +360,7 @@ const ProjectDashboard = () => {
           clientBilling = (clientBilling * 12 * durationDays) / 365;
           break;
         case "Hourly":
-          clientBilling *= workingHours;
+          clientBilling *= durationDays * 8;
           break;
         case "LPA":
         default:
@@ -443,20 +396,18 @@ const ProjectDashboard = () => {
     }
   };
 
-  console.log("employee", assignEmployee)
   // Calculate profit for an employee
   const calculateProfit = (employee: AssignEmployee, mode: "accrual" | "actual") => {
     const revenue = calculateRevenue(employee, mode);
-      let salary = employee.salary || 0;
-  const salaryType = employee?.salary_type || "LPA";
+    let salary = employee.salary || 0;
+    const salaryType = employee?.salary_type || "LPA";
 
-  if (employee.salary_currency === "USD") {
-    salary *= EXCHANGE_RATE_USD_TO_INR;
-  }
+    if (employee.salary_currency === "USD") {
+      salary *= EXCHANGE_RATE_USD_TO_INR;
+    }
 
     if (mode === "accrual") {
       const durationDays = employee.duration || 1;
-
       if (salaryType === "LPA") {
         salary = (salary * durationDays) / 365;
       } else if (salaryType === "Monthly") {
@@ -467,7 +418,6 @@ const ProjectDashboard = () => {
       }
     } else {
       const hours = calculateEmployeeHours(employee.assign_employee);
-
       if (salaryType === "LPA") {
         const hourlySalary = salary / (365 * 8);
         salary = hours * hourlySalary;
@@ -482,19 +432,19 @@ const ProjectDashboard = () => {
     return revenue - salary;
   };
 
-  // Calculate total revenue
+  // Calculate total revenue (not affected by date range)
   const totalRevenue = assignEmployee.reduce(
     (acc, emp) => acc + calculateRevenue(emp, calculationMode),
     0
   ) || 0;
 
-  // Calculate total profit
+  // Calculate total profit (not affected by date range)
   const totalProfit = assignEmployee.reduce(
     (acc, emp) => acc + calculateProfit(emp, calculationMode),
     0
   ) || 0;
 
-  // Calculate employee counts from assignEmployee array
+  // Calculate employee counts (not affected by date range)
   const totalEmployees = assignEmployee.length;
   const workingCount = assignEmployee.filter((emp) => emp.status === "Working").length || 0;
   const relievedCount = assignEmployee.filter((emp) => emp.status === "Relieved").length || 0;
@@ -520,17 +470,21 @@ const ProjectDashboard = () => {
     },
   });
 
-  // Filter employees based on search and status
+  // Filter employees based on search, status, and date range (for table only)
   const filteredEmployees = assignEmployee.filter((employee) => {
     const employeeName = employee.hr_employees
       ? `${employee.hr_employees.first_name} ${employee.hr_employees.last_name}`
       : "";
     const matchesSearch = employeeName.toLowerCase().includes(searchQuery.toLowerCase());
-    if (activeTab === "all") return matchesSearch;
-    if (activeTab === "working") return matchesSearch && employee.status === "Working";
-    if (activeTab === "relieved") return matchesSearch && employee.status === "Relieved";
-    if (activeTab === "terminated") return matchesSearch && employee.status === "Terminated";
-    return matchesSearch;
+    const isWithinDateRange =
+      calculationMode === "actual" ||
+      (new Date(employee.start_date) <= appliedDateRange.endDate &&
+        new Date(employee.end_date) >= appliedDateRange.startDate);
+    if (activeTab === "all") return matchesSearch && isWithinDateRange;
+    if (activeTab === "working") return matchesSearch && employee.status === "Working" && isWithinDateRange;
+    if (activeTab === "relieved") return matchesSearch && employee.status === "Relieved" && isWithinDateRange;
+    if (activeTab === "terminated") return matchesSearch && employee.status === "Terminated" && isWithinDateRange;
+    return matchesSearch && isWithinDateRange;
   });
 
   // Pagination logic
@@ -585,7 +539,11 @@ const ProjectDashboard = () => {
           ? `${employee.hr_employees.first_name} ${employee.hr_employees.last_name}`
           : "N/A",
         calculationMode === "accrual"
-          ? `${employee.duration} days`
+          ? `${Math.ceil(
+              (Math.min(new Date(employee.end_date).getTime(), appliedDateRange.endDate.getTime()) -
+                Math.max(new Date(employee.start_date).getTime(), appliedDateRange.startDate.getTime())) /
+                (1000 * 60 * 60 * 24)
+            )} days`
           : `${calculateEmployeeHours(employee.assign_employee).toFixed(2)} hours`,
         ...(calculationMode === "accrual"
           ? [
@@ -629,31 +587,6 @@ const ProjectDashboard = () => {
         </div>
       );
     }
-
-    // Helper function to calculate salary (extracted from calculateProfit)
-const calculateSalary = (employee: AssignEmployee, mode: "accrual" | "actual") => {
-  let salary = employee.salary || 0;
-  const salaryType = employee?.salary_type || "LPA";
-
-  if (employee.salary_currency === "USD") {
-    salary *= EXCHANGE_RATE_USD_TO_INR;
-  }
-
-
-    const durationDays = employee.duration || 1;
-
-    if (salaryType === "LPA") {
-      salary = (salary * durationDays) / 365;
-    } else if (salaryType === "Monthly") {
-      const monthlyToDaily = salary / 30;
-      salary = monthlyToDaily * durationDays;
-    } else if (salaryType === "Hourly") {
-      salary = salary * durationDays * 8;
-    }
-  
-
-  return salary;
-};
 
     return (
       <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm animate-scale-in">
@@ -704,7 +637,11 @@ const calculateSalary = (employee: AssignEmployee, mode: "accrual" | "actual") =
                   </td>
                   <td className="px-4 py-2">
                     {calculationMode === "accrual"
-                      ? `${employee.duration} days`
+                      ? `${Math.ceil(
+                          (Math.min(new Date(employee.end_date).getTime(), appliedDateRange.endDate.getTime()) -
+                            Math.max(new Date(employee.start_date).getTime(), appliedDateRange.startDate.getTime())) /
+                            (1000 * 60 * 60 * 24)
+                        )} days`
                       : `${calculateEmployeeHours(employee.assign_employee).toFixed(2)} hours`}
                   </td>
                   {calculationMode === "accrual" && (
@@ -713,34 +650,34 @@ const calculateSalary = (employee: AssignEmployee, mode: "accrual" | "actual") =
                       <td className="px-4 py-2">{new Date(employee.end_date).toLocaleDateString()}</td>
                     </>
                   )}
-                 <td className="px-4 py-2">
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <span className="cursor-pointer">
-        {(() => {
-          const currency = employee.salary_currency || "INR";
-          const salary = employee.salary || 0;
-          const salaryType = employee.salary_type || "LPA";
-          const currencySymbol = currency === "USD" ? "$" : "₹";
-          const salaryTypeText = salaryType === "Hourly" ? "/hr" : salaryType === "Monthly" ? "/month" : "/year";
-          return `${currencySymbol}${salary.toLocaleString('en-IN')}${salaryTypeText}`;
-        })()}
-      </span>
-    </TooltipTrigger>
-    <TooltipContent>
-      <p>
-        {(() => {
-          const currency = employee.salary_currency || "INR";
-          const salary = employee.salary || 0;
-          const salaryType = employee.salary_type || "LPA";
-          const convertedSalary = currency === "USD" ? salary * 84 : salary;
-          const salaryTypeText = salaryType === "Hourly" ? "/hr" : salaryType === "Monthly" ? "/month" : "/year";
-          return `₹${convertedSalary.toLocaleString('en-IN')}${salaryTypeText}`;
-        })()}
-      </p>
-    </TooltipContent>
-  </Tooltip>
-</td>
+                  <td className="px-4 py-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-pointer">
+                          {(() => {
+                            const currency = employee.salary_currency || "INR";
+                            const salary = employee.salary || 0;
+                            const salaryType = employee.salary_type || "LPA";
+                            const currencySymbol = currency === "USD" ? "$" : "₹";
+                            const salaryTypeText = salaryType === "Hourly" ? "/hr" : salaryType === "Monthly" ? "/month" : "/year";
+                            return `${currencySymbol}${salary.toLocaleString('en-IN')}${salaryTypeText}`;
+                          })()}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          {(() => {
+                            const currency = employee.salary_currency || "INR";
+                            const salary = employee.salary || 0;
+                            const salaryType = employee.salary_type || "LPA";
+                            const convertedSalary = currency === "USD" ? salary * 84 : salary;
+                            const salaryTypeText = salaryType === "Hourly" ? "/hr" : salaryType === "Monthly" ? "/month" : "/year";
+                            return `₹${convertedSalary.toLocaleString('en-IN')}${salaryTypeText}`;
+                          })()}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </td>
                   <td className="px-4 py-2">
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -914,370 +851,266 @@ const calculateSalary = (employee: AssignEmployee, mode: "accrual" | "actual") =
     );
   }
 
-return (
-  <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-6 md:p-10">
-    <main className="w-full max-w-8xl mx-auto space-y-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-gray-600 hover:text-indigo-600 transition-all duration-200"
-          >
-            <ArrowLeft size={16} />
-            <span>Back</span>
-          </Button>
-           <div className="flex items-center gap-2 text-sm text-gray-600">
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-6 md:p-10">
+      <main className="w-full max-w-8xl mx-auto space-y-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 text-gray-600 hover:text-indigo-600 transition-all duration-200"
+            >
+              <ArrowLeft size={16} />
+              <span>Back</span>
+            </Button>
+            <div className="flex items-center gap-2 text-sm text-gray-600">
               <span
                 className="cursor-pointer hover:text-indigo-600 transition-colors"
-                onClick={() => navigate("/projects")} // Adjust route as needed
+                onClick={() => navigate("/projects")}
               >
                 Projects
               </span>
               <span>/</span>
               <span
                 className="cursor-pointer hover:text-indigo-600 transition-colors"
-                onClick={() =>
-                  navigate(`/client/${clientId}`) // Adjust route as needed
-                }
+                onClick={() => navigate(`/client/${clientId}`)}
               >
                 {client?.client_name || "Loading..."}
               </span>
-              {/* <span>/</span>
-              <span className="font-medium text-gray-800">{project?.name || "Project"}</span> */}
             </div>
-          <div>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-gray-800 tracking-tight">
-              {project?.name} Dashboard
-            </h1>
-            <p className="text-gray-500 text-sm md:text-base mt-2">
-              Manage and track all employees for this project
-            </p>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-extrabold text-gray-800 tracking-tight">
+                {project?.name} Dashboard
+              </h1>
+              <p className="text-gray-500 text-sm md:text-base mt-2">
+                Manage and track all employees for this project
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => setAddProjectOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <Plus size={16} />
+            <span>Assign New Employee</span>
+          </Button>
+        </div>
+
+        {/* Calculation Mode Tabs and Date Range Picker */}
+        <Tabs
+          value={calculationMode}
+          onValueChange={(value) => setCalculationMode(value as "accrual" | "actual")}
+          className="mb-6"
+        >
+          <TabsList className="grid grid-cols-2 w-[200px]">
+            <TabsTrigger value="actual">Actual</TabsTrigger>
+            <TabsTrigger value="accrual">Accrual</TabsTrigger>
+          </TabsList>
+          <DateRangePickerField
+            dateRange={tempDateRange}
+            onDateRangeChange={(range) => setTempDateRange(range)}
+            onApply={() => setAppliedDateRange(tempDateRange)}
+            className="mt-4"
+          />
+        </Tabs>
+
+        {/* Stats Overview and Finance Chart */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <Card className="lg:col-span-1 purple-gradient">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-lg font-semibold text-white flex items-center">
+                <Briefcase className="mr-2" size={18} />
+                Project Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-2">
+              <ul className="space-y-3">
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <FileText size={16} className="mr-2 text-white" />
+                    <span className="text-sm">Project Name:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{project?.name}</span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <Briefcase size={16} className="mr-2 text-white" />
+                    <span>Project ID:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{project?.id}</span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <Calendar size={16} className="mr-2 text-white" />
+                    <span>Start Date:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">
+                    {project?.start_date ? new Date(project.start_date).toLocaleDateString() : "N/A"}
+                  </span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <Calendar size={16} className="mr-2 text-white" />
+                    <span>End Date:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">
+                    {project?.end_date ? new Date(project.end_date).toLocaleDateString() : "N/A"}
+                  </span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <Users size={16} className="mr-2 text-white" />
+                    <span>Total Employees:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{totalEmployees}</span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <UserRoundCheck size={16} className="mr-2 text-white" />
+                    <span>Working Employees:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{workingCount}</span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <UserRoundX size={16} className="mr-2 text-white" />
+                    <span>Relieved Employees:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{relievedCount}</span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <UserRoundX size={16} className="mr-2 text-white" />
+                    <span>Terminated Employees:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{terminatedCount}</span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <ReceiptIndianRupee size={16} className="mr-2 text-white" />
+                    <span>Total Revenue:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{formatINR(totalRevenue)}</span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <TrendingUp size={16} className="mr-2 text-white" />
+                    <span>Total Profit:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{formatINR(totalProfit)}</span>
+                </li>
+              </ul>
+            </CardContent>
+          </Card>
+          <div className="lg:col-span-3">
+            <RevenueExpenseChart projectId={id} />
           </div>
         </div>
-         <Button
-              onClick={() => setAddProjectOpen(true)}
-              className="flex items-center gap-2"
-            >
-              <Plus size={16} />
-              <span>Assign New Employee</span>
-            </Button>
-      </div>
 
-      {/* Calculation Mode Tabs */}
- <Tabs
-            value={calculationMode}
-            onValueChange={(value) => setCalculationMode(value as "accrual" | "actual")}
-            className="mb-6"
-          >
-            <TabsList className="grid grid-cols-2 w-[200px]">
-              <TabsTrigger value="actual">Actual</TabsTrigger>
-              <TabsTrigger value="accrual">Accrual</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">Total Employees</p>
-              <h3 className="text-2xl font-bold text-gray-800">{totalEmployees}</h3>
-              <p className="text-xs text-gray-500 mt-1">All assigned employees</p>
-            </div>
-            <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-full">
-              <Briefcase size={24} className="text-white" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">Working Employees</p>
-              <h3 className="text-2xl font-bold text-gray-800">{workingCount}</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                {totalEmployees ? Math.round((workingCount / totalEmployees) * 100) : 0}% of total
-              </p>
-            </div>
-            <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full">
-              <Calendar size={24} className="text-white" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">Relieved Employees</p>
-              <h3 className="text-2xl font-bold text-gray-800">{relievedCount}</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                {totalEmployees ? Math.round((relievedCount / totalEmployees) * 100) : 0}% of total
-              </p>
-            </div>
-            <div className="bg-gradient-to-br from-yellow-400 to-yellow-600 p-3 rounded-full">
-              <Clock size={24} className="text-white" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">Terminated Employees</p>
-              <h3 className="text-2xl font-bold text-gray-800">{terminatedCount}</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                {totalEmployees ? Math.round((terminatedCount / totalEmployees) * 100) : 0}% of total
-              </p>
-            </div>
-            <div className="bg-gradient-to-br from-red-400 to-red-600 p-3 rounded-full">
-              <Briefcase size={24} className="text-white" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">Total Revenue</p>
-              <h3 className="text-2xl font-bold text-gray-800">₹ {formatINR(totalRevenue)}</h3>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <p className="text-xs text-gray-500 mt-1">
-                      ${(totalRevenue / EXCHANGE_RATE_USD_TO_INR).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
-                    </p>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-white border-gray-200 shadow-lg rounded-lg p-2">
-                    <p>Converted at 1 USD = ₹ {EXCHANGE_RATE_USD_TO_INR}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-full">
-              <ReceiptIndianRupee size={24} className="text-white" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">Total Profit</p>
-              <h3 className="text-2xl font-bold text-gray-800">₹ {formatINR(totalProfit)}</h3>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <p className="text-xs text-gray-500 mt-1">
-                      ${(totalProfit / EXCHANGE_RATE_USD_TO_INR).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
-                    </p>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-white border-gray-200 shadow-lg rounded-lg p-2">
-                    <p>Converted at 1 USD = ₹ {EXCHANGE_RATE_USD_TO_INR}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full">
-              <TrendingUp size={24} className="text-white" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardHeader className="purple-gradient text-white p-6">
-            <h2 className="text-xl md:text-2xl font-semibold">Employee Financials</h2>
-          </CardHeader>
-          <CardContent className="p-6 overflow-x-auto">
-            <div style={{ minWidth: `${assignEmployee.length * 100}px` }}>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart
-                  data={assignEmployee.map((employee) => ({
-                    name: employee.hr_employees
-                      ? `${employee.hr_employees.first_name} ${employee.hr_employees.last_name}`
-                      : "N/A",
-                    revenue: calculateRevenue(employee, calculationMode),
-                    salary: employee.salary,
-                    profit: calculateProfit(employee, calculationMode),
-                  }))}
-                  margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
-                  className="animate-fade-in"
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis
-                    dataKey="name"
-                    angle={0}
-                    textAnchor="middle"
-                    interval={0}
-                    height={50}
-                    label={{ value: "Employees", position: "insideBottom", offset: -10, fill: "#4b5563" }}
-                    className="text-sm font-medium purple-text-color"
-                    tick={{ fontSize: 12, fill: "#4b5563" }}
-                    tickFormatter={(value) => (value.length > 7 ? `${value.slice(0, 7)}...` : value)}
-                  />
-                  <YAxis
-                    label={{ value: "Value (INR)", angle: -90, position: "insideLeft", offset: -10, fill: "#4b5563" }}
-                    className="text-sm font-medium purple-text-color"
-                    tick={{ fontSize: 12, fill: "#4b5563" }}
-                  />
-                  <RechartsTooltip
-                    contentStyle={{
-                      backgroundColor: "#fff",
-                      border: "1px solid oklch(62.7% 0.265 303.9)",
-                      borderRadius: "8px",
-                      boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                    }}
-                    formatter={(value: number, name) => {
-                      const usd = value / EXCHANGE_RATE_USD_TO_INR;
-                      return [
-                        `₹${formatINR(value)} ($${usd.toLocaleString(undefined, { maximumFractionDigits: 0 })})`,
-                        name,
-                      ];
-                    }}
-                    itemStyle={{ color: "#4b5563" }}
-                    cursor={{ fill: "#f3e8ff" }}
-                  />
-                  <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "14px", color: "#4b5563" }} />
-                  <Bar dataKey="revenue" fill="#7B43F1" name="Revenue" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="salary" fill="#A74BC8" name="Salary" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="profit" fill="#B343B5" name="Profit" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-        {calculationMode === "actual" ? (
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-            <CardHeader className="purple-gradient text-white p-6">
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl md:text-2xl font-semibold">Logged Hours</h2>
-                <div className="flex items-center gap-2">
-                  <Select value={timePeriod} onValueChange={(value) => setTimePeriod(value as "week" | "month" | "year")}>
-                    <SelectTrigger className="w-[100px] bg-white text-gray-800">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="week">Week</SelectItem>
-                      <SelectItem value="month">Month</SelectItem>
-                      <SelectItem value="year">Year</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-[170px] justify-start text-left font-normal text-black bg-white border-gray-200"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {format(selectedDate, timePeriod === "week" ? "'Week of' MMM d, yyyy" : timePeriod === "month" ? "MMM yyyy" : "yyyy")}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <UICalendar
-                        mode={timePeriod === "year" ? "year" : "default"}
-                        selected={selectedDate}
-                        onSelect={(date) => date && setSelectedDate(date)}
-                        initialFocus
-                        disabled={(date) => date > new Date()}
-                        {...(timePeriod === "year" ? { views: ["year"] } : {})}
-                      />
-                    </PopoverContent>
-                  </Popover>
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 gap-6 mb-8">
+          {calculationMode === "actual" ? (
+            <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
+              <CardHeader className="purple-gradient text-white p-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl md:text-2xl font-semibold">Logged Hours</h2>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-6">
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart
-                  data={calculateTotalHoursByInterval(timePeriod, selectedDate)}
-                  margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
-                  className="animate-fade-in"
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis
-                    dataKey="name"
-                    angle={0}
-                    textAnchor="middle"
-                    interval={0}
-                    height={50}
-                    label={{ value: "Time Intervals", position: "insideBottom", offset: -10, fill: "#4b5563" }}
-                    className="text-sm font-medium purple-text-color"
-                    tick={{ fontSize: 12, fill: "#4b5563" }}
-                    tickFormatter={(value) => (value.length > 7 ? `${value.slice(0, 7)}...` : value)}
-                  />
-                  <YAxis
-                    label={{ value: "Hours", angle: -90, position: "insideLeft", offset: -10, fill: "#4b5563" }}
-                    className="text-sm font-medium purple-text-color"
-                    tick={{ fontSize: 12, fill: "#4b5563" }}
-                  />
-                  <RechartsTooltip
-                    contentStyle={{
-                      backgroundColor: "#fff",
-                      border: "1px solid oklch(62.7% 0.265 303.9)",
-                      borderRadius: "8px",
-                      boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                    }}
-                    formatter={(value: number) => `${value.toFixed(2)} hours`}
-                    itemStyle={{ color: "#4b5563" }}
-                    cursor={{ fill: "#f3e8ff" }}
-                  />
-                  <Bar dataKey="hours" fill="#7B43F1" name="Logged Hours" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-            <CardHeader className="purple-gradient text-white p-6">
-              <h2 className="text-xl md:text-2xl font-semibold">Revenue vs Profit</h2>
-            </CardHeader>
-            <CardContent className="p-6 flex flex-col items-center">
-              <ResponsiveContainer width="100%" height={400}>
-                <PieChart className="animate-fade-in">
-                  <Pie
-                    data={[
-                      { name: "Revenue", value: totalRevenue, fill: "#7B43F1" },
-                      { name: "Profit", value: totalProfit, fill: "#A74BC8" },
-                    ]}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={100}
-                    outerRadius={140}
-                    cornerRadius={50}
-                    paddingAngle={5}
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ₹${formatINR(value)}`}
-                    labelLine={false}
-                    className="font-medium purple-text-color"
-                  />
-                  <RechartsTooltip
-                    contentStyle={{
-                      backgroundColor: "#fff",
-                      border: "1px solid oklch(62.7% 0.265 303.9)",
-                      borderRadius: "8px",
-                      boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                    }}
-                    formatter={(value: number, name) => {
-                      const usd = value / EXCHANGE_RATE_USD_TO_INR;
-                      return [
-                        `₹${formatINR(value)} ($${usd.toLocaleString(undefined, { maximumFractionDigits: 0 })})`,
-                        name,
-                      ];
-                    }}
-                    itemStyle={{ color: "#4b5563" }}
-                  />
-                  <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: "14px", color: "#4b5563" }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart
+                    data={calculateTotalHoursByDay()}
+                    margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
+                    className="animate-fade-in"
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis
+                      dataKey="name"
+                      angle={45}
+                      textAnchor="end"
+                      interval={0}
+                      height={50}
+                      label={{ value: "Date", position: "insideBottom", offset: -10, fill: "#4b5563" }}
+                      className="text-sm font-medium purple-text-color"
+                      tick={{ fontSize: 12, fill: "#4b5563" }}
+                      tickFormatter={(value) => (value.length > 7 ? `${value.slice(0, 7)}...` : value)}
+                    />
+                    <YAxis
+                      label={{ value: "Hours", angle: -90, position: "insideLeft", offset: -10, fill: "#4b5563" }}
+                      className="text-sm font-medium purple-text-color"
+                      tick={{ fontSize: 12, fill: "#4b5563" }}
+                    />
+                    <RechartsTooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        border: "1px solid oklch(62.7% 0.265 303.9)",
+                        borderRadius: "8px",
+                        boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                      }}
+                      formatter={(value: number) => `${value.toFixed(2)} hours`}
+                      itemStyle={{ color: "#4b5563" }}
+                      cursor={{ fill: "#f3e8ff" }}
+                    />
+                    <Bar dataKey="hours" fill="#7B43F1" name="Logged Hours" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
+              <CardHeader className="purple-gradient text-white p-6">
+                <h2 className="text-xl md:text-2xl font-semibold">Revenue vs Profit</h2>
+              </CardHeader>
+              <CardContent className="p-6 flex flex-col items-center">
+                <ResponsiveContainer width="100%" height={400}>
+                  <PieChart className="animate-fade-in">
+                    <Pie
+                      data={[
+                        { name: "Revenue", value: totalRevenue, fill: "#7B43F1" },
+                        { name: "Profit", value: totalProfit, fill: "#A74BC8" },
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={100}
+                      outerRadius={140}
+                      cornerRadius={50}
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, value }) => `${name}: ₹${formatINR(value)}`}
+                      labelLine={false}
+                      className="font-medium purple-text-color"
+                    />
+                    <RechartsTooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        border: "1px solid oklch(62.7% 0.265 303.9)",
+                        borderRadius: "8px",
+                        boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                      }}
+                      formatter={(value: number, name) => {
+                        const usd = value / EXCHANGE_RATE_USD_TO_INR;
+                        return [
+                          `₹${formatINR(value)} ($${usd.toLocaleString(undefined, { maximumFractionDigits: 0 })})`,
+                          name,
+                        ];
+                      }}
+                      itemStyle={{ color: "#4b5563" }}
+                    />
+                    <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: "14px", color: "#4b5563" }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
-      {/* Table Section */}
-      <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl rounded-2xl">
-        <CardContent className="p-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
-           <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+        {/* Table Section */}
+        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl rounded-2xl">
+          <CardContent className="p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
+              <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="grid grid-cols-4 w-full sm:w-[400px]">
                   <TabsTrigger value="all">All</TabsTrigger>
                   <TabsTrigger value="working" className="flex items-center gap-1">
@@ -1294,88 +1127,87 @@ return (
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
-            <div className="relative flex-grow">
-              <Search
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                size={18}
-              />
-              <Input
-                placeholder="Search for employees..."
-                className="pl-10 h-10 rounded-lg border-gray-200"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+              <div className="relative flex-grow">
+                <Search
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                  size={18}
+                />
+                <Input
+                  placeholder="Search for employees..."
+                  className="pl-10 h-10 rounded-lg border-gray-200"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={exportToCSV} className="border-gray-200 hover:bg-gray-50">
+                  <Download className="w-4 h-4 mr-2" />
+                  Export CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportToPDF} className="border-gray-200 hover:bg-gray-50">
+                  <Download className="w-4 h-4 mr-2" />
+                  Export PDF
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={exportToCSV} className="border-gray-200 hover:bg-gray-50">
-                <Download className="w-4 h-4 mr-2" />
-                Export CSV
-              </Button>
-              <Button variant="outline" size="sm" onClick={exportToPDF} className="border-gray-200 hover:bg-gray-50">
-                <Download className="w-4 h-4 mr-2" />
-                Export PDF
-              </Button>
-            </div>
-          </div>
-          <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
-            <TabsContent value="all" className="space-y-6">
-              {renderTable(paginatedEmployees)}
-              {filteredEmployees.length > 0 && renderPagination()}
-            </TabsContent>
-            <TabsContent value="working" className="space-y-6">
-              {renderTable(paginatedEmployees.filter((employee) => employee.status === "Working"))}
-              {filteredEmployees.length > 0 && renderPagination()}
-            </TabsContent>
-            <TabsContent value="relieved" className="space-y-6">
-              {renderTable(paginatedEmployees.filter((employee) => employee.status === "Relieved"))}
-              {filteredEmployees.length > 0 && renderPagination()}
-            </TabsContent>
-            <TabsContent value="terminated" className="space-y-6">
-              {renderTable(paginatedEmployees.filter((employee) => employee.status === "Terminated"))}
-              {filteredEmployees.length > 0 && renderPagination()}
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+            <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+              <TabsContent value="all" className="space-y-6">
+                {renderTable(paginatedEmployees)}
+                {filteredEmployees.length > 0 && renderPagination()}
+              </TabsContent>
+              <TabsContent value="working" className="space-y-6">
+                {renderTable(paginatedEmployees.filter((employee) => employee.status === "Working"))}
+                {filteredEmployees.length > 0 && renderPagination()}
+              </TabsContent>
+              <TabsContent value="relieved" className="space-y-6">
+                {renderTable(paginatedEmployees.filter((employee) => employee.status === "Relieved"))}
+                {filteredEmployees.length > 0 && renderPagination()}
+              </TabsContent>
+              <TabsContent value="terminated" className="space-y-6">
+                {renderTable(paginatedEmployees.filter((employee) => employee.status === "Terminated"))}
+                {filteredEmployees.length > 0 && renderPagination()}
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
 
-      {clientId && id && (
-        <>
-          <AssignEmployeeDialog
-            open={addProjectOpen}
-            onOpenChange={(open) => {
-              setAddProjectOpen(open);
-              if (!open) setEditEmployee(null);
-            }}
-            projectId={id}
-            clientId={clientId}
-            editEmployee={editEmployee}
-            project={project}
-          />
-          <AlertDialog open={!!deleteEmployeeId} onOpenChange={() => setDeleteEmployeeId(null)}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This action will permanently remove the employee from this project. This cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-red-600 hover:bg-red-700"
-                  onClick={() => deleteEmployeeId && deleteEmployee.mutate(deleteEmployeeId)}
-                >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </>
-      )}
-    </main>
-  </div>
-);
+        {clientId && id && (
+          <>
+            <AssignEmployeeDialog
+              open={addProjectOpen}
+              onOpenChange={(open) => {
+                setAddProjectOpen(open);
+                if (!open) setEditEmployee(null);
+              }}
+              projectId={id}
+              clientId={clientId}
+              editEmployee={editEmployee}
+              project={project}
+            />
+            <AlertDialog open={!!deleteEmployeeId} onOpenChange={() => setDeleteEmployeeId(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action will permanently remove the employee from this project. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={() => deleteEmployeeId && deleteEmployee.mutate(deleteEmployeeId)}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        )}
+      </main>
+    </div>
+  );
 };
 
 export default ProjectDashboard;
-// 

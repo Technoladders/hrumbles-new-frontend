@@ -828,24 +828,33 @@ const chartFilteredData = useMemo(() => {
       </div>
       {/* DIALOGS */}
       {/* ✅ FIX: ADDED THE DIALOG FOR THE INITIAL FETCH STEP */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Fetch Company Data</DialogTitle><DialogDescription>Enter a company name to fetch details using AI.</DialogDescription></DialogHeader>
+          <CompanyAddForm onAdd={handleCompanyDataFetched} onCancel={() => setIsAddDialogOpen(false)} />
+        </DialogContent>
+      </Dialog>
+      
       <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
-                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader><DialogTitle>Review and Create Company</DialogTitle></DialogHeader>
-                    {companyToReview && <CompanyEditForm company={companyToReview} onClose={() => setIsReviewDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}
-                </DialogContent>
-            </Dialog>
-            <Dialog open={isManualAddDialogOpen} onOpenChange={setIsManualAddDialogOpen}>
-                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader><DialogTitle>Add Company Manually</DialogTitle></DialogHeader>
-                    <CompanyEditForm company={{}} onClose={() => setIsManualAddDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />
-                </DialogContent>
-            </Dialog>
-            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader><DialogTitle>Edit Company</DialogTitle></DialogHeader>
-                    {editCompany && <CompanyEditForm company={editCompany} onClose={() => setIsEditDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}
-                </DialogContent>
-            </Dialog>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Review and Create Company</DialogTitle><DialogDescription>Review the AI-fetched data then save.</DialogDescription></DialogHeader>
+          {companyToReview && <CompanyEditForm company={companyToReview} onClose={() => setIsReviewDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={isManualAddDialogOpen} onOpenChange={setIsManualAddDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Add Company Manually</DialogTitle><DialogDescription>Fill out the form and click "Create Company" to save.</DialogDescription></DialogHeader>
+          <CompanyEditForm company={{}} onClose={() => setIsManualAddDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Edit Company</DialogTitle><DialogDescription>Update details for {editCompany?.name}.</DialogDescription></DialogHeader>
+          {editCompany && <CompanyEditForm company={editCompany} onClose={() => setIsEditDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}
+        </DialogContent>
+      </Dialog>
         </div>
     );
 };

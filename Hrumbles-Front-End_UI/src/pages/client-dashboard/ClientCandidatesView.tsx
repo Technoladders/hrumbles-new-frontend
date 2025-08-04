@@ -35,7 +35,10 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 
 // Status IDs for Offered and Joined candidates
 const OFFERED_STATUS_ID = "9d48d0f9-8312-4f60-aaa4-bafdce067417";
+const OFFER_ISSUED_SUB_STATUS_ID = "bcc84d3b-fb76-4912-86cc-e95448269d6b";
 const JOINED_STATUS_ID = "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e";
+const JOINED_SUB_STATUS_ID = "c9716374-3477-4606-877a-dfa5704e7680";
+
 
 // Static USD to INR conversion rates
 const USD_TO_INR_RATE_CANDIDATES = 84;
@@ -376,7 +379,8 @@ const fetchCandidatesAndEmployees = async (client: string) => {
           hr_jobs!hr_job_candidates_job_id_fkey(id, title, job_type_category, client_details)
         `)
         .in("job_id", jobIds)
-        .in("main_status_id", [OFFERED_STATUS_ID, JOINED_STATUS_ID]);
+       .or(`main_status_id.eq.${JOINED_STATUS_ID},main_status_id.eq.${OFFERED_STATUS_ID}`)
+          .in("sub_status_id", [JOINED_SUB_STATUS_ID, OFFER_ISSUED_SUB_STATUS_ID]);
 
       if (candidatesError) throw candidatesError;
 
@@ -608,11 +612,11 @@ const fetchCandidatesAndEmployees = async (client: string) => {
     navigate("/clients");
   };
 
-  const getStatusBadgeColor = (statusId: string | undefined) => {
+ const getStatusBadgeColor = (statusId: string | undefined) => {
     switch (statusId) {
-      case OFFERED_STATUS_ID:
+      case OFFER_ISSUED_SUB_STATUS_ID:
         return "bg-yellow-100 text-yellow-800 hover:bg-yellow-200";
-      case JOINED_STATUS_ID:
+      case JOINED_SUB_STATUS_ID:
         return "bg-green-100 text-green-800 hover:bg-green-200";
       default:
         return "bg-gray-100 text-gray-800 hover:bg-gray-200";
@@ -621,21 +625,24 @@ const fetchCandidatesAndEmployees = async (client: string) => {
 
   const getStatusText = (statusId: string | undefined) => {
     switch (statusId) {
-      case OFFERED_STATUS_ID:
-        return "Offered";
-      case JOINED_STATUS_ID:
+      case OFFER_ISSUED_SUB_STATUS_ID:
+        return "Offer Issued";
+      case JOINED_SUB_STATUS_ID:
         return "Joined";
       default:
         return "Unknown";
     }
   };
 
-  const handleStatusChange = async (candidateId: string, statusId: string) => {
+const handleStatusChange = async (candidateId: string, subStatusId: string) => {
     setStatusUpdateLoading(candidateId);
     try {
       const { error } = await supabase
         .from("hr_job_candidates")
-        .update({ main_status_id: statusId })
+        .update({ 
+          main_status_id: subStatusId === OFFER_ISSUED_SUB_STATUS_ID ? OFFERED_STATUS_ID : JOINED_STATUS_ID,
+          sub_status_id: subStatusId 
+        })
         .eq("id", candidateId);
 
       if (error) throw error;
@@ -656,6 +663,7 @@ const fetchCandidatesAndEmployees = async (client: string) => {
       setStatusUpdateLoading(null);
     }
   };
+
 
   const handleEditCandidate = (candidate: Candidate) => {
     toast({
@@ -997,8 +1005,8 @@ const fetchCandidatesAndEmployees = async (client: string) => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {isEmployee ? (
-                      <Badge variant="outline" className={getStatusBadgeColor(candidate.main_status_id)}>
-                        {getStatusText(candidate.main_status_id)}
+                      <Badge variant="outline" className={getStatusBadgeColor(candidate.sub_status_id)}>
+                        {getStatusText(candidate.sub_status_id)}
                       </Badge>
                     ) : (
                       <DropdownMenu>
@@ -1009,9 +1017,9 @@ const fetchCandidatesAndEmployees = async (client: string) => {
                             ) : (
                               <Badge
                                 variant="outline"
-                                className={getStatusBadgeColor(candidate.main_status_id)}
+                                className={getStatusBadgeColor(candidate.sub_status_id)}
                               >
-                                {getStatusText(candidate.main_status_id)}
+                                {getStatusText(candidate.sub_status_id)}
                               </Badge>
                             )}
                           </Button>
@@ -1019,13 +1027,13 @@ const fetchCandidatesAndEmployees = async (client: string) => {
                         <DropdownMenuContent align="center">
                           <DropdownMenuItem
                             className="text-yellow-600 focus:text-yellow-600 focus:bg-yellow-50"
-                            onClick={() => handleStatusChange(candidate.id, OFFERED_STATUS_ID)}
+                            onClick={() => handleStatusChange(candidate.id, OFFER_ISSUED_SUB_STATUS_ID)}
                           >
-                            Offered
+                            Offer Issued
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-green-600 focus:text-green-600 focus:bg-green-50"
-                            onClick={() => handleStatusChange(candidate.id, JOINED_STATUS_ID)}
+                            onClick={() => handleStatusChange(candidate.id, JOINED_SUB_STATUS_ID)}
                           >
                             Joined
                           </DropdownMenuItem>

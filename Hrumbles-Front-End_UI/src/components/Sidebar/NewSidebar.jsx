@@ -1,3 +1,4 @@
+// NewSidebar.js
 import {
   VStack,
   IconButton,
@@ -14,7 +15,6 @@ import {
   Avatar,
   useDisclosure,
   Button,
-  Spinner,
 } from "@chakra-ui/react";
 import { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
@@ -29,7 +29,7 @@ const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownTogg
   const { icon, label, path, dropdown } = item;
   const isActive = location.pathname === path || (dropdown && dropdown.some(sub => location.pathname.startsWith(sub.path)));
   const isDropdownOpen = openDropdown === label;
-  
+
   const hoverBg = "#4A5568";
   const activeBg = "#7B43F1";
   const activeColor = "white";
@@ -106,8 +106,9 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { role, user } = useSelector((state) => state.auth);
-  
+
   const [departmentName, setDepartmentName] = useState("Unknown Department");
+  const [designationName, setDesignationName] = useState("Unknown Designation"); // New state for designation
   const [openDropdown, setOpenDropdown] = useState(null);
   const [isMobile] = useMediaQuery("(max-width: 768px)");
   const [employeeProfile, setEmployeeProfile] = useState(null);
@@ -117,14 +118,16 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const activeBg = "#7B43F1";
   const hoverBg = "#4A5568";
   const textColor = "white";
-  
+
   const [activeSuite, setActiveSuite] = useState(() => {
     return localStorage.getItem('activeSuite') || null;
   });
 
+  console.log("designatookkmj", designationName);
+
   const menuConfig =
     role === "employee" || role === "admin"
-      ? menuItemsByRole[role](departmentName)
+      ? menuItemsByRole[role](departmentName, designationName) // Pass designationName
       : menuItemsByRole[role] || [];
 
   const isCategorized = role === 'organization_superadmin' || (role === 'admin' && departmentName !== "Finance");
@@ -152,70 +155,61 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
     const fetchEmployeeProfile = async () => {
       if (!user?.id) {
         setEmployeeProfile(null);
+        setDepartmentName("Unknown Department");
+        setDesignationName("Unknown Designation");
         return;
       }
       try {
-        const { data, error } = await supabase
+        // Fetch employee data including department_id and designation_id
+        const { data: employeeData, error: employeeError } = await supabase
           .from('hr_employees')
-          .select('first_name, last_name, profile_picture_url')
+          .select('first_name, last_name, profile_picture_url, department_id, designation_id')
           .eq('id', user.id)
           .single();
-        if (error) throw error;
-        if (data) {
+        if (employeeError) throw employeeError;
+
+        if (employeeData) {
           setEmployeeProfile({
-            firstName: data.first_name,
-            lastName: data.last_name,
-            avatarUrl: data.profile_picture_url,
+            firstName: employeeData.first_name,
+            lastName: employeeData.last_name,
+            avatarUrl: employeeData.profile_picture_url,
           });
+
+          // Fetch department name
+          if (employeeData.department_id) {
+            const { data: departmentData, error: departmentError } = await supabase
+              .from("hr_departments")
+              .select("name")
+              .eq("id", employeeData.department_id)
+              .single();
+            if (departmentError) throw departmentError;
+            setDepartmentName(departmentData.name || "Unknown Department");
+          } else {
+            setDepartmentName("Unknown Department");
+          }
+
+          // Fetch designation name
+          if (employeeData.designation_id) {
+            const { data: designationData, error: designationError } = await supabase
+              .from("hr_designations")
+              .select("name")
+              .eq("id", employeeData.designation_id)
+              .single();
+            if (designationError) throw designationError;
+            setDesignationName(designationData.name || "Unknown Designation");
+          } else {
+            setDesignationName("Unknown Designation");
+          }
         }
       } catch (error) {
-        console.error("Error fetching employee profile:", error.message);
+        console.error("Error fetching employee profile or department/designation:", error.message);
         setEmployeeProfile(null);
+        setDepartmentName("Unknown Department");
+        setDesignationName("Unknown Designation");
       }
     };
     fetchEmployeeProfile();
   }, [user?.id]);
-
-  useEffect(() => {
-    const fetchDepartmentName = async () => {
-      if (!user?.id) {
-        setDepartmentName("Unknown Department");
-        return;
-      }
-      try {
-        const { data: employeeData, error: employeeError } = await supabase
-          .from("hr_employees")
-          .select("department_id")
-          .eq("id", user.id)
-          .single();
-        if (employeeError) throw employeeError;
-        if (!employeeData?.department_id) {
-          setDepartmentName("Unknown Department");
-          return;
-        }
-        const { data: departmentData, error: departmentError } = await supabase
-          .from("hr_departments")
-          .select("name")
-          .eq("id", employeeData.department_id)
-          .single();
-        if (departmentError) throw departmentError;
-        const newDepartment = departmentData.name || "Unknown Department";
-        setDepartmentName(newDepartment);
-        const currentSuite = localStorage.getItem('activeSuite');
-        const newMenuConfig = menuItemsByRole[role](newDepartment);
-        const suiteExists = newMenuConfig.some(suite => suite.title === currentSuite);
-        if (!suiteExists && newMenuConfig.length > 0) {
-          const defaultSuite = newMenuConfig[0].title;
-          setActiveSuite(defaultSuite);
-          localStorage.setItem('activeSuite', defaultSuite);
-        }
-      } catch (error) {
-        console.error("Error fetching department:", error.message);
-        setDepartmentName("Unknown Department");
-      }
-    };
-    fetchDepartmentName();
-  }, [user?.id, role]);
 
   useEffect(() => {
     if (isCategorized && menuConfig.length > 0) {
@@ -289,7 +283,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
           />
         )}
       </Flex>
-      
+
       <VStack
         spacing={2}
         align="stretch"
@@ -352,7 +346,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
             </Collapse>
           </Box>
         )}
-        
+
         {isCategorized && (
           <HStack
             justify="center"
