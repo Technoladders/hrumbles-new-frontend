@@ -63,6 +63,8 @@ interface DateRange {
   key?: string;
 }
 
+const NATIVE_COLUMNS = ['id', 'name', 'email', 'mobile', 'job_title', 'linkedin_url', 'contact_stage', 'company_id', 'company_name', 'created_at', 'updated_at', 'created_by', 'updated_by', 'organization_id', 'file_id', 'medium', 'country', 'state', 'city', 'timezone', 'alt_mobile'];
+
 const TanstackContactsPage: React.FC = () => {
   const { toast } = useToast();
   const { fileId: fileIdFromUrl } = useParams<{ fileId?: string }>();
@@ -159,15 +161,16 @@ const TanstackContactsPage: React.FC = () => {
 
 
   const memoizedColumns = React.useMemo<ColumnDef<SimpleContact>[]>(() => {
-    const dynamicColumns: ColumnDef<SimpleContact>[] = customFields.map(field => ({
-      id: field.column_key,
-      accessorFn: row => (row.custom_data as any)?.[field.column_key],
-      header: ReorderableHeader,
-      cell: getCustomCell(field.data_type as any),
-      size: 150, minSize: 100, maxSize: 250,
-    }));
+    const dynamicColumns: ColumnDef<SimpleContact>[] = customFields
+        .filter(field => !NATIVE_COLUMNS.includes(field.column_key))
+        .map(field => ({
+            id: field.column_key,
+            accessorFn: row => (row.custom_data as any)?.[field.column_key],
+            header: ReorderableHeader,
+            cell: getCustomCell(field.data_type as any),
+            size: 150, minSize: 100, maxSize: 250,
+        }));
     
-    // Position custom fields before the audit trail columns (created at/by, updated at/by)
     const auditStartIndex = defaultColumns.findIndex(col => col.id === 'created_by_employee');
 
     if (auditStartIndex !== -1) {
@@ -176,7 +179,6 @@ const TanstackContactsPage: React.FC = () => {
         return [...preAuditColumns, ...dynamicColumns, ...auditColumns, ActionColumn];
     }
 
-    // Fallback to original order if audit columns aren't found
     return [...defaultColumns, ...dynamicColumns, ActionColumn];
   }, [customFields]);
 
@@ -216,38 +218,64 @@ const TanstackContactsPage: React.FC = () => {
     setColumnVisibility(grouping.includes('contact_stage') ? { 'contact_stage': false } : {});
   }, [grouping]);
 
-
-const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => {
+  const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => {
     const oldData = [...data];
-    let updatedRow: SimpleContact;
-
-    if (customFields.some(f => f.column_key === columnId)) {
-      const originalRow = oldData[rowIndex];
-      const newCustomData = { ...(originalRow.custom_data || {}), [columnId]: value };
-      updatedRow = { ...originalRow, custom_data: newCustomData, updated_by: currentUser?.id };
-      updateContactMutation.mutate(
-        { item: updatedRow, updates: { custom_data: newCustomData, updated_by: currentUser?.id } },
-        {
-          onError: (err: any) => {
-            setData(oldData);
-            toast({ title: "Update Failed", variant: "destructive", description: err.message });
-          },
-        }
-      );
+    const originalRow = oldData[rowIndex];
+    
+    let incomingUpdates: Record<string, any>;
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        incomingUpdates = value;
     } else {
-      updatedRow = { ...oldData[rowIndex], [columnId]: value, updated_by: currentUser?.id };
-      updateContactMutation.mutate(
-        { item: updatedRow, updates: { [columnId]: value, updated_by: currentUser?.id } },
-        {
-          onError: (err: any) => {
-            setData(oldData);
-            toast({ title: "Update Failed", variant: "destructive", description: err.message });
-          },
-        }
-      );
+        incomingUpdates = { [columnId]: value };
     }
+
+    const nativeUpdates: Record<string, any> = {};
+    const customUpdates: Record<string, any> = {};
+
+    // [THE FIX] This loop correctly separates updates into native and custom buckets.
+    for (const key in incomingUpdates) {
+        if (Object.prototype.hasOwnProperty.call(incomingUpdates, key)) {
+            // A field is native if it's in our explicit NATIVE_COLUMNS list.
+            if (NATIVE_COLUMNS.includes(key)) {
+                nativeUpdates[key] = incomingUpdates[key];
+            } else {
+                // Otherwise, it's treated as a custom field.
+                customUpdates[key] = incomingUpdates[key];
+            }
+        }
+    }
+
+    const finalUpdates: Record<string, any> = { ...nativeUpdates };
+    
+    // If there are any custom fields to update, merge them into the custom_data object.
+    if (Object.keys(customUpdates).length > 0) {
+        finalUpdates.custom_data = {
+            ...(originalRow.custom_data || {}),
+            ...customUpdates,
+        };
+    }
+    
+    // Add the user who performed the update.
+    finalUpdates.updated_by = currentUser?.id;
+    
+    // Create the updated row for optimistic UI update.
+    const updatedRow = { ...originalRow, ...finalUpdates };
+
+    // Optimistically update the local state.
     setData(oldData.map((row, index) => (index === rowIndex ? updatedRow : row)));
+
+    // Send the correctly structured payload to the backend.
+    updateContactMutation.mutate(
+        { item: originalRow, updates: finalUpdates },
+        {
+            onError: (err: any) => {
+                setData(oldData); // Revert UI on error
+                toast({ title: "Update Failed", variant: "destructive", description: err.message });
+            },
+        }
+    );
   };
+
   const handleDeleteRow = (contactId: string) => {
     deleteContactMutation.mutate(contactId, {
       onSuccess: () => toast({ title: "Contact Deleted" }),

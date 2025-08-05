@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from './data-table-column-header';
 import { CompanyCombobox } from './CompanyCombobox';
+import { LocationCell } from './LocationCell';
 import type { SimpleContact } from '@/types/simple-contact.types';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -60,6 +61,12 @@ export const ReorderableHeader: React.FC<any> = ({ header, table }) => {
             </div>
         </div>
     );
+};
+
+// NEW: A simple read-only cell for displaying data like timezone
+const ReadOnlyCell: React.FC<any> = ({ getValue }) => {
+    const value = getValue();
+    return <div className="truncate">{value || <span className="text-muted-foreground">-</span>}</div>;
 };
 
 
@@ -487,6 +494,56 @@ export const columns: ColumnDef<SimpleContact>[] = [
         </Button>
       );
     }
+  },
+  {
+    accessorKey: 'alt_mobile',
+    header: ReorderableHeader,
+    size: 160,
+    minSize: 120,
+    maxSize: 200,
+    cell: (props) => {
+      const initialValue = props.getValue();
+      const [isRevealed, setIsRevealed] = useState(!initialValue);
+      useEffect(() => { setIsRevealed(!initialValue); }, [initialValue]);
+
+      if (isRevealed) {
+        return <PhoneCell {...props} />;
+      }
+      return (
+        <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs font-normal"
+            onClick={(e) => { e.stopPropagation(); setIsRevealed(true); }}
+        >
+            <PhoneIncoming className="h-3.5 w-3.5 mr-2" />
+            Access Alt. Mobile
+        </Button>
+      );
+    }
+  },
+    {
+    id: 'location', // A unique ID for the virtual column
+    header: "Location",
+    // Create a display value from the underlying data
+    accessorFn: row => {
+        const parts = [row.city, row.state, row.country].filter(Boolean); // Filter out null/empty values
+        return parts.join(', ');
+    },
+    cell: LocationCell, // Our existing component now attaches to this single column
+    size: 200,
+    minSize: 150,
+    maxSize: 300,
+  },
+  
+  // [FIX] Make Timezone editable for manual overrides
+  {
+    accessorKey: 'timezone',
+    header: ReorderableHeader,
+    cell: EditableCell, // Use EditableCell instead of ReadOnlyCell
+    size: 140,
+    minSize: 100,
+    maxSize: 200,
   },
   {
     accessorKey: 'linkedin_url',

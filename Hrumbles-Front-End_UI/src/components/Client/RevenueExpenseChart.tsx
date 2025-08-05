@@ -299,7 +299,7 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Revenue Card */}
-      <Card className="shadow-xl border-none bg-white text-gray-900 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]">
+      <Card className="shadow-xl h-[350px] border-none bg-white text-gray-900 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]">
         <CardHeader className="p-6 border-b border-gray-200">
           <div className="flex justify-between items-center">
             <CardTitle className="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-3">
@@ -319,7 +319,7 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
           ) : errorMessage ? (
             <p className="text-red-500 text-center font-medium">{errorMessage}</p>
           ) : (
-            <div className="h-[150px]">
+            <div className="h-[200px]">
               <Bar data={revenueChartData} options={revenueChartOptions} />
             </div>
           )}
@@ -332,7 +332,7 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
           <div className="flex justify-between items-center">
             <CardTitle className="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-3">
               <div className="w-4 h-4 bg-yellow-500 rounded-full shadow-lg shadow-yellow-500/50"></div>
-              Expenses
+              Profit
             </CardTitle>
             <span className="text-lg font-bold text-yellow-600">{formatCurrency(totalExpense)}</span>
           </div>
@@ -345,7 +345,7 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
           ) : errorMessage ? (
             <p className="text-red-500 text-center font-medium">{errorMessage}</p>
           ) : (
-            <div className="h-[150px]">
+            <div className="h-[200px]">
               <Bar data={expenseChartData} options={expenseChartOptions} />
             </div>
           )}

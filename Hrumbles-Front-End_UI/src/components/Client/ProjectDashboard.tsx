@@ -29,7 +29,8 @@ import {
   UserRoundX,
   ReceiptIndianRupee,
   TrendingUp,
-  Clock
+  Clock,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
@@ -48,9 +49,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
-  PieChart,
+  Legend,
   Pie,
-  Legend
+  PieChart,
 } from "recharts";
 import {
   Tooltip,
@@ -68,9 +69,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
-import { startOfMonth, isSameDay, isWithinInterval, format, eachDayOfInterval } from "date-fns";
+import { startOfMonth, startOfWeek, isSameDay, isWithinInterval, format, eachDayOfInterval, startOfYear } from "date-fns";
 import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
 import RevenueExpenseChart from "./RevenueExpenseChart";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as UICalendar } from "@/components/ui/calendar"; 
 
 interface AssignEmployee {
   id: string;
@@ -154,16 +157,13 @@ const ProjectDashboard = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
   const [calculationMode, setCalculationMode] = useState<"accrual" | "actual">("actual");
-  const [tempDateRange, setTempDateRange] = useState<DateRange>({
+  const [dateRange, setDateRange] = useState<DateRange>({
     startDate: startOfMonth(new Date()),
     endDate: new Date(),
     key: "selection",
   });
-  const [appliedDateRange, setAppliedDateRange] = useState<DateRange>({
-    startDate: startOfMonth(new Date()),
-    endDate: new Date(),
-    key: "selection",
-  });
+  const [timePeriod, setTimePeriod] = useState<"week" | "month" | "year">("month");
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
@@ -262,19 +262,84 @@ const ProjectDashboard = () => {
     enabled: !!id,
   });
 
-  // Fetch time logs for actual calculations within the applied date range
+  // Fetch unfiltered time logs for Project Overview and RevenueExpenseChart (no date filters)
+  const { data: unfilteredTimeLogs = [], isLoading: loadingUnfilteredTimeLogs, error: unfilteredTimeLogsError } = useQuery<
+    TimeLog[]
+  >({
+    queryKey: ["unfiltered_time_logs", id],
+    queryFn: async () => {
+      if (!id) throw new Error("Project ID is missing");
+      const { data, error } = await supabase
+        .from("time_logs")
+        .select("id, employee_id, date, project_time_data, total_working_hours")
+        .eq("is_approved", true);
+      if (error) throw error;
+      return data.filter((log) =>
+        log.project_time_data?.projects?.some((proj) => proj.projectId === id)
+      ) as TimeLog[];
+    },
+    enabled: calculationMode === "actual" && !!id,
+  });
+
+  // Fetch time logs for Logged Hours chart (filtered by timePeriod and selectedDate)
   const { data: timeLogs = [], isLoading: loadingTimeLogs, error: timeLogsError } = useQuery<
     TimeLog[]
   >({
-    queryKey: ["time_logs", id, appliedDateRange],
+    queryKey: ["time_logs_chart", id, timePeriod, selectedDate],
+    queryFn: async () => {
+      if (!id) throw new Error("Project ID is missing");
+      let query = supabase
+        .from("time_logs")
+        .select("id, employee_id, date, project_time_data, total_working_hours")
+        .eq("is_approved", true);
+      
+      if (timePeriod === "week") {
+        const startOfWeekDate = startOfWeek(selectedDate, { weekStartsOn: 0 });
+        const endOfWeekDate = new Date(startOfWeekDate);
+        endOfWeekDate.setDate(startOfWeekDate.getDate() + 6);
+        query = query
+          .gte("date", startOfWeekDate.toISOString())
+          .lte("date", endOfWeekDate.toISOString());
+      } else if (timePeriod === "month") {
+        const startOfMonthDate = startOfMonth(selectedDate);
+        const endOfMonthDate = new Date(startOfMonthDate);
+        endOfMonthDate.setMonth(startOfMonthDate.getMonth() + 1);
+        endOfMonthDate.setDate(0);
+        query = query
+          .gte("date", startOfMonthDate.toISOString())
+          .lte("date", endOfMonthDate.toISOString());
+      } else if (timePeriod === "year") {
+        const startOfYearDate = startOfYear(selectedDate);
+        const endOfYearDate = new Date(startOfYearDate);
+        endOfYearDate.setFullYear(startOfYearDate.getFullYear() + 1);
+        endOfYearDate.setDate(0);
+        query = query
+          .gte("date", startOfYearDate.toISOString())
+          .lte("date", endOfYearDate.toISOString());
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data.filter((log) =>
+        log.project_time_data?.projects?.some((proj) => proj.projectId === id)
+      ) as TimeLog[];
+    },
+    enabled: calculationMode === "actual" && !!id,
+  });
+
+  // Fetch time logs for table (filtered by dateRange)
+  const { data: tableTimeLogs = [], isLoading: loadingTableTimeLogs, error: tableTimeLogsError } = useQuery<
+    TimeLog[]
+  >({
+    queryKey: ["time_logs_table", id, dateRange],
     queryFn: async () => {
       if (!id) throw new Error("Project ID is missing");
       const { data, error } = await supabase
         .from("time_logs")
         .select("id, employee_id, date, project_time_data, total_working_hours")
         .eq("is_approved", true)
-        .gte("date", appliedDateRange.startDate.toISOString())
-        .lte("date", appliedDateRange.endDate.toISOString());
+        .gte("date", dateRange.startDate.toISOString())
+        .lte("date", dateRange.endDate.toISOString());
       if (error) throw error;
       return data.filter((log) =>
         log.project_time_data?.projects?.some((proj) => proj.projectId === id)
@@ -297,24 +362,28 @@ const ProjectDashboard = () => {
   });
 
   useEffect(() => {
-    if (projectError || employeesError || clientsError || timeLogsError) {
+    if (projectError || employeesError || clientsError || unfilteredTimeLogsError || timeLogsError || tableTimeLogsError) {
       toast.error("Failed to fetch data");
-      console.error("Errors:", { projectError, employeesError, clientsError, timeLogsError });
+      console.error("Errors:", { projectError, employeesError, clientsError, unfilteredTimeLogsError, timeLogsError, tableTimeLogsError });
     }
-    setLoading(loadingProject || loadingEmployees || loadingClients || loadingTimeLogs);
+    setLoading(loadingProject || loadingEmployees || loadingClients || loadingUnfilteredTimeLogs || loadingTimeLogs || loadingTableTimeLogs);
   }, [
     projectError,
     employeesError,
     clientsError,
+    unfilteredTimeLogsError,
     timeLogsError,
+    tableTimeLogsError,
     loadingProject,
     loadingEmployees,
     loadingClients,
+    loadingUnfilteredTimeLogs,
     loadingTimeLogs,
+    loadingTableTimeLogs,
   ]);
 
-  // Calculate employee hours within the applied date range
-  const calculateEmployeeHours = (employeeId: string) => {
+  // Calculate employee hours for chart (using filtered timeLogs)
+  const calculateEmployeeHoursForChart = (employeeId: string) => {
     return timeLogs
       .filter((log) => log.employee_id === employeeId)
       .reduce((acc, log) => {
@@ -325,20 +394,107 @@ const ProjectDashboard = () => {
       }, 0);
   };
 
-  // Calculate total hours by day within the applied date range
-  const calculateTotalHoursByDay = () => {
-    const days = eachDayOfInterval({ start: appliedDateRange.startDate, end: appliedDateRange.endDate });
-    return days.map((day) => ({
-      name: format(day, "MMM dd"),
-      hours: timeLogs
-        .filter((log) => isSameDay(new Date(log.date), day))
+  // Calculate employee hours for table (using tableTimeLogs)
+  const calculateEmployeeHoursForTable = (employeeId: string) => {
+    return tableTimeLogs
+      .filter((log) => 
+        isWithinInterval(new Date(log.date), {
+          start: dateRange.startDate,
+          end: dateRange.endDate,
+        })
+      )
+      .reduce((acc, log) => {
+        const projectEntry = log.project_time_data?.projects?.find(
+          (proj) => proj.projectId === id
+        );
+        return acc + (projectEntry?.hours || 0);
+      }, 0);
+  };
+
+  // Calculate employee hours for revenue/profit (using unfilteredTimeLogs)
+  const calculateEmployeeHoursForRevenueProfit = (employeeId: string) => {
+    return unfilteredTimeLogs
+      .filter((log) => log.employee_id === employeeId)
+      .reduce((acc, log) => {
+        const projectEntry = log.project_time_data?.projects?.find(
+          (proj) => proj.projectId === id
+        );
+        return acc + (projectEntry?.hours || 0);
+      }, 0);
+  };
+
+  // Calculate total hours by interval for the chart
+  const calculateTotalHoursByInterval = (timePeriod: "week" | "month" | "year", selectedDate: Date) => {
+    let intervals: string[] = [];
+    let startDate: Date;
+
+    if (timePeriod === "week") {
+      startDate = startOfWeek(selectedDate, { weekStartsOn: 0 });
+      intervals = Array.from({ length: 7 }, (_, i) =>
+        format(new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000), "EEE")
+      );
+    } else if (timePeriod === "month") {
+      startDate = startOfMonth(selectedDate);
+      intervals = Array.from({ length: 4 }, (_, i) =>
+        format(
+          new Date(startDate.getTime() + i * 7 * 24 * 60 * 60 * 1000),
+          "MMM dd"
+        )
+      );
+    } else {
+      intervals = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
+    }
+
+    const hoursByInterval = intervals.map((interval, index) => {
+      let intervalStart: Date;
+      let intervalEnd: Date;
+
+      if (timePeriod === "week") {
+        intervalStart = new Date(startDate.getTime() + index * 24 * 60 * 60 * 1000);
+        intervalEnd = new Date(intervalStart);
+        intervalEnd.setHours(23, 59, 59, 999);
+      } else if (timePeriod === "month") {
+        intervalStart = new Date(startDate.getTime() + index * 7 * 24 * 60 * 60 * 1000);
+        intervalEnd = new Date(intervalStart);
+        intervalEnd.setDate(intervalStart.getDate() + 6);
+        intervalEnd.setHours(23, 59, 59, 999);
+      } else {
+        intervalStart = new Date(selectedDate.getFullYear(), index, 1);
+        intervalEnd = new Date(selectedDate.getFullYear(), index + 1, 0);
+        intervalEnd.setHours(23, 59, 59, 999);
+      }
+
+      const totalHours = timeLogs
+        .filter((log) =>
+          isWithinInterval(new Date(log.date), {
+            start: intervalStart,
+            end: intervalEnd,
+          })
+        )
         .reduce((acc, log) => {
           const projectEntry = log.project_time_data?.projects?.find(
             (proj) => proj.projectId === id
           );
           return acc + (projectEntry?.hours || 0);
-        }, 0),
-    }));
+        }, 0);
+
+      return { name: interval, hours: totalHours };
+    });
+
+    return hoursByInterval;
   };
 
   // Convert client_billing to LPA or per-hour for accrual calculations
@@ -390,7 +546,7 @@ const ProjectDashboard = () => {
     if (mode === "accrual") {
       return convertToLPA(employee, "accrual");
     } else {
-      const hours = calculateEmployeeHours(employee.assign_employee);
+      const hours = calculateEmployeeHoursForRevenueProfit(employee.assign_employee);
       const hourlyRate = convertToLPA(employee, "actual");
       return hours * hourlyRate;
     }
@@ -417,7 +573,7 @@ const ProjectDashboard = () => {
         salary = salary * durationDays * 8;
       }
     } else {
-      const hours = calculateEmployeeHours(employee.assign_employee);
+      const hours = calculateEmployeeHoursForRevenueProfit(employee.assign_employee);
       if (salaryType === "LPA") {
         const hourlySalary = salary / (365 * 8);
         salary = hours * hourlySalary;
@@ -432,13 +588,13 @@ const ProjectDashboard = () => {
     return revenue - salary;
   };
 
-  // Calculate total revenue (not affected by date range)
+  // Calculate total revenue (using unfilteredTimeLogs)
   const totalRevenue = assignEmployee.reduce(
     (acc, emp) => acc + calculateRevenue(emp, calculationMode),
     0
   ) || 0;
 
-  // Calculate total profit (not affected by date range)
+  // Calculate total profit (using unfilteredTimeLogs)
   const totalProfit = assignEmployee.reduce(
     (acc, emp) => acc + calculateProfit(emp, calculationMode),
     0
@@ -478,8 +634,8 @@ const ProjectDashboard = () => {
     const matchesSearch = employeeName.toLowerCase().includes(searchQuery.toLowerCase());
     const isWithinDateRange =
       calculationMode === "actual" ||
-      (new Date(employee.start_date) <= appliedDateRange.endDate &&
-        new Date(employee.end_date) >= appliedDateRange.startDate);
+      (new Date(employee.start_date) <= dateRange.endDate &&
+        new Date(employee.end_date) >= dateRange.startDate);
     if (activeTab === "all") return matchesSearch && isWithinDateRange;
     if (activeTab === "working") return matchesSearch && employee.status === "Working" && isWithinDateRange;
     if (activeTab === "relieved") return matchesSearch && employee.status === "Relieved" && isWithinDateRange;
@@ -504,7 +660,7 @@ const ProjectDashboard = () => {
         ? `${employee.hr_employees.first_name} ${employee.hr_employees.last_name}`
         : "N/A",
       Duration: calculationMode === "accrual" ? `${employee.duration} days` : "",
-      Hours: calculationMode === "actual" ? `${calculateEmployeeHours(employee.assign_employee).toFixed(2)} hours` : "",
+      Hours: calculationMode === "actual" ? `${calculateEmployeeHoursForTable(employee.assign_employee).toFixed(2)} hours` : "",
       "Start Date": calculationMode === "accrual" ? new Date(employee.start_date).toLocaleDateString() : "",
       "End Date": calculationMode === "accrual" ? new Date(employee.end_date).toLocaleDateString() : "",
       Salary: formatINR(employee.salary),
@@ -540,11 +696,11 @@ const ProjectDashboard = () => {
           : "N/A",
         calculationMode === "accrual"
           ? `${Math.ceil(
-              (Math.min(new Date(employee.end_date).getTime(), appliedDateRange.endDate.getTime()) -
-                Math.max(new Date(employee.start_date).getTime(), appliedDateRange.startDate.getTime())) /
+              (Math.min(new Date(employee.end_date).getTime(), dateRange.endDate.getTime()) -
+                Math.max(new Date(employee.start_date).getTime(), dateRange.startDate.getTime())) /
                 (1000 * 60 * 60 * 24)
             )} days`
-          : `${calculateEmployeeHours(employee.assign_employee).toFixed(2)} hours`,
+          : `${calculateEmployeeHoursForTable(employee.assign_employee).toFixed(2)} hours`,
         ...(calculationMode === "accrual"
           ? [
               new Date(employee.start_date).toLocaleDateString(),
@@ -638,11 +794,11 @@ const ProjectDashboard = () => {
                   <td className="px-4 py-2">
                     {calculationMode === "accrual"
                       ? `${Math.ceil(
-                          (Math.min(new Date(employee.end_date).getTime(), appliedDateRange.endDate.getTime()) -
-                            Math.max(new Date(employee.start_date).getTime(), appliedDateRange.startDate.getTime())) /
+                          (Math.min(new Date(employee.end_date).getTime(), dateRange.endDate.getTime()) -
+                            Math.max(new Date(employee.start_date).getTime(), dateRange.startDate.getTime())) /
                             (1000 * 60 * 60 * 24)
                         )} days`
-                      : `${calculateEmployeeHours(employee.assign_employee).toFixed(2)} hours`}
+                      : `${calculateEmployeeHoursForTable(employee.assign_employee).toFixed(2)} hours`}
                   </td>
                   {calculationMode === "accrual" && (
                     <>
@@ -851,6 +1007,20 @@ const ProjectDashboard = () => {
     );
   }
 
+  // Define colors for employees (using a simple palette)
+  const employeeColors = [
+    "#7B43F1",
+    "#A74BC8",
+    "#FF6B6B",
+    "#4ECDC4",
+    "#45B7D1",
+    "#96CEB4",
+    "#FFEEAD",
+    "#D4A5A5",
+    "#9B59B6",
+    "#3498DB",
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-6 md:p-10">
       <main className="w-full max-w-8xl mx-auto space-y-8">
@@ -898,34 +1068,30 @@ const ProjectDashboard = () => {
           </Button>
         </div>
 
-        {/* Calculation Mode Tabs and Date Range Picker */}
-        <Tabs
-          value={calculationMode}
-          onValueChange={(value) => setCalculationMode(value as "accrual" | "actual")}
-          className="mb-6"
-        >
-          <TabsList className="grid grid-cols-2 w-[200px]">
-            <TabsTrigger value="actual">Actual</TabsTrigger>
-            <TabsTrigger value="accrual">Accrual</TabsTrigger>
-          </TabsList>
-          <DateRangePickerField
-            dateRange={tempDateRange}
-            onDateRangeChange={(range) => setTempDateRange(range)}
-            onApply={() => setAppliedDateRange(tempDateRange)}
-            className="mt-4"
-          />
-        </Tabs>
+        {/* Calculation Mode Tabs */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <Tabs
+            value={calculationMode}
+            onValueChange={(value) => setCalculationMode(value as "accrual" | "actual")}
+            className="mb-6"
+          >
+            <TabsList className="grid grid-cols-2 w-[200px]">
+              <TabsTrigger value="actual">Actual</TabsTrigger>
+              <TabsTrigger value="accrual">Accrual</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
 
         {/* Stats Overview and Finance Chart */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <Card className="lg:col-span-1 purple-gradient">
+          <Card className="lg:col-span-1 purple-gradient h-[350px] flex flex-col">
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-lg font-semibold text-white flex items-center">
                 <Briefcase className="mr-2" size={18} />
                 Project Overview
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-2">
+            <CardContent className="pt-2 flex-grow overflow-auto">
               <ul className="space-y-3">
                 <li className="flex items-start justify-between">
                   <div className="flex items-center text-sm text-white">
@@ -934,13 +1100,13 @@ const ProjectDashboard = () => {
                   </div>
                   <span className="font-small text-sm text-right text-white">{project?.name}</span>
                 </li>
-                <li className="flex items-start justify-between">
+                {/* <li className="flex items-start justify-between">
                   <div className="flex items-center text-sm text-white">
                     <Briefcase size={16} className="mr-2 text-white" />
                     <span>Project ID:</span>
                   </div>
                   <span className="font-small text-sm text-right text-white">{project?.id}</span>
-                </li>
+                </li> */}
                 <li className="flex items-start justify-between">
                   <div className="flex items-center text-sm text-white">
                     <Calendar size={16} className="mr-2 text-white" />
@@ -1005,7 +1171,7 @@ const ProjectDashboard = () => {
             </CardContent>
           </Card>
           <div className="lg:col-span-3">
-            <RevenueExpenseChart projectId={id} />
+            <RevenueExpenseChart projectId={id} timeLogs={unfilteredTimeLogs} />
           </div>
         </div>
 
@@ -1016,23 +1182,56 @@ const ProjectDashboard = () => {
               <CardHeader className="purple-gradient text-white p-6">
                 <div className="flex justify-between items-center">
                   <h2 className="text-xl md:text-2xl font-semibold">Logged Hours</h2>
+                  <div className="flex items-center gap-2">
+                    <Select value={timePeriod} onValueChange={(value) => setTimePeriod(value as "week" | "month" | "year")}>
+                      <SelectTrigger className="w-[100px] bg-white text-gray-800">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="week">Week</SelectItem>
+                        <SelectItem value="month">Month</SelectItem>
+                        <SelectItem value="year">Year</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-[170px] justify-start text-left font-normal text-black bg-white border-gray-200"
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {format(selectedDate, timePeriod === "week" ? "'Week of' MMM d, yyyy" : timePeriod === "month" ? "MMM yyyy" : "yyyy")}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <UICalendar
+                          mode={timePeriod === "year" ? "year" : "default"}
+                          selected={selectedDate}
+                          onSelect={(date) => date && setSelectedDate(date)}
+                          initialFocus
+                          disabled={(date) => date > new Date()}
+                          {...(timePeriod === "year" ? { views: ["year"] } : {})}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="p-6">
                 <ResponsiveContainer width="100%" height={400}>
                   <BarChart
-                    data={calculateTotalHoursByDay()}
+                    data={calculateTotalHoursByInterval(timePeriod, selectedDate)}
                     margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
                     className="animate-fade-in"
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis
                       dataKey="name"
-                      angle={45}
-                      textAnchor="end"
+                      angle={0}
+                      textAnchor="middle"
                       interval={0}
                       height={50}
-                      label={{ value: "Date", position: "insideBottom", offset: -10, fill: "#4b5563" }}
+                      label={{ value: "Time Intervals", position: "insideBottom", offset: -10, fill: "#4b5563" }}
                       className="text-sm font-medium purple-text-color"
                       tick={{ fontSize: 12, fill: "#4b5563" }}
                       tickFormatter={(value) => (value.length > 7 ? `${value.slice(0, 7)}...` : value)}
@@ -1139,6 +1338,12 @@ const ProjectDashboard = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
+              <DateRangePickerField
+                dateRange={dateRange}
+                onDateRangeChange={setDateRange}
+                onApply={() => {}}
+                className="mt-4 sm:mt-0"
+              />
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={exportToCSV} className="border-gray-200 hover:bg-gray-50">
                   <Download className="w-4 h-4 mr-2" />
