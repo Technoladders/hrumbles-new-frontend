@@ -1,4 +1,7 @@
-import React, { useState } from "react";
+
+"use client";
+
+import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../integrations/supabase/client";
@@ -6,7 +9,7 @@ import { useSelector } from "react-redux";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
-import { Download, Pencil, Eye, Trash2, Search, Briefcase, Clock, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, Pencil, Eye, Trash2, Search, Briefcase, Clock, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
@@ -17,7 +20,7 @@ import "jspdf-autotable";
 
 interface ClientData {
   id: string;
-  display_name: string;
+  display_name?: string;
   internal_contact?: string;
   service_type: string[];
   status: string;
@@ -32,9 +35,10 @@ interface ClientData {
 interface ClientTableProps {
   clientFinancials: ClientData[];
   setAddClientOpen: (open: boolean) => void;
+  isLoading: boolean;
 }
 
-const ClientTable = ({ clientFinancials, setAddClientOpen }: ClientTableProps) => {
+const ClientTable = ({ clientFinancials, setAddClientOpen, isLoading }: ClientTableProps) => {
   const queryClient = useQueryClient();
   const user = useSelector((state: any) => state.auth.user);
   const userRole = useSelector((state: any) => state.auth.role);
@@ -45,14 +49,28 @@ const ClientTable = ({ clientFinancials, setAddClientOpen }: ClientTableProps) =
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
+  // Sort clients by revenue_inr (descending), with profit_inr as tiebreaker
+  const sortedClients = useMemo(() => {
+    return [...clientFinancials].sort((a, b) => {
+      if (b.revenue_inr !== a.revenue_inr) {
+        return b.revenue_inr - a.revenue_inr;
+      }
+      return b.profit_inr - a.profit_inr;
+    });
+  }, [clientFinancials]);
+
   // Filter Clients Based on Search & Status
-  const filteredClients = clientFinancials.filter((client) => {
-    const matchesSearch = client.display_name.toLowerCase().includes(searchTerm.toLowerCase());
-    if (activeTab === "all") return matchesSearch;
-    if (activeTab === "active") return matchesSearch && client.status === "active";
-    if (activeTab === "inactive") return matchesSearch && client.status === "inactive";
-    return matchesSearch;
-  });
+  const filteredClients = useMemo(() => {
+    return sortedClients.filter((client) => {
+      const matchesSearch = client.display_name && typeof client.display_name === "string"
+        ? client.display_name.toLowerCase().includes(searchTerm.toLowerCase())
+        : false;
+      if (activeTab === "all") return matchesSearch;
+      if (activeTab === "active") return matchesSearch && client.status === "active";
+      if (activeTab === "inactive") return matchesSearch && client.status === "inactive";
+      return matchesSearch;
+    });
+  }, [sortedClients, searchTerm, activeTab]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
@@ -67,7 +85,7 @@ const ClientTable = ({ clientFinancials, setAddClientOpen }: ClientTableProps) =
   // Export to CSV
   const exportToCSV = () => {
     const exportData = filteredClients.map((client) => ({
-      "Client Name": client.display_name,
+      "Client Name": client.display_name || "N/A",
       "Total Projects": client.total_projects,
       "Revenue (INR)": `₹ ${client.revenue_inr.toLocaleString()}`,
       "Revenue (USD)": `$ ${client.revenue_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
@@ -102,12 +120,12 @@ const ClientTable = ({ clientFinancials, setAddClientOpen }: ClientTableProps) =
         ],
       ],
       body: filteredClients.map((client) => [
-        client.display_name,
+        client.display_name || "N/A",
         client.total_projects,
         `₹ ${client.revenue_inr.toLocaleString()}`,
-        // `$ ${client.revenue_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+        `$ ${client.revenue_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
         `₹ ${client.profit_inr.toLocaleString()}`,
-        // `$ ${client.profit_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+        `$ ${client.profit_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
         client.status,
         client.currency,
         client.internal_contact || "N/A",
@@ -183,6 +201,14 @@ const ClientTable = ({ clientFinancials, setAddClientOpen }: ClientTableProps) =
   };
 
   const renderTable = (clients: ClientData[]) => {
+    if (isLoading || !clientFinancials.length) {
+      return (
+        <div className="text-center p-12 text-gray-500">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-500 mx-auto" />
+          <p>Loading clients...</p>
+        </div>
+      );
+    }
     if (clients.length === 0) {
       return (
         <div className="text-center p-12 text-gray-500">
@@ -229,7 +255,7 @@ const ClientTable = ({ clientFinancials, setAddClientOpen }: ClientTableProps) =
                         to={`/client/${client.id}`}
                         className="font-medium text-blue-600 hover:underline"
                       >
-                        {client.display_name}
+                        {client.display_name || "N/A"}
                       </Link>
                       <span className="text-xs text-gray-500 flex space-x-2">
                         <Badge
@@ -244,17 +270,17 @@ const ClientTable = ({ clientFinancials, setAddClientOpen }: ClientTableProps) =
                   <td className="px-4 py-2">{client.total_projects}</td>
                   <td className="px-4 py-2">
                     ₹ {client.revenue_inr.toLocaleString()}
-                    {/* <br />
+                    <br />
                     <span className="text-xs text-gray-500">
                       $ {client.revenue_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    </span> */}
+                    </span>
                   </td>
                   <td className="px-4 py-2">
                     ₹ {client.profit_inr.toLocaleString()}
-                    {/* <br />
+                    <br />
                     <span className="text-xs text-gray-500">
                       $ {client.profit_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    </span> */}
+                    </span>
                   </td>
                   <td className="px-4 py-2">{client.currency}</td>
                   <td className="px-4 py-2">
@@ -301,7 +327,7 @@ const ClientTable = ({ clientFinancials, setAddClientOpen }: ClientTableProps) =
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
-                      {/* {!isEmployee && (
+                      {!isEmployee && (
                         <>
                           <TooltipProvider>
                             <Tooltip>
@@ -338,7 +364,7 @@ const ClientTable = ({ clientFinancials, setAddClientOpen }: ClientTableProps) =
                             </Tooltip>
                           </TooltipProvider>
                         </>
-                      )} */}
+                      )}
                     </div>
                   </td>
                 </tr>

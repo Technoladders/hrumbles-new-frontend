@@ -54,7 +54,7 @@ const JobDescriptionStep = ({ data, onChange }: JobDescriptionStepProps) => {
           </div>
         </div>
         
-        <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
+        {/* <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
           <h4 className="text-sm font-medium mb-3">Tips for a good job description:</h4>
           <ul className="text-xs text-gray-600 space-y-2 list-disc pl-4">
             <li>Start with a brief overview of the position and your company</li>
@@ -64,7 +64,7 @@ const JobDescriptionStep = ({ data, onChange }: JobDescriptionStepProps) => {
             <li>Include information about the work environment and company culture</li>
             <li>Specify any unique benefits or perks of the position</li>
           </ul>
-        </div>
+        </div> */}
       </div>
     </div>
   );

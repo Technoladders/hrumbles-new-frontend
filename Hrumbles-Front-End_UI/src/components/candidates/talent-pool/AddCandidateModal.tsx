@@ -66,7 +66,7 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
   };
 
   const analyseAndSaveProfile = async (text: string, resumeFile?: File): Promise<{status: string; profile: any}> => {
-    const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY_TALENT;
     const genAI = new GoogleGenerativeAI(geminiApiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
     

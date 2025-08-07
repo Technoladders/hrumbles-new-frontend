@@ -106,6 +106,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { role, user } = useSelector((state) => state.auth);
+  const organizationId = useSelector((state) => state.auth.organization_id);
 
   const [departmentName, setDepartmentName] = useState("Unknown Department");
   const [designationName, setDesignationName] = useState("Unknown Designation"); // New state for designation
@@ -125,12 +126,23 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
 
   console.log("designatookkmj", designationName);
 
-  const menuConfig =
-    role === "employee" || role === "admin"
-      ? menuItemsByRole[role](departmentName, designationName) // Pass designationName
-      : menuItemsByRole[role] || [];
+  const menuConfig = (() => {
+    const menuSource = menuItemsByRole[role];
+    if (!menuSource) return [];
 
-  const isCategorized = role === 'organization_superadmin' || (role === 'admin' && departmentName !== "Finance");
+    switch (role) {
+      case 'organization_superadmin':
+        return menuSource(organizationId); // Pass the organizationId
+      case 'admin':
+        return menuSource(departmentName);
+      case 'employee':
+        return menuSource(departmentName, designationName);
+      default:
+        return menuSource;
+    }
+  })();
+
+    const isCategorized = Array.isArray(menuConfig) && menuConfig.length > 0 && menuConfig[0].hasOwnProperty('title');
 
   const findSuiteForPath = (pathname) => {
     if (!isCategorized) return null;

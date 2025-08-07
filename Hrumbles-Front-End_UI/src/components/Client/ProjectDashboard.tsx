@@ -30,7 +30,7 @@ import {
   ReceiptIndianRupee,
   TrendingUp,
   Clock,
-  Calendar as CalendarIcon,
+  Info,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
@@ -72,8 +72,6 @@ import {
 import { startOfMonth, startOfWeek, isSameDay, isWithinInterval, format, eachDayOfInterval, startOfYear } from "date-fns";
 import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
 import RevenueExpenseChart from "./RevenueExpenseChart";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as UICalendar } from "@/components/ui/calendar"; 
 
 interface AssignEmployee {
   id: string;
@@ -162,8 +160,6 @@ const ProjectDashboard = () => {
     endDate: new Date(),
     key: "selection",
   });
-  const [timePeriod, setTimePeriod] = useState<"week" | "month" | "year">("month");
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
@@ -175,6 +171,21 @@ const ProjectDashboard = () => {
       </div>
     );
   }
+
+  // Determine financial year from dateRange.endDate
+  const getFinancialYear = (endDate: Date) => {
+    const year = endDate.getMonth() < 3 ? endDate.getFullYear() - 1 : endDate.getFullYear();
+    const startDate = new Date(year, 3, 1); // April 1
+    const endDateFY = new Date(year + 1, 2, 31, 23, 59, 59, 999); // March 31
+    return { startDate, endDate: endDateFY, year };
+  };
+
+  const { startDate: financialYearStart, endDate: financialYearEnd, year: financialYear } = getFinancialYear(dateRange.endDate);
+
+  // Check if dateRange spans multiple financial years
+  const spansMultipleYears = dateRange.startDate.getFullYear() !== dateRange.endDate.getFullYear() ||
+    (dateRange.startDate.getFullYear() === dateRange.endDate.getFullYear() &&
+     dateRange.startDate.getMonth() < 3 && dateRange.endDate.getMonth() >= 3);
 
   // Fetch client details
   const { data: client, isLoading: loadingClient, error: clientError } = useQuery<Client>({
@@ -281,44 +292,19 @@ const ProjectDashboard = () => {
     enabled: calculationMode === "actual" && !!id,
   });
 
-  // Fetch time logs for Logged Hours chart (filtered by timePeriod and selectedDate)
+  // Fetch time logs for Logged Hours chart (filtered by financial year from dateRange)
   const { data: timeLogs = [], isLoading: loadingTimeLogs, error: timeLogsError } = useQuery<
     TimeLog[]
   >({
-    queryKey: ["time_logs_chart", id, timePeriod, selectedDate],
+    queryKey: ["time_logs_chart", id, financialYear],
     queryFn: async () => {
       if (!id) throw new Error("Project ID is missing");
-      let query = supabase
+      const { data, error } = await supabase
         .from("time_logs")
         .select("id, employee_id, date, project_time_data, total_working_hours")
-        .eq("is_approved", true);
-      
-      if (timePeriod === "week") {
-        const startOfWeekDate = startOfWeek(selectedDate, { weekStartsOn: 0 });
-        const endOfWeekDate = new Date(startOfWeekDate);
-        endOfWeekDate.setDate(startOfWeekDate.getDate() + 6);
-        query = query
-          .gte("date", startOfWeekDate.toISOString())
-          .lte("date", endOfWeekDate.toISOString());
-      } else if (timePeriod === "month") {
-        const startOfMonthDate = startOfMonth(selectedDate);
-        const endOfMonthDate = new Date(startOfMonthDate);
-        endOfMonthDate.setMonth(startOfMonthDate.getMonth() + 1);
-        endOfMonthDate.setDate(0);
-        query = query
-          .gte("date", startOfMonthDate.toISOString())
-          .lte("date", endOfMonthDate.toISOString());
-      } else if (timePeriod === "year") {
-        const startOfYearDate = startOfYear(selectedDate);
-        const endOfYearDate = new Date(startOfYearDate);
-        endOfYearDate.setFullYear(startOfYearDate.getFullYear() + 1);
-        endOfYearDate.setDate(0);
-        query = query
-          .gte("date", startOfYearDate.toISOString())
-          .lte("date", endOfYearDate.toISOString());
-      }
-
-      const { data, error } = await query;
+        .eq("is_approved", true)
+        .gte("date", financialYearStart.toISOString())
+        .lte("date", financialYearEnd.toISOString());
       if (error) throw error;
       return data.filter((log) =>
         log.project_time_data?.projects?.some((proj) => proj.projectId === id)
@@ -382,7 +368,7 @@ const ProjectDashboard = () => {
     loadingTableTimeLogs,
   ]);
 
-  // Calculate employee hours for chart (using filtered timeLogs)
+  // Calculate employee hours for chart (using timeLogs filtered by financial year)
   const calculateEmployeeHoursForChart = (employeeId: string) => {
     return timeLogs
       .filter((log) => log.employee_id === employeeId)
@@ -423,59 +409,18 @@ const ProjectDashboard = () => {
       }, 0);
   };
 
-  // Calculate total hours by interval for the chart
-  const calculateTotalHoursByInterval = (timePeriod: "week" | "month" | "year", selectedDate: Date) => {
-    let intervals: string[] = [];
-    let startDate: Date;
+  // Calculate total hours by interval for the chart (financial year, April to March)
+  const calculateTotalHoursByInterval = () => {
+    const intervals = [
+      "Apr", "May", "Jun", "Jul", "Aug", "Sep",
+      "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"
+    ];
 
-    if (timePeriod === "week") {
-      startDate = startOfWeek(selectedDate, { weekStartsOn: 0 });
-      intervals = Array.from({ length: 7 }, (_, i) =>
-        format(new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000), "EEE")
-      );
-    } else if (timePeriod === "month") {
-      startDate = startOfMonth(selectedDate);
-      intervals = Array.from({ length: 4 }, (_, i) =>
-        format(
-          new Date(startDate.getTime() + i * 7 * 24 * 60 * 60 * 1000),
-          "MMM dd"
-        )
-      );
-    } else {
-      intervals = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ];
-    }
-
-    const hoursByInterval = intervals.map((interval, index) => {
-      let intervalStart: Date;
-      let intervalEnd: Date;
-
-      if (timePeriod === "week") {
-        intervalStart = new Date(startDate.getTime() + index * 24 * 60 * 60 * 1000);
-        intervalEnd = new Date(intervalStart);
-        intervalEnd.setHours(23, 59, 59, 999);
-      } else if (timePeriod === "month") {
-        intervalStart = new Date(startDate.getTime() + index * 7 * 24 * 60 * 60 * 1000);
-        intervalEnd = new Date(intervalStart);
-        intervalEnd.setDate(intervalStart.getDate() + 6);
-        intervalEnd.setHours(23, 59, 59, 999);
-      } else {
-        intervalStart = new Date(selectedDate.getFullYear(), index, 1);
-        intervalEnd = new Date(selectedDate.getFullYear(), index + 1, 0);
-        intervalEnd.setHours(23, 59, 59, 999);
-      }
+    const hoursByInterval = intervals.map((month, index) => {
+      const monthIndex = (index + 3) % 12; // April (3) to March (2)
+      const year = monthIndex < 3 ? financialYear + 1 : financialYear;
+      const intervalStart = new Date(year, monthIndex, 1);
+      const intervalEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
 
       const totalHours = timeLogs
         .filter((log) =>
@@ -491,7 +436,7 @@ const ProjectDashboard = () => {
           return acc + (projectEntry?.hours || 0);
         }, 0);
 
-      return { name: interval, hours: totalHours };
+      return { name: month, hours: totalHours };
     });
 
     return hoursByInterval;
@@ -1100,13 +1045,6 @@ const ProjectDashboard = () => {
                   </div>
                   <span className="font-small text-sm text-right text-white">{project?.name}</span>
                 </li>
-                {/* <li className="flex items-start justify-between">
-                  <div className="flex items-center text-sm text-white">
-                    <Briefcase size={16} className="mr-2 text-white" />
-                    <span>Project ID:</span>
-                  </div>
-                  <span className="font-small text-sm text-right text-white">{project?.id}</span>
-                </li> */}
                 <li className="flex items-start justify-between">
                   <div className="flex items-center text-sm text-white">
                     <Calendar size={16} className="mr-2 text-white" />
@@ -1171,138 +1109,74 @@ const ProjectDashboard = () => {
             </CardContent>
           </Card>
           <div className="lg:col-span-3">
-            <RevenueExpenseChart projectId={id} timeLogs={unfilteredTimeLogs} />
-          </div>
-        </div>
-
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 gap-6 mb-8">
-          {calculationMode === "actual" ? (
-            <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-              <CardHeader className="purple-gradient text-white p-6">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-xl md:text-2xl font-semibold">Logged Hours</h2>
-                  <div className="flex items-center gap-2">
-                    <Select value={timePeriod} onValueChange={(value) => setTimePeriod(value as "week" | "month" | "year")}>
-                      <SelectTrigger className="w-[100px] bg-white text-gray-800">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="week">Week</SelectItem>
-                        <SelectItem value="month">Month</SelectItem>
-                        <SelectItem value="year">Year</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="w-[170px] justify-start text-left font-normal text-black bg-white border-gray-200"
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {format(selectedDate, timePeriod === "week" ? "'Week of' MMM d, yyyy" : timePeriod === "month" ? "MMM yyyy" : "yyyy")}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <UICalendar
-                          mode={timePeriod === "year" ? "year" : "default"}
-                          selected={selectedDate}
-                          onSelect={(date) => date && setSelectedDate(date)}
-                          initialFocus
-                          disabled={(date) => date > new Date()}
-                          {...(timePeriod === "year" ? { views: ["year"] } : {})}
-                        />
-                      </PopoverContent>
-                    </Popover>
+            {calculationMode === "actual" ? (
+              <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl h-[350px]">
+                <CardHeader className="purple-gradient text-white p-3">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl md:text-2xl font-semibold">
+                        Logged Hours (Financial Year {financialYear}-{financialYear + 1})
+                      </h2>
+                      {spansMultipleYears && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info size={18} className="text-white cursor-pointer" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>
+                              The date range spans multiple financial years. Showing data for the most recent financial year
+                              ({financialYear}-{financialYear + 1}). Adjust the table's date range to view a specific financial year.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6">
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart
-                    data={calculateTotalHoursByInterval(timePeriod, selectedDate)}
-                    margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
-                    className="animate-fade-in"
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis
-                      dataKey="name"
-                      angle={0}
-                      textAnchor="middle"
-                      interval={0}
-                      height={50}
-                      label={{ value: "Time Intervals", position: "insideBottom", offset: -10, fill: "#4b5563" }}
-                      className="text-sm font-medium purple-text-color"
-                      tick={{ fontSize: 12, fill: "#4b5563" }}
-                      tickFormatter={(value) => (value.length > 7 ? `${value.slice(0, 7)}...` : value)}
-                    />
-                    <YAxis
-                      label={{ value: "Hours", angle: -90, position: "insideLeft", offset: -10, fill: "#4b5563" }}
-                      className="text-sm font-medium purple-text-color"
-                      tick={{ fontSize: 12, fill: "#4b5563" }}
-                    />
-                    <RechartsTooltip
-                      contentStyle={{
-                        backgroundColor: "#fff",
-                        border: "1px solid oklch(62.7% 0.265 303.9)",
-                        borderRadius: "8px",
-                        boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                      }}
-                      formatter={(value: number) => `${value.toFixed(2)} hours`}
-                      itemStyle={{ color: "#4b5563" }}
-                      cursor={{ fill: "#f3e8ff" }}
-                    />
-                    <Bar dataKey="hours" fill="#7B43F1" name="Logged Hours" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-              <CardHeader className="purple-gradient text-white p-6">
-                <h2 className="text-xl md:text-2xl font-semibold">Revenue vs Profit</h2>
-              </CardHeader>
-              <CardContent className="p-6 flex flex-col items-center">
-                <ResponsiveContainer width="100%" height={400}>
-                  <PieChart className="animate-fade-in">
-                    <Pie
-                      data={[
-                        { name: "Revenue", value: totalRevenue, fill: "#7B43F1" },
-                        { name: "Profit", value: totalProfit, fill: "#A74BC8" },
-                      ]}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={100}
-                      outerRadius={140}
-                      cornerRadius={50}
-                      paddingAngle={5}
-                      dataKey="value"
-                      label={({ name, value }) => `${name}: ₹${formatINR(value)}`}
-                      labelLine={false}
-                      className="font-medium purple-text-color"
-                    />
-                    <RechartsTooltip
-                      contentStyle={{
-                        backgroundColor: "#fff",
-                        border: "1px solid oklch(62.7% 0.265 303.9)",
-                        borderRadius: "8px",
-                        boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                      }}
-                      formatter={(value: number, name) => {
-                        const usd = value / EXCHANGE_RATE_USD_TO_INR;
-                        return [
-                          `₹${formatINR(value)} ($${usd.toLocaleString(undefined, { maximumFractionDigits: 0 })})`,
-                          name,
-                        ];
-                      }}
-                      itemStyle={{ color: "#4b5563" }}
-                    />
-                    <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: "14px", color: "#4b5563" }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
+                </CardHeader>
+                <CardContent className="p-6">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart
+                      data={calculateTotalHoursByInterval()}
+                      margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
+                      className="animate-fade-in"
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="name"
+                        angle={0}
+                        textAnchor="middle"
+                        interval={0}
+                        height={50}
+                        label={{ value: "Months", position: "insideBottom", offset: -10, fill: "#4b5563" }}
+                        className="text-sm font-medium purple-text-color"
+                        tick={{ fontSize: 12, fill: "#4b5563" }}
+                        tickFormatter={(value) => (value.length > 7 ? `${value.slice(0, 7)}...` : value)}
+                      />
+                      <YAxis
+                        label={{ value: "Hours", angle: -90, position: "insideLeft", offset: -10, fill: "#4b5563" }}
+                        className="text-sm font-medium purple-text-color"
+                        tick={{ fontSize: 12, fill: "#4b5563" }}
+                      />
+                      <RechartsTooltip
+                        contentStyle={{
+                          backgroundColor: "#fff",
+                          border: "1px solid oklch(62.7% 0.265 303.9)",
+                          borderRadius: "8px",
+                          boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                        }}
+                        formatter={(value: number) => `${value.toFixed(2)} hours`}
+                        itemStyle={{ color: "#4b5563" }}
+                        cursor={{ fill: "#f3e8ff" }}
+                      />
+                      <Bar dataKey="hours" fill="#7B43F1" name="Logged Hours" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            ) : (
+              <RevenueExpenseChart projectId={id} timeLogs={unfilteredTimeLogs} />
+            )}
+          </div>
         </div>
 
         {/* Table Section */}

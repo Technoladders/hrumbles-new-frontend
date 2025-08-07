@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "../ui/card";
 import { Loader2 } from "lucide-react";
 import { Bar } from "react-chartjs-2";
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from "chart.js";
+import { startOfMonth, endOfMonth, isWithinInterval, getYear, getMonth } from "date-fns";
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -17,68 +18,126 @@ interface RevenueExpenseData {
   expense: number;
 }
 
-interface Props {
-  projectId: string;
+interface TimeLog {
+  id: string;
+  employee_id: string;
+  date: string;
+  project_time_data: {
+    projects: { hours: number; report: string; clientId: string; projectId: string }[];
+  };
+  total_working_hours: string;
 }
 
-const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
+interface Employee {
+  id: string;
+  assign_employee: string;
+  project_id: string;
+  client_id: string;
+  salary: number;
+  client_billing: number;
+  billing_type?: string;
+  salary_type?: string;
+  salary_currency?: string;
+  hr_employees?: {
+    first_name: string;
+    last_name: string;
+    salary_type: string;
+  } | null;
+  hr_projects?: {
+    id: string;
+    client_id: string;
+  } | null;
+}
+
+interface Props {
+  projectId?: string | null;
+  clientId: string;
+  timeLogs: TimeLog[];
+  dateRange: { startDate: Date; endDate: Date };
+}
+
+const ProjectRevenueExpenseChart: React.FC<Props> = ({ projectId, clientId, timeLogs, dateRange }) => {
   const [revenueExpenseData, setRevenueExpenseData] = useState<RevenueExpenseData[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Determine financial year from dateRange.endDate
+  const getFinancialYear = (endDate: Date) => {
+    const year = endDate.getMonth() < 3 ? endDate.getFullYear() - 1 : endDate.getFullYear();
+    const startDate = new Date(year, 3, 1); // April 1
+    const endDateFY = new Date(year + 1, 2, 31, 23, 59, 59, 999); // March 31
+    return { startDate, endDate: endDateFY, year };
+  };
+
+  const { startDate: financialYearStart, endDate: financialYearEnd, year: financialYear } = getFinancialYear(dateRange.endDate);
 
   useEffect(() => {
     const fetchRevenueExpenseData = async () => {
       setIsLoading(true);
       try {
-        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const months = ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"];
         const monthlyData: RevenueExpenseData[] = months.map((month) => ({
           month,
           revenue: 0,
           expense: 0,
         }));
 
-        // Fetch employees data for the specific project
-        const { data: employeesData, error: employeesError } = await supabase
-          .from("hr_project_employees")
-          .select(`
-            id,
-            assign_employee,
-            project_id,
-            salary,
-            client_billing,
-            billing_type,
-            salary_type,
-            salary_currency,
-            start_date,
-            end_date,
-            hr_employees!hr_project_employees_assign_employee_fkey(first_name, last_name, salary_type),
-            hr_projects!hr_project_employees_project_id_fkey(id, client_id)
-          `)
-          .eq("project_id", projectId);
+        // Skip fetching employees if projectId is null and clientId is provided
+        let employeesData: Employee[] = [];
+        if (projectId) {
+          const { data, error } = await supabase
+            .from("hr_project_employees")
+            .select(`
+              id,
+              assign_employee,
+              project_id,
+              client_id,
+              salary,
+              client_billing,
+              billing_type,
+              salary_type,
+              salary_currency,
+              hr_employees!hr_project_employees_assign_employee_fkey(first_name, last_name, salary_type),
+              hr_projects!hr_project_employees_project_id_fkey(id, client_id)
+            `)
+            .eq("project_id", projectId);
 
-        if (employeesError) {
-          console.error("Supabase query error (hr_project_employees):", employeesError);
-          throw new Error(`Error fetching employees data: ${employeesError.message}`);
-        }
+          if (error) {
+            console.error("Supabase query error (hr_project_employees):", error);
+            throw new Error(`Error fetching employees data: ${error.message}`);
+          }
+          employeesData = data || [];
+        } else {
+          const { data, error } = await supabase
+            .from("hr_project_employees")
+            .select(`
+              id,
+              assign_employee,
+              project_id,
+              client_id,
+              salary,
+              client_billing,
+              billing_type,
+              salary_type,
+              salary_currency,
+              hr_employees!hr_project_employees_assign_employee_fkey(first_name, last_name, salary_type),
+              hr_projects!hr_project_employees_project_id_fkey(id, client_id)
+            `)
+            .eq("client_id", clientId);
 
-        // Fetch time logs for the current year
-        const currentYear = new Date().getFullYear();
-        const { data: timeLogsData, error: timeLogsError } = await supabase
-          .from("time_logs")
-          .select("id, employee_id, date, project_time_data, total_working_hours")
-          .eq("is_approved", true)
-          .gte("date", `${currentYear}-01-01`)
-          .lte("date", `${currentYear}-12-31`);
-
-        if (timeLogsError) {
-          console.error("Supabase query error (time_logs):", timeLogsError);
-          throw new Error(`Error fetching time logs: ${timeLogsError.message}`);
+          if (error) {
+            console.error("Supabase query error (hr_project_employees):", error);
+            throw new Error(`Error fetching employees data: ${error.message}`);
+          }
+          employeesData = data || [];
         }
 
         // Fetch clients to get currency information
         const { data: clientsData, error: clientsError } = await supabase
           .from("hr_clients")
-          .select("id, currency");
+          .select("id, currency")
+          .eq("id", clientId)
+          .single();
 
         if (clientsError) {
           console.error("Supabase query error (hr_clients):", clientsError);
@@ -87,9 +146,8 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
 
         // Process employees data for revenue and expense
         const USD_TO_INR_RATE = 84;
-        employeesData?.forEach((employee) => {
-          const client = clientsData?.find((c) => c.id === employee.hr_projects?.client_id);
-          const currency = client?.currency || "INR";
+        employeesData.forEach((employee) => {
+          const currency = clientsData?.currency || "INR";
           let clientBilling = employee.client_billing || 0;
           let salary = employee.salary || 0;
 
@@ -115,15 +173,23 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
             hourlySalary = salary / (365 * 8);
           }
 
-          // Calculate total hours per month
-          const relevantTimeLogs = timeLogsData?.filter((log) =>
-            log.project_time_data?.projects?.some((proj) => proj.projectId === projectId && log.employee_id === employee.assign_employee)
-          ) || [];
+          // Filter time logs by financial year
+          const relevantTimeLogs = timeLogs.filter((log) =>
+            isWithinInterval(new Date(log.date), {
+              start: financialYearStart,
+              end: financialYearEnd,
+            }) &&
+            log.project_time_data?.projects?.some((proj) =>
+              projectId ? proj.projectId === projectId : proj.clientId === clientId
+            )
+          );
 
           relevantTimeLogs.forEach((log) => {
             const date = new Date(log.date);
-            const monthIndex = date.getMonth();
-            const projectEntry = log.project_time_data?.projects?.find((proj) => proj.projectId === projectId);
+            const monthIndex = (getMonth(date) + 9) % 12; // Adjust for April (3) to March (2)
+            const projectEntry = log.project_time_data?.projects?.find((proj) =>
+              projectId ? proj.projectId === projectId : proj.clientId === clientId
+            );
             const hours = projectEntry?.hours || 0;
 
             monthlyData[monthIndex].revenue += hours * hourlyRate;
@@ -142,7 +208,7 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
     };
 
     fetchRevenueExpenseData();
-  }, [projectId]);
+  }, [projectId, clientId, timeLogs, financialYear]);
 
   // Format numbers for display
   const formatCurrency = (amount: number) =>
@@ -246,7 +312,7 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
     labels: revenueExpenseData.map((data) => data.month),
     datasets: [
       {
-        label: "Expenses",
+        label: "Profit",
         data: revenueExpenseData.map((data) => data.expense),
         backgroundColor: createExpenseGradient,
         hoverBackgroundColor: createExpenseGradient,
@@ -290,7 +356,7 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
         borderWidth: 2,
         cornerRadius: 8,
         callbacks: {
-          label: (context: any) => `Expenses: ₹${context.parsed.y.toLocaleString("en-IN")}`,
+          label: (context: any) => `Profit: ₹${context.parsed.y.toLocaleString("en-IN")}`,
         },
       },
     },
@@ -299,12 +365,12 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Revenue Card */}
-      <Card className="shadow-xl h-[350px] border-none bg-white text-gray-900 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]">
+      <Card className="shadow-xl h-[300px] border-none bg-white text-gray-900 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]">
         <CardHeader className="p-6 border-b border-gray-200">
           <div className="flex justify-between items-center">
-            <CardTitle className="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-3">
+            <CardTitle className="text-lg md:text-2xl font-bold text-gray-900 flex items-center gap-3">
               <div className="w-4 h-4 bg-indigo-500 rounded-full shadow-lg shadow-indigo-500/50"></div>
-              Revenue
+              Revenue ({financialYear}-{financialYear + 1})
             </CardTitle>
             <div className="flex items-center gap-2">
               <span className="text-lg font-bold text-indigo-600">{formatCurrency(totalRevenue)}</span>
@@ -319,7 +385,7 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
           ) : errorMessage ? (
             <p className="text-red-500 text-center font-medium">{errorMessage}</p>
           ) : (
-            <div className="h-[200px]">
+            <div className="h-[190px]">
               <Bar data={revenueChartData} options={revenueChartOptions} />
             </div>
           )}
@@ -327,12 +393,13 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
       </Card>
 
       {/* Expense Card */}
-      <Card className="shadow-xl border-none bg-white text-gray-900 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]">
+      <Card className="shadow-xl h-[300px] border-none bg-white text-gray-900 overflow-hidden transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]">
+
         <CardHeader className="p-6 border-b border-gray-200">
           <div className="flex justify-between items-center">
-            <CardTitle className="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-3">
+            <CardTitle className="text-lg md:text-2xl font-bold text-gray-900 flex items-center gap-3">
               <div className="w-4 h-4 bg-yellow-500 rounded-full shadow-lg shadow-yellow-500/50"></div>
-              Profit
+              Profit ({financialYear}-{financialYear + 1})
             </CardTitle>
             <span className="text-lg font-bold text-yellow-600">{formatCurrency(totalExpense)}</span>
           </div>
@@ -345,7 +412,7 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
           ) : errorMessage ? (
             <p className="text-red-500 text-center font-medium">{errorMessage}</p>
           ) : (
-            <div className="h-[200px]">
+            <div className="h-[190px]">
               <Bar data={expenseChartData} options={expenseChartOptions} />
             </div>
           )}
@@ -355,5 +422,4 @@ const RevenueExpenseChart: React.FC<Props> = ({ projectId }) => {
   );
 };
 
-export default RevenueExpenseChart;
-// Project & Client
+export default ProjectRevenueExpenseChart;

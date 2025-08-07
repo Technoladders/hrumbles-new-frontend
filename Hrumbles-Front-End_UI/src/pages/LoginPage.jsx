@@ -4,16 +4,20 @@ import { motion } from "framer-motion";
 import { FiSun, FiMoon } from "react-icons/fi";
 import { signIn } from "../utils/api";
 import { useNavigate } from "react-router-dom";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { fetchUserSession } from "../Redux/authSlice";
 import supabase from "../config/supabaseClient";
 
 const MotionBox = motion(Box);
 
+const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
+
 const LoginPage = () => {
   const { colorMode, toggleColorMode } = useColorMode();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+    const organizationId = useSelector((state) => state.auth.organization_id);
+  
 
   const bg = useColorModeValue("base.bglight", "base.bgdark");
   const cardBg = useColorModeValue("white", "gray.800");
@@ -93,6 +97,9 @@ const LoginPage = () => {
       let navigateTo = "/dashboard";
       if (role === "employee" && departmentName === "Finance") {
         navigateTo = "/finance";
+      }
+      if (organizationId === ITECH_ORGANIZATION_ID) {
+        navigateTo = "/jobs";
       }
 
       console.log("Navigating to:", navigateTo, "Role:", role, "Department:", departmentName);

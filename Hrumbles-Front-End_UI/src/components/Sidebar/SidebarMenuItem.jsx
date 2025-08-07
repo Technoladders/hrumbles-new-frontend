@@ -5,7 +5,7 @@ import { MdDashboardCustomize, MdOutlineManageAccounts, MdOutlineEmojiPeople, Md
 import { ImProfile } from "react-icons/im";
 import { GoGoal } from "react-icons/go";
 import { AiOutlineProfile } from "react-icons/ai";
-import { FaFileInvoiceDollar, FaSackDollar, FaArrowsDownToPeople, FaRegCalendarCheck } from "react-icons/fa6";
+import { FaFileInvoiceDollar, FaSackDollar, FaArrowsDownToPeople, FaRegCalendarCheck, FaDropbox } from "react-icons/fa6";
 import { TbCheckbox } from "react-icons/tb";
 import { GoOrganization } from "react-icons/go";
 import { VscOrganization } from "react-icons/vsc";
@@ -15,6 +15,10 @@ import { BsShieldLock } from "react-icons/bs";
 import { FaUserShield, FaProjectDiagram } from 'react-icons/fa';
 import { RiCustomerService2Fill } from 'react-icons/ri';
 import { TbDatabaseSearch } from "react-icons/tb";
+
+
+
+const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
 
 // --- START: organization_superadmin categorization logic ---
 
@@ -49,6 +53,7 @@ const orgSuperAdminAllItems = [
   { icon: GoOrganization, label: "Companies", path: "/companies" },
   { icon: VscOrganization, label: "People", path: "/contacts" },
   { icon: FiList, label: "Lists", path: "/lists" },
+  { icon: FaDropbox, label: "Kanban", path: "/contacts/kanban" },
   {
     icon: FiSettings,
     label: "Settings",
@@ -62,9 +67,21 @@ const orgSuperAdminAllItems = [
   { icon: MdOutlineManageAccounts, label: "User Management", path: "/user-management" },
 ];
 
+
+// --- TEMPORARY MENU FOR ITECH ORGANIZATION --- (This remains unchanged)
+const iTechOrgSuperAdminMenu = [
+    // { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
+    { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+    { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
+    { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" },
+    { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+    { icon: GoGoal, label: "Goals", path: "/goals" },
+    { icon: ImProfile, label: "My Profile", path: "/profile" },
+    { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
+];
 // 2. Define the items for each suite
 const projectSuiteLabels = ["Clients", "Projects"];
-const salesSuiteLabels = ["Companies", "People", "Lists"];
+const salesSuiteLabels = ["Companies", "People", "Lists", "Kanban"];
 const financeSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll"];
 
 const projectSuiteItems = orgSuperAdminAllItems.filter(item => projectSuiteLabels.includes(item.label));
@@ -125,6 +142,7 @@ const adminAllItems = [
     { icon: GoOrganization, label: "Companies", path: "/companies", department: "Sales & Marketing" },
     { icon: VscOrganization, label: "People", path: "/contacts", department: "Sales & Marketing" },
     { icon: FiList, label: "Lists", path: "/lists", department: "Sales & Marketing" },
+    { icon: FaDropbox, label: "Kanban", path: "/contacts/kanban", department: "Sales & Marketing" },
             { icon: MdOutlineAccountBalance, label: "Finance", path: "/finance",  department: "Human Resource", },
   
             { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices",  department: "Human Resource", },
@@ -147,7 +165,7 @@ const adminAllItems = [
 // 2. Define labels for each suite for the Admin role
 const adminHrSuiteLabels = ["Dashboard", "Employees", "Jobs", "Talent Pool", "Zive-X", "Goals", "Reports", "My Profile", "Time Sheet", "Regularization", "Leave", "Attendance", "Calendar", "Settings"];
 const adminProjectSuiteLabels = ["Clients", "Projects"];
-const adminSalesSuiteLabels = ["Companies", "People", "Lists"];
+const adminSalesSuiteLabels = ["Companies", "People", "Lists", "Kanban"];
 const adminFinanceSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll"];
 
 // 3. Create a function to generate the categorized menu for an Admin
@@ -208,7 +226,13 @@ export const menuItemsByRole = {
     { icon: SiAwsorganizations, label: "Organization", path: "/organization" },
     { icon: FiSettings, label: "Settings", path: "/settings" },
   ],
-  organization_superadmin: categorizedOrgSuperAdminMenu, // Use the new categorized structure
+ organization_superadmin: (organizationId) => {
+    // The check is now against the constant ID
+    if (organizationId === ITECH_ORGANIZATION_ID) {
+      return iTechOrgSuperAdminMenu; // Return the simple menu for iTech
+    }
+    return categorizedOrgSuperAdminMenu; // Return the standard suite menu for everyone else
+  },
   admin: (departmentName) => createCategorizedAdminMenu(departmentName), // Use the new categorized function
   employee: (departmentName, designationName) => {
     // This logic is simple enough to remain as is, but could also be refactored
@@ -240,7 +264,8 @@ export const menuItemsByRole = {
       baseMenu.splice(2, 0,
         { icon: GoOrganization, label: "Companies", path: "/companies" },
         { icon: VscOrganization, label: "People", path: "/contacts" },
-        { icon: FiList, label: "Lists", path: "/lists" }
+        { icon: FiList, label: "Lists", path: "/lists" },
+        { icon: RiCustomerService2Fill, label: "Kanban", path: "/contacts/kanban" }
       );
     }
      if (departmentName === "Finance") {

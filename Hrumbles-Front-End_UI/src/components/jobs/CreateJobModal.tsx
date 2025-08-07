@@ -13,6 +13,7 @@ import { Briefcase, Users } from "lucide-react";
 import { toast } from "sonner";
 import { JobStepperForm } from "./job/JobStepperForm";
 import { JobData } from "@/lib/types";
+import { useSelector } from "react-redux";
 
 interface CreateJobModalProps {
   isOpen: boolean;
@@ -21,20 +22,36 @@ interface CreateJobModalProps {
   onSave?: (job: JobData) => void;
 }
 
+// MODIFICATION: Define a constant for the iTech organization ID for better readability
+const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
+
 export const CreateJobModal = ({ isOpen, onClose, editJob = null, onSave }: CreateJobModalProps) => {
   const [jobType, setJobType] = useState<"Internal" | "External" | null>(null);
   const [showStepper, setShowStepper] = useState(false);
+
+    const organizationId = useSelector((state: any) => state.auth.organization_id);
   
   // Reset state when modal opens/closes or when switching between create and edit modes
-  useEffect(() => {
-    if (isOpen && editJob) {
-      // For edit mode, determine job type from the job data
-      setJobType(editJob.jobType || "Internal");
-      setShowStepper(true);
+   useEffect(() => {
+    if (isOpen) {
+      if (editJob) {
+        // This is the existing logic for editing a job, which is correct.
+        setJobType(editJob.jobType || "Internal");
+        setShowStepper(true);
+      } else if (organizationId === ITECH_ORGANIZATION_ID) {
+        // NEW LOGIC: If creating a new job for the specific iTech organization,
+        // bypass the selection screen and go directly to the internal job form.
+        setJobType("Internal");
+        setShowStepper(true);
+      } else {
+        // For all other organizations, reset to show the selection screen.
+        handleReset();
+      }
     } else if (!isOpen) {
+      // When the modal closes, reset everything. This is correct.
       handleReset();
     }
-  }, [isOpen, editJob]);
+  }, [isOpen, editJob, organizationId]);
   
   const handleReset = () => {
     setJobType(null);
@@ -57,7 +74,7 @@ export const CreateJobModal = ({ isOpen, onClose, editJob = null, onSave }: Crea
     }
   };
 
-  return (
+   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent 
         className={`${showStepper ? 'sm:max-w-4xl max-h-[90vh] overflow-y-auto' : 'sm:max-w-md'}`}
@@ -65,17 +82,20 @@ export const CreateJobModal = ({ isOpen, onClose, editJob = null, onSave }: Crea
       >
         <DialogHeader className="sticky top-0 z-10 bg-background pb-4">
           <DialogTitle className="text-xl">
+            {/* This title logic will now correctly show "Internal Job" for iTech users */}
             {!showStepper ? (editJob ? "Edit Job" : "Create New Job") : 
               `${jobType} Job`
             }
           </DialogTitle>
           <DialogDescription>
+             {/* This description logic will also update correctly */}
             {!showStepper ? `Select the type of job you want to ${editJob ? 'edit' : 'create'}` : 
               `Fill in the required information to ${editJob ? 'update' : 'create a new'} job`
             }
           </DialogDescription>
         </DialogHeader>
         
+        {/* MODIFICATION: This block is now automatically skipped for iTech users in create mode due to the useEffect logic */}
         {!jobType && !editJob && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-6">
             <Button

@@ -26,7 +26,8 @@ import {
 } from '@tanstack/react-table';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { useQuery } from '@tanstack/react-query';
+
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { DataTable } from '@/components/ui/data-table';
 import { columns as defaultColumns, ActionColumn, getCustomCell } from '@/components/sales/contacts-table/columns';
@@ -71,6 +72,7 @@ const TanstackContactsPage: React.FC = () => {
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   const currentUser = useSelector((state: any) => state.auth.user);
   const { viewingMode } = useSelector((state: any) => state.workspace);
+  const queryClient = useQueryClient();
 
   const { data: serverContacts = [], isLoading } = useSimpleContacts({ 
       fileId: fileIdFromUrl,
@@ -97,7 +99,7 @@ const TanstackContactsPage: React.FC = () => {
   });
 
   const [isManageStagesOpen, setIsManageStagesOpen] = React.useState(false);
-  const [data, setData] = React.useState<SimpleContact[]>([]);
+  // const [data, setData] = React.useState<SimpleContact[]>([]);
   const [isAddColumnOpen, setIsAddColumnOpen] = React.useState(false);
   const [isAddContactOpen, setIsAddContactOpen] = React.useState(false);
   const [isImportOpen, setIsImportOpen] = React.useState(false);
@@ -155,11 +157,7 @@ const TanstackContactsPage: React.FC = () => {
     });
   }, [serverContacts, chartDateRange]);
 
-  React.useEffect(() => {
-      setData(filteredData);
-  }, [filteredData]);
-
-
+ 
   const memoizedColumns = React.useMemo<ColumnDef<SimpleContact>[]>(() => {
     const dynamicColumns: ColumnDef<SimpleContact>[] = customFields
         .filter(field => !NATIVE_COLUMNS.includes(field.column_key))
@@ -183,13 +181,18 @@ const TanstackContactsPage: React.FC = () => {
   }, [customFields]);
 
   const table = useReactTable({
-    data,
+   data: filteredData, 
     enableRowSelection: true,
     columns: memoizedColumns,
+      autoResetPageIndex: false,
     initialState: { pagination: { pageSize: 20 } },
     state: { columnOrder, columnSizing, grouping, columnVisibility, columnFilters },
     meta: {
-      updateData: (rowIndex: number, columnId: string, value: unknown) => handleRowUpdate(rowIndex, columnId, value),
+          updateData: (rowIndex: number, columnId: string, value: unknown) => {
+        console.log(`Step 2: table.meta.updateData called with:`, { rowIndex, columnId, value });
+        handleRowUpdate(rowIndex, columnId, value);
+      },
+
       deleteRow: (contactId: string) => handleDeleteRow(contactId),
     },
     columnResizeMode: 'onChange',
@@ -218,10 +221,25 @@ const TanstackContactsPage: React.FC = () => {
     setColumnVisibility(grouping.includes('contact_stage') ? { 'contact_stage': false } : {});
   }, [grouping]);
 
-  const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => {
-    const oldData = [...data];
-    const originalRow = oldData[rowIndex];
-    
+// This function goes inside your TanstackContactsPage.tsx component
+
+// TanstackContactPage.tsx
+
+const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => {
+    console.log("Step 3: handleRowUpdate function entered.");
+
+    // [THE FIX] Use `getPrePaginationRowModel` to get the row from the full dataset,
+    // ignoring the current page.
+    const originalRow = table.getPrePaginationRowModel().rowsById[rowIndex]?.original;
+
+    console.log("Original Row:", originalRow);
+
+    if (!originalRow) {
+      console.error(`Could not find original row data at index ${rowIndex}. Aborting update.`);
+      return;
+    }
+
+    // --- The rest of your function remains exactly the same ---
     let incomingUpdates: Record<string, any>;
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         incomingUpdates = value;
@@ -231,23 +249,17 @@ const TanstackContactsPage: React.FC = () => {
 
     const nativeUpdates: Record<string, any> = {};
     const customUpdates: Record<string, any> = {};
-
-    // [THE FIX] This loop correctly separates updates into native and custom buckets.
     for (const key in incomingUpdates) {
         if (Object.prototype.hasOwnProperty.call(incomingUpdates, key)) {
-            // A field is native if it's in our explicit NATIVE_COLUMNS list.
             if (NATIVE_COLUMNS.includes(key)) {
                 nativeUpdates[key] = incomingUpdates[key];
             } else {
-                // Otherwise, it's treated as a custom field.
                 customUpdates[key] = incomingUpdates[key];
             }
         }
     }
 
     const finalUpdates: Record<string, any> = { ...nativeUpdates };
-    
-    // If there are any custom fields to update, merge them into the custom_data object.
     if (Object.keys(customUpdates).length > 0) {
         finalUpdates.custom_data = {
             ...(originalRow.custom_data || {}),
@@ -255,27 +267,19 @@ const TanstackContactsPage: React.FC = () => {
         };
     }
     
-    // Add the user who performed the update.
     finalUpdates.updated_by = currentUser?.id;
     
-    // Create the updated row for optimistic UI update.
-    const updatedRow = { ...originalRow, ...finalUpdates };
+    console.log("Final payload being sent to mutate:", { item: originalRow, updates: finalUpdates });
 
-    // Optimistically update the local state.
-    setData(oldData.map((row, index) => (index === rowIndex ? updatedRow : row)));
-
-    // Send the correctly structured payload to the backend.
     updateContactMutation.mutate(
         { item: originalRow, updates: finalUpdates },
         {
             onError: (err: any) => {
-                setData(oldData); // Revert UI on error
                 toast({ title: "Update Failed", variant: "destructive", description: err.message });
             },
         }
     );
-  };
-
+};
   const handleDeleteRow = (contactId: string) => {
     deleteContactMutation.mutate(contactId, {
       onSuccess: () => toast({ title: "Contact Deleted" }),
@@ -404,7 +408,13 @@ return (
                 <DialogHeader><DialogTitle>Add New Contact</DialogTitle></DialogHeader>
                 <AddContactForm
                     onClose={() => setIsAddContactOpen(false)}
-                    onSuccess={(newContact) => setData(currentData => [newContact, ...currentData])}
+                    // [THE FIX] Instead of optimistically updating local state,
+                    // we invalidate the query to refetch the list. This is the standard
+                    // way to handle additions/deletions.
+                    onSuccess={() => {
+                        toast({ title: "Contact Added" });
+                        queryClient.invalidateQueries({ queryKey: ['simpleContactsList'] });
+                    }}
                     fileId={fileIdFromUrl}
                 />
             </DialogContent>

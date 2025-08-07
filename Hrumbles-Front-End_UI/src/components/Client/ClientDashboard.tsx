@@ -21,14 +21,14 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  DollarSign,
-  TrendingUp,
   Pencil,
   Trash2,
   FileText,
- UserRoundCheck, UserRoundX, ReceiptIndianRupee 
+  UserRoundCheck,
+  ReceiptIndianRupee,
+  TrendingUp,
 } from "lucide-react";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
 import { Input } from "../../components/ui/input";
 import { toast } from "sonner";
@@ -37,8 +37,9 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 import AddProjectDialog from "./AddProjectDialog";
 import Loader from "@/components/ui/Loader";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie } from "recharts";
-import RevenueProfitChart from "../Client/RevenueProfitChart";
+import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
+import ProjectRevenueExpenseChart from "../Client/ProjectRevenueExpenseChart";
+import { startOfMonth, isWithinInterval, startOfYear } from "date-fns";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,8 +50,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../components/ui/alert-dialog";
-import { Tooltip as ReactTooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-
 
 interface Project {
   id: string;
@@ -104,6 +103,12 @@ interface TimeLog {
   total_working_hours: string;
 }
 
+interface DateRange {
+  startDate: Date;
+  endDate: Date;
+  key: string;
+}
+
 const EXCHANGE_RATE_USD_TO_INR = 84;
 
 const formatINR = (number: number) =>
@@ -124,6 +129,11 @@ const ClientDashboard = () => {
   const [activeTab, setActiveTab] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [dateRange, setDateRange] = useState<DateRange>({
+    startDate: startOfMonth(new Date()),
+    endDate: new Date(),
+    key: "selection",
+  });
 
   const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
@@ -225,26 +235,27 @@ const ClientDashboard = () => {
         billing_type: employee.billing_type ?? "LPA",
         start_date: employee.start_date ?? "",
         end_date: employee.end_date ?? "",
-        salary_type: employee.salary_type?? "LPA",
-        salary_currency: employee.salary_currency?? "INR",
+        salary_type: employee.salary_type ?? "LPA",
+        salary_currency: employee.salary_currency ?? "INR",
         hr_employees: employee.hr_employees ?? null,
       }));
     },
     enabled: !!id && !!organization_id,
   });
 
-  // Fetch time logs for actual calculations
-  const { data: timeLogs = [], isLoading: loadingTimeLogs, error: timeLogsError } = useQuery<
+  // Fetch time logs for table and ProjectRevenueExpenseChart (filtered by dateRange)
+  const { data: tableTimeLogs = [], isLoading: loadingTableTimeLogs, error: tableTimeLogsError } = useQuery<
     TimeLog[]
   >({
-    queryKey: ["time_logs", id],
+    queryKey: ["time_logs_table", id, dateRange],
     queryFn: async () => {
       if (!id) throw new Error("Client ID is missing");
       const { data, error } = await supabase
         .from("time_logs")
         .select("id, employee_id, date, project_time_data, total_working_hours")
-        // .eq("organization_id", organization_id);
-            .eq("is_approved", true)
+        .eq("is_approved", true)
+        .gte("date", dateRange.startDate.toISOString())
+        .lte("date", dateRange.endDate.toISOString());
       if (error) throw error;
       return data.filter((log) =>
         log.project_time_data?.projects?.some((proj) => projects.some((p) => p.id === proj.projectId))
@@ -254,12 +265,12 @@ const ClientDashboard = () => {
   });
 
   // Combine loading states
-  const isLoading = loadingClient || loadingProjects || loadingEmployees || loadingTimeLogs;
+  const isLoading = loadingClient || loadingProjects || loadingEmployees || loadingTableTimeLogs;
 
   // Error handling
-  if (clientError || projectsError || employeesError || timeLogsError) {
+  if (clientError || projectsError || employeesError || tableTimeLogsError) {
     toast.error("Failed to fetch data");
-    console.error("Errors:", { clientError, projectsError, employeesError, timeLogsError });
+    console.error("Errors:", { clientError, projectsError, employeesError, tableTimeLogsError });
   }
 
   // Reset currentPage when searchQuery or activeTab changes
@@ -267,10 +278,15 @@ const ClientDashboard = () => {
     setCurrentPage(1);
   }, [searchQuery, activeTab]);
 
-  // Calculate total hours per employee from time logs
+  // Calculate total hours per employee from time logs (filtered by dateRange for table)
   const calculateEmployeeHours = (employeeId: string, projectId: string) =>
-    timeLogs
-      .filter((log) => log.employee_id === employeeId)
+    tableTimeLogs
+      .filter((log) =>
+        isWithinInterval(new Date(log.date), {
+          start: dateRange.startDate,
+          end: dateRange.endDate,
+        })
+      )
       .reduce((acc, log) => {
         const projectEntry = log.project_time_data?.projects?.find(
           (proj) => proj.projectId === projectId
@@ -313,14 +329,12 @@ const ClientDashboard = () => {
   // Calculate profit for an employee
   const calculateProfit = (employee: AssignEmployee, projectId: string) => {
     const revenue = calculateRevenue(employee, projectId);
-      let salary = employee.salary || 0;
-  const salaryType = employee?.salary_type || "LPA";
+    let salary = employee.salary || 0;
+    const salaryType = employee?.salary_type || "LPA";
 
-  if (employee.salary_currency === "USD") {
-    salary *= EXCHANGE_RATE_USD_TO_INR;
-  }
-
-  console.log("employee.salary_type", employee)
+    if (employee.salary_currency === "USD") {
+      salary *= EXCHANGE_RATE_USD_TO_INR;
+    }
 
     const hours = calculateEmployeeHours(employee.assign_employee, projectId);
 
@@ -430,7 +444,7 @@ const ClientDashboard = () => {
     const worksheet = XLSX.utils.json_to_sheet(csvData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Projects");
-    XLSX.writeFile(workbook, "Projects_actual.csv");
+    XLSX.writeFile(workbook, "Projects.csv");
   };
 
   // Export to PDF
@@ -451,7 +465,7 @@ const ClientDashboard = () => {
       ]),
       startY: 20,
     });
-    doc.save("Projects_actual.pdf");
+    doc.save("Projects.pdf");
   };
 
   // Update project status mutation
@@ -669,248 +683,109 @@ const ClientDashboard = () => {
     );
   }
 
-return (
-  <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-6 md:p-10">
-    <main className="w-full max-w-8xl mx-auto space-y-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex items-center gap-4">
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-6 md:p-10">
+      <main className="w-full max-w-8xl mx-auto space-y-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 text-gray-600 hover:text-indigo-600 transition-all duration-200"
+            >
+              <ArrowLeft size={16} />
+              Back
+            </Button>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-extrabold text-gray-800 tracking-tight">
+                {client?.display_name} Dashboard
+              </h1>
+              <p className="text-gray-500 text-sm md:text-base mt-2">
+                Manage and track all projects for this client
+              </p>
+            </div>
+          </div>
           <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-gray-600 hover:text-indigo-600 transition-all duration-200"
+            onClick={() => {
+              setEditProject(null);
+              setAddProjectOpen(true);
+            }}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-all duration-200"
           >
-            <ArrowLeft size={16} />
-            Back
+            <Plus size={16} />
+            Create New Project
           </Button>
-          <div>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-gray-800 tracking-tight">
-              {client?.display_name} Dashboard
-            </h1>
-            <p className="text-gray-500 text-sm md:text-base mt-2">
-              Manage and track all projects for this client
-            </p>
+        </div>
+
+        {/* Client Overview Card */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <Card className="purple-gradient h-[300px] flex flex-col lg:col-span-1">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-lg font-semibold text-white flex items-center">
+                <Briefcase className="mr-2" size={18} />
+                Client Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-2 flex-grow overflow-auto">
+              <ul className="space-y-5">
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <Briefcase size={16} className="mr-2 text-white" />
+                    <span>Total Projects:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{totalProjects}</span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <Calendar size={16} className="mr-2 text-white" />
+                    <span>Ongoing Projects:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{ongoingProjects}</span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <Calendar size={16} className="mr-2 text-white" />
+                    <span>Completed Projects:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{completedProjects}</span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <UserRoundCheck size={16} className="mr-2 text-white" />
+                    <span>Working Employees:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{workingCount}</span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <ReceiptIndianRupee size={16} className="mr-2 text-white" />
+                    <span>Total Revenue:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{formatINR(totalRevenue)}</span>
+                </li>
+                <li className="flex items-start justify-between">
+                  <div className="flex items-center text-sm text-white">
+                    <TrendingUp size={16} className="mr-2 text-white" />
+                    <span>Total Profit:</span>
+                  </div>
+                  <span className="font-small text-sm text-right text-white">{formatINR(totalProfit)}</span>
+                </li>
+              </ul>
+            </CardContent>
+          </Card>
+          <div className="lg:col-span-3">
+
+          <ProjectRevenueExpenseChart projectId={null} clientId={id} timeLogs={tableTimeLogs} dateRange={dateRange} />
+
           </div>
         </div>
-        <Button
-          onClick={() => {
-            setEditProject(null);
-            setAddProjectOpen(true);
-          }}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-all duration-200"
-        >
-          <Plus size={16} />
-          Create New Project
-        </Button>
-      </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">Total Projects</p>
-              <h3 className="text-2xl font-bold text-gray-800">{totalProjects}</h3>
-              <p className="text-xs text-gray-500 mt-1">All projects</p>
-            </div>
-            <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-full">
-              <Briefcase size={24} className="text-white" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">Ongoing Projects</p>
-              <h3 className="text-2xl font-bold text-gray-800">{ongoingProjects}</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                {totalProjects ? Math.round((ongoingProjects / totalProjects) * 100) : 0}% of total
-              </p>
-            </div>
-            <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full">
-              <Calendar size={24} className="text-white" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">Completed Projects</p>
-              <h3 className="text-2xl font-bold text-gray-800">{completedProjects}</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                {totalProjects ? Math.round((completedProjects / totalProjects) * 100) : 0}% of total
-              </p>
-            </div>
-            <div className="bg-gradient-to-br from-yellow-400 to-yellow-600 p-3 rounded-full">
-              <Calendar size={24} className="text-white" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">Working Employees</p>
-              <h3 className="text-2xl font-bold text-gray-800">{workingCount}</h3>
-              <p className="text-xs text-gray-500 mt-1">Currently active</p>
-            </div>
-            <div className="bg-gradient-to-br from-purple-400 to-purple-600 p-3 rounded-full">
-              <Briefcase size={24} className="text-white" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">Total Revenue</p>
-              <h3 className="text-2xl font-bold text-gray-800">₹ {formatINR(totalRevenue)}</h3>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <p className="text-xs text-gray-500 mt-1">
-                      ${(totalRevenue / EXCHANGE_RATE_USD_TO_INR).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
-                    </p>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-white border-gray-200 shadow-lg rounded-lg p-2">
-                    <p>Converted at 1 USD = ₹ {EXCHANGE_RATE_USD_TO_INR}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-full">
-              <ReceiptIndianRupee size={24} className="text-white" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">Total Profit</p>
-              <h3 className="text-2xl font-bold text-gray-800">₹ {formatINR(totalProfit)}</h3>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <p className="text-xs text-gray-500 mt-1">
-                      ${(totalProfit / EXCHANGE_RATE_USD_TO_INR).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
-                    </p>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-white border-gray-200 shadow-lg rounded-lg p-2">
-                    <p>Converted at 1 USD = ₹ {EXCHANGE_RATE_USD_TO_INR}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full">
-              <TrendingUp size={24} className="text-white" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+       
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardHeader className="purple-gradient text-white p-6">
-            <h2 className="text-xl md:text-2xl font-semibold">Project Financials</h2>
-          </CardHeader>
-          <CardContent className="p-6 overflow-x-auto">
-            <div style={{ minWidth: `${projectData.length * 100}px` }}>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart
-                  data={projectData}
-                  margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
-                  className="animate-fade-in"
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis
-                    dataKey="name"
-                    angle={0}
-                    textAnchor="middle"
-                    interval={0}
-                    height={50}
-                    label={{ value: "Projects", position: "insideBottom", offset: -10, fill: "#4b5563" }}
-                    className="text-sm font-medium purple-text-color"
-                    tick={{ fontSize: 12, fill: "#4b5563" }}
-                    tickFormatter={(value) => (value.length > 7 ? `${value.slice(0, 7)}...` : value)}
-                  />
-                  <YAxis
-                    label={{ value: "Value (INR)", angle: -90, position: "insideLeft", offset: -10, fill: "#4b5563" }}
-                    className="text-sm font-medium purple-text-color"
-                    tick={{ fontSize: 12, fill: "#4b5563" }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#fff",
-                      border: "1px solid oklch(62.7% 0.265 303.9)",
-                      borderRadius: "8px",
-                      boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                    }}
-                    formatter={(value: number, name) => {
-                      const usd = value / EXCHANGE_RATE_USD_TO_INR;
-                      return [
-                        `₹${formatINR(value)} ($${usd.toLocaleString(undefined, { maximumFractionDigits: 0 })})`,
-                        name,
-                      ];
-                    }}
-                    itemStyle={{ color: "#4b5563" }}
-                    cursor={{ fill: "#f3e8ff" }}
-                  />
-                  <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "14px", color: "#4b5563" }} />
-                  <Bar dataKey="revenue" fill="#7B43F1" name="Revenue" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="profit" fill="#A74BC8" name="Profit" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardHeader className="purple-gradient text-white p-6">
-            <h2 className="text-xl md:text-2xl font-semibold">Revenue vs Profit</h2>
-          </CardHeader>
-          <CardContent className="p-6 flex flex-col items-center">
-            <ResponsiveContainer width="100%" height={400}>
-              <PieChart className="animate-fade-in">
-                <Pie
-                  data={[
-                    { name: "Revenue", value: totalRevenue, fill: "#7B43F1" },
-                    { name: "Profit", value: totalProfit, fill: "#A74BC8" },
-                  ]}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={100}
-                  outerRadius={140}
-                  cornerRadius={50}
-                  paddingAngle={5}
-                  dataKey="value"
-                  label={({ name, value }) => `${name}: ₹${formatINR(value)}`}
-                  labelLine={false}
-                  className="font-medium purple-text-color"
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#fff",
-                    border: "1px solid oklch(62.7% 0.265 303.9)",
-                    borderRadius: "8px",
-                    boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                  }}
-                  formatter={(value: number, name) => {
-                    const usd = value / EXCHANGE_RATE_USD_TO_INR;
-                    return [
-                      `₹${formatINR(value)} ($${usd.toLocaleString(undefined, { maximumFractionDigits: 0 })})`,
-                      name,
-                    ];
-                  }}
-                  itemStyle={{ color: "#4b5563" }}
-                />
-                <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: "14px", color: "#4b5563" }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Table Section */}
-      <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl rounded-2xl">
-        <CardContent className="p-6">
+        {/* Table Section */}
+        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl rounded-2xl">
+          <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
               <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="grid grid-cols-4 w-full sm:w-[400px]">
@@ -941,6 +816,12 @@ return (
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
+              <DateRangePickerField
+                dateRange={dateRange}
+                onDateRangeChange={setDateRange}
+                onApply={() => {}}
+                className="mt-4 sm:mt-0"
+              />
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={exportToCSV}>
                   <Download className="w-4 h-4 mr-2" />
@@ -970,45 +851,44 @@ return (
                 {filteredProjects.length > 0 && renderPagination()}
               </TabsContent>
             </Tabs>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {id && (
-        <>
-          <AddProjectDialog
-            open={addProjectOpen}
-            onOpenChange={(open) => {
-              setAddProjectOpen(open);
-              if (!open) setEditProject(null);
-            }}
-            clientId={id}
-            editProject={editProject}
-          />
-          <AlertDialog open={!!deleteProjectId} onOpenChange={() => setDeleteProjectId(null)}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This action will permanently delete the project and cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-red-600 hover:bg-red-700"
-                  onClick={() => deleteProjectId && deleteProject.mutate(deleteProjectId)}
-                >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </>
-      )}
-    </main>
-  </div>
-);
+        {id && (
+          <>
+            <AddProjectDialog
+              open={addProjectOpen}
+              onOpenChange={(open) => {
+                setAddProjectOpen(open);
+                if (!open) setEditProject(null);
+              }}
+              clientId={id}
+              editProject={editProject}
+            />
+            <AlertDialog open={!!deleteProjectId} onOpenChange={() => setDeleteProjectId(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action will permanently delete the project and cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={() => deleteProjectId && deleteProject.mutate(deleteProjectId)}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        )}
+      </main>
+    </div>
+  );
 };
 
 export default ClientDashboard;
-// UI change

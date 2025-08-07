@@ -94,7 +94,9 @@ export const EditableCell: React.FC<any> = ({ getValue, row, column, table }) =>
     if (row.getIsGrouped()) return null;
     const initialValue = getValue() || "";
     const [value, setValue] = React.useState(initialValue);
-    const onBlur = () => table.options.meta?.updateData(row.index, column.id, value);
+    const onBlur = () => 
+      
+      table.options.meta?.updateData(row.index, column.id, value);
     React.useEffect(() => setValue(initialValue), [initialValue]);
     return <Input value={value} onChange={(e) => setValue(e.target.value)} onBlur={onBlur} className="h-full border-none bg-transparent focus-visible:ring-0 rounded-none p-0 truncate" />;
 };
@@ -136,7 +138,7 @@ const PhoneCell: React.FC<any> = ({ getValue, row, column, table }) => {
              `}</style>
              <PhoneInput
                 international
-                defaultCountry="IN"
+                
                 value={value}
                 onChange={(v) => setValue(v || "")}
              />

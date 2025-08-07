@@ -34,7 +34,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({ stage, contacts, onD
       <div className="p-3 border-b flex items-center gap-2 sticky top-0 bg-slate-100/80 rounded-t-lg backdrop-blur-sm z-10">
         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color || '#ccc' }}></span>
         <h3 className="font-semibold text-gray-700 text-sm truncate">{stage.name}</h3>
-        <span className="text-sm text-muted-foreground ml-auto flex-shrink-0 px-2 py-0.5 bg-slate-200 rounded-full">{contacts.length}</span>
+        <span className="text-sm text-purple-800 ml-auto flex-shrink-0 px-2 py-0.5 bg-purple-300 rounded-full">{contacts.length}</span>
       </div>
       {/* Scrollable content within the column */}
       <div className="flex-grow p-1.5 overflow-y-auto">
