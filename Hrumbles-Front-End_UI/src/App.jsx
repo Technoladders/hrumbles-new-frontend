@@ -15,7 +15,14 @@ import DomainVerificationPage from "./pages/DomainVerificationPage";
 import Login from "./pages/LoginPage";
 import SignUp from "./pages/GlobalSuperAdmin";
 import PrivateRoutes from "./utils/PrivateRoutes";
+
+// Global Superadmin
 import GlobalSuperadminDashboard from "./pages/Global_Dashboard";
+import VerificationHubPage from "./pages/verifications/VerificationHubPage";
+import VerificationTypeDashboardPage from "./pages/verifications/VerificationTypeDashboardPage";
+import OrganizationVerificationReportPage from "./pages/verifications/OrganizationVerificationReportPage";
+
+
 import MainLayout from "./layouts/MainLayout";
 import HomePage from "./pages/HomePage";
 import Dashboard from "./pages/dashboard";
@@ -147,6 +154,8 @@ function App() {
         <Route path="/signup" element={<SignUp />} />
                  <Route path="/set-password" element={<SetPassword />} />
 
+               
+
 
         {/* career page */}
         <Route path="/careers" element={<Career />} />
@@ -178,6 +187,11 @@ function App() {
             {/* Password Change */}
             <Route path="/password" element={<PasswordChange />} />
 
+              {/* Global Super Admin */}
+                 <Route path="/verifications" element={<VerificationHubPage />} />
+            <Route path="/verifications/:verificationType" element={<VerificationTypeDashboardPage />} />
+            <Route path="/verifications/:verificationType/:organizationId" element={<OrganizationVerificationReportPage />} />
+            
             {/* <Route path="/employees" element={<Employee/>} /> */}
             <Route path="/projects" element={<Clients />} />
             <Route path="/client/:id" element={<ClientDashboard />} />

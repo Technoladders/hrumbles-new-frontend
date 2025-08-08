@@ -105,9 +105,15 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
 `;
 
     const result = await model.generateContent(prompt);
+    
+    // Extract token usage from the response
+    const usageMetadata = result.response.usageMetadata;
+    const inputTokens = usageMetadata?.promptTokenCount || 0;
+    const outputTokens = usageMetadata?.candidatesTokenCount || 0;
+    
     const cleanedJson = cleanResponse(result.response.text());
+    // --- END: MODIFICATION ---
     const profileData = JSON.parse(cleanedJson);
-
     let resumePath: string | null = null;
     if (resumeFile) {
         // --- FIX: Sanitize the filename before uploading ---
@@ -130,6 +136,9 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
       organization_id_input: organizationId,
       user_id_input: user.id,
       resume_path_input: resumePath,
+       input_tokens_used: inputTokens,
+      output_tokens_used: outputTokens,
+      usage_type_input: 'talent_pool_ingestion'
     });
 
     if (rpcError) throw new Error(`Database Error: ${rpcError.message}`);

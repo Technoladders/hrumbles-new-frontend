@@ -11,7 +11,7 @@ import { GoOrganization } from "react-icons/go";
 import { VscOrganization } from "react-icons/vsc";
 import { GrDocumentTime } from "react-icons/gr";
 import { LuCalendarPlus, LuUserSearch } from "react-icons/lu";
-import { BsShieldLock } from "react-icons/bs";
+import { BsShieldLock, BsShieldCheck } from "react-icons/bs";
 import { FaUserShield, FaProjectDiagram } from 'react-icons/fa';
 import { RiCustomerService2Fill } from 'react-icons/ri';
 import { TbDatabaseSearch } from "react-icons/tb";
@@ -224,6 +224,7 @@ export const menuItemsByRole = {
     // ... remains the same
     { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
     { icon: SiAwsorganizations, label: "Organization", path: "/organization" },
+     { icon: BsShieldCheck, label: "Verifications", path: "/verifications" },
     { icon: FiSettings, label: "Settings", path: "/settings" },
   ],
  organization_superadmin: (organizationId) => {
