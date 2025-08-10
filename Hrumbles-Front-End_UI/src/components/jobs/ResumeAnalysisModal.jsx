@@ -65,6 +65,14 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
       setIsLoading(true);
       const newCandidateId = candidateId || uuidv4();
       setCandidateId(newCandidateId);
+
+       // --- START: MODIFICATION ---
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let status = 'FAILURE';
+      let analysisForLog = null;
+      let responseText = "";
+      // --- END: MODIFICATION ---
    
       try {
         const prompt = `
@@ -122,10 +130,21 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
           Use symbols: ✅ for 'yes', ⚠️ for 'partial', ❌ for 'no'. Return ONLY the JSON object.
         `;
    
-        const result = await model.generateContent(prompt);
-        const cleanedText = cleanResponse(result.response.text());
+         const result = await model.generateContent(prompt);
+
+        // --- START: MODIFICATION ---
+        inputTokens = result.response.usageMetadata?.promptTokenCount || 0;
+        outputTokens = result.response.usageMetadata?.candidatesTokenCount || 0;
+        responseText = result.response.text();
+        // --- END: MODIFICATION ---
+        
+        const cleanedText = cleanResponse(responseText);
         const parsedResult = JSON.parse(cleanedText);
-   
+
+        // --- START: MODIFICATION ---
+        status = 'SUCCESS';
+        analysisForLog = parsedResult;
+        // --- END: MODIFICATION ---
         // Normalize company names
         // const normalizeCompanyName = (name) => {
         //   const lowerName = name.toLowerCase().trim();
@@ -205,7 +224,22 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
         setShowResults(false);
       } catch (err) {
         setError('Error analyzing resume: ' + err.message);
+        // --- START: MODIFICATION ---
+        analysisForLog = { error: err.message, raw_response: responseText };
+        // --- END: MODIFICATION ---
       } finally {
+        // --- START: MODIFICATION ---
+        await supabase.from('hr_gemini_usage_log').insert({
+          organization_id: organizationId,
+          created_by: user.id,
+          status: status,
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          analysis_response: analysisForLog,
+          parsed_email: analysisForLog?.email || null,
+          usage_type: 'resume_initial_analysis'
+        });
+        // --- END: MODIFICATION ---
         setIsLoading(false);
       }
     };
@@ -452,8 +486,17 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
    
     const revalidateSkills = async () => {
       setIsLoading(true);
+
+      // --- START: MODIFICATION ---
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let status = 'FAILURE';
+      let analysisForLog = null;
+      let responseText = "";
+      // --- END: MODIFICATION ---
+
       try {
-        // Use a random API key for this call
+
        
    
         const prompt = `
@@ -501,10 +544,22 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
           Return ONLY the JSON object.
         `;
    
-        const result = await model.generateContent(prompt);
-        const cleanedText = cleanResponse(result.response.text());
+         const result = await model.generateContent(prompt);
+
+        // --- START: MODIFICATION ---
+        inputTokens = result.response.usageMetadata?.promptTokenCount || 0;
+        outputTokens = result.response.usageMetadata?.candidatesTokenCount || 0;
+        responseText = result.response.text();
+        // --- END: MODIFICATION ---
+        
+        const cleanedText = cleanResponse(responseText);
         const updatedScores = JSON.parse(cleanedText);
-   
+        
+        // --- START: MODIFICATION ---
+        status = 'SUCCESS';
+        analysisForLog = updatedScores;
+        // --- END: MODIFICATION ---
+
         console.log('Updated Scores from Gemini:', updatedScores);
    
         const updatedResult = {
@@ -533,7 +588,9 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
         setShowResults(false);
       } catch (err) {
         setError('Error re-evaluating scores: ' + err.message);
-   
+        // --- START: MODIFICATION ---
+        analysisForLog = { error: err.message, raw_response: responseText };
+        // --- END: MODIFICATION ---
         // Local fallback calculation if Gemini fails
         const updatedScoring = { ...analysisResult.section_wise_scoring };
         const skillMap = {
@@ -580,6 +637,18 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
           });
         }
       } finally {
+         // --- START: MODIFICATION ---
+        await supabase.from('hr_gemini_usage_log').insert({
+          organization_id: organizationId,
+          created_by: user.id,
+          status: status,
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          analysis_response: analysisForLog,
+          parsed_email: email, // Use the email from component state
+          usage_type: 'resume_revalidation'
+        });
+        // --- END: MODIFICATION ---
         setIsLoading(false);
       }
     };

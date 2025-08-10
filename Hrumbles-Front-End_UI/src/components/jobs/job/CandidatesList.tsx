@@ -2316,6 +2316,7 @@ const handleValidateResume = async (candidateId: string) => {
       resume_url: extractedResumeUrl,
       job_description: jobdescription,
       organization_id: organizationId,
+      user_id: user.id,
     };
     console.log("Sending payload to backend:", payload);
 
@@ -2361,7 +2362,7 @@ const handleValidateResume = async (candidateId: string) => {
         console.log(`Polling attempt ${attempts}/${maxAttempts} for job ${rqJobId}...`);
 
         try {
-          const statusApiUrl = `https://dev.hrumbles.ai/api/job-status?jobId=${encodeURIComponent(rqJobId)}`;
+          const statusApiUrl = `https://dev.hrumbles.ai/api/job-status/${encodeURIComponent(rqJobId)}`;
           console.log(`Polling URL: ${statusApiUrl}`);
           const statusResponse = await fetch(statusApiUrl);
 

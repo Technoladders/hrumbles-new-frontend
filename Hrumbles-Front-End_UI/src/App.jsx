@@ -62,6 +62,11 @@ import ReportsPage from "./pages/reports/Index";
 import EmployeeProfilePage from "./components/MagicLinkView/EmployeeProfileDrawer";
 import CandidateConsentPage from './components/MagicLinkView/CandidateConsentPage';
 
+// Job Route Handler
+import JobRouteHandler from "./components/jobs/JobRouteHandler";
+import JobViewRouteHandler from "./components/jobs/JobViewRouteHandler";
+import CandidateBgvProfilePage from "./pages/bg-verification/CandidateBgvProfilePage";
+
 // Candidates
 import TalentPoolPage from "./pages/candidates/TalentPoolPage"; // Create this new page
 import CandidateProfilePage from "./pages/candidates/CandidateProfilePage"; 
@@ -231,13 +236,15 @@ function App() {
             <Route path="/goals/:goalId/:goalType?" element={<GoalDetailView />} />
 
             {/* Jobs */}
-            <Route path="/jobs" element={<Jobs />} />
-            <Route path="/jobs/:id" element={<JobView />} />
+            <Route path="/jobs" element={<JobRouteHandler />} />
+            <Route path="/jobs/:id" element={<JobViewRouteHandler />} />
             <Route path="/resume-analysis/:candidateId" element={<ResumeAnalysisDetailView />} />
             <Route path="/jobs/:id/description" element={<JobDescription />} />
             <Route path="/jobs/edit/:id" element={<JobDescription />} />
             <Route path="/jobstatuses" element={<StatusSettings />} />
             <Route path="/employee/:candidateId/:jobId" element={<EmployeeProfilePage />} />
+
+            <Route path="/jobs/:jobId/candidate/:candidateId/bgv" element={<CandidateBgvProfilePage />} />
 
             {/* Candidates */}
             <Route path="/talent-pool" element={<TalentPoolPage />} />
