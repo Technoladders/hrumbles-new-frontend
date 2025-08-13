@@ -16,9 +16,7 @@ import mammoth from 'mammoth';
 
 // Types
 interface Props {
-  onBack: () => void;
-  jobId: string;
-  closeModal: () => void;
+onAnalysisComplete: (data: any, file: File) => void;
 }
 interface BulkResult {
   fileName: string;
@@ -27,9 +25,11 @@ interface BulkResult {
   message: string;
 }
 
-const BUCKET_NAME = 'candidate-bgv-resumes';
+const BUCKET_NAME = 'candidate_resumes'; // This is correct
+const FOLDER_NAME = 'bgv-resumes'; // Define the folder to upload into
 
-export const AiResumeUpload: FC<Props> = ({ onBack, jobId, closeModal }) => {
+
+export const AiResumeUpload: FC<Props> = ({ onAnalysisComplete}) => {
   const [activeTab, setActiveTab] = useState('single');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -72,15 +72,15 @@ export const AiResumeUpload: FC<Props> = ({ onBack, jobId, closeModal }) => {
     if (!file) return;
 
     setIsProcessing(true);
-    setResumeFile(file);
+   
     toast.info("Parsing and analyzing resume...");
     try {
       const text = await parseFileToText(file);
       const data = await analyseResume(text);
-      setReviewData({ ...data, resumeText: text }); // Pass text to review form
+      onAnalysisComplete({ ...data, resumeText: text }, file);
     } catch (err: any) {
       toast.error("Analysis Failed", { description: err.message });
-      setResumeFile(null); // Clear file on error
+     
     } finally {
       setIsProcessing(false);
     }
@@ -112,7 +112,7 @@ export const AiResumeUpload: FC<Props> = ({ onBack, jobId, closeModal }) => {
   };
   
   // Final save for all successful bulk uploads
-  const handleBulkSave = async () => {
+ const handleBulkSave = async () => {
     const successfulUploads = bulkResults.filter(r => r.status === 'success');
     if (successfulUploads.length === 0) return toast.error("No successful resumes to save.");
 
@@ -123,11 +123,11 @@ export const AiResumeUpload: FC<Props> = ({ onBack, jobId, closeModal }) => {
     for (const result of successfulUploads) {
         try {
             const { resumeFile, ...candidateData } = result.data;
-            const fileName = `${uuidv4()}-${resumeFile.name.replace(/[\[\]\+\s]+/g, '_')}`;
+            const fileName = `${FOLDER_NAME}/${uuidv4()}-${resumeFile.name.replace(/[\[\]\+\s]+/g, '_')}`;
             const { data: uploadData, error: uploadError } = await supabase.storage.from(BUCKET_NAME).upload(fileName, resumeFile);
             if (uploadError) throw uploadError;
             
-            const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uploadData.path);
+            const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(fileName);
 
             await supabase.rpc('add_candidate_to_job', {
                 p_job_id: jobId,
@@ -144,11 +144,8 @@ export const AiResumeUpload: FC<Props> = ({ onBack, jobId, closeModal }) => {
     }
     toast.success(`${savedCount} out of ${successfulUploads.length} candidates saved successfully.`);
     closeModal();
-  };
+};
 
-  if (reviewData) {
-    return <AiCandidateReviewForm jobData={reviewData} resumeFile={resumeFile} jobId={jobId} closeModal={closeModal} onBack={() => setReviewData(null)} />;
-  }
 
   return (
     <div className="py-4">
@@ -184,7 +181,7 @@ export const AiResumeUpload: FC<Props> = ({ onBack, jobId, closeModal }) => {
         </TabsContent>
       </Tabs>
       <div className="mt-4 flex justify-start">
-        <Button variant="outline" onClick={onBack} disabled={isProcessing}>Back</Button>
+        <Button variant="outline" disabled={isProcessing}>Back</Button>
       </div>
     </div>
   );

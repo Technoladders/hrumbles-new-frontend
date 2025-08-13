@@ -31,6 +31,7 @@ import UserManagement from "./pages/UserManagement";
 import Clients from "./pages/Client";
 import ClientDashboard from "./components/Client/ClientDashboard";
 import ProjectDashboard from "./components/Client/ProjectDashboard";
+import ProjectManagement from "./pages/clients/ProjectManagement";
 import Index from "./pages/Index";
 
 // Password change
@@ -66,6 +67,7 @@ import CandidateConsentPage from './components/MagicLinkView/CandidateConsentPag
 import JobRouteHandler from "./components/jobs/JobRouteHandler";
 import JobViewRouteHandler from "./components/jobs/JobViewRouteHandler";
 import CandidateBgvProfilePage from "./pages/bg-verification/CandidateBgvProfilePage";
+import AllCandidatesPage from "./pages/bg-verification/AllCandidatesPage";
 
 // Candidates
 import TalentPoolPage from "./pages/candidates/TalentPoolPage"; // Create this new page
@@ -198,7 +200,7 @@ function App() {
             <Route path="/verifications/:verificationType/:organizationId" element={<OrganizationVerificationReportPage />} />
             
             {/* <Route path="/employees" element={<Employee/>} /> */}
-            <Route path="/projects" element={<Clients />} />
+            <Route path="/projects" element={<ProjectManagement />} />
             <Route path="/client/:id" element={<ClientDashboard />} />
             <Route path="/project/:id" element={<ProjectDashboard />} />
 
@@ -245,6 +247,7 @@ function App() {
             <Route path="/employee/:candidateId/:jobId" element={<EmployeeProfilePage />} />
 
             <Route path="/jobs/:jobId/candidate/:candidateId/bgv" element={<CandidateBgvProfilePage />} />
+            <Route path="/all-candidates" element={<AllCandidatesPage />} /> 
 
             {/* Candidates */}
             <Route path="/talent-pool" element={<TalentPoolPage />} />

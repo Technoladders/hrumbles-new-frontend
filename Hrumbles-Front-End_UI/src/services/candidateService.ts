@@ -748,7 +748,44 @@ const authData = getAuthDataFromLocalStorage();
   }
 };
 
+export const getAllCandidatesWithVerificationInfo = async () => {
+  const { data, error } = await supabase
+    .from('hr_job_candidates')
+    .select(`
+      id,
+      name,
+      email,
+      phone,
+      created_at,
+      job:hr_jobs!hr_job_candidates_job_id_fkey (id, title),
+      creator:hr_employees!hr_job_candidates_created_by_fkey (first_name, last_name),
+      uanlookups (
+       created_at,
+        lookup_type,
+        response_data,
+        user:hr_employees!uanlookups_verified_by_fkey (
+          first_name,
+          last_name
+        )
+      )
+    `)
+    .not('job', 'is', null)
+    .order('created_at', { referencedTable: 'uanlookups', ascending: false }); // Sort lookups by date
 
+  if (error) {
+    console.error("Error fetching all candidates with verification info:", error);
+    throw new Error(error.message);
+  }
 
-
-
+  // Process the data to flatten it and keep only the latest verification
+  return data.map(candidate => {
+    const latestVerification = candidate.uanlookups.length > 0 ? candidate.uanlookups[0] : null;
+    
+    return {
+      ...candidate,
+      job_id: candidate.job.id,
+      job_title: candidate.job.title,
+      latest_verification: latestVerification // Attach the latest record
+    };
+  });
+};

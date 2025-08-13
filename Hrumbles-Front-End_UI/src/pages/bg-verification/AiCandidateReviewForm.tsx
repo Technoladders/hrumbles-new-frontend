@@ -12,9 +12,11 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2 } from 'lucide-react';
+import { DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Loader2, ArrowLeft } from 'lucide-react';
 
-const BUCKET_NAME = 'candidate-bgv-resumes';
+const BUCKET_NAME = 'candidate_resumes'; // Updated bucket name
+const FOLDER_NAME = 'bgv-resumes';
 
 interface WorkExperienceEntry {
   company: string;
@@ -36,81 +38,33 @@ interface ReviewFormData {
 
 interface Props {
   jobData: any;
-  resumeFile: File | null;
-  jobId: string;
-  closeModal: () => void;
+  onReviewComplete: (data: any) => void;
   onBack: () => void;
 }
 
-export const AiCandidateReviewForm: FC<Props> = ({ jobData, resumeFile, jobId, closeModal, onBack }) => {
-  // Initialize state with the 'isVerified' flag set to true by default for all entries
-  const [formData, setFormData] = useState<ReviewFormData>({
+export const AiCandidateReviewForm: FC<Props> = ({ jobData, onReviewComplete, onBack }) => {
+   const [formData, setFormData] = useState({
     ...jobData,
-    work_experience: jobData.work_experience.map((exp: any) => ({ ...exp, isVerified: true }))
+    work_experience: (jobData.work_experience || []).map((exp: any) => ({ ...exp, isVerified: true }))
   });
   const [candidateIdInput, setCandidateIdInput] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const user = useSelector((state: any) => state.auth.user);
-  const organizationId = useSelector((state: any) => state.auth.organization_id);
-
+ 
   // Handler to update a specific work experience entry
   const handleWorkExpChange = (index: number, field: keyof WorkExperienceEntry, value: any) => {
     const updatedWorkExp = [...formData.work_experience];
     updatedWorkExp[index] = { ...updatedWorkExp[index], [field]: value };
     setFormData({ ...formData, work_experience: updatedWorkExp });
   };
-  
-  const handleSave = async () => {
-    if (!resumeFile) return toast.error("Resume file is missing.");
-    setIsSaving(true);
 
-    try {
-        // --- KEY CHANGE: Filter work experience based on the checkbox ---
-        const verifiedWorkExperience = formData.work_experience
-            .filter(exp => exp.isVerified)
-            .map(({ isVerified, ...rest }) => rest); // Remove the 'isVerified' UI property before saving
-
-        const finalCandidateData = {
-            ...formData,
-            work_experience: verifiedWorkExperience
-        };
-
-        const fileName = `${uuidv4()}-${resumeFile.name.replace(/[\[\]\+\s]+/g, '_')}`;
-        const { data: uploadData, error: uploadError } = await supabase.storage.from(BUCKET_NAME).upload(fileName, resumeFile);
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uploadData.path);
-
-        const { error: rpcError } = await supabase.rpc('add_candidate_to_job', {
-            p_job_id: jobId,
-            p_organization_id: organizationId,
-            p_user_id: user.id,
-            p_candidate_data: finalCandidateData,
-            p_resume_url: urlData.publicUrl,
-            p_resume_text: formData.resumeText,
-            p_candidate_id_input: candidateIdInput || null
-        });
-
-        if (rpcError) throw new Error(rpcError.message);
-
-        toast.success("Candidate saved successfully!");
-        closeModal();
-    } catch (err: any) {
-        toast.error("Failed to save candidate", { description: err.message });
-    } finally {
-        setIsSaving(false);
-    }
-  };
 
    return (
     // --- KEY CHANGE: Flexbox layout for scrolling ---
-    <div className="flex flex-col h-[75vh] md:h-[80vh]">
-      {/* Header */}
-      <div className="flex-shrink-0">
-        <h3 className="text-lg font-semibold">Review & Verify Candidate Details</h3>
-        <p className="text-sm text-gray-500">Edit details and uncheck any experience to exclude.</p>
-      </div>
-
+     <div className="flex flex-col h-[75vh]">
+      <DialogHeader className="flex-shrink-0">
+        <DialogTitle>Step 2: Review & Verify Details</DialogTitle>
+        <DialogDescription>Edit any details extracted by the AI and uncheck any experience to exclude.</DialogDescription>
+      </DialogHeader>
+     
       {/* Scrollable Content Area */}
       <ScrollArea className="flex-grow mt-4 pr-4">
         <div className="space-y-4">
@@ -153,11 +107,11 @@ export const AiCandidateReviewForm: FC<Props> = ({ jobData, resumeFile, jobId, c
       </ScrollArea>
       
       {/* Fixed Footer */}
-      <div className="flex-shrink-0 flex justify-between pt-4 mt-2 border-t">
-        <Button variant="outline" onClick={onBack} disabled={isSaving}>Back</Button>
-        <Button onClick={handleSave} disabled={isSaving}>
-          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm & Save Candidate"}
+     <div className="flex-shrink-0 flex justify-between pt-4 border-t">
+        <Button variant="outline" onClick={onBack}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
+        <Button onClick={() => onReviewComplete(formData)}>Next: Assign to Job</Button>
       </div>
     </div>
   );

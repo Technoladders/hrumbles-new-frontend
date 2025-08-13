@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import { useSelector } from "react-redux";
 import { Building2, Users, UserCheck, Clock, Contact, Building, BarChart2, FileText, Users2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ReportType } from '@/types/reports';
 import ClientWiseReport from '@/components/reports/ClientWiseReport';
 import IndividualReport from '@/components/reports/IndividualReport';
@@ -15,11 +16,14 @@ import CompaniesReport from '@/components/reports/CompaniesReport';
 import ContactsTrendsReport from '@/components/reports/ContactsTrendsReport';
 import CompaniesTrendsReport from '@/components/reports/CompaniesTrendsReport';
 import AttendanceReportsPage from '@/components/reports/attendance/AttendanceReportsPage';
-import ContactStatusReport from '@/components/reports/ContactsStatusReport'; // New component
-import CompaniesStatusReport from '@/components/reports/CompaniesStatusReport'; // New component
+import ContactStatusReport from '@/components/reports/ContactsStatusReport';
+import CompaniesStatusReport from '@/components/reports/CompaniesStatusReport';
+
+const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
 
 const ReportIndex: React.FC = () => {
   const [selectedReportType, setSelectedReportType] = useState<ReportType | null>(null);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
 
   const renderReportContent = () => {
     if (!selectedReportType) return null;
@@ -64,201 +68,221 @@ const ReportIndex: React.FC = () => {
 
       {!selectedReportType && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          <Card
-            onClick={() => setSelectedReportType('client')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-indigo-50">
-              <CardTitle className="flex items-center text-indigo-700">
-                <Building2 className="mr-2 h-6 w-6" /> Client Wise Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              View candidate status counts and distributions for each client.
-            </CardContent>
-          </Card>
+          {organizationId === ITECH_ORGANIZATION_ID ? (
+            // Show only Consolidated Status Report card for ITECH users
+            <Card
+              onClick={() => setSelectedReportType('consolidated_status')}
+              className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+            >
+              <CardHeader className="bg-red-50">
+                <CardTitle className="flex items-center text-red-700">
+                  <Users2 className="mr-2 h-6 w-6" /> Consolidated Status Report
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 text-gray-600">
+                Consolidated status across all candidates.
+              </CardContent>
+            </Card>
+          ) : (
+            // Show all report cards for non-ITECH users
+            <>
+              <Card
+                onClick={() => setSelectedReportType('client')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-indigo-50">
+                  <CardTitle className="flex items-center text-indigo-700">
+                    <Building2 className="mr-2 h-6 w-6" /> Client Wise Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  View candidate status counts and distributions for each client.
+                </CardContent>
+              </Card>
 
-          <Card
-            onClick={() => setSelectedReportType('individual')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-blue-50">
-              <CardTitle className="flex items-center text-blue-700">
-                <Users className="mr-2 h-6 w-6" /> Individual Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              View candidate status counts by individual employees.
-            </CardContent>
-          </Card>
+              <Card
+                onClick={() => setSelectedReportType('individual')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-blue-50">
+                  <CardTitle className="flex items-center text-blue-700">
+                    <Users className="mr-2 h-6 w-6" /> Individual Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  View candidate status counts by individual employees.
+                </CardContent>
+              </Card>
 
-          <Card
-            onClick={() => setSelectedReportType('recruiter')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-green-50">
-              <CardTitle className="flex items-center text-green-700">
-                <UserCheck className="mr-2 h-6 w-6" /> Recruiter Performance
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              Track recruiter performance with detailed metrics.
-            </CardContent>
-          </Card>
+              <Card
+                onClick={() => setSelectedReportType('recruiter')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-green-50">
+                  <CardTitle className="flex items-center text-green-700">
+                    <UserCheck className="mr-2 h-6 w-6" /> Recruiter Performance
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  Track recruiter performance with detailed metrics.
+                </CardContent>
+              </Card>
 
-          <Card
-            onClick={() => setSelectedReportType('talent')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-purple-50">
-              <CardTitle className="flex items-center text-purple-700">
-                <UserCheck className="mr-2 h-6 w-6" /> Talent Profile Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              View talent profile status distributions.
-            </CardContent>
-          </Card>
+              <Card
+                onClick={() => setSelectedReportType('talent')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-purple-50">
+                  <CardTitle className="flex items-center text-purple-700">
+                    <UserCheck className="mr-2 h-6 w-6" /> Talent Profile Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  View talent profile status distributions.
+                </CardContent>
+              </Card>
 
-          <Card
-            onClick={() => setSelectedReportType('talent_trends')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-teal-50">
-              <CardTitle className="flex items-center text-teal-700">
-                <BarChart2 className="mr-2 h-6 w-6" /> Talent Trends Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              Analyze trends in talent data.
-            </CardContent>
-          </Card>
+              <Card
+                onClick={() => setSelectedReportType('talent_trends')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-teal-50">
+                  <CardTitle className="flex items-center text-teal-700">
+                    <BarChart2 className="mr-2 h-6 w-6" /> Talent Trends Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  Analyze trends in talent data.
+                </CardContent>
+              </Card>
 
-          <Card
-            onClick={() => setSelectedReportType('verification')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-yellow-50">
-              <CardTitle className="flex items-center text-yellow-700">
-                <FileText className="mr-2 h-6 w-6" /> Verification Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              View verification status details.
-            </CardContent>
-          </Card>
+              <Card
+                onClick={() => setSelectedReportType('verification')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-yellow-50">
+                  <CardTitle className="flex items-center text-yellow-700">
+                    <FileText className="mr-2 h-6 w-6" /> Verification Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  View verification status details.
+                </CardContent>
+              </Card>
 
-          <Card
-            onClick={() => setSelectedReportType('consolidated_status')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-red-50">
-              <CardTitle className="flex items-center text-red-700">
-                <Users2 className="mr-2 h-6 w-6" /> Consolidated Status Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              Consolidated status across all candidates.
-            </CardContent>
-          </Card>
+              <Card
+                onClick={() => setSelectedReportType('consolidated_status')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-red-50">
+                  <CardTitle className="flex items-center text-red-700">
+                    <Users2 className="mr-2 h-6 w-6" /> Consolidated Status Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  Consolidated status across all candidates.
+                </CardContent>
+              </Card>
 
-          {/* <Card
-            onClick={() => setSelectedReportType('contacts')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-indigo-50">
-              <CardTitle className="flex items-center text-indigo-700">
-                <Contact className="mr-2 h-6 w-6" /> Contacts Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              View contact status details.
-            </CardContent>
-          </Card>
+              <Card
+                onClick={() => setSelectedReportType('contacts')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-indigo-50">
+                  <CardTitle className="flex items-center text-indigo-700">
+                    <Contact className="mr-2 h-6 w-6" /> Contacts Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  View contact status details.
+                </CardContent>
+              </Card>
 
-          <Card
-            onClick={() => setSelectedReportType('companies')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-blue-50">
-              <CardTitle className="flex items-center text-blue-700">
-                <Building className="mr-2 h-6 w-6" /> Companies Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              View company status details.
-            </CardContent>
-          </Card> */}
+              <Card
+                onClick={() => setSelectedReportType('companies')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-blue-50">
+                  <CardTitle className="flex items-center text-blue-700">
+                    <Building className="mr-2 h-6 w-6" /> Companies Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  View company status details.
+                </CardContent>
+              </Card>
 
-          <Card
-            onClick={() => setSelectedReportType('contacts_trends')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-teal-50">
-              <CardTitle className="flex items-center text-teal-700">
-                <BarChart2 className="mr-2 h-6 w-6" /> Contacts Trends Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              Analyze trends in contact data.
-            </CardContent>
-          </Card>
+              <Card
+                onClick={() => setSelectedReportType('contacts_trends')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-teal-50">
+                  <CardTitle className="flex items-center text-teal-700">
+                    <BarChart2 className="mr-2 h-6 w-6" /> Contacts Trends Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  Analyze trends in contact data.
+                </CardContent>
+              </Card>
 
-          <Card
-            onClick={() => setSelectedReportType('companies_trends')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-purple-50">
-              <CardTitle className="flex items-center text-purple-700">
-                <BarChart2 className="mr-2 h-6 w-6" /> Companies Trends Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              Analyze trends in company data.
-            </CardContent>
-          </Card>
+              <Card
+                onClick={() => setSelectedReportType('companies_trends')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-purple-50">
+                  <CardTitle className="flex items-center text-purple-700">
+                    <BarChart2 className="mr-2 h-6 w-6" /> Companies Trends Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  Analyze trends in company data.
+                </CardContent>
+              </Card>
 
-          <Card
-            onClick={() => setSelectedReportType('attendance')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-green-50">
-              <CardTitle className="flex items-center text-green-700">
-                <Clock className="mr-2 h-6 w-6" /> Attendance Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              View attendance records and details.
-            </CardContent>
-          </Card>
+              <Card
+                onClick={() => setSelectedReportType('attendance')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-green-50">
+                  <CardTitle className="flex items-center text-green-700">
+                    <Clock className="mr-2 h-6 w-6" /> Attendance Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  View attendance records and details.
+                </CardContent>
+              </Card>
 
-          <Card
-            onClick={() => setSelectedReportType('contact_status')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-yellow-50">
-              <CardTitle className="flex items-center text-yellow-700">
-                <Contact className="mr-2 h-6 w-6" /> Contact Status Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              View current status of contacts.
-            </CardContent>
-          </Card>
+              <Card
+                onClick={() => setSelectedReportType('contact_status')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-yellow-50">
+                  <CardTitle className="flex items-center text-yellow-700">
+                    <Contact className="mr-2 h-6 w-6" /> Contact Status Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  View current status of contacts.
+                </CardContent>
+              </Card>
 
-          <Card
-            onClick={() => setSelectedReportType('companies_status')}
-            className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
-          >
-            <CardHeader className="bg-red-50">
-              <CardTitle className="flex items-center text-red-700">
-                <Building className="mr-2 h-6 w-6" /> Companies Status Report
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 text-gray-600">
-              View current status of companies.
-            </CardContent>
-          </Card>
+              <Card
+                onClick={() => setSelectedReportType('companies_status')}
+                className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
+              >
+                <CardHeader className="bg-red-50">
+                  <CardTitle className="flex items-center text-red-700">
+                    <Building className="mr-2 h-6 w-6" /> Companies Status Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 text-gray-600">
+                  View current status of companies.
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
       )}
 

@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "react-router-dom";
+import { useSelector } from "react-redux";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,9 @@ interface StatusFilter {
   color?: string;
 }
 
+const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
+
+
 const CandidatesTabsSection = ({ 
   jobId, 
   jobdescription,
@@ -38,6 +42,8 @@ const CandidatesTabsSection = ({
   onAddCandidate 
 }: CandidatesTabsSectionProps) => {
   const { id } = useParams<{ id: string }>();
+      const organization_id = useSelector((state: any) => state.auth.organization_id);
+  
   const [activeTab, setActiveTab] = useState("all");
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [localCandidates, setLocalCandidates] = useState<Candidate[]>([]);
@@ -237,9 +243,11 @@ const CandidatesTabsSection = ({
           </Button> */}
   
           {/* Status Settings Button */}
-          <Button onClick={() => setShowStatusDialog(true)} size="sm">
-            Status Settings
-          </Button>
+          {organization_id !== ITECH_ORGANIZATION_ID && (
+            <Button onClick={() => setShowStatusDialog(true)} size="sm">
+              Status Settings
+            </Button>
+          )}
         </div>
       </div>
   

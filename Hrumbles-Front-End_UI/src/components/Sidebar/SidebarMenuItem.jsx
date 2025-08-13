@@ -19,6 +19,7 @@ import { TbDatabaseSearch } from "react-icons/tb";
 
 
 const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
+const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
 
 // --- START: organization_superadmin categorization logic ---
 
@@ -29,6 +30,7 @@ const orgSuperAdminAllItems = [
   { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" },
   { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+  { icon: LuUserSearch, label: "All Candidates", path: "/all-candidates" },
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
   { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x" },
   { icon: GoGoal, label: "Goals", path: "/goals" },
@@ -75,22 +77,31 @@ const iTechOrgSuperAdminMenu = [
     { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
     { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" },
     { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
-    { icon: GoGoal, label: "Goals", path: "/goals" },
-    { icon: ImProfile, label: "My Profile", path: "/profile" },
+    // { icon: GoGoal, label: "Goals", path: "/goals" },
+    // { icon: ImProfile, label: "My Profile", path: "/profile" },
     { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
+];
+
+const AscendionOrgSuperAdminMenu = [
+    // { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
+    { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+     { icon: LuUserSearch, label: "All Candidates", path: "/all-candidates" },
+
 ];
 // 2. Define the items for each suite
 const projectSuiteLabels = ["Clients", "Projects"];
 const salesSuiteLabels = ["Companies", "People", "Lists", "Kanban"];
 const financeSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll"];
+const verificationSuiteLabels = ["All Candidates"];
 
 const projectSuiteItems = orgSuperAdminAllItems.filter(item => projectSuiteLabels.includes(item.label));
 const salesSuiteItems = orgSuperAdminAllItems.filter(item => salesSuiteLabels.includes(item.label));
 const financeSuiteItems = orgSuperAdminAllItems.filter(item => financeSuiteLabels.includes(item.label));
+const verificationSuiteItems = orgSuperAdminAllItems.filter(item => verificationSuiteLabels.includes(item.label));
 
 // 3. The HR suite contains everything else
 const hrSuiteItems = orgSuperAdminAllItems.filter(
-  item => !projectSuiteLabels.includes(item.label) && !salesSuiteLabels.includes(item.label) && !financeSuiteLabels.includes(item.label)
+  item => !projectSuiteLabels.includes(item.label) && !salesSuiteLabels.includes(item.label) && !financeSuiteLabels.includes(item.label) && !verificationSuiteLabels.includes(item.label)
 );
 
 // 4. Structure the final menu data with categories AND ICONS
@@ -104,6 +115,11 @@ const categorizedOrgSuperAdminMenu = [
         title: "Project Suite",
         icon: FaProjectDiagram,
         items: projectSuiteItems,
+    },
+    {
+        title: "Verification Suite",
+        icon: BsShieldCheck,
+        items: verificationSuiteItems,
     },
     {
         title: "Sales Suite",
@@ -227,10 +243,11 @@ export const menuItemsByRole = {
      { icon: BsShieldCheck, label: "Verifications", path: "/verifications" },
     { icon: FiSettings, label: "Settings", path: "/settings" },
   ],
- organization_superadmin: (organizationId) => {
-    // The check is now against the constant ID
+organization_superadmin: (organizationId) => {
     if (organizationId === ITECH_ORGANIZATION_ID) {
       return iTechOrgSuperAdminMenu; // Return the simple menu for iTech
+    } else if (organizationId === ASCENDION_ORGANIZATION_ID) {
+      return AscendionOrgSuperAdminMenu; // Return the simple menu for Ascendion
     }
     return categorizedOrgSuperAdminMenu; // Return the standard suite menu for everyone else
   },

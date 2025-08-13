@@ -1,22 +1,27 @@
-// src/pages/jobs/ai/CandidateBgvProfilePage.tsx
-
-import { useParams, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Candidate } from '@/lib/types';
+import { Candidate, ResumeAnalysis } from '@/lib/types';
 import Loader from '@/components/ui/Loader';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { CardContent } from '@/components/ui/card';
 import { BgvCandidateInfoCard } from './BgvCandidateInfoCard';
-import { BgvVerificationSection } from './BgvVerificationSection'; 
+import { BgvVerificationSection } from './BgvVerificationSection';
 import { BgvTimelineCard } from './cards/BgvTimelineCard';
+import { ResumeAnalysisSection } from '@/components/MagicLinkView/ResumeAnalysisSection';
+import { ResumePreviewSection } from '@/components/MagicLinkView/ResumePreviewSection';
 
 const CandidateBgvProfilePage = () => {
   const { candidateId } = useParams<{ candidateId: string }>();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<string>('bg-verification'); // Default to bg-verification
 
-  const { data: candidate, isLoading, error } = useQuery<Candidate>({
+  const { data: candidate, isLoading: isCandidateLoading, error: candidateError } = useQuery<Candidate>({
     queryKey: ['candidate', candidateId],
-   queryFn: async () => {
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('hr_job_candidates')
         .select('*')
@@ -28,36 +33,105 @@ const CandidateBgvProfilePage = () => {
     enabled: !!candidateId,
   });
 
-  if (isLoading) return <div className="flex justify-center items-center h-[80vh]"><Loader /></div>;
-  if (error || !candidate) return (
-    <div className="text-center p-10"><h2 className="text-xl font-bold">Candidate Not Found</h2><Button asChild variant="link" className="mt-4"><Link to="/jobs"><ArrowLeft className="mr-2 h-4 w-4" />Back to Jobs</Link></Button></div>
-  );
+  const { data: resumeAnalysis, isLoading: isResumeAnalysisLoading } = useQuery<ResumeAnalysis | null>({
+    queryKey: ['resume-analysis', candidateId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('candidate_resume_analysis')
+        .select('*')
+        .eq('candidate_id', candidateId!)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data || null;
+    },
+    enabled: !!candidateId,
+  });
 
-  console.log("candidate", candidate)
+  // Set default tab based on resumeAnalysis presence
+  useEffect(() => {
+    if (!isResumeAnalysisLoading) {
+      setActiveTab(resumeAnalysis ? 'resume-analysis' : 'bg-verification');
+    }
+  }, [isResumeAnalysisLoading, resumeAnalysis]);
 
+  if (isCandidateLoading || isResumeAnalysisLoading) {
+    return <div className="flex justify-center items-center h-[80vh]"><Loader /></div>;
+  }
+
+  if (candidateError || !candidate) {
+    return (
+      <div className="text-center p-10">
+        <h2 className="text-xl font-bold">Candidate Not Found</h2>
+        <Button asChild variant="link" className="mt-4">
+          <Link to="/jobs"><ArrowLeft className="mr-2 h-4 w-4" />Back to Jobs</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  const availableTabs = [
+    resumeAnalysis && 'resume-analysis',
+    'bg-verification',
+    candidate.resume_url && 'resume',
+  ].filter(Boolean) as string[];
 
   return (
     <div className="p-4 md:p-6 space-y-6">
       <div className="flex items-center gap-4">
-        <Button asChild variant="outline" size="icon"><Link to="/jobs"><ArrowLeft /></Link></Button>
+        <Button variant="outline" size="icon" onClick={() => navigate(-1)}>
+          <ArrowLeft />
+        </Button>
         <h1 className="text-2xl font-bold">Candidate Verification Profile</h1>
       </div>
-      
-      {/* --- NEW RESPONSIVE GRID LAYOUT --- */}
+
+      {/* Grid layout for Info Card and Timeline */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Candidate Info Card takes up 3/4 of the space on large screens */}
         <div className="lg:col-span-3">
           <BgvCandidateInfoCard candidate={candidate} />
         </div>
-        
-        {/* Timeline Card takes up 1/4 of the space on large screens */}
         <div className="lg:col-span-2">
           <BgvTimelineCard candidateId={candidate.id} />
         </div>
       </div>
-      
-      {/* Verification Section still takes full width below the grid */}
-      <BgvVerificationSection candidate={candidate} />
+
+      {/* Tabbed interface below Info Card and Timeline */}
+      <Tabs defaultValue="bg-verification" value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="flex flex-wrap gap-2 mb-6 overflow-x-auto">
+          {availableTabs.map((tab) => (
+            <TabsTrigger
+              key={tab}
+              value={tab}
+              className="flex-1 min-w-[100px] text-xs sm:text-sm sm:min-w-[120px]"
+            >
+              {tab === 'resume-analysis' && 'Resume Analysis'}
+              {tab === 'bg-verification' && 'Background Verification'}
+              {tab === 'resume' && 'Resume'}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        <TabsContent value="resume-analysis">
+          <CardContent>
+            {resumeAnalysis ? (
+              <ResumeAnalysisSection resumeAnalysis={resumeAnalysis} />
+            ) : (
+              <p className="text-sm text-gray-600 mt-4">No resume analysis available.</p>
+            )}
+          </CardContent>
+        </TabsContent>
+
+        <TabsContent value="bg-verification">
+          <CardContent>
+            <BgvVerificationSection candidate={candidate} />
+          </CardContent>
+        </TabsContent>
+
+        <TabsContent value="resume">
+          <CardContent>
+            <ResumePreviewSection resumeUrl={candidate.resume_url || '#'} />
+          </CardContent>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

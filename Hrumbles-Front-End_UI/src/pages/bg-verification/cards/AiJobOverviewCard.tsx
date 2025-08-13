@@ -1,18 +1,81 @@
-// src/pages/jobs/ai/cards/AiJobOverviewCard.tsx
-import { Briefcase, MapPin, Users } from "lucide-react";
+import { Briefcase, FileText, Clock, User, MapPin, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { JobData } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
+import { JobData, Candidate } from "@/lib/types";
 
-interface Props { job: JobData; candidateCount: number; }
+interface Props {
+  job: JobData;
+  candidates: Candidate[];
+}
 
-export const AiJobOverviewCard = ({ job, candidateCount }: Props) => (
-  <Card>
-    <CardHeader><CardTitle className="flex items-center gap-2"><Briefcase size={18} /> Job Overview</CardTitle></CardHeader>
-    <CardContent className="space-y-2 text-sm">
-      <div className="flex justify-between"><span>Job Title:</span> <span className="font-semibold text-right">{job.title}</span></div>
-      <div className="flex justify-between"><span>Job ID:</span> <span>{job.jobId}</span></div>
-      <div className="flex justify-between"><span>Location:</span> <span className="text-right">{job.location.join(', ')}</span></div>
-      <div className="flex justify-between"><span>Total Candidates:</span> <span className="font-bold">{candidateCount}</span></div>
+export const AiJobOverviewCard = ({ job, candidates }: Props) => (
+  <Card className="md:col-span-1 purple-gradient">
+    <CardHeader className="pb-2 pt-4">
+      <CardTitle className="text-lg font-semibold text-white flex items-center">
+        <Briefcase className="mr-2" size={18} />
+        Job Overview
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="pt-2">
+      <ul className="space-y-3">
+        <li className="flex items-start justify-between">
+          <div className="flex items-center text-sm text-white">
+            <FileText size={16} className="mr-2 text-white" />
+            <span className="text-sm">Job Title:</span>
+          </div>
+          <span className="font-small text-sm text-right text-white">{job.title}</span>
+        </li>
+        <li className="flex items-start justify-between">
+          <div className="flex items-center text-sm text-white">
+            <Briefcase size={16} className="mr-2 text-white" />
+            <span>Job ID:</span>
+          </div>
+          <span className="font-small text-sm text-right text-white">{job.jobId}</span>
+        </li>
+        <li className="flex items-start justify-between">
+          <div className="flex items-center text-sm text-white">
+            <Clock size={16} className="mr-2 text-white" />
+            <span>Hiring Mode:</span>
+          </div>
+          <span className="font-small text-sm text-right text-white">{job.hiringMode}</span>
+        </li>
+        <li className="flex items-start justify-between">
+          <div className="flex items-center text-sm text-white">
+            <User size={16} className="mr-2 text-white" />
+            <span>Job Type:</span>
+          </div>
+          <span className="font-small text-sm text-right text-white">{job.type}</span>
+        </li>
+        <li className="flex items-start justify-between">
+          <div className="flex items-center text-sm text-white">
+            <Briefcase size={16} className="mr-2 text-white" />
+            <span>Client Name:</span>
+          </div>
+          <span className="font-small text-sm text-right text-white">{job.clientDetails?.clientName || job.clientOwner}</span>
+        </li>
+        <li className="flex items-start justify-between">
+          <div className="flex items-center text-sm text-white">
+            <MapPin size={16} className="mr-2 text-white" />
+            <span>Job Location:</span>
+          </div>
+          <div className="text-right">
+            {job.location && job.location.length > 0 ? (
+              <Badge variant="outline" className="bg-blue-50">
+                {job.location.join(", ")}
+              </Badge>
+            ) : (
+              <span className="font-medium">Remote</span>
+            )}
+          </div>
+        </li>
+        <li className="flex items-start justify-between">
+          <div className="flex items-center text-sm text-white">
+            <Users size={16} className="mr-2 text-white" />
+            <span>Candidates Required:</span>
+          </div>
+          <Badge className="bg-white text-black">{job?.numberOfCandidates}</Badge>
+        </li>
+      </ul>
     </CardContent>
   </Card>
 );

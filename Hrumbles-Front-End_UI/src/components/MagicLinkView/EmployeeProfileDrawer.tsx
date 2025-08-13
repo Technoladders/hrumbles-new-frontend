@@ -267,13 +267,14 @@ const handleSaveUanResult = useCallback(async (
       }
     : employeeFormatted;
 
-  const availableTabs = [
+ const availableTabs = [
     resumeAnalysis && "resume-analysis",
     (!shareMode || currentDataOptions?.skillinfo) && "skill-matrix",
     workHistory.length > 0 && "work-history",
+    (!shareMode || currentDataOptions?.documentsInfo) && 
+    "bg-verification",
     "resume",
   ].filter(Boolean) as string[];
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">

@@ -54,7 +54,8 @@ const JobView = () => {
   // Fetch history data
   const { 
     data: historyData = [],
-    isLoading: historyLoading
+    isLoading: historyLoading,
+    refetch: refetchHistory
   } = useQuery({
     queryKey: ['job-history', id],
     queryFn: async () => {
@@ -71,7 +72,6 @@ const JobView = () => {
             last_name
           )
         `)
-        
         .eq('job_id', id)
         .order('updated_at', { ascending: false });
       if (error) throw error;
@@ -143,6 +143,31 @@ const JobView = () => {
     };
   }, [id, refetchCandidates]);
 
+  // Listen for real-time changes to resume analysis
+  useEffect(() => {
+    if (!id) return;
+
+    const channel = supabase
+      .channel('resume-analysis-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'resume_analysis',
+          filter: `job_id=eq.${id}`
+        },
+        () => {
+          refetchHistory();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id, refetchHistory]);
+
   const handleCandidateAdded = () => {
     refetchCandidates();
     toast.success("Candidate added successfully");
@@ -155,6 +180,7 @@ const JobView = () => {
     overall_score: number;
   }) => {
     refetchCandidates();
+    refetchHistory(); // Refetch history to update the View History modal
     toast.success("Resume analysis completed");
     setIsResumeModalOpen(false);
   };
@@ -210,13 +236,12 @@ const JobView = () => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setIsModalOpen(true)}>
+              <DropdownMenuItem onClick={() => setIsModalOpen(true)}>
                 Paste Resume
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setIsHistoryModalOpen(true)}>
                 View History
               </DropdownMenuItem>
-              <DropdownMenuItem>Add Resume</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -241,12 +266,12 @@ const JobView = () => {
           jobId={id}
           onClose={() => setIsModalOpen(false)}
           setError={setError}
-          // onAnalysisComplete={handleAnalysisComplete}
+          onAnalysisComplete={handleAnalysisComplete}
           initialData={{}}
         />
       )}
 
-{isHistoryModalOpen && (
+      {isHistoryModalOpen && (
         <Modal 
           isOpen={true} 
           onRequestClose={() => setIsHistoryModalOpen(false)}
@@ -272,18 +297,15 @@ const JobView = () => {
               <div className="space-y-6">
                 {historyData.map((item, index) => (
                   <div key={item.candidate_id} className="relative">
-                    {/* Timeline Line */}
                     {index !== historyData.length - 1 && (
                       <div className="absolute left-3 top-8 w-0.5 h-full bg-gray-200 -z-10" />
                     )}
                     
                     <div className="flex items-start gap-4">
-                      {/* Timeline Dot */}
                       <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary flex items-center justify-center">
                         <div className="w-3 h-3 rounded-full bg-white" />
                       </div>
 
-                      {/* Content */}
                       <div className="flex-1 pb-6">
                         <div className="flex items-center justify-between">
                           <div>
@@ -294,7 +316,7 @@ const JobView = () => {
                               {formatDate(item.updated_at)}
                             </p>
                             <p className="text-sm text-gray-500">
-                            Added by {item.hr_employees?.first_name} {item.hr_employees?.last_name}
+                              Added by {item.hr_employees?.first_name} {item.hr_employees?.last_name}
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -332,5 +354,3 @@ const JobView = () => {
 };
 
 export default JobView;
-
-// job resume View

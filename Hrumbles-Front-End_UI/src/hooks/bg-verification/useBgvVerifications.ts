@@ -108,36 +108,38 @@ export const useBgvVerifications = (candidate: Candidate) => {
       }
 
     } catch (err: any) {
-  let description = "An unknown error occurred. Please check the console."; // Default
+      // --- THIS IS THE NEW AND IMPROVED ERROR HANDLING BLOCK ---
+      
+      let description = "An unknown error occurred. Please check the console."; // Default message
 
-  // The Supabase client often wraps the raw response in err.context
-  if (err.context && typeof err.context.json === 'function') {
-    try {
-      // Attempt to parse the JSON body of the error response
-      const errorJson = await err.context.json();
-      let rawError = errorJson.error || err.message;
-
-      // Try to extract the inner JSON { "message": "...", ... }
-      const match = rawError.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          const innerError = JSON.parse(match[0]);
-          description = innerError.message || rawError;
-        } catch {
-          description = rawError; // If parsing fails
-        }
-      } else {
+      try {
+        // The Supabase client wraps the raw error response in err.context
+        const errorJson = await err.context.json();
+        const rawError = errorJson.error || err.message;
+        
+        // Start with the raw error as the fallback
         description = rawError;
+
+        // Use a regular expression to find the JSON object string inside the raw error message
+        const jsonMatch = rawError.match(/{[\s\S]*}/);
+
+        if (jsonMatch) {
+          // If a JSON string is found, try to parse it
+          const innerJson = JSON.parse(jsonMatch[0]);
+          
+          // Traverse the nested structure to find the user-friendly message
+          if (innerJson.error && typeof innerJson.error.message === 'string') {
+            description = innerJson.error.message;
+          } else if (typeof innerJson.message === 'string') {
+            description = innerJson.message;
+          }
+        }
+      } catch (parseError) {
+        // If anything fails during parsing, we fall back to the generic message
+        description = err.message || "Edge function failed with a non-JSON error response.";
       }
-
-    } catch {
-      description = err.message;
-    }
-  } else {
-    description = err.message;
-  }
-
-  toast.error("Verification Failed", { description });
+      
+      toast.error("Verification Failed", { description });
       
     } finally {
       setState(s => ({ ...s, loading: { ...s.loading, [verificationType]: false } }));

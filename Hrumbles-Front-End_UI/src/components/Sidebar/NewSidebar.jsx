@@ -282,7 +282,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       zIndex={20}
     >
       <Flex align="center" mb={8} minH="40px" px={isExpanded ? 0 : 1}>
-        {isExpanded && <Image src="/2-cropped.svg" alt="Logo" width="160px" />}
+        {isExpanded && <Image src="/hrumbles-wave-white.svg" alt="Logo" width="180px" />}
         <Spacer />
         {!isMobile && (
           <IconButton
@@ -346,11 +346,11 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
             </Flex>
             <Collapse in={isProfileMenuOpen} animateOpacity>
               <VStack align="stretch" spacing={1} mt={2} pl={2}>
-                {departmentName !== "Finance" && (
+                {/* {departmentName !== "Finance" && (
                   <Text as={Link} to="/profile" p={2} borderRadius="md" _hover={{ bg: hoverBg }}>
                     My Profile
                   </Text>
-                )}
+                )} */}
                 <Text onClick={handleLogout} p={2} borderRadius="md" cursor="pointer" _hover={{bg: hoverBg}}>
                   Logout
                 </Text>

@@ -169,15 +169,15 @@ const RecentActivityCard = ({ candidates, onAddCandidate }: RecentActivityCardPr
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center h-40">
-          <p className="text-gray-500 mb-4">No candidates added yet</p>
-          <Button 
+          <p className="text-gray-500 mb-4">No status changed yet</p>
+          {/* <Button 
             size="sm" 
             id="add-candidate-btn"
             onClick={onAddCandidate}
           >
             <UserPlus className="mr-2 h-4 w-4" />
             Add Candidate
-          </Button>
+          </Button> */}
         </div>
       )}
     </CardContent>

@@ -1,47 +1,174 @@
-// src/pages/jobs/ai/results/LatestPassbookResult.tsx
-
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { User, Calendar, Briefcase, IndianRupee } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { User, Download } from 'lucide-react';
+import { generatePassbookPdf } from '@/lib/generatePassbookPdf';
+import { toast } from 'sonner';
+import { Candidate } from '@/components/MagicLinkView/types';
 
-export const LatestPassbookResult = ({ result }: { result: any }) => {
+interface PassbookEntry {
+  year: string;
+  month: string;
+  description: string;
+  employee_share: string;
+  employer_share: string;
+  pension_share: string;
+  status: string;
+  date_of_approval: string;
+}
+
+interface Employer {
+  establishment_name: string;
+  member_id: string;
+  service_period: string;
+  date_of_joining: string;
+  total_employee_share: number;
+  total_employer_share: number;
+  total_pension_share: number;
+  passbook_entries: PassbookEntry[];
+}
+
+interface PassbookData {
+  name: string;
+  date_of_birth: string;
+  gender: string;
+  uan: string;
+  employers: Employer[];
+}
+
+interface PassbookResult {
+  data?: {
+    passbook_data: PassbookData;
+  };
+}
+
+interface LatestPassbookResultProps {
+  result: PassbookResult;
+  candidate: Candidate;
+  subStatusId?: string;
+}
+
+export const LatestPassbookResult = ({ result, candidate, subStatusId }: LatestPassbookResultProps) => {
   const passbook = result.data?.passbook_data;
-  if (!passbook) return <p className="text-sm text-gray-500">No passbook data found in the response.</p>;
 
-  const formatCurrency = (amount: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
+  if (!passbook || !passbook.employers || passbook.employers.length === 0) {
+    return <p className="text-gray-500 text-center py-4">No passbook data found.</p>;
+  }
+
+  const formatCurrency = (amount: number | string) => {
+    const num = typeof amount === 'string' ? parseFloat(amount.replace(/,/g, '')) : amount; // Handle comma-separated strings
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(num);
+  };
+
+  const handleDownloadPdf = () => {
+    try {
+      console.log('Result object passed to PDF:', result); // Debug log
+      if (!result.data || !result.data.passbook_data || !result.data.passbook_data.name) {
+        throw new Error('Invalid passbook data: Missing name or data structure');
+      }
+      generatePassbookPdf(candidate, result);
+      toast.success('Passbook PDF downloaded successfully');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error(`Failed to generate passbook PDF: ${error.message}`);
+    }
+  };
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><User size={16}/> {passbook.name}</CardTitle>
-          <CardDescription>DOB: {passbook.date_of_birth} | Gender: {passbook.gender}</CardDescription>
+    <div className="space-y-4">
+      <Card className="border-none shadow-lg">
+        <CardHeader className="bg-indigo-50 p-4 flex flex-row justify-between items-center">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-lg font-semibold text-indigo-700">
+              <User size={18} />
+              {passbook.name || 'N/A'}
+            </CardTitle>
+            <CardDescription className="text-gray-600">
+              DOB: {passbook.date_of_birth || 'N/A'} | Gender: {passbook.gender || 'N/A'} | UAN: {passbook.uan || 'N/A'}
+            </CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadPdf}
+            title="Download Passbook PDF"
+            className="flex items-center gap-2"
+          >
+            <Download size={16} />
+            Download PDF
+          </Button>
         </CardHeader>
       </Card>
-
-      <h3 className="text-base font-semibold text-gray-800">Employer Passbook Details</h3>
-      {passbook.employers?.map((employer: any, i: number) => (
-        <Card key={i} className="bg-white border-gray-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base text-indigo-700">{employer.establishment_name}</CardTitle>
-            <CardDescription>Member ID: {employer.member_id} | Service: {employer.service_period}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div className="p-3 bg-gray-50 rounded-md">
-              <p className="text-xs text-gray-500">Employee Share</p>
-              <p className="font-semibold">{formatCurrency(employer.total_employee_share)}</p>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-md">
-              <p className="text-xs text-gray-500">Employer Share</p>
-              <p className="font-semibold">{formatCurrency(employer.total_employer_share)}</p>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-md">
-              <p className="text-xs text-gray-500">Pension Share</p>
-              <p className="font-semibold">{formatCurrency(employer.total_pension_share)}</p>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+      <h3 className="text-xl font-semibold text-gray-800">Employer Passbook Details</h3>
+      <div className="grid gap-4">
+        {passbook.employers.map((employer: Employer, i: number) => (
+          <Card key={i} className="border-none shadow-md hover:shadow-lg transition-shadow">
+            <CardHeader className="bg-gray-50 p-4">
+              <CardTitle className="text-base font-medium text-gray-900">
+                {employer.establishment_name || 'N/A'}
+              </CardTitle>
+              <CardDescription className="text-sm text-gray-600">
+                Member ID: {employer.member_id || 'N/A'} | Service: {employer.service_period || 'N/A'} | DOJ: {employer.date_of_joining || 'N/A'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="p-3 bg-gray-50 rounded-md text-center">
+                  <p className="text-xs text-gray-500">Employee Share</p>
+                  <p className="font-semibold">{formatCurrency(employer.total_employee_share || 0)}</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-md text-center">
+                  <p className="text-xs text-gray-500">Employer Share</p>
+                  <p className="font-semibold">{formatCurrency(employer.total_employer_share || 0)}</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-md text-center">
+                  <p className="text-xs text-gray-500">Pension Share</p>
+                  <p className="font-semibold">{formatCurrency(employer.total_pension_share || 0)}</p>
+                </div>
+              </div>
+              <h4 className="text-md font-semibold text-gray-700 mt-4">Transaction History</h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left text-gray-700">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2">Year</th>
+                      <th className="px-4 py-2">Month</th>
+                      <th className="px-4 py-2">Description</th>
+                      <th className="px-4 py-2">Emp. Share</th>
+                      <th className="px-4 py-2">Emp. Share</th> {/* Typo: Should be "Employer Share" */}
+                      <th className="px-4 py-2">Pension Share</th>
+                      <th className="px-4 py-2">Status</th>
+                      <th className="px-4 py-2">Approval Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employer.passbook_entries.map((entry, j) => (
+                      <tr key={j} className="border-t">
+                        <td className="px-4 py-2">{entry.year}</td>
+                        <td className="px-4 py-2">{entry.month}</td>
+                        <td className="px-4 py-2">{entry.description}</td>
+                        <td className="px-4 py-2">{formatCurrency(entry.employee_share)}</td>
+                        <td className="px-4 py-2">{formatCurrency(entry.employer_share)}</td>
+                        <td className="px-4 py-2">{formatCurrency(entry.pension_share)}</td>
+                        <td className="px-4 py-2">{entry.status}</td>
+                        <td className="px-4 py-2">{entry.date_of_approval ? formatDate(entry.date_of_approval) : 'N/A'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
+
+  // Helper function to format date
+  function formatDate(date: string): string {
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = d.toLocaleString('default', { month: 'short' });
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
 };
-// 

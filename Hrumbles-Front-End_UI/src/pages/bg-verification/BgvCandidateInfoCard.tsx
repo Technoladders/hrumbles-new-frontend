@@ -59,7 +59,7 @@ export const BgvCandidateInfoCard: React.FC<BgvCandidateInfoCardProps> = ({ cand
       <div className="mt-4">
         <h3 className="text-sm font-medium mb-2">Skills & Expertise</h3>
         <div className="flex flex-wrap gap-2">
-          {candidate.skills.map((skill, index) => (
+          {candidate.skills?.map((skill, index) => (
             <Badge key={index} variant="outline" className="bg-purple-100 text-purple-700">
               {skill}
             </Badge>
@@ -171,7 +171,7 @@ export const BgvCandidateInfoCard: React.FC<BgvCandidateInfoCardProps> = ({ cand
       </div>
       <div className="space-y-4">
         <h3 className="text-sm font-medium">Experience</h3>
-        {candidate.career_experience.map((exp, index) => (
+        {candidate.career_experience?.map((exp, index) => (
           <div key={index} className="flex items-start space-x-2">
             <Briefcase className="w-6 h-6 text-blue-500 mt-1" />
             <div className="flex-1">

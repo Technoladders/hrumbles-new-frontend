@@ -8,6 +8,7 @@ import SubmissionOverviewCard from "./cards/SubmissionOverviewCard";
 import RecentActivityCard from "./cards/RecentActivityCard";
 import CandidatesTabsSection from "./sections/CandidatesTabsSection";
 
+
 interface JobDetailViewProps {
   job: JobData;
   candidates: Candidate[];

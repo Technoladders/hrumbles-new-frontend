@@ -118,7 +118,7 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
    return (
     <Card className="w-full shadow-md border-gray-200">
       <CardHeader><CardTitle className="text-gray-800">Background Verification</CardTitle></CardHeader>
-      <CardContent className="relative min-h-[400px] overflow-hidden p-0">
+     <CardContent className="relative h-[calc(100vh-200px)] overflow-y-auto p-0 sm:p-4 mb-4">
         <div 
           className="absolute top-0 left-0 w-[300%] h-full flex transition-transform duration-300 ease-in-out"
           style={{ transform: transformValue }}

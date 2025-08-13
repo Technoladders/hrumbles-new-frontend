@@ -26,12 +26,48 @@ export interface SubStatus {
 // Fetch all statuses with their sub-statuses
 export const fetchAllStatuses = async (organizationId?: string): Promise<MainStatus[]> => {
   try {
+    const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+
+    // Define color mappings for BGV statuses
+    const colorMap: { [key: string]: string } = {
+      // Main Statuses
+      '602d0e81-4f0e-4e9a-b79d-61d29668a1d6': '#3B82F6', // Initiated
+      '7acb59b8-ac5a-483a-aa2b-b48dfb3261fb': '#14B8A6', // In Progress
+      'a0200ec3-ed70-49ef-85d9-de0fa3649e05': '#F59E0B', // On Hold
+      '390775e9-98b4-458a-8fc7-6205105cae64': '#10B981', // Completed
+      '7a2a35b8-94ed-4182-99d7-5df2662792be': '#6B7280', // Closed
+      // Sub-Statuses under Initiated
+      '0a8da64d-bbbd-4936-9ff2-afb353eb86ce': '#60A5FA', // Pending Candidate Documents
+      'b921b145-1018-4654-a1ac-ff6d83ccf235': '#3B82F6', // Documents Submitted
+      // Sub-Statuses under In Progress
+      '8573213c-5e20-41e7-9e3c-35d4068a1ebf': '#2DD4BF', // Verification Started
+      '5d833e78-9d18-4cfb-93e9-0918145ff496': '#14B8A6', // Address Verification
+      '56238948-0614-4171-a337-f4163364ee11': '#14B8A6', // Education Verification
+      'e3c5787c-cc8f-4565-ad8e-83746a90d569': '#14B8A6', // Employment Verification
+      '5c6642e5-adbd-4a79-b022-d04735d69639': '#14B8A6', // Criminal Record Verification
+      '2538a810-89c5-4ff0-adb8-05018193ec16': '#0D9488', // Reference Check
+      // Sub-Statuses under On Hold
+      'a2033a14-fdf2-4940-8fde-c07eaf00ed73': '#FBBF24', // Awaiting Candidate Response
+      '211e14b2-286d-4115-a64d-fb888943a746': '#F59E0B', // Awaiting Vendor Update
+      // Sub-Statuses under Completed
+      '922d42b8-5ddf-4aa2-8f9f-dd43d70ebf5a': '#10B981', // All Checks Clear
+      'bf2c0e46-8ae7-4fea-b253-bfc0f2503828': '#FBBF24', // Minor Discrepancy
+      'a6de2d0b-4b73-439f-9540-d555a1192e24': '#EF4444', // Major Discrepancy
+      // Sub-Statuses under Closed
+      '49533ca9-8196-4250-abc0-648ebd7725e8': '#9CA3AF', // Verification Not Required
+      '886a545d-16b2-40fe-8e72-6907bb0bc4fa': '#6B7280', // Candidate Withdrawn
+    };
+    const { organization_id, userId } = authData;
     // First, get all main statuses
     const { data: mainStatuses, error: mainError } = await supabase
       .from('job_statuses')
       .select('*')
       .eq('type', 'main')
-      .order('display_order', { ascending: true });
+      .order('display_order', { ascending: true })
+      .eq('organization_id', organization_id);
 
     if (mainError) throw mainError;
 
@@ -40,7 +76,8 @@ export const fetchAllStatuses = async (organizationId?: string): Promise<MainSta
       .from('job_statuses')
       .select('*')
       .eq('type', 'sub')
-      .order('display_order', { ascending: true });
+      .order('display_order', { ascending: true })
+      .eq('organization_id', organization_id);
 
     if (subError) throw subError;
 
@@ -54,18 +91,21 @@ export const fetchAllStatuses = async (organizationId?: string): Promise<MainSta
     }
 
     // Map sub-statuses to their parent statuses
-    const result = mainStatuses.map(mainStatus => {
-      const subs = subStatuses.filter(sub => sub.parent_id === mainStatus.id);
-      return {
-        ...mainStatus,
-        subStatuses: subs
-      };
-    });
+   const result = mainStatuses.map(mainStatus => ({
+      ...mainStatus,
+      color: colorMap[mainStatus.id] || mainStatus.color || '#777777',
+      subStatuses: subStatuses
+        .filter(sub => sub.parent_id === mainStatus.id)
+        .map(sub => ({
+          ...sub,
+          color: colorMap[sub.id] || mainStatus.color || '#777777',
+        }))
+        .sort((a, b) => (a.display_order || 0) - (b.display_order || 0)),
+    }));
 
     return result;
   } catch (error) {
     console.error('Error fetching statuses:', error);
-    // Return default statuses when there's an error
     return getDefaultStatuses();
   }
 };

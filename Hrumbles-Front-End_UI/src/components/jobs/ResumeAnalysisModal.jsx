@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { supabase } from '../../integrations/supabase/client'; // Adjust import path as needed
 import { v4 as uuidv4 } from 'uuid';
 import { useSelector } from 'react-redux';
+import { toast } from "sonner";
  
 function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = () => {}, initialData }) {
   const [resumeText, setResumeText] = useState(initialData?.resume_text || '');
@@ -251,11 +252,13 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
             .from('resume_analysis')
             .select('candidate_id')
             .eq('email', result.email)
+            .eq('job_id', jobId)
             .single();
           if (existing) {
-            setError('Candidate with this email already exists.');
-            return false;
-          }
+          toast.error('Candidate with this email already added for this job.');
+          setError('Candidate with this email already exists.');
+          return false;
+        }
         }
    
         // Validate required fields

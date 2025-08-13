@@ -18,9 +18,18 @@ export const isVerificationSuccessful = (resultData: any, verificationType: stri
     return resultData.data?.code == '1014';
   }
 
+    // --- THIS IS THE KEY ADDITION ---
+  if (verificationType === 'latest_passbook_mobile') {
+    return resultData.data?.code == '1022'; // Passbook success code
+  }
+
+if (verificationType === 'latest_employment_uan') {
+    // We check for string '1014' as API might return it as a string.
+    return resultData.data?.code == '1014';
+  }
   // --- TruthScreen Success Check ---
   // Successful TruthScreen lookups have a top-level `status` of 1 or 0.
-  if (['mobile_to_uan', 'pan_to_uan', 'uan_full_history'].includes(verificationType)) {
+  if (['mobile_to_uan', 'pan_to_uan', 'uan_full_history', 'mobile', 'pan'].includes(verificationType)) {
     return resultData.status === 1 || resultData.status === 0;
   }
 

@@ -15,12 +15,12 @@ const EmptyState = ({ onAddCandidate }: EmptyStateProps) => {
       </div>
       <h3 className="text-lg font-medium text-gray-900 mb-2">No candidates found</h3>
       <p className="text-sm text-gray-500 mb-6 max-w-md text-center">
-        Start by adding candidates to this job. You can add candidates manually or import them from your database.
+        Start by adding candidates to this job. You can add candidates manually or by analyse Resume.
       </p>
-      <Button onClick={onAddCandidate} className="flex items-center gap-2">
+      {/* <Button onClick={onAddCandidate} className="flex items-center gap-2">
         <UserPlus size={16} />
         <span>Add Candidate</span>
-      </Button>
+      </Button> */}
     </div>
   );
 };

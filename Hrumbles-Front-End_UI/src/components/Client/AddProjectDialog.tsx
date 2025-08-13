@@ -9,14 +9,24 @@ import {
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import supabase from "../../config/supabaseClient";
 import { toast } from "sonner";
-import { X, Upload } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "../../components/ui/popover";
+import { Command, CommandInput, CommandEmpty, CommandGroup, CommandItem } from "../../components/ui/command";
+import { X, Upload, ChevronsUpDown, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+
+interface Client {
+  id: string;
+  display_name: string;
+}
 
 interface Project {
   id: string;
+  client_id: string;
   name: string;
   start_date: string;
   end_date: string;
@@ -28,17 +38,35 @@ interface Project {
 interface AddProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  clientId: string;
-  editProject?: Project | null;
+  editingProject?: Project | null;
 }
 
-const AddProjectDialog = ({ open, onOpenChange, clientId, editProject }: AddProjectDialogProps) => {
+const AddProjectDialog = ({ open, onOpenChange, editingProject }: AddProjectDialogProps) => {
   const queryClient = useQueryClient();
   const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // --- NEW: Fetch clients for the combobox ---
+  const { data: clients, isLoading: isLoadingClients } = useQuery<Client[]>({
+    queryKey: ['clients-list', organization_id],
+    queryFn: async () => {
+      if (!organization_id) return [];
+      const { data, error } = await supabase
+        .from('hr_clients')
+        .select('id, display_name')
+        .eq('organization_id', organization_id)
+        .order('display_name', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: open && !!organization_id, // Only fetch when dialog is open
+  });
+
+
   // Form states
+   const [selectedClientId, setSelectedClientId] = useState(""); // NEW
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false); // NEW for combobox
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [projectName, setProjectName] = useState("");
@@ -57,38 +85,37 @@ const AddProjectDialog = ({ open, onOpenChange, clientId, editProject }: AddProj
     return d.toISOString().split("T")[0]; // Returns YYYY-MM-DD
   };
 
-  // Pre-fill form for editing
   useEffect(() => {
-    console.log("editProject:", editProject); // Debug log
-    if (editProject && open) {
-      setProjectName(editProject.name || "");
-      setStartDate(formatDate(editProject.start_date));
-      setEndDate(formatDate(editProject.end_date));
-      setEmployeesNeeded(editProject.employees_needed?.toString() || "");
-      setNoOfDays(editProject.duration || 0);
-      setExistingAttachment(editProject.attachment || null);
+    if (editingProject && open) {
+      setSelectedClientId(editingProject.client_id || ""); // Set client for edit
+      setProjectName(editingProject.name || "");
+      setStartDate(formatDate(editingProject.start_date));
+      setEndDate(formatDate(editingProject.end_date));
+      setEmployeesNeeded(editingProject.employees_needed?.toString() || "");
+      setNoOfDays(editingProject.duration || 0);
+      setExistingAttachment(editingProject.attachment || null);
       setFile(null);
       setErrors({});
-    } else if (!editProject && open) {
+    } else if (!editingProject && open) {
       resetForm();
     }
-  }, [editProject, open]);
+  }, [editingProject, open]);
+
 
   // Validate form inputs
-  const validateForm = () => {
+   const validateForm = () => {
     const newErrors: { [key: string]: string } = {};
+    if (!selectedClientId) newErrors.clientId = "Client is required"; // NEW validation
     if (!projectName.trim()) newErrors.projectName = "Project name is required";
     if (!startDate) newErrors.startDate = "Start date is required";
     if (!endDate) newErrors.endDate = "End date is required";
     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
       newErrors.endDate = "End date must be after start date";
     }
-    if (employeesNeeded && parseInt(employeesNeeded) < 0) {
-      newErrors.employeesNeeded = "Number of employees cannot be negative";
-    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
 
   // Calculate duration dynamically
   const handleDateChange = (start: string, end: string) => {
@@ -154,9 +181,10 @@ const AddProjectDialog = ({ open, onOpenChange, clientId, editProject }: AddProj
   };
 
   const resetForm = () => {
+    setSelectedClientId(""); // Reset client
+    setProjectName("");
     setStartDate("");
     setEndDate("");
-    setProjectName("");
     setEmployeesNeeded("");
     setNoOfDays(0);
     setFile(null);
@@ -188,7 +216,7 @@ const AddProjectDialog = ({ open, onOpenChange, clientId, editProject }: AddProj
       }
 
       const projectData = {
-        client_id: clientId,
+        client_id: selectedClientId,
         name: projectName,
         start_date: startDate,
         end_date: endDate,
@@ -199,130 +227,109 @@ const AddProjectDialog = ({ open, onOpenChange, clientId, editProject }: AddProj
         attachment: fileUrl,
       };
 
-      if (editProject) {
-        // Update existing project
-        const { error } = await supabase
-          .from("hr_projects")
-          .update(projectData)
-          .eq("id", editProject.id)
-          .eq("organization_id", organization_id);
+      if (editingProject) {
+        const { error } = await supabase.from("hr_projects").update(projectData).eq("id", editingProject.id);
         if (error) throw error;
         toast.success("Project updated successfully");
       } else {
-        // Insert new project
-        const { error } = await supabase.from("hr_projects").insert({
-          ...projectData,
-          created_by: user.id,
-          organization_id
-        });
+        const { error } = await supabase.from("hr_projects").insert({ ...projectData, created_by: user.id });
         if (error) throw error;
         toast.success("Project added successfully");
       }
 
-      queryClient.invalidateQueries({ queryKey: ["client-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] }); // Invalidate main projects list
       onOpenChange(false);
       resetForm();
     } catch (error) {
       console.error("Error saving project:", error);
-      toast.error(`Failed to ${editProject ? "update" : "add"} project`);
+      toast.error(`Failed to ${editingProject ? "update" : "add"} project`);
     }
   };
 
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => {
-      onOpenChange(isOpen);
-      if (!isOpen) resetForm();
-    }}>
+   return (
+    <Dialog open={open} onOpenChange={(isOpen) => { onOpenChange(isOpen); if (!isOpen) resetForm(); }}>
       <DialogContent className="sm:max-w-[500px] bg-white rounded-lg shadow-xl p-6">
         <DialogHeader>
           <DialogTitle className="text-2xl font-semibold text-gray-800">
-            {editProject ? "Edit Project" : "Add New Project"}
+            {editingProject ? "Edit Project" : "Add New Project"}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* --- NEW CLIENT COMBOBOX --- */}
           <div className="space-y-2">
-            <Label htmlFor="projectName" className="text-sm font-medium text-gray-700">
-              Project Name <span className="text-red-500">*</span>
+            <Label htmlFor="client" className="text-sm font-medium text-gray-700">
+              Client <span className="text-red-500">*</span>
             </Label>
-            <Input
-              id="projectName"
-              placeholder="Enter project name"
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              className={`border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200 ${
-                errors.projectName ? "border-red-500" : ""
-              }`}
-              required
-            />
-            {errors.projectName && (
-              <p className="text-xs text-red-500 mt-1">{errors.projectName}</p>
-            )}
+            <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={isPopoverOpen}
+                  className={`w-full justify-between font-normal ${!selectedClientId && "text-muted-foreground"} ${errors.clientId ? "border-red-500" : ""}`}
+                >
+                  {selectedClientId
+                    ? clients?.find((client) => client.id === selectedClientId)?.display_name
+                    : "Select client..."}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[450px] p-0">
+                <Command>
+                  <CommandInput placeholder="Search client..." />
+                  <CommandEmpty>{isLoadingClients ? "Loading..." : "No client found."}</CommandEmpty>
+                  <CommandGroup>
+                    {clients?.map((client) => (
+                      <CommandItem
+                        key={client.id}
+                        value={client.display_name}
+                        onSelect={() => {
+                          setSelectedClientId(client.id);
+                          setIsPopoverOpen(false);
+                        }}
+                      >
+                        <Check className={cn("mr-2 h-4 w-4", selectedClientId === client.id ? "opacity-100" : "opacity-0")} />
+                        {client.display_name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            {errors.clientId && <p className="text-xs text-red-500 mt-1">{errors.clientId}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="projectName">Project Name <span className="text-red-500">*</span></Label>
+            <Input id="projectName" value={projectName} onChange={(e) => setProjectName(e.target.value)} required />
+            {errors.projectName && <p className="text-xs text-red-500 mt-1">{errors.projectName}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-700">
-                Start Date <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => handleDateChange(e.target.value, endDate)}
-                className={`border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200 ${
-                  errors.startDate ? "border-red-500" : ""
-                }`}
-                required
-              />
-              {errors.startDate && (
-                <p className="text-xs text-red-500 mt-1">{errors.startDate}</p>
-              )}
+              <Label>Start Date <span className="text-red-500">*</span></Label>
+              <Input type="date" value={startDate} onChange={(e) => handleDateChange(e.target.value, endDate)} required />
+              {errors.startDate && <p className="text-xs text-red-500 mt-1">{errors.startDate}</p>}
             </div>
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-700">
-                End Date <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => handleDateChange(startDate, e.target.value)}
-                className={`border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200 ${
-                  errors.endDate ? "border-red-500" : ""
-                }`}
-                required
-              />
-              {errors.endDate && (
-                <p className="text-xs text-red-500 mt-1">{errors.endDate}</p>
-              )}
+              <Label>End Date <span className="text-red-500">*</span></Label>
+              <Input type="date" value={endDate} onChange={(e) => handleDateChange(startDate, e.target.value)} required />
+              {errors.endDate && <p className="text-xs text-red-500 mt-1">{errors.endDate}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-700">No. of Employees Needed</Label>
-              <Input
-                type="number"
-                min="0"
-                value={employeesNeeded}
-                onChange={(e) => setEmployeesNeeded(e.target.value)}
-                className={`border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200 ${
-                  errors.employeesNeeded ? "border-red-500" : ""
-                }`}
-              />
-              {errors.employeesNeeded && (
-                <p className="text-xs text-red-500 mt-1">{errors.employeesNeeded}</p>
-              )}
+              <Label>No. of Employees Needed</Label>
+              <Input type="number" min="0" value={employeesNeeded} onChange={(e) => setEmployeesNeeded(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-700">No. of Days</Label>
-              <Input
-                type="number"
-                value={noOfDays}
-                disabled
-                className="bg-gray-100 border-gray-300"
-              />
+              <Label>No. of Days</Label>
+              <Input type="number" value={noOfDays} disabled className="bg-gray-100" />
             </div>
           </div>
 
+          {/* File Upload section is the same */}
           <div
             className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${
               isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300"
@@ -373,23 +380,8 @@ const AddProjectDialog = ({ open, onOpenChange, clientId, editProject }: AddProj
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                onOpenChange(false);
-                resetForm();
-              }}
-              className="border-gray-300 text-gray-700 hover:bg-gray-100 transition-all duration-200"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              className="bg-blue-600 hover:bg-blue-700 text-white transition-all duration-200"
-            >
-              {editProject ? "Update" : "Save"}
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" className="bg-blue-600 hover:bg-blue-700">{editingProject ? "Update Project" : "Create Project"}</Button>
           </div>
         </form>
       </DialogContent>
