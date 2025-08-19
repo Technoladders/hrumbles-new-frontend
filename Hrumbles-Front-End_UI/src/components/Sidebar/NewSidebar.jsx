@@ -282,7 +282,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       zIndex={20}
     >
       <Flex align="center" mb={8} minH="40px" px={isExpanded ? 0 : 1}>
-        {isExpanded && <Image src="/hrumbles-wave-white.svg" alt="Logo" width="180px" />}
+        {isExpanded && <Image src="/hrumbles-wave-white.svg" alt="Logo" width="160px" />}
         <Spacer />
         {!isMobile && (
           <IconButton

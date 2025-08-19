@@ -175,7 +175,7 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
               </h2>
               <div className="flex items-center gap-2">
                 {/* Render the status badge in the header for visibility */}
-                {!shareMode && renderConsentStatusBadge()}
+                {/* {!shareMode && renderConsentStatusBadge()} */}
                 <Button onClick={navigateBack} variant="outline" size="sm">
                   Back
                 </Button>
@@ -190,7 +190,7 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
                 {/* --- SHARE LINK SECTION (EXISTING) --- */}
                 <Button
                   variant="outline"
-                  className="flex items-center justify-center bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 w-full"
+                  className="flex items-center justify-center bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 w-auto"
                   onClick={onShareClick}
                   disabled={isSharing || employee.id === "emp001"}
                 >
@@ -227,7 +227,7 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
                   </div>
                 )}
                  {/* --- CONSENT LINK SECTION (NEW) --- */}
-                 <Button
+                 {/* <Button
                     variant="outline"
                     className="flex items-center justify-center bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200 w-full"
                     onClick={onGenerateConsentLink}
@@ -243,7 +243,7 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
                       {employee.consentStatus === 'pending' || employee.consentStatus === 'denied' ? 'Resend Consent Request' : 'Request Candidate Consent'}
                     </>
                   )}
-                </Button>
+                </Button> */}
                 {consentLink && (
                   <div className="p-3 bg-blue-50 rounded-md border border-blue-100 relative">
                     <p className="text-xs text-blue-700 mb-1 font-medium">

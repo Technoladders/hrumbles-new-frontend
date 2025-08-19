@@ -74,8 +74,8 @@ const orgSuperAdminAllItems = [
 const iTechOrgSuperAdminMenu = [
     // { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
     { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
-    { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
-    { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" },
+    // { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
+    // { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" },
     { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
     // { icon: GoGoal, label: "Goals", path: "/goals" },
     // { icon: ImProfile, label: "My Profile", path: "/profile" },
@@ -83,10 +83,20 @@ const iTechOrgSuperAdminMenu = [
 ];
 
 const AscendionOrgSuperAdminMenu = [
-    // { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
-    { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
-     { icon: LuUserSearch, label: "All Candidates", path: "/all-candidates" },
-
+    {
+        title: "Hiring Suite",
+        icon: FaUserShield, // Using the same icon for consistency
+        items: [
+            { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+        ],
+    },
+    {
+        title: "Verification Suite",
+        icon: BsShieldCheck, // Using the same icon for consistency
+        items: [
+            { icon: LuUserSearch, label: "Verification", path: "/all-candidates" },
+        ],
+    }
 ];
 // 2. Define the items for each suite
 const projectSuiteLabels = ["Clients", "Projects"];
@@ -107,7 +117,7 @@ const hrSuiteItems = orgSuperAdminAllItems.filter(
 // 4. Structure the final menu data with categories AND ICONS
 const categorizedOrgSuperAdminMenu = [
     {
-        title: "HR suite",
+        title: "Hiring Suite",
         icon: FaUserShield,
         items: hrSuiteItems,
     },

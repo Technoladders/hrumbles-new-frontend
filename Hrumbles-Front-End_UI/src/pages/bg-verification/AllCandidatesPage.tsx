@@ -82,7 +82,7 @@ const AllCandidatesPage = () => {
         </div>
         <Button onClick={() => setIsAddModalOpen(true)}>
           <UserPlus className="mr-2 h-4 w-4" />
-          Add New Candidate
+          Verify New Candidate
         </Button>
       </div>
 

@@ -144,6 +144,13 @@
   .border-purple {
     border-color: oklch(62.7% 0.265 303.9);
   }
+
+    .login-gradient {
+    background-image: linear-gradient(90deg, var(--tw-gradient-stops));
+    --tw-gradient-from: #7B43F1 var(--tw-gradient-from-position);
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+    --tw-gradient-to: rgb(180 75 203 / 0.2) var(--tw-gradient-to-position);
+  }
   
 
   .purple-gradient {

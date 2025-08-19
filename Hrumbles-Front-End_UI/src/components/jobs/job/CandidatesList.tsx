@@ -1610,6 +1610,7 @@ import {
   TooltipTrigger,
 } from "@/components/jobs/ui/tooltip";
 import { StatusSelector } from "./StatusSelector";
+import { ItechStatusSelector } from "./ItechStatusSelector";
 import ValidateResumeButton from "./candidate/ValidateResumeButton";
 import StageProgress from "./candidate/StageProgress";
 import EmptyState from "./candidate/EmptyState";
@@ -1681,6 +1682,8 @@ const CandidatesList = ({
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const userRole = useSelector((state: any) => state.auth.role);
   const isEmployee = userRole === 'employee';
+
+  const ITECH_ORGANIZATION_ID = '1961d419-1272-4371-8dc7-63a4ec71be83';
 
 
 
@@ -3212,7 +3215,7 @@ const handleValidateResume = async (candidateId: string) => {
                 <TableHead className="w-[50px] sm:w-[100px]">
                   Contact Info
                 </TableHead>
-                {!isEmployee && <TableHead className="w-[80px] sm:w-[100px]">Profit</TableHead>}
+                {organizationId !== ITECH_ORGANIZATION_ID && !isEmployee && <TableHead className="w-[80px] sm:w-[100px]">Profit</TableHead>}
                 <TableHead className="w-[120px] sm:w-[150px]">Stage Progress</TableHead>
                 <TableHead className="w-[100px] sm:w-[120px]">Status</TableHead>
                 <TableHead className="w-[80px] sm:w-[100px]">Validate</TableHead>
@@ -3251,7 +3254,7 @@ const handleValidateResume = async (candidateId: string) => {
                     phone={candidate.phone}
                     candidateId={candidate.id}
                   />
-                 {!isEmployee && (
+                {organizationId !== ITECH_ORGANIZATION_ID && !isEmployee && (
   <TableCell>
     <span
       className={
@@ -3275,13 +3278,22 @@ const handleValidateResume = async (candidateId: string) => {
                       />
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <StatusSelector
-                      value={candidate.sub_status_id || ""}
-                      onChange={(value) => handleStatusChange(value, candidate)}
-                      className="h-7 text-xs w-full"
-                      disableNextStage={candidate.sub_status?.name?.includes('Reject')}
-                    />
+                 <TableCell>
+                    {/* 3. ADD CONDITIONAL RENDERING LOGIC */}
+                    {organizationId === ITECH_ORGANIZATION_ID ? (
+                      <ItechStatusSelector
+                        value={candidate.sub_status_id || ""}
+                        onChange={(value) => handleStatusChange(value, candidate)}
+                        className="h-7 text-xs w-full"
+                      />
+                    ) : (
+                      <StatusSelector
+                        value={candidate.sub_status_id || ""}
+                        onChange={(value) => handleStatusChange(value, candidate)}
+                        className="h-7 text-xs w-full"
+                        disableNextStage={candidate.sub_status?.name?.includes('Reject')}
+                      />
+                    )}
                   </TableCell>
                   <TableCell className="px-2">
                     <div className="flex items-center gap-2">

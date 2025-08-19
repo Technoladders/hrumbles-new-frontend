@@ -178,6 +178,7 @@ const mainConfig: Config = {
 			},
 			backgroundImage: {
 				"gradient-main": "linear-gradient(to bottom, #FFFFFF, #FFF9E7)",
+				"login-gradient": "linear-gradient(to right, #40c975, rgba(53, 31, 105, 0.8))",
 			},
 		},
 	},

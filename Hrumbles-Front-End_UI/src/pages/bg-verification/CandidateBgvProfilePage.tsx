@@ -33,6 +33,21 @@ const CandidateBgvProfilePage = () => {
     enabled: !!candidateId,
   });
 
+  const { data: job, isLoading: isJobLoading } = useQuery<Job>({
+    queryKey: ['job', candidate?.job_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('hr_jobs')
+        .select('title') // We only need the title for efficiency
+        .eq('id', candidate!.job_id)
+        .single();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    // The `enabled` flag is crucial. It ensures this query waits for `candidate.job_id`.
+    enabled: !!candidate?.job_id,
+  });
+
   const { data: resumeAnalysis, isLoading: isResumeAnalysisLoading } = useQuery<ResumeAnalysis | null>({
     queryKey: ['resume-analysis', candidateId],
     queryFn: async () => {
@@ -54,7 +69,7 @@ const CandidateBgvProfilePage = () => {
     }
   }, [isResumeAnalysisLoading, resumeAnalysis]);
 
-  if (isCandidateLoading || isResumeAnalysisLoading) {
+  if (isCandidateLoading || isResumeAnalysisLoading || isJobLoading) {
     return <div className="flex justify-center items-center h-[80vh]"><Loader /></div>;
   }
 
@@ -69,6 +84,9 @@ const CandidateBgvProfilePage = () => {
     );
   }
 
+  console.log('candidateprofilee', candidate)
+
+
   const availableTabs = [
     resumeAnalysis && 'resume-analysis',
     'bg-verification',
@@ -81,7 +99,9 @@ const CandidateBgvProfilePage = () => {
         <Button variant="outline" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft />
         </Button>
-        <h1 className="text-2xl font-bold">Candidate Verification Profile</h1>
+         <h1 className="text-2xl font-bold">
+          {job ? `${job.title}` : 'Candidate Profile'}
+        </h1>
       </div>
 
       {/* Grid layout for Info Card and Timeline */}

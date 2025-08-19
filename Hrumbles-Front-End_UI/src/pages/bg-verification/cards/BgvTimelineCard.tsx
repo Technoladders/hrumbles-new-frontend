@@ -81,7 +81,7 @@ export const BgvTimelineCard = ({ candidateId }: Props) => {
       <CardHeader className="bg-gray-50 border-b border-gray-200 p-4">
         <CardTitle className="text-gray-800 flex items-center gap-2 text-lg font-semibold">
           <History size={20} className="text-purple-600" />
-          Verification Timeline
+          Timeline
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-grow p-0">

@@ -62,7 +62,11 @@ export const getRequiredInteractionType = (
       newSubStatusName === 'L1' || 
       newSubStatusName === 'L2' || 
       newSubStatusName === 'L3' || 
-      newSubStatusName === 'End Client Round') {
+      newSubStatusName === 'End Client Round' ||
+      newSubStatusName === 'Interview Scheduled' ||
+      newSubStatusName === 'In-Person Interview' ||
+      newSubStatusName === 'HR Round') {
+
     return 'interview-schedule';
   }
   
@@ -70,7 +74,8 @@ export const getRequiredInteractionType = (
     return 'interview-feedback';
   }
   
-  if (newSubStatusName === 'Joined' || newSubStatusName === 'Offer Issued') {
+  if (newSubStatusName === 'Joined' || newSubStatusName === 'Offer Issued' || newSubStatusName === 'Offer Made') {
+
     return 'joining';
   }
   
@@ -106,6 +111,11 @@ export const getInterviewRoundName = (statusName: string): string => {
   if (statusName === 'End Client Round' || statusName === 'Reschedule End Client Round') {
     return 'End Client Round';
   }
+
+    // ADDED: iTech interview rounds
+  if (statusName === 'Interview Scheduled') return 'Interview';
+  if (statusName === 'In-Person Interview') return 'In-Person Interview';
+  if (statusName === 'HR Round') return 'HR Round';
   return 'Interview';
 };
 
@@ -134,5 +144,7 @@ export const isTerminalStatus = (statusName: string | undefined): boolean => {
   return statusName.includes('Reject') || 
          statusName.includes('No Show') ||
          statusName === 'Offer Declined' ||
+         statusName.includes('Rejected') ||
+            statusName === 'Offer Rejected' ||
          statusName === 'Candidate Dropped';
 };

@@ -196,9 +196,9 @@ const AiJobsDashboard = () => {
                                                 <Badge variant="outline" className="bg-purple-100 text-purple-800 hover:bg-purple-200 rounded-full text-[10px]">
                                                     {job.jobId}
                                                 </Badge>
-                                                <Badge variant="outline" className="bg-purple-100 text-purple-800 hover:bg-purple-200 rounded-full text-[10px]">
+                                                {/* <Badge variant="outline" className="bg-purple-100 text-purple-800 hover:bg-purple-200 rounded-full text-[10px]">
                                                     {job.jobType}
-                                                </Badge>
+                                                </Badge> */}
                                             </span>
                                         </div>
                                     </td>

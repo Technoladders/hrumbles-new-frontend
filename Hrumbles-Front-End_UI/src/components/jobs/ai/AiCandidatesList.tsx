@@ -29,6 +29,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import moment from "moment";
 import { ProgressColumn } from "@/components/jobs/job/ProgressColumn";
 import { StatusSelector } from "@/components/jobs/ai/StatusSelector";
+import { ItechStatusSelector } from "@/components/jobs/job/ItechStatusSelector";
+
+
 import { AiValidateResumeButton } from './AiValidateResumeButton'; // <-- Import new button
 import SummaryModal from '@/components/jobs/job/SummaryModal';
 import { fetchAllStatuses, MainStatus } from "@/services/statusService";
@@ -178,6 +181,9 @@ export const AiCandidatesList = ({ job, candidates, onCandidateUpdate }: Props) 
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [analysisDataAvailable, setAnalysisDataAvailable] = useState<{ [key: string]: boolean }>({});
   const [candidateAnalysisData, setCandidateAnalysisData] = useState<{ [key: string]: any }>({});
+
+    // *** 1. ADD NEW STATE FOR BULK VALIDATION ***
+  const [isBulkValidating, setIsBulkValidating] = useState(false);
 
    useEffect(() => {
     // Set the first main status as the default tab once loaded
@@ -604,6 +610,39 @@ export const AiCandidatesList = ({ job, candidates, onCandidateUpdate }: Props) 
     }
   };
 
+  
+  // *** 2. ADD NEW HANDLER FUNCTION FOR BULK VALIDATION ***
+  const handleValidateAll = async () => {
+    const candidatesToValidate = filteredCandidates.filter(c => !c.hasValidatedResume && c.resume_url);
+
+    if (candidatesToValidate.length === 0) {
+      toast.info("All visible candidates have already been validated or have no resume.");
+      return;
+    }
+
+    setIsBulkValidating(true);
+    toast.info(`Starting validation for ${candidatesToValidate.length} candidate(s)...`);
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    // Process candidates one by one to avoid overwhelming the backend
+    for (const candidate of candidatesToValidate) {
+      try {
+        await handleValidateResume(candidate.id);
+        successCount++;
+      } catch (error) {
+        console.error(`Failed to validate resume for candidate ${candidate.name} (${candidate.id}):`, error);
+        failureCount++;
+        // The error toast is already shown inside handleValidateResume
+      }
+    }
+
+    toast.success(`Bulk validation complete. Validated: ${successCount}, Failed: ${failureCount}.`);
+    setIsBulkValidating(false);
+  };
+
+
   const renderPagination = () => {
     return (
       <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
@@ -673,7 +712,7 @@ export const AiCandidatesList = ({ job, candidates, onCandidateUpdate }: Props) 
 
   return (
     <>
-      {isEmployee && (
+    
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-600">Filter Candidates:</span>
@@ -691,6 +730,21 @@ export const AiCandidatesList = ({ job, candidates, onCandidateUpdate }: Props) 
             </Select>
           </div>
           <div className="flex items-center gap-2">
+             {/* *** 3. ADD THE "VALIDATE ALL" BUTTON HERE *** */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleValidateAll}
+              disabled={isBulkValidating || filteredCandidates.length === 0}
+              className="flex items-center gap-1"
+            >
+              {isBulkValidating ? (
+                <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+              ) : (
+                <FileText size={16} />
+              )}
+              <span className="ml-1">{isBulkValidating ? "Validating..." : "Validate All"}</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -702,7 +756,7 @@ export const AiCandidatesList = ({ job, candidates, onCandidateUpdate }: Props) 
             </Button>
           </div>
         </div>
-      )}
+      
       <div className="flex flex-wrap gap-2 mb-4">
         {appliedFilters.length > 0 &&
           appliedFilters.map((filterId) => {
@@ -842,7 +896,7 @@ export const AiCandidatesList = ({ job, candidates, onCandidateUpdate }: Props) 
                     </div>
                   </TableCell>
                   <TableCell>
-                    <StatusSelector
+                    <ItechStatusSelector
                       value={candidate.sub_status_id || ""}
                       onChange={(newValue) => handleStatusChange(newValue, candidate)}
                       className="h-7 text-xs w-full"
