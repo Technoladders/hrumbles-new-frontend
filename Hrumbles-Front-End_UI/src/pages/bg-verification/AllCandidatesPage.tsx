@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { isVerificationSuccessful } from '@/components/jobs/ai/utils/bgvUtils';
 import { GlobalAddCandidateModal } from './GlobalAddCandidateModal';
+import { AssignCandidateToJobModal } from './AddCandidateJobSelectModal';
 
 const AllCandidatesPage = () => {
     const organizationId = useSelector((state: any) => state.auth.organization_id);
@@ -27,6 +28,11 @@ const AllCandidatesPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50); // Default to 50
 
+   const [assignModalState, setAssignModalState] = useState({ 
+      isOpen: false, 
+      candidateId: null as string | null, 
+      candidateName: '' 
+    });
 
 
   const { data: candidates = [], isLoading, refetch } = useQuery({
@@ -58,20 +64,29 @@ const AllCandidatesPage = () => {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedCandidates = filteredCandidates.slice(startIndex, startIndex + itemsPerPage);
 
-  const handleItemsPerPageChange = (value: string) => {
-    setItemsPerPage(Number(value));
-    setCurrentPage(1);
-  };
-  const handleJobSelected = (jobId: string) => {
-    setSelectedJobId(jobId);
-    setIsJobSelectModalOpen(false);
-    setIsAddCandidateModalOpen(true);
-  };
+   const handleItemsPerPageChange = (value: string) => {
+        setItemsPerPage(Number(value));
+        setCurrentPage(1);
+    };
 
-  const handleCloseAddCandidate = () => {
-     setIsAddModalOpen(false);
-    refetch();
-  };
+    const handleCloseAddCandidate = () => {
+        setIsAddModalOpen(false);
+        refetch(); // Refetch data after adding a new candidate
+    };
+
+    // --- NEW HANDLERS FOR ASSIGNMENT MODAL ---
+    const handleOpenAssignModal = (candidateId: string, candidateName: string) => {
+        setAssignModalState({ isOpen: true, candidateId, candidateName });
+    };
+
+    const handleCloseAssignModal = () => {
+        setAssignModalState({ isOpen: false, candidateId: null, candidateName: '' });
+    };
+
+    const handleAssignSuccess = () => {
+        refetch(); // Refetch data to show the updated job title
+        handleCloseAssignModal();
+    };
 
  return (
     <div className="p-4 md:p-6 space-y-6">
@@ -102,7 +117,7 @@ const AllCandidatesPage = () => {
             </div>
         </CardHeader>
         <CardContent>
-          <CandidatesTable candidates={paginatedCandidates} organizationId={organizationId} />
+          <CandidatesTable candidates={paginatedCandidates} organizationId={organizationId}  onAssignClick={handleOpenAssignModal} />
         </CardContent>
         {totalPages > 1 && (
           <CardFooter className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t">
@@ -135,6 +150,13 @@ const AllCandidatesPage = () => {
         isOpen={isAddModalOpen}
         onClose={handleCloseAddCandidate}
       />
+      <AssignCandidateToJobModal
+                isOpen={assignModalState.isOpen}
+                onClose={handleCloseAssignModal}
+                onAssignSuccess={handleAssignSuccess}
+                candidateId={assignModalState.candidateId}
+                candidateName={assignModalState.candidateName}
+            />
     </div>
   );
 };

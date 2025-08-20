@@ -360,7 +360,7 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
       handleClose();
     } catch (error) {
       console.error("Error saving candidate proof ID:", error);
-      toast.error("Failed to save proof ID information");
+      // toast.error("Failed to save proof ID information");
     }
   };
 

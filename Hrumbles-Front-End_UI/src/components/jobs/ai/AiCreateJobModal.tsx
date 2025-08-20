@@ -8,9 +8,11 @@ interface Props {
   onClose: () => void;
   onSave: (job: JobData) => void;
   initialAiData?: Partial<JobFormData> | null;
+    editJob?: JobData | null;
 }
 
-export const AiCreateJobModal = ({ isOpen, onClose, onSave, initialAiData }: Props) => {
+export const AiCreateJobModal = ({ isOpen, onClose, onSave, initialAiData, editJob }: Props) => {
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -22,6 +24,7 @@ export const AiCreateJobModal = ({ isOpen, onClose, onSave, initialAiData }: Pro
           onClose={onClose}
           onSave={onSave}
           initialAiData={initialAiData}
+           editJob={editJob}
         />
       </DialogContent>
     </Dialog>

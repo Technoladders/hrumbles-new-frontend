@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSelector } from "react-redux";
 import { UseFormReturn } from "react-hook-form";
 import {
   Form,
@@ -32,7 +33,38 @@ interface BasicInformationTabProps {
   form: UseFormReturn<CandidateFormData>;
   onSaveAndNext: (data: CandidateFormData) => void;
   onCancel: () => void;
+  // ADDED: Prop to send the full parsed data back to the parent
+  onParseComplete: (data: any) => void;
 }
+
+// --- ADDED: Helper function to calculate experience from work history ---
+const calculateExperienceFromHistory = (workHistory: any[]) => {
+  if (!workHistory || workHistory.length === 0) {
+    return { years: 0, months: 0 };
+  }
+
+  let totalMonths = 0;
+  workHistory.forEach(job => {
+    try {
+      const startDate = new Date(job.start_date);
+      const endDate = job.end_date === 'Present' ? new Date() : new Date(job.end_date);
+
+      if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+        let months = (endDate.getFullYear() - startDate.getFullYear()) * 12;
+        months -= startDate.getMonth();
+        months += endDate.getMonth();
+        totalMonths += months <= 0 ? 0 : months;
+      }
+    } catch (e) {
+      console.warn("Could not parse date from work history", job);
+    }
+  });
+
+  return {
+    years: Math.floor(totalMonths / 12),
+    months: totalMonths % 12
+  };
+};
 
 // Revert to hard-coded locations
 const LOCATION_OPTIONS = [
@@ -74,8 +106,10 @@ const sanitizeFileName = (fileName: string): string => {
   return `${sanitizedName}.${extension}`;
 };
 
-const BasicInformationTab = ({ form, onSaveAndNext, onCancel }: BasicInformationTabProps) => {
+const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }: BasicInformationTabProps) => {
   const [isParsing, setIsParsing] = useState(false);
+  const user = useSelector((state: any) => state.auth.user);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -106,28 +140,44 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel }: BasicInformation
       toast.success("Resume uploaded. Parsing with AI, please wait...");
 
       const { data: parsedData, error: functionError } = await supabase.functions.invoke('parse-resume', {
-        body: { fileUrl: publicUrl },
+        body: { 
+            fileUrl: publicUrl,
+            user_id: user?.id,
+            organization_id: organizationId
+        },
       });
       if (functionError) throw new Error(`AI Parsing Error: ${functionError.message}`);
+
+       // ADDED: Call the callback with the full parsed data object
+      if (parsedData) {
+        onParseComplete(parsedData);
+      }
       
       if (parsedData) {
+        // --- KEY CHANGE: Handle the new, richer data structure ---
         if (parsedData.firstName) form.setValue("firstName", parsedData.firstName, { shouldValidate: true });
         if (parsedData.lastName) form.setValue("lastName", parsedData.lastName, { shouldValidate: true });
         if (parsedData.email) form.setValue("email", parsedData.email, { shouldValidate: true });
-
-        // **Phone number parsing fix**
+        if (parsedData.linkedInId) form.setValue("linkedInId", parsedData.linkedInId, { shouldValidate: true });
+        
         if (parsedData.phone) {
-          let phoneNumber = parsedData.phone.replace(/\s+/g, ''); // Remove spaces
-          if (!phoneNumber.startsWith('+')) {
-            phoneNumber = `+91${phoneNumber}`; // Prepend +91 if missing
-          }
+          let phoneNumber = parsedData.phone.replace(/\s+/g, '');
+          if (!phoneNumber.startsWith('+')) phoneNumber = `+91${phoneNumber}`;
           form.setValue("phone", phoneNumber, { shouldValidate: true });
         }
-
+        
         if (parsedData.currentLocation) form.setValue("currentLocation", parsedData.currentLocation, { shouldValidate: true });
-        if (parsedData.totalExperience !== undefined) form.setValue("totalExperience", parsedData.totalExperience, { shouldValidate: true });
-        if (parsedData.totalExperienceMonths !== undefined) form.setValue("totalExperienceMonths", parsedData.totalExperienceMonths, { shouldValidate: true });
-        if (parsedData.linkedInId) form.setValue("linkedInId", parsedData.linkedInId, { shouldValidate: true });
+
+        // Calculate and set total experience from the new work_experience array
+        if (parsedData.work_experience && parsedData.work_experience.length > 0) {
+            const exp = calculateExperienceFromHistory(parsedData.work_experience);
+            form.setValue("totalExperience", exp.years, { shouldValidate: true });
+            form.setValue("totalExperienceMonths", exp.months, { shouldValidate: true });
+        } else {
+             // Fallback to old fields if work_experience is not present
+            if (parsedData.totalExperience !== undefined) form.setValue("totalExperience", parsedData.totalExperience, { shouldValidate: true });
+            if (parsedData.totalExperienceMonths !== undefined) form.setValue("totalExperienceMonths", parsedData.totalExperienceMonths, { shouldValidate: true });
+        }
       }
       
       toast.success("Resume parsed and form has been auto-filled!");

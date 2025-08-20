@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Mail, Phone, Copy, Check, Eye } from 'lucide-react';
+import { Mail, Phone, Copy, Check, Eye, Briefcase, Pencil, UserPlus } from 'lucide-react';
+
 import { toast } from 'sonner';
 import moment from 'moment';
 
@@ -61,9 +62,10 @@ const renderVerificationResult = (verification: any) => {
 interface Props {
   candidates: any[];
   organizationId: string;
+   onAssignClick: (candidateId: string, candidateName: string) => void;
 }
 
-export const CandidatesTable = ({ candidates, organizationId }: Props) => {
+export const CandidatesTable = ({ candidates, organizationId, onAssignClick }: Props) => {
   const navigate = useNavigate();
 
   return (
@@ -112,20 +114,46 @@ export const CandidatesTable = ({ candidates, organizationId }: Props) => {
                       <span className="text-xs text-gray-500">{moment(candidate.created_at).fromNow()}</span>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                             <Link to={candidateProfilePath}>
-                            <Eye className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent><p>View Candidate</p></TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </TableCell>
+                  <TableCell className="text-right">
+  <TooltipProvider delayDuration={100}>
+    <div className="flex items-center justify-end gap-1">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => navigate(candidateProfilePath)}
+            disabled={!candidate.job_id}
+          >
+            <span className="sr-only">View Details</span>
+            <Eye className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>View Details</p>
+        </TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => onAssignClick(candidate.id, candidate.name)}
+          >
+            <span className="sr-only">Assign to Job</span>
+            <UserPlus className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Assign to Job</p>
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  </TooltipProvider>
+</TableCell>
                 </TableRow>
               );
             })}

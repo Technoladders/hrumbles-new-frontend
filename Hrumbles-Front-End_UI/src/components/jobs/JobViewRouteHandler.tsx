@@ -4,7 +4,7 @@ import JobView from "@/pages/jobs/JobView"; // Your original component
 import AiJobView from "@/pages/bg-verification/AiJobView"; // The new component
 
 
-const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
+const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c2";
 
 const JobViewRouteHandler = () => {
   const { id } = useParams<{ id: string }>();

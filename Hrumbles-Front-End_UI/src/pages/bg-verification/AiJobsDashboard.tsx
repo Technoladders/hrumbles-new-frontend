@@ -26,7 +26,8 @@ import {
 import { Briefcase, Calendar, CheckCircle, Clock, Plus, Search, Users, Eye, Edit, UserPlus, Trash2, Loader2, ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 
 // Services and Types
-import { getAllJobs, deleteJob, updateJobStatus, updateJob } from "@/services/jobService";
+import { getAllJobs, deleteJob, updateJobStatus, updateJob, createJob } from "@/services/jobService";
+
 import { JobData } from "@/lib/types";
 import { JobFormData } from "@/components/jobs/ai/hooks/useAiJobFormState";
 
@@ -253,7 +254,7 @@ const AiJobsDashboard = () => {
                                                     <TooltipContent><p>View Job</p></TooltipContent>
                                                 </Tooltip>
                                             </TooltipProvider>
-                                            {/* <TooltipProvider>
+                                            <TooltipProvider>
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditJob(job)}>
@@ -262,7 +263,7 @@ const AiJobsDashboard = () => {
                                                     </TooltipTrigger>
                                                     <TooltipContent><p>Edit Job</p></TooltipContent>
                                                 </Tooltip>
-                                            </TooltipProvider> */}
+                                            </TooltipProvider>
                                             <TooltipProvider>
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
@@ -401,7 +402,7 @@ const AiJobsDashboard = () => {
             </div>
 
             <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-                <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+                {/* <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
                     <TabsList className="grid grid-cols-3 w-full sm:w-80">
                         <TabsTrigger value="all">All</TabsTrigger>
                         <TabsTrigger value="internal" className="flex items-center gap-1">
@@ -413,7 +414,7 @@ const AiJobsDashboard = () => {
                             <span>External</span>
                         </TabsTrigger>
                     </TabsList>
-                </Tabs>
+                </Tabs> */}
                 <div className="relative flex-grow">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                     <Input placeholder="Search for jobs..." className="pl-10 h-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />

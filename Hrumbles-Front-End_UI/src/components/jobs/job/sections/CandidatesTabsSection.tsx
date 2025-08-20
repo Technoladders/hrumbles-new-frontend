@@ -33,6 +33,7 @@ interface StatusFilter {
 }
 
 const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
+const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
 
 
 const CandidatesTabsSection = ({ 
@@ -243,7 +244,7 @@ const CandidatesTabsSection = ({
           </Button> */}
   
           {/* Status Settings Button */}
-          {organization_id !== ITECH_ORGANIZATION_ID && (
+          {organization_id !== ITECH_ORGANIZATION_ID || organization_id !== ASCENDION_ORGANIZATION_ID && (
             <Button onClick={() => setShowStatusDialog(true)} size="sm">
               Status Settings
             </Button>

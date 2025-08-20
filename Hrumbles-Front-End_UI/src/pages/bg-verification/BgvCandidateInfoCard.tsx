@@ -53,6 +53,9 @@ export const BgvCandidateInfoCard: React.FC<BgvCandidateInfoCardProps> = ({ cand
     return `${startMonth} ${startYear} - ${endMonth} ${endYear}`;
   };
 
+  console.log(candidate);
+
+
   // Render skills badges
   const renderSkills = () => {
     return (
@@ -169,7 +172,7 @@ export const BgvCandidateInfoCard: React.FC<BgvCandidateInfoCardProps> = ({ cand
           <span>Current Location • {candidate.location || "N/A"}</span>
         </div>
       </div>
-      <div className="space-y-4">
+      {/* <div className="space-y-4">
         <h3 className="text-sm font-medium">Experience</h3>
         {candidate.career_experience?.map((exp, index) => (
           <div key={index} className="flex items-start space-x-2">
@@ -183,7 +186,7 @@ export const BgvCandidateInfoCard: React.FC<BgvCandidateInfoCardProps> = ({ cand
             </div>
           </div>
         ))}
-      </div>
+      </div> */}
       {renderSkills()}
     </div>
   </CardContent>

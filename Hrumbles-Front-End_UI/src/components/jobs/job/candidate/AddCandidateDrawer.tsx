@@ -65,6 +65,8 @@ export type CandidateFormData = {
   pan?: string;
   pf?: string;
   esicNumber?: string;
+   career_experience?: any[] | null;
+  projects?: any[] | null;
 };
 
 // Zod schema for Basic Information tab (excludes skills)
@@ -164,6 +166,8 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
   const user = useSelector((state: any) => state.auth.user);
   const isEditMode = !!candidate;
 
+    const [parsedResumeData, setParsedResumeData] = useState<any | null>(null);
+
   // Use controlled open state if provided, otherwise use internal state
   const controlledOpen = open !== undefined ? open : isOpen;
   const controlledOnOpenChange = onOpenChange || setIsOpen;
@@ -218,6 +222,7 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
     skillsForm.reset();
     proofIdForm.reset();
     setCandidateId(isEditMode ? candidate?.id.toString() : null);
+    setParsedResumeData(null); 
     setActiveTab("basic-info");
     controlledOnOpenChange(false);
   };
@@ -293,6 +298,8 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
         appliedFrom,
         resumeUrl: data.resume,
         createdBy: createdby,
+         career_experience: parsedResumeData?.work_experience || null,
+        projects: parsedResumeData?.projects || null,
         metadata: {
           currentLocation: data.currentLocation,
           preferredLocations: data.preferredLocations,
@@ -330,9 +337,9 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
         toast.success("Basic information updated successfully");
       }
 
-      // Transfer skills to skillsForm for the next tab
-      if (data.skills && data.skills.length > 0) {
-        skillsForm.setValue("skills", data.skills);
+       // MODIFIED: Pass skills from parsed data to the next tab
+      if (parsedResumeData?.skills && parsedResumeData.skills.length > 0) {
+        skillsForm.setValue("skills", parsedResumeData.skills);
       }
 
       setActiveTab("skills-info");
@@ -457,6 +464,7 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
               form={basicInfoForm} 
               onSaveAndNext={(data) => handleSaveBasicInfo(data)}
               onCancel={handleClose}
+              onParseComplete={setParsedResumeData}
             />
           </TabsContent>
           

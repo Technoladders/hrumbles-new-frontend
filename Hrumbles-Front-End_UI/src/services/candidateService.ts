@@ -43,6 +43,8 @@ export interface HrJobCandidate {
     [key: string]: any; // Allow other fields
   } | null;
   skill_ratings: Record<string, any> | Array<{ name: string; rating: number }> | null;
+  career_experience?: any[] | null;
+  projects?: any[] | null;
   applied_from?: string;
   expected_salary: any;
   current_salary: any;
@@ -93,6 +95,8 @@ export interface CandidateData {
     [key: string]: any; // Allow other fields
   };
   skillRatings?: Array<{ name: string; rating: number }>;
+  career_experience?: any[] | null;
+  projects?: any[] | null;
   main_status?: Partial<MainStatus> | null;
   sub_status?: Partial<SubStatus> | null;
   createdBy?: string;
@@ -238,6 +242,8 @@ export const mapCandidateToDbData = (candidate: CandidateData): Partial<HrJobCan
     expected_salary: candidate.expectedSalary || null,
     updated_by: candidate.updatedBy,
     created_by: candidate.createdBy,
+    career_experience: candidate.career_experience || null,
+    projects: candidate.projects || null,
   };
 
   console.log("Mapped dbCandidate:", dbCandidate); // Debug log
@@ -749,6 +755,13 @@ const authData = getAuthDataFromLocalStorage();
 };
 
 export const getAllCandidatesWithVerificationInfo = async () => {
+
+  const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id, userId } = authData;
+
   const { data, error } = await supabase
     .from('hr_job_candidates')
     .select(`
@@ -757,7 +770,7 @@ export const getAllCandidatesWithVerificationInfo = async () => {
       email,
       phone,
       created_at,
-      job:hr_jobs!hr_job_candidates_job_id_fkey (id, title),
+      job:hr_jobs!hr_job_candidates_job_id_fkey(id, title), 
       creator:hr_employees!hr_job_candidates_created_by_fkey (first_name, last_name),
       uanlookups (
        created_at,
@@ -769,7 +782,7 @@ export const getAllCandidatesWithVerificationInfo = async () => {
         )
       )
     `)
-    .not('job', 'is', null)
+    .eq('organization_id', organization_id)
     .order('created_at', { referencedTable: 'uanlookups', ascending: false }); // Sort lookups by date
 
   if (error) {
@@ -783,8 +796,8 @@ export const getAllCandidatesWithVerificationInfo = async () => {
     
     return {
       ...candidate,
-      job_id: candidate.job.id,
-      job_title: candidate.job.title,
+      job_id: candidate.job?.id,
+      job_title: candidate.job?.title,
       latest_verification: latestVerification // Attach the latest record
     };
   });

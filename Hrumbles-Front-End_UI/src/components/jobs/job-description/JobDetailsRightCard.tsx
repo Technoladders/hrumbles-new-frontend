@@ -56,7 +56,7 @@ const JobDetailsRightCard = ({ job }: JobDetailsRightCardProps) => {
         <InfoItem
           icon={<Hourglass className="text-orange-500" />}
           title="Required Experience"
-          value={formatDisplayValue(`${job.experience?.min.years} years to ${job.experience?.max.years} years`)}
+          value={formatDisplayValue(`${job.experience?.min?.years} years to ${job.experience?.max?.years} years`)}
         />
 
         {/* No. of Positions */}

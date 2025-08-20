@@ -1651,6 +1651,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 import moment from 'moment';
 import { getRoundNameFromResult } from "@/utils/statusTransitionHelper";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface CandidatesListProps {
   jobId: string;
@@ -1684,8 +1685,13 @@ const CandidatesList = ({
   const isEmployee = userRole === 'employee';
 
   const ITECH_ORGANIZATION_ID = '1961d419-1272-4371-8dc7-63a4ec71be83';
+  const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
 
+    // ADDED: State for dynamic tabs
+  const [mainStatuses, setMainStatuses] = useState<MainStatus[]>([]);
+  const [areStatusesLoading, setAreStatusesLoading] = useState(true);
 
+console.log('mainStatuses', mainStatuses)
 
   const { data: candidatesData = [], isLoading, refetch } = useQuery({
     queryKey: ["job-candidates", jobId],
@@ -1872,6 +1878,24 @@ const [currentSubStatus, setCurrentSubStatus] = useState<{ id: string; name: str
   const recruitmentStages = ["New", "InReview", "Engaged", "Available", "Offered", "Hired"];
 
   const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://62.72.51.159:5005";
+
+    // ADDED: useEffect to fetch and set dynamic tabs
+  useEffect(() => {
+    const loadStatuses = async () => {
+        try {
+            setAreStatusesLoading(true);
+            const data = await fetchAllStatuses();
+           
+            setMainStatuses(data);
+        } catch (error) {
+            console.error("Error loading statuses:", error);
+            toast.error("Failed to load statuses");
+        } finally {
+            setAreStatusesLoading(false);
+        }
+    };
+    loadStatuses();
+  }, []);
 
 useEffect(() => {
   setFilteredCandidates(candidatesData);
@@ -3107,77 +3131,27 @@ const handleValidateResume = async (candidateId: string) => {
               {getTabCount("All Candidates")}
             </span>
           </TabsTrigger1>
-          <TabsTrigger1 value="Applied" className="relative">
-            Applied
-            <span
-              className={`absolute top-0 right-1 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
-                activeTab === "Applied" ? "bg-white purple-text-color" : "bg-purple text-white"
-              }`}
-            >
-              {getTabCount("Applied")}
-            </span>
-          </TabsTrigger1>
-          <TabsTrigger1 value="New" className="relative">
-            New
-            <span
-              className={`absolute top-0 right-1 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
-                activeTab === "New" ? "bg-white purple-text-color" : "bg-purple text-white"
-              }`}
-            >
-              {getTabCount("New")}
-            </span>
-          </TabsTrigger1>
-          <TabsTrigger1 value="Processed" className="relative">
-            Processed
-            <span
-              className={`absolute top-0 right-1 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
-                activeTab === "Processed"
-                  ? "bg-white purple-text-color"
-                  : "bg-purple text-white"
-              }`}
-            >
-              {getTabCount("Processed")}
-            </span>
-          </TabsTrigger1>
-          <TabsTrigger1 value="Interview" className="relative">
-            Interview
-            <span
-              className={`absolute top-0 right-1 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
-                activeTab === "Interview"
-                  ? "bg-white purple-text-color"
-                  : "bg-purple text-white"
-              }`}
-            >
-              {getTabCount("Interview")}
-            </span>
-          </TabsTrigger1>
-          <TabsTrigger1 value="Offered" className="relative">
-            Offered
-            <span
-              className={`absolute top-0 right-1 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
-                activeTab === "Offered"
-                  ? "bg-white purple-text-color"
-                  : "bg-purple text-white"
-              }`}
-            >
-              {getTabCount("Offered")}
-            </span>
-          </TabsTrigger1>
-          <TabsTrigger1 value="Joined" className="relative">
-            Joined
-            <span
-              className={`absolute top-0 right-1 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
-                activeTab === "Joined"
-                  ? "bg-white purple-text-color"
-                  : "bg-purple text-white"
-              }`}
-            >
-              {getTabCount("Joined")}
-            </span>
-          </TabsTrigger1>
+         
+           {areStatusesLoading ? (
+            Array.from({ length: 5 }).map((_, index) => (
+              <Skeleton key={index} className="h-10 w-full rounded-md" />
+            ))
+          ) : (
+            mainStatuses.map((status) => (
+              <TabsTrigger1 key={status.id} value={status.name} className="relative">
+                {status.name}
+                <span
+                  className={`absolute top-0 right-1 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
+                    activeTab === status.name ? "bg-white purple-text-color" : "bg-purple text-white"
+                  }`}
+                >
+                  {getTabCount(status.name)}
+                </span>
+              </TabsTrigger1>
+            ))
+          )}
         </TabsList1>
       </Tabs>
-
       {filteredCandidates.length === 0 ? (
         <EmptyState onAddCandidate={async () => {
           try {
@@ -3215,7 +3189,7 @@ const handleValidateResume = async (candidateId: string) => {
                 <TableHead className="w-[50px] sm:w-[100px]">
                   Contact Info
                 </TableHead>
-                {organizationId !== ITECH_ORGANIZATION_ID && !isEmployee && <TableHead className="w-[80px] sm:w-[100px]">Profit</TableHead>}
+                {organizationId !== ITECH_ORGANIZATION_ID || organizationId !== ASCENDION_ORGANIZATION_ID && !isEmployee && <TableHead className="w-[80px] sm:w-[100px]">Profit</TableHead>}
                 <TableHead className="w-[120px] sm:w-[150px]">Stage Progress</TableHead>
                 <TableHead className="w-[100px] sm:w-[120px]">Status</TableHead>
                 <TableHead className="w-[80px] sm:w-[100px]">Validate</TableHead>
@@ -3254,7 +3228,7 @@ const handleValidateResume = async (candidateId: string) => {
                     phone={candidate.phone}
                     candidateId={candidate.id}
                   />
-                {organizationId !== ITECH_ORGANIZATION_ID && !isEmployee && (
+                {organizationId !== ITECH_ORGANIZATION_ID || organizationId !== ASCENDION_ORGANIZATION_ID && !isEmployee && (
   <TableCell>
     <span
       className={
@@ -3280,7 +3254,7 @@ const handleValidateResume = async (candidateId: string) => {
                   </TableCell>
                  <TableCell>
                     {/* 3. ADD CONDITIONAL RENDERING LOGIC */}
-                    {organizationId === ITECH_ORGANIZATION_ID ? (
+                    {organizationId === ITECH_ORGANIZATION_ID || organizationId === ASCENDION_ORGANIZATION_ID ? (
                       <ItechStatusSelector
                         value={candidate.sub_status_id || ""}
                         onChange={(value) => handleStatusChange(value, candidate)}

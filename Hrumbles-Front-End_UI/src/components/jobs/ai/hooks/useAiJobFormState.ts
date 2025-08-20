@@ -44,5 +44,5 @@ export const useAiJobFormState = ({ initialAiData }: { initialAiData?: Partial<J
     setFormData(prev => ({ ...prev, [step]: { ...prev[step], ...data } }));
   };
 
-  return { formData, updateFormData };
+  return { formData, updateFormData, setFormData };
 };

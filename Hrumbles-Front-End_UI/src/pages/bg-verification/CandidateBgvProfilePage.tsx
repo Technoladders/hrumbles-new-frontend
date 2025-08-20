@@ -11,6 +11,7 @@ import { CardContent } from '@/components/ui/card';
 import { BgvCandidateInfoCard } from './BgvCandidateInfoCard';
 import { BgvVerificationSection } from './BgvVerificationSection';
 import { BgvTimelineCard } from './cards/BgvTimelineCard';
+import CandidateExperienceCard from './cards/CandidateExperienceCard'; 
 import { ResumeAnalysisSection } from '@/components/MagicLinkView/ResumeAnalysisSection';
 import { ResumePreviewSection } from '@/components/MagicLinkView/ResumePreviewSection';
 
@@ -65,9 +66,9 @@ const CandidateBgvProfilePage = () => {
   // Set default tab based on resumeAnalysis presence
   useEffect(() => {
     if (!isResumeAnalysisLoading) {
-      setActiveTab(resumeAnalysis ? 'resume-analysis' : 'bg-verification');
+      setActiveTab(candidate.resume_url ? 'bg-verification' : 'resume' );
     }
-  }, [isResumeAnalysisLoading, resumeAnalysis]);
+  }, [isResumeAnalysisLoading, candidate?.resume_url]);
 
   if (isCandidateLoading || isResumeAnalysisLoading || isJobLoading) {
     return <div className="flex justify-center items-center h-[80vh]"><Loader /></div>;
@@ -87,8 +88,7 @@ const CandidateBgvProfilePage = () => {
   console.log('candidateprofilee', candidate)
 
 
-  const availableTabs = [
-    resumeAnalysis && 'resume-analysis',
+ const availableTabs = [
     'bg-verification',
     candidate.resume_url && 'resume',
   ].filter(Boolean) as string[];
@@ -109,8 +109,8 @@ const CandidateBgvProfilePage = () => {
         <div className="lg:col-span-3">
           <BgvCandidateInfoCard candidate={candidate} />
         </div>
-        <div className="lg:col-span-2">
-          <BgvTimelineCard candidateId={candidate.id} />
+       <div className="lg:col-span-2">
+          <CandidateExperienceCard candidate={candidate} /> {/* Replaced BgvTimelineCard */}
         </div>
       </div>
 
@@ -123,24 +123,12 @@ const CandidateBgvProfilePage = () => {
               value={tab}
               className="flex-1 min-w-[100px] text-xs sm:text-sm sm:min-w-[120px]"
             >
-              {tab === 'resume-analysis' && 'Resume Analysis'}
               {tab === 'bg-verification' && 'Background Verification'}
               {tab === 'resume' && 'Resume'}
             </TabsTrigger>
           ))}
         </TabsList>
-
-        <TabsContent value="resume-analysis">
-          <CardContent>
-            {resumeAnalysis ? (
-              <ResumeAnalysisSection resumeAnalysis={resumeAnalysis} />
-            ) : (
-              <p className="text-sm text-gray-600 mt-4">No resume analysis available.</p>
-            )}
-          </CardContent>
-        </TabsContent>
-
-        <TabsContent value="bg-verification">
+<TabsContent value="bg-verification">
           <CardContent>
             <BgvVerificationSection candidate={candidate} />
           </CardContent>

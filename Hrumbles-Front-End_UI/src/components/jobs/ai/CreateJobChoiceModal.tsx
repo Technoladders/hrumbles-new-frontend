@@ -37,7 +37,7 @@ export const CreateJobChoiceModal = ({ isOpen, onClose, onModeSelect }: Props) =
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-6">
             <Button variant="outline" className="h-36 flex flex-col gap-3" onClick={() => setView('ai_paste')}>
               <Wand2 className="h-10 w-10 text-purple-500" />
-              <span className="font-semibold text-base">Fetch with AI</span>
+              <span className="font-semibold text-base">Create with JD</span>
             </Button>
             <Button variant="outline" className="h-36 flex flex-col gap-3" onClick={() => onModeSelect('manual')}>
               <Edit className="h-10 w-10 text-blue-500" />
