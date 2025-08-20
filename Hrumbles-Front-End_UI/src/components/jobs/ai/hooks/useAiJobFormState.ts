@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { deepMerge } from '@/lib/utils'; // You'll need a deep merge utility
+import { deepMerge } from '@/lib/utils';
 
-// Define the shape of your form data
+// MODIFIED: This interface now EXACTLY matches the props of your step components.
 export interface JobFormData {
   jobInformation: {
     hiringMode: string;
@@ -23,16 +23,31 @@ export interface JobFormData {
   };
 }
 
+// MODIFIED: The default state now matches the corrected interface.
 const defaultState: JobFormData = {
-  jobInformation: { hiringMode: 'Full Time', jobId: '', jobTitle: '', numberOfCandidates: 1, jobLocation: [], noticePeriod: '' },
-  experienceSkills: { minimumYear: 0, minimumMonth: 0, maximumYear: 0, maximumMonth: 0, skills: [] },
-  jobDescription: { description: '' },
+  jobInformation: {
+    hiringMode: 'Full Time',
+    jobId: '',
+    jobTitle: '',
+    numberOfCandidates: 1,
+    jobLocation: [],
+    noticePeriod: 'Immediate',
+  },
+  experienceSkills: {
+    minimumYear: 0,
+    minimumMonth: 0,
+    maximumYear: 0,
+    maximumMonth: 0,
+    skills: [],
+  },
+  jobDescription: {
+    description: '',
+  },
 };
 
 export const useAiJobFormState = ({ initialAiData }: { initialAiData?: Partial<JobFormData> | null }) => {
   const getInitialState = (): JobFormData => {
     if (initialAiData) {
-      // Deep merge will intelligently combine the AI data with the default structure
       return deepMerge(defaultState, initialAiData);
     }
     return defaultState;
@@ -44,5 +59,6 @@ export const useAiJobFormState = ({ initialAiData }: { initialAiData?: Partial<J
     setFormData(prev => ({ ...prev, [step]: { ...prev[step], ...data } }));
   };
 
+  // This is correct and remains the same.
   return { formData, updateFormData, setFormData };
 };

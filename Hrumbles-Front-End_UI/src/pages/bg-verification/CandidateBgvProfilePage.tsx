@@ -64,13 +64,21 @@ const CandidateBgvProfilePage = () => {
   });
 
   // Set default tab based on resumeAnalysis presence
-  useEffect(() => {
-    if (!isResumeAnalysisLoading) {
-      setActiveTab(candidate.resume_url ? 'bg-verification' : 'resume' );
+   useEffect(() => {
+    // Only proceed if the candidate object actually exists.
+    if (candidate) {
+      // If there's no resume_url, default to the 'resume' tab, otherwise stick to verification.
+      // This is safer and covers more cases.
+      if (!candidate.resume_url) {
+        setActiveTab('resume');
+      } else {
+        setActiveTab('bg-verification');
+      }
     }
-  }, [isResumeAnalysisLoading, candidate?.resume_url]);
+  }, [candidate]); // The dependency is now just the candidate object itself.
 
-  if (isCandidateLoading || isResumeAnalysisLoading || isJobLoading) {
+  // The loading check now correctly protects all subsequent code from running with undefined data.
+  if (isCandidateLoading || (candidate?.job_id && isJobLoading)) {
     return <div className="flex justify-center items-center h-[80vh]"><Loader /></div>;
   }
 
@@ -85,13 +93,12 @@ const CandidateBgvProfilePage = () => {
     );
   }
 
-  console.log('candidateprofilee', candidate)
-
-
- const availableTabs = [
+  // This logic is now safe because it runs after the loading and error guards.
+  const availableTabs = [
     'bg-verification',
     candidate.resume_url && 'resume',
   ].filter(Boolean) as string[];
+
 
   return (
     <div className="p-4 md:p-6 space-y-6">

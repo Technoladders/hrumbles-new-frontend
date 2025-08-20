@@ -1,15 +1,11 @@
-// src/components/jobs/ai/steps/AiJobDescriptionStep.tsx
-
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { JobFormData } from '../hooks/useAiJobFormState';
 
-interface JobDescriptionData {
-  description: string;
-}
-
+// MODIFIED: Use the standardized interface
 interface AiJobDescriptionStepProps {
-  data: JobDescriptionData;
-  onChange: (data: Partial<JobDescriptionData>) => void;
+  data: JobFormData['jobDescription'];
+  onChange: (data: Partial<JobFormData['jobDescription']>) => void;
 }
 
 const AiJobDescriptionStep = ({ data, onChange }: AiJobDescriptionStepProps) => {

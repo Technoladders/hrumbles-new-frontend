@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'; // Import useEffect
 import { Button } from "@/components/ui/button";
 import { JobData } from "@/lib/types";
 import { useAiJobFormState, JobFormData } from "./hooks/useAiJobFormState";
-import { mapFormDataToJobData, validateStep } from "./utils/aiJobFormUtils";
+import { mapFormDataToJobData, mapJobDataToFormData, validateStep } from "./utils/aiJobFormUtils";
 import StepperNavigation from "../job/StepperNavigation";
 import AiStepRenderer from "./AiStepRenderer";
 import { useSelector } from "react-redux";
@@ -16,36 +16,7 @@ interface Props {
 }
 
 // ADDED: Utility function to map DB data to form data
-const mapJobDataToFormData = (job: JobData): JobFormData => {
-    // Helper to safely convert experience from JSON to a single number
-    const getExperienceInYears = (exp: any, type: 'min' | 'max') => {
-        if (!exp) return 0;
-        const years = type === 'min' ? exp.minimumYear || 0 : exp.maximumYear || 0;
-        const months = type === 'min' ? exp.minimumMonth || 0 : exp.maximumMonth || 0;
-        return parseFloat((years + months / 12).toFixed(2));
-    };
 
-    return {
-        jobInformation: {
-            jobTitle: job.title || '',
-            locations: job.location || [],
-            employmentType: job.service_type || 'Permanent',
-            hiringMode: job.hiring_mode || 'Full Time',
-        },
-        experienceSkills: {
-            minExperience: getExperienceInYears(job.experience, 'min'),
-            maxExperience: getExperienceInYears(job.experience, 'max'),
-            skills: job.skills || [],
-            budget: job.budget || 0,
-            currency: job.currency_type || 'INR',
-            noticePeriod: job.notice_period || 'Immediate',
-            candidatesRequired: job.number_of_candidates || 1,
-        },
-        jobDescription: {
-            description: job.description || '',
-        },
-    };
-};
 
 export const AiJobStepperForm = ({ onClose, onSave, initialAiData, editJob }: Props) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -60,6 +31,7 @@ export const AiJobStepperForm = ({ onClose, onSave, initialAiData, editJob }: Pr
   // ADDED: useEffect to populate form when editJob is provided
   useEffect(() => {
     if (editJob) {
+      // This line uses the new mapping function and will now work correctly
       const mappedData = mapJobDataToFormData(editJob);
       setFormData(mappedData);
     }
