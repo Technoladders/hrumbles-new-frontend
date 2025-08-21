@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { CandidateSearchResult } from '@/pages/candidates/ZiveXSearchPage'; // Assuming this is now in types folder
+import { CandidateSearchResult } from '@/types/candidateSearch'; // Assuming this is now in types folder
 import { Briefcase, GraduationCap, MapPin, IndianRupee } from 'lucide-react';
 
 interface CandidateSearchResultsProps {

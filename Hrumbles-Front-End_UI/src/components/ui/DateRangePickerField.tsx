@@ -58,7 +58,8 @@ export const DateRangePickerField: React.FC<DateRangePickerFieldProps> = ({
               !dateRange?.startDate && 'text-muted-foreground'
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4" />
+            <CalendarIcon className="mr-2 h-4 w-4 text-white" />
+
             {dateRange?.startDate ? (
               dateRange.endDate ? (
                 <>
@@ -69,7 +70,8 @@ export const DateRangePickerField: React.FC<DateRangePickerFieldProps> = ({
                 format(dateRange.startDate, 'LLL dd, y')
               )
             ) : (
-              <span>Pick a date range</span>
+              <span className="text-white">Pick a date range</span>
+
             )}
           </Button>
         </PopoverTrigger>

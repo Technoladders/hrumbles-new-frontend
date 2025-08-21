@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useMemo } from "react";
+// Goal: Import useSearchParams to manage state in the URL
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Briefcase,
   Calendar,
@@ -80,9 +81,12 @@ import moment from "moment";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/jobs/ui/avatar";
 import { fetchEmployeesByIds } from "@/services/jobs/supabaseQueries";
 import Loader from "@/components/ui/Loader";
+// Goal: Import the new DateRangePickerField component
+import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
 
 const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
 
+// ... (AvatarGroup component remains unchanged)
 const AvatarGroup = ({
   children,
   limit = 3,
@@ -133,11 +137,26 @@ const AvatarGroup = ({
   );
 };
 
+
 const Jobs = () => {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  // Goal: Initialize searchParams to manage state in the URL
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Goal: Initialize state from URL search parameters, providing defaults
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("search") || "");
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "all");
+  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get("page") || "1", 10));
+  const [itemsPerPage, setItemsPerPage] = useState(parseInt(searchParams.get("limit") || "20", 10));
+  
+  // Goal: Add state for the new client and date range filters, initialized from URL
+  const [selectedClient, setSelectedClient] = useState(searchParams.get("client") || "all");
+  const [dateRange, setDateRange] = useState({
+    startDate: searchParams.get("startDate") ? new Date(searchParams.get("startDate")!) : null,
+    endDate: searchParams.get("endDate") ? new Date(searchParams.get("endDate")!) : null,
+    key: "selection",
+  });
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
   const [selectedJob, setSelectedJob] = useState<JobData | null>(null);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [editJob, setEditJob] = useState<JobData | null>(null);
@@ -146,20 +165,38 @@ const Jobs = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState<JobData | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("all");
   const [statusUpdateLoading, setStatusUpdateLoading] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [associateModalOpen, setAssociateModalOpen] = useState(false);
   const [clientselectedJob, setClientSelectedJob] = useState<JobData | null>(null);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const user = useSelector((state: any) => state.auth.user);
   const userRole = useSelector((state: any) => state.auth.role);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
+  // Goal: Get the list of clients from the Redux store
+  const clients = useSelector((state: any) => state.clients.clients);
 
   const isEmployee = userRole === "employee" && user?.id !== "0fa0aa1b-9cb3-482f-b679-5bd8fa355a6e";
 
+  // Goal: This effect syncs the component's state with the URL's query parameters.
+  // When any filter, search term, or page number changes, the URL is updated.
+  // This ensures that the state is preserved on navigation.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (searchTerm) params.set("search", searchTerm);
+    if (activeTab !== "all") params.set("tab", activeTab);
+    if (currentPage !== 1) params.set("page", currentPage.toString());
+    if (itemsPerPage !== 10) params.set("limit", itemsPerPage.toString());
+    if (selectedClient !== "all") params.set("client", selectedClient);
+    if (dateRange.startDate) params.set("startDate", dateRange.startDate.toISOString());
+    if (dateRange.endDate) params.set("endDate", dateRange.endDate.toISOString());
+
+    // Use replace: true to avoid polluting browser history with every filter change
+    setSearchParams(params, { replace: true });
+  }, [searchTerm, activeTab, currentPage, itemsPerPage, selectedClient, dateRange, setSearchParams]);
+
+
+  // ... (useEffect for loading jobs remains unchanged)
   useEffect(() => {
     const loadJobs = async () => {
       try {
@@ -175,7 +212,6 @@ const Jobs = () => {
         }
 
         setMockJobs(jobs);
-        setCurrentPage(1);
       } catch (error) {
         console.error("Failed to load jobs:", error);
         toast.error("Failed to load jobs. Please try again.");
@@ -186,6 +222,7 @@ const Jobs = () => {
 
     loadJobs();
   }, [activeTab, organization_id]);
+
 
   const {
     data: jobs = [],
@@ -202,6 +239,17 @@ const Jobs = () => {
     },
   });
 
+  const clientList = useMemo(() => {
+    if (!jobs || jobs.length === 0) return [];
+    
+    const clientNames = jobs
+      .map(job => job.clientOwner)
+      .filter(clientName => clientName && clientName !== "Internal HR"); // Filter out nulls/unwanted values
+
+    // Use a Set to get unique names and then convert back to an array and sort
+    return Array.from(new Set(clientNames)).sort();
+  }, [jobs]); // This list will only recalculate when the 'jobs' data changes
+
   useEffect(() => {
     if (error) {
       toast.error("Failed to fetch jobs");
@@ -209,16 +257,33 @@ const Jobs = () => {
     }
   }, [error]);
 
+  // Goal: Update filtering logic to include date range and client filters.
   const filteredJobs = jobs.filter((job) => {
     const matchesSearch =
       job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       job.jobId.toLowerCase().includes(searchTerm.toLowerCase());
 
-    if (organization_id === ITECH_ORGANIZATION_ID || activeTab === "all") return matchesSearch;
-    if (activeTab === "internal") return matchesSearch && job.jobType === "Internal";
-    if (activeTab === "external") return matchesSearch && job.jobType === "External";
+    // Date range filter logic
+    const matchesDate = (() => {
+      if (!dateRange.startDate || !dateRange.endDate) return true;
+      const jobDate = moment(job.createdAt);
+      // Set end of day for the end date to include all jobs on that day
+      const endDate = moment(dateRange.endDate).endOf('day');
+      return jobDate.isBetween(dateRange.startDate, endDate, undefined, '[]');
+    })();
 
-    return matchesSearch;
+    // Client filter logic
+    const matchesClient =
+      selectedClient === "all" || job.clientOwner === selectedClient;
+
+    const matchesTab = (() => {
+        if (organization_id === ITECH_ORGANIZATION_ID || activeTab === "all") return true;
+        if (activeTab === "internal") return job.jobType === "Internal";
+        if (activeTab === "external") return job.jobType === "External";
+        return true;
+    })();
+
+    return matchesSearch && matchesDate && matchesClient && matchesTab;
   });
 
   const totalPages = Math.ceil(filteredJobs.length / itemsPerPage);
@@ -233,7 +298,9 @@ const Jobs = () => {
   const activeJobs = filteredJobs.filter((job) => job.status === "Active" || job.status === "OPEN").length;
   const pendingJobs = filteredJobs.filter((job) => job.status === "Pending" || job.status === "HOLD").length;
   const completedJobs = filteredJobs.filter((job) => job.status === "Completed" || job.status === "CLOSE").length;
-
+  
+  // ... (All handler functions and other logic remain unchanged down to the main return statement)
+  
   const daysSinceCreated = (createdDate: string) => {
     return moment(createdDate).fromNow();
   };
@@ -416,8 +483,8 @@ const Jobs = () => {
 
     return content || <span className="text-gray-400 text-sm">Loading...</span>;
   };
-
-  const renderTable = (jobs: JobData[]) => {
+  
+    const renderTable = (jobs: JobData[]) => {
     if (jobs.length === 0) {
       return (
         <div className="text-center p-12 text-gray-500">
@@ -670,8 +737,8 @@ const Jobs = () => {
       </div>
     );
   };
-
-  const renderPagination = () => {
+  
+    const renderPagination = () => {
     return (
       <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
         <div className="flex items-center gap-2">
@@ -732,6 +799,7 @@ const Jobs = () => {
     );
   };
 
+
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -748,7 +816,8 @@ const Jobs = () => {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+       {/* ... (Stat cards section remains unchanged) */}
+       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="stat-card animate-slide-up" style={{ animationDelay: "0ms" }}>
           <div className="flex items-start justify-between">
             <div>
@@ -802,18 +871,18 @@ const Jobs = () => {
         </Card>
       </div>
 
+
+      {/* Goal: This is the updated filter section */}
       <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
         {!isEmployee && organization_id !== ITECH_ORGANIZATION_ID && (
           <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid grid-cols-3 w-full sm:w-80">
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="internal" className="flex items-center gap-1">
-                <Briefcase size={14} />
-                <span>Internal</span>
+                <Briefcase size={14} /> <span>Internal</span>
               </TabsTrigger>
               <TabsTrigger value="external" className="flex items-center gap-1">
-                <Users size={14} />
-                <span>External</span>
+                <Users size={14} /> <span>External</span>
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -825,37 +894,48 @@ const Jobs = () => {
             placeholder="Search for jobs..."
             className="pl-10 h-10"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1); // Reset to first page on search
+            }}
           />
         </div>
 
         {!isEmployee && (
-          <Dialog>
-            <DialogTrigger asChild>
-              {/* <Button variant="outline" className="flex items-center gap-2">
-                <Filter size={16} />
-                <span>Filters</span>
-              </Button> */}
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Filter Jobs</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                {/* Filter options remain unchanged */}
-              </div>
-              <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setFilters({})}>
-                  Reset Filters
-                </Button>
-                <Button type="submit">Apply Filters</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+            <DateRangePickerField
+              dateRange={dateRange as any}
+              onDateRangeChange={(range) => setDateRange(range as any)}
+              onApply={() => setCurrentPage(1)} // Reset to first page on filter change
+            />
         )}
+
+        {/* Goal: Add Client Filter Dropdown */}
+        {!isEmployee && (
+           <Select value={selectedClient} onValueChange={(value) => {
+                setSelectedClient(value);
+                setCurrentPage(1);
+            }}>
+                <SelectTrigger className="w-full md:w-[200px]">
+                    <SelectValue placeholder="Filter by Client" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Clients</SelectItem>
+                    {/* Map over the new, derived clientList */}
+                    {clientList.map((clientName) => (
+                        <SelectItem key={clientName} value={clientName}>
+                            {clientName}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        )}
+
+        {/* Goal: Add Date Range Filter */}
+        
       </div>
 
-      {!isEmployee ? (
+       {/* ... (The rest of the component remains the same) */}
+       {!isEmployee ? (
         organization_id === ITECH_ORGANIZATION_ID ? (
           <div className="space-y-6">
             {renderTable(paginatedJobs)}
@@ -936,6 +1016,7 @@ const Jobs = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
     </div>
   );
 };

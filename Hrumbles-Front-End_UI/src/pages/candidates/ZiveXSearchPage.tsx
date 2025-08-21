@@ -11,23 +11,26 @@ const ZiveXSearchPage: FC = () => {
 // In ZiveXSearchPage.tsx
 // In ZiveXSearchPage.tsx
 // In ZiveXSearchPage.tsx
-const handleSearch = (filters: SearchFilters) => {
+const handleSearch = (newFilters: SearchFilters) => {
     const params = new URLSearchParams();
-    if (filters.keywords.length > 0) params.append('keywords', filters.keywords.join(','));
-    if (filters.locations.length > 0) params.append('locations', filters.locations.join(','));
-    if (filters.min_exp) params.append('min_exp', filters.min_exp.toString());
-    if (filters.max_exp) params.append('max_exp', filters.max_exp.toString());
-    if (filters.min_salary) params.append('min_salary', filters.min_salary.toString());
-    if (filters.max_salary) params.append('max_salary', filters.max_salary.toString());
-    if (filters.gender !== 'All candidates') params.append('gender', filters.gender);
-    if (filters.notice_period !== 'Any') params.append('notice_period', filters.notice_period);
-    if (filters.companies.length > 0) params.append('companies', filters.companies.join(','));
-    if (filters.educations.length > 0) params.append('educations', filters.educations.join(','));
+    if (newFilters.keywords.length > 0) params.append('keywords', newFilters.keywords.join(','));
+    if (newFilters.locations.length > 0) params.append('locations', newFilters.locations.join(','));
+    if (newFilters.min_exp) params.append('min_exp', newFilters.min_exp.toString());
+    if (newFilters.max_exp) params.append('max_exp', newFilters.max_exp.toString());
+    if (newFilters.min_salary) params.append('min_salary', newFilters.min_salary.toString());
+    if (newFilters.max_salary) params.append('max_salary', newFilters.max_salary.toString());
     
-    navigate(`/zive-x-search/results?${params.toString()}`);
+    // BUG FIX: Add the missing parameters
+    if (newFilters.gender !== 'All candidates') params.append('gender', newFilters.gender);
+    if (newFilters.notice_period !== 'Any') params.append('notice_period', newFilters.notice_period);
+    if (newFilters.companies.length > 0) params.append('companies', newFilters.companies.join(','));
+    if (newFilters.educations.length > 0) params.append('educations', newFilters.educations.join(','));
+    
+    // Use navigate with replace: true to avoid breaking the back button history
+    navigate(`/zive-x-search/results?${params.toString()}`, { replace: true });
 };
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto">
+    <div className="p-4 md:p-8 max-w-8xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Search Candidates</h1>
         <p className="text-gray-500 mt-1">Find the perfect candidate from your unified talent pool.</p>

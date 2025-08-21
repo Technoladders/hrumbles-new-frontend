@@ -88,6 +88,8 @@ const AscendionOrgSuperAdminMenu = [
         icon: FaUserShield, // Using the same icon for consistency
         items: [
             { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+  { icon: MdOutlineManageAccounts, label: "User Management", path: "/user-management" },
+
         ],
     },
     {

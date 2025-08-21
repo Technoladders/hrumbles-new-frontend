@@ -48,17 +48,30 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({ onSearch, isS
           <label className="text-sm font-medium">Keywords</label>
           <Input placeholder="Skills, designation, company..." value={keywords} onChange={e => setKeywords(e.target.value)} />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div><label className="text-sm font-medium">Min Experience</label><Input type="number" placeholder="Years" value={minExp} onChange={e => setMinExp(e.target.value)} /></div>
-          <div><label className="text-sm font-medium">Max Experience</label><Input type="number" placeholder="Years" value={maxExp} onChange={e => setMaxExp(e.target.value)} /></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="minExp" className="text-sm font-medium">Min Experience</label>
+            <Input id="minExp" type="number" placeholder="Years" value={minExp} onChange={e => setMinExp(e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="maxExp" className="text-sm font-medium">Max Experience</label>
+            <Input id="maxExp" type="number" placeholder="Years" value={maxExp} onChange={e => setMaxExp(e.target.value)} />
+          </div>
         </div>
         <div>
-          <label className="text-sm font-medium">Current location of candidate</label>
-          <Input placeholder="Add locations, comma separated" value={locations} onChange={e => setLocations(e.target.value)} />
+          <label htmlFor="locations" className="text-sm font-medium">Current location of candidate</label>
+          <Input id="locations" placeholder="Add locations, comma separated" value={locations} onChange={e => setLocations(e.target.value)} />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div><label className="text-sm font-medium">Min Salary (Lacs)</label><Input type="number" placeholder="e.g., 5" value={minSalary} onChange={e => setMinSalary(e.target.value)} /></div>
-          <div><label className="text-sm font-medium">Max Salary (Lacs)</label><Input type="number" placeholder="e.g., 15" value={maxSalary} onChange={e => setMaxSalary(e.target.value)} /></div>
+        {/* RESPONSIVE CHANGE HERE */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="minSalary" className="text-sm font-medium">Min Salary (Lacs)</label>
+            <Input id="minSalary" type="number" placeholder="e.g., 5" value={minSalary} onChange={e => setMinSalary(e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="maxSalary" className="text-sm font-medium">Max Salary (Lacs)</label>
+            <Input id="maxSalary" type="number" placeholder="e.g., 15" value={maxSalary} onChange={e => setMaxSalary(e.target.value)} />
+          </div>
         </div>
       </div>
 

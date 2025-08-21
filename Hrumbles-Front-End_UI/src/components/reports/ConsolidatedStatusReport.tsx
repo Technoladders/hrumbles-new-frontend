@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { DateRangePickerField } from './DateRangePickerField';
+import { DateRangePickerField } from '@/components/ui/DateRangePickerField';
 import { format, isValid } from 'date-fns';
 import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, Calendar, ChevronLeft, ChevronRight, Sigma, ArrowUp, Activity, TrendingUp, CheckCircle, Tag, Building, User } from 'lucide-react';
 import {
@@ -130,6 +130,11 @@ const ConsolidatedStatusReport: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+    const [dateRange, setDateRange] = useState({
+    startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)),
+    endDate: new Date(),
+    key: 'selection',
+  });
 
   // --- Data Fetching ---
   useEffect(() => {
@@ -150,8 +155,8 @@ const ConsolidatedStatusReport: React.FC = () => {
             `
             )
             .eq('organization_id', organizationId)
-            .gte('created_at', appliedDateRange.startDate.toISOString())
-            .lte('created_at', appliedDateRange.endDate.toISOString())
+            .gte('created_at', dateRange.startDate.toISOString())
+            .lte('created_at', dateRange.endDate.toISOString())
             .order('created_at', { ascending: false }),
           supabase.from('job_statuses').select('id, name').eq('organization_id', organizationId),
         ]);
@@ -195,7 +200,7 @@ const ConsolidatedStatusReport: React.FC = () => {
       }
     };
     fetchData();
-  }, [organizationId, appliedDateRange]);
+  }, [organizationId, dateRange]);
 
   // --- Memoized Data Transformations ---
   const filteredCandidates = useMemo(() => {
@@ -522,12 +527,11 @@ const ConsolidatedStatusReport: React.FC = () => {
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 items-center">
               <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <DateRangePickerField
-                  dateRange={draftDateRange}
-                  onDateRangeChange={setDraftDateRange}
-                  className="pl-10 h-10 w-full"
-                />
+                dateRange={dateRange as any} // Pass the single dateRange state
+                onDateRangeChange={setDateRange} // This updates the state when "Apply" is clicked
+                onApply={() => setCurrentPage(1)} // Reset page on apply
+              />
               </div>
               <Select value={statusFilter} onValueChange={onFilterChange(setStatusFilter)}>
                 <SelectTrigger>
@@ -573,13 +577,13 @@ const ConsolidatedStatusReport: React.FC = () => {
               </Select>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
-              <Button
+              {/* <Button
                 onClick={handleApplyFilters}
                 className="w-full sm:w-auto flex-shrink-0 bg-indigo-600 hover:bg-indigo-700"
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
                 Apply Filters
-              </Button>
+              </Button> */}
               <div className="relative flex-grow w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <Input
