@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -107,6 +108,18 @@ const formatDate = (date: string) => {
   return isValid(parsedDate) ? format(parsedDate, 'MMM d, yyyy') : date;
 };
 
+const getScoreBadgeClass = (score: number | null | undefined): string => {
+  if (score == null) {
+    return 'bg-gray-100 text-gray-800'; // Default for N/A
+  }
+  if (score > 80) {
+    return 'bg-green-100 text-green-800'; // Green
+  }
+  if (score > 50) {
+    return 'bg-amber-100 text-amber-800'; // Orange/Amber
+  }
+  return 'bg-red-100 text-red-800'; // Red
+};
 // --- Main Component ---
 const ConsolidatedStatusReport: React.FC = () => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
@@ -150,6 +163,7 @@ const ConsolidatedStatusReport: React.FC = () => {
               `
               id, name, created_at, updated_at, main_status_id, sub_status_id,
               current_salary, expected_salary, location, notice_period, overall_score,
+              job_id,
               job:hr_jobs!hr_job_candidates_job_id_fkey(title, client_details),
               recruiter:hr_employees!hr_job_candidates_created_by_fkey(first_name, last_name)
             `
@@ -166,6 +180,7 @@ const ConsolidatedStatusReport: React.FC = () => {
         
         const formattedCandidates: Candidate[] = candidatesResponse.data.map((c: any) => ({
           id: c.id,
+           job_id: c.job_id,
           name: c.name,
           created_at: c.created_at,
           updated_at: c.updated_at,
@@ -659,15 +674,26 @@ const ConsolidatedStatusReport: React.FC = () => {
                         return (
                           <TableRow key={candidate!.id} className="hover:bg-gray-50 transition">
                             <TableCell className="sticky left-0 bg-white z-10 font-medium text-gray-800 px-4 py-2">
-                              {candidate!.name}
+                               <Link
+              to={`/employee/${candidate!.id}/${candidate!.job_id}`}
+              className="text-indigo-600 hover:underline hover:text-indigo-800"
+            >
+              {candidate!.name}
+            </Link>
                             </TableCell>
                             <TableCell className="text-gray-600 px-4 py-2">{statusName}</TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">
-                              <Badge variant={candidate!.overall_score && candidate!.overall_score > 75 ? "default" : "secondary"}>
-                                {formatValue(candidate!.overall_score)}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.job_title)}</TableCell>
+                          <TableCell className="text-gray-600 px-4 py-2">
+            {/* CHANGE: Updated Badge to use the color helper function */}
+            <Badge className={getScoreBadgeClass(candidate!.overall_score)}>
+              {formatValue(candidate!.overall_score)}
+            </Badge>
+          </TableCell>
+                            <TableCell className="text-gray-600 px-4 py-2"><Link
+              to={`/jobs/${candidate!.job_id}`}
+              className="text-indigo-600 hover:underline hover:text-indigo-800"
+            >
+              {formatValue(candidate!.job_title)}
+            </Link></TableCell>
                             <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.client_name)}</TableCell>
                             <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.recruiter_name)}</TableCell>
                             <TableCell className="text-gray-600 px-4 py-2">{formatDate(candidate!.created_at)}</TableCell>

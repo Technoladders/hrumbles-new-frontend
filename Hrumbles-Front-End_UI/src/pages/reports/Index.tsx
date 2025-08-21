@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useSelector } from "react-redux";
 import { Building2, Users, UserCheck, Clock, Contact, Building, BarChart2, FileText, Users2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,8 +23,28 @@ import CompaniesStatusReport from '@/components/reports/CompaniesStatusReport';
 const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
 
 const ReportIndex: React.FC = () => {
-  const [selectedReportType, setSelectedReportType] = useState<ReportType | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Initialize state directly from the URL's 'type' parameter.
+  const [selectedReportType, setSelectedReportType] = useState<ReportType | null>(
+    () => searchParams.get('type') as ReportType | null
+  );
+
   const organizationId = useSelector((state: any) => state.auth.organization_id);
+
+    useEffect(() => {
+    setSelectedReportType(searchParams.get('type') as ReportType | null);
+  }, [searchParams]);
+
+   const handleSelectReport = (reportType: ReportType) => {
+    setSelectedReportType(reportType);
+    setSearchParams({ type: reportType });
+  };
+
+  const handleGoBack = () => {
+    setSelectedReportType(null);
+    setSearchParams({}); // This clears the URL search parameters
+  };
 
   const renderReportContent = () => {
     if (!selectedReportType) return null;
@@ -71,7 +92,7 @@ const ReportIndex: React.FC = () => {
           {organizationId === ITECH_ORGANIZATION_ID ? (
             // Show only Consolidated Status Report card for ITECH users
             <Card
-              onClick={() => setSelectedReportType('consolidated_status')}
+              onClick={() => handleSelectReport('consolidated_status')}
               className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
             >
               <CardHeader className="bg-red-50">
@@ -171,7 +192,7 @@ const ReportIndex: React.FC = () => {
               </Card>
 
               <Card
-                onClick={() => setSelectedReportType('consolidated_status')}
+                 onClick={() => handleSelectReport('consolidated_status')}
                 className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up"
               >
                 <CardHeader className="bg-red-50">
