@@ -1,136 +1,158 @@
-import React, { useState, useEffect } from 'react';
-// We no longer need useLocation, so it's removed from the import.
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
+// src/pages/SetPassword.tsx
 
-const SetPassword = () => {
-  const [password, setPassword] = React.useState('');
-  const [error, setError] = React.useState<string | null>(null);
-  const [message, setMessage] = React.useState<string | null>(null);
-  const [isSessionSet, setIsSessionSet] = React.useState(false);
-  const navigate = useNavigate();
-  // const location = useLocation(); // <- This line is removed.
-  const { toast } = useToast();
+import React, { useState, useEffect, FC, FormEvent } from 'react';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { supabase } from "@/integrations/supabase/client"; // Ensure this path is correct
 
-  React.useEffect(() => {
-    const setAuthSession = async () => {
-      try {
-        // --- THIS IS THE FIX ---
-        // Read the hash directly from the browser's window object
-        // to avoid race conditions with the React Router.
-        const hash = window.location.hash;
-        const params = new URLSearchParams(hash.substring(1));
-        // --- END OF FIX ---
-        
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        
-        const errorDescription = params.get('error_description');
-        if (errorDescription) {
-          // Replace '+' with spaces for a clean message
-          const decodedError = errorDescription.replace(/\+/g, ' ');
-          throw new Error(`Link Invalid: ${decodedError}`);
-        }
+type AuthStatus = 'checking' | 'authenticated' | 'error';
 
-        if (!accessToken) {
-          throw new Error('Invalid or missing verification token. Please check the link or request a new one.');
-        }
+const SetPasswordPage: FC = () => {
+    const navigate = useNavigate();
+    const [password, setPassword] = useState<string>('');
+    const [confirmPassword, setConfirmPassword] = useState<string>('');
+    const [loading, setLoading] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+    const [message, setMessage] = useState<string | null>(null);
+    const [authStatus, setAuthStatus] = useState<AuthStatus>('checking');
 
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken || '',
+    // This effect runs on component mount to verify the magic link
+    useEffect(() => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            // This event fires when the Supabase client detects the password recovery token in the URL
+            if (event === 'PASSWORD_RECOVERY' && session) {
+                setAuthStatus('authenticated');
+            }
         });
 
-        if (sessionError) {
-          throw new Error('Failed to authenticate: ' + sessionError.message);
-        }
-        
-        setIsSessionSet(true);
+        // If the event doesn't fire after a short delay, the link is likely invalid or expired.
+        const timer = setTimeout(() => {
+            if (authStatus === 'checking') {
+                setAuthStatus('error');
+                setError("Invalid or expired link. Please request a new one.");
+            }
+        }, 3000); // 3-second timeout
 
-      } catch (err: any) {
-        const errorMessage = err.message || 'Failed to authenticate. Please try again or request a new verification email.';
-        setError(errorMessage);
-        toast({
-          title: 'Authentication Error',
-          description: errorMessage,
-          variant: 'destructive',
-        });
-      }
+        // Cleanup subscription on component unmount
+        return () => {
+            subscription.unsubscribe();
+            clearTimeout(timer);
+        };
+    }, [authStatus]); // Rerun if authStatus changes (though it shouldn't after the first load)
+
+    const handleSetPassword = async (e: FormEvent) => {
+        e.preventDefault();
+        setError(null);
+        setMessage(null);
+
+        // --- Client-side validation ---
+        if (password.length < 6) {
+            setError("Password must be at least 6 characters long.");
+            return;
+        }
+        if (password !== confirmPassword) {
+            setError("Passwords do not match.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            // The user is already in a temporary session, so we can update their details
+            const { error: updateError } = await supabase.auth.updateUser({
+                password: password,
+            });
+
+            if (updateError) throw updateError;
+            
+            setMessage("Your password has been updated successfully!");
+            
+            // Redirect to login after a short delay
+            setTimeout(() => {
+                navigate('/login');
+            }, 2000);
+
+        } catch (err: any) {
+            setError(err.message || 'An unexpected error occurred.');
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    // Render different content based on the authentication status
+    const renderContent = () => {
+        switch (authStatus) {
+            case 'checking':
+                return <p className="text-center text-gray-600">Verifying your link...</p>;
+            
+            case 'error':
+                return (
+                    <div className="text-center">
+                        <p className="text-red-600 mb-4">{error}</p>
+                        <RouterLink to="/login" className="font-medium text-gray-800 hover:text-gray-900 underline">
+                            Go to Login
+                        </RouterLink>
+                    </div>
+                );
+
+            case 'authenticated':
+                return (
+                    <form onSubmit={handleSetPassword} className="space-y-6">
+                        <div>
+                            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                                New Password
+                            </label>
+                            <input
+                                id="password"
+                                type="password"
+                                placeholder="••••••••"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                className="w-full h-12 px-4 rounded-lg border border-gray-300 focus:border-gray-800 focus:ring-1 focus:ring-gray-800"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1">
+                                Confirm New Password
+                            </label>
+                            <input
+                                id="confirm-password"
+                                type="password"
+                                placeholder="••••••••"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                required
+                                className="w-full h-12 px-4 rounded-lg border border-gray-300 focus:border-gray-800 focus:ring-1 focus:ring-gray-800"
+                            />
+                        </div>
+
+                        {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+                        {message && <p className="text-sm text-green-600 text-center">{message}</p>}
+
+                        <button
+                            type="submit"
+                            disabled={loading || !!message} // Disable after success
+                            className="w-full flex justify-center items-center h-12 px-6 border rounded-lg text-white bg-gray-900 hover:bg-gray-800 disabled:bg-gray-400"
+                        >
+                            {loading ? 'Saving...' : 'Set New Password'}
+                        </button>
+                    </form>
+                );
+        }
     };
 
-    setAuthSession();
-    // The dependency array is updated because `location.hash` is no longer used.
-    // The hook will now run only once when the component mounts.
-  }, [toast]);
-
-  const handleSetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setMessage(null);
-
-    if (!isSessionSet) {
-      setError('Authentication session is not yet ready. Please wait a moment.');
-      return;
-    }
-    
-    try {
-      if (password.length < 6) {
-        throw new Error('Password must be at least 6 characters long.');
-      }
-
-      const { error: updateError } = await supabase.auth.updateUser({ password });
-      if (updateError) {
-        throw updateError;
-      }
-
-      setMessage('Password set successfully! Redirecting to login...');
-      toast({
-        title: 'Success',
-        description: 'Password set successfully.',
-      });
-      setTimeout(() => navigate('/login'), 2000);
-    } catch (err: any) {
-      let errorMessage = err.message || 'Failed to set password.';
-      if (err.message.includes('Auth session missing')) {
-        errorMessage = 'Authentication session expired or invalid. Please request a new verification email.';
-      }
-      setError(errorMessage);
-      toast({
-        title: 'Error',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    }
-  };
-
-  return (
-    <div className="max-w-md mx-auto mt-10">
-      <h2 className="text-2xl font-bold mb-4">Set Your Password</h2>
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-      {message && <p className="text-green-500 mb-4">{message}</p>}
-      <form onSubmit={handleSetPassword} className="space-y-4">
-        <div>
-          <Label htmlFor="password">Password</Label>
-          <Input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-            disabled={!isSessionSet}
-          />
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+            <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-md">
+                <div className="text-center mb-8">
+                    <h1 className="text-3xl font-bold text-gray-900">Set Your Password</h1>
+                    <p className="text-gray-500 mt-2">
+                        {authStatus === 'authenticated' ? 'Please choose a secure new password.' : ''}
+                    </p>
+                </div>
+                {renderContent()}
+            </div>
         </div>
-        <Button type="submit" disabled={!isSessionSet || !password || password.length < 6}>
-          Set Password
-        </Button>
-      </form>
-    </div>
-  );
+    );
 };
 
-export default SetPassword;
+export default SetPasswordPage;

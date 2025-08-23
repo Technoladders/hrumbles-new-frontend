@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import {
   Dialog,
   DialogContent,
@@ -47,6 +48,8 @@ const ManagerAssignmentDialog: React.FC<ManagerAssignmentDialogProps> = ({
   onSuccess
 }) => {
   const [managers, setManagers] = useState<Employee[]>([]);
+    const organizationId = useSelector((state: any) => state.auth.organization_id);
+
   const [selectedManagerId, setSelectedManagerId] = useState<string>('none');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -77,6 +80,7 @@ const ManagerAssignmentDialog: React.FC<ManagerAssignmentDialogProps> = ({
           profile_picture_url,
           department:hr_departments(name)
         `)
+        .eq('organization_id', organizationId)
         .eq('status', 'active')
         .neq('id', employee.id)
         .order('first_name');

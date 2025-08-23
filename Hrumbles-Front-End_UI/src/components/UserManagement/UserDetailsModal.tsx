@@ -177,7 +177,7 @@ const UserDetailsModal = ({ user, isOpen, onClose, onUpdate }: UserDetailsModalP
                   <span className="text-sm text-muted-foreground">{user.email}</span>
                 </DialogDescription>
               </div>
-              <div className="flex gap-2">
+              {/* <div className="flex gap-2">
                 {!isEditing ? (
                   <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
                     <Edit className="h-4 w-4 mr-1" />
@@ -194,11 +194,11 @@ const UserDetailsModal = ({ user, isOpen, onClose, onUpdate }: UserDetailsModalP
                     </Button>
                   </div>
                 )}
-              </div>
+              </div> */}
             </div>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Personal Information</CardTitle>
@@ -321,7 +321,7 @@ const UserDetailsModal = ({ user, isOpen, onClose, onUpdate }: UserDetailsModalP
                 )}
               </CardContent>
             </Card>
-          </div>
+          </div> */}
           {/* Reporting Structure Section */}
           <Card>
             <CardHeader>
@@ -371,7 +371,7 @@ const UserDetailsModal = ({ user, isOpen, onClose, onUpdate }: UserDetailsModalP
               </div>
             </CardContent>
           </Card>
-          <div className="space-y-4">
+          {/* <div className="space-y-4">
             <div className="space-y-3">
               <Label className="text-base font-semibold">Role & Permissions</Label>
               <div className="space-y-2">
@@ -399,7 +399,7 @@ const UserDetailsModal = ({ user, isOpen, onClose, onUpdate }: UserDetailsModalP
                 </p>
               </div>
             </div>
-          </div>
+          </div> */}
 
           <DialogFooter>
             <Button variant="outline" onClick={onClose}>

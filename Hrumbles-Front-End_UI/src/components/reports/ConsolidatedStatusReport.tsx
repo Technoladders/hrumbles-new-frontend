@@ -292,6 +292,8 @@ const ConsolidatedStatusReport: React.FC = () => {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedData = tableRows.slice(startIndex, startIndex + itemsPerPage);
 
+  console.log(paginatedData)
+
   // --- Export Functions ---
   const exportToCSV = () => {
     const dataForExport = filteredCandidates.map(c => ({

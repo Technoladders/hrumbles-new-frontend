@@ -9,14 +9,14 @@ import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
 
 interface DateRange {
-  startDate: Date;
-  endDate: Date;
+  startDate: Date | null;
+  endDate: Date | null;
   key: string;
 }
 
 interface DateRangePickerFieldProps {
-  dateRange: DateRange;
-  onDateRangeChange: (range: DateRange) => void;
+  dateRange: DateRange | null;
+  onDateRangeChange: (range: DateRange | null) => void;
   onApply: () => void;
   className?: string;
 }
@@ -30,9 +30,9 @@ export const DateRangePickerField: React.FC<DateRangePickerFieldProps> = ({
   const [open, setOpen] = useState(false);
   const [tempRange, setTempRange] = useState<DateRange[]>([
     {
-      startDate: dateRange.startDate,
-      endDate: dateRange.endDate,
-      key: dateRange.key || 'selection',
+      startDate: dateRange?.startDate || null,
+      endDate: dateRange?.endDate || null,
+      key: dateRange?.key || 'selection',
     },
   ]);
 
@@ -41,7 +41,14 @@ export const DateRangePickerField: React.FC<DateRangePickerFieldProps> = ({
   };
 
   const handleApply = () => {
-    onDateRangeChange(tempRange[0]);
+    onDateRangeChange(tempRange[0].startDate && tempRange[0].endDate ? tempRange[0] : null);
+    onApply();
+    setOpen(false);
+  };
+
+  const handleClear = () => {
+    setTempRange([{ startDate: null, endDate: null, key: 'selection' }]);
+    onDateRangeChange(null);
     onApply();
     setOpen(false);
   };
@@ -59,19 +66,13 @@ export const DateRangePickerField: React.FC<DateRangePickerFieldProps> = ({
             )}
           >
             <CalendarIcon className="mr-2 h-4 w-4 text-white" />
-
-            {dateRange?.startDate ? (
-              dateRange.endDate ? (
-                <>
-                  {format(dateRange.startDate, 'LLL dd, y')} -{' '}
-                  {format(dateRange.endDate, 'LLL dd, y')}
-                </>
-              ) : (
-                format(dateRange.startDate, 'LLL dd, y')
-              )
+            {dateRange?.startDate && dateRange?.endDate ? (
+              <>
+                {format(dateRange.startDate, 'LLL dd, y')} -{' '}
+                {format(dateRange.endDate, 'LLL dd, y')}
+              </>
             ) : (
               <span className="text-white">Pick a date range</span>
-
             )}
           </Button>
         </PopoverTrigger>
@@ -85,7 +86,8 @@ export const DateRangePickerField: React.FC<DateRangePickerFieldProps> = ({
               ranges={tempRange}
               direction="horizontal"
             />
-            <div className="p-3 border-t border-gray-200 flex justify-end">
+            <div className="p-3 border-t border-gray-200 flex justify-end gap-2">
+              <Button variant="outline" onClick={handleClear}>Clear</Button>
               <Button onClick={handleApply}>Apply</Button>
             </div>
           </div>

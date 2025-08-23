@@ -18,16 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { 
-  Users, 
-  UserPlus, 
-  Search, 
-  Filter,
-  MoreHorizontal,
-  Shield,
-  Clock,
-  Building
-} from "lucide-react";
+import { Users, UserPlus, Search, Shield, Clock, Building, Edit, Eye, Trash2, UserRoundPen } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,9 +27,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import AddUserModal from './AddUserModal';
+import EditUserModal from './EditUserModal';
 import UserDetailsModal from './UserDetailsModal';
 import BulkActionsBar from './BulkActionsBar';
 import { useSelector } from 'react-redux';
@@ -66,6 +60,9 @@ const UserManagementDashboard = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+      const [showEditModal, setShowEditModal] = useState(false);
+    const [editingUser, setEditingUser] = useState<Employee | null>(null);
+  
   const [selectedUser, setSelectedUser] = useState<Employee | null>(null);
   const [stats, setStats] = useState({
     total: 0,
@@ -75,10 +72,57 @@ const UserManagementDashboard = () => {
   });
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchEmployees();
-  }, []);
+     const roleDisplayNameMap: { [key: string]: string } = {
+        organization_superadmin: 'Super Admin',
+        admin: 'Admin',
+        employee: 'User',
+    };
 
+useEffect(() => {
+        // MODIFICATION: The entire fetch function is replaced
+        const fetchEmployees = async () => {
+            if (!organizationId) {
+                setEmployees([]);
+                setLoading(false);
+                return;
+            }
+            try {
+                setLoading(true);
+                
+                // Call the PostgreSQL function using rpc()
+                const { data, error } = await supabase
+                    .rpc('get_employees_with_details', {
+                        org_id: organizationId
+                    });
+
+                if (error) throw error;
+
+                // The data is already flat, so mapping is simpler
+                const formattedEmployees = data.map(emp => ({
+                    ...emp,
+                    status: (emp.status || 'active') as 'active' | 'inactive' | 'terminated',
+                    role_display_name: roleDisplayNameMap[emp.role_name] || emp.role_name,
+                })) || [];
+
+                setEmployees(formattedEmployees);
+                setStats({
+                    total: formattedEmployees.length,
+                    active: formattedEmployees.filter(e => e.status === 'active').length,
+                    inactive: formattedEmployees.filter(e => e.status === 'inactive').length,
+                    terminated: formattedEmployees.filter(e => e.status === 'terminated').length,
+                });
+
+            } catch (error: any) {
+                toast({ title: "Error", description: `Failed to fetch employees: ${error.message}`, variant: "destructive" });
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchEmployees();
+    }, [organizationId, toast]);
+
+  console.log('employees', employees)
   const fetchEmployees = async () => {
     try {
       setLoading(true);
@@ -191,6 +235,19 @@ const UserManagementDashboard = () => {
     );
   };
 
+     const handleEditClick = (employee: Employee) => {
+        setEditingUser(employee);
+        setShowEditModal(true);
+    };
+
+    const getStatusSelectClass = (status: string) => {
+        switch (status) {
+            case 'active': return "bg-green-100 text-green-800 border-green-200 hover:bg-green-200";
+            case 'inactive': return "bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200";
+            case 'terminated': return "bg-red-100 text-red-800 border-red-200 hover:bg-red-200";
+            default: return "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200";
+        }
+    };
   const handleSelectAll = () => {
     setSelectedUsers(
       selectedUsers.length === filteredEmployees.length 
@@ -329,13 +386,13 @@ const UserManagementDashboard = () => {
                   <TableHead>Department</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Login</TableHead>
-                  <TableHead className="w-10"></TableHead>
+                  <TableHead className="w-10">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredEmployees.map((employee) => (
-                  <TableRow key={employee.id}>
-                    <TableCell>
+                  {filteredEmployees.map((employee) => (
+                    <TableRow key={employee.id}>
+                     <TableCell>
                       <input
                         type="checkbox"
                         checked={selectedUsers.includes(employee.id)}
@@ -343,57 +400,63 @@ const UserManagementDashboard = () => {
                         className="rounded"
                       />
                     </TableCell>
-                    <TableCell className="font-medium">
-                      {employee.first_name} {employee.last_name}
-                    </TableCell>
-                    <TableCell>{employee.email}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {employee.role_name || 'No Role'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{employee.department_name || '-'}</TableCell>
-                    <TableCell>{getStatusBadge(employee.status)}</TableCell>
-                    <TableCell>
-                      {employee.last_login 
-                        ? new Date(employee.last_login).toLocaleDateString()
-                        : 'Never'
-                      }
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => setSelectedUser(employee)}>
-                            View Details
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          {employee.status === 'active' ? (
-                            <DropdownMenuItem onClick={() => handleStatusChange(employee.id, 'inactive')}>
-                              Deactivate
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem onClick={() => handleStatusChange(employee.id, 'active')}>
-                              Activate
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem 
-                            onClick={() => handleStatusChange(employee.id, 'terminated')}
-                            className="text-red-600"
-                          >
-                            Terminate
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
+                      <TableCell className="font-medium">{employee.first_name} {employee.last_name}</TableCell>
+                      <TableCell>{employee.email}</TableCell>
+                      <TableCell><Badge variant="outline">{employee.role_display_name}</Badge></TableCell>
+                      <TableCell>{employee.department_name || '-'}</TableCell>
+                      <TableCell>
+                        <Select value={employee.status} onValueChange={(newStatus) => handleStatusChange(employee.id, newStatus)}>
+                          <SelectTrigger className={`h-8 w-[110px] text-xs font-semibold ${getStatusSelectClass(employee.status)}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent align="end">
+                            <SelectItem value="active">Active</SelectItem>
+                            <SelectItem value="inactive">Inactive</SelectItem>
+                            <SelectItem value="terminated">Terminated</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+          <TableCell>
+  {employee.last_login
+    ? new Date(employee.last_login).toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true, // use 12-hour format (AM/PM), remove if you want 24-hour
+      })
+    : "Never"}
+</TableCell>
+
+
+                      <TableCell>
+                        <TooltipProvider delayDuration={100}>
+                          <div className="flex items-center justify-center gap-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedUser(employee)}>
+                                  <UserRoundPen className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent><p>View Details</p></TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditClick(employee)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent><p>Edit User</p></TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TooltipProvider>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
             </Table>
           </div>
 
@@ -423,6 +486,21 @@ const UserManagementDashboard = () => {
           onUpdate={fetchEmployees}
         />
       )}
+       {editingUser && (
+                <EditUserModal
+                    isOpen={showEditModal}
+                    onClose={() => {
+                        setShowEditModal(false);
+                        setEditingUser(null);
+                    }}
+                    onSuccess={() => {
+                        fetchEmployees();
+                        setShowEditModal(false);
+                        setEditingUser(null);
+                    }}
+                    user={editingUser}
+                />
+            )}
     </div>
   );
 };

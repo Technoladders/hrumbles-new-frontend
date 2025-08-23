@@ -37,6 +37,7 @@ import Index from "./pages/Index";
 // Password change
 import PasswordChange from "./pages/ChangeEmployeePassword";
 import SetPassword from "./pages/SetPassword"
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 
 // import EmployeeProfile from "./pages/EmployeeProfile";
 import ProfilePageEmployee from "./pages/ProfilePageEmployee";
@@ -48,6 +49,9 @@ import GoalView from "./pages/goals/EmployeeView";
 import GoalDetail from "./pages/goals/GoalDetail";
 import EmployeeGoalView from "./components/goals/employee/EmployeeGoalDashboard"
 import GoalDetailView from "./components/goals/dashboard/GoalDetailView";
+
+// New CLients
+import ClientNew from "./pages/ClientNew/page";
 
 // Jobs
 import Jobs from "./pages/jobs/Jobs";
@@ -160,6 +164,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
                  <Route path="/set-password" element={<SetPassword />} />
+                  <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
                
 
@@ -227,7 +232,7 @@ function App() {
 
                         {/* Client Dashboard (New) */}
                         <Route path="/clients" element={<ClientManagementDashboard />} />
-            <Route path="/client-dashboard/:clientName/candidates" element={<ClientCandidatesView />} />
+            <Route path="/client-dashboard/:clientName/candidates" element={<ClientNew />} />
             <Route path="/client-metrics" element={<ClientMetricsDashboard />} />
 
             {/* Goals */}

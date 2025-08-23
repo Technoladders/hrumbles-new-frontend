@@ -26,6 +26,7 @@ interface UserDetails {
   role: string | null;
   departmentName: string | null;
   organizationId: string | null;
+  status: string | null;
 }
 
 /*
@@ -102,7 +103,7 @@ const LoginPage: FC = () => {
     try {
       const { data: employeeData, error: employeeError } = await supabase
         .from("hr_employees")
-        .select("role_id, department_id, organization_id")
+        .select("role_id, department_id, organization_id, status")
         .eq("id", userId)
         .single();
 
@@ -133,11 +134,12 @@ const LoginPage: FC = () => {
         role: roleName,
         departmentName: departmentName,
         organizationId: employeeData.organization_id,
+        status: employeeData.status,
       };
 
     } catch (error: any) {
       console.error("Error in fetchUserDetails:", error.message);
-      return { role: null, departmentName: null, organizationId: null };
+      return { role: null, departmentName: null, organizationId: null, status: null };
     }
   };
 
@@ -171,19 +173,26 @@ const LoginPage: FC = () => {
       console.log("[4] ✅ User authenticated successfully:", user);
 
       console.log("[5] Fetching employee details for user ID:", user.id);
-      const { role, departmentName, organizationId: userOrgId } = await fetchUserDetails(user.id);
-      console.log("[6] ✅ Fetched employee details:", { role, departmentName, userOrgId });
+      const { role, departmentName, organizationId: userOrgId, status } = await fetchUserDetails(user.id);
+      console.log("[6] ✅ Fetched employee details:", { role, departmentName, userOrgId, status });
+
+      // MODIFICATION: Add the new status check
+    console.log(`[7] Verifying user status: "${status}"`);
+    if (status !== 'active') {
+      throw new Error("Your account is not active. Please contact your administrator.");
+    }
+    console.log("[8] ✅ User status is active.");
       
       if (!userOrgId) {
         throw new Error("Could not determine the user's organization. Please contact support.");
       }
 
-      console.log(`[7] Comparing Org IDs -> User's Org ID: "${userOrgId}" vs Subdomain's Org ID: "${subdomainOrgId}"`);
+      console.log(`[9] Comparing Org IDs -> User's Org ID: "${userOrgId}" vs Subdomain's Org ID: "${subdomainOrgId}"`);
       if (userOrgId !== subdomainOrgId) {
         throw new Error("Access Denied. Please log in from your organization's assigned domain.");
       }
       
-      console.log("[8] ✅ Organization Match Verified. Proceeding to login.");
+      console.log("[10] ✅ Organization Match Verified. Proceeding to login.");
 
       await dispatch(fetchUserSession()).unwrap();
 
@@ -316,7 +325,7 @@ const LoginPage: FC = () => {
 
             <p
               className="text-center text-sm text-gray-600 cursor-pointer hover:text-gray-900 underline"
-              onClick={(e: MouseEvent<HTMLParagraphElement>) => navigate('#')}
+              onClick={() => navigate('/forgot-password')}
             >
               Forgot password?
             </p>

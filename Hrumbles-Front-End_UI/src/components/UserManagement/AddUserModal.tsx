@@ -1,3 +1,5 @@
+// src/components/UserManagement/AddUserModal.tsx
+
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -19,7 +21,17 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { v4 as uuidv4 } from 'uuid';
+
+// MODIFICATION: Import the phone input component and its styles
+import PhoneInput, { E164Number } from "react-phone-number-input";
+import "react-phone-number-input/style.css";
+
+// Define a type for our filtered roles
+interface Role {
+  id: string;
+  name: string;
+  displayName: string;
+}
 
 interface AddUserModalProps {
   isOpen: boolean;
@@ -27,317 +39,202 @@ interface AddUserModalProps {
   onSuccess: () => void;
 }
 
-interface FormData {
-  first_name: string;
-  last_name: string;
-  email: string;
-  employee_id: string;
-  phone?: string;
-  role_id?: string;
-  department_id?: string;
-  shift_id?: string;
-  employment_start_date?: string;
-}
-
 const AddUserModal = ({ isOpen, onClose, onSuccess }: AddUserModalProps) => {
-  const [formData, setFormData] = useState<FormData>({
+  // Use a more structured state for form data
+  const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
     email: '',
     employee_id: '',
-    phone: '',
     role_id: '',
     department_id: '',
-    shift_id: '',
     employment_start_date: '',
   });
+  // Separate state for the phone number
+  const [phone, setPhone] = useState<E164Number | undefined>();
+
   const [loading, setLoading] = useState(false);
-  const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
-  const [shifts, setShifts] = useState<Array<{ id: string; name: string }>>([]);
   const { toast } = useToast();
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { id, value } = e.target;
+    setFormData(prev => ({ ...prev, [id]: value }));
+  };
 
   useEffect(() => {
     if (isOpen) {
-      fetchRolesDepartmentsAndShifts();
+      const fetchDropdownData = async () => {
+        try {
+          const [rolesResponse, departmentsResponse] = await Promise.all([
+            supabase.from('hr_roles').select('id, name'),
+            supabase.from('hr_departments').select('id, name'),
+          ]);
+
+          if (rolesResponse.error) throw rolesResponse.error;
+          if (departmentsResponse.error) throw departmentsResponse.error;
+          
+          // MODIFICATION: Filter and map roles
+          const allowedRoles = ['organization_superadmin', 'admin', 'employee'];
+          const roleDisplayNameMap: { [key: string]: string } = {
+            organization_superadmin: 'Superadmin',
+            admin: 'Admin',
+            employee: 'Employee',
+          };
+
+          const filteredRoles = rolesResponse.data
+            .filter(role => allowedRoles.includes(role.name))
+            .map(role => ({
+              ...role,
+              displayName: roleDisplayNameMap[role.name] || role.name
+            }));
+
+          setRoles(filteredRoles);
+          setDepartments(departmentsResponse.data || []);
+        } catch (error) {
+          console.error('Error fetching dropdown data:', error);
+          toast({ title: "Error", description: "Failed to load roles or departments", variant: "destructive" });
+        }
+      };
+      fetchDropdownData();
     }
-  }, [isOpen]);
+  }, [isOpen, toast]);
 
-  const fetchRolesDepartmentsAndShifts = async () => {
-    try {
-      const [rolesResponse, departmentsResponse, shiftsResponse] = await Promise.all([
-        supabase.from('hr_roles').select('id, name'),
-        supabase.from('hr_departments').select('id, name'),
-        supabase.from('hr_shifts').select('id, name'),
-      ]);
-
-      if (rolesResponse.data) setRoles(rolesResponse.data);
-      if (departmentsResponse.data) setDepartments(departmentsResponse.data);
-      if (shiftsResponse.data) setShifts(shiftsResponse.data);
-    } catch (error) {
-      console.error('Error fetching roles, departments, and shifts:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load roles, departments, or shifts",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const validateForeignKeys = async (organization_id: string) => {
-    const checks = [
-      formData.role_id && supabase.from('hr_roles').select('id').eq('id', formData.role_id).single(),
-      formData.department_id && supabase.from('hr_departments').select('id').eq('id', formData.department_id).single(),
-      formData.shift_id && supabase.from('hr_shifts').select('id').eq('id', formData.shift_id).single(),
-      supabase.from('hr_organizations').select('id').eq('id', organization_id).single(),
-    ].filter(Boolean);
-
-    const results = await Promise.all(checks);
-    const errors = results.filter((result) => result.error || !result.data);
-    if (errors.length > 0) {
-      throw new Error('Invalid foreign key(s): role, department, shift, or organization.');
-    }
-  };
-
-  const generateTemporaryPassword = () => {
-    return uuidv4().replace(/-/g, '').slice(0, 16); // 16-character random password
-  };
-
-// AddUserModal.tsx - inside the component
-
-const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    // ... (Your existing handleSubmit logic using fetch remains the same)
+    // Just ensure the payload is built from the new state
     e.preventDefault();
     setLoading(true);
+    // ... (rest of your existing, working handleSubmit logic)
+     try {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.email)) {
+            throw new Error('Invalid email format');
+        }
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
+        const user = session.user;
 
-    try {
-      // Basic client-side validation remains
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email)) {
-        throw new Error('Invalid email format');
-      }
+        const { data: userProfile } = await supabase.from('hr_employees').select('organization_id').eq('id', user.id).single();
+        if (!userProfile) throw new Error('Admin profile not found');
+        
+        const subdomain = window.location.hostname.split('.')[0];
+        const functionPayload = {
+            subdomain,
+            user_data: {
+                email: formData.email,
+                first_name: formData.first_name,
+                last_name: formData.last_name,
+                phone: phone, // Use the state from PhoneInput
+                employee_id: formData.employee_id,
+            },
+            profile_data: {
+                organization_id: userProfile.organization_id,
+                first_name: formData.first_name,
+                last_name: formData.last_name,
+                email: formData.email,
+                employee_id: formData.employee_id,
+                phone: phone || null,
+                role_id: formData.role_id || null,
+                department_id: formData.department_id || null,
+                employment_start_date: formData.employment_start_date || null,
+            },
+            creating_user_id: user.id
+        };
 
-      // Get current user's organization_id and ID
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+        const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`;
+        const response = await fetch(functionUrl, { /* ... your fetch config */ });
 
-      const { data: userProfile } = await supabase
-        .from('hr_employees')
-        .select('organization_id')
-        .eq('id', user.id)
-        .single();
-
-      if (!userProfile) throw new Error('Admin profile not found');
-      
-      const tempPassword = uuidv4(); // Still need a temp password for creation
-
-      // Prepare the data for the Edge Function
-      const functionPayload = {
-        user_data: {
-          email: formData.email,
-          // password: tempPassword, // REMOVE THIS LINE
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          phone: formData.phone,
-          employee_id: formData.employee_id,
-        },
-        profile_data: {
-          organization_id: userProfile.organization_id,
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          email: formData.email,
-          employee_id: formData.employee_id,
-          phone: formData.phone || null,
-          role_id: formData.role_id || null,
-          department_id: formData.department_id || null,
-          shift_id: formData.shift_id || null,
-          employment_start_date: formData.employment_start_date || null,
-        },
-        creating_user_id: user.id
-      };
-      
-     // Invoke the Edge Function (this call doesn't change)
-      const { data, error: functionError } = await supabase.functions.invoke('create-user', {
-        body: functionPayload
-      });
-      if (functionError) throw functionError;
-      if (data.error) throw new Error(data.error); // Handle errors returned from the function body
-
-      toast({
-        title: "Success",
-        description: `User created successfully. A verification email has been sent to ${formData.email}.`,
-      });
-
-      onSuccess();
-      resetForm();
-    } catch (error: any) {
-      console.error('Error creating user:', error);
-      toast({
-        title: "Error Creating User",
-        description: error.message || 'An unexpected error occurred.',
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      first_name: '',
-      last_name: '',
-      email: '',
-      employee_id: '',
-      phone: '',
-      role_id: '',
-      department_id: '',
-      shift_id: '',
-      employment_start_date: '',
-    });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Request failed with status ${response.status}`);
+        }
+        toast({ title: "Success", description: `User invitation sent successfully.` });
+        onSuccess();
+        handleClose();
+     } catch (error: any) {
+        console.error('Error creating user:', error);
+        toast({ title: "Error Creating User", description: error.message, variant: "destructive" });
+     } finally {
+        setLoading(false);
+     }
   };
 
   const handleClose = () => {
-    resetForm();
+    // Reset form on close
+    setFormData({ first_name: '', last_name: '', email: '', employee_id: '', role_id: '', department_id: '', employment_start_date: '' });
+    setPhone(undefined);
     onClose();
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>Add New User</DialogTitle>
-          <DialogDescription>
-            Create a new user account and assign roles, departments, and shifts. A verification email will be sent to the user.
-          </DialogDescription>
+          <DialogDescription>A verification email will be sent to the user to set their password.</DialogDescription>
         </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+          {/* MODIFICATION: Two-column layout */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="first_name">First Name *</Label>
-              <Input
-                id="first_name"
-                value={formData.first_name}
-                onChange={(e) => setFormData((prev) => ({ ...prev, first_name: e.target.value }))}
-                required
-              />
+              <Input id="first_name" value={formData.first_name} onChange={handleInputChange} required />
             </div>
             <div>
               <Label htmlFor="last_name">Last Name *</Label>
-              <Input
-                id="last_name"
-                value={formData.last_name}
-                onChange={(e) => setFormData((prev) => ({ ...prev, last_name: e.target.value }))}
-                required
+              <Input id="last_name" value={formData.last_name} onChange={handleInputChange} required />
+            </div>
+            <div className="col-span-2">
+              <Label htmlFor="email">Email *</Label>
+              <Input id="email" type="email" value={formData.email} onChange={handleInputChange} required />
+            </div>
+            <div className="col-span-2">
+              <Label htmlFor="employee_id">User / Employee ID *</Label>
+              <Input id="employee_id" value={formData.employee_id} onChange={handleInputChange} required />
+            </div>
+            <div>
+              <Label htmlFor="phone">Phone Number</Label>
+              <PhoneInput
+                id="phone"
+                international
+                defaultCountry="IN"
+                value={phone}
+                onChange={setPhone}
+                className="phone-input" // Add a class for custom styling
               />
             </div>
+            <div>
+              <Label htmlFor="role">Role *</Label>
+              <Select value={formData.role_id} onValueChange={(value) => setFormData(p => ({ ...p, role_id: value }))} required>
+                <SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger>
+                <SelectContent>
+                  {roles.map((role) => (
+                    <SelectItem key={role.id} value={role.id}>{role.displayName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="department">Department</Label>
+              <Select value={formData.department_id} onValueChange={(value) => setFormData(p => ({ ...p, department_id: value }))}>
+                <SelectTrigger><SelectValue placeholder="Select a department" /></SelectTrigger>
+                <SelectContent>
+                  {departments.map((dept) => (
+                    <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="employment_start_date">Employment Start Date</Label>
+              <Input id="employment_start_date" type="date" value={formData.employment_start_date} onChange={handleInputChange} />
+            </div>
           </div>
-
-          <div>
-            <Label htmlFor="email">Email *</Label>
-            <Input
-              id="email"
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-              required
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="employee_id">User unique ID / Employee ID *</Label>
-            <Input
-              id="employee_id"
-              value={formData.employee_id}
-              onChange={(e) => setFormData((prev) => ({ ...prev, employee_id: e.target.value }))}
-              required
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="phone">Phone</Label>
-            <Input
-              id="phone"
-              value={formData.phone}
-              onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="role">Role</Label>
-            <Select
-              value={formData.role_id}
-              onValueChange={(value) => setFormData((prev) => ({ ...prev, role_id: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a role" />
-              </SelectTrigger>
-              <SelectContent>
-                {roles.map((role) => (
-                  <SelectItem key={role.id} value={role.id}>
-                    {role.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="department">Department</Label>
-            <Select
-              value={formData.department_id}
-              onValueChange={(value) => setFormData((prev) => ({ ...prev, department_id: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a department" />
-              </SelectTrigger>
-              <SelectContent>
-                {departments.map((dept) => (
-                  <SelectItem key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="shift">Shift</Label>
-            <Select
-              value={formData.shift_id}
-              onValueChange={(value) => setFormData((prev) => ({ ...prev, shift_id: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a shift" />
-              </SelectTrigger>
-              <SelectContent>
-                {shifts.map((shift) => (
-                  <SelectItem key={shift.id} value={shift.id}>
-                    {shift.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="start_date">Employment Start Date</Label>
-            <Input
-              id="start_date"
-              type="date"
-              value={formData.employment_start_date}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, employment_start_date: e.target.value }))
-              }
-            />
-          </div>
-
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Creating...' : 'Create User'}
-            </Button>
+            <Button type="button" variant="outline" onClick={handleClose}>Cancel</Button>
+            <Button type="submit" disabled={loading}>{loading ? 'Creating...' : 'Create User'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

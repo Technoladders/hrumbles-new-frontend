@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react"; // --- CHANGED: Added useMemo
 import { useParams, useNavigate, Link } from "react-router-dom";
 import supabase from "../../config/supabaseClient";
 import {
@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
-import { ArrowLeft, Search, TrendingUp, ChevronLeft, ChevronRight, ArrowUpDown, Loader2, Plus, Briefcase, Calendar, Clock, DollarSign, UserRoundCheck, UserRoundX, ReceiptIndianRupee } from "lucide-react";
+import { ArrowLeft, Search, TrendingUp, ChevronLeft, ChevronRight, ArrowUpDown, Loader2, Plus, Briefcase, Calendar, Clock, DollarSign, UserRoundCheck, UserRoundX, ReceiptIndianRupee, Users } from "lucide-react"; // --- ADDED: Users icon
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import HiddenContactCell from "@/components/ui/HiddenContactCell";
 import { format } from "date-fns";
@@ -32,6 +32,10 @@ import {
 import { useSelector } from "react-redux";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, PieChart, Pie } from "recharts";
 
+// --- ADDED: New components for UI enhancements
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 
 // Status IDs for Offered and Joined candidates
 const OFFERED_STATUS_ID = "9d48d0f9-8312-4f60-aaa4-bafdce067417";
@@ -43,6 +47,12 @@ const JOINED_SUB_STATUS_ID = "c9716374-3477-4606-877a-dfa5704e7680";
 // Static USD to INR conversion rates
 const USD_TO_INR_RATE_CANDIDATES = 84;
 const USD_TO_INR_RATE_EMPLOYEES = 84;
+
+// --- ADDED: Type for sorting configuration
+type SortConfig = {
+  key: keyof Candidate | keyof Employee;
+  direction: "ascending" | "descending";
+} | null;
 
 interface Candidate {
   id: string;
@@ -62,6 +72,7 @@ interface Candidate {
   profit?: number;
   job_type_category?: string;
   joining_date?: string;
+  applied_from?: string; // --- ADDED: To match usage in table
   hr_jobs?: {
     client_details?: {
       pointOfContact?: string;
@@ -150,6 +161,11 @@ const ClientCandidatesView = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [statusUpdateLoading, setStatusUpdateLoading] = useState<string | null>(null);
 
+  // --- ADDED: State for sorting
+  const [candidateSortConfig, setCandidateSortConfig] = useState<SortConfig>(null);
+  const [employeeSortConfig, setEmployeeSortConfig] = useState<SortConfig>(null);
+
+
   const isEmployee = false;
 
   const currencies = [
@@ -157,7 +173,7 @@ const ClientCandidatesView = () => {
     { value: "USD", symbol: "$" },
   ];
   
-
+// --- START: All calculation and fetching functions remain the same --- //
   const parseSalary = (salary: string | undefined): number => {
     if (!salary) return 0;
     const currency = currencies.find((c) => salary.startsWith(c.symbol)) || currencies[0];
@@ -254,7 +270,7 @@ const ClientCandidatesView = () => {
   };
   
 
-  const formatBilling = (amount: number, billingType: string, currency: string): string => {
+  const formatBilling = (amount: number, billingType: string, currency?: string): string => { // --- CHANGED: currency optional
     const currencySymbol = currencies.find((c) => c.value === currency)?.symbol || "₹";
     const formattedAmount = amount.toLocaleString("en-IN", { maximumFractionDigits: 2 });
     switch (billingType) {
@@ -313,14 +329,9 @@ const ClientCandidatesView = () => {
     const hours = calculateEmployeeHours(employee.id, projectId, timeLogs);
     let salary = employee.salary;
     
-
-console.log("employee", employee)
-  
-
   if (employee.salary_currency === "USD") {
     salary *= USD_TO_INR_RATE_EMPLOYEES;
   }
-
 
     const salaryType = employee.salary_type;
     if (salaryType === "LPA") {
@@ -519,7 +530,7 @@ const fetchCandidatesAndEmployees = async (client: string) => {
             salary_formatted: formatBilling(Number(employee.salary) || 0, salaryType),
             client_billing: Number(employee.client_billing) || 0,
             billing_type: employee.billing_type || "LPA",
-            billing_type_formatted: formatBilling(Number(employee.client_billing) || 0, employee.billing_type || "LPA"),
+            billing_type_formatted: formatBilling(Number(employee.client_billing) || 0, employee.billing_type || "LPA", clientData.currency), // --- CHANGED: Pass currency
             currency: clientData.currency,
             actual_revenue_inr: actualRevenue,
             actual_profit_inr: actualProfit,
@@ -557,6 +568,60 @@ const fetchCandidatesAndEmployees = async (client: string) => {
     setLoading(false);
   }
 };
+// --- END: All calculation and fetching functions remain the same --- //
+
+
+// --- START: NEW AND MODIFIED UI/UX Functions --- //
+
+  // --- ADDED: Sorting function
+  const handleSort = (key: keyof Candidate | keyof Employee, type: 'candidate' | 'employee') => {
+    const sortConfig = type === 'candidate' ? candidateSortConfig : employeeSortConfig;
+    const setSortConfig = type === 'candidate' ? setCandidateSortConfig : setEmployeeSortConfig;
+
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  // --- ADDED: useMemo to sort data only when necessary
+  const sortedCandidates = useMemo(() => {
+    const sortableItems = [...filteredCandidates];
+    if (candidateSortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const aValue = a[candidateSortConfig.key as keyof Candidate] ?? '';
+        const bValue = b[candidateSortConfig.key as keyof Candidate] ?? '';
+
+        if (aValue < bValue) {
+          return candidateSortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return candidateSortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [filteredCandidates, candidateSortConfig]);
+
+  const sortedEmployees = useMemo(() => {
+    const sortableItems = [...filteredEmployees];
+    if (employeeSortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const aValue = a[employeeSortConfig.key as keyof Employee] ?? '';
+        const bValue = b[employeeSortConfig.key as keyof Employee] ?? '';
+        if (aValue < bValue) {
+          return employeeSortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return employeeSortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [filteredEmployees, employeeSortConfig]);
 
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -590,6 +655,7 @@ const fetchCandidatesAndEmployees = async (client: string) => {
     setFilteredCandidates(filteredCandidates);
     setFilteredEmployees(filteredEmployees);
   };
+
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("en-IN", {
@@ -665,47 +731,17 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
   };
 
 
-  const handleEditCandidate = (candidate: Candidate) => {
-    toast({
-      title: "Edit Candidate",
-      description: "Edit candidate functionality is not yet implemented.",
-    });
-  };
 
-  const handleDeleteCandidate = async (candidate: Candidate) => {
-    try {
-      const { error } = await supabase
-        .from("hr_job_candidates")
-        .delete()
-        .eq("id", candidate.id);
-
-      if (error) throw error;
-
-      await fetchCandidatesAndEmployees(decodeURIComponent(clientName || ""));
-      toast({
-        title: "Candidate Deleted",
-        description: "Candidate deleted successfully.",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete candidate.",
-        variant: "destructive",
-      });
-      console.error("Error deleting candidate:", error);
-    }
-  };
-
-  const totalCandidatePages = Math.ceil(filteredCandidates.length / itemsPerPage);
+  const totalCandidatePages = Math.ceil(sortedCandidates.length / itemsPerPage);
   const candidateStartIndex = (currentPageCandidates - 1) * itemsPerPage;
-  const paginatedCandidates = filteredCandidates.slice(
+  const paginatedCandidates = sortedCandidates.slice(
     candidateStartIndex,
     candidateStartIndex + itemsPerPage
   );
 
-  const totalEmployeePages = Math.ceil(filteredEmployees.length / itemsPerPage);
+  const totalEmployeePages = Math.ceil(sortedEmployees.length / itemsPerPage);
   const employeeStartIndex = (currentPageEmployees - 1) * itemsPerPage;
-  const paginatedEmployees = filteredEmployees.slice(
+  const paginatedEmployees = sortedEmployees.slice(
     employeeStartIndex,
     employeeStartIndex + itemsPerPage
   );
@@ -715,6 +751,8 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
     setCurrentPageCandidates(1);
     setCurrentPageEmployees(1);
   };
+
+// --- END: NEW AND MODIFIED UI/UX Functions --- //
 
   // Chart data
   const financialData = [
@@ -739,7 +777,34 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
     { name: "Employee Profit", value: metrics.employeeProfitINR, fill: "#D946EF" },
   ];
 
+  // --- ADDED: Enhanced Empty State Component
+  const EmptyState = ({ message, description }: { message: string, description: string }) => (
+    <div className="text-center py-10 px-4">
+      <Users className="mx-auto h-12 w-12 text-gray-400" />
+      <h3 className="mt-2 text-sm font-medium text-gray-900">{message}</h3>
+      <p className="mt-1 text-sm text-gray-500">{description}</p>
+    </div>
+  );
 
+  // --- ADDED: Skeleton Loader Components
+  const MetricsSkeleton = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <Card className="shadow-lg border-none bg-white"><CardContent className="p-6"><Skeleton className="h-20 w-full" /></CardContent></Card>
+      <Card className="shadow-lg border-none bg-white"><CardContent className="p-6"><Skeleton className="h-20 w-full" /></CardContent></Card>
+      <Card className="shadow-lg border-none bg-white"><CardContent className="p-6"><Skeleton className="h-20 w-full" /></CardContent></Card>
+    </div>
+  );
+
+  const TableSkeleton = ({ rows = 5 }) => (
+    <div className="space-y-4">
+      <Skeleton className="h-10 w-full" />
+      {Array.from({ length: rows }).map((_, i) => (
+        <Skeleton key={i} className="h-12 w-full" />
+      ))}
+    </div>
+  );
+
+  // --- START: All render functions are modified for new features --- //
   const renderPagination = (totalPages: number, isCandidates: boolean) => {
     const currentPage = isCandidates ? currentPageCandidates : currentPageEmployees;
     const setCurrentPage = isCandidates ? setCurrentPageCandidates : setCurrentPageEmployees;
@@ -909,43 +974,30 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
     </Card>
   );
 
-  console.log("candidatesssssssssss", candidates)
-
-  const renderCandidateTable = (candidates: Candidate[], title: string) => (
+  const renderCandidateTable = (candidates: Candidate[]) => (
     <div className="w-full min-w-0">
-      <h3 className="text-lg font-semibold mb-2">{title}</h3>
       <div className="md:hidden">
         {candidates.length > 0 ? (
           candidates.map((candidate) => renderCandidateCard(candidate))
         ) : (
-          <Card className="p-4 text-center">
-            <p className="text-sm">
-              {searchTerm
-                ? "No candidates found matching your search."
-                : "No candidates found for this client."}
-            </p>
-          </Card>
+          <EmptyState message="No candidates found" description={searchTerm ? "Try adjusting your search." : "No candidates match the criteria for this client."} />
         )}
       </div>
       <div className="hidden md:block rounded-md border max-h-[400px] overflow-y-auto overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 sticky top-0">
             <tr>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('name', 'candidate')}>
                   Name
-                  <button aria-label="Sort by Name">
-                    <ArrowUpDown size={14} />
-                  </button>
+                  <ArrowUpDown size={14} />
                 </div>
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('job_title', 'candidate')}>
                   Position
-                  <button aria-label="Sort by Position">
-                    <ArrowUpDown size={14} />
-                  </button>
+                  <ArrowUpDown size={14} />
                 </div>
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Experience</th>
@@ -958,7 +1010,8 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
           <tbody className="bg-white divide-y divide-gray-200">
             {candidates.length > 0 ? (
               candidates.map((candidate) => (
-                <tr key={candidate.id} className="hover:bg-gray-50 transition">
+                // --- CHANGED: Added zebra striping class
+                <tr key={candidate.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-slate-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <div className="flex flex-col">
                       <Link to={`/candidates/${candidate.id}/${candidate.job_id}`} className="font-medium text-blue-600 hover:underline">
@@ -1058,9 +1111,7 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
             ) : (
               <tr>
                 <td colSpan={8} className="px-6 py-8 text-center text-sm text-gray-500">
-                  {searchTerm
-                    ? "No candidates found matching your search."
-                    : "No candidates found for this client."}
+                   <EmptyState message="No candidates found" description={searchTerm ? "Try adjusting your search." : "No candidates match the criteria for this client."} />
                 </td>
               </tr>
             )}
@@ -1071,40 +1122,29 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
     </div>
   );
 
-  const renderEmployeeTable = (employees: Employee[], title: string) => (
+  const renderEmployeeTable = (employees: Employee[]) => (
     <div className="w-full min-w-0">
-      <h3 className="text-lg font-semibold mb-2">{title}</h3>
       <div className="md:hidden">
         {employees.length > 0 ? (
           employees.map((employee) => renderEmployeeCard(employee))
         ) : (
-          <Card className="p-4 text-center">
-            <p className="text-sm">
-              {searchTerm
-                ? "No employees found matching your search."
-                : "No employees assigned to projects for this client."}
-            </p>
-          </Card>
+          <EmptyState message="No employees found" description={searchTerm ? "Try adjusting your search." : "No employees are assigned for this client."} />
         )}
       </div>
       <div className="hidden md:block rounded-md border max-h-[400px] overflow-y-auto overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 sticky top-0">
             <tr>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('employee_name', 'employee')}>
                   Name
-                  <button aria-label="Sort by Name">
-                    <ArrowUpDown size={14} />
-                  </button>
+                  <ArrowUpDown size={14} />
                 </div>
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('project_name', 'employee')}>
                   Project
-                  <button aria-label="Sort by Project">
-                    <ArrowUpDown size={14} />
-                  </button>
+                  <ArrowUpDown size={14} />
                 </div>
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salary</th>
@@ -1117,7 +1157,7 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
           <tbody className="bg-white divide-y divide-gray-200">
             {employees.length > 0 ? (
               employees.map((employee) => (
-                <tr key={employee.id} className="hover:bg-gray-50 transition">
+                <tr key={employee.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-slate-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {employee.employee_name}
                   </td>
@@ -1125,33 +1165,36 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
                     {employee.project_name || "Unknown"}
                   </td>
                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <span className="cursor-pointer">
-        {(() => {
-          const currency = employee.salary_currency || "INR";
-          const salary = employee.salary || 0;
-          const salaryType = employee.salary_type || "LPA";
-          const currencySymbol = currency === "USD" ? "$" : "₹";
-          const salaryTypeText = salaryType === "Hourly" ? "hr" : salaryType === "Monthly" ? "month" : "year";
-          return `${currencySymbol}${salary.toLocaleString('en-IN')}/${salaryTypeText}`;
-        })()}
-      </span>
-    </TooltipTrigger>
-    <TooltipContent>
-      <p>
-        {(() => {
-          const currency = employee.salary_currency || "INR";
-          const salary = employee.salary || 0;
-          const salaryType = employee.salary_type || "LPA";
-          const convertedSalary = currency === "USD" ? salary * 84 : salary;
-          const salaryTypeText = salaryType === "Hourly" ? "hr" : salaryType === "Monthly" ? "month" : "year";
-          return `₹${convertedSalary.toLocaleString('en-IN')}/${salaryTypeText}`;
-        })()}
-      </p>
-    </TooltipContent>
-  </Tooltip>
-</td>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-pointer">
+                          {(() => {
+                            const currency = employee.salary_currency || "INR";
+                            const salary = employee.salary || 0;
+                            const salaryType = employee.salary_type || "LPA";
+                            const currencySymbol = currency === "USD" ? "$" : "₹";
+                            const salaryTypeText = salaryType === "Hourly" ? "hr" : salaryType === "Monthly" ? "month" : "year";
+                            return `${currencySymbol}${salary.toLocaleString('en-IN')}/${salaryTypeText}`;
+                          })()}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          {(() => {
+                            const currency = employee.salary_currency || "INR";
+                            const salary = employee.salary || 0;
+                            const salaryType = employee.salary_type || "LPA";
+                            const convertedSalary = currency === "USD" ? salary * 84 : salary;
+                            const salaryTypeText = salaryType === "Hourly" ? "hr" : salaryType === "Monthly" ? "month" : "year";
+                            const annualSalary = (salaryType === 'Monthly' ? convertedSalary * 12 : (salaryType === 'Hourly' ? convertedSalary * 2016 : convertedSalary));
+                            return `₹${annualSalary.toLocaleString('en-IN')}/year (INR)`;
+                          })()}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {employee.billing_type_formatted}
                   </td>
@@ -1171,9 +1214,7 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
             ) : (
               <tr>
                 <td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500">
-                  {searchTerm
-                    ? "No employees found matching your search."
-                    : "No employees assigned to projects for this client."}
+                  <EmptyState message="No employees found" description={searchTerm ? "Try adjusting your search." : "No employees are assigned for this client."} />
                 </td>
               </tr>
             )}
@@ -1184,6 +1225,9 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
     </div>
   );
 
+  // --- END: All render functions modified --- //
+
+
   useEffect(() => {
     if (clientName && organization_id) {
       fetchCandidatesAndEmployees(decodeURIComponent(clientName));
@@ -1192,7 +1236,7 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-6 md:p-10">
-     <main className="w-full max-w-8xl md:max-w-8xl lg:max-w-8xl mx-auto space-y-8">
+     <main className="w-full max-w-8xl mx-auto space-y-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="flex items-center gap-2">
             <Button
@@ -1205,78 +1249,92 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
             </Button>
             <div>
               <h1 className="text-3xl md:text-4xl font-extrabold text-gray-800 tracking-tight">
-                {clientName} - Candidates and Employees
+                {clientName} - Overview
               </h1>
               <p className="text-gray-500 text-sm md:text-base mt-2">
                 Manage and track candidate and employee activities
               </p>
             </div>
           </div>
+           {/* --- CHANGED: Moved search bar to the top for better visibility --- */}
+           <div className="w-full sm:w-72 relative">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
+              <Input
+                type="search"
+                placeholder="Search candidates and employees..."
+                className="pl-8 w-full text-sm border-gray-300 focus:ring-2 focus:ring-indigo-500"
+                value={searchTerm}
+                onChange={handleSearch}
+              />
+            </div>
         </div>
 
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Total Count</p>
-                <h3 className="text-2xl font-bold text-gray-800">{metrics.candidateCount + metrics.employeeCount}</h3>
-                <p className="text-xs text-gray-500 mt-1">{metrics.candidateCount} Candidates, {metrics.employeeCount} Employees</p>
-              </div>
-              <div className="bg-gradient-to-br from-purple-400 to-purple-600 p-3 rounded-full">
-                <Briefcase size={24} className="text-white" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Total Revenue</p>
-                <h3 className="text-2xl font-bold text-gray-800">{formatCurrency(metrics.candidateRevenue + metrics.employeeRevenueINR)}</h3>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <p className="text-xs text-gray-500 mt-1">
-                        ${(metrics.candidateRevenue + metrics.employeeRevenueINR).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
-                      </p>
-                    </TooltipTrigger>
-                    <TooltipContent className="bg-white border-gray-200 shadow-lg rounded-lg p-2">
-                      <p>Converted at 1 USD = ₹ {USD_TO_INR_RATE_CANDIDATES}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-full">
-                <DollarSign size={24} className="text-white" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Total Profit</p>
-                <h3 className="text-2xl font-bold text-gray-800">{formatCurrency(metrics.candidateProfit + metrics.employeeProfitINR)}</h3>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <p className="text-xs text-gray-500 mt-1">
-                        ${(metrics.candidateProfit + metrics.employeeProfitINR).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
-                      </p>
-                    </TooltipTrigger>
-                    <TooltipContent className="bg-white border-gray-200 shadow-lg rounded-lg p-2">
-                      <p>Converted at 1 USD = ₹ {USD_TO_INR_RATE_CANDIDATES}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full">
-                <TrendingUp size={24} className="text-white" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* --- CHANGED: Added loading skeleton for stats --- */}
+        {loading ? <MetricsSkeleton /> : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
+                    <CardContent className="p-6 flex items-center justify-between">
+                    <div>
+                        <p className="text-sm font-medium text-gray-500 mb-2">Total Count</p>
+                        <h3 className="text-2xl font-bold text-gray-800">{metrics.candidateCount + metrics.employeeCount}</h3>
+                        <p className="text-xs text-gray-500 mt-1">{metrics.candidateCount} Candidates, {metrics.employeeCount} Employees</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-purple-400 to-purple-600 p-3 rounded-full">
+                        <Briefcase size={24} className="text-white" />
+                    </div>
+                    </CardContent>
+                </Card>
+                <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
+                    <CardContent className="p-6 flex items-center justify-between">
+                    <div>
+                        <p className="text-sm font-medium text-gray-500 mb-2">Total Revenue</p>
+                        <h3 className="text-2xl font-bold text-gray-800">{formatCurrency(metrics.candidateRevenue + metrics.employeeRevenueINR)}</h3>
+                         <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    ~${((metrics.candidateRevenue + metrics.employeeRevenueINR) / USD_TO_INR_RATE_CANDIDATES).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
+                                </p>
+                                </TooltipTrigger>
+                                <TooltipContent className="bg-white border-gray-200 shadow-lg rounded-lg p-2">
+                                <p>Converted at 1 USD = ₹ {USD_TO_INR_RATE_CANDIDATES}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                    <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-full">
+                        <DollarSign size={24} className="text-white" />
+                    </div>
+                    </CardContent>
+                </Card>
+                <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
+                    <CardContent className="p-6 flex items-center justify-between">
+                    <div>
+                        <p className="text-sm font-medium text-gray-500 mb-2">Total Profit</p>
+                        <h3 className="text-2xl font-bold text-gray-800">{formatCurrency(metrics.candidateProfit + metrics.employeeProfitINR)}</h3>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    ~${((metrics.candidateProfit + metrics.employeeProfitINR) / USD_TO_INR_RATE_CANDIDATES).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
+                                </p>
+                                </TooltipTrigger>
+                                <TooltipContent className="bg-white border-gray-200 shadow-lg rounded-lg p-2">
+                                <p>Converted at 1 USD = ₹ {USD_TO_INR_RATE_CANDIDATES}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                    <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full">
+                        <TrendingUp size={24} className="text-white" />
+                    </div>
+                    </CardContent>
+                </Card>
+            </div>
+        )}
+        
 
-        {/* Charts Section */}
+        {/* --- CHARTS SECTION (Unchanged) --- */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
             <CardHeader className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white p-6">
@@ -1372,37 +1430,35 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
           </Card>
         </div>
 
-        {/* Tables Section */}
+        {/* --- ADDED: Tabbed interface for tables --- */}
         <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl rounded-2xl">
           <CardContent className="p-6">
-            <div className="flex items-center mb-6 relative">
-              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
-              <Input
-                type="search"
-                placeholder="Search candidates and employees..."
-                className="pl-8 w-full text-sm border-gray-300 focus:ring-2 focus:ring-indigo-500"
-                value={searchTerm}
-                onChange={handleSearch}
-              />
-            </div>
             {loading ? (
-              <div className="flex items-center justify-center h-[80vh]">
-                <Loader2 className="h-12 w-12 animate-spin text-indigo-600" />
-              </div>
+                <TableSkeleton />
             ) : (
-              <div className="flex flex-col md:flex-row gap-6">
-                {renderCandidateTable(paginatedCandidates, "All Candidates")}
-                {serviceType.length === 1 && serviceType[0] === "permanent" ? null : (
-                  renderEmployeeTable(paginatedEmployees, "Assigned Employees in Projects")
-                )}
-              </div>
+                <Tabs defaultValue="candidates" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="candidates">Candidates ({filteredCandidates.length})</TabsTrigger>
+                        {serviceType.includes("contractual") && (
+                            <TabsTrigger value="employees">Employees ({filteredEmployees.length})</TabsTrigger>
+                        )}
+                    </TabsList>
+                    <TabsContent value="candidates" className="mt-4">
+                        {renderCandidateTable(paginatedCandidates)}
+                    </TabsContent>
+                    {serviceType.includes("contractual") && (
+                        <TabsContent value="employees" className="mt-4">
+                            {renderEmployeeTable(paginatedEmployees)}
+                        </TabsContent>
+                    )}
+                </Tabs>
             )}
           </CardContent>
         </Card>
+
       </main>
     </div>
   );
 };
 
 export default ClientCandidatesView;
-// UI changes

@@ -1,23 +1,33 @@
 // EnhancedUserManagement.tsx
 
 import React from 'react';
+// MODIFICATION: Import useSelector
+import { useSelector } from "react-redux";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-// MODIFICATION: Add Mail icon
-import { Users, UserCog, Shield, Building, Clock, LocateFixed, Mail } from "lucide-react";
+import { Users, UserCog, Shield, Building, LocateFixed, Mail, Blocks } from "lucide-react";
 import UserManagementDashboard from './UserManagementDashboard';
 import TeamManagement from './TeamManagement';
-import ShiftManagement from './ShiftManagement';
-import UserManagementTree from './UserManagementTree';
 import RolePermissionsManagement from './RolePermissionsManagement';
 import OrganizationalChart from './OrganizationalChart';
-// MODIFICATION: Import the new component
 import EmailConfigurationManagement from './EmailConfigurationManagement';
-
+import OrganizationStructureManagement from './OrganizationStructureManagement';
 
 const EnhancedUserManagement = () => {
+  // MODIFICATION: Define the specific organization ID
+  const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
+
+  // MODIFICATION: Get the current user's organization ID from Redux
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
+
+  // MODIFICATION: Create a boolean flag for easier conditional rendering
+  const isAscendionUser = organizationId === ASCENDION_ORGANIZATION_ID;
+
+  // MODIFICATION: Dynamically set the grid columns class based on the flag
+  const gridColsClass = isAscendionUser ? "grid-cols-3" : "grid-cols-6";
+
   return (
-    <div className=" max-w-8xl mx-auto py-6 space-y-6">
+    <div className="max-w-8xl mx-auto py-6 space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -27,54 +37,66 @@ const EnhancedUserManagement = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="users" className="w-full">
-            {/* MODIFICATION: Adjust grid columns to fit new tab */}
-            <TabsList className="grid w-full grid-cols-6">
+            {/* MODIFICATION: Use the dynamic grid class */}
+            <TabsList className={`grid w-full ${gridColsClass}`}>
+              {/* --- Tabs visible for ALL users --- */}
               <TabsTrigger value="users" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
                 Users
               </TabsTrigger>
-              <TabsTrigger value="teams" className="flex items-center gap-2">
-                <Building className="h-4 w-4" />
-                Teams
-              </TabsTrigger>
-              {/* <TabsTrigger value="shifts" className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Shifts
-              </TabsTrigger> */}
-              <TabsTrigger value="roles" className="flex items-center gap-2">
-                <Shield className="h-4 w-4" />
-                Roles & Permissions
-              </TabsTrigger>
+              
+              {/* --- MODIFICATION: Conditionally render tabs for non-Ascendion users --- */}
+              {!isAscendionUser && (
+                <>
+                  <TabsTrigger value="teams" className="flex items-center gap-2">
+                    <Building className="h-4 w-4" />
+                    Teams
+                  </TabsTrigger>
+                  <TabsTrigger value="structure" className="flex items-center gap-2">
+                    <Blocks className="h-4 w-4" />
+                    Structure
+                  </TabsTrigger>
+                  <TabsTrigger value="roles" className="flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    Roles & Permissions
+                  </TabsTrigger>
+                </>
+              )}
+
+              {/* --- Tabs visible for ALL users --- */}
               <TabsTrigger value="org-chart" className="flex items-center gap-2">
                 <LocateFixed className="h-4 w-4" />
                 Org Chart
               </TabsTrigger>
-              {/* MODIFICATION: Add the new Email Config tab trigger */}
               <TabsTrigger value="email-config" className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
                 Email Config
               </TabsTrigger>
             </TabsList>
 
+            {/* --- Render Tab Content --- */}
             <TabsContent value="users" className="mt-6">
               <UserManagementDashboard />
             </TabsContent>
-            <TabsContent value="teams" className="mt-6">
-              <TeamManagement />
-            </TabsContent>
-            {/* <TabsContent value="shifts" className="mt-6">
-              <ShiftManagement />
-            </TabsContent> */}
-            <TabsContent value="roles" className="mt-6">
-              <RolePermissionsManagement />
-            </TabsContent>
+
+            {/* --- MODIFICATION: Conditionally render content for non-Ascendion users --- */}
+            {!isAscendionUser && (
+              <>
+                <TabsContent value="teams" className="mt-6">
+                  <TeamManagement />
+                </TabsContent>
+                <TabsContent value="structure" className="mt-6">
+                  <OrganizationStructureManagement />
+                </TabsContent>
+                <TabsContent value="roles" className="mt-6">
+                  <RolePermissionsManagement />
+                </TabsContent>
+              </>
+            )}
+
             <TabsContent value="org-chart" className="mt-6">
               <OrganizationalChart />
             </TabsContent>
-            {/* NOTE: I am removing the "Organization Tree" tab as it seems duplicative of "Org Chart"
-                         and was not in the original grid-cols-5. You can add it back if needed. */}
-
-            {/* MODIFICATION: Add the new content for the Email Config tab */}
             <TabsContent value="email-config" className="mt-6">
               <EmailConfigurationManagement />
             </TabsContent>
