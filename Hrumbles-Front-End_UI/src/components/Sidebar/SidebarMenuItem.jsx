@@ -283,6 +283,8 @@ organization_superadmin: (organizationId) => {
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
   { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x" },
       { icon: GoGoal, label: "Goals", path: "/goalsview" },
+  { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
+
       );
     }
 

@@ -123,6 +123,7 @@ const getScoreBadgeClass = (score: number | null | undefined): string => {
 // --- Main Component ---
 const ConsolidatedStatusReport: React.FC = () => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
+    const { user, role } = useSelector((state: any) => state.auth);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -149,29 +150,86 @@ const ConsolidatedStatusReport: React.FC = () => {
     key: 'selection',
   });
 
+  const [departmentName, setDepartmentName] = useState<string | null>(null);
+  const [isDepartmentLoading, setIsDepartmentLoading] = useState(true);
+  
+  // NEW: Logic to check for the restricted view
+  const isRestrictedView = role === 'employee' && departmentName === 'Human Resource';
+
+  // NEW: useEffect to fetch department name for the current user
+  useEffect(() => {
+    const fetchDepartmentName = async () => {
+      if (!user?.id) {
+        setIsDepartmentLoading(false);
+        return;
+      }
+
+      setIsDepartmentLoading(true);
+      try {
+        const { data: employeeData, error: employeeError } = await supabase
+          .from("hr_employees")
+          .select("department_id")
+          .eq("id", user.id)
+          .single();
+
+        if (employeeError || !employeeData?.department_id) {
+          throw new Error(employeeError?.message || "No department found");
+        }
+
+        const { data: departmentData, error: departmentError } = await supabase
+          .from("hr_departments")
+          .select("name")
+          .eq("id", employeeData.department_id)
+          .single();
+
+        if (departmentError) throw departmentError;
+
+        setDepartmentName(departmentData.name || null);
+      } catch (error: any) {
+        console.error("Error fetching department:", error.message);
+        setDepartmentName(null); // Fallback to non-restricted view
+      } finally {
+        setIsDepartmentLoading(false);
+      }
+    };
+
+    fetchDepartmentName();
+  }, [user?.id]);
+
+
+
   // --- Data Fetching ---
   useEffect(() => {
     const fetchData = async () => {
-      if (!organizationId) return;
+      if (!organizationId || isDepartmentLoading) return;
+      
       setIsLoading(true);
       setError(null);
-      try {
-        const [candidatesResponse, statusesResponse] = await Promise.all([
-          supabase
-            .from('hr_job_candidates')
-            .select(
-              `
-              id, name, created_at, updated_at, main_status_id, sub_status_id,
-              current_salary, expected_salary, location, notice_period, overall_score,
-              job_id,
-              job:hr_jobs!hr_job_candidates_job_id_fkey(title, client_details),
-              recruiter:hr_employees!hr_job_candidates_created_by_fkey(first_name, last_name)
+       try {
+        // MODIFIED: Build query dynamically based on user role/department
+        let candidatesQuery = supabase
+          .from('hr_job_candidates')
+          .select(
             `
-            )
-            .eq('organization_id', organizationId)
-            .gte('created_at', dateRange.startDate.toISOString())
-            .lte('created_at', dateRange.endDate.toISOString())
-            .order('created_at', { ascending: false }),
+            id, name, created_at, updated_at, main_status_id, sub_status_id,
+            current_salary, expected_salary, location, notice_period, overall_score,
+            job_id,
+            job:hr_jobs!hr_job_candidates_job_id_fkey(title, client_details),
+            recruiter:hr_employees!hr_job_candidates_created_by_fkey(first_name, last_name)
+          `
+          )
+          .eq('organization_id', organizationId)
+          .gte('created_at', dateRange.startDate.toISOString())
+          .lte('created_at', dateRange.endDate.toISOString())
+          .order('created_at', { ascending: false });
+
+        // MODIFIED: If it's the restricted view, add a filter for the current user's ID
+        if (isRestrictedView && user?.id) {
+            candidatesQuery = candidatesQuery.eq('created_by', user.id);
+        }
+
+        const [candidatesResponse, statusesResponse] = await Promise.all([
+          candidatesQuery,
           supabase.from('job_statuses').select('id, name').eq('organization_id', organizationId),
         ]);
 
@@ -180,7 +238,7 @@ const ConsolidatedStatusReport: React.FC = () => {
         
         const formattedCandidates: Candidate[] = candidatesResponse.data.map((c: any) => ({
           id: c.id,
-           job_id: c.job_id,
+          job_id: c.job_id,
           name: c.name,
           created_at: c.created_at,
           updated_at: c.updated_at,
@@ -215,7 +273,8 @@ const ConsolidatedStatusReport: React.FC = () => {
       }
     };
     fetchData();
-  }, [organizationId, dateRange]);
+  // MODIFIED: Added dependencies to re-run fetch when user context changes
+  }, [organizationId, dateRange, user?.id, isDepartmentLoading, isRestrictedView]); 
 
   // --- Memoized Data Transformations ---
   const filteredCandidates = useMemo(() => {
@@ -224,7 +283,8 @@ const ConsolidatedStatusReport: React.FC = () => {
         const statusName = statuses[c.sub_status_id || ''] || 'Uncategorized';
         const statusMatch = statusFilter === 'all' || statusName === statusFilter;
         const clientMatch = clientFilter === 'all' || c.client_name === clientFilter;
-        const recruiterMatch = recruiterFilter === 'all' || c.recruiter_name === recruiterFilter;
+        // MODIFIED: Recruiter filter logic now considers the restricted view
+        const recruiterMatch = isRestrictedView || recruiterFilter === 'all' || c.recruiter_name === recruiterFilter;
         return statusMatch && clientMatch && recruiterMatch;
       })
       .filter(c => {
@@ -238,7 +298,7 @@ const ConsolidatedStatusReport: React.FC = () => {
           c.location?.toLowerCase().includes(search)
         );
       });
-  }, [candidates, searchTerm, statuses, statusFilter, clientFilter, recruiterFilter]);
+  }, [candidates, searchTerm, statuses, statusFilter, clientFilter, recruiterFilter, isRestrictedView]);
 
   const groupedBySubStatus = useMemo<GroupedData>(() => {
     return filteredCandidates.reduce((acc: GroupedData, candidate) => {
@@ -364,7 +424,7 @@ const ConsolidatedStatusReport: React.FC = () => {
     setCurrentPage(1);
   };
 
-  if (isLoading && candidates.length === 0 && !error) {
+ if ((isLoading && candidates.length === 0 && !error) || isDepartmentLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <LoadingSpinner size={60} className="border-[6px] animate-spin text-indigo-600" />
@@ -578,20 +638,22 @@ const ConsolidatedStatusReport: React.FC = () => {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={recruiterFilter} onValueChange={onFilterChange(setRecruiterFilter)}>
-                <SelectTrigger>
-                  <div className="flex items-center gap-2">
-                    <User size={16} className="text-gray-500" />
-                    <SelectValue placeholder="Filter by Recruiter" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Recruiters</SelectItem>
-                  {recruiterOptions.map(r => (
-                    <SelectItem key={r} value={r}>{r}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {!isRestrictedView && (
+                <Select value={recruiterFilter} onValueChange={onFilterChange(setRecruiterFilter)}>
+                  <SelectTrigger>
+                    <div className="flex items-center gap-2">
+                      <User size={16} className="text-gray-500" />
+                      <SelectValue placeholder="Filter by Recruiter" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Recruiters</SelectItem>
+                    {recruiterOptions.map(r => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
               {/* <Button

@@ -27,8 +27,10 @@ interface RecruiterPerformance { name: string; hires: number; }
 interface PipelineStage { stage: string; count: number; }
 
 // --- Constants for Calculation ---
+const OFFERED_STATUS_ID = "9d48d0f9-8312-4f60-aaa4-bafdce067417";
+const OFFER_ISSUED_SUB_STATUS_ID = "bcc84d3b-fb76-4912-86cc-e95448269d6b";
 const JOINED_STATUS_ID = "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e";
-const OFFERED_STATUS_ID = "9d4e0b82-0774-4e3b-bb1e-96bc2743f96e";
+const JOINED_SUB_STATUS_ID = "c9716374-3477-4606-877a-dfa5704e7680";
 
 // --- Helper Functions ---
 const formatCurrency = (value: number | null | undefined) => (value == null) ? 'N/A' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
