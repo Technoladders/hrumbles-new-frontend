@@ -259,32 +259,41 @@ const Jobs = () => {
 
   // Goal: Update filtering logic to include date range and client filters.
   const filteredJobs = jobs.filter((job) => {
-    const matchesSearch =
-      job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.jobId.toLowerCase().includes(searchTerm.toLowerCase());
+  const lowercasedSearchTerm = searchTerm.toLowerCase();
 
-    // Date range filter logic
-    const matchesDate = (() => {
-      if (!dateRange.startDate || !dateRange.endDate) return true;
-      const jobDate = moment(job.createdAt);
-      // Set end of day for the end date to include all jobs on that day
-      const endDate = moment(dateRange.endDate).endOf('day');
-      return jobDate.isBetween(dateRange.startDate, endDate, undefined, '[]');
-    })();
+  const matchesSearch =
+    // 1. Keep existing search on job title and ID
+    job.title.toLowerCase().includes(lowercasedSearchTerm) ||
+    job.jobId.toLowerCase().includes(lowercasedSearchTerm) ||
+    
+    // 2. Add new search condition for candidate names
+    (job.hr_job_candidates && 
+      job.hr_job_candidates.some((candidate) =>
+        candidate.name.toLowerCase().includes(lowercasedSearchTerm)
+      ));
 
-    // Client filter logic
-    const matchesClient =
-      selectedClient === "all" || job.clientOwner === selectedClient;
+  // --- The rest of the filtering logic remains the same ---
+  const matchesDate = (() => {
+    if (!dateRange.startDate || !dateRange.endDate) return true;
+    const jobDate = moment(job.createdAt);
+    // Set end of day for the end date to include all jobs on that day
+    const endDate = moment(dateRange.endDate).endOf('day');
+    return jobDate.isBetween(dateRange.startDate, endDate, undefined, '[]');
+  })();
 
-    const matchesTab = (() => {
-        if (organization_id === ITECH_ORGANIZATION_ID || activeTab === "all") return true;
-        if (activeTab === "internal") return job.jobType === "Internal";
-        if (activeTab === "external") return job.jobType === "External";
-        return true;
-    })();
+  // Client filter logic
+  const matchesClient =
+    selectedClient === "all" || job.clientOwner === selectedClient;
 
-    return matchesSearch && matchesDate && matchesClient && matchesTab;
-  });
+  const matchesTab = (() => {
+      if (organization_id === ITECH_ORGANIZATION_ID || activeTab === "all") return true;
+      if (activeTab === "internal") return job.jobType === "Internal";
+      if (activeTab === "external") return job.jobType === "External";
+      return true;
+  })();
+
+  return matchesSearch && matchesDate && matchesClient && matchesTab;
+});
 
   const totalPages = Math.ceil(filteredJobs.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -891,7 +900,7 @@ const Jobs = () => {
         <div className="relative flex-grow">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
           <Input
-            placeholder="Search for jobs..."
+            placeholder="Search by Job Title, ID, or Candidate Name"
             className="pl-10 h-10"
             value={searchTerm}
             onChange={(e) => {

@@ -12,6 +12,7 @@ export const fetchAllJobs = async () => {
       *,
       created_by:hr_employees!hr_jobs_created_by_fkey (first_name, last_name),
       assigned_to,
+     hr_job_candidates!job_id ( name ),
    candidate_count:hr_job_candidates!job_id(count)
     `) // Ensure assigned_to is included
     .order("created_at", { ascending: false });

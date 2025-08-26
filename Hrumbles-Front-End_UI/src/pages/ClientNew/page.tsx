@@ -259,7 +259,7 @@ const fetchDashboardData = useCallback(async () => {
         <div className="bg-white min-h-screen">
             {/* NEW HEADER SECTION */}
             <div className="bg-gray-50/50">
-                <header className="max-w-screen-2xl mx-auto p-4 flex justify-between items-center">
+                <header className="max-w-screen-2xl  p-4 flex justify-between items-center">
                     <div className="flex items-center gap-2">
                         <Button variant="ghost" size="icon" onClick={() => navigate("/clients")} className="h-9 w-9 text-gray-600 hover:text-black">
                             <ArrowLeft className="h-5 w-5" />
@@ -277,7 +277,7 @@ const fetchDashboardData = useCallback(async () => {
                 </header>
             </div>
             
-            <main className="max-w-screen-2xl mx-auto p-4 md:p-6 space-y-6">
+            <main className="max-w-screen-8xl mx-auto p-4 md:p-6 space-y-6">
                 {/* <div className="flex justify-between items-center">
                     <h2 className="text-2xl font-bold text-gray-800">{clientName}</h2>
                     <DateRangePickerField dateRange={dateRange} onDateRangeChange={(range) => setDateRange(range)} onApply={fetchDashboardData} />
@@ -302,7 +302,7 @@ const fetchDashboardData = useCallback(async () => {
                             </button>
                         )}
                         <button onClick={() => setActiveTab('all_candidates')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'all_candidates' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                            All Candidates
+                            Engaged Candidates
                         </button>
                     </nav>
                      <DateRangePickerField dateRange={dateRange} onDateRangeChange={(range) => setDateRange(range)} onApply={fetchDashboardData} />

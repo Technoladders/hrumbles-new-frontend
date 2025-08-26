@@ -264,49 +264,86 @@ organization_superadmin: (organizationId) => {
     return categorizedOrgSuperAdminMenu; // Return the standard suite menu for everyone else
   },
   admin: (departmentName) => createCategorizedAdminMenu(departmentName), // Use the new categorized function
-  employee: (departmentName, designationName) => {
-    // This logic is simple enough to remain as is, but could also be refactored
-    // if it becomes more complex in the future.
-     const baseMenu = [
+employee: (departmentName, designationName, userId) => {
+    // MODIFIED: Centralized definitions for menu item groups for reusability
+
+    const SPECIAL_USER_ID = '00c22bbb-9781-44bc-9973-c53bd08c9da2';
+
+    const coreEmployeeItems = [
       { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
       { icon: GrDocumentTime, label: "Time Sheet", path: "/employee/timesheet"},
       { icon: MdMoreTime, label: "Regularization", path: "/employee/regularization",},
       { icon: ImProfile, label: "My Profile", path: "/profile" },
-
       { icon: LuCalendarPlus, label: "Leave", path: "/employee/leave" },
       { icon: FaRegCalendarCheck, label: "Attendance", path: "/employee/attendance" },
       { icon: IoCalendarNumberOutline, label: "Calendar", path: "/employee/calendar" },
     ];
-    if (departmentName === "Human Resource") {
-      baseMenu.splice(1, 0,
-      { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
-  { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
-  { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x" },
-      { icon: GoGoal, label: "Goals", path: "/goalsview" },
-  { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
 
-      );
+    const hrSpecificItems = [
+      { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+      { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+      { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x" },
+      { icon: GoGoal, label: "Goals", path: "/goalsview" },
+      { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
+    ];
+    
+    const salesSuiteItems = [
+      { icon: GoOrganization, label: "Companies", path: "/companies" },
+      { icon: VscOrganization, label: "People", path: "/contacts" },
+      { icon: FiList, label: "Lists", path: "/lists" },
+      { icon: RiCustomerService2Fill, label: "Kanban", path: "/contacts/kanban" }
+    ];
+
+    // --- NEW: Logic for the special user to get a categorized/suite menu ---
+    if (userId === SPECIAL_USER_ID) {
+      // Build and return the categorized menu structure
+      return [
+        {
+          title: "HR Suite",
+          icon: FaUserShield,
+          // This user gets all core employee items plus the HR-specific items
+          items: [
+             // Manually order items for the suite view
+            { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
+            ...hrSpecificItems,
+            ...coreEmployeeItems.filter(item => item.label !== "Dashboard") // Add rest of core items
+          ],
+        },
+        {
+          title: "Sales Suite",
+          icon: RiCustomerService2Fill,
+          items: salesSuiteItems,
+        }
+      ];
+    }
+    
+    // --- Existing logic for all other employees (returns a flat menu) ---
+    
+    // Start with the base items for a standard employee
+    let baseMenu = [...coreEmployeeItems];
+
+    if (departmentName === "Human Resource") {
+      // Insert HR-specific items after "Dashboard"
+      baseMenu.splice(1, 0, ...hrSpecificItems);
     }
 
-    // Add Jobs for Consultant designation in Sales & Marketing department
     if (departmentName === "Sales & Marketing" && designationName === "Consultant") {
       baseMenu.splice(1, 0, { icon: FiBriefcase, label: "Jobs", path: "/jobs" });
     }
+
     if (departmentName === "Sales & Marketing") {
-      baseMenu.splice(2, 0,
-        { icon: GoOrganization, label: "Companies", path: "/companies" },
-        { icon: VscOrganization, label: "People", path: "/contacts" },
-        { icon: FiList, label: "Lists", path: "/lists" },
-        { icon: RiCustomerService2Fill, label: "Kanban", path: "/contacts/kanban" }
-      );
+      // Insert sales items after "My Profile" (or adjust index as needed)
+      baseMenu.splice(4, 0, ...salesSuiteItems);
     }
-     if (departmentName === "Finance") {
+    
+    if (departmentName === "Finance") {
       return [
         { icon: MdOutlineAccountBalance, label: "Finance", path: "/finance" },
         { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices" },
         { icon: FaSackDollar, label: "Expenses", path: "/accounts/expenses" },
       ];
     }
+
     return baseMenu;
   },
 };

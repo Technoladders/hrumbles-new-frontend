@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import moment from 'moment';
@@ -38,6 +39,8 @@ export interface TalentPoolCandidate {
 }
 
 const TalentPoolPage = () => {
+  const { role, user } = useSelector((state: any) => state.auth);
+  
   // State management for UI
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -49,10 +52,12 @@ const TalentPoolPage = () => {
   const [historyCandidate, setHistoryCandidate] = useState<TalentPoolCandidate | null>(null);
 
   // Fetch candidates with creator's name using a join
-  const { data: candidates = [], isLoading, refetch } = useQuery({
-    queryKey: ['talentPoolCandidates'],
+const { data: candidates = [], isLoading, refetch } = useQuery({
+    // The queryKey now includes role and user ID to ensure data is refetched for different users
+    queryKey: ['talentPoolCandidates', role, user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Base query selects all necessary columns and joins with hr_employees
+      let query = supabase
         .from('hr_talent_pool')
         .select(`
           id,
@@ -65,12 +70,21 @@ const TalentPoolPage = () => {
             first_name,
             last_name
           )
-        `)
-        .order('created_at', { ascending: false });
+        `);
+
+      // If the user is an 'employee', add a filter to only show their own created candidates
+      if (role === 'employee' && user?.id) {
+        query = query.eq('created_by', user.id);
+      }
+      
+      // Execute the final query with ordering
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw new Error(error.message);
       return data as TalentPoolCandidate[];
     },
+    // The query will only run if the user object is available
+    enabled: !!user,
   });
   // --- END: MODIFICATION ---
 

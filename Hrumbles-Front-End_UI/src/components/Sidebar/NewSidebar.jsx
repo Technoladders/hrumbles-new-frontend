@@ -136,7 +136,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       case 'admin':
         return menuSource(departmentName);
       case 'employee':
-        return menuSource(departmentName, designationName);
+        return menuSource(departmentName, designationName, user?.id);
       default:
         return menuSource;
     }
