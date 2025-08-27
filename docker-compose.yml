@@ -24,7 +24,7 @@ services:
         # --- NEW SERVICE FOR THE MARKETING WEBSITE ---
   hrumble-website:
     build:
-      context: ./hrumbles_website
+      context: ./hrumbles-website
       dockerfile: Dockerfile
     container_name: hrumble-website
     restart: unless-stopped
