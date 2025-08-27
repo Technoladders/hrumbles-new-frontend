@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, isValid } from 'date-fns';
-import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sigma, BarChart2, Star, Tag, User, Loader2, GitMerge, UserCheck, Crown } from 'lucide-react';
+import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sigma, BarChart2, Star, Tag, User, Loader2, GitMerge, UserCheck, Crown, Calendar, Clock, MessageSquare } from 'lucide-react';
 import { Tooltip as ShadTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Tooltip } from 'recharts';
 import { Progress } from '@/components/ui/progress';
@@ -20,26 +20,36 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 // --- Type Definitions ---
-interface Candidate { id: string; name: string; created_at: string; main_status_id: string | null; sub_status_id: string | null; job_title: string | null; recruiter_name: string | null; client_name: string | null; current_salary: number | null; expected_salary: number | null; location: string | null; notice_period: string | null; overall_score: number | null; job_id: string; }
-interface StatusMap { [key: string]: string; }
+interface Candidate { id: string; name: string; created_at: string; main_status_id: string | null; sub_status_id: string | null; job_title: string | null; recruiter_name: string | null; client_name: string | null; current_salary: number | null; expected_salary: number | null; location: string | null; notice_period: string | null; overall_score: number | null; job_id: string; metadata: any; interview_date?: string | null; interview_time?: string | null; interview_feedback?: string | null; }interface StatusMap { [key: string]: string; }
 interface GroupedData { [statusName: string]: Candidate[]; }
 interface TableRowData { type: 'header' | 'data'; statusName?: string; count?: number; candidate?: Candidate; }
 interface RecruiterPerformance { name: string; hires: number; }
 interface PipelineStage { stage: string; count: number; }
 
 // --- CONSTANTS FOR CALCULATION ---
-const INTERVIEW_STATUS_ID = "f72e13f8-7825-4793-85e0-e31d669f8097";
-const OFFERED_STATUS_ID = "9d48d0f9-8312-4f60-aaa4-bafdce067417";
-const OFFER_ISSUED_SUB_STATUS_ID = "bcc84d3b-fb76-4912-86cc-e95448269d6b";
-const JOINED_STATUS_ID = "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e";
-const JOINED_SUB_STATUS_ID = "c9716374-3477-4606-877a-dfa5704e7680";
+const INTERVIEW_MAIN_STATUS_ID = "f72e13f8-7825-4793-85e0-e31d669f8097";
+const INTERVIEW_SCHEDULED_SUB_STATUS_IDS = ["4ab0c42a-4748-4808-8f29-e57cb401bde5", "a8eed1eb-f903-4bbf-a91b-e347a0f7c43f", "1de35d8a-c07f-4c1d-b185-12379f559286", "0cc92be8-c8f1-47c6-a38d-3ca04eca6bb8", "48e060dc-5884-47e5-85dd-d717d4debe40"];
+const INTERVIEW_RESCHEDULED_SUB_STATUS_IDS = ["00601f51-90ec-4d75-8ced-3225fed31643", "9ef38a36-cffa-4286-9826-bc7d736a04ce", "2c38a0fb-8b56-47bf-8c7e-e4bd19b68fdf", "d2aef2b3-89b4-4845-84f0-777b6adf9018", "e569facd-7fd0-48b9-86cd-30062c80260b"];
+const INTERVIEW_OUTCOME_SUB_STATUS_IDS = ["1930ab52-4bb4-46a2-a9d1-887629954868", "e5615fa5-f60c-4312-9f6b-4ed543541520", "258741d9-cdb1-44fe-8ae9-ed5e9eed9e27", "0111b1b9-23c9-4be1-8ad4-322ccad6ccf0", "11281dd5-5f33-4d5c-831d-2488a5d3c96e", "31346b5c-1ff4-4842-aab4-645b36b6197a", "1ce3a781-09c7-4b3f-9a58-e4c6cd02721a", "4694aeff-567b-4007-928e-b3fefe558daf", "5b59c8cb-9a6a-43b8-a3cd-8f867c0b30a2", "368aa85f-dd4a-45b5-9266-48898704839b"];
+const JOINED_STATUS_ID = "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e"; const OFFERED_STATUS_ID = "9d48d0f9-8312-4f60-aaa4-bafdce067417"; const JOINED_SUB_STATUS_ID = "c9716374-3477-4606-877a-dfa5704e7680";
 
 
 // --- Helper Functions ---
 const formatCurrency = (value: number | null | undefined) => (value == null) ? 'N/A' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
-const formatValue = (value: any) => (value != null) ? String(value) : 'N/A';
-const formatDate = (date: string) => isValid(new Date(date)) ? format(new Date(date), 'MMM d, yyyy') : date;
+const formatValue = (value: any) => (value != null && value !== '') ? String(value) : 'N/A';
+const formatDate = (date: string) => isValid(new Date(date)) ? format(new Date(date), 'MMM d, yyyy') : 'N/A';
 const getScoreBadgeClass = (score: number | null | undefined): string => { if (score == null) return 'bg-gray-100 text-gray-800'; if (score > 80) return 'bg-green-100 text-green-800'; if (score > 50) return 'bg-amber-100 text-amber-800'; return 'bg-red-100 text-red-800'; };
+const formatTime = (time?: string | null) => {
+  if (!time || typeof time !== 'string') return '';
+  try {
+    const [hours, minutes] = time.split(':');
+    const date = new Date();
+    date.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0);
+    return format(date, 'h:mm a'); // 'h:mm a' explicitly produces '10:00 AM' or '2:30 PM'
+  } catch {
+    return time; // Fallback to original string if parsing fails
+  }
+};
 
 // --- Reusable Analytics Card Component (Updated) ---
 const AnalyticsCard: React.FC<{ icon: React.ElementType; title: string; value: string | number; subMetrics?: { label: string; value: string | number }[]; }> = ({ icon: Icon, title, value, subMetrics }) => (
@@ -76,6 +86,60 @@ const AnalyticsCard: React.FC<{ icon: React.ElementType; title: string; value: s
   </Card>
 );
 
+
+
+// --- NEW STATUS CELL COMPONENT (Replace the old one with this) ---
+const StatusCell: React.FC<{ candidate: Candidate; statusName: string }> = ({ candidate, statusName }) => {
+  const isScheduled = candidate.main_status_id === INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && (INTERVIEW_SCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id));
+  const isRescheduled = candidate.main_status_id === INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && INTERVIEW_RESCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id);
+  const isOutcome = candidate.main_status_id === INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && INTERVIEW_OUTCOME_SUB_STATUS_IDS.includes(candidate.sub_status_id);
+
+  let displayStatusName = statusName;
+  if (isScheduled) {
+    displayStatusName = `${statusName} Scheduled`;
+  }
+
+  return (
+    <div className="flex flex-col">
+      <p className="font-medium">{displayStatusName}</p>
+      
+      {/* --- MODIFIED SECTION for single-line date and time --- */}
+      {(isScheduled || isRescheduled) && candidate.interview_date && (
+        <div className="text-xs text-gray-500 mt-1 flex items-center gap-1.5 whitespace-nowrap">
+          {/* <Calendar size={12} /> */}
+          <span>{formatDate(candidate.interview_date)}</span>
+          {candidate.interview_time && (
+            <>
+              <span className="text-gray-300">|</span>
+              {/* <Clock size={12} /> */}
+              <span>{formatTime(candidate.interview_time)}</span>
+            </>
+          )}
+        </div>
+      )}
+
+      {isOutcome && candidate.interview_feedback && (
+        <TooltipProvider>
+          <ShadTooltip>
+            <TooltipTrigger asChild>
+              <div className="text-xs text-gray-500 mt-1 flex items-start gap-1.5 cursor-help">
+                <MessageSquare size={12} className="flex-shrink-0 mt-0.5" />
+                <p className="truncate">
+                  {candidate.interview_feedback.length > 10 ? `${candidate.interview_feedback.slice(0, 10)}...` : candidate.interview_feedback}
+                </p>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <p className="text-sm">{candidate.interview_feedback}</p>
+            </TooltipContent>
+          </ShadTooltip>
+
+        </TooltipProvider>
+      )}
+    </div>
+  );
+};
+
 // --- Main Component ---
 interface AllCandidatesTabProps {
   clientName: string;
@@ -97,23 +161,25 @@ const AllCandidatesTab: React.FC<AllCandidatesTabProps> = ({ clientName, dateRan
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
 
-  useEffect(() => {
+useEffect(() => {
     const fetchData = async () => {
       if (!organizationId || !clientName) return;
-      setIsLoading(true);
-      setError(null);
+      setIsLoading(true); setError(null);
       try {
         const { data: jobs, error: jobsError } = await supabase.from('hr_jobs').select('id').eq('organization_id', organizationId).eq('client_owner', clientName);
         if (jobsError) throw jobsError;
         if (!jobs || jobs.length === 0) { setCandidates([]); return; }
         const jobIds = jobs.map(job => job.id);
         
+        // --- UPDATED QUERY to fetch interview details ---
         let candidatesQuery = supabase.from('hr_job_candidates').select(`
-            id, name, created_at, main_status_id, sub_status_id, metadata, job_id,
-            job:hr_jobs!hr_job_candidates_job_id_fkey(title),
-            recruiter:created_by(first_name, last_name),
-            analysis:candidate_resume_analysis!candidate_id(overall_score)
-          `).eq('organization_id', organizationId).in('job_id', jobIds);
+          id, name, created_at, main_status_id, sub_status_id, metadata, job_id,
+          interview_date, interview_time, interview_feedback,
+          job:hr_jobs!hr_job_candidates_job_id_fkey(title),
+          recruiter:created_by(first_name, last_name),
+          analysis:candidate_resume_analysis!candidate_id(overall_score)
+        `).eq('organization_id', organizationId).in('job_id', jobIds);
+
         if (dateRange?.startDate && dateRange.endDate) {
             candidatesQuery = candidatesQuery.gte('created_at', format(dateRange.startDate, 'yyyy-MM-dd')).lte('created_at', format(dateRange.endDate, 'yyyy-MM-dd'));
         }
@@ -126,20 +192,24 @@ const AllCandidatesTab: React.FC<AllCandidatesTabProps> = ({ clientName, dateRan
         if (candidatesResponse.error) throw candidatesResponse.error;
         if (statusesResponse.error) throw statusesResponse.error;
         
-         // --- MODIFIED FORMATTING ---
+        // --- UPDATED FORMATTING to include new fields ---
         const formattedCandidates: Candidate[] = (candidatesResponse.data as any[]).map(c => ({
           id: c.id, job_id: c.job_id, name: c.name, created_at: c.created_at, main_status_id: c.main_status_id, sub_status_id: c.sub_status_id, metadata: c.metadata,
           job_title: c.job?.title || 'N/A', 
           recruiter_name: c.recruiter ? `${c.recruiter.first_name} ${c.recruiter.last_name}`.trim() : 'N/A', 
           client_name: clientName, 
-          current_salary: c.metadata?.currentSalary, // From metadata
-          expected_salary: c.metadata?.expectedSalary, // From metadata
-          location: c.metadata?.currentLocation, // From metadata
-          notice_period: c.metadata?.noticePeriod, // From metadata
-          overall_score: c.analysis?.[0]?.overall_score || null, // From joined table
+          current_salary: c.metadata?.currentSalary,
+          expected_salary: c.metadata?.expectedSalary,
+          location: c.metadata?.currentLocation,
+          notice_period: c.metadata?.noticePeriod,
+          overall_score: c.analysis?.[0]?.overall_score || null,
+          interview_date: c.interview_date,
+          interview_time: c.interview_time,
+          interview_feedback: c.interview_feedback,
         }));
+
         setCandidates(formattedCandidates);
-        const statusMap = statusesResponse.data.reduce((acc: StatusMap, status) => { acc[status.id] = status.name; return acc; }, {});
+        const statusMap = statusesResponse.data.reduce((acc, status) => { acc[status.id] = status.name; return acc; }, {});
         setStatuses(statusMap);
         const uniqueRecruiters = [...new Set(formattedCandidates.map(c => c.recruiter_name).filter(r => r && r !== 'N/A'))].sort();
         setRecruiterOptions(uniqueRecruiters);
@@ -167,7 +237,7 @@ const AllCandidatesTab: React.FC<AllCandidatesTabProps> = ({ clientName, dateRan
     const stageCounts: { [key: string]: number } = {}; let scoreSum = 0; let scoreCount = 0;
     const recruiterProfiles: { [key: string]: number } = {}; const recruiterConversions: { [key: string]: number } = {}; const recruiterJoins: { [key: string]: number } = {};
     let convertedCount = 0; let joinedCount = 0;
-    const conversionStatuses = [INTERVIEW_STATUS_ID, OFFERED_STATUS_ID, JOINED_STATUS_ID];
+    const conversionStatuses = [INTERVIEW_MAIN_STATUS_ID, OFFERED_STATUS_ID, JOINED_STATUS_ID];
 
     filteredCandidates.forEach(c => {
       const mainStatusName = statuses[c.main_status_id || ''] || 'Sourced';
@@ -337,7 +407,9 @@ const AllCandidatesTab: React.FC<AllCandidatesTabProps> = ({ clientName, dateRan
                   return (
                     <TableRow key={candidate!.id} className="hover:bg-gray-50">
                       <TableCell className="font-medium"><Link to={`/candidates/${candidate!.id}/${candidate!.job_id}`} className="text-purple-600 hover:underline">{candidate!.name}</Link></TableCell>
-                      <TableCell>{statusName}</TableCell>
+                      <TableCell>
+                        <StatusCell candidate={candidate!} statusName={statusName!} />
+                      </TableCell>
                       <TableCell><Badge className={getScoreBadgeClass(candidate!.overall_score)}>{formatValue(candidate!.overall_score)}</Badge></TableCell>
                       <TableCell><Link to={`/jobs/${candidate!.job_id}`} className="hover:underline">{formatValue(candidate!.job_title)}</Link></TableCell>
                       <TableCell>{formatValue(candidate!.recruiter_name)}</TableCell>

@@ -1,0 +1,265 @@
+:root {
+    /* ----------------- Primitives -------------------- */
+
+    /* Embed Black */
+    --embed-black-1000: #222222;
+    --embed-black-950: #222222FA; /* 98% opacity */
+    --embed-black-900: #222222F2; /* 95% opacity */
+    --embed-black-800: #222222E3; /* 89% opacity */
+    --embed-black-700: #222222CC; /* 80% opacity */
+    --embed-black-600: #222222AD; /* 68% opacity */
+    --embed-black-500: #2222228F; /* 56% opacity */
+    --embed-black-400: #22222252; /* 32% opacity */
+    --embed-black-300: #22222233; /* 20% opacity */
+    --embed-black-200: #2222221C; /* 11% opacity */
+    --embed-black-100: #2222220D; /* 5% opacity */
+    --embed-black-50: #22222205; /* 2% opacity */
+
+    /* Embed White */
+    --embed-white-1000: #FFFFFF;
+    --embed-white-950: #FFFFFFFA; /* 98% opacity */
+    --embed-white-900: #FFFFFFF2; /* 95% opacity */
+    --embed-white-800: #FFFFFFE3; /* 89% opacity */
+    --embed-white-700: #FFFFFFCC; /* 80% opacity */
+    --embed-white-600: #FFFFFFAD; /* 68% opacity */
+    --embed-white-500: #FFFFFF8F; /* 56% opacity */
+    --embed-white-400: #FFFFFF52; /* 32% opacity */
+    --embed-white-300: #FFFFFF33; /* 20% opacity */
+    --embed-white-200: #FFFFFF1C; /* 11% opacity */
+    --embed-white-100: #FFFFFF0D; /* 5% opacity */
+    --embed-white-50: #FFFFFF05; /* 2% opacity */
+
+    /* Embed Fonts */
+    --embed-font-inter: "Inter Var";
+    --embed-font-kaio: Kaio;
+
+    /* Embed Accent Colors */
+    --embed-color-1: #db2777;
+    --embed-color-2: #9333ea;
+    --embed-color-3: #2563eb;
+    --embed-color-4: #16a34a;
+
+    /* Embed Accent Dark Background Colors */
+    --embed-bg-color-light: #2000240D;
+    --embed-bg-color-dark-1: #240029;
+    --embed-bg-color-dark-2: #1A002E;
+    --embed-bg-color-dark-3: #000B2E;
+    --embed-bg-color-dark-4: #001408;
+
+    /* Embed Element Radius */
+    --embed-element-radius-none: 0;
+    --embed-element-radius-sm: 0.25rem;
+    --embed-element-radius-md: 0.5rem;
+    --embed-element-radius-lg: 4rem;
+
+    /* Embed Wrapper Radius */
+    --embed-wrapper-radius-none: 0;
+    --embed-wrapper-radius-sm: 1rem;
+    --embed-wrapper-radius-md: 1.5rem;
+    --embed-wrapper-radius-lg: 2rem;
+
+    /* ////////////////////// Tokens ////////////////////// */
+
+    /* Embed Tokens - General */
+    --embed-text-color: var(--embed-black-1000);
+    --embed-text-color-muted: var(--embed-black-500);
+    --embed-bg-color: var(--embed-bg-color-light);
+    --embed-divider-color: var(--embed-black-200);
+    --embed-wrapper-bg-color: var(--embed-white-1000);
+    --embed-wrapper-shadow: 0px 0px 0px 1px var(--embed-black-200);
+    --embed-wrapper-divider-color: var(--embed-black-200);
+    --embed-accent-color: var(--embed-color-1);
+    --embed-element-radius: var(--embed-element-radius-sm);
+
+    /* Embed Tokens - Fonts */
+    --embed-heading-font: var(--embed-font-kaio);
+    --embed-body-font: var(--embed-font-inter);
+
+    /* Embed Tokens - Primary Button */
+    --embed-button-text-color: var(--embed-white-1000);
+    --embed-btn-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+    /* Embed Tokens - Secondary Button */
+    --embed-secondary-btn-bg-color: var(--embed-white-1000);
+    --embed-secondary-btn-shadow-hover: inset 0px 0px 0px 1px var(--embed-black-300), inset 0px 0px 0px 100px rgba(0, 0, 0, 0.02), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+    /* Embed Tokens - Radio Button */
+    --embed-radio-group-bg-color: var(--embed-black-50);
+    --embed-radio-group-shadow: 0px 0px 0px 1px var(--embed-black-100);
+    --embed-radio-group-shadow-hover: 0px 0px 0px 1px var(--embed-black-200);
+    --embed-radius-swatch-color: var(--embed-black-300); 
+
+    /* Embed Tokens - Input */
+    --embed-input-bg-color: var(--embed-white-100);
+    --embed-input-shadow: inset 0px 0px 0px 1px var(--embed-black-300), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --embed-input-shadow-focus: inset 0px 0px 0px 1px var(--embed-accent-color), 0px 0px 0px 1px var(--embed-accent-color), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --embed-btn-shadow-hover: inset 0px 0px 0px 100px rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Appearance Switch */
+
+.section:has(#dark-mode:checked) {
+    /* Dark - General */
+    --colors-page-wrapper--background-secondary: var(--colors-black--1000);
+    --colors-page-wrapper--text-muted: var(--colors-white--500);
+    --embed-text-color: var(--embed-white-1000);
+    --embed-text-color-muted: var(--embed-white-500);
+    --embed-wrapper-bg-color: var(--embed-white-50);
+    --colors-page-wrapper--text: var(--colors-white--1000);
+    --embed-wrapper-shadow: 0px 0px 0px 1px var(--embed-white-200);
+    --embed-wrapper-divider-color: var(--embed-white-200);
+    --embed-divider-color: var(--embed-white-200);
+    --embed-bg-color: var(--embed-bg-color-dark-1);
+
+    /* Dark - Secondary Button */
+    --embed-secondary-btn-bg-color: var(--embed-white-200);
+    --embed-secondary-btn-shadow-hover: inset 0px 0px 0px 1px var(--embed-white-300), inset 0px 0px 0px 100px rgba(255, 255, 255, 0.02), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+    /* Dark - Input */
+    --embed-input-shadow: inset 0px 0px 0px 1px var(--embed-white-300), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+    /* Dark - Radio Button */
+    --embed-radio-group-bg-color: var(--embed-white-50);
+    --embed-radio-group-shadow: 0px 0px 0px 1px var(--embed-white-100);
+    --embed-radio-group-shadow-hover: 0px 0px 0px 1px var(--embed-white-200);
+}
+
+/* Logo Switch */
+
+.section:has(#logo-2:checked) {
+    .embed_logo-1 { display: none; }
+    .embed_logo-2 { display: block; }
+}
+
+.section:has(#logo-3:checked) {
+    .embed_logo-1 { display: none; }
+    .embed_logo-3 { display: block; }
+}
+
+.section:has(#logo-4:checked) {
+    .embed_logo-1 { display: none; }
+    .embed_logo-4 { display: block; }
+}
+
+/* Font Switch */
+
+.section:has(#font-2:checked) {
+    --embed-fonts--heading-font: var(--embed-primatives--heading-font-2);
+}
+
+.section:has(#font-3:checked) {
+    --embed-fonts--heading-font: var(--embed-primatives--heading-font-3);
+}
+
+.section:has(#font-4:checked) {
+    --embed-fonts--heading-font: var(--embed-primatives--heading-font-4);
+}
+
+/* Color Switch */
+
+.section:has(#color-1:checked) {
+    --embed-accent-color: var(--embed-color-1);
+}
+
+.section:has(#color-2:checked) {
+    --embed-accent-color: var(--embed-color-2);
+    --embed-input-shadow-focus: inset 0px 0px 0px 1px var(--embed-accent-color), 0px 0px 0px 1px var(--embed-accent-color), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+    &:has(#dark-mode:checked) {
+        --embed-bg-color: var(--embed-bg-color-dark-2);
+    }
+}
+
+.section:has(#color-3:checked) {
+    --embed-accent-color: var(--embed-color-3);
+    --embed-input-shadow-focus: inset 0px 0px 0px 1px var(--embed-accent-color), 0px 0px 0px 1px var(--embed-accent-color), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+    &:has(#dark-mode:checked) {
+        --embed-bg-color: var(--embed-bg-color-dark-3);
+    }
+}
+
+.section:has(#color-4:checked) {
+    --embed-accent-color: var(--embed-color-4);
+    --embed-input-shadow-focus: inset 0px 0px 0px 1px var(--embed-accent-color), 0px 0px 0px 1px var(--embed-accent-color), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+    &:has(#dark-mode:checked) {
+        --embed-bg-color: var(--embed-bg-color-dark-4);
+    }
+}
+
+/* Radius Switch */
+
+.section:has(#radius-none:checked) {
+    --embed-element-radius: var(--embed-element-radius-none);
+}
+
+.section:has(#radius-md:checked) {
+    --embed-element-radius: var(--embed-element-radius-md);
+}
+
+.section:has(#radius-lg:checked) {
+    --embed-element-radius: var(--embed-element-radius-lg);
+}
+
+/* Radio Group Styles */
+
+.embed_radio-group {
+    &.cc-large {
+        .embed_radio-field {
+            padding: 1rem;
+
+            &:not(.is-active-inputactive) {
+                box-shadow: var(--embed-radio-group-shadow);
+                background-color: var(--embed-radio-group-bg-color);
+
+                &:hover {
+                    box-shadow: var(--embed-radio-group-shadow-hover)
+                }
+            }
+        }
+    }
+    &.cc-color {
+        .embed_radio-field {
+            padding: .25rem;
+            opacity: .75;
+
+            &:hover,
+            &.is-active-inputactive {
+                opacity: 1;
+            }
+        }
+    }
+    &.cc-radius {
+        .embed_radio-field {
+            padding: .5rem;
+            opacity: .2;
+
+            &:hover {
+                opacity: .3;
+            }
+            &.is-active-inputactive {
+                opacity: 1;
+            }
+        }
+
+        &:not(.is-active-inputactive) {
+                box-shadow: var(--embed-radio-group-shadow);
+                background-color: var(--embed-radio-group-bg-color);
+            }
+    }
+}
+
+/* Profile Tab Link Styles */
+
+.embed_profile-tab-link.w--current:before {
+    content: "";
+    opacity: .25;
+    position: absolute;
+    z-index: -1;
+    right: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--embed-accent-color);
+}

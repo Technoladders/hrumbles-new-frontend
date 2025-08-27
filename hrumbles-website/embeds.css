@@ -1,0 +1,362 @@
+.o--Widget--widget {
+
+    /* //////////////////// General typography //////////////////// */
+
+    &.o--Widget--displayMode-light * {
+        color: var(--colors-page-wrapper--text);
+    }
+
+    --font-size-sm: .875rem;
+    --font-size-xs: .75rem;
+
+    .o--text-xs {
+        color: var(--colors-page-wrapper--text-muted)
+    }
+
+    *:not(.material-icons) {
+        font-family: Inter Var;
+    }
+
+    strong {
+        font-weight: 500;
+    }
+
+    --weight-bold: 500;
+
+    .o--text-secondary {
+        color: var(--colors-page-wrapper--text-muted);
+    }
+
+    /* //////////////////// Divider //////////////////// */
+
+    .o--HrLabel--hrLabel:after {
+        padding: 0 1rem;
+    }
+
+    .o--HrLabel--displayMode-light:after {
+        color: var(--colors-page-wrapper--text-muted);
+    }
+
+    .o--HrLabel--displayMode-light:before {
+        background: var(--colors-general--border);
+    }
+
+    .o--Separator--displayMode-light {
+        border-top-color: var(--colors-general--border);
+    }
+
+    /* //////////////////// Headings //////////////////// */
+
+    h1 {
+        font-family: Kaio !important;
+        font-weight: 700;
+    }
+
+    h4 {
+        font-weight: 500;
+    }
+
+    /* //////////////////// Labels //////////////////// */
+
+    label {
+       &.o--Label--label {
+            font-weight: 500;
+        }
+
+        &.o--Label--displayMode-light {
+            color: var(--colors-page-wrapper--text);
+        }
+    }
+
+    /* //////////////////// Inputs //////////////////// */
+
+    .o--Input--input,
+    .o--TextArea--textArea {
+        padding: var(--component-button--vertical-padding) var(--component-button--horizontal-padding-small);
+        box-shadow: var(--shadow-input);
+    }
+
+    .o--Input--fieldStyle-light-border,
+    .o--TextArea--fieldStyle-light-border {
+        border: 1px solid var(--component-input--border-color);
+        resize: vertical;
+
+        &:focus {
+            border-color: var(--colors-black--1000);
+            outline-color: var(--colors-black--1000);
+            outline-offset: 0px;
+            outline-style: solid;
+            outline-width: 1px;
+        }
+    }
+
+    .o--Input--cornerShape-rounded,
+    .o--TextArea--cornerShape-rounded {
+        border-radius: var(--component-input--border-radius);
+    }
+
+    .o--PasswordInput--passwordInput {
+        div {
+            span {
+                color: var(--colors-page-wrapper--text-muted) !important;
+                font-weight: 500;
+            }
+            .material-icons {
+                font-size: 20px;
+            }
+        }
+    }
+
+    @media screen and (max-width: 448px) {
+        .o--Input--input,
+        .o--TextArea--textArea {
+            font-size: 1rem;
+        }
+    }
+
+    /* //////////////////// File upload //////////////////// */
+
+    .o--FileUpload--FileUpload {
+        &.o--FileUpload--displayMode-light {
+            .o--FileUpload--dropzone {
+                border: 1px dashed var(--component-input--border-color);
+                border-radius: var(--component-input--border-radius);
+
+                p {
+                    i {
+                        margin-right: 4px;
+                    }
+                }
+            }
+
+            .o--FileUpload--file {
+                align-items: center;
+                border-radius: var(--component-input--border-radius);
+                background-color: #fff;
+                box-shadow: var(--shadow-input);
+                border: 1px solid var(--component-input--border-color);
+                overflow-wrap: anywhere;
+    
+                i, a {
+                    line-height: inherit;
+                }
+            }
+        }
+    }
+
+    /* //////////////////// Selects //////////////////// */
+
+    .o--Select--selectWrapper {
+        &.o--Select--cornerShape-rounded {
+            select {
+                border-radius: var(--component-input--border-radius);
+                border: 1px solid var(--component-input--border-color);
+                padding: var(--component-button--vertical-padding) var(--component-button--horizontal-padding-small);
+                box-shadow: var(--shadow-input);
+            }
+        }
+        > span {
+            &.material-icons {
+                top: 50%;
+                right: var(--component-button--horizontal-padding-small);
+                transform: translateY(-50%);
+                color: var(--colors-black--400);
+            }
+        }
+    }
+
+    /* //////////////////// Buttons //////////////////// */
+
+    .o--Button--btn {
+        width: 100%;
+        padding: var(--component-button--vertical-padding) var(--component-button--horizontal-padding-small);
+        font-weight: 500;
+        border-color: var(--component-button--border-color);
+        box-shadow: var(--shadow-btn);
+        
+        &.o--Button--buttonStyle-solid {
+            background-color: var(--colors-general--primary);
+
+            .o--Button--children {
+                color: var(--colors-page-wrapper--text);
+            }
+        }
+
+        &:hover {
+            box-shadow: inherit;
+        }
+
+        &.o--Button--cornerShape-rounded {
+            border-radius: var(--component-button--border-radius);
+        }
+    }
+
+    a {
+        font-weight: 500;
+
+        &:hover {
+            color: inherit;
+        }
+    }
+
+    div:has(> .o--SignInWithGoogle--btnGoogleSignin) {
+        width: 100%;
+        height: 38px;
+    }
+
+    .o--SignInWithGoogle--btnGoogleSignin {
+        width: 100%;
+
+        & > div {
+            display: flex;
+            justify-content: center;
+
+            & > div:has([role="button"]) {
+                width: 100%;
+            }
+        }
+
+        [role="button"] {
+            border-radius: var(--component-button--border-radius);
+            border-color: var(--component-button--border-color);
+            box-shadow: var(--shadow-btn);
+            height: 38px;
+
+            & > div:first-child {
+                display: none;
+            }
+
+            & > div:nth-child(2) {
+                justify-content: center;
+
+                & > span {
+                    flex-grow: 0;
+                }
+            }
+
+            &:hover {
+                background-color: var(--colors-black--50);
+            }
+        }
+    }
+
+    /* //////////////////// Payment term toggle //////////////////// */
+
+    .o--HorizontalToggle--horizontalToggle {
+        &.o--HorizontalToggle--borderWidth-1px {
+            li {
+                a {
+                    padding: var(--component-button--vertical-padding-small) var(--component-button--horizontal-padding-small);
+                    border: 1px solid transparent;
+                    border-radius: var(--component-button--border-radius);
+                }
+
+                &.o--HorizontalToggle--active {
+                    a {
+                        border-color: var(--component-button--border-color);
+                        box-shadow: var(--shadow-btn);
+                    }
+                }
+            }
+        }
+        &.o--HorizontalToggle--displayMode-light {
+            ul {
+                background-color: var(--colors-black--50);
+                border: 1px solid var(--colors-black--100);
+                padding: .125rem;
+                border-radius: calc(var(--component-button--border-radius) + .125rem);
+
+                li {
+                    background: transparent;
+
+                    a {
+                        color: var(--colors-page-wrapper--text-muted);
+                    }
+
+                    &.o--HorizontalToggle--active {
+                        a {
+                            color: var(--colors-page-wrapper--text);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /* //////////////////// Charge summary //////////////////// */
+
+    .o--ChargeSummary--chargeSummary {
+        /* display: none; */
+    }
+
+    .o--ChargeSummary--invoiceRow {
+        &.o--ChargeSummary--discount {
+            gap: 16px;
+        }
+
+        &:last-child {
+            .o--ChargeSummary--invoiceRowWhen,
+            .o--ChargeSummary--invoiceRowPrice {
+                font-weight: 500;
+            }
+        }
+    }
+
+    .o--ChargeSummary--info {
+        display: none;
+    }
+
+    .state-Checkout {
+        .o--Separator--separator {
+            &:nth-of-type(-n + 3) {
+                display: none;
+            }
+        }
+    }
+
+    /* //////////////////// Badge //////////////////// */
+
+    .o--Badge--badge {
+        font-size: 12px;
+        gap: 4px;
+    }
+
+    /* //////////////////// Popup specific styles //////////////////// */
+
+    &.o--Widget--popup {
+        max-width: 26rem;
+
+        &:has(.state-Register, .state-Checkout),
+        &.o--App--leadCaptureWidget {
+            max-width: 30rem;
+        }
+        
+    }
+
+    @media only screen and (min-width: 600px) {
+        .o--Widget--widgetBody {
+            padding: 3rem 2rem;
+        }
+    }
+
+    &.o--Widget--cornerShape-rounded {
+        border-radius: var(--component-card--border-radius);
+    }
+
+    /* //////////////////// Page embed specific styles //////////////////// */
+
+    &:not(.o--Widget--popup) {
+        &:not(.o--App--supportWidget) {
+            .o--header,
+            .o--SectionGroup--sectionGroup:has(h1) {
+                display: none;
+            }
+        }
+
+        .o--Widget--widgetBody {
+            padding: 0;
+        }
+    }
+    
+}
+
