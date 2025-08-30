@@ -9,7 +9,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Input } from '@/components/ui/input';
-import { Edit, Mail, Phone, Globe, User, MoreVertical, Activity, Clock, FileText, Home, Eye, Download, Copy, Briefcase } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Edit, Mail, Phone, Globe, User, MoreVertical, Activity, Clock, FileText, Home, Eye, Download, Copy, Briefcase, ShieldCheck, ShieldAlert, Loader2 } from "lucide-react";
 import {useSelector} from "react-redux";
 
 interface PaymentEarning {
@@ -167,10 +168,14 @@ interface EmployeeDetail {
 
 const EmployeeProfile = () => {
   const { id } = useParams<{ id: string }>();
+    const user = useSelector((state: any) => state.auth.user);
+      const organizationId = useSelector((state: any) => state.auth.organization_id);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   const navigate = useNavigate();
   const [employee, setEmployee] = useState<EmployeeDetail | null>(null);
   const [loading, setLoading] = useState(true);
+    const [isVerifying, setIsVerifying] = useState({ pan: false, aadhaar: false }); // Loading state for verification
+  const [verifications, setVerifications] = useState<any[]>([]); // To store verification history
   const [activeTab, setActiveTab] = useState("personal");
   const [showFullAccountNumber, setShowFullAccountNumber] = useState(false);
   const [isExitModalOpen, setIsExitModalOpen] = useState(false);
@@ -423,6 +428,16 @@ const EmployeeProfile = () => {
         appraisalHistory,
       };
 
+      // ADD THIS: Fetch verification history
+      const { data: verificationsData, error: verificationsError } = await supabase
+        .from('hr_identity_verifications')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .order('created_at', { ascending: false });
+
+      if (verificationsError) throw verificationsError;
+      setVerifications(verificationsData || []);
+
       setEmployee(completeEmployeeData);
     } catch (error: any) {
       console.error("Error fetching employee details:", error);
@@ -431,6 +446,79 @@ const EmployeeProfile = () => {
       setLoading(false);
     }
   };
+
+   // NEW FUNCTION: Handle Identity Verification
+  const handleVerifyIdentity = async (type: 'pan' | 'aadhaar') => {
+    if (!employee || !user || !organizationId) return;
+
+    const docNumber = type === 'pan' ? employee.pan_number : employee.aadhar_number;
+    if (!docNumber) {
+      toast.error(`${type.toUpperCase()} number is not available.`);
+      return;
+    }
+
+    setIsVerifying(prev => ({ ...prev, [type]: true }));
+
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-identity-document', {
+        body: {
+          verificationType: `${type}_verification`,
+          payload: {
+            employeeId: employee.id,
+            organizationId: organizationId,
+            userId: user.id,
+            documentNumber: docNumber,
+          },
+        },
+      });
+
+      if (error) throw error;
+      
+      if (data.status === 'completed') {
+        toast.success(`${type.toUpperCase()} verification completed.`);
+      } else {
+        toast.info(`${type.toUpperCase()} verification is pending.`);
+      }
+
+      // Refresh data to show new verification status
+      fetchEmployeeDetails(employee.id);
+
+    } catch (error: any) {
+      console.error(`Error verifying ${type}:`, error);
+      toast.error(`Failed to verify ${type}: ${error.message}`);
+    } finally {
+      setIsVerifying(prev => ({ ...prev, [type]: false }));
+    }
+  };
+
+  // NEW HELPER: To render verification status
+  const renderVerificationStatus = (type: 'pan' | 'aadhaar') => {
+    const verification = verifications.find(v => v.verification_type === `${type}_verification`);
+    if (!verification) return null;
+
+    if (verification.status === '1' || verification.status === '0') {
+      return (
+        <Badge variant="default" className="bg-green-100 text-green-700 hover:bg-green-100 ml-2">
+          <ShieldCheck className="h-3 w-3 mr-1" />
+          Verified
+        </Badge>
+      );
+    }
+    if (verification.status === '9') {
+      return (
+        <Badge variant="destructive" className="ml-2">
+          <ShieldAlert className="h-3 w-3 mr-1" />
+          Not Found
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="secondary" className="ml-2">
+        Status: {verification.status}
+      </Badge>
+    );
+  };
+
 
   const handleExitProcessSubmit = async () => {
     // Validate required fields
@@ -789,7 +877,7 @@ const EmployeeProfile = () => {
   }
 
   return (
-    <div className="container mx-auto py-8">
+    <div className=" mx-auto py-8">
       <div className="flex items-center mb-6">
         <Button variant="ghost" onClick={() => navigate('/employee')} className="mr-2 text-gray-600 hover:text-purple-500 dark:text-gray-400 dark:hover:text-purple-400">
           Employees
@@ -1336,77 +1424,69 @@ const EmployeeProfile = () => {
                 </CardContent>
               </Card>
 
-              <Card className="shadow-md rounded-xl">
-                <CardContent className="pt-6">
-                  <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">Identity Documents</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 shadow-sm">
-                      <div className="font-medium text-gray-800 dark:text-gray-200 flex items-center">
-                        <FileText className="h-5 w-5 text-purple-500 dark:text-purple-400 mr-2" />
-                        Aadhar Card
-                        {employee.aadhar_url && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              asChild
-                              className="ml-2 text-purple-500 dark:text-purple-400"
-                            >
-                              <a href={employee.aadhar_url} target="_blank" rel="noopener noreferrer">
-                                <Eye className="h-4 w-4" />
-                              </a>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              asChild
-                              className="ml-1 text-purple-500 dark:text-purple-400"
-                            >
-                              <a href={employee.aadhar_url} download>
-                                <Download className="h-4 w-4" />
-                              </a>
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        Number: {employee.aadhar_number || 'Not provided'}
-                      </div>
-                    </div>
-                    <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 shadow-sm">
-                      <div className="font-medium text-gray-800 dark:text-gray-200 flex items-center">
-                        <FileText className="h-5 w-5 text-purple-500 dark:text-purple-400 mr-2" />
-                        PAN Card
-                        {employee.pan_url && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              asChild
-                              className="ml-2 text-purple-500 dark:text-purple-400"
-                            >
-                              <a href={employee.pan_url} target="_blank" rel="noopener noreferrer">
-                                <Eye className="h-4 w-4" />
-                              </a>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              asChild
-                              className="ml-1 text-purple-500 dark:text-purple-400"
-                            >
-                              <a href={employee.pan_url} download>
-                                <Download className="h-4 w-4" />
-                              </a>
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        Number: {employee.pan_number || 'Not provided'}
-                      </div>
-                    </div>
-                    <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 shadow-sm">
+           <Card className="shadow-md rounded-xl">
+    <CardContent className="pt-6">
+      <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">Identity & Verification</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Aadhar Card */}
+        <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 shadow-sm">
+          <div className="font-medium text-gray-800 dark:text-gray-200 flex items-center mb-1">
+            <FileText className="h-5 w-5 text-purple-500 dark:text-purple-400 mr-2" />
+            Aadhar Card
+            {renderVerificationStatus('aadhaar')}
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            Number: {employee.aadhar_number || 'Not provided'}
+          </div>
+          <div className="flex items-center mt-2">
+            {employee.aadhar_url && (
+              <>
+                <Button variant="ghost" size="xs" asChild className="text-purple-500 dark:text-purple-400">
+                  <a href={employee.aadhar_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4 mr-1"/>View</a>
+                </Button>
+              </>
+            )}
+            <Button
+              variant="outline"
+              size="xs"
+              className="ml-auto"
+              onClick={() => handleVerifyIdentity('aadhaar')}
+              disabled={!employee.aadhar_number || isVerifying.aadhaar}
+            >
+              {isVerifying.aadhaar ? <Loader2 className="h-4 w-4 animate-spin"/> : 'Verify'}
+            </Button>
+          </div>
+        </div>
+
+        {/* PAN Card */}
+        <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 shadow-sm">
+          <div className="font-medium text-gray-800 dark:text-gray-200 flex items-center mb-1">
+            <FileText className="h-5 w-5 text-purple-500 dark:text-purple-400 mr-2" />
+            PAN Card
+            {renderVerificationStatus('pan')}
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            Number: {employee.pan_number || 'Not provided'}
+          </div>
+          <div className="flex items-center mt-2">
+            {employee.pan_url && (
+               <Button variant="ghost" size="xs" asChild className="text-purple-500 dark:text-purple-400">
+                  <a href={employee.pan_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4 mr-1"/>View</a>
+                </Button>
+            )}
+            <Button
+              variant="outline"
+              size="xs"
+              className="ml-auto"
+              onClick={() => handleVerifyIdentity('pan')}
+              disabled={!employee.pan_number || isVerifying.pan}
+            >
+              {isVerifying.pan ? <Loader2 className="h-4 w-4 animate-spin"/> : 'Verify'}
+            </Button>
+          </div>
+        </div>
+        
+       <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 shadow-sm">
                       <div className="font-medium text-gray-800 dark:text-gray-200 flex items-center">
                         <FileText className="h-5 w-5 text-purple-500 dark:text-purple-400 mr-2" />
                         ESIC
@@ -1472,9 +1552,9 @@ const EmployeeProfile = () => {
                         Number: {employee.uan_number || 'Not provided'}
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+      </div>
+    </CardContent>
+  </Card>
             </TabsContent>
 
             <TabsContent value="professional" className="space-y-6">

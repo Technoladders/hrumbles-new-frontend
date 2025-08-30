@@ -187,7 +187,8 @@ const EmployeeList = () => {
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'right' as const,
+        display: false,
+        position: 'left' as const,
         labels: {
           font: {
             size: 10,
@@ -202,7 +203,7 @@ const EmployeeList = () => {
       },
     },
     layout: {
-      padding: 10,
+      padding: 1,
     },
   };
   
@@ -260,8 +261,8 @@ const EmployeeList = () => {
   };
 
   return (
-    <div className="container mx-auto py-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className=" mx-auto py-4 px-4 sm:px-6 lg:px-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl font-bold">Employees</h1>
         <Button onClick={onOpen}>+ Add Employee</Button>
         <AddEmployeeModal isOpen={isOpen} onClose={onClose} />

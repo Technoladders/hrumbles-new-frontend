@@ -157,12 +157,12 @@ const SubmissionOverviewCard = ({ job }: SubmissionOverviewCardProps) => {
                     );
                   }}
                 />
-                <Legend
+                {/* <Legend
                   layout="horizontal"
                   verticalAlign="bottom"
                   align="center"
                   formatter={(value) => <span className="text-xs">{value}</span>}
-                />
+                /> */}
               </PieChart>
             </ResponsiveContainer>
           </div>

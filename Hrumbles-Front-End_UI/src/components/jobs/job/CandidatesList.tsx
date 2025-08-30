@@ -1604,7 +1604,7 @@ import {
   TableRow,
 } from "@/components/jobs/ui/table";
 import {
-  Tooltip,
+   Tooltip as ShadTooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
@@ -1614,7 +1614,7 @@ import { ItechStatusSelector } from "./ItechStatusSelector";
 import ValidateResumeButton from "./candidate/ValidateResumeButton";
 import StageProgress from "./candidate/StageProgress";
 import EmptyState from "./candidate/EmptyState";
-import { Pencil, Eye, Download, FileText, Phone, Calendar, User, ChevronLeft, ChevronRight, EyeOff, Copy, Check, PhoneOff, MailOpen, Mail, Contact } from "lucide-react";
+import { Pencil, Eye, Download, FileText, Phone, Calendar, User, ChevronLeft, ChevronRight, EyeOff, Copy, Check, PhoneOff, MailOpen, Mail, Contact, Clock, MessageSquare, Notebook } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import EditCandidateDrawer from "@/components/jobs/job/candidate/EditCandidateDrawer";
 import { getJobById } from "@/services/jobService";
@@ -1648,8 +1648,10 @@ import {
   SelectItem9,
 } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CandidateTimelineModal } from './CandidateTimelineModal';
 
 import moment from 'moment';
+import { format, isValid } from 'date-fns';
 import { getRoundNameFromResult } from "@/utils/statusTransitionHelper";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -1669,6 +1671,7 @@ interface HiddenContactCellProps {
   candidateId: string;
 }
 
+
 const CandidatesList = ({
   jobId,
   statusFilter,
@@ -1684,8 +1687,12 @@ const CandidatesList = ({
   const userRole = useSelector((state: any) => state.auth.role);
   const isEmployee = userRole === 'employee';
 
-  const ITECH_ORGANIZATION_ID = '1961d419-1272-4371-8dc7-63a4ec71be83';
+  const ITECH_ORGANIZATION_ID = [
+  "1961d419-1272-4371-8dc7-63a4ec71be83",
+  "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
+];
   const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
+
 
     // ADDED: State for dynamic tabs
   const [mainStatuses, setMainStatuses] = useState<MainStatus[]>([]);
@@ -1697,6 +1704,8 @@ console.log('mainStatuses', mainStatuses)
     queryKey: ["job-candidates", jobId],
     queryFn: () => getCandidatesByJobId(jobId),
   });
+
+  console.log('candidatesData', candidatesData)
 
 
   const { data: appliedCandidates = [] } = useQuery({
@@ -1766,8 +1775,16 @@ console.log('mainStatuses', mainStatuses)
   const [needsReschedule, setNeedsReschedule] = useState(false);
   const [candidateFilter, setCandidateFilter] = useState<"All" | "Yours">("All"); // New filter state
 
+  const [isTimelineModalOpen, setIsTimelineModalOpen] = useState(false);
+const [selectedCandidateForTimeline, setSelectedCandidateForTimeline] = useState<Candidate | null>(null);
+
   const [showOfferJoiningModal, setShowOfferJoiningModal] = useState(false);
 
+  // Create a handler function to open the modal
+const handleViewTimeline = (candidate: Candidate) => {
+  setSelectedCandidateForTimeline(candidate);
+  setIsTimelineModalOpen(true);
+};
 
 
 const [currentSubStatus, setCurrentSubStatus] = useState<{ id: string; name: string; parentId?: string | null } | null>(null);
@@ -1799,6 +1816,78 @@ const [currentSubStatus, setCurrentSubStatus] = useState<{ id: string; name: str
     queryFn: () => getJobById(jobId || ""),
     enabled: !!jobId,
   });
+
+
+    // Inside CandidatesList.tsx (or a shared constants file)
+const INTERVIEW_MAIN_STATUS_ID = "f72e13f8-7825-4793-85e0-e31d669f8097";
+const INTERVIEW_SCHEDULED_SUB_STATUS_IDS = ["4ab0c42a-4748-4808-8f29-e57cb401bde5", "a8eed1eb-f903-4bbf-a91b-e347a0f7c43f", "1de35d8a-c07f-4c1d-b185-12379f558286", "0cc92be8-c8f1-47c6-a38d-3ca04eca6bb8", "48e060dc-5884-47e5-85dd-d717d4debe40"];
+const INTERVIEW_RESCHEDULED_SUB_STATUS_IDS = ["00601f51-90ec-4d75-8ced-3225fed31643", "9ef38a36-cffa-4286-9826-bc7d736a04ce", "2c38a0fb-8b56-47bf-8c7e-e4bd19b68fdf", "d2aef2b3-89b4-4845-84f0-777b6adf9018", "e569facd-7fd0-48b9-86cd-30062c80260b"];
+const INTERVIEW_OUTCOME_SUB_STATUS_IDS = ["1930ab52-4bb4-46a2-a9d1-887629954868", "e5615fa5-f60c-4312-9f6b-4ed543541520", "258741d9-cdb1-44fe-8ae9-ed5e9eed9e27", "0111b1b9-23c9-4be1-8ad4-322ccad6ccf0", "11281dd5-5f33-4d5c-831d-2488a5d3c96e", "31346b5c-1ff4-4842-aab4-645b36b6197a", "1ce3a781-09c7-4b3f-9a58-e4c6cd02721a", "4694aeff-567b-4007-928e-b3fefe558daf", "5b59c8cb-9a6a-43b8-a3cd-8f867c0b30a2", "368aa85f-dd4a-45b5-9266-48898704839b"];
+
+
+
+// Helper function for formatting time (from AllCandidatesTab.tsx)
+const formatTime = (time?: string | null) => {
+  if (!time || typeof time !== 'string') return '';
+  try {
+    const [hours, minutes] = time.split(':');
+    const date = new Date();
+    date.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0);
+    return format(date, 'h:mm a');
+  } catch {
+    return time;
+  }
+};
+
+const formatDate = (date: string) => isValid(new Date(date)) ? format(new Date(date), 'MMM d, yyyy') : 'N/A';
+
+interface InterviewDetailsCellProps {
+  candidate: Candidate;
+}
+
+const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }) => {
+  const isScheduled = candidate.main_status_id === INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && (INTERVIEW_SCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id) || INTERVIEW_RESCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id));
+  const isOutcome = candidate.main_status_id === INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && INTERVIEW_OUTCOME_SUB_STATUS_IDS.includes(candidate.sub_status_id);
+
+  if (isScheduled && candidate.interview_date) {
+    return (
+      <div className="flex flex-col">
+        <div className="text-sm text-gray-700 flex items-center gap-1.5 whitespace-nowrap">
+          <Calendar size={14} className="flex-shrink-0" />
+          <span>{formatDate(candidate.interview_date)}</span>
+        </div>
+        {candidate.interview_time && (
+          <div className="text-sm text-gray-700 flex items-center gap-1.5 whitespace-nowrap mt-1">
+            <Clock size={14} className="flex-shrink-0" />
+            <span>{formatTime(candidate.interview_time)}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isOutcome && candidate.interview_feedback) {
+    return (
+      <TooltipProvider>
+        <ShadTooltip>
+          <TooltipTrigger asChild>
+            <div className="text-sm text-gray-700 flex items-start gap-1.5 cursor-help">
+              <MessageSquare size={14} className="flex-shrink-0 mt-0.5" />
+              <p className="truncate max-w-[150px]">
+                {candidate.interview_feedback.length > 25 ? `${candidate.interview_feedback.slice(0, 25)}...` : candidate.interview_feedback}
+              </p>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            <p className="text-sm">{candidate.interview_feedback}</p>
+          </TooltipContent>
+        </ShadTooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return <span className="text-muted-foreground">-</span>;
+};
 
 
 
@@ -2136,6 +2225,9 @@ const { data: clientData } = useQuery({
           accrual_ctc: candidate.accrual_ctc,
           ctc: candidate.ctc,
           profit,
+          interview_date: candidate.interview_date,
+          interview_time: candidate.interview_time,
+          interview_feedback: candidate.interview_feedback,
         };
       });
 
@@ -3189,7 +3281,8 @@ const handleValidateResume = async (candidateId: string) => {
                 <TableHead className="w-[50px] sm:w-[100px]">
                   Contact Info
                 </TableHead>
-                {organizationId !== ITECH_ORGANIZATION_ID || organizationId !== ASCENDION_ORGANIZATION_ID && !isEmployee && <TableHead className="w-[80px] sm:w-[100px]">Profit</TableHead>}
+                {/* <TableHead className="w-[150px] sm:w-[200px]">Interview / Feedback</TableHead> */}
+                {!ITECH_ORGANIZATION_ID.includes(organizationId) || organizationId !== ASCENDION_ORGANIZATION_ID && !isEmployee && <TableHead className="w-[80px] sm:w-[100px]">Profit</TableHead>}
                 <TableHead className="w-[120px] sm:w-[150px]">Stage Progress</TableHead>
                 <TableHead className="w-[100px] sm:w-[120px]">Status</TableHead>
                 <TableHead className="w-[80px] sm:w-[100px]">Validate</TableHead>
@@ -3228,7 +3321,10 @@ const handleValidateResume = async (candidateId: string) => {
                     phone={candidate.phone}
                     candidateId={candidate.id}
                   />
-                {organizationId !== ITECH_ORGANIZATION_ID || organizationId !== ASCENDION_ORGANIZATION_ID && !isEmployee && (
+                  {/* <TableCell>
+                <InterviewDetailsCell candidate={candidate} />
+              </TableCell> */}
+                {!ITECH_ORGANIZATION_ID.includes(organizationId)|| organizationId !== ASCENDION_ORGANIZATION_ID && !isEmployee && (
   <TableCell>
     <span
       className={
@@ -3254,7 +3350,7 @@ const handleValidateResume = async (candidateId: string) => {
                   </TableCell>
                  <TableCell>
                     {/* 3. ADD CONDITIONAL RENDERING LOGIC */}
-                    {organizationId === ITECH_ORGANIZATION_ID || organizationId === ASCENDION_ORGANIZATION_ID ? (
+                    {ITECH_ORGANIZATION_ID.includes(organizationId) || organizationId === ASCENDION_ORGANIZATION_ID ? (
                       <ItechStatusSelector
                         value={candidate.sub_status_id || ""}
                         onChange={(value) => handleStatusChange(value, candidate)}
@@ -3332,6 +3428,14 @@ const handleValidateResume = async (candidateId: string) => {
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
+                       <Button
+      variant="ghost"
+      size="sm"
+      onClick={() => handleViewTimeline(candidate)}
+      title="View Timeline & Notes"
+    >
+      <MessageSquare className="h-4 w-4" />
+    </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -3363,6 +3467,15 @@ const handleValidateResume = async (candidateId: string) => {
             setIsSummaryModalOpen(false);
             setAnalysisData(null);
           }}
+        />
+      )}
+
+      {/* --- ADD THIS NEW MODAL RENDER --- */}
+      {selectedCandidateForTimeline && (
+        <CandidateTimelineModal
+          isOpen={isTimelineModalOpen}
+          onClose={() => setIsTimelineModalOpen(false)}
+          candidate={selectedCandidateForTimeline}
         />
       )}
 

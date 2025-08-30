@@ -18,7 +18,10 @@ import { TbDatabaseSearch } from "react-icons/tb";
 
 
 
-const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
+const ITECH_ORGANIZATION_ID = [
+  "1961d419-1272-4371-8dc7-63a4ec71be83",
+  "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
+];
 const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
 
 // --- START: organization_superadmin categorization logic ---
@@ -256,7 +259,7 @@ export const menuItemsByRole = {
     { icon: FiSettings, label: "Settings", path: "/settings" },
   ],
 organization_superadmin: (organizationId) => {
-    if (organizationId === ITECH_ORGANIZATION_ID) {
+   if (ITECH_ORGANIZATION_ID.includes(organizationId)) {
       return iTechOrgSuperAdminMenu; // Return the simple menu for iTech
     } else if (organizationId === ASCENDION_ORGANIZATION_ID) {
       return AscendionOrgSuperAdminMenu; // Return the simple menu for Ascendion

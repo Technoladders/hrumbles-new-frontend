@@ -23,7 +23,10 @@ interface CreateJobModalProps {
 }
 
 // MODIFICATION: Define a constant for the iTech organization ID for better readability
-const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
+const ITECH_ORGANIZATION_ID = [
+  "1961d419-1272-4371-8dc7-63a4ec71be83",
+  "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
+];
 
 export const CreateJobModal = ({ isOpen, onClose, editJob = null, onSave }: CreateJobModalProps) => {
   const [jobType, setJobType] = useState<"Internal" | "External" | null>(null);
@@ -38,7 +41,7 @@ export const CreateJobModal = ({ isOpen, onClose, editJob = null, onSave }: Crea
         // This is the existing logic for editing a job, which is correct.
         setJobType(editJob.jobType || "Internal");
         setShowStepper(true);
-      } else if (organizationId === ITECH_ORGANIZATION_ID) {
+      } else if (Array.isArray(ITECH_ORGANIZATION_ID) && ITECH_ORGANIZATION_ID.includes(organizationId)) {
         // NEW LOGIC: If creating a new job for the specific iTech organization,
         // bypass the selection screen and go directly to the internal job form.
         setJobType("Internal");

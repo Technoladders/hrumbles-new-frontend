@@ -84,7 +84,10 @@ import Loader from "@/components/ui/Loader";
 // Goal: Import the new DateRangePickerField component
 import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
 
-const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
+const ITECH_ORGANIZATION_ID = [
+  "1961d419-1272-4371-8dc7-63a4ec71be83",
+  "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
+];
 
 // ... (AvatarGroup component remains unchanged)
 const AvatarGroup = ({
@@ -203,9 +206,9 @@ const Jobs = () => {
         setLoading(true);
         let jobs: JobData[];
 
-        if (organization_id !== ITECH_ORGANIZATION_ID && activeTab === "all") {
+        if (!ITECH_ORGANIZATION_ID.includes(organization_id) && activeTab === "all") {
           jobs = await getAllJobs();
-        } else if (organization_id !== ITECH_ORGANIZATION_ID) {
+        } else if (!ITECH_ORGANIZATION_ID.includes(organization_id)) {
           jobs = await getJobsByType(activeTab === "staffing" ? "Staffing" : "Augment Staffing");
         } else {
           jobs = await getAllJobs(); // For ITECH, always fetch all jobs
@@ -286,7 +289,7 @@ const Jobs = () => {
     selectedClient === "all" || job.clientOwner === selectedClient;
 
   const matchesTab = (() => {
-      if (organization_id === ITECH_ORGANIZATION_ID || activeTab === "all") return true;
+      if (ITECH_ORGANIZATION_ID.includes(organization_id) || activeTab === "all") return true;
       if (activeTab === "internal") return job.jobType === "Internal";
       if (activeTab === "external") return job.jobType === "External";
       return true;
@@ -515,14 +518,14 @@ const Jobs = () => {
                     <ArrowUpDown size={14} />
                   </div>
                 </th>
-                {organization_id !== ITECH_ORGANIZATION_ID && (
+                {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
                   <th scope="col" className="table-header-cell">Client</th>
                 )}
                 <th scope="col" className="table-header-cell">Posted By</th>
                 <th scope="col" className="table-header-cell">Created Date</th>
                 <th scope="col" className="table-header-cell">No. of Candidates</th>
                 <th scope="col" className="table-header-cell">Status</th>
-                 {organization_id !== ITECH_ORGANIZATION_ID && (
+                 {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
                 <th scope="col" className="table-header-cell">Assigned To</th>
                 )}
                 <th scope="col" className="table-header-cell">Actions</th>
@@ -546,7 +549,7 @@ const Jobs = () => {
                         >
                           {job.hiringMode}
                         </Badge>
-                        {organization_id !== ITECH_ORGANIZATION_ID && (
+                        {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
                         <Badge
                           variant="outline"
                           className={`rounded-full text-[10px] ${
@@ -563,7 +566,7 @@ const Jobs = () => {
                       </span>
                     </div>
                   </td>
-                  {organization_id !== ITECH_ORGANIZATION_ID && (
+                  {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
                   <td className="table-cell">
                     <div className="flex flex-col">
                       <span className="text-gray-800">{job.clientOwner}</span>
@@ -638,7 +641,7 @@ const Jobs = () => {
                       </DropdownMenu>
                     )}
                   </td>
-                  {organization_id !== ITECH_ORGANIZATION_ID && (
+                  {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
                   <td className="table-cell w-auto min-w-[120px] max-w-[200px]">
                     <AssignedToCell assignedTo={job.assigned_to} />
                   </td>
@@ -679,7 +682,7 @@ const Jobs = () => {
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          {organization_id !== ITECH_ORGANIZATION_ID && (
+                          {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -698,7 +701,7 @@ const Jobs = () => {
                             </Tooltip>
                           </TooltipProvider>
                           )}
-                          {organization_id !== ITECH_ORGANIZATION_ID && job.jobType === "Internal" && (
+                          {!ITECH_ORGANIZATION_ID.includes(organization_id) && job.jobType === "Internal" && (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -883,7 +886,7 @@ const Jobs = () => {
 
       {/* Goal: This is the updated filter section */}
       <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-        {!isEmployee && organization_id !== ITECH_ORGANIZATION_ID && (
+        {!isEmployee && !ITECH_ORGANIZATION_ID.includes(organization_id) && (
           <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid grid-cols-3 w-full sm:w-80">
               <TabsTrigger value="all">All</TabsTrigger>
@@ -945,7 +948,7 @@ const Jobs = () => {
 
        {/* ... (The rest of the component remains the same) */}
        {!isEmployee ? (
-        organization_id === ITECH_ORGANIZATION_ID ? (
+        ITECH_ORGANIZATION_ID.includes(organization_id) ? (
           <div className="space-y-6">
             {renderTable(paginatedJobs)}
             {filteredJobs.length > 0 && renderPagination()}

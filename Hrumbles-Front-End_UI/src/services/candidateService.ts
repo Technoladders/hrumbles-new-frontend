@@ -282,6 +282,9 @@ export const getCandidatesByJobId = async (jobId: string, statusFilter?: string)
         created_at,
         ctc,
         accrual_ctc,
+        interview_date, 
+        interview_time,
+        interview_feedback,
         main_status:job_statuses!main_status_id(*),
         sub_status:job_statuses!sub_status_id(*)
       `)
@@ -392,33 +395,89 @@ const authData = getAuthDataFromLocalStorage();
     }
     const { organization_id, userId } = authData;
 
-    // Fetch the main status "Processed"
-    const { data: mainStatus, error: mainStatusError } = await supabase
-      .from("job_statuses")
-      .select("id")
-      .eq("type", "main")
-      .eq("name", "Processed")
-      .single();
+     // --- START OF MODIFICATION ---
 
-    if (mainStatusError || !mainStatus) {
-      console.error("Error fetching Processed main status:", mainStatusError);
-      throw new Error("Could not find Processed main status");
+    // Define the organization IDs that require the special "first status" logic
+    const ITECH_ORGANIZATION_ID = [
+      "1961d419-1272-4371-8dc7-63a4ec71be83",
+      "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
+    ];
+
+    let mainStatus;
+    let subStatus;
+
+    // Check if the current organization is one of the Itech organizations
+    if (ITECH_ORGANIZATION_ID.includes(organization_id)) {
+      // Logic for Itech Orgs: Fetch the very first status in the pipeline
+      console.log("Itech organization detected. Fetching the first available status.");
+
+      // 1. Fetch the first main status (ordered by display_order)
+      const { data: firstMainStatus, error: firstMainStatusError } = await supabase
+        .from("job_statuses")
+        .select("id, name")
+        .eq("organization_id", organization_id)
+        .eq("type", "main")
+        .order("display_order", { ascending: true })
+        .limit(1)
+        .single();
+
+      if (firstMainStatusError || !firstMainStatus) {
+        console.error("Configuration Error fetching first main status:", firstMainStatusError);
+        throw new Error("Could not find a default main status for this organization. Please check status configuration.");
+      }
+      mainStatus = firstMainStatus;
+
+      // 2. Fetch the first sub-status belonging to that main status
+      const { data: firstSubStatus, error: firstSubStatusError } = await supabase
+        .from("job_statuses")
+        .select("id, name")
+        .eq("parent_id", mainStatus.id)
+        .eq("type", "sub")
+        .order("display_order", { ascending: true })
+        .limit(1)
+        .single();
+        
+      if (firstSubStatusError || !firstSubStatus) {
+        console.error(`Configuration Error fetching sub-status for ${mainStatus.name}:`, firstSubStatusError);
+        throw new Error(`Could not find a default sub-status for main status '${mainStatus.name}'.`);
+      }
+      subStatus = firstSubStatus;
+
+    } else {
+      // Original Logic for all other organizations
+      console.log("Default organization detected. Setting status to 'Processed (Internal)'.");
+      
+      // Fetch the main status "Processed"
+      const { data: processedMainStatus, error: mainStatusError } = await supabase
+        .from("job_statuses")
+        .select("id, name")
+        .eq("type", "main")
+        .eq("name", "Processed")
+        .single();
+
+      if (mainStatusError || !processedMainStatus) {
+        console.error("Error fetching Processed main status:", mainStatusError);
+        throw new Error("Could not find Processed main status");
+      }
+      mainStatus = processedMainStatus;
+
+      // Fetch the sub-status "Processed (Internal)"
+      const { data: processedSubStatus, error: subStatusError } = await supabase
+        .from("job_statuses")
+        .select("id, name")
+        .eq("type", "sub")
+        .eq("name", "Processed (Internal)")
+        .eq("parent_id", mainStatus.id)
+        .single();
+
+      if (subStatusError || !processedSubStatus) {
+        console.error("Error fetching Processed (Internal) sub-status:", subStatusError);
+        throw new Error("Could not find Processed (Internal) sub-status");
+      }
+      subStatus = processedSubStatus;
     }
-
-    // Fetch the sub-status "Processed (Internal)" linked to the "Processed" main status
-    const { data: subStatus, error: subStatusError } = await supabase
-      .from("job_statuses")
-      .select("id")
-      .eq("type", "sub")
-      .eq("name", "Processed (Internal)")
-      .eq("parent_id", mainStatus.id)
-      .single();
-
-    if (subStatusError || !subStatus) {
-      console.error("Error fetching Processed (Internal) sub-status:", subStatusError);
-      throw new Error("Could not find Processed (Internal) sub-status");
-    }
-
+    
+    // --- END OF MODIFICATION ---
     console.log("Payload for createCandidate:", {
       ...dbCandidate,
       job_id: jobId,
@@ -443,6 +502,32 @@ const authData = getAuthDataFromLocalStorage();
       console.error("Error creating candidate:", error);
       throw error;
     }
+
+     // --- CORRECTED BLOCK ---
+    if (data) {
+      // 1. DYNAMICALLY IMPORT the function to avoid circular dependencies
+      const { createStatusChangeTimelineEntry } = await import('@/services/statusService');
+      
+      // 2. CALL THE IMPORTED FUNCTION
+      await createStatusChangeTimelineEntry(
+        data.id,
+        userId || 'System',
+        {
+          previousState: null,
+          newState: {
+            mainStatusId: mainStatus.id,
+            subStatusId: subStatus.id,
+            mainStatusName: mainStatus.name,
+            subStatusName: subStatus.name
+          },
+          additionalData: { 
+            action: 'Candidate Created',
+          }
+        }
+      );
+    }
+    // --- END OF CORRECTION ---
+    
 
     // Record the status change in hr_status_change_counts
     const statusUpdateSuccess = await updateCandidateStatusCounts(

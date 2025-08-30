@@ -3834,10 +3834,10 @@ body {
             --gradient-1:
             	linear-gradient(
               	145deg,
-                hsl(350deg 100% 93%),
-                hsl(47deg 100% 87%) 40%,
-                hsl(47deg 100% 87%) 60%,
-                hsl(47deg 100% 53%)
+  hsl(260deg 100% 93%),
+  hsl(265deg 100% 78%) 40%,
+  hsl(268deg 100% 68%) 60%,
+  hsl(270deg 100% 55%)
               );
             --gradient-2:
             	linear-gradient(

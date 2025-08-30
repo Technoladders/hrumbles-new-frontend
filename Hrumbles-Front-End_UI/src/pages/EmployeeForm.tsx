@@ -1928,7 +1928,7 @@ const handleExpUpload = async (
   
 
   return (
-    <div className="container mx-auto py-6">
+    <div className=" mx-auto py-6">
       <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4">
         &larr; Back
       </Button>

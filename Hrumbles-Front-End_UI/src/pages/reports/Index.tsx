@@ -22,7 +22,10 @@ import ContactStatusReport from '@/components/reports/ContactsStatusReport';
 import CompaniesStatusReport from '@/components/reports/CompaniesStatusReport';
 import { LoadingSpinner } from '@/components/ui/loading-spinner'; // NEW: Import a loading spinner
 
-const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
+const ITECH_ORGANIZATION_ID = [
+  "1961d419-1272-4371-8dc7-63a4ec71be83",
+  "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
+];
 
 // NEW: A reusable component for the Consolidated Report Card to avoid duplication
 const ConsolidatedReportCard = ({ onSelect }: { onSelect: () => void }) => (

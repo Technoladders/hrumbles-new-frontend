@@ -11,7 +11,10 @@ import { getOrganizationSubdomain } from "../utils/subdomain";
 import { Eye, EyeOff } from 'lucide-react';
 
 // --- Constants ---
-const ITECH_ORGANIZATION_ID = "1961d419-1272-4371-8dc7-63a4ec71be83";
+const ITECH_ORGANIZATION_ID = [
+  "1961d419-1272-4371-8dc7-63a4ec71be83",
+  "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
+];
 const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
 
 
@@ -200,7 +203,7 @@ const LoginPage: FC = () => {
       if (role === "employee" && departmentName === "Finance") {
         navigateTo = "/finance";
       }
-      if (userOrgId === ITECH_ORGANIZATION_ID || userOrgId === ASCENDION_ORGANIZATION_ID) {
+      if (ITECH_ORGANIZATION_ID.includes(userOrgId) || userOrgId === ASCENDION_ORGANIZATION_ID) {
         navigateTo = "/jobs";
       }
       

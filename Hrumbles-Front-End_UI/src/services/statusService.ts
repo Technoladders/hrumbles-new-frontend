@@ -974,3 +974,112 @@ const authData = getAuthDataFromLocalStorage();
     return false;
   }
 };
+
+export const fetchTimelineForCandidate = async (candidateId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('hr_candidate_timeline')
+      .select(`
+        *,
+        created_by_user:hr_employees!created_by(first_name, last_name)
+      `)
+      .eq('candidate_id', candidateId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    
+    // Process data to make user name more accessible
+    return data.map(item => ({
+      ...item,
+      user_name: item.created_by_user 
+        ? `${item.created_by_user.first_name || ''} ${item.created_by_user.last_name || ''}`.trim() 
+        : 'System'
+    }));
+
+  } catch (error) {
+    console.error('Error fetching candidate timeline:', error);
+    toast.error("Failed to load candidate's history.");
+    return [];
+  }
+};
+
+
+
+// ADD this new function to create a note as its own event
+export const createNoteTimelineEvent = async (
+  candidateId: string,
+  noteText: string,
+  userId: string
+): Promise<boolean> => {
+  try {
+    const authData = getAuthDataFromLocalStorage();
+    if (!authData) throw new Error('Authentication data not found');
+
+    const eventData = {
+      text: noteText,
+    };
+
+    const { error } = await supabase.from('hr_candidate_timeline').insert({
+      candidate_id: candidateId,
+      created_by: userId,
+      event_type: 'note', // The new event type
+      event_data: eventData,
+      organization_id: authData.organization_id,
+      // previous_state and new_state will be null by default, which is correct
+    });
+
+    if (error) throw error;
+    toast.success("Note added successfully");
+    return true;
+
+  } catch (error) {
+    console.error('Error creating note timeline event:', error);
+    toast.error("Failed to add note.");
+    return false;
+  }
+};
+
+// ADD this new function to update an existing note
+export const updateNoteTimelineEvent = async (
+  timelineId: string,
+  newNoteText: string,
+  userId: string
+): Promise<boolean> => {
+  try {
+    // 1. Fetch the current event to preserve its original data
+    const { data: currentEvent, error: fetchError } = await supabase
+      .from('hr_candidate_timeline')
+      .select('event_data')
+      .eq('id', timelineId)
+      .single();
+
+    if (fetchError || !currentEvent) throw fetchError || new Error("Timeline event not found");
+
+    // 2. Prepare the updated data, adding updated_by and updated_at
+    const updatedEventData = {
+      ...currentEvent.event_data, // Keep any other data that might exist
+      text: newNoteText,
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    };
+
+    // 3. Update the record
+    const { error: updateError } = await supabase
+      .from('hr_candidate_timeline')
+      .update({ 
+        event_data: updatedEventData,
+        // The top-level updated_at for the record itself can also be updated
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', timelineId);
+      
+    if (updateError) throw updateError;
+    toast.success("Note updated successfully");
+    return true;
+
+  } catch (error) {
+    console.error('Error updating note timeline event:', error);
+    toast.error("Failed to update note.");
+    return false;
+  }
+};
