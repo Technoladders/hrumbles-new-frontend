@@ -1495,67 +1495,104 @@
             </div>
           </div>
         </div>
-        <div aria-labelledby="w-tabs-0-data-w-tab-1" class="col w-tab-pane w--tab-active" data-w-tab="Sign up" id="w-tabs-0-data-w-pane-1" role="tabpanel">
-          <div class="u-d-flex cc-justify-center">
-            <div class="embed">
-              <div class="embed_body">
-                <div class="u-d-flex cc-justify-center">
-                  <div class="embed_logo-wrapper">
-                    <img src="assets/logo/hrumbles-wave-white.svg" alt="Hrumbles.ai Logo" class="embed_logo-1" loading="lazy" />
-                  </div>
-                </div>
-                <h2 class="embed_heading h3 u-mb-0 u-text-center">
-                  Sign Up
-                </h2>
-                <div class="embed_input-group">
-                  <label class="embed_input-label">Email</label>
-                  <input class="embed_input" data-bwignore="" type="text" />
-                </div>
-                <div class="row row-sm-gutters">
-                  <div class="col">
-                    <div class="embed_input-group">
-                      <label class="embed_input-label">First name</label>
-                      <input class="embed_input" data-bwignore="" type="text" />
-                    </div>
-                  </div>
-                  <div class="col">
-                    <div class="embed_input-group">
-                      <label class="embed_input-label">Last name</label>
-                      <input class="embed_input" data-bwignore="" type="text" />
-                    </div>
-                  </div>
-                </div>
-                <div class="embed_input-group">
-                  <label class="embed_input-label">Organization</label>
-                  <input class="embed_input" data-bwignore="" type="text" />
-                </div>
-                <a class="embed_btn w-button" href="#">Sign Up</a>
-                <div class="u-d-flex cc-align-center cc-gap-0-75">
-                  <div class="embed_divider"></div>
-                  <div class="embed_text-muted">OR</div>
-                  <div class="embed_divider"></div>
-                </div>
-                <a class="embed_btn cc-secondary w-inline-block" href="#">
-                  <div class="icon-16 w-embed">
-                    <svg fill="none" height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M15.684 8.184c0-.544-.044-1.09-.138-1.625H8v3.08h4.321a3.703 3.703 0 0 1-1.599 2.431v2H13.3c1.514-1.394 2.384-3.452 2.384-5.886Z" fill="#4285F4"></path>
-                      <path d="M8 16c2.158 0 3.977-.708 5.303-1.93l-2.578-2c-.717.488-1.643.765-2.722.765-2.087 0-3.857-1.408-4.492-3.301H.851v2.06A8.001 8.001 0 0 0 8 16Z" fill="#34A853"></path>
-                      <path d="M3.508 9.533a4.792 4.792 0 0 1 0-3.063V4.41H.851a8.007 8.007 0 0 0 0 7.184l2.657-2.06Z" fill="#FBBC04"></path>
-                      <path d="M8 3.166a4.347 4.347 0 0 1 3.069 1.2l2.284-2.284A7.689 7.689 0 0 0 8 0 7.998 7.998 0 0 0 .851 4.41l2.657 2.06C4.14 4.574 5.913 3.166 8 3.166Z" fill="#EA4335"></path>
-                    </svg>
-                  </div>
-                  <div>Sign up with Google</div>
-                </a>
-                <div class="u-text-center">
-                  <div>
-                    <span class="embed_text-muted">Already have an account?</span>
-                    <a class="embed_link-text" href="#">Log in</a>
-                  </div>
-                </div>
+       <!-- START: Replace this entire section in your HTML -->
+<div class="col w-tab-pane w--tab-active" data-w-tab="Sign up" id="w-tabs-0-data-w-pane-1" role="tabpanel">
+  <div class="u-d-flex cc-justify-center">
+    <div class="embed">
+
+      <!-- This container holds the visible form -->
+      <div class="embed_body" id="signup-form-body">
+        <div class="u-d-flex cc-justify-center">
+          <div class="embed_logo-wrapper">
+            <img src="assets/logo/hrumbles-wave-white.svg" alt="Hrumbles.ai Logo" class="embed_logo-1" loading="lazy" />
+          </div>
+        </div>
+        <h2 class="embed_heading h3 u-mb-0 u-text-center">
+          Sign Up
+        </h2>
+
+        <!-- The actual <form> element -->
+        <form id="signup-form" method="POST">
+          <div class="embed_input-group">
+            <label class="embed_input-label">Email</label>
+            <input name="email" class="embed_input" data-bwignore="" type="email" required />
+          </div>
+          <div class="row row-sm-gutters">
+            <div class="col">
+              <div class="embed_input-group">
+                <label class="embed_input-label">First name</label>
+                <input name="firstName" class="embed_input" data-bwignore="" type="text" required />
+              </div>
+            </div>
+            <div class="col">
+              <div class="embed_input-group">
+                <label class="embed_input-label">Last name</label>
+                <input name="lastName" class="embed_input" data-bwignore="" type="text" required />
               </div>
             </div>
           </div>
+
+          <!-- New Phone Number Field -->
+          <div class="embed_input-group">
+              <label class="embed_input-label">Phone number</label>
+              <div style="display: flex;">
+                  <select name="countryCode" class="embed_input" style="max-width: 100px; border-right: none; border-top-right-radius: 0; border-bottom-right-radius: 0;">
+                      <option value="+91" selected>IN (+91)</option>
+                      <option value="+1">US (+1)</option>
+                      <option value="+44">UK (+44)</option>
+                      <option value="+61">AU (+61)</option>
+                      <option value="+971">AE (+971)</option>
+                  </select>
+                  <input name="phone" class="embed_input" data-bwignore="" type="tel" style="border-top-left-radius: 0; border-bottom-left-radius: 0;" required />
+              </div>
+          </div>
+          
+          <div class="embed_input-group">
+            <label class="embed_input-label">Organization</label>
+            <input name="organization" class="embed_input" data-bwignore="" type="text" />
+          </div>
+
+          <!-- The Sign Up button is now a proper submit button -->
+          <button type="submit" id="submit-button" class="embed_btn w-button">Sign Up</button>
+
+          <!-- Container for error messages -->
+          <div id="error-message" style="display: none; color: #ffbaba; margin-top: 15px; text-align: center;"></div>
+        </form>
+
+        <div class="u-d-flex cc-align-center cc-gap-0-75">
+          <div class="embed_divider"></div>
+          <div class="embed_text-muted">OR</div>
+          <div class="embed_divider"></div>
         </div>
+        <a class="embed_btn cc-secondary w-inline-block" href="#">
+          <div class="icon-16 w-embed">
+            <svg fill="none" height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
+              <path d="M15.684 8.184c0-.544-.044-1.09-.138-1.625H8v3.08h4.321a3.703 3.703 0 0 1-1.599 2.431v2H13.3c1.514-1.394 2.384-3.452 2.384-5.886Z" fill="#4285F4"></path>
+              <path d="M8 16c2.158 0 3.977-.708 5.303-1.93l-2.578-2c-.717.488-1.643.765-2.722.765-2.087 0-3.857-1.408-4.492-3.301H.851v2.06A8.001 8.001 0 0 0 8 16Z" fill="#34A853"></path>
+              <path d="M3.508 9.533a4.792 4.792 0 0 1 0-3.063V4.41H.851a8.007 8.007 0 0 0 0 7.184l2.657-2.06Z" fill="#FBBC04"></path>
+              <path d="M8 3.166a4.347 4.347 0 0 1 3.069 1.2l2.284-2.284A7.689 7.689 0 0 0 8 0 7.998 7.998 0 0 0 .851 4.41l2.657 2.06C4.14 4.574 5.913 3.166 8 3.166Z" fill="#EA4335"></path>
+            </svg>
+          </div>
+          <div>Sign up with Google</div>
+        </a>
+        <div class="u-text-center">
+          <div>
+            <span class="embed_text-muted">Already have an account?</span>
+            <a class="embed_link-text" href="#">Log in</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Success Message (Initially Hidden) -->
+      <div id="success-message" style="display: none; text-align: center; padding: 40px;">
+          <h3 class="embed_heading h3 u-mb-0 u-text-center" style="color: white;">Thank You!</h3>
+          <p class="embed_text-muted" style="margin-top: 16px; font-size: 1.1em;">Our administration will contact you soon.</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+<!-- END: Replacement Section -->
       </div>
     </div>
   </div>
@@ -2417,6 +2454,74 @@
   }, 3000);
 
   showImage(currentIndex);
+</script>
+<!-- Email send script -->
+ <script>
+document.addEventListener('DOMContentLoaded', () => {
+  const signupForm = document.getElementById('signup-form');
+  const submitButton = document.getElementById('submit-button');
+  const formBody = document.getElementById('signup-form-body');
+  const successMessage = document.getElementById('success-message');
+  const errorMessageDiv = document.getElementById('error-message');
+
+  signupForm.addEventListener('submit', async (event) => {
+    // Prevent the form from reloading the page
+    event.preventDefault();
+
+    // --- Provide user feedback ---
+    submitButton.disabled = true;
+    submitButton.textContent = 'Submitting...';
+    errorMessageDiv.style.display = 'none'; // Hide previous errors
+
+    // --- Collect form data ---
+    const formData = new FormData(signupForm);
+    const data = Object.fromEntries(formData.entries());
+
+    // --- Your Edge Function URL ---
+    // IMPORTANT: Replace this placeholder with your actual deployed function URL
+    const edgeFunctionUrl = 'https://kbpeyfietrwlhwcwqhjw.supabase.co/functions/v1/website-signup-handler';
+
+
+     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImticGV5ZmlldHJ3bGh3Y3dxaGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4NDA5NjEsImV4cCI6MjA1NDQxNjk2MX0.A-K4DO6D2qQZ66qIXY4BlmoHxc-W5B0itV-HAAM84YA';
+
+    try {
+      const response = await fetch(edgeFunctionUrl, {
+        method: 'POST',
+      headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey, // Supabase requires this header
+          'Authorization': `Bearer ${supabaseAnonKey}` // Standard authorization header
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (response.ok) {
+        // --- Success ---
+        formBody.style.display = 'none';
+        successMessage.style.display = 'block';
+      } else {
+        // --- Handle server errors ---
+        const errorResult = await response.json();
+        const message = errorResult.error || 'An unexpected error occurred.';
+        errorMessageDiv.textContent = message;
+        errorMessageDiv.style.display = 'block';
+        
+        // Restore button state on failure
+        submitButton.disabled = false;
+        submitButton.textContent = 'Sign Up';
+      }
+    } catch (error) {
+      // --- Handle network errors ---
+      console.error('Network or other error:', error);
+      errorMessageDiv.textContent = 'Could not connect to the server. Please try again later.';
+      errorMessageDiv.style.display = 'block';
+      
+      // Restore button state on failure
+      submitButton.disabled = false;
+      submitButton.textContent = 'Sign Up';
+    }
+  });
+});
 </script>
 </body>
 </html>

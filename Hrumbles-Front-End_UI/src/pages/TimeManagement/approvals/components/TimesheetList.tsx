@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TimeLog } from "@/types/time-tracker-types";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,7 +15,6 @@ import { toast } from "sonner";
 interface TimesheetListProps {
   timesheets: TimeLog[];
   loading: boolean;
-  searchTerm: string;
   type: 'pending' | 'clarification' | 'approved';
   onViewTimesheet: (timesheet: TimeLog, openClarification?: boolean) => void;
   onRespondToClarification?: (timesheet: TimeLog) => void;
@@ -31,20 +30,11 @@ export const formatDuration = (minutes: number | null) => {
   return `${hours}.${mins} hrs`;
 };
 
-export const filterTimesheetsByEmployee = (timesheets: TimeLog[], searchTerm: string) => {
-  return timesheets.filter(timesheet => {
-    const employeeName = timesheet.employee?.first_name && timesheet.employee?.last_name
-      ? `${timesheet.employee.first_name} ${timesheet.employee.last_name}`.toLowerCase()
-      : '';
-    return employeeName.includes(searchTerm.toLowerCase());
-  });
-};
-
 // Convert UTC ISO time to IST and format as 12-hour with AM/PM
 const format12HourTime = (time: string | null) => {
   if (!time) return "N/A";
   const date = new Date(time);
-  const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours_gene 30 minutes in milliseconds
+  const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours 30 minutes in milliseconds
   const istDate = new Date(date.getTime() + istOffset);
   const hours = istDate.getUTCHours();
   const minutes = istDate.getUTCMinutes().toString().padStart(2, "0");
@@ -138,7 +128,6 @@ const truncateNotes = (notes: string | null, maxLength: number = 50) => {
 const TimesheetList = ({
   timesheets,
   loading,
-  searchTerm,
   type,
   onViewTimesheet,
   onRespondToClarification,
@@ -147,17 +136,21 @@ const TimesheetList = ({
   emptyMessage,
 }: TimesheetListProps) => {
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
   const [selectedTimesheets, setSelectedTimesheets] = useState<string[]>([]);
   const [clarificationDialogOpen, setClarificationDialogOpen] = useState(false);
   const [clarificationTimesheetId, setClarificationTimesheetId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [reasonError, setReasonError] = useState(false);
 
-  const filteredTimesheets = filterTimesheetsByEmployee(timesheets, searchTerm);
-  const totalPages = Math.ceil(filteredTimesheets.length / itemsPerPage);
+  // Reset to page 1 when the filtered timesheet list changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [timesheets]);
+
+  const totalPages = Math.ceil(timesheets.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedTimesheets = filteredTimesheets.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedTimesheets = timesheets.slice(startIndex, startIndex + itemsPerPage);
 
   const handleSelectTimesheet = (timesheetId: string) => {
     setSelectedTimesheets((prev) =>
@@ -217,7 +210,7 @@ const TimesheetList = ({
         await handleRequestClarification(clarificationTimesheetId, rejectionReason);
         toast.success("Clarification request sent successfully");
         setClarificationDialogOpen(false);
-        setReRejectionReason("");
+        setRejectionReason("");
         setClarificationTimesheetId(null);
       } catch (error) {
         toast.error("Failed to send clarification request");
@@ -234,15 +227,13 @@ const TimesheetList = ({
     );
   }
 
-  if (filteredTimesheets.length === 0) {
+  if (timesheets.length === 0) {
     return (
       <div className="text-center p-12 text-gray-500">
         <p>{emptyMessage}</p>
       </div>
     );
   }
-
-  console.log("filtered timesheet", filteredTimesheets);
 
   return (
     <div className="space-y-6">
@@ -285,7 +276,7 @@ const TimesheetList = ({
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white divide-y divide-gray-200 text-xs">
               {paginatedTimesheets.map((timesheet) => {
                 const loginDisplay = getLoginDisplay(timesheet.clock_in_time);
                 const logoutDisplay = getLogoutDisplay(timesheet.clock_out_time, timesheet.duration_minutes);
@@ -447,7 +438,7 @@ const TimesheetList = ({
         </div>
       </div>
 
-      {filteredTimesheets.length > 0 && (
+      {timesheets.length > 0 && (
         <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-600">Show</span>
@@ -495,8 +486,8 @@ const TimesheetList = ({
             </Button>
           </div>
           <span className="text-sm text-gray-600">
-            Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredTimesheets.length)} of{" "}
-            {filteredTimesheets.length} timesheets
+            Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, timesheets.length)} of{" "}
+            {timesheets.length} timesheets
           </span>
         </div>
       )}

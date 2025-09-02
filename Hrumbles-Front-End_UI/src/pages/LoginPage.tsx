@@ -203,9 +203,9 @@ const LoginPage: FC = () => {
       if (role === "employee" && departmentName === "Finance") {
         navigateTo = "/finance";
       }
-      if (ITECH_ORGANIZATION_ID.includes(userOrgId) || userOrgId === ASCENDION_ORGANIZATION_ID) {
-        navigateTo = "/jobs";
-      }
+      // if (ITECH_ORGANIZATION_ID.includes(userOrgId) || userOrgId === ASCENDION_ORGANIZATION_ID) {
+      //   navigateTo = "/jobs";
+      // }
       
       console.log(`[9] Determining navigation path. Role: "${role}", Department: "${departmentName}". Navigating to: "${navigateTo}"`);
       console.log("--- LOGIN PROCESS COMPLETED SUCCESSFULLY ---");

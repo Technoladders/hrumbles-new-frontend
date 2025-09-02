@@ -231,8 +231,8 @@ const MainLayout = () => {
     return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   };
 
-  const expandedSidebarWidth = "250px";
-  const collapsedSidebarWidth = "80px";
+  const expandedSidebarWidth = "210px";
+  const collapsedSidebarWidth = "74px";
   const mainSidebarWidth = isSidebarExpanded ? expandedSidebarWidth : collapsedSidebarWidth;
 
   const toggleSidebar = () => {

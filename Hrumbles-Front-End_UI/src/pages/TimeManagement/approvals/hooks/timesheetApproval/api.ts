@@ -108,14 +108,14 @@ export const fetchApprovedTimesheets = async (): Promise<TimeLog[]> => {
         id,
         first_name,
         last_name,
-        hr_departments!hr_employees_department_id_fkey(name),
+        department:hr_departments!hr_employees_department_id_fkey(name),
         email
       )
         )
       `)
       .eq('status', 'approved')
-      .order('approved_at', { ascending: false })
-      .limit(50);
+      .order('approved_at', { ascending: false });
+      
     
     if (error) throw error;
     

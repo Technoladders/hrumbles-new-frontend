@@ -268,6 +268,60 @@ const ProjectManagement = () => {
     });
   }, [projects, projectEmployees, timeLogs]);
 
+  // In ProjectManagement.tsx, after the 'projectFinancials' useMemo hook
+
+const monthlyChartData = useMemo(() => {
+  const months = eachMonthOfInterval({ start: dateRange.startDate, end: dateRange.endDate });
+  const initialData = months.map(month => ({
+    month: format(month, 'MMM'),
+    revenue: 0,
+    profit: 0,
+  }));
+
+  if (!timeLogs || !projectEmployees || !projects) return initialData;
+
+  timeLogs.forEach(log => {
+    const logMonth = format(new Date(log.date), 'MMM');
+    const monthData = initialData.find(m => m.month === logMonth);
+
+    if (monthData && log.project_time_data?.projects) {
+      log.project_time_data.projects.forEach(p => {
+        // Find the employee and project details for this specific log entry
+        const employee = projectEmployees.find(e => e.assign_employee === log.employee_id && e.project_id === p.projectId);
+        const project = projects.find(proj => proj.id === p.projectId);
+        
+        if (employee && project) {
+          const projectCurrency = project.hr_clients?.currency || "INR";
+          const hours = p.hours || 0;
+
+          // Calculate revenue for this specific log
+          const hourlyRate = convertToHourly(employee, projectCurrency);
+          const logRevenue = hours * hourlyRate;
+
+          // Calculate profit for this specific log
+          let salary = Number(employee.salary) || 0;
+          if (employee.salary_currency === "USD") salary *= EXCHANGE_RATE_USD_TO_INR;
+
+          let hourlySalary = 0;
+          switch (employee.salary_type) {
+            case "LPA": hourlySalary = salary / (365 * 8); break;
+            case "Monthly": hourlySalary = (salary / 30) / 8; break; // Corrected logic
+            case "Hourly": hourlySalary = salary; break;
+          }
+          const logExpense = hours * hourlySalary;
+          const logProfit = logRevenue - logExpense;
+          
+          // Add to the monthly totals
+          monthData.revenue += logRevenue;
+          monthData.profit += logProfit;
+        }
+      });
+    }
+  });
+
+  return initialData;
+}, [timeLogs, projectEmployees, projects, dateRange]);
+
   // Filter projects with non-zero revenue or profit for the chart
   const filteredProjectFinancials = projectFinancials.filter(project =>
     dataType === "revenue" ? project.revenue_inr > 0 : project.profit_inr > 0
@@ -384,7 +438,10 @@ const ProjectManagement = () => {
            <div className="lg:col-span-2">
             <ErrorBoundary>
               {/* This component can be reused if its internal logic is based on props */}
-              <ClientRevenueExpenseChart dateRange={dateRange} dataType={dataType} />
+              <ClientRevenueExpenseChart 
+      chartData={monthlyChartData} 
+      dataType={dataType} 
+      isLoading={isDataLoading} />
             </ErrorBoundary>
           </div>
         </div>

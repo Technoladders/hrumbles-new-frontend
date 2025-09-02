@@ -433,25 +433,25 @@ const clientStatusDistribution = useMemo(() => {
     </Card>
 
     {/* NEW: Grid for two side-by-side charts */}
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-6">
+    <div className=" gap-6">
         <Card className="shadow-sm">
             <CardHeader className="pb-2">
                 <CardTitle className="text-base">By Service Type</CardTitle>
             </CardHeader>
             <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
+                <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
                         <Pie data={serviceTypeDistribution} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value" paddingAngle={5}>
                             {serviceTypeDistribution.map((entry, index) => (<Cell key={`cell-${index}`} fill={DONUT_CHART_COLORS[index % DONUT_CHART_COLORS.length]} />))}
                         </Pie>
                         <RechartsTooltip formatter={(value: number) => `${value} Clients`} />
-                        <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
+                        {/* <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} /> */}
                     </PieChart>
                 </ResponsiveContainer>
             </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
+        {/* <Card className="shadow-sm">
             <CardHeader className="pb-2">
                 <CardTitle className="text-base">By Status</CardTitle>
             </CardHeader>
@@ -466,7 +466,7 @@ const clientStatusDistribution = useMemo(() => {
                     </PieChart>
                 </ResponsiveContainer>
             </CardContent>
-        </Card>
+        </Card> */}
     </div>
 </div>
                     

@@ -10,6 +10,7 @@ import { CalendarCard } from "../employee/profile/cards/CalendarCard";
 import { TimelineCard } from "../employee/profile/cards/SuperadminTimeline";
 import { SubmissionChartCard } from "../employee/profile/cards/SubmissionChartCard";
 import {OnboardingChartCard} from "../employee/profile/cards/OnboardingChartCard";
+import HiringSuiteDashboard from "./HiringSuiteDashboard";
  
 interface RecruiterData {
   recruiter: string;
@@ -22,7 +23,7 @@ interface ResumeStatsData {
   fill: string;
 }
  
-function OrganizationSuperadminDashboard() {
+const OriginalDashboardContent = () => {
   const [recruiterData, setRecruiterData] = useState<RecruiterData[]>([]);
   const [resumeStatsData, setResumeStatsData] = useState<ResumeStatsData[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -371,5 +372,35 @@ return (
 );
 }
  
-export default OrganizationSuperadminDashboard;
+
  
+
+// --- Main Component acting as a router ---
+function OrganizationSuperadminDashboard() {
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
+
+  // Define the organizations that will see the new dashboard
+  const ITECH_HIRING_SUITE_ORGS = [
+    "1961d419-1272-4371-8dc7-63a4ec71be83",
+    "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
+    "53989f03-bdc9-439a-901c-45b274eff506",
+    // "96593f3f-59fa-4805-bc84-bbec17ed964e"
+  ];
+
+  if (!organizationId) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      </div>
+    );
+  }
+
+  // Conditionally render the correct dashboard
+  if (ITECH_HIRING_SUITE_ORGS.includes(organizationId)) {
+    return <HiringSuiteDashboard />;
+  } else {
+    return <OriginalDashboardContent />;
+  }
+}
+
+export default OrganizationSuperadminDashboard;

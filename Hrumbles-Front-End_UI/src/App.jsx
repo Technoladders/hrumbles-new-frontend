@@ -32,6 +32,7 @@ import Clients from "./pages/Client";
 import ClientDashboard from "./components/Client/ClientDashboard";
 import ProjectDashboard from "./components/Client/ProjectDashboard";
 import ProjectManagement from "./pages/clients/ProjectManagement";
+import EmployeeProjectLogDetails from "./components/Client/EmployeeProjectLogDetails"; 
 import Index from "./pages/Index";
 
 // Password change
@@ -208,6 +209,10 @@ function App() {
             <Route path="/projects" element={<ProjectManagement />} />
             <Route path="/client/:id" element={<ClientDashboard />} />
             <Route path="/project/:id" element={<ProjectDashboard />} />
+            <Route
+  path="/project/:projectId/employee/:employeeId/details"
+  element={<EmployeeProjectLogDetails />}
+/>
 
 {/* User management */}
 

@@ -3282,7 +3282,7 @@ const handleValidateResume = async (candidateId: string) => {
                   Contact Info
                 </TableHead>
                 {/* <TableHead className="w-[150px] sm:w-[200px]">Interview / Feedback</TableHead> */}
-                {!ITECH_ORGANIZATION_ID.includes(organizationId) || organizationId !== ASCENDION_ORGANIZATION_ID && !isEmployee && <TableHead className="w-[80px] sm:w-[100px]">Profit</TableHead>}
+                {ITECH_ORGANIZATION_ID.includes(organizationId) || organizationId !== ASCENDION_ORGANIZATION_ID && !isEmployee && <TableHead className="w-[80px] sm:w-[100px]">Profit</TableHead>}
                 <TableHead className="w-[120px] sm:w-[150px]">Stage Progress</TableHead>
                 <TableHead className="w-[100px] sm:w-[120px]">Status</TableHead>
                 <TableHead className="w-[80px] sm:w-[100px]">Validate</TableHead>
@@ -3324,7 +3324,7 @@ const handleValidateResume = async (candidateId: string) => {
                   {/* <TableCell>
                 <InterviewDetailsCell candidate={candidate} />
               </TableCell> */}
-                {!ITECH_ORGANIZATION_ID.includes(organizationId)|| organizationId !== ASCENDION_ORGANIZATION_ID && !isEmployee && (
+                {ITECH_ORGANIZATION_ID.includes(organizationId)|| organizationId !== ASCENDION_ORGANIZATION_ID && !isEmployee && (
   <TableCell>
     <span
       className={

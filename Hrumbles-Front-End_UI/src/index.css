@@ -125,6 +125,10 @@
     --sidebar-ring: 217.2 91.2% 59.8%;
     --tab: 120 40% 50%;
   }
+
+    html {
+    font-size: 80%; /* This makes 1rem = 12.8px instead of 16px */
+  }
 }
 
 @layer base {
@@ -192,10 +196,10 @@
     @apply text-[10px] text-red-500 mt-0.5;
   }
   .input-modern {
-    @apply px-1 py-0.5 rounded border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent text-[10px] h-5 max-w-[100px];
+    @apply px-1 py-0.5 rounded border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent text-[8px] h-4 max-w-[80px];
   }
   .button-modern {
-    @apply px-1 py-0.5 rounded text-[10px] font-medium transition-colors h-4 max-w-[80px];
+    @apply px-1 py-0.5 rounded text-[8px] font-medium transition-colors h-3 max-w-[70px];
   }
   .button-primary {
     @apply bg-brand-primary text-white hover:bg-brand-primary/90;
@@ -213,10 +217,10 @@
     @apply space-y-0.5;
   }
   .card-compact {
-    @apply p-2 space-y-0.5 h-[280px] overflow-hidden;
+    @apply p-2 space-y-0.5 h-[224px] overflow-hidden;
   }
   .modal-header {
-    @apply text-[10px] font-semibold mb-1;
+    @apply text-[8px] font-semibold mb-1;
   }
   .modal-content {
     @apply space-y-1;
@@ -237,13 +241,13 @@
     @apply bg-red-100 text-red-700;
   }
   .table-modern {
-    @apply w-full border-collapse text-[10px] bg-[--bglight];
+    @apply w-full border-collapse text-[8px] bg-[--bglight];
   }
   .table-modern th {
-    @apply px-0.5 py-0.5 text-left text-[10px] font-semibold text-[--primary1] bg-[--sidebar] border-b;
+    @apply px-0.5 py-0.5 text-left text-[8px] font-semibold text-[--primary1] bg-[--sidebar] border-b;
   }
   .table-modern td {
-    @apply px-0.5 py-0.5 text-[10px] text-[--greydk] border-b;
+    @apply px-0.5 py-0.5 text-[8px] text-[--greydk] border-b;
   }
   .table-modern tr:hover {
     @apply bg-[--primary1]/10;

@@ -23,6 +23,7 @@ const ITECH_ORGANIZATION_ID = [
   "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
 ];
 const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
+const DEMO_ORGANIZATION_ID = "53989f03-bdc9-439a-901c-45b274eff506";
 
 // --- START: organization_superadmin categorization logic ---
 
@@ -75,7 +76,7 @@ const orgSuperAdminAllItems = [
 
 // --- TEMPORARY MENU FOR ITECH ORGANIZATION --- (This remains unchanged)
 const iTechOrgSuperAdminMenu = [
-    // { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
+    { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
     { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
     // { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
     // { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" },
@@ -83,6 +84,61 @@ const iTechOrgSuperAdminMenu = [
     // { icon: GoGoal, label: "Goals", path: "/goals" },
     // { icon: ImProfile, label: "My Profile", path: "/profile" },
     { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
+];
+
+const demoOrgSuperAdminMenu = [
+    {
+        title: "Hiring Suite",
+        icon: FaUserShield, // Using the same icon for consistency
+        items: [
+           { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
+  { icon: FiUsers, label: "Employees", path: "/employee" },
+  { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+  { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+  // { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x" },
+  { icon: GoGoal, label: "Goals", path: "/goals" },
+  { icon: ImProfile, label: "My Profile", path: "/profile" },
+  { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
+
+  {
+    icon: TbCheckbox,
+    label: "Approvals",
+    path: "#",
+    dropdown: [
+      { icon: TbCheckbox, label: "Timesheet", path: "/approvals/timesheet" },
+      { icon: TbCheckbox, label: "Regularization", path: "/approvals/regularization" },
+      { icon: TbCheckbox , label:"Leave", path: "/approvals/leave"},
+      { icon: TbCheckbox, label: "Auto-Terminated Timesheets", path: "/approvals/auto-terminated" },
+    ],
+  },
+  {
+    icon: FiSettings,
+    label: "Settings",
+    path: "#",
+    dropdown: [
+      { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies" },
+      { icon: IoCalendarNumberOutline, label: "Official Holidays", path: "/admin/holidays" },
+      { icon: BsShieldLock, label: "Password", path: "/password" },
+    ],
+  },
+  { icon: MdOutlineManageAccounts, label: "User Management", path: "/user-management" },
+
+        ],
+    },
+    {
+        title: "Project Suite",
+        icon: FaProjectDiagram, // Using the same icon for consistency
+        items: [  { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
+  { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" }, 
+        ],
+    },
+    {
+        title: "Verification Suite",
+        icon: BsShieldCheck, // Using the same icon for consistency
+        items: [
+            { icon: LuUserSearch, label: "Verification", path: "/all-candidates" },
+        ],
+    }
 ];
 
 const AscendionOrgSuperAdminMenu = [
@@ -263,6 +319,9 @@ organization_superadmin: (organizationId) => {
       return iTechOrgSuperAdminMenu; // Return the simple menu for iTech
     } else if (organizationId === ASCENDION_ORGANIZATION_ID) {
       return AscendionOrgSuperAdminMenu; // Return the simple menu for Ascendion
+    }
+    else if (organizationId === DEMO_ORGANIZATION_ID) {
+      return demoOrgSuperAdminMenu; // Return the simple menu for demo
     }
     return categorizedOrgSuperAdminMenu; // Return the standard suite menu for everyone else
   },

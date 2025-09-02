@@ -289,7 +289,7 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
 
         // Fetch public holidays from Google Calendar API
         const year = 2025;
-        const apiKey = import.meta.env.VITE_GOOGLE_API_KEY || 'AIzaSyCZjuVaeOKuABcXC9l84XRTUTv27U2toCs';
+        const apiKey = import.meta.env.VITE_GOOGLE_API_KEY || 'AIzaSyDSqwikiTb-KtMMEUvMgrUVRin3Sm6vRs8';
         const calendarId = 'in.indian%23holiday@group.v.calendar.google.com';
         const timeMin = `${year}-01-01T00:00:00Z`;
         const timeMax = `${year}-12-31T23:59:59Z`;

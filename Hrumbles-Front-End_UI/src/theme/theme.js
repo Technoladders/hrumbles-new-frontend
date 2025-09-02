@@ -79,7 +79,7 @@ const theme = extendTheme({
         bg: props.colorMode === "dark" ? "base.bgdark" : "base.bglight",
         color: props.colorMode === "dark" ? "white" : "black",
         fontFamily: "body",
-        fontSize: "14px",
+        // fontSize: "14px",
         lineHeight: "1.5",
       },
       "*::placeholder": {

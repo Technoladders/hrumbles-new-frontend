@@ -273,7 +273,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       bg={bgColor}
       color={textColor}
       height="100vh"
-      width={isExpanded ? "250px" : "80px"}
+      width={isExpanded ? "210px" : "74px"}
       transition="width 0.2s ease-in-out"
       position="fixed"
       left={0}
@@ -371,9 +371,9 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
               <Tooltip key={suite.title} label={suite.title} placement="top" isDisabled={isExpanded}>
                 <IconButton
                   aria-label={suite.title}
-                  icon={<Icon as={suite.icon} fontSize="20px" />}
+                  icon={<Icon as={suite.icon} fontSize="16px" />}
                   isRound
-                  size="md"
+                  size="sm"
                   bg={activeSuite === suite.title ? activeBg : 'transparent'}
                   color="white"
                   _hover={{ bg: activeSuite !== suite.title && hoverBg }}

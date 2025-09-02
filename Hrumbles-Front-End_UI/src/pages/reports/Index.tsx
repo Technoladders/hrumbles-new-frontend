@@ -129,7 +129,7 @@ const ReportIndex: React.FC = () => {
   
   // NEW: Conditional flag to determine which view to show
   const showOnlyConsolidated = 
-    (organizationId === ITECH_ORGANIZATION_ID) || 
+    (ITECH_ORGANIZATION_ID.includes(organizationId)) || 
     (role === 'employee' && departmentName === 'Human Resource');
 
   return (

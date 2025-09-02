@@ -313,6 +313,8 @@ const ProjectDashboard = () => {
     enabled: calculationMode === "actual" && !!id,
   });
 
+ 
+
   // Fetch time logs for table (filtered by dateRange)
   const { data: tableTimeLogs = [], isLoading: loadingTableTimeLogs, error: tableTimeLogsError } = useQuery<
     TimeLog[]
@@ -334,6 +336,10 @@ const ProjectDashboard = () => {
     enabled: calculationMode === "actual" && !!id,
   });
 
+   console.log("unfilteredTimeLogs", unfilteredTimeLogs);
+  console.log("timeLogs", timeLogs);
+  console.log("tableTimeLogs", tableTimeLogs);
+
   // Fetch clients to get currency information
   const { data: clients = [], isLoading: loadingClients, error: clientsError } = useQuery<Client[]>({
     queryKey: ["clients"],
@@ -346,6 +352,19 @@ const ProjectDashboard = () => {
       return data as Client[];
     },
   });
+
+  // Add this useEffect hook to set the initial date range
+useEffect(() => {
+  // Check if the project data has been successfully loaded and has a start date
+  if (project && project.start_date) {
+    // Set the date range from the project's start date until today
+    setDateRange({
+      startDate: new Date(project.start_date),
+      endDate: new Date(),
+      key: "selection",
+    });
+  }
+}, [project]); // The dependency array ensures this runs only when the 'project' object changes
 
   useEffect(() => {
     if (projectError || employeesError || clientsError || unfilteredTimeLogsError || timeLogsError || tableTimeLogsError) {
@@ -381,21 +400,17 @@ const ProjectDashboard = () => {
   };
 
   // Calculate employee hours for table (using tableTimeLogs)
-  const calculateEmployeeHoursForTable = (employeeId: string) => {
-    return tableTimeLogs
-      .filter((log) => 
-        isWithinInterval(new Date(log.date), {
-          start: dateRange.startDate,
-          end: dateRange.endDate,
-        })
-      )
-      .reduce((acc, log) => {
-        const projectEntry = log.project_time_data?.projects?.find(
-          (proj) => proj.projectId === id
-        );
-        return acc + (projectEntry?.hours || 0);
-      }, 0);
-  };
+// CORRECTED: Calculate employee hours for table (using tableTimeLogs)
+const calculateEmployeeHoursForTable = (employeeId: string) => {
+  return tableTimeLogs
+    .filter((log) => log.employee_id === employeeId) // <-- This is the critical fix
+    .reduce((acc, log) => {
+      const projectEntry = log.project_time_data?.projects?.find(
+        (proj) => proj.projectId === id
+      );
+      return acc + (projectEntry?.hours || 0);
+    }, 0);
+};
 
   // Calculate employee hours for revenue/profit (using unfilteredTimeLogs)
   const calculateEmployeeHoursForRevenueProfit = (employeeId: string) => {
@@ -662,6 +677,39 @@ const ProjectDashboard = () => {
     doc.save(`Project_Employees_${calculationMode}.pdf`);
   };
 
+  // NEW: Calculate revenue for the table based on the selected date range
+const calculateRevenueForTable = (employee: AssignEmployee) => {
+  const hours = calculateEmployeeHoursForTable(employee.assign_employee);
+  const hourlyRate = convertToLPA(employee, "actual");
+  return hours * hourlyRate;
+};
+
+// NEW: Calculate profit for the table based on the selected date range
+const calculateProfitForTable = (employee: AssignEmployee) => {
+  const revenue = calculateRevenueForTable(employee);
+  let salary = employee.salary || 0;
+  const salaryType = employee?.salary_type || "LPA";
+
+  if (employee.salary_currency === "USD") {
+    salary *= EXCHANGE_RATE_USD_TO_INR;
+  }
+
+  const hours = calculateEmployeeHoursForTable(employee.assign_employee);
+  let salaryCost = 0;
+
+  if (salaryType === "LPA") {
+    const hourlySalary = salary / (365 * 8);
+    salaryCost = hours * hourlySalary;
+  } else if (salaryType === "Monthly") {
+    const monthlyToHourly = (salary / 30) / 8;
+    salaryCost = hours * monthlyToHourly;
+  } else if (salaryType === "Hourly") {
+    salaryCost = hours * salary;
+  }
+
+  return revenue - salaryCost;
+};
+
   // Mutation for updating employee status
   const updateEmployeeStatus = useMutation({
     mutationFn: async ({ employeeId, newStatus }: { employeeId: string; newStatus: string }) => {
@@ -717,9 +765,13 @@ const ProjectDashboard = () => {
                 <th scope="col" className="px-4 py-2 text-left text-sm font-medium text-gray-500">
                   Client Billing
                 </th>
+                 <th scope="col" className="px-4 py-2 text-left text-sm font-medium text-gray-500">
+                  {calculationMode === "accrual" ? "Estimated Revenue" : "Actual Revenue"}
+                </th>
                 <th scope="col" className="px-4 py-2 text-left text-sm font-medium text-gray-500">
                   {calculationMode === "accrual" ? "Estimated Profit" : "Actual Profit"}
                 </th>
+               
                 <th scope="col" className="px-4 py-2 text-left text-sm font-medium text-gray-500">
                   Status
                 </th>
@@ -736,7 +788,15 @@ const ProjectDashboard = () => {
                       ? `${employee.hr_employees.first_name} ${employee.hr_employees.last_name}`
                       : "N/A"}
                   </td>
-                  <td className="px-4 py-2">
+                  <td className={`px-4 py-2 ${calculationMode === "actual" ? "cursor-pointer hover:bg-indigo-50 transition" : ""}`}
+  onClick={() => {
+    if (calculationMode === "actual") {
+      // Pass projectId, employeeId, and the current dateRange to the new page
+      navigate(
+        `/project/${id}/employee/${employee.assign_employee}/details?startDate=${dateRange.startDate.toISOString()}&endDate=${dateRange.endDate.toISOString()}`
+      );
+    }
+  }}>
                     {calculationMode === "accrual"
                       ? `${Math.ceil(
                           (Math.min(new Date(employee.end_date).getTime(), dateRange.endDate.getTime()) -
@@ -809,7 +869,20 @@ const ProjectDashboard = () => {
                       </TooltipContent>
                     </Tooltip>
                   </td>
-                  <td className="px-4 py-2">{formatINR(calculateProfit(employee, calculationMode))}</td>
+                 <td className="px-4 py-2">
+  {formatINR(
+    calculationMode === "actual"
+      ? calculateRevenueForTable(employee)
+      : calculateRevenue(employee, "accrual")
+  )}
+</td>
+<td className="px-4 py-2">
+  {formatINR(
+    calculationMode === "actual"
+      ? calculateProfitForTable(employee)
+      : calculateProfit(employee, "accrual")
+  )}
+</td>
                   <td className="px-4 py-2">
                     <Select
                       defaultValue={employee.status}
@@ -1174,7 +1247,12 @@ const ProjectDashboard = () => {
                 </CardContent>
               </Card>
             ) : (
-              <RevenueExpenseChart projectId={id} timeLogs={unfilteredTimeLogs} />
+              <RevenueExpenseChart
+                projectId={id}
+                timeLogs={unfilteredTimeLogs}
+                assignEmployee={assignEmployee}
+                calculationMode={calculationMode}
+              />
             )}
           </div>
         </div>
@@ -1290,3 +1368,4 @@ const ProjectDashboard = () => {
 };
 
 export default ProjectDashboard;
+// 
