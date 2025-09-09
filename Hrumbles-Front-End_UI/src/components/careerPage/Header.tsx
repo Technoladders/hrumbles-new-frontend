@@ -28,7 +28,7 @@ const Header: React.FC = () => {
         scrolled ? 'py-3 glass shadow-sm' : 'py-5 bg-transparent'
       }`}
     >
-      <div className="container flex items-center justify-between">
+      <div className=" flex items-center justify-between">
         <div className="flex items-center gap-2 transition-transform duration-300 hover:scale-105">
           <img
             src={TechnoladdersLogo}

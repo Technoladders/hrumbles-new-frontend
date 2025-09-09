@@ -48,6 +48,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { ManageStagesDialog } from '@/components/sales/contacts-table/ManageStagesDialog'
 import { ContactImportDialog } from '@/components/sales/contacts-table/ContactImportDialog';
@@ -267,6 +268,7 @@ const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => 
         };
     }
     
+    finalUpdates.updated_at = new Date().toISOString();
     finalUpdates.updated_by = currentUser?.id;
     
     console.log("Final payload being sent to mutate:", { item: originalRow, updates: finalUpdates });
@@ -287,17 +289,18 @@ const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => 
     });
   };
 
-  const handleDownloadCsv = () => {
+const handleDownloadCsv = (exportAll: boolean) => {
+    const rowsToExport = exportAll ? table.getPrePaginationRowModel().rows : table.getRowModel().rows;
     const visibleColumns = table.getVisibleLeafColumns().filter(c => !['select', 'actions'].includes(c.id));
     const header = visibleColumns.map(c => c.id);
-    const rows = table.getRowModel().rows.map(row => 
+    const rows = rowsToExport.map(row => 
         visibleColumns.map(col => row.getValue(col.id))
     );
     const csv = Papa.unparse({ fields: header, data: rows });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', 'contacts.csv');
+    link.setAttribute('download', exportAll ? 'all_contacts.csv' : 'contacts_page.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -358,11 +361,14 @@ return (
                     </div>
                     <div className="flex items-center space-x-2">
                         <DateRangePickerField dateRange={chartDateRange} onDateRangeChange={setChartDateRange} />
-                        <DropdownMenu>
+                          <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="h-9"><Download className="mr-2 h-4 w-4" /> Export</Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={handleDownloadCsv}>Download CSV</DropdownMenuItem>
-                                <DropdownMenuItem onClick={handleDownloadPdf}>Download PDF</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDownloadCsv(false)}>Export Page (CSV)</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDownloadCsv(true)}>Export All (CSV)</DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleDownloadPdf(false)}>Export Page (PDF)</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDownloadPdf(true)}>Export All (PDF)</DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                         <DropdownMenu>

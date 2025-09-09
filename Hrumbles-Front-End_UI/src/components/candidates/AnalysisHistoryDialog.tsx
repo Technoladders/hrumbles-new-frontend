@@ -67,7 +67,7 @@ const AnalysisHistoryDialog = ({ isOpen, onClose, candidateId, candidateName }: 
                       variant="ghost" 
                       size="icon"
                       // Navigate to the job view to see the candidate in that context
-                      onClick={() => navigate(`/resume-analysis/${item.candidate_id}`)}
+                      onClick={() => navigate(`/resume-analysis/${item.candidate_id}?talentId=${item.candidate_id}`)}
                       title="View in Job Context"
                     >
                       <Eye size={18} />

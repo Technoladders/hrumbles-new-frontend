@@ -69,7 +69,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
-import { startOfMonth, startOfWeek, isSameDay, isWithinInterval, format, eachDayOfInterval, startOfYear } from "date-fns";
+import { startOfMonth, startOfWeek, isSameDay, isWithinInterval, format, eachDayOfInterval, startOfYear, getDaysInMonth, // <-- ADD THIS
+  getDaysInYear, 
+  isSunday,    
+  isWeekend } from "date-fns";
 import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
 import RevenueExpenseChart from "./RevenueExpenseChart";
 
@@ -86,6 +89,7 @@ interface AssignEmployee {
   sow: string | null;
   duration: number;
   billing_type?: string;
+  working_days_config?: 'all_days' | 'weekdays_only' | 'saturday_working';
   salary_type?: string;
   salary_currency?: string;
   hr_employees?: {
@@ -253,6 +257,7 @@ const ProjectDashboard = () => {
           salary_type,
           salary_currency,
           working_hours,
+           working_days_config,
           hr_employees:hr_employees!hr_project_employees_assign_employee_fkey (first_name, last_name, salary_type)
         `)
         .eq("project_id", id)
@@ -264,7 +269,7 @@ const ProjectDashboard = () => {
           ? Math.ceil(
               (new Date(employee.end_date).getTime() - new Date(employee.start_date).getTime()) /
                 (1000 * 60 * 60 * 24)
-            )
+            ) + 1
           : 0,
         hr_employees: employee.hr_employees ?? null,
         sow: employee.sow ?? null,
@@ -501,51 +506,187 @@ const calculateEmployeeHoursForTable = (employeeId: string) => {
     return clientBilling;
   };
 
+  // 4. NEW: Create a helper function to count working days based on the config
+const countWorkingDays = (
+  startDate: Date,
+  endDate: Date,
+  config: 'all_days' | 'weekdays_only' | 'saturday_working' = 'all_days'
+): number => {
+  if (!startDate || !endDate || startDate > endDate) return 0;
+  
+  const days = eachDayOfInterval({ start: startDate, end: endDate });
+  
+  switch (config) {
+    case 'weekdays_only':
+      return days.filter(day => !isWeekend(day)).length;
+    case 'saturday_working':
+      return days.filter(day => !isSunday(day)).length;
+    case 'all_days':
+    default:
+      return days.length;
+  }
+};
   // Calculate revenue for an employee
-  const calculateRevenue = (employee: AssignEmployee, mode: "accrual" | "actual") => {
-    if (mode === "accrual") {
-      return convertToLPA(employee, "accrual");
-    } else {
-      const hours = calculateEmployeeHoursForRevenueProfit(employee.assign_employee);
-      const hourlyRate = convertToLPA(employee, "actual");
-      return hours * hourlyRate;
+// Calculate revenue for an employee
+const calculateRevenue = (employee: AssignEmployee, mode: "accrual" | "actual") => {
+    const config = employee.working_days_config || 'all_days';
+    const client = clients.find((c) => c.id === employee.client_id);
+    let clientBilling = employee.client_billing || 0;
+    if (client?.currency === "USD") {
+        clientBilling *= EXCHANGE_RATE_USD_TO_INR;
     }
+
+    if (mode === "accrual") {
+        const assignmentDays = countWorkingDays(new Date(employee.start_date), new Date(employee.end_date), config);
+        let dailyRate = 0;
+
+        switch (employee.billing_type) {
+            case "Monthly":
+                const daysInMonth = getDaysInMonth(new Date(employee.start_date)); // Or an average
+                const workingDaysInBillingMonth = countWorkingDays(startOfMonth(new Date(employee.start_date)), new Date(employee.start_date).setDate(daysInMonth), config);
+                dailyRate = clientBilling / (workingDaysInBillingMonth || 1);
+                break;
+            case "LPA":
+                const daysInYear = getDaysInYear(new Date(employee.start_date));
+                const workingDaysInBillingYear = countWorkingDays(startOfYear(new Date(employee.start_date)), new Date(employee.start_date).setMonth(11, 31), config);
+                dailyRate = clientBilling / (workingDaysInBillingYear || 1);
+                break;
+            case "Hourly":
+                return clientBilling * assignmentDays * (employee.working_hours || 8);
+        }
+        return dailyRate * assignmentDays;
+    } else { // Actual mode
+        const hours = calculateEmployeeHoursForRevenueProfit(employee.assign_employee);
+        let hourlyRate = 0;
+        
+        // Use yearly averages for more stable hourly rate conversion
+        const avgWorkingDaysInYear = config === 'weekdays_only' ? 260 : config === 'saturday_working' ? 312 : 365;
+
+        switch (employee.billing_type) {
+            case "Monthly":
+                hourlyRate = (clientBilling * 12) / (avgWorkingDaysInYear * (employee.working_hours || 8));
+                break;
+            case "LPA":
+                hourlyRate = clientBilling / (avgWorkingDaysInYear * (employee.working_hours || 8));
+                break;
+            case "Hourly":
+                hourlyRate = clientBilling;
+                break;
+        }
+        return hours * (hourlyRate || 0);
+    }
+};
+
+// Calculate profit for an employee (similar logic applied to salary)
+const calculateProfit = (employee: AssignEmployee, mode: "accrual" | "actual") => {
+    const revenue = calculateRevenue(employee, mode);
+    const config = employee.working_days_config || 'all_days';
+    let salary = employee.salary || 0;
+    
+    if (employee.salary_currency === "USD") {
+        salary *= EXCHANGE_RATE_USD_TO_INR;
+    }
+    
+    let salaryCost = 0;
+
+    if (mode === "accrual") {
+        const assignmentDays = countWorkingDays(new Date(employee.start_date), new Date(employee.end_date), config);
+        let dailySalaryRate = 0;
+
+        switch (employee.salary_type) {
+            case "Monthly":
+                const daysInMonth = getDaysInMonth(new Date(employee.start_date));
+                const workingDaysInSalaryMonth = countWorkingDays(startOfMonth(new Date(employee.start_date)), new Date(employee.start_date).setDate(daysInMonth), config);
+                dailySalaryRate = salary / (workingDaysInSalaryMonth || 1);
+                break;
+            case "LPA":
+                const daysInYear = getDaysInYear(new Date(employee.start_date));
+                const workingDaysInSalaryYear = countWorkingDays(startOfYear(new Date(employee.start_date)), new Date(employee.start_date).setMonth(11, 31), config);
+                dailySalaryRate = salary / (workingDaysInSalaryYear || 1);
+                break;
+            case "Hourly":
+                salaryCost = salary * assignmentDays * (employee.working_hours || 8);
+                break;
+        }
+        if (employee.salary_type !== 'Hourly') {
+            salaryCost = dailySalaryRate * assignmentDays;
+        }
+    } else { // Actual mode
+        const hours = calculateEmployeeHoursForRevenueProfit(employee.assign_employee);
+        let hourlySalaryRate = 0;
+
+        const avgWorkingDaysInYear = config === 'weekdays_only' ? 260 : config === 'saturday_working' ? 312 : 365;
+
+        switch (employee.salary_type) {
+            case "Monthly":
+                hourlySalaryRate = (salary * 12) / (avgWorkingDaysInYear * (employee.working_hours || 8));
+                break;
+            case "LPA":
+                hourlySalaryRate = salary / (avgWorkingDaysInYear * (employee.working_hours || 8));
+                break;
+            case "Hourly":
+                hourlySalaryRate = salary;
+                break;
+        }
+        salaryCost = hours * (hourlySalaryRate || 0);
+    }
+
+    return revenue - salaryCost;
+};
+
+ const calculateActualRevenueForTable = (employee: AssignEmployee) => {
+    const hours = calculateEmployeeHoursForTable(employee.assign_employee);
+    const config = employee.working_days_config || 'all_days';
+    const client = clients.find((c) => c.id === employee.client_id);
+    let clientBilling = employee.client_billing || 0;
+    if (client?.currency === "USD") {
+        clientBilling *= EXCHANGE_RATE_USD_TO_INR;
+    }
+
+    let hourlyRate = 0;
+    const avgWorkingDaysInYear = config === 'weekdays_only' ? 260 : config === 'saturday_working' ? 312 : 365;
+
+    switch (employee.billing_type) {
+        case "Monthly":
+            hourlyRate = (clientBilling * 12) / (avgWorkingDaysInYear * (employee.working_hours || 8));
+            break;
+        case "LPA":
+            hourlyRate = clientBilling / (avgWorkingDaysInYear * (employee.working_hours || 8));
+            break;
+        case "Hourly":
+            hourlyRate = clientBilling;
+            break;
+    }
+    return hours * (hourlyRate || 0);
   };
 
-  // Calculate profit for an employee
-  const calculateProfit = (employee: AssignEmployee, mode: "accrual" | "actual") => {
-    const revenue = calculateRevenue(employee, mode);
+  const calculateActualProfitForTable = (employee: AssignEmployee) => {
+    const revenue = calculateActualRevenueForTable(employee);
+    const hours = calculateEmployeeHoursForTable(employee.assign_employee);
+    const config = employee.working_days_config || 'all_days';
     let salary = employee.salary || 0;
-    const salaryType = employee?.salary_type || "LPA";
-
     if (employee.salary_currency === "USD") {
-      salary *= EXCHANGE_RATE_USD_TO_INR;
+        salary *= EXCHANGE_RATE_USD_TO_INR;
     }
+    
+    let salaryCost = 0;
+    let hourlySalaryRate = 0;
+    const avgWorkingDaysInYear = config === 'weekdays_only' ? 260 : config === 'saturday_working' ? 312 : 365;
 
-    if (mode === "accrual") {
-      const durationDays = employee.duration || 1;
-      if (salaryType === "LPA") {
-        salary = (salary * durationDays) / 365;
-      } else if (salaryType === "Monthly") {
-        const monthlyToDaily = salary / 30;
-        salary = monthlyToDaily * durationDays;
-      } else if (salaryType === "Hourly") {
-        salary = salary * durationDays * 8;
-      }
-    } else {
-      const hours = calculateEmployeeHoursForRevenueProfit(employee.assign_employee);
-      if (salaryType === "LPA") {
-        const hourlySalary = salary / (365 * 8);
-        salary = hours * hourlySalary;
-      } else if (salaryType === "Monthly") {
-        const monthlyToHourly = (salary / 30) / 8;
-        salary = hours * monthlyToHourly;
-      } else if (salaryType === "Hourly") {
-        salary = hours * salary;
-      }
+    switch (employee.salary_type) {
+        case "Monthly":
+            hourlySalaryRate = (salary * 12) / (avgWorkingDaysInYear * (employee.working_hours || 8));
+            break;
+        case "LPA":
+            hourlySalaryRate = salary / (avgWorkingDaysInYear * (employee.working_hours || 8));
+            break;
+        case "Hourly":
+            hourlySalaryRate = salary;
+            break;
     }
+    salaryCost = hours * (hourlySalaryRate || 0);
 
-    return revenue - salary;
+    return revenue - salaryCost;
   };
 
   // Calculate total revenue (using unfilteredTimeLogs)
@@ -592,10 +733,13 @@ const calculateEmployeeHoursForTable = (employeeId: string) => {
       ? `${employee.hr_employees.first_name} ${employee.hr_employees.last_name}`
       : "";
     const matchesSearch = employeeName.toLowerCase().includes(searchQuery.toLowerCase());
+
+    // CHANGE_HIGHLIGHT: The date range filter is now conditional. It's always true for accrual mode.
     const isWithinDateRange =
-      calculationMode === "actual" ||
+      calculationMode === "accrual" || // For accrual, we don't filter by date range
       (new Date(employee.start_date) <= dateRange.endDate &&
         new Date(employee.end_date) >= dateRange.startDate);
+
     if (activeTab === "all") return matchesSearch && isWithinDateRange;
     if (activeTab === "working") return matchesSearch && employee.status === "Working" && isWithinDateRange;
     if (activeTab === "relieved") return matchesSearch && employee.status === "Relieved" && isWithinDateRange;
@@ -654,12 +798,9 @@ const calculateEmployeeHoursForTable = (employeeId: string) => {
         employee.hr_employees
           ? `${employee.hr_employees.first_name} ${employee.hr_employees.last_name}`
           : "N/A",
+        // CHANGE_HIGHLIGHT: Use employee.duration for accrual mode to show total assignment duration.
         calculationMode === "accrual"
-          ? `${Math.ceil(
-              (Math.min(new Date(employee.end_date).getTime(), dateRange.endDate.getTime()) -
-                Math.max(new Date(employee.start_date).getTime(), dateRange.startDate.getTime())) /
-                (1000 * 60 * 60 * 24)
-            )} days`
+          ? `${employee.duration} days`
           : `${calculateEmployeeHoursForTable(employee.assign_employee).toFixed(2)} hours`,
         ...(calculationMode === "accrual"
           ? [
@@ -736,7 +877,7 @@ const calculateProfitForTable = (employee: AssignEmployee) => {
         </div>
       );
     }
-
+console.log("pagiodkmndndu", assignEmployee)
     return (
       <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm animate-scale-in">
         <div className="overflow-x-auto">
@@ -745,6 +886,9 @@ const calculateProfitForTable = (employee: AssignEmployee) => {
               <tr>
                 <th scope="col" className="px-4 py-2 text-left text-sm font-medium text-gray-500">
                   Employee Name
+                </th>
+                 <th scope="col" className="px-4 py-2 text-left text-sm font-medium text-gray-500">
+                  Working Days
                 </th>
                 <th scope="col" className="px-4 py-2 text-left text-sm font-medium text-gray-500">
                   {calculationMode === "accrual" ? "Duration" : "Hours"}
@@ -788,6 +932,25 @@ const calculateProfitForTable = (employee: AssignEmployee) => {
                       ? `${employee.hr_employees.first_name} ${employee.hr_employees.last_name}`
                       : "N/A"}
                   </td>
+                  <td className="px-4 py-2">
+                    {(() => {
+                      if (calculationMode === 'accrual') {
+                        const totalWorkingDays = countWorkingDays(
+                          new Date(employee.start_date),
+                          new Date(employee.end_date),
+                          employee.working_days_config
+                        );
+                        return `${totalWorkingDays} days`;
+                      } else { // Actual mode
+                        // Calculate intersection of employee assignment and date range
+                        const effectiveStartDate = new Date(Math.max(new Date(employee.start_date).getTime(), dateRange.startDate.getTime()));
+                        const effectiveEndDate = new Date(Math.min(new Date(employee.end_date).getTime(), dateRange.endDate.getTime()));
+                        
+                        const daysInPeriod = countWorkingDays(effectiveStartDate, effectiveEndDate, employee.working_days_config);
+                        return `${daysInPeriod} days`;
+                      }
+                    })()}
+                  </td>
                   <td className={`px-4 py-2 ${calculationMode === "actual" ? "cursor-pointer hover:bg-indigo-50 transition" : ""}`}
   onClick={() => {
     if (calculationMode === "actual") {
@@ -797,12 +960,9 @@ const calculateProfitForTable = (employee: AssignEmployee) => {
       );
     }
   }}>
+                    {/* CHANGE_HIGHLIGHT: Use employee.duration for accrual mode to show total assignment duration. */}
                     {calculationMode === "accrual"
-                      ? `${Math.ceil(
-                          (Math.min(new Date(employee.end_date).getTime(), dateRange.endDate.getTime()) -
-                            Math.max(new Date(employee.start_date).getTime(), dateRange.startDate.getTime())) /
-                            (1000 * 60 * 60 * 24)
-                        )} days`
+                      ? `${employee.duration} days`
                       : `${calculateEmployeeHoursForTable(employee.assign_employee).toFixed(2)} hours`}
                   </td>
                   {calculationMode === "accrual" && (
@@ -869,20 +1029,20 @@ const calculateProfitForTable = (employee: AssignEmployee) => {
                       </TooltipContent>
                     </Tooltip>
                   </td>
-                 <td className="px-4 py-2">
-  {formatINR(
-    calculationMode === "actual"
-      ? calculateRevenueForTable(employee)
-      : calculateRevenue(employee, "accrual")
-  )}
-</td>
-<td className="px-4 py-2">
-  {formatINR(
-    calculationMode === "actual"
-      ? calculateProfitForTable(employee)
-      : calculateProfit(employee, "accrual")
-  )}
-</td>
+                  <td className="px-4 py-2">
+                {formatINR(
+                  calculationMode === "actual"
+                    ? calculateActualRevenueForTable(employee) // <-- USE NEW CORRECT FUNCTION
+                    : calculateRevenue(employee, "accrual")
+                )}
+              </td>
+              <td className="px-4 py-2">
+                {formatINR(
+                  calculationMode === "actual"
+                    ? calculateActualProfitForTable(employee) // <-- USE NEW CORRECT FUNCTION
+                    : calculateProfit(employee, "accrual")
+                )}
+              </td>
                   <td className="px-4 py-2">
                     <Select
                       defaultValue={employee.status}
@@ -1249,7 +1409,6 @@ const calculateProfitForTable = (employee: AssignEmployee) => {
             ) : (
               <RevenueExpenseChart
                 projectId={id}
-                timeLogs={unfilteredTimeLogs}
                 assignEmployee={assignEmployee}
                 calculationMode={calculationMode}
               />
@@ -1290,12 +1449,15 @@ const calculateProfitForTable = (employee: AssignEmployee) => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <DateRangePickerField
-                dateRange={dateRange}
-                onDateRangeChange={setDateRange}
-                onApply={() => {}}
-                className="mt-4 sm:mt-0"
-              />
+              {/* CHANGE_HIGHLIGHT: Conditionally render the DateRangePickerField */}
+              {calculationMode === "actual" && (
+                <DateRangePickerField
+                  dateRange={dateRange}
+                  onDateRangeChange={setDateRange}
+                  onApply={() => {}}
+                  className="mt-4 sm:mt-0"
+                />
+              )}
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={exportToCSV} className="border-gray-200 hover:bg-gray-50">
                   <Download className="w-4 h-4 mr-2" />
@@ -1368,4 +1530,3 @@ const calculateProfitForTable = (employee: AssignEmployee) => {
 };
 
 export default ProjectDashboard;
-// 

@@ -118,19 +118,21 @@ const AddProjectDialog = ({ open, onOpenChange, editingProject }: AddProjectDial
 
 
   // Calculate duration dynamically
-  const handleDateChange = (start: string, end: string) => {
-    setStartDate(start);
-    setEndDate(end);
+const handleDateChange = (start: string, end: string) => {
+  setStartDate(start);
+  setEndDate(end);
 
-    if (start && end) {
-      const duration = Math.ceil(
-        (new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24)
-      );
-      setNoOfDays(duration > 0 ? duration : 0);
-    } else {
-      setNoOfDays(0);
-    }
-  };
+  if (start && end) {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    const duration = Math.ceil(
+      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+    ) + 1; // Include end date
+    setNoOfDays(duration > 0 ? duration : 0);
+  } else {
+    setNoOfDays(0);
+  }
+};
 
   // Handle file upload
   const handleFileUpload = (selectedFile: File | null) => {

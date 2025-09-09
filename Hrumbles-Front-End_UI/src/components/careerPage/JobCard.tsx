@@ -32,7 +32,10 @@ const JobCard: React.FC<JobCardProps> = ({ job }) => {
       <div className="flex flex-col h-full">
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="bg-hrumbles-accent/10 text-hrumbles-accent font-medium px-2.5 py-1 rounded-full text-xs flex items-center gap-1">
+            <span>
+            <h3 className="text-lg font-semibold mb-1 hover:text-purple-500 transition-colors">{job.title}</h3>
+            </span>
+            <span className="bg-purple-100 text-purple-600 font-medium px-2.5 py-1 rounded-full text-xs flex items-center gap-1">
               <Briefcase size={12} /> <span>{job.type}</span>
             </span>
             <span className="text-hrumbles-muted text-xs flex items-center gap-1">
@@ -40,10 +43,10 @@ const JobCard: React.FC<JobCardProps> = ({ job }) => {
             </span>
           </div>
           
-          <h3 className="text-lg font-semibold mb-1 hover:text-hrumbles-accent transition-colors">{job.title}</h3>
+          
           
           <div className="flex flex-col gap-1 mb-4">
-            <span className="text-sm text-hrumbles-muted">{job.company}</span>
+            {/* <span className="text-sm text-hrumbles-muted">{job.company}</span> */}
             <span className="text-xs text-hrumbles-muted flex items-center gap-1">
               <MapPin size={12} /> <span>{job.location}</span>
             </span>
@@ -57,7 +60,7 @@ const JobCard: React.FC<JobCardProps> = ({ job }) => {
         </div>
         
         <div className="mt-2">
-          <span className="font-medium text-hrumbles text-sm">{job.salary}</span>
+          <span className="font-medium text-purple-500 text-sm hover:text-grey-500 transition-colors">View More...</span>
         </div>
       </div>
     </div>

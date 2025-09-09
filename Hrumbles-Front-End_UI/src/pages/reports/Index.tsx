@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useSelector } from "react-redux";
 import { supabase } from '@/integrations/supabase/client'; // NEW: Import Supabase client
-import { Building2, Users, UserCheck, Clock, Contact, Building, BarChart2, FileText, Users2 } from 'lucide-react';
+import { Building2, Users, UserCheck, Clock, Contact, Building, BarChart2, FileText, Users2, FileUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ReportType } from '@/types/reports';
@@ -25,7 +25,11 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'; // NEW: Import
 const ITECH_ORGANIZATION_ID = [
   "1961d419-1272-4371-8dc7-63a4ec71be83",
   "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
+  "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5"
 ];
+
+const RECRUITMENT_FIRM_ID = "87fd4bb2-dbaf-4775-954a-eb82f70ac961";
+
 
 // NEW: A reusable component for the Consolidated Report Card to avoid duplication
 const ConsolidatedReportCard = ({ onSelect }: { onSelect: () => void }) => (
@@ -132,6 +136,8 @@ const ReportIndex: React.FC = () => {
     (ITECH_ORGANIZATION_ID.includes(organizationId)) || 
     (role === 'employee' && departmentName === 'Human Resource');
 
+  const showRecruitmentFirmReports = (RECRUITMENT_FIRM_ID.includes(organizationId))
+
   return (
     <div className="p-6 space-y-6 min-h-screen bg-gray-50">
       <h1 className="text-3xl font-bold text-gray-800 animate-fade-in">Reports Dashboard</h1>
@@ -145,11 +151,32 @@ const ReportIndex: React.FC = () => {
           {showOnlyConsolidated ? (
             // MODIFIED: View for ITECH and HR Employees
             <ConsolidatedReportCard onSelect={() => handleSelectReport('consolidated_status')} />
+          ) : showRecruitmentFirmReports ? (
+            <>
+              {/* --- Reports for Recruitment Firms --- */}
+              <Card onClick={() => handleSelectReport('recruitment_firm_submission')} className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up">
+                <CardHeader className="bg-cyan-50"><CardTitle className="flex items-center text-cyan-700"><FileUp className="mr-2 h-6 w-6" /> Submission Report</CardTitle></CardHeader>
+                <CardContent className="p-4 text-gray-600">Track and analyze all candidate submissions.</CardContent>
+              </Card>
+              <Card onClick={() => handleSelectReport('client')} className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up">
+                 <CardHeader className="bg-indigo-50"><CardTitle className="flex items-center text-indigo-700"><Building2 className="mr-2 h-6 w-6" /> Client Performance</CardTitle></CardHeader>
+                 <CardContent className="p-4 text-gray-600">View candidate status counts for each client.</CardContent>
+              </Card>
+              <Card onClick={() => handleSelectReport('recruiter')} className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up">
+                <CardHeader className="bg-green-50"><CardTitle className="flex items-center text-green-700"><UserCheck className="mr-2 h-6 w-6" /> Recruiter Performance</CardTitle></CardHeader>
+                <CardContent className="p-4 text-gray-600">Track recruiter performance with detailed metrics.</CardContent>
+              </Card>
+              <ConsolidatedReportCard onSelect={() => handleSelectReport('consolidated_status')} />
+                <Card onClick={() => handleSelectReport('attendance')} className="cursor-pointer ...">
+                <CardHeader className="bg-green-50"><CardTitle className="flex items-center text-green-700"><Clock className="mr-2 h-6 w-6" /> Attendance Report</CardTitle></CardHeader>
+                <CardContent className="p-4 text-gray-600">View attendance records and details.</CardContent>
+              </Card>
+            </>
           ) : (
             // MODIFIED: View for all other users
             <>
               <Card onClick={() => handleSelectReport('client')} className="cursor-pointer ...">
-                 <CardHeader className="bg-indigo-50"><CardTitle className="flex items-center text-indigo-700"><Building2 className="mr-2 h-6 w-6" /> Client Wise Report</CardTitle></CardHeader>
+                 <CardHeader className="bg-indigo-50"><CardTitle className="flex items-center text-indigo-700"><Building2 className="mr-2 h-6 w-6" /> Client Performance</CardTitle></CardHeader>
                  <CardContent className="p-4 text-gray-600">View candidate status counts and distributions for each client.</CardContent>
               </Card>
               <Card onClick={() => handleSelectReport('individual')} className="cursor-pointer ...">

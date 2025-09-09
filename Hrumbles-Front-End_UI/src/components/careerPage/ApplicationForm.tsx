@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { ApplicationFormData } from '@/types/application';
 import { Button } from '@/components/careerPage/ui/button';
-import { User, Briefcase, GraduationCap, FileText, X } from 'lucide-react';
+import { User, Briefcase, GraduationCap, FileText, X, Loader2, DollarSign } from 'lucide-react';
 import { ScrollArea } from '@/components/careerPage/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/careerPage/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/careerPage/ui/table';
@@ -26,6 +26,7 @@ interface ApplicationFormProps {
   onCancel: () => void;
   previousApplications?: string[];
   onDuplicateApplication?: (email: string) => void;
+  organizationId: string;
 }
 
 const ApplicationForm: React.FC<ApplicationFormProps> = ({
@@ -33,11 +34,13 @@ const ApplicationForm: React.FC<ApplicationFormProps> = ({
   onSubmitSuccess,
   onCancel,
   previousApplications = [],
-  onDuplicateApplication
+  onDuplicateApplication,
+   organizationId
 }) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { jobId } = useParams<{ jobId: string }>();
+   const [isParsing, setIsParsing] = useState(false);
 
   // Form data state initialized with the correct structure
   const [formData, setFormData] = useState<ApplicationFormData>({
@@ -54,6 +57,21 @@ const ApplicationForm: React.FC<ApplicationFormProps> = ({
     resume: null,
     coverLetter: '',
   });
+
+  const handleParseComplete = (parsedData: any) => {
+    setFormData(prev => ({
+      ...prev,
+      personalInfo: {
+        ...prev.personalInfo,
+        fullName: `${parsedData.firstName || ''} ${parsedData.lastName || ''}`.trim(),
+        email: parsedData.email || prev.personalInfo.email,
+        phone: parsedData.phone || prev.personalInfo.phone,
+        location: parsedData.currentLocation || prev.personalInfo.location,
+      },
+      // You can add more fields from your parser output here
+    }));
+    setIsParsing(false);
+  };
 
   // State for confirmation and success modals
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -107,87 +125,70 @@ const ApplicationForm: React.FC<ApplicationFormProps> = ({
 
   const handleSubmitApplication = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const isValid = validateForm();
-    
-    if (isValid) {
-      // Check for duplicate application
-      if (previousApplications.includes(formData.personalInfo.email)) {
-        if (onDuplicateApplication) {
-          onDuplicateApplication(formData.personalInfo.email);
-        }
-        return;
-      }
-      
-      // Show confirmation dialog
+    if (validateForm()) {
       setShowConfirmDialog(true);
     } else {
-      // Show validation errors
       setShowValidationErrors(true);
       toast({
         title: "Please fix the errors",
         description: "There are some required fields that need to be filled.",
         variant: "destructive"
       });
-      
-      // Scroll to the first error
-      const firstErrorElement = document.querySelector('.border-red-500');
-      if (firstErrorElement) {
-        firstErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
     }
   };
 
 
-  const confirmSubmission = async () => {
-    setSubmitting(true);
+ const confirmSubmission = async () => {
+  setSubmitting(true);
 
-    try {
-        console.log("Updated Resume:", formData.resume);  // Debugging Log
+  try {
+    // Step 1: Package all the necessary data into a single payload.
+    // The client's only job is to send this data to the secure backend endpoint.
+    const payload = {
+      applicationData: formData, // The complete form data object
+      jobId: jobId,              // The ID of the job being applied for
+       orgId: organizationId,     // The organization ID passed down as a prop
+    };
 
-        // Ensure newData.resume is valid before proceeding
-        if (!formData.resume) {
-            throw new Error("Resume URL is missing or undefined");
-        }
+    // Step 2: Invoke the single, powerful Edge Function.
+    // This one function handles everything:
+    // - Inserting into 'hr_job_candidates'
+    // - Parsing the resume from the URL
+    // - Calling Gemini AI for analysis
+    // - Upserting the full profile into 'hr_talent_pool'
+    const { error } = await supabase.functions.invoke('submit-application', {
+      body: payload,
+    });
 
-        // Insert job application into `hr_job_candidates` table
-        const { error } = await supabase.from('hr_job_candidates').insert([
-            {
-                job_id: jobId,
-                name: formData.personalInfo.fullName,
-                email: formData.personalInfo.email,
-                phone: formData.personalInfo.phone,
-                location: formData.personalInfo.location,
-                availability: formData.personalInfo.availability,
-                current_salary: formData.currentSalary,
-                expected_salary: formData.expectedSalary,
-                resume_url: formData.resume,  // Directly using newData.resume
-                cover_letter: formData.coverLetter,
-                applied_date: new Date().toISOString(),
-                applied_from: 'Candidate'
-            },
-        ]);
-
-        if (error) throw error;
-
-        setSubmitting(false);
-        setShowConfirmDialog(false);
-
-        toast({
-            title: "Application Submitted Successfully!",
-            description: `Your application for the ${jobTitle} position has been submitted.`,
-            variant: "default",
-        });
-
-        navigate(`/job/${jobId}`);
-    } catch (error) {
-        setSubmitting(false);
-        toast({
-            title: "Submission Failed",
-            description: error.message || "There was an error submitting your application.",
-            variant: "destructive",
-        });
+    // Step 3: Handle the response.
+    // If the Edge Function returns an error for any reason, it will be caught here.
+    if (error) {
+      throw error; // This will be caught by the catch block below.
     }
+
+    // Step 4: Handle the success case.
+    // If no error is thrown, the entire backend process was successful.
+    setSubmitting(false);
+    setShowConfirmDialog(false);
+
+    toast({
+      title: "Application Submitted Successfully!",
+      description: `Your application for the ${jobTitle} position has been submitted. We will be in touch.`,
+      variant: "default",
+    });
+
+    // Navigate the user away after a successful submission.
+    onSubmitSuccess();
+
+  } catch (error: any) {
+    // This block catches any error, whether from the network or from the function itself.
+    setSubmitting(false);
+    toast({
+      title: "Submission Failed",
+      description: error.message || "An unexpected error occurred. Please try again.",
+      variant: "destructive",
+    });
+  }
 };
 
 
@@ -222,30 +223,38 @@ console.log("Updated Resume:", newData.resume);
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full relative">
+
+       {isParsing && (
+        <div className="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center rounded-xl">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+          <p className="mt-4 text-lg font-medium text-slate-700">Parsing your resume...</p>
+          <p className="text-slate-500">Auto-filling form fields, please wait.</p>
+        </div>
+      )}
       <form onSubmit={handleSubmitApplication} className="max-w-2xl mx-auto flex flex-col h-full">
         <p className="text-center text-gray-500 mb-6">Complete all required fields marked with an asterisk (*)</p>
         
         <ScrollArea className="flex-1 max-h-[70vh] overflow-y-auto pr-4 -mr-4">
           <div className="space-y-10 pb-4">
-            {/* Personal Information Section */}
-            <PersonalInfoSection
-              formData={formData}
-              updateFormData={updateFormData}
-              errors={errors}
-              showValidationErrors={showValidationErrors}
-            />
-
+              {/* 1. Resume Upload Section FIRST */}
+          <FileUploadSection
+            formData={formData}
+            updateFormData={setFormData}
+            errors={errors}
+            showValidationErrors={showValidationErrors}
+            onParseComplete={handleParseComplete} // Pass the handler
+            onParseStart={() => setIsParsing(true)}
+          />
+          {/* 2. Personal Info Section */}
+          <PersonalInfoSection
+            formData={formData}
+            updateFormData={setFormData}
+            errors={errors}
+            showValidationErrors={showValidationErrors}
+          />
 {/* <SkillsSection formData={formData} updateFormData={updateFormData} /> */}
 
-
-            {/* Resume & Cover Letter Section */}
-            <FileUploadSection
-              formData={formData}
-              updateFormData={updateFormData}
-              errors={errors}
-              showValidationErrors={showValidationErrors}
-            />
           </div>
         </ScrollArea>
         
@@ -269,94 +278,68 @@ console.log("Updated Resume:", newData.resume);
         </div>
       </form>
 
-      {/* Confirmation Dialog */}
+      {/* --- CHANGE: Improved Confirmation Dialog --- */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <DialogContent className="max-w-3xl p-0 gap-0">
           <DialogHeader className="p-6 border-b">
             <DialogTitle className="text-2xl font-bold">Review Your Application</DialogTitle>
             <DialogDescription className="text-base mt-2">
-              Please review all details before submitting your application for the <span className="font-semibold">{jobTitle}</span> position.
+              Please review all details for the <span className="font-semibold">{jobTitle}</span> position.
             </DialogDescription>
           </DialogHeader>
           
           <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
-            {/* Personal Information Card */}
+            {/* Personal Info Card */}
             <Card>
               <CardContent className="p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <User className="h-5 w-5 text-blue-500" />
-                  Personal Information
+                  <User className="h-5 w-5 text-blue-500" /> Personal Information
                 </h3>
-                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
                   <div>
                     <p className="text-sm text-gray-500">Full Name</p>
                     <p className="font-medium">{formData.personalInfo.fullName}</p>
                   </div>
-                  
                   <div>
                     <p className="text-sm text-gray-500">Email Address</p>
                     <p className="font-medium">{formData.personalInfo.email}</p>
                   </div>
-                  
                   <div>
                     <p className="text-sm text-gray-500">Phone Number</p>
                     <p className="font-medium">{formData.personalInfo.phone}</p>
                   </div>
-                  
                   <div>
                     <p className="text-sm text-gray-500">Current Location</p>
                     <p className="font-medium">{formData.personalInfo.location}</p>
                   </div>
-                  
-                  <div>
-                    <p className="text-sm text-gray-500">Availability</p>
-                    <p className="font-medium">{getAvailabilityText(formData.personalInfo.availability)}</p>
-                  </div>
-                  
                 </div>
               </CardContent>
             </Card>
-            
-           
-            {/* Files Card */}
+
+            {/* Salary & Documents Card */}
             <Card>
               <CardContent className="p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-blue-500" />
-                  Documents
+                  <DollarSign className="h-5 w-5 text-green-500" /> Compensation & Documents
                 </h3>
-                    {/* Salary Details Section */}
-    <div className="border rounded-md p-4 bg-green-50 mb-4">
-      <h4 className="text-md font-semibold text-gray-700 mb-2">Salary Details</h4>
-      <p className="text-sm text-gray-600">
-        <span className="font-medium">Current Salary:</span> ${formData.currentSalary.toLocaleString()}
-      </p>
-      <p className="text-sm text-gray-600">
-        <span className="font-medium">Expected Salary:</span> ${formData.expectedSalary.toLocaleString()}
-      </p>
-    </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="border rounded-md p-4 bg-blue-50">
-                    <p className="text-sm text-gray-600 mb-1">Resume</p>
-                    <p className="font-medium flex items-center">
-                      <FileText className="h-4 w-4 mr-2 text-blue-600" />
-                      {formData.resume?.name}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {formData.resume && `${(formData.resume.size / 1024 / 1024).toFixed(2)} MB`}
-                    </p>
-                  </div>
-                  
-                  {formData.coverLetter && (
-                    <div className="border rounded-md p-4 bg-blue-50">
-                      <p className="text-sm text-gray-600 mb-1">Cover Letter</p>
-                      <p className="text-sm leading-relaxed line-clamp-3">
-                        {formData.coverLetter}
-                      </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                    <div>
+                        <p className="text-sm text-gray-500">Current Salary</p>
+                        <p className="font-medium">{formData.currentSalary ? `₹${formData.currentSalary.toLocaleString('en-IN')}` : 'N/A'}</p>
                     </div>
-                  )}
+                    <div>
+                        <p className="text-sm text-gray-500">Expected Salary</p>
+                        <p className="font-medium">{formData.expectedSalary ? `₹${formData.expectedSalary.toLocaleString('en-IN')}` : 'N/A'}</p>
+                    </div>
+                    {formData.resume && (
+                        <div className="md:col-span-2 border rounded-md p-3 bg-slate-50 flex items-center gap-3">
+                            <FileText className="h-6 w-6 text-blue-600 flex-shrink-0" />
+                            <div>
+                                <p className="text-sm text-gray-500">Resume</p>
+                                <p className="font-medium break-all">{formData.resume.split('/').pop()}</p>
+                            </div>
+                        </div>
+                    )}
                 </div>
               </CardContent>
             </Card>

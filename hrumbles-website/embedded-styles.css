@@ -3832,13 +3832,7 @@ body {
 
             /* Gradients */
             --gradient-1:
-            	linear-gradient(
-              	145deg,
-  hsl(260deg 100% 93%),
-  hsl(265deg 100% 78%) 40%,
-  hsl(268deg 100% 68%) 60%,
-  hsl(270deg 100% 55%)
-              );
+            	linear-gradient(to right, #7B43F1, rgba(180, 75, 203, 0.8));
             --gradient-2:
             	linear-gradient(
               	135deg,

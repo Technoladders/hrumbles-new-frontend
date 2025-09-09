@@ -15,7 +15,7 @@ export interface BGVState {
     latest_employment_uan?: string;
   };
   loading: { [key: string]: boolean };
-  results: { [key: string]: any | null };
+  results: { [key: string]: any[] | null };
 }
 
 const sanitizeMobile = (phone: string): string => {
@@ -38,32 +38,51 @@ export const useBgvVerifications = (candidate: Candidate) => {
     results: {},
   });
 
-  // Fetch previous results on component load
-  useEffect(() => {
-    const fetchPreviousResults = async () => {
-      const { data, error } = await supabase
-        .from('uanlookups')
-        .select('lookup_type, response_data')
-        .eq('candidate_id', candidate.id)
-        .in('lookup_type', [
-            'mobile_to_uan', 
-            'pan_to_uan', 
-            'uan_full_history', 
-            'latest_employment_mobile',
-            'latest_passbook_mobile',
-            'latest_employment_uan'
-        ]);
-      
-      if (data) {
-        const prevResults: { [key: string]: any } = {};
-        for (const res of data) {
-          prevResults[res.lookup_type] = { status: 'completed', data: res.response_data };
+  // --- CHANGE 1: The fetching logic is extracted into a reusable useCallback function. ---
+  const fetchPreviousResults = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('uanlookups')
+      .select('lookup_type, response_data, created_at, lookup_value')
+      .eq('candidate_id', candidate.id)
+      .in('lookup_type', [
+          'mobile_to_uan', 
+          'pan_to_uan', 
+          'uan_full_history', 
+          'latest_employment_mobile',
+          'latest_passbook_mobile',
+          'latest_employment_uan'
+      ])
+      .order('created_at', { ascending: false });
+
+       console.log("Fetched raw data from Supabase:", data);
+    
+    if (data) {
+      // --- KEY CHANGE: Group results by lookup_type into arrays ---
+      const groupedResults: { [key: string]: any[] } = {};
+      for (const res of data) {
+        if (!groupedResults[res.lookup_type]) {
+          groupedResults[res.lookup_type] = []; // Initialize array if it doesn't exist
         }
-        setState(s => ({ ...s, results: prevResults }));
+        // Push the full result object into the array
+        groupedResults[res.lookup_type].push({
+          status: 'completed',
+          data: res.response_data,
+          meta: { // Add useful metadata for display
+            timestamp: res.created_at,
+            inputValue: res.lookup_value
+          }
+        });
       }
-    };
-    fetchPreviousResults();
+
+        console.log("Grouped results to be set in state:", groupedResults);
+      setState(s => ({ ...s, results: groupedResults }));
+    }
   }, [candidate.id]);
+
+    // --- CHANGE 2: The useEffect now simply calls the function above. ---
+  useEffect(() => {
+    fetchPreviousResults();
+  }, [fetchPreviousResults]); 
 
   const handleInputChange = (type: keyof BGVState['inputs'], value: string) => {
     setState(s => ({ ...s, inputs: { ...s.inputs, [type]: value } }));
@@ -95,22 +114,23 @@ export const useBgvVerifications = (candidate: Candidate) => {
       });
 
       if (error) throw error;
+
+            await fetchPreviousResults();
       
-     setState(s => ({ ...s, results: { ...s.results, [verificationType]: data } }));
       if (data.status === 'completed' && (data.data?.status === 1 || data.data?.data?.code === '1014' || data.data?.data?.code === '1022')) {
         toast.success(`${verificationType.replace(/_/g, ' ')} verification successful!`);
       } else if (data.status === 'pending') {
         toast.info(data.message);
       } else {
-        // Handle cases where the function returns 200 but the API result is a known failure (e.g., "No records found")
         const errorMessage = data.data?.data?.message || data.data?.msg || "Verification completed with no results.";
         toast.warning("Verification Result", { description: errorMessage });
       }
 
     } catch (err: any) {
+
       // --- THIS IS THE NEW AND IMPROVED ERROR HANDLING BLOCK ---
       
-      let description = "An unknown error occurred. Please check the console."; // Default message
+      let description = "An unknown error occurred. Please try after sometime."; // Default message
 
       try {
         // The Supabase client wraps the raw error response in err.context
@@ -142,9 +162,9 @@ export const useBgvVerifications = (candidate: Candidate) => {
       toast.error("Verification Failed", { description });
       
     } finally {
-      setState(s => ({ ...s, loading: { ...s.loading, [verificationType]: false } }));
+     setState(s => ({ ...s, loading: { ...s.loading, [verificationType]: false } }));
     }
-  }, [state.inputs, candidate, organizationId, user?.id]);
+  }, [state.inputs, candidate, organizationId, user?.id, fetchPreviousResults]);
 
   return { state, handleInputChange, handleVerify };
 };

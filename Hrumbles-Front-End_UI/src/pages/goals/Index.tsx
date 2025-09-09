@@ -1,20 +1,20 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import GoalCard from "@/components/goals/common/GoalCard";
 import AnimatedCard from "@/components/ui/custom/AnimatedCard";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, CalendarDays, BarChart3, Target, CheckCircle2, AlertTriangle, Users, Eye } from "lucide-react";
-import { getGoalsWithDetails, calculateGoalStatistics } from "@/lib/goalService";
+import { Calendar, BarChart3, Target, CheckCircle2, AlertTriangle, Users, Eye } from "lucide-react";
+import { getGoalsWithDetails } from "@/lib/goalService";
 import { GoalType, GoalWithDetails } from "@/types/goal";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import CreateGoalForm from "@/components/goals/goals/CreateGoalForm";
 import AssignGoalsForm from "@/components/goals/goals/AssignGoalsForm";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { Bar } from "react-chartjs-2";
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from "chart.js";
-import { isSameDay } from "date-fns";
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, isWithinInterval, isSameDay } from "date-fns";
 import { useNavigate } from "react-router-dom";
 
 // Register Chart.js components
@@ -23,13 +23,13 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 const GoalsIndex = () => {
   const navigate = useNavigate();
   const [goals, setGoals] = useState<GoalWithDetails[]>([]);
-  const [sectors, setSectors] = useState<{ name: string; count: number }[]>([]);
-  const [selectedSector, setSelectedSector] = useState("all");
+  const [selectedSector, setSelectedSector] = useState<string>("");
   const [selectedTimeframe, setSelectedTimeframe] = useState<"all" | GoalType>("all");
   const [loading, setLoading] = useState(true);
-  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [activeDepartments, setActiveDepartments] = useState<{ id: string; name: string }[]>([]);
   const [createGoalDialogOpen, setCreateGoalDialogOpen] = useState(false);
   const [assignGoalDialogOpen, setAssignGoalDialogOpen] = useState(false);
+  const [chartTimeframe, setChartTimeframe] = useState<'day' | 'week' | 'month' | 'year'>('week');
 
   useEffect(() => {
     fetchData();
@@ -39,31 +39,22 @@ const GoalsIndex = () => {
     try {
       setLoading(true);
       const goalsData = await getGoalsWithDetails();
-      console.log("Fetched Goals:", goalsData);
       
-      const { data: departmentsData, error } = await supabase
+      // Fetch only departments with assigned goals
+      const assignedSectors = [...new Set(goalsData.map(g => g.sector))];
+      const { data: allDepartments, error } = await supabase
         .from('hr_departments')
         .select('id, name')
+        .in('name', assignedSectors)
         .order('name');
       
-      if (error) {
-        console.error("Error fetching departments:", error);
-      } else {
-        setDepartments(departmentsData || []);
+      if (error) console.error("Error fetching departments:", error);
+      
+      setActiveDepartments(allDepartments || []);
+      if (allDepartments && allDepartments.length > 0) {
+        setSelectedSector(allDepartments[0].name.toLowerCase());
       }
-
-      const sectorCounts = goalsData.reduce((acc, goal) => {
-        acc[goal.sector] = (acc[goal.sector] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-
-      const sectorsData = Object.entries(sectorCounts).map(([name, count]) => ({
-        name,
-        count,
-      }));
-
       setGoals(goalsData);
-      setSectors(sectorsData);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -71,105 +62,123 @@ const GoalsIndex = () => {
     }
   };
 
-  // Apply sector filter
-  const filteredGoals = goals.filter((goal) => {
-    if (selectedSector !== "all") {
-      return goal.sector.toLowerCase() === selectedSector.toLowerCase();
-    }
-    return true;
-  });
+  // Filter goals for GoalCard components only
+  const goalCardFilteredGoals = useMemo(() => {
+    return goals.filter(goal => goal.sector.toLowerCase() === selectedSector.toLowerCase());
+  }, [goals, selectedSector]);
 
-  console.log("Filtered Goals:", filteredGoals);
-
-  // Apply timeframe filter
+  // Apply timeframe filter for GoalCard components
   const timeframeFilteredGoals = selectedTimeframe !== "all"
-    ? filteredGoals.filter((goal) =>
+    ? goalCardFilteredGoals.filter((goal) =>
         goal.assignments?.some((a) => a.goal_type === selectedTimeframe)
       )
-    : filteredGoals;
+    : goalCardFilteredGoals;
 
-  console.log("Timeframe Filtered Goals:", timeframeFilteredGoals);
+  // Calculate stats based on all goals (unfiltered by sector)
+  const stats = useMemo(() => {
+    const stats = {
+      totalAssignments: 0,
+      averageProgress: 0,
+      completedInstances: 0,
+      overdueInstances: 0,
+      topDepartment: { name: "N/A", progress: 0 },
+    };
 
-  // Calculate stats based on hr_assigned_goals and hr_goal_instances
-  const stats = {
-    totalAssignments: 0,
-    averageProgress: 0,
-    completedInstances: 0,
-    overdueInstances: 0,
-    topDepartment: { name: "N/A", progress: 0 },
-  };
+    let totalAssignments = 0;
+    let totalProgress = 0;
+    const departmentProgress: Record<string, { total: number; count: number }> = {};
 
-  // Total active assignments and average progress
-  let totalAssignments = 0;
-  let totalProgress = 0;
-  const departmentProgress: Record<string, { total: number; count: number }> = {};
+    goals.forEach((goal) => {
+      const currentAssignments = goal.assignments?.filter((a) => {
+        const now = new Date();
+        const periodEnd = new Date(a.period_end || now);
+        const isActive = isSameDay(periodEnd, now) || periodEnd > now;
+        const matchesTimeframe = selectedTimeframe === "all" || a.goal_type === selectedTimeframe;
+        return isActive && matchesTimeframe;
+      }) || [];
 
-  timeframeFilteredGoals.forEach((goal) => {
-    const currentAssignments = goal.assignments?.filter((a) => {
-      const now = new Date();
-      const periodEnd = new Date(a.period_end || now);
-      const isActive = isSameDay(periodEnd, now) || periodEnd > now;
-      const matchesTimeframe = selectedTimeframe === "all" || a.goal_type === selectedTimeframe;
-      console.log(`Assignment ${a.id}: period_end=${a.period_end}, isActive=${isActive}, matchesTimeframe=${matchesTimeframe}`);
-      return isActive && matchesTimeframe;
-    }) || [];
+      totalAssignments += currentAssignments.length;
+      currentAssignments.forEach((a) => {
+        const progress = a.progress || 0;
+        totalProgress += progress;
 
-    console.log(`Goal ${goal.id}: ${currentAssignments.length} active assignments`);
+        const dept = goal.sector || "Unknown";
+        if (!departmentProgress[dept]) {
+          departmentProgress[dept] = { total: 0, count: 0 };
+        }
+        departmentProgress[dept].total += progress;
+        departmentProgress[dept].count += 1;
+      });
 
-    totalAssignments += currentAssignments.length;
-    currentAssignments.forEach((a) => {
-      const progress = a.progress || 0;
-      totalProgress += progress;
+      goal.assignments?.forEach((a) => {
+        const instances = a.instances || [];
+        stats.completedInstances += instances.filter((i) => i.status === "completed").length;
+        stats.overdueInstances += instances.filter((i) => i.status === "overdue").length;
+      });
+    });
 
-      // Aggregate department progress
-      const dept = goal.sector || "Unknown";
-      if (!departmentProgress[dept]) {
-        departmentProgress[dept] = { total: 0, count: 0 };
+    stats.totalAssignments = totalAssignments;
+    stats.averageProgress = totalAssignments > 0 ? Math.round(totalProgress / totalAssignments) : 0;
+
+    let maxProgress = 0;
+    let topDept = "N/A";
+    Object.entries(departmentProgress).forEach(([dept, data]) => {
+      const avgProgress = data.count > 0 ? Math.round(data.total / data.count) : 0;
+      if (avgProgress > maxProgress) {
+        maxProgress = avgProgress;
+        topDept = dept;
       }
-      departmentProgress[dept].total += progress;
-      departmentProgress[dept].count += 1;
     });
+    stats.topDepartment = { name: topDept, progress: maxProgress };
 
-    // Completed and overdue instances
-    goal.assignments?.forEach((a) => {
-      const instances = a.instances || [];
-      stats.completedInstances += instances.filter((i) => i.status === "completed").length;
-      stats.overdueInstances += instances.filter((i) => i.status === "overdue").length;
-    });
-  });
+    return stats;
+  }, [goals, selectedTimeframe]);
 
-  stats.totalAssignments = totalAssignments;
-  stats.averageProgress = totalAssignments > 0 ? Math.round(totalProgress / totalAssignments) : 0;
+  // Chart data for department progress (unfiltered by sector)
+  const chartData = useMemo(() => {
+    const now = new Date();
+    let interval: { start: Date; end: Date };
 
-  console.log("Stats:", stats);
-
-  // Find top performing department
-  let maxProgress = 0;
-  let topDept = "N/A";
-  Object.entries(departmentProgress).forEach(([dept, data]) => {
-    const avgProgress = data.count > 0 ? Math.round(data.total / data.count) : 0;
-    if (avgProgress > maxProgress) {
-      maxProgress = avgProgress;
-      topDept = dept;
+    switch (chartTimeframe) {
+      case 'day': interval = { start: startOfDay(now), end: endOfDay(now) }; break;
+      case 'week': interval = { start: startOfWeek(now), end: endOfWeek(now) }; break;
+      case 'month': interval = { start: startOfMonth(now), end: endOfMonth(now) }; break;
+      case 'year': interval = { start: startOfYear(now), end: endOfYear(now) }; break;
     }
-  });
-  stats.topDepartment = { name: topDept, progress: maxProgress };
 
-  // Chart data for department progress
-  const chartData = {
-    labels: Object.keys(departmentProgress),
-    datasets: [
-      {
-        label: "Average Progress (%)",
-        data: Object.values(departmentProgress).map((data) =>
-          data.count > 0 ? Math.round(data.total / data.count) : 0
-        ),
-        backgroundColor: "rgba(59, 130, 246, 0.5)",
-        borderColor: "rgba(59, 130, 246, 1)",
-        borderWidth: 1,
-      },
-    ],
-  };
+    const departmentProgress: Record<string, { total: number; count: number }> = {};
+
+    goals.forEach(goal => {
+      goal.assignments?.forEach(assignment => {
+        const relevantInstance = assignment.instances?.find(inst => 
+          isWithinInterval(new Date(inst.period_start), interval) || 
+          isWithinInterval(new Date(inst.period_end), interval)
+        );
+        
+        if (relevantInstance) {
+          const dept = goal.sector || "Unknown";
+          if (!departmentProgress[dept]) {
+            departmentProgress[dept] = { total: 0, count: 0 };
+          }
+          departmentProgress[dept].total += relevantInstance.progress || 0;
+          departmentProgress[dept].count += 1;
+        }
+      });
+    });
+
+    const labels = Object.keys(departmentProgress);
+    const data = Object.values(departmentProgress).map(d => d.count > 0 ? Math.round(d.total / d.count) : 0);
+
+    return {
+      labels,
+      datasets: [{
+        label: `Average Progress This ${chartTimeframe}`,
+        data,
+        backgroundColor: "rgba(79, 70, 229, 0.8)",
+        borderRadius: 4,
+      }],
+    };
+  }, [goals, chartTimeframe]);
 
   const chartOptions = {
     responsive: true,
@@ -238,22 +247,20 @@ const GoalsIndex = () => {
                 </DialogTrigger>
                 <AssignGoalsForm onClose={() => setAssignGoalDialogOpen(false)} />
               </Dialog>
-
-                {/* New Employee View Button */}
-      <Button
-        variant="secondary"
-        onClick={() => navigate("/goalsview")}
-        className="flex items-center gap-2 text-sm sm:text-base px-3 sm:px-4 py-1 sm:py-2"
-      >
-        <Eye className="h-4 w-4" />
-        <span>Employee View</span>
-      </Button>
+              <Button
+                variant="secondary"
+                onClick={() => navigate("/goalsview")}
+                className="flex items-center gap-2 text-sm sm:text-base px-3 sm:px-4 py-1 sm:py-2"
+              >
+                <Eye className="h-4 w-4" />
+                <span>Employee View</span>
+              </Button>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className=" mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-10">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -283,7 +290,7 @@ const GoalsIndex = () => {
                 <p className="text-gray-500 text-xs sm:text-sm">Active Assignments</p>
                 <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.totalAssignments}</h3>
                 <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-100 mt-1">
-                  {sectors.length} Sectors
+                  {activeDepartments.length} Sectors
                 </Badge>
               </div>
             </AnimatedCard>
@@ -351,97 +358,69 @@ const GoalsIndex = () => {
                 </Badge>
               </div>
             </AnimatedCard>
-            <AnimatedCard
-              animation="fade"
-              delay={600}
-              className="bg-white p-4 sm:p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow col-span-1 sm:col-span-2 lg:col-span-3"
-            >
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Department Performance</h3>
-              <div className="h-[200px] sm:h-[300px]">
-                <Bar
-                  data={chartData}
-                  options={chartOptions}
-                  aria-label="Average progress by department chart"
-                />
-              </div>
-            </AnimatedCard>
           </div>
         )}
 
-        <div className="mb-6 bg-white p-4 sm:p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow">
-          <h3 className="font-semibold text-lg sm:text-xl text-gray-900 mb-4">Filter Goals</h3>
-          <div className="space-y-4">
-            <div>
-              <h4 className="text-sm text-gray-500 mb-2">Department</h4>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={selectedSector === "all" ? "default" : "outline"}
-                  size="sm"
-                  className="flex items-center gap-1 text-sm sm:text-base hover:bg-gray-100"
-                  onClick={() => setSelectedSector("all")}
-                >
-                  <Calendar className="h-4 w-4" />
-                  <span>All Departments</span>
-                </Button>
-                {departments.map((department) => (
-                  <Button
-                    key={department.id}
-                    variant={selectedSector === department.name.toLowerCase() ? "default" : "outline"}
-                    size="sm"
-                    className="flex items-center gap-1 text-sm sm:text-base hover:bg-gray-100"
-                    onClick={() => setSelectedSector(department.name.toLowerCase())}
-                  >
-                    <BarChart3 className="h-4 w-4" />
-                    <span>{department.name}</span>
+        {/* Department Chart with Timeframe Filters */}
+        <Card className="mb-8">
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <CardTitle>Department Performance</CardTitle>
+              <div className="flex items-center gap-2">
+                {(['day', 'week', 'month', 'year'] as const).map(tf => (
+                  <Button key={tf} size="sm" variant={chartTimeframe === tf ? "default" : "outline"} onClick={() => setChartTimeframe(tf)}>
+                    This {tf.charAt(0).toUpperCase() + tf.slice(1)}
                   </Button>
                 ))}
               </div>
             </div>
-            {/* <div>
-              <h4 className="text-sm text-gray-500 mb-2">Timeframe</h4>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              {chartData.labels.length > 0 ? (
+                <Bar data={chartData} options={chartOptions} />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  No goal data available for the selected period.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Department Filter for Goal Cards */}
+        <Card className="mb-8">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4">
+              <h4 className="text-sm font-medium text-gray-600">Filter Goals by Department:</h4>
               <div className="flex flex-wrap gap-2">
-                {["all", "Daily", "Weekly", "Monthly", "Yearly"].map((timeframe) => (
+                {activeDepartments.map((dept) => (
                   <Button
-                    key={timeframe}
-                    variant={selectedTimeframe === timeframe ? "default" : "outline"}
+                    key={dept.id}
+                    variant={selectedSector === dept.name.toLowerCase() ? "default" : "outline"}
                     size="sm"
-                    className="flex items-center gap-1 text-sm sm:text-base hover:bg-gray-100"
-                    onClick={() => setSelectedTimeframe(timeframe as any)}
+                    onClick={() => setSelectedSector(dept.name.toLowerCase())}
                   >
-                    {timeframe === "all" ? <Calendar className="h-4 w-4" /> : 
-                     timeframe === "Daily" ? <CalendarDays className="h-4 w-4" /> :
-                     <Calendar className="h-4 w-4" />}
-                    <span>{timeframe === "all" ? "All Timeframes" : timeframe}</span>
+                    {dept.name}
                   </Button>
                 ))}
               </div>
-            </div> */}
-          </div>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
 
-        {loading ? (
-          <div className="text-center py-10">
-            <div className="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
-            <p className="mt-2 text-gray-500 text-sm sm:text-base">Loading goals data...</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {timeframeFilteredGoals.length === 0 ? (
-              <p className="text-center text-gray-500 col-span-full text-sm sm:text-base">
-                No goals found for the selected filters.
-              </p>
-            ) : (
-              timeframeFilteredGoals.map((goal) => (
-                <GoalCard
-                  key={goal.id}
-                  goal={goal}
-                  onUpdate={fetchData}
-                  className="hover:shadow-md transition-shadow"
-                />
-              ))
-            )}
-          </div>
-        )}
+        {/* Goal Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {loading ? (
+            <p>Loading...</p>
+          ) : timeframeFilteredGoals.length === 0 ? (
+            <p className="text-center text-gray-500 col-span-full">No goals found for the selected department and timeframe.</p>
+          ) : (
+            timeframeFilteredGoals.map((goal) => (
+              <GoalCard key={goal.id} goal={goal} onUpdate={fetchData} />
+            ))
+          )}
+        </div>
       </main>
     </div>
   );

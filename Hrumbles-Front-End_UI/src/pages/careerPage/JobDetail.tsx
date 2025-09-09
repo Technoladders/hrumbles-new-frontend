@@ -6,22 +6,33 @@ import Header from '@/components/careerPage/Header';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from "@/integrations/supabase/client";
 
+interface Job {
+  id: string;
+  title: string;
+  location: string[];
+  job_type: string;
+  posted_date: string;
+  description: string;
+  salary: string;
+  organization_id: string; // <-- Add this field
+}
 
 const JobDetail = () => {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [job, setJob] = useState(null);
+const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+useEffect(() => {
     const fetchJob = async () => {
+      if (!jobId) return;
       setLoading(true);
-      const { data, error } = await supabase
-        .from('hr_jobs')
-        .select('*')
-        .eq('id', jobId)
-        .single();
+
+      // --- CHANGE: Invoke the Edge Function instead of direct DB access ---
+      const { data, error } = await supabase.functions.invoke('get-public-job-by-id', {
+        body: { jobId },
+      });
       
       if (error) {
         toast({
@@ -29,14 +40,23 @@ const JobDetail = () => {
           description: error.message,
           variant: 'destructive',
         });
+        setJob(null);
       } else {
         setJob(data);
       }
       setLoading(false);
     };
 
-    if (jobId) fetchJob();
+    fetchJob();
   }, [jobId, toast]);
+
+    const handleApply = () => {
+    if (!job) return;
+    // Pass organization_id in the navigation state to the application page
+    navigate(`/job/${job.id}/apply`, {
+      state: { organizationId: job.organization_id } 
+    });
+  };
 
   if (loading) {
     return (
@@ -74,7 +94,7 @@ const JobDetail = () => {
             <div>
               <div className="flex items-center gap-4 mb-2">
                 <div className="bg-hrumbles-accent/10 text-hrumbles-accent font-medium px-3 py-1 rounded-full text-sm flex items-center gap-1">
-                  <Briefcase size={14} /> <span>{job.type}</span>
+                  <Briefcase size={14} /> <span>{job.job_type}</span>
                 </div>
                 <div className="text-hrumbles-muted text-sm flex items-center gap-1">
                   <Calendar size={14} /> <span>{new Date(job.posted_date).toLocaleDateString()}</span>
@@ -85,17 +105,17 @@ const JobDetail = () => {
               
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="flex items-center gap-1 text-hrumbles-muted">
-                  <MapPin size={16} /> <span>{job.location}</span>
+                  <MapPin size={16} /> <span>{Array.isArray(job.location) ? job.location.join(', ') : job.location}</span>
                 </div>
                 <div className="flex items-center gap-1 text-hrumbles font-medium">
                   <Clock size={16} className="text-hrumbles-accent" /> 
-                  <span>{job.salary}</span>
+                  {/* <span>{job.salary}</span> */}
                 </div>
               </div>
             </div>
             
             <Button 
-              onClick={() => navigate(`/job/${job.id}/apply`)}
+              onClick={handleApply}
               className="mt-6 lg:mt-0 bg-hrumbles-accent hover:bg-hrumbles-accent/90"
             >
               Apply Now
@@ -114,7 +134,7 @@ const JobDetail = () => {
               </p>
               
               <Button 
-                onClick={() => navigate(`/job/${job.id}/apply`)}
+                onClick={handleApply}
                 className="bg-hrumbles-accent hover:bg-hrumbles-accent/90"
               >
                 Apply for this Position

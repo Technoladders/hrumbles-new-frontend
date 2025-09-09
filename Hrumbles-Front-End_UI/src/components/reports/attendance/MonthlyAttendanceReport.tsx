@@ -16,20 +16,28 @@ const MonthlyAttendanceReport: React.FC<MonthlyAttendanceReportProps> = ({ data,
   const [viewType, setViewType] = useState<'billable' | 'non_billable'>('non_billable');
 
   const { headers, rows } = useMemo(() => {
+    // Step 1: Filter logs based on the selected tab (Billable/Non-billable). This is correct.
     const logs = data.filter(log => viewType === 'billable' ? log.is_billable : !log.is_billable);
 
+    // [THE FIX] Step 2: From the filtered logs, get a unique list of employees who should be displayed.
+    const relevantEmployeeIds = new Set(logs.map(log => log.employee_id));
+    const filteredEmployees = employees.filter(emp => relevantEmployeeIds.has(emp.id));
+
+    // Step 3: Prepare the date headers for the table. This is correct.
     const firstDay = startOfMonth(selectedMonth);
     const numDays = getDaysInMonth(selectedMonth);
     const daysArray = Array.from({ length: numDays }, (_, i) => new Date(firstDay.getFullYear(), firstDay.getMonth(), i + 1));
     const headers = daysArray.map(day => ({ date: day, label: format(day, 'd') }));
 
+    // Step 4: Map the filtered logs by employee for quick lookup. This is correct.
     const employeeData = new Map<string, { [key: string]: number | null }>();
     logs.forEach(log => {
       if (!employeeData.has(log.employee_id)) employeeData.set(log.employee_id, {});
       employeeData.get(log.employee_id)![format(new Date(log.date), 'yyyy-MM-dd')] = log.duration_minutes;
     });
 
-    const rows = employees.map(emp => {
+    // [THE FIX] Step 5: Generate rows using the *filtered* list of employees, not the full list.
+    const rows = filteredEmployees.map(emp => {
       const empLogs = employeeData.get(emp.id) || {};
       let totalPresent = 0;
       const dailyData = headers.map(h => {

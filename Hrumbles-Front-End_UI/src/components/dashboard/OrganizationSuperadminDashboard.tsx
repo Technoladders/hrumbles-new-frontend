@@ -384,7 +384,9 @@ function OrganizationSuperadminDashboard() {
     "1961d419-1272-4371-8dc7-63a4ec71be83",
     "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
     "53989f03-bdc9-439a-901c-45b274eff506",
-    // "96593f3f-59fa-4805-bc84-bbec17ed964e"
+    "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5",
+    "87fd4bb2-dbaf-4775-954a-eb82f70ac961",
+    "96593f3f-59fa-4805-bc84-bbec17ed964e"
   ];
 
   if (!organizationId) {

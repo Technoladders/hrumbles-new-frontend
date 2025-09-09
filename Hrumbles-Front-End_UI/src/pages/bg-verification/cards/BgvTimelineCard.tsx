@@ -85,7 +85,7 @@ export const BgvTimelineCard = ({ candidateId }: Props) => {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-grow p-0">
-        <ScrollArea className="h-full max-h-[400px] p-4 pr-6">
+        <ScrollArea className="h-full max-h-[500px] p-4 pr-6">
           {isLoading && (
             <p className="text-sm text-gray-500 text-center animate-pulse">Loading timeline...</p>
           )}

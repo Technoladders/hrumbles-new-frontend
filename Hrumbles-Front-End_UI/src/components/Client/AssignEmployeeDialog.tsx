@@ -31,6 +31,7 @@ import { CalendarIcon, X } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "../../lib/utils";
 import { Switch } from "../../components/ui/switch";
+import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group";
 
 interface Client {
   id: string;
@@ -54,6 +55,7 @@ interface AssignEmployee {
   duration: number;
     working_hours?: number;
   billing_type?: string;
+  working_days_config?: 'all_days' | 'weekdays_only' | 'saturday_working';
   hr_employees?: {
     first_name: string;
     last_name: string;
@@ -96,6 +98,7 @@ const AssignEmployeeDialog = ({ open, onOpenChange, projectId, clientId, editEmp
       noOfDays: number;
       working_hours: string;
       isSalaryEditable: boolean;
+      working_days_config: 'all_days' | 'weekdays_only' | 'saturday_working';
     }[]
   >([]);
 
@@ -158,6 +161,7 @@ const AssignEmployeeDialog = ({ open, onOpenChange, projectId, clientId, editEmp
           noOfDays: editEmployee.duration,
           isSalaryEditable: false,
           working_hours: editEmployee.working_hours?.toString() || "0",
+          working_days_config: editEmployee.working_days_config || "all_days",
         },
       ]);
     } else {
@@ -198,6 +202,7 @@ const AssignEmployeeDialog = ({ open, onOpenChange, projectId, clientId, editEmp
           noOfDays: projectData.duration || 0,
           isSalaryEditable: false,
           working_hours: "8",
+          working_days_config: "all_days",
         },
       ]);
     }
@@ -303,6 +308,7 @@ const AssignEmployeeDialog = ({ open, onOpenChange, projectId, clientId, editEmp
             salary_type: assignment.salary_type,
             client_billing: parseFloat(assignment.client_billing) || 0,
             working_hours: parseFloat(assignment.working_hours) || 8,
+            working_days_config: assignment.working_days_config,
             billing_type: assignment.billing_type,
             status: assignment.status,
             updated_by: user.id,
@@ -359,6 +365,7 @@ const AssignEmployeeDialog = ({ open, onOpenChange, projectId, clientId, editEmp
               status: employee.status,
              working_hours: parseFloat(employee.working_hours) || 8,
               sow: sowUrl,
+               working_days_config: employee.working_days_config,
               organization_id,
               created_by: user.id,
               updated_by: user.id,
@@ -448,232 +455,243 @@ const AssignEmployeeDialog = ({ open, onOpenChange, projectId, clientId, editEmp
 
           {employeeAssignments.length > 0 && (
             <div className="space-y-4 border rounded-md p-4">
-              {employeeAssignments.map((assignment, index) => {
-                const employee = employees.find((e) => e.id === assignment.assign_employee);
-                const startDate = assignment.start_date ? new Date(assignment.start_date) : null;
-                const endDate = assignment.end_date ? new Date(assignment.end_date) : null;
-                const salaryCurrencySymbol = assignment.salary_currency === "USD" ? "$" : "₹";
-                return (
-                  <div
-                    key={index}
-                    className="border-b last:border-b-0 pb-4 last:pb-0 space-y-4"
-                  >
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold">
-                        {employee?.first_name} {employee?.last_name}
-                      </h3>
-                      {!editEmployee && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => handleRemoveEmployee(assignment.assign_employee, index)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <div>
-                        <Label className="text-sm font-medium block mb-1">Start Date*</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "w-full justify-start text-left font-normal text-sm",
-                                !startDate && "text-muted-foreground"
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {startDate ? format(startDate, "PPP") : "Select Date"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0">
-                            <Calendar
-                              mode="single"
-                              selected={startDate}
-                              onSelect={(date) => handleFieldChange(index, "start_date", date)}
-                              initialFocus
-                              className="p-3 pointer-events-auto"
-                              fromDate={projectStartDate}
-                              toDate={projectEndDate}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium block mb-1">End Date*</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "w-full justify-start text-left font-normal text-sm",
-                                !endDate && "text-muted-foreground"
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {endDate ? format(endDate, "PPP") : "Select Date"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0">
-                            <Calendar
-                              mode="single"
-                              selected={endDate}
-                              onSelect={(date) => handleFieldChange(index, "end_date", date)}
-                              initialFocus
-                              className="p-3 pointer-events-auto"
-                              fromDate={startDate || projectStartDate}
-                              toDate={projectEndDate}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium block mb-1">Days</Label>
-                        <Input
-                          type="number"
-                          value={assignment.noOfDays}
-                          disabled
-                          className="w-full text-sm bg-gray-100"
-                        />
-                      </div>
-                      <div>
-<div className="flex items-center justify-between mb-1">
-  <Label className="text-sm font-medium">Salary</Label>
-  <div className="flex items-center gap-2">
-    <Label className="text-sm">Editable</Label>
-    <Switch
-      checked={assignment.isSalaryEditable}
-      onCheckedChange={() => toggleSalaryEditable(index)}
-    />
-  </div>
-</div>
-
-<div className="flex items-center gap-0">
-  {/* Currency Selector */}
-  <Select
-    value={assignment.salary_currency}
-    onValueChange={(value) => handleFieldChange(index, "salary_currency", value)}
-    disabled={!assignment.isSalaryEditable}
-    required
-  >
-    <SelectTrigger
-      className={cn(
-        "w-[60px] text-sm",
-        !assignment.isSalaryEditable && "bg-gray-100 cursor-not-allowed"
-      )}
+            {employeeAssignments.map((assignment, index) => {
+  const employee = employees.find((e) => e.id === assignment.assign_employee);
+  const startDate = assignment.start_date ? new Date(assignment.start_date) : null;
+  const endDate = assignment.end_date ? new Date(assignment.end_date) : null;
+  const salaryCurrencySymbol = assignment.salary_currency === "USD" ? "$" : "₹";
+  return (
+    <div
+      key={index}
+      className="border-b last:border-b-0 pb-4 last:pb-0 space-y-4"
     >
-      <SelectValue placeholder="INR" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="INR" className="text-sm">₹</SelectItem>
-      <SelectItem value="USD" className="text-sm">$</SelectItem>
-    </SelectContent>
-  </Select>
-
-  {/* Salary Input Field */}
-  <Input
-    type="number"
-    value={assignment.salary}
-    onChange={(e) => handleFieldChange(index, "salary", e.target.value)}
-    disabled={!assignment.isSalaryEditable}
-    className={cn(
-      "w-full pl-6 text-sm",
-      !assignment.isSalaryEditable && "bg-gray-100 cursor-not-allowed"
-    )}
-  />
-
-  {/* Salary Type Selector */}
-  <Select
-    value={assignment.salary_type}
-    onValueChange={(value) => handleFieldChange(index, "salary_type", value)}
-    disabled={!assignment.isSalaryEditable}
-    required
-  >
-    <SelectTrigger
-      className={cn(
-        "w-[80px] text-sm",
-        !assignment.isSalaryEditable && "bg-gray-100 cursor-not-allowed"
-      )}
-    >
-      <SelectValue placeholder="Type" />
-    </SelectTrigger>
-    <SelectContent>
-      {salaryTypeOptions.map((type) => (
-        <SelectItem key={type} value={type} className="text-sm">
-          {type}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-</div>
-
-</div>
-
-                      <div>
-                        <Label className="text-sm font-medium block mb-1">Client Billing*</Label>
-                        <div className="flex items-center gap-2">
-                          <div className="relative flex-1">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-500">
-                              {currencySymbol}
-                            </span>
-                            <Input
-                              type="number"
-                              value={assignment.client_billing}
-                              onChange={(e) => handleFieldChange(index, "client_billing", e.target.value)}
-                              placeholder="Enter billing amount"
-                              required
-                              className="w-full pl-6 text-sm rounded-r-none"
-                            />
-                          </div>
-                          <Select
-                            value={assignment.billing_type}
-                            onValueChange={(value) => handleFieldChange(index, "billing_type", value)}
-                            required
-                          >
-                            <SelectTrigger className="w-[80px] text-sm rounded-l-none border-l-0">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {billingTypeOptions.map((type) => (
-                                <SelectItem key={type} value={type} className="text-sm">
-                                  {type}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div>
-                      <Label className="text-sm font-medium block mb-1">Working Hours*</Label>
-                    <div>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        value={assignment.working_hours}
-                        onChange={(e) => handleFieldChange(index, "working_hours", e.target.value)}
-                        placeholder="Enter working hours (e.g., 4.2)"
-                        required
-                        className="w-full text-sm"
-                      />
-                    </div>
-                    </div>
-                      <div>
-                        <Label className="text-sm font-medium block mb-1">SOW</Label>
-                        <Input
-                          type="file"
-                          accept=".pdf,.png,.jpg"
-                          onChange={(e) => handleFileUpload(index, e)}
-                          className="w-full text-sm file:mr-2 file:text-sm"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">
+          {employee?.first_name} {employee?.last_name}
+        </h3>
+        {!editEmployee && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0"
+            onClick={() => handleRemoveEmployee(assignment.assign_employee, index)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label className="text-sm font-medium block">Start Date*</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal text-sm",
+                  !startDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {startDate ? format(startDate, "PPP") : "Select Date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={startDate}
+                onSelect={(date) => handleFieldChange(index, "start_date", date)}
+                initialFocus
+                className="p-3 pointer-events-auto"
+                fromDate={projectStartDate}
+                toDate={projectEndDate}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium block">End Date*</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal text-sm",
+                  !endDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {endDate ? format(endDate, "PPP") : "Select Date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={endDate}
+                onSelect={(date) => handleFieldChange(index, "end_date", date)}
+                initialFocus
+                className="p-3 pointer-events-auto"
+                fromDate={startDate || projectStartDate}
+                toDate={projectEndDate}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium block">Working Days Calculation*</Label>
+          <RadioGroup
+            value={assignment.working_days_config}
+            onValueChange={(value) => handleFieldChange(index, "working_days_config", value)}
+            className="flex flex-col-1 space-y-2"
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="all_days" id={`r1-${index}`} />
+              <Label htmlFor={`r1-${index}`} className="text-sm">All Days</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="weekdays_only" id={`r2-${index}`} />
+              <Label htmlFor={`r2-${index}`} className="text-sm">Weekdays Only</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="saturday_working" id={`r3-${index}`} />
+              <Label htmlFor={`r3-${index}`} className="text-sm">Mon-Sat</Label>
+            </div>
+          </RadioGroup>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium block">Days</Label>
+          <Input
+            type="number"
+            value={assignment.noOfDays}
+            disabled
+            className="w-full text-sm bg-gray-100"
+          />
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Salary</Label>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Editable</Label>
+              <Switch
+                checked={assignment.isSalaryEditable}
+                onCheckedChange={() => toggleSalaryEditable(index)}
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-0">
+            <Select
+              value={assignment.salary_currency}
+              onValueChange={(value) => handleFieldChange(index, "salary_currency", value)}
+              disabled={!assignment.isSalaryEditable}
+              required
+            >
+              <SelectTrigger
+                className={cn(
+                  "w-[60px] text-sm",
+                  !assignment.isSalaryEditable && "bg-gray-100 cursor-not-allowed"
+                )}
+              >
+                <SelectValue placeholder="INR" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="INR" className="text-sm">₹</SelectItem>
+                <SelectItem value="USD" className="text-sm">$</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="number"
+              value={assignment.salary}
+              onChange={(e) => handleFieldChange(index, "salary", e.target.value)}
+              disabled={!assignment.isSalaryEditable}
+              className={cn(
+                "w-full pl-6 text-sm",
+                !assignment.isSalaryEditable && "bg-gray-100 cursor-not-allowed"
+              )}
+            />
+            <Select
+              value={assignment.salary_type}
+              onValueChange={(value) => handleFieldChange(index, "salary_type", value)}
+              disabled={!assignment.isSalaryEditable}
+              required
+            >
+              <SelectTrigger
+                className={cn(
+                  "w-[80px] text-sm",
+                  !assignment.isSalaryEditable && "bg-gray-100 cursor-not-allowed"
+                )}
+              >
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                {salaryTypeOptions.map((type) => (
+                  <SelectItem key={type} value={type} className="text-sm">
+                    {type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium block">Client Billing*</Label>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+                {salaryCurrencySymbol}
+              </span>
+              <Input
+                type="number"
+                value={assignment.client_billing}
+                onChange={(e) => handleFieldChange(index, "client_billing", e.target.value)}
+                placeholder="Enter billing amount"
+                required
+                className="w-full pl-6 text-sm rounded-r-none"
+              />
+            </div>
+            <Select
+              value={assignment.billing_type}
+              onValueChange={(value) => handleFieldChange(index, "billing_type", value)}
+              required
+            >
+              <SelectTrigger className="w-[80px] text-sm rounded-l-none border-l-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {billingTypeOptions.map((type) => (
+                  <SelectItem key={type} value={type} className="text-sm">
+                    {type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium block">Working Hours*</Label>
+          <Input
+            type="number"
+            step="0.1"
+            min="0"
+            value={assignment.working_hours}
+            onChange={(e) => handleFieldChange(index, "working_hours", e.target.value)}
+            placeholder="Enter working hours (e.g., 4.2)"
+            required
+            className="w-full text-sm"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium block">SOW</Label>
+          <Input
+            type="file"
+            accept=".pdf,.png,.jpg"
+            onChange={(e) => handleFileUpload(index, e)}
+            className="w-full text-sm file:mr-2 file:text-sm"
+          />
+        </div>
+      </div>
+    </div>
+  );
+})}
             </div>
           )}
 

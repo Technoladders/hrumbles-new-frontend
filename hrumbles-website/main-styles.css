@@ -2556,10 +2556,13 @@ figcaption {
 }
 .section.cc-hero {
   padding-top: 7.5rem;
+  color: hsl(0, 0%, 95%);
+
 }
 .section.cc-hero-lg {
   padding-top: 10.5rem;
 }
+
 .section.cc-minh-100vh {
   flex-flow: column;
   justify-content: center;
@@ -4472,6 +4475,7 @@ figcaption {
   flex: 1;
   justify-content: flex-start;
   max-width: 400px;
+  padding: 1.5rem;
   display: flex;
   position: relative;
   overflow: hidden;
@@ -4521,7 +4525,7 @@ figcaption {
   border-style: none;
   width: 100%;
   height: auto;
-  margin-bottom: 0;
+  margin-bottom: 1rem;
 }
 .embed_input:focus {
   box-shadow: var(--embed-input-shadow-focus);
@@ -4554,6 +4558,11 @@ figcaption {
   display: inline-flex;
   position: relative;
 }
+#submit-button {
+  display: flex; /* Makes the <a> tag a block-level flex container */
+  width: 100%;   /* Ensures it takes up the full available width */
+  justify-content: center; /* Centers the text "Sign up" inside the button */
+}
 .embed_btn:hover {
   box-shadow: var(--embed-btn-shadow-hover);
 }
@@ -4577,6 +4586,7 @@ figcaption {
   flex-direction: column;
   display: block;
   position: relative;
+  margin-top: 0;
 }
 .embed_input-label {
   z-index: 1;

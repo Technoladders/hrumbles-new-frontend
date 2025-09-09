@@ -16,12 +16,15 @@ import OrganizationStructureManagement from './OrganizationStructureManagement';
 const EnhancedUserManagement = () => {
   // MODIFICATION: Define the specific organization ID
   const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
+  const RECRUITMENT_FIRM_ID = "87fd4bb2-dbaf-4775-954a-eb82f70ac961";
+  
 
   // MODIFICATION: Get the current user's organization ID from Redux
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
   // MODIFICATION: Create a boolean flag for easier conditional rendering
   const isAscendionUser = organizationId === ASCENDION_ORGANIZATION_ID;
+  const isRecruitmentFirmUser = organizationId === RECRUITMENT_FIRM_ID;
 
   // MODIFICATION: Dynamically set the grid columns class based on the flag
   const gridColsClass = isAscendionUser ? "grid-cols-3" : "grid-cols-6";
@@ -46,7 +49,7 @@ const EnhancedUserManagement = () => {
               </TabsTrigger>
               
               {/* --- MODIFICATION: Conditionally render tabs for non-Ascendion users --- */}
-              {!isAscendionUser && (
+              {!isAscendionUser && !isRecruitmentFirmUser && (
                 <>
                   <TabsTrigger value="teams" className="flex items-center gap-2">
                     <Building className="h-4 w-4" />

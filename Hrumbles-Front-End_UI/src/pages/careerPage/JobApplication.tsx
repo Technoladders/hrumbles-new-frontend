@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import Header from '@/components/careerPage/Header';
@@ -9,38 +9,48 @@ import ApplicationForm from '@/components/careerPage/ApplicationForm';
 import { supabase } from "@/integrations/supabase/client";
 import '../../careerpage.css'
 
+interface JobInfo {
+  id: string;
+  title: string;
+  company: string;
+}
+
 const JobApplication = () => {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [job, setJob] = useState<any>(null);
+    const location = useLocation(); // <-- Get location object
+  const { organizationId } = location.state || {};
+ const [job, setJob] = useState<JobInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [previousApplications, setPreviousApplications] = useState<string[]>([]);
 
-    useEffect(() => {
-      const fetchJobDetails = async () => {
-        setLoading(true);
-        const { data, error } = await supabase.from('hr_jobs').select('*').eq('id', jobId).single();
-        
-        if (error) {
-          toast({ title: 'Error fetching job details', description: error.message, variant: 'destructive' });
-        } else {
-          setJob({
-            id: data.id,
-            title: data.title,
-            company: 'Hrumbles.ai',
-            location: data.location.join(', '),
-            type: data.job_type,
-            salary: 'Competitive',
-            postedDate: new Date(data.posted_date).toDateString(),
-            description: data.description
-          });
-        }
-        setLoading(false);
-      };
+     useEffect(() => {
+    const fetchJobDetails = async () => {
+      if (!jobId) return;
+      setLoading(true);
+
+      // --- CHANGE: Invoke the secure Edge Function instead of a direct query ---
+      const { data, error } = await supabase.functions.invoke('get-public-job-by-id', {
+        body: { jobId },
+      });
       
-      if (jobId) fetchJobDetails();
-    }, [jobId]);
+      if (error) {
+        toast({ title: 'Error fetching job details', description: error.message, variant: 'destructive' });
+        setJob(null); // Ensure job is null on error
+      } else {
+        // We only need a subset of the job data for this page's display
+        setJob({
+          id: data.id,
+          title: data.title,
+          company: 'Hrumbles.ai', // Or your company name
+        });
+      }
+      setLoading(false);
+    };
+    
+    fetchJobDetails();
+  }, [jobId, toast]);
   
     const handleSubmitSuccess = () => {
       navigate(`/job/${jobId}`);
@@ -116,6 +126,7 @@ const JobApplication = () => {
             onCancel={() => navigate(`/job/${jobId}`)}
             previousApplications={previousApplications}
             onDuplicateApplication={handleDuplicateApplication}
+            organizationId={organizationId}
           />
         </div>
       </div>

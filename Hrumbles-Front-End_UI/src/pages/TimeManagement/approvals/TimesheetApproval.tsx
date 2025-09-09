@@ -168,7 +168,7 @@ const TimesheetApproval = () => {
           <TabsTrigger value="pending" className="relative">
             Pending Approvals
             {getPendingCount() > 0 && (
-              <span className="ml-2 bg-primary absolute -top-2 -right-2 rounded-full px-2 py-1 text-xs text-white">
+              <span className="ml-2 bg-primary rounded-full px-2 py-1 text-xs text-white">
                 {getPendingCount()}
               </span>
             )}

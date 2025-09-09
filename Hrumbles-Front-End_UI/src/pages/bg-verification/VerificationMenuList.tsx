@@ -1,8 +1,7 @@
 // src/pages/jobs/ai/VerificationMenuList.tsx
 
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { ChevronRight, ArrowLeft, User, History, BookOpen, Building, ShieldCheck, CheckCircle } from 'lucide-react';
+import { ChevronRight, ArrowLeft, User, History, BookOpen, ShieldCheck, CheckCircle, FileText } from 'lucide-react';
 import { BGVState } from '@/hooks/bg-verification/useBgvVerifications';
 import { isVerificationSuccessful } from '@/components/jobs/ai/utils/bgvUtils';
 
@@ -14,6 +13,7 @@ const iconMap: { [key: string]: React.ElementType } = {
   fetchLatestMobile: BookOpen,
   mobile_to_uan: ShieldCheck,
   pan_to_uan: ShieldCheck,
+  viewAll: FileText,
 };
 
 interface Props {
@@ -21,31 +21,38 @@ interface Props {
   items: { key: string; label: string }[];
   onSelect: (key: string) => void;
   onBack?: () => void;
-  // --- NEW PROPS to make the component aware of results ---
   results: BGVState['results'];
   config: any;
-  parentKey?: string; // The key of the parent category for sub-menus
+  parentKey?: string;
 }
 
 export const VerificationMenuList = ({ title, items, onSelect, onBack, results, config, parentKey }: Props) => {
 
+  // --- THIS FUNCTION IS NOW FULLY CORRECTED ---
   const isItemVerified = (itemKey: string): boolean => {
     // This is a sub-menu item (e.g., 'mobile_to_uan')
     if (parentKey) {
-      const result = results[itemKey];
-      return result && isVerificationSuccessful(result.data, itemKey);
+      const resultArray = results[itemKey]; // This is now an array
+      // Check if the array exists and if ANY item in it is successful
+      return Array.isArray(resultArray) && resultArray.some(item => isVerificationSuccessful(item.data, itemKey));
     }
     
-    // This is a main menu category item (e.g., 'fetchUan')
     const categoryConfig = config[itemKey];
+    // This is for special, non-verification items like "View All Results"
+    if (!categoryConfig) return false;
+
+    // This is a main menu category item that has a direct method
     if (categoryConfig.isDirect) {
-      const result = results[categoryConfig.method];
-      return result && isVerificationSuccessful(result.data, categoryConfig.method);
-    } else {
-      // Check if ANY sub-method under this category is verified
+      const resultArray = results[categoryConfig.method]; // This is now an array
+      // Check if the array exists and if ANY item in it is successful
+      return Array.isArray(resultArray) && resultArray.some(item => isVerificationSuccessful(item.data, categoryConfig.method));
+    } 
+    // This is a main menu category item that has sub-methods (e.g., 'Fetch UAN')
+    else {
+      // Check if ANY sub-method under this category has ANY successful verification
       return Object.keys(categoryConfig.methods).some(methodKey => {
-        const result = results[methodKey];
-        return result && isVerificationSuccessful(result.data, methodKey);
+        const resultArray = results[methodKey]; // This is now an array
+        return Array.isArray(resultArray) && resultArray.some(item => isVerificationSuccessful(item.data, methodKey));
       });
     }
   };
@@ -58,8 +65,11 @@ export const VerificationMenuList = ({ title, items, onSelect, onBack, results, 
       </div>
       <div className="space-y-3">
         {items.map(item => {
+          // Special case to prevent "View All" from ever showing as verified
+          const isViewAll = item.key === 'viewAll';
+          const verified = isViewAll ? false : isItemVerified(item.key);
           const Icon = iconMap[item.key] || ChevronRight;
-          const verified = isItemVerified(item.key);
+
           return (
             <button
               key={item.key}
@@ -85,4 +95,3 @@ export const VerificationMenuList = ({ title, items, onSelect, onBack, results, 
     </div>
   );
 };
-// 

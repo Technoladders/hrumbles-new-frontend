@@ -7,6 +7,7 @@ import { useBgvVerifications } from '@/hooks/bg-verification/useBgvVerifications
 import { VerificationMenuList } from './VerificationMenuList';
 import { VerificationInputForm } from './VerificationInputForm';
 import { isVerificationSuccessful } from '@/components/jobs/ai/utils/bgvUtils';
+import { AllResultsDisplay } from './results/AllResultsDisplay';
 
 
 const verificationConfig = {
@@ -49,16 +50,30 @@ const verificationConfig = {
       { name: 'pan', placeholder: 'Enter PAN (Optional)', label: 'Candidate PAN Number' }
     ]
   },
+  viewAll: { // --- THIS IS THE NEW ENTRY ---
+    label: 'View All Results',
+    isDirect: true, // Behaves like a direct item
+    method: 'view_all', // A unique key
+    inputs: [], // No inputs needed
+  },
 };
 
 export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) => {
-  const [view, setView] = useState<'main' | 'submenu' | 'form'>('main');
+  const [view, setView] = useState<'main' | 'submenu' | 'form' | 'all_results'>('main');
   const [activeCategory, setActiveCategory] = useState<any | null>(null);
   const [activeMethod, setActiveMethod] = useState<any | null>(null);
 
   const { state, handleInputChange, handleVerify } = useBgvVerifications(candidate);
 
+  console.log('state', state);
+
   const handleSelectCategory = (key: string) => {
+
+        if (key === 'viewAll') {
+      setView('all_results');
+      return;
+    }
+
     const category = verificationConfig[key];
     setActiveCategory({ key, ...category });
 
@@ -94,6 +109,11 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
   };
 
   const handleBack = () => {
+
+        if (view === 'all_results') {
+        setView('main');
+        return;
+    }
     if (view === 'form') {
       // If we came directly from main menu, go back to main menu
       if (activeCategory.isDirect || isVerificationSuccessful(state.results[activeMethod.key]?.data, activeMethod.key)) {
@@ -119,6 +139,17 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
     <Card className="w-full shadow-md border-gray-200">
       <CardHeader><CardTitle className="text-gray-800">Background Verification</CardTitle></CardHeader>
      <CardContent className="relative h-[calc(100vh-200px)] overflow-y-auto p-0 sm:p-4 mb-4">
+
+       {/* --- NEW: Conditional rendering for the all_results view --- */}
+        {view === 'all_results' ? (
+          <div className="p-6 animate-fade-in">
+             <AllResultsDisplay 
+                candidate={candidate}
+                results={state.results} 
+                onBack={handleBack} 
+            />
+          </div>
+        ) : (
         <div 
           className="absolute top-0 left-0 w-[300%] h-full flex transition-transform duration-300 ease-in-out"
           style={{ transform: transformValue }}
@@ -154,6 +185,7 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
             {activeMethod && (
               <VerificationInputForm
                 title={activeMethod.label}
+                candidate={candidate}
                 verificationType={activeMethod.key as keyof typeof state.inputs}
                 inputs={activeMethod.inputs}
                 state={state}
@@ -164,6 +196,7 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
             )}
           </div>
         </div>
+        )}
       </CardContent>
     </Card>
   );

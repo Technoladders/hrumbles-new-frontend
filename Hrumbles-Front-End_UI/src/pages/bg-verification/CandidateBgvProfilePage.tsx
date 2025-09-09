@@ -121,32 +121,36 @@ const CandidateBgvProfilePage = () => {
         </div>
       </div>
 
-      {/* Tabbed interface below Info Card and Timeline */}
-      <Tabs defaultValue="bg-verification" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex flex-wrap gap-2 mb-6 overflow-x-auto">
-          {availableTabs.map((tab) => (
-            <TabsTrigger
-              key={tab}
-              value={tab}
-              className="flex-1 min-w-[100px] text-xs sm:text-sm sm:min-w-[120px]"
-            >
-              {tab === 'bg-verification' && 'Background Verification'}
-              {tab === 'resume' && 'Resume'}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-<TabsContent value="bg-verification">
-          <CardContent>
-            <BgvVerificationSection candidate={candidate} />
-          </CardContent>
-        </TabsContent>
+       {/* --- NEW BOTTOM GRID: Tabbed interface on the left, Timeline on the right --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-3">
+            <Tabs defaultValue="bg-verification" value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="grid w-full grid-cols-2">
+                    {availableTabs.includes('bg-verification') && (
+                        <TabsTrigger value="bg-verification">Background Verification</TabsTrigger>
+                    )}
+                    {availableTabs.includes('resume') && (
+                        <TabsTrigger value="resume">Resume</TabsTrigger>
+                    )}
+                </TabsList>
+                
+                <TabsContent value="bg-verification">
+                    {/* The BGV Section no longer needs its own Card wrapper, as it is a self-contained card. */}
+                    <BgvVerificationSection candidate={candidate} />
+                </TabsContent>
 
-        <TabsContent value="resume">
-          <CardContent>
-            <ResumePreviewSection resumeUrl={candidate.resume_url || '#'} />
-          </CardContent>
-        </TabsContent>
-      </Tabs>
+                <TabsContent value="resume">
+                    <CardContent>
+                        <ResumePreviewSection resumeUrl={candidate.resume_url || '#'} />
+                    </CardContent>
+                </TabsContent>
+            </Tabs>
+        </div>
+        <div className="lg:col-span-2">
+            {/* The re-introduced timeline card */}
+            <BgvTimelineCard candidateId={candidate.id} />
+        </div>
+      </div>
     </div>
   );
 };

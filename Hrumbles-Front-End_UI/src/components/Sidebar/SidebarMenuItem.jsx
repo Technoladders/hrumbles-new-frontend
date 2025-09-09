@@ -24,6 +24,7 @@ const ITECH_ORGANIZATION_ID = [
 ];
 const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
 const DEMO_ORGANIZATION_ID = "53989f03-bdc9-439a-901c-45b274eff506";
+const RECRUITMENT_FIRM_ID = "87fd4bb2-dbaf-4775-954a-eb82f70ac961";
 
 // --- START: organization_superadmin categorization logic ---
 
@@ -141,12 +142,65 @@ const demoOrgSuperAdminMenu = [
     }
 ];
 
+const recruitmentFirmOrgSuperAdminMenu = [
+    {
+        title: "Hiring Suite",
+        icon: FaUserShield, // Using the same icon for consistency
+        items: [
+           { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
+  { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+  { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+  // { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x" },
+  { icon: GoGoal, label: "Goals", path: "/goals" },
+  { icon: ImProfile, label: "My Profile", path: "/profile" },
+  { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
+
+  {
+    icon: TbCheckbox,
+    label: "Approvals",
+    path: "#",
+    dropdown: [
+      { icon: TbCheckbox, label: "Timesheet", path: "/approvals/timesheet" },
+      { icon: TbCheckbox, label: "Regularization", path: "/approvals/regularization" },
+      { icon: TbCheckbox , label:"Leave", path: "/approvals/leave"},
+    ],
+  },
+  {
+    icon: FiSettings,
+    label: "Settings",
+    path: "#",
+    dropdown: [
+      { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies" },
+      { icon: IoCalendarNumberOutline, label: "Official Holidays", path: "/admin/holidays" },
+    ],
+  },
+  { icon: MdOutlineManageAccounts, label: "User Management", path: "/user-management" },
+
+        ],
+    },
+    {
+        title: "Project Suite",
+        icon: FaProjectDiagram, // Using the same icon for consistency
+        items: [  { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
+  { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" }, 
+        ],
+    },
+    {
+        title: "Verification Suite",
+        icon: BsShieldCheck, // Using the same icon for consistency
+        items: [
+            { icon: LuUserSearch, label: "Verification", path: "/all-candidates" },
+        ],
+    }
+];
+
 const AscendionOrgSuperAdminMenu = [
     {
         title: "Hiring Suite",
         icon: FaUserShield, // Using the same icon for consistency
         items: [
             { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+  // { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
   { icon: MdOutlineManageAccounts, label: "User Management", path: "/user-management" },
 
         ],
@@ -322,6 +376,9 @@ organization_superadmin: (organizationId) => {
     }
     else if (organizationId === DEMO_ORGANIZATION_ID) {
       return demoOrgSuperAdminMenu; // Return the simple menu for demo
+    }
+    else if (RECRUITMENT_FIRM_ID.includes(organizationId)) {
+      return recruitmentFirmOrgSuperAdminMenu;
     }
     return categorizedOrgSuperAdminMenu; // Return the standard suite menu for everyone else
   },

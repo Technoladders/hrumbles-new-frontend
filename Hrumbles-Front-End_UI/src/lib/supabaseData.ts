@@ -402,7 +402,15 @@ export const createEmployee = async (employee: Omit<Employee, 'id'>): Promise<Em
 
 export const createGoal = async (
   goal: Omit<Partial<Goal>, 'id' | 'createdAt'>,
-  kpis?: Omit<KPI, 'id'>[]
+  kpis?: Omit<KPI, 'id'>[] &  {
+    // Add the new optional automation fields to the type
+    is_automated?: boolean;
+    source_table?: string;
+    source_value_column?: string;
+    source_employee_column?: string;
+    source_date_column?: string;
+    source_filter_conditions?: Record<string, string>;
+  }
 ): Promise<Goal | null> => {
   try {
     const currentDate = new Date().toISOString();
@@ -426,7 +434,14 @@ const authData = getAuthDataFromLocalStorage();
         metric_unit: goal.metricUnit,
         start_date: goal.startDate ?? currentDate,
         end_date: goal.endDate ?? futureDate.toISOString(),
-        organization_id: organization_id
+        organization_id: organization_id,
+
+         is_automated: goal.is_automated ?? false,
+        source_table: goal.source_table,
+        source_value_column: goal.source_value_column,
+        source_employee_column: goal.source_employee_column,
+        source_date_column: goal.source_date_column,
+        source_filter_conditions: goal.source_filter_conditions,
       })
       .select()
       .single();

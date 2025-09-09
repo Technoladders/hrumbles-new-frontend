@@ -4,67 +4,100 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from '@/components/careerPage/ui/button';
 import { Textarea } from '@/components/careerPage/ui/textarea';
 import { Label } from '@/components/careerPage/ui/label';
-import { Input } from '@/components/careerPage/ui/input';
-import { FileText, Upload, X } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast'; // --- CHANGE: Import your toast hook
+import { FileText, Upload, X, Loader2 } from 'lucide-react'; // --- CHANGE: Import a loader icon
 import { v4 as uuidv4 } from 'uuid';
 
 const BUCKET_NAME = 'candidate_resumes';
 
-const FileUploadSection: React.FC<FormSectionProps> = ({ 
+// --- CHANGE: Define a more specific props interface to include the callback
+interface FileUploadSectionProps extends FormSectionProps {
+  onParseComplete: (parsedData: any) => void;
+  onParseStart: () => void;
+}
+
+const FileUploadSection: React.FC<FileUploadSectionProps> = ({ 
   formData, 
   updateFormData,
   errors,
-  showValidationErrors
+  showValidationErrors,
+  onParseStart,
+  onParseComplete // --- CHANGE: Destructure the new callback prop
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  // --- CHANGE: Renamed state to be more generic for the entire process
+  const [isProcessing, setIsProcessing] = useState(false); 
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const { toast } = useToast(); // --- CHANGE: Initialize the toast hook
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate File Size
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit
       setUploadError("File size exceeds 5MB. Please upload a smaller file.");
       return;
     }
 
-    // Generate a unique filename
     const fileExt = file.name.split('.').pop();
     const uniqueFileName = `${uuidv4()}.${fileExt}`;
 
-    setUploading(true);
+    setIsProcessing(true);
+     onParseStart(); 
     setUploadError(null);
-    setUploadProgress(0);
+    toast({ title: "Uploading resume..." });
 
-    // Use a progress tracking method
     try {
-      const { error } = await supabase.storage
+      // Step 1: Upload the file to storage (same as before)
+      const { error: uploadError } = await supabase.storage
         .from(BUCKET_NAME)
         .upload(uniqueFileName, file, {
           cacheControl: '3600',
           upsert: false,
         });
 
-      if (error) {
-        throw error;
-      }
+      if (uploadError) throw uploadError;
 
-      // Get public URL
-      const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uniqueFileName);
-      if (data) {
-        updateFormData({ ...formData, resume: data.publicUrl });
-      } else {
+      // Step 2: Get the public URL and update the form state
+      const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uniqueFileName);
+      if (!urlData || !urlData.publicUrl) {
         throw new Error("Failed to retrieve resume URL.");
       }
-    } catch (error) {
-      console.error('Upload error:', error);
-      setUploadError(`Upload failed: ${error.message}`);
+      const resumeUrl = urlData.publicUrl;
+      updateFormData({ ...formData, resume: resumeUrl });
+
+      // --- CHANGE: Step 3: Invoke the Edge Function to parse the resume ---
+      toast({ title: "Resume uploaded. Parsing with AI..." });
+      
+      // Assumes you have an edge function named 'parse-resume' like in your AddCandidateDrawer
+      const { data: parsedData, error: functionError } = await supabase.functions.invoke('parse-resume', {
+        body: { fileUrl: resumeUrl },
+      });
+
+      if (functionError) {
+        throw new Error(`AI Parsing Error: ${functionError.message}`);
+      }
+      
+      // --- CHANGE: Step 4: Use the callback to send parsed data to the parent component ---
+      if (parsedData) {
+        onParseComplete(parsedData);
+        toast({
+          title: "Success!",
+          description: "Your information has been auto-filled.",
+          variant: 'default',
+        });
+      }
+
+    } catch (error: any) {
+      console.error('Resume processing error:', error);
+      setUploadError(`Processing failed: ${error.message}`);
+      toast({
+        title: "An Error Occurred",
+        description: error.message,
+        variant: 'destructive',
+      });
     } finally {
-      setUploading(false);
-      setUploadProgress(null);
+      setIsProcessing(false);
     }
   };
 
@@ -98,6 +131,7 @@ const FileUploadSection: React.FC<FormSectionProps> = ({
               onChange={handleFileChange}
               accept=".pdf,.doc,.docx"
               className="hidden"
+              disabled={isProcessing} // --- CHANGE: Disable while processing
             />
 
             {formData.resume ? (
@@ -122,20 +156,22 @@ const FileUploadSection: React.FC<FormSectionProps> = ({
                   size="sm"
                   onClick={handleRemoveFile}
                   className="text-gray-500 hover:text-red-500"
+                  disabled={isProcessing} // --- CHANGE: Disable while processing
                 >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
             ) : (
               <div 
-                className={`border-2 border-dashed rounded-md p-8 text-center cursor-pointer hover:bg-slate-50 transition-colors ${
+                className={`border-2 border-dashed rounded-md p-8 text-center transition-colors ${
                   showValidationErrors && !formData.resume ? "border-red-300 bg-red-50" : "border-gray-300"
-                }`}
-                onClick={() => fileInputRef.current?.click()}
+                } ${isProcessing ? 'cursor-not-allowed bg-slate-100' : 'cursor-pointer hover:bg-slate-50'}`}
+                onClick={() => !isProcessing && fileInputRef.current?.click()}
               >
                 <Upload className="mx-auto h-12 w-12 text-gray-400" />
                 <h4 className="mt-2 font-medium">
-                  {uploading ? `Uploading... ${uploadProgress}%` : 'Upload your resume'}
+                  {/* --- CHANGE: Improved loading text --- */}
+                  {isProcessing ? 'Processing Resume...' : 'Upload your resume'}
                 </h4>
                 <p className="text-sm text-gray-500 mt-1">
                   PDF, DOC, or DOCX (Max 5MB)
@@ -145,9 +181,17 @@ const FileUploadSection: React.FC<FormSectionProps> = ({
                   variant="outline" 
                   size="sm"
                   className="mt-4"
-                  disabled={uploading}
+                  disabled={isProcessing}
                 >
-                  {uploading ? 'Uploading...' : 'Select File'}
+                  {/* --- CHANGE: Show loader in button --- */}
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Please wait
+                    </>
+                  ) : (
+                    'Select File'
+                  )}
                 </Button>
               </div>
             )}

@@ -18,6 +18,10 @@ const MonthlyInOutReport: React.FC<MonthlyInOutReportProps> = ({ data, employees
   const { headers, rows } = useMemo(() => {
     const logs = data.filter(log => viewType === 'billable' ? log.is_billable : !log.is_billable);
 
+      // [THE FIX] Step 2: Get a unique list of employees who have logs in the filtered set.
+    const relevantEmployeeIds = new Set(logs.map(log => log.employee_id));
+    const filteredEmployees = employees.filter(emp => relevantEmployeeIds.has(emp.id));
+
     const firstDay = startOfMonth(selectedMonth);
     const numDays = getDaysInMonth(selectedMonth);
     const daysArray = Array.from({ length: numDays }, (_, i) => new Date(firstDay.getFullYear(), firstDay.getMonth(), i + 1));
@@ -29,7 +33,7 @@ const MonthlyInOutReport: React.FC<MonthlyInOutReportProps> = ({ data, employees
       employeeData.get(log.employee_id)![format(new Date(log.date), 'yyyy-MM-dd')] = { in: log.clock_in_time, out: log.clock_out_time };
     });
 
-    const rows = employees.map(emp => ({
+    const rows = filteredEmployees.map(emp => ({
       employee: emp,
       dailyData: headers.map(h => employeeData.get(emp.id)?.[format(h.date, 'yyyy-MM-dd')] || { in: null, out: null }),
     }));

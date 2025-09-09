@@ -44,10 +44,11 @@ interface PassbookResult {
 interface LatestPassbookResultProps {
   result: PassbookResult;
   candidate: Candidate;
+  meta: { inputValue: string };
   subStatusId?: string;
 }
 
-export const LatestPassbookResult = ({ result, candidate, subStatusId }: LatestPassbookResultProps) => {
+export const LatestPassbookResult = ({ result, meta, candidate, subStatusId }: LatestPassbookResultProps) => {
   const passbook = result.data?.passbook_data;
 
   if (!passbook || !passbook.employers || passbook.employers.length === 0) {
@@ -73,42 +74,29 @@ export const LatestPassbookResult = ({ result, candidate, subStatusId }: LatestP
     }
   };
 
-  return (
+return (
     <div className="space-y-4">
-      <Card className="border-none shadow-lg">
-        <CardHeader className="bg-indigo-50 p-4 flex flex-row justify-between items-center">
+       <Card className="shadow-sm border-gray-200">
+        <CardHeader className="bg-gray-50 flex-row justify-between items-center p-4">
           <div>
-            <CardTitle className="flex items-center gap-2 text-lg font-semibold text-indigo-700">
-              <User size={18} />
-              {passbook.name || 'N/A'}
+            <CardTitle className="flex items-center gap-2 text-lg text-gray-800">
+              <User size={18} /> {passbook.name || 'N/A'}
             </CardTitle>
-            <CardDescription className="text-gray-600">
-              DOB: {passbook.date_of_birth || 'N/A'} | Gender: {passbook.gender || 'N/A'} | UAN: {passbook.uan || 'N/A'}
-            </CardDescription>
+            <CardDescription>UAN: {passbook.uan || 'N/A'} | DOB: {passbook.date_of_birth || 'N/A'}</CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDownloadPdf}
-            title="Download Passbook PDF"
-            className="flex items-center gap-2"
-          >
-            <Download size={16} />
-            Download PDF
+          <Button variant="outline" size="sm" onClick={handleDownloadPdf}>
+            <Download size={16} className="mr-2" /> Download Passbook
           </Button>
         </CardHeader>
       </Card>
+
       <h3 className="text-xl font-semibold text-gray-800">Employer Passbook Details</h3>
-      <div className="grid gap-4">
+      <div className="space-y-4">
         {passbook.employers.map((employer: Employer, i: number) => (
-          <Card key={i} className="border-none shadow-md hover:shadow-lg transition-shadow">
+          <Card key={i} className="border-gray-200 shadow-sm">
             <CardHeader className="bg-gray-50 p-4">
-              <CardTitle className="text-base font-medium text-gray-900">
-                {employer.establishment_name || 'N/A'}
-              </CardTitle>
-              <CardDescription className="text-sm text-gray-600">
-                Member ID: {employer.member_id || 'N/A'} | Service: {employer.service_period || 'N/A'} | DOJ: {employer.date_of_joining || 'N/A'}
-              </CardDescription>
+              <CardTitle className="text-base font-semibold text-gray-900">{employer.establishment_name || 'N/A'}</CardTitle>
+              <CardDescription>Member ID: {employer.member_id || 'N/A'}</CardDescription>
             </CardHeader>
             <CardContent className="p-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">

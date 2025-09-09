@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   DialogContent,
   DialogHeader,
@@ -23,6 +23,10 @@ import { toast } from "sonner";
 import { SectorType, MetricType } from "@/types/goal";
 import { createGoal } from "@/lib/supabaseData";
 import { supabase } from "@/integrations/supabase/client";
+import {X} from "lucide-react"
+import {Switch} from "@/components/ui/switch"
+import { Separator } from "@/components/ui/separator";
+import { AUTOMATION_SOURCES } from "@/lib/goalAutomationConfig";
 
 interface CreateGoalFormProps {
   onClose?: () => void;
@@ -37,6 +41,28 @@ const CreateGoalForm: React.FC<CreateGoalFormProps> = ({ onClose }) => {
   const [customUnit, setCustomUnit] = useState("");
   const [departments, setDepartments] = useState<{id: string, name: string}[]>([]);
   const [isLoadingDepartments, setIsLoadingDepartments] = useState(true);
+
+    // --- 2. REPLACE old technical state with user-friendly state ---
+  const [isAutomated, setIsAutomated] = useState(false);
+  const [selectedAutomationSource, setSelectedAutomationSource] = useState<string>("");
+  const [selectedStatus, setSelectedStatus] = useState<string>("");
+const [sourceTable, setSourceTable] = useState("");
+const [sourceValueColumn, setSourceValueColumn] = useState("");
+const [sourceEmployeeColumn, setSourceEmployeeColumn] = useState("");
+const [sourceDateColumn, setSourceDateColumn] = useState("");
+const [filters, setFilters] = useState<{ key: string; value: string }[]>([
+  { key: "", value: "" },
+]);
+
+  // --- 3. ADD logic to manage the dynamic dropdowns ---
+  const currentSourceConfig = useMemo(() => {
+    return AUTOMATION_SOURCES.find(source => source.value === selectedAutomationSource);
+  }, [selectedAutomationSource]);
+
+    useEffect(() => {
+    // Reset the status selection whenever the source changes
+    setSelectedStatus("");
+  }, [selectedAutomationSource]);
 
   useEffect(() => {
     const fetchDepartments = async () => {
@@ -83,6 +109,27 @@ const CreateGoalForm: React.FC<CreateGoalFormProps> = ({ onClose }) => {
     }
   };
 
+  // Inside CreateGoalForm component, before the return statement
+
+const handleAddFilter = () => {
+  setFilters([...filters, { key: "", value: "" }]);
+};
+
+const handleRemoveFilter = (index: number) => {
+  const newFilters = filters.filter((_, i) => i !== index);
+  setFilters(newFilters);
+};
+
+const handleFilterChange = (index: number, field: 'key' | 'value', val: string) => {
+  const newFilters = filters.map((filter, i) => {
+    if (i === index) {
+      return { ...filter, [field]: val };
+    }
+    return filter;
+  });
+  setFilters(newFilters);
+};
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -97,34 +144,44 @@ const CreateGoalForm: React.FC<CreateGoalFormProps> = ({ onClose }) => {
     }
     
     setLoading(true);
+
+    // --- NEW: Prepare automation data ---
+ let automationConfig = {};
+    if (isAutomated) {
+      if (!currentSourceConfig || !selectedStatus) {
+        toast.error("Please select an automation source and a status to track.");
+        setLoading(false);
+        return;
+      }
+      
+      automationConfig = {
+        is_automated: true,
+        source_table: currentSourceConfig.sourceTable,
+        source_value_column: currentSourceConfig.valueColumn,
+        source_employee_column: currentSourceConfig.employeeColumn,
+        source_date_column: currentSourceConfig.dateColumn,
+        source_filter_conditions: {
+          [currentSourceConfig.filterColumn]: selectedStatus,
+        },
+      };
+    }
     
     try {
-      // Create goal template with minimal required fields
-      const newGoal = await createGoal({
+      const newGoalPayload = {
         name,
         description,
         sector,
         metricType,
         metricUnit: getMetricUnitValue(),
-      });
+        ...automationConfig, // Spread the correctly built config
+      };
+
+      const newGoal = await createGoal(newGoalPayload);
       
-      if (!newGoal) {
-        throw new Error("Failed to create goal");
-      }
+      if (!newGoal) throw new Error("Failed to create goal");
       
       toast.success("Goal template created successfully!");
-      
-      // Reset form
-      setName("");
-      setDescription("");
-      setSector(undefined);
-      setMetricType(undefined);
-      setCustomUnit("");
-      
-      // Close the modal after successful creation
-      if (onClose) {
-        onClose();
-      }
+      onClose?.();
       
     } catch (error) {
       console.error("Error creating goal:", error);
@@ -133,6 +190,7 @@ const CreateGoalForm: React.FC<CreateGoalFormProps> = ({ onClose }) => {
       setLoading(false);
     }
   };
+
 
   return (
     <DialogContent className="sm:max-w-[600px]">
@@ -145,6 +203,47 @@ const CreateGoalForm: React.FC<CreateGoalFormProps> = ({ onClose }) => {
       
       <form onSubmit={handleSubmit} className="space-y-6 py-4">
         <div className="space-y-4">
+
+          <Separator className="my-4" />
+
+<div className="flex items-center space-x-2">
+  <Switch id="automation-mode" checked={isAutomated} onCheckedChange={setIsAutomated} />
+  <Label htmlFor="automation-mode">Enable Automated Tracking</Label>
+</div>
+<p className="text-xs text-gray-500 mt-1">
+  Enable this to automatically track goal progress from a source data table.
+</p>
+
+ {isAutomated && (
+          <div className="space-y-4 pt-4 border-t mt-4">
+            <h4 className="text-md font-semibold">Automation Configuration</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Automation Source</Label>
+                <Select value={selectedAutomationSource} onValueChange={setSelectedAutomationSource}>
+                  <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select a source..." /></SelectTrigger>
+                  <SelectContent>
+                    {AUTOMATION_SOURCES.map(source => (
+                      <SelectItem key={source.value} value={source.value}>{source.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Track When Status Is...</Label>
+                <Select value={selectedStatus} onValueChange={setSelectedStatus} disabled={!currentSourceConfig}>
+                  <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select a status..." /></SelectTrigger>
+                  <SelectContent>
+                    {currentSourceConfig?.statuses.map(status => (
+                      <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>
+    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        )}
           <div>
             <Label htmlFor="name" className="text-sm font-medium">
               Goal Name
@@ -158,6 +257,7 @@ const CreateGoalForm: React.FC<CreateGoalFormProps> = ({ onClose }) => {
               required
             />
           </div>
+          
           
           <div>
             <Label htmlFor="description" className="text-sm font-medium">

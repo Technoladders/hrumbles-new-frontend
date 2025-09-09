@@ -5,6 +5,15 @@ import { Input } from '@/components/careerPage/ui/input';
 import { Label } from '@/components/careerPage/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/careerPage/ui/select';
 import { User, Mail, Phone, MapPin, Linkedin, Github, Calendar } from 'lucide-react';
+import PhoneInput from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
+
+// Helper for formatting currency
+const formatINR = (value: number): string => {
+    if (!value) return '';
+    return new Intl.NumberFormat("en-IN", { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(value);
+};
+
 
 const PersonalInfoSection: React.FC<FormSectionProps> = ({ 
   formData, 
@@ -20,6 +29,17 @@ const PersonalInfoSection: React.FC<FormSectionProps> = ({
       [name]: value
     };
     updateFormData(updatedFormData);
+  };
+
+    const handlePhoneChange = (value: string | undefined) => {
+    const updatedFormData = { ...formData };
+    updatedFormData.personalInfo = { ...updatedFormData.personalInfo, phone: value || '' };
+    updateFormData(updatedFormData);
+  };
+
+  const handleSalaryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    updateFormData({ ...formData, [name]: value ? Number(value) : 0 });
   };
 
   const handleAvailabilityChange = (value: string) => {
@@ -121,24 +141,47 @@ const PersonalInfoSection: React.FC<FormSectionProps> = ({
         </div>
         
         <div className="space-y-2">
-          <Label htmlFor="phone" className="flex items-center gap-1">
-            Phone Number <span className="text-red-500">*</span>
-          </Label>
-          <div className="relative">
-            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              id="phone"
-              name="phone"
-              value={formData.personalInfo.phone}
-              onChange={handleInputChange}
-              placeholder="+91 9876543210"
-              className={`pl-10 ${showValidationErrors && !formData.personalInfo.phone ? "border-red-500" : ""}`}
-            />
-          </div>
-          {showValidationErrors && !formData.personalInfo.phone && (
+        <Label htmlFor="phone">Phone Number <span className="text-red-500">*</span></Label>
+        <PhoneInput
+            international
+            defaultCountry="IN"
+            placeholder="Enter phone number"
+            value={formData.personalInfo.phone}
+            onChange={handlePhoneChange}
+            className={`input-style-for-phone ${showValidationErrors && !formData.personalInfo.phone ? "border-red-500" : ""}`}
+        />
+        {showValidationErrors && !formData.personalInfo.phone && (
             <p className="text-red-500 text-sm">Phone number is required</p>
-          )}
+        )}
+      </div>
+
+      {/* Add Salary Fields */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-2">
+          <Label htmlFor="currentSalary">Current CTC (per annum)</Label>
+          <Input
+            id="currentSalary"
+            name="currentSalary"
+            type="number"
+            value={formData.currentSalary || ''}
+            onChange={handleSalaryChange}
+            placeholder="e.g., 1000000"
+          />
+          {formData.currentSalary > 0 && <p className="text-sm text-gray-500 mt-1">{formatINR(formData.currentSalary)}</p>}
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="expectedSalary">Expected CTC (per annum)</Label>
+          <Input
+            id="expectedSalary"
+            name="expectedSalary"
+            type="number"
+            value={formData.expectedSalary || ''}
+            onChange={handleSalaryChange}
+            placeholder="e.g., 1200000"
+          />
+          {formData.expectedSalary > 0 && <p className="text-sm text-gray-500 mt-1">{formatINR(formData.expectedSalary)}</p>}
+        </div>
+      </div>
         
         <div className="space-y-2">
           <Label htmlFor="location" className="flex items-center gap-1">

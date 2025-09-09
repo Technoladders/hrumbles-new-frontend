@@ -71,34 +71,71 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
     
     const prompt = `
-  Based on the following resume text, perform a detailed extraction to create a professional profile.
-  Return ONLY a single, valid JSON object with the exact keys specified below.
-
-  **JSON Schema and Strict Instructions:**
-  - "suggested_title": string.
-    - **Rule 1:** Use the most recent or prominent job title from work experience (e.g., "Technical Lead", "Full Stack Developer").
-    - **Rule 2:** If no work experience, infer a suitable title from the professional summary and skills (e.g., "Frontend Developer").
-  - "candidate_name": string (Full Name).
-  - "email": string (Email address).
-  - "phone": string (Phone number, exactly as found).
-  - "linkedin_url": string.
-    - **Rule:** Must be a valid URL (starts with http, https, or www). If the text is just a phrase like "LinkedIn Profile", return null.
-  - "github_url": string.
-    - **Rule:** Must be a valid URL. If not a URL, return null.
-  - "professional_summary": string (A brief, 2-3 sentence summary).
-  - "top_skills": array of strings (List of key technical and soft skills).
-  - "work_experience": array of objects, each with "company", "designation", "duration", and "responsibilities" (array of strings).
-    - **Rule:** If a company and a client are mentioned (e.g., "Company X | Client: Client Y"), extract only the primary company name ("Company X") into the "company" field.
-  - "education": array of objects, each with "institution", "degree", and "year".
-    - **Rule:** If an institution name is not explicitly stated, return null for "institution" instead of guessing a location.
-  - "projects": array of objects, each with "name", "description", and "technologies" (array of strings).
-    - **Rule:** If a "Key Project" is described within a work experience entry, extract it into this "projects" array.
-    - **Rule:** For "technologies", extract *all* mentioned technologies, libraries, or frameworks from the project description.
-  - "certifications": array of strings.
-  
-  **Important:** If a field's value cannot be found, use null or an empty array/string as appropriate. Do not add any explanatory text before or after the JSON object.
-
+     Based on the following resume text, perform a detailed extraction to create a professional profile. Return ONLY a single, valid JSON object with the exact keys specified below.
+ 
+JSON Schema and Strict Instructions:
+       
+"suggested_title": string.
+Rule 1: Use the most recent or prominent job title from work experience (e.g., "Technical Lead", "Full Stack Developer").
+Rule 2: If no work experience, infer a suitable title from the professional summary and skills (e.g., "Frontend Developer").
+ 
+"candidate_name": string (Full Name).
+                                                 
+"email": string (Email address).
+ 
+"phone": string (Phone number, exactly as found).
+ 
+"linkedin_url": string.
+Rule: Must be a valid URL (starts with http, https, or www). If the text is just a phrase like "LinkedIn Profile", return null.
+ 
+"github_url": string.
+Rule: Must be a valid URL. If not a URL, return null.
+ 
+"current_location": string.  
+- Rule: Extract the full address if available (e.g., under "Address", "Location", or at the top of the resume).  
+- If no address is found, return null.  
+- Do not merge email or phone into address.  
+                                                   
+"professional_summary": array of strings  
+Rules:  
+1. Always return as an array of separate bullet points (strings).  
+2. Each bullet point must be a single complete sentence or phrase from the resume.  
+3. Do not merge multiple points into one string.  
+4. If no professional summary is present, omit this field entirely.  
+ 
+"top_skills": array of strings (List of key technical and soft skills).  
+ 
+"work_experience": array of objects, each with "company", "designation", "duration", and "responsibilities" (array of strings).  
+Rule: If a company and a client are mentioned (e.g., "Company X | Client: Client Y"), extract only the primary company name ("Company X") into the "company" field.  
+ 
+"education": array of objects, each with "institution", "degree", and "year".  
+Rule: If an institution name is not explicitly stated, return null for "institution".  
+ 
+"projects": array of strings  
+Rules:  
+- Always extract the **entire Project Summary section exactly as written**, including titles, clients, environments, roles, descriptions, and bullet-point responsibilities.  
+- Each project (PROJECT #1, PROJECT #2, etc.) must be preserved as one full string inside the array.  
+- Do not replace with placeholders like "View Project". If a project block exists in the text, copy it fully.  
+- Do not summarize or shorten. Preserve all formatting and wording.  
+- If no projects exist in the resume, return an empty array.  
+ 
+"certifications": array of strings.  
+ 
+"other_details": object  
+Rules:  
+- Include only additional resume information that does not belong to the above categories.  
+- Use exact heading names as keys (e.g., "Hackathons", "AI & Tech Online Courses", "Languages", "Achievements").  
+- Do NOT include project-related information here.  
+- If no such sections exist, return null.  
+ 
+Important:  
+- If a field cannot be found, use null or an empty array/string as appropriate.  
+- Return only the JSON object, no explanations.  
+- Give as a points.
+ 
+ 
   Resume Text:
+ 
   ---
    ${text} 
   ---

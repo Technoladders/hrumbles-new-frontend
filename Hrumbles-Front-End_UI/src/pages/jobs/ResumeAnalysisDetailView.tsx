@@ -50,6 +50,8 @@ const ResumeAnalysisDetailView = () => {
     enabled: !!candidateId,
   });
 
+  console.log("analysis", analysis)
+
     // Fetch all jobs
     const { data: jobs, isLoading: isJobsLoading } = useQuery({
       queryKey: ["jobs"],
@@ -83,58 +85,75 @@ const ResumeAnalysisDetailView = () => {
     const otherJobs = jobs?.filter((job) => job.id !== analysis?.job_id) || [];
    
     // Mutation to assign candidate to a job
-    const assignJobMutation = useMutation({
-     
-      mutationFn: async (jobId: string) => {
-        const appliedFrom = user?.user_metadata
-          ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
-          : "Unknown";
-        const createdBy = user?.id;
-        const { error } = await supabase.from("hr_job_candidates").insert({
-          job_id: jobId, // UUID from hr_jobs.id
-          candidate_id: null, // Set to null to bypass self-referential constraint
-          name: analysis?.candidate_name || "Unknown Candidate", // Mandatory
-          email: analysis?.email || null,
-          github: analysis?.github || null,
-          linkedin: analysis?.linkedin || null,
-          skills: [], // text[] from top_skills
-          overall_score: analysis?.overall_score || null,
-          applied_from:appliedFrom,
-          created_by: createdBy,
-          has_validated_resume: false,
-          main_status_id:'0dcd262f-f307-4179-ac79-d7465c51a9a0',
-          sub_status_id: 'aaebf9b9-58eb-498c-8b87-1d2c5b1d1e54',
-          organization_id: organization_id, // Set to organization_id
-   
-          // Let defaults handle: id, applied_date (CURRENT_DATE), created_at (now()), updated_at (now()), status ('queued')
-        });
-        if (error) {
-          if (error.code === "23505") {
-            throw new Error("Candidate is already assigned to this job");
-          }
-          if (error.code === "23503") {
-            throw new Error("Invalid Job ID or constraint violation");
-          }
-          throw error;
-        }
-      },
-      onSuccess: () => {
-        toast({
-          title: "Success",
-          description: "Candidate assigned to job successfully",
-        });
-        setIsAssignModalOpen(false);
-        setOpenCombobox(false);
-        queryClient.invalidateQueries({ queryKey: ["resume-analysis", candidateId] });
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to assign candidate to job",
-          variant: "destructive",
-        });
-      },
+const assignJobMutation = useMutation({
+  mutationFn: async (jobId: string) => {
+    const appliedFrom = user?.user_metadata
+      ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
+      : 'Unknown';
+    const createdBy = user?.id;
+
+    // Check for talentId in query parameters (e.g., ?talentId=xxx)
+    const queryParams = new URLSearchParams(location.search);
+    const talentId = queryParams.get('talentId');
+    const isTalentContext = !!talentId;
+
+    const payload: any = {
+      job_id: jobId, // UUID from hr_jobs.id
+      name: analysis?.candidate_name || 'Unknown Candidate', // Mandatory
+      email: analysis?.email || null,
+      github: analysis?.github || null,
+      linkedin: analysis?.linkedin || null,
+      skills: analysis?.top_skills || [], // text[] from top_skills
+      overall_score: analysis?.overall_score || null,
+      applied_from: appliedFrom,
+      created_by: createdBy,
+      has_validated_resume: false,
+      main_status_id: '0dcd262f-f307-4179-ac79-d7465c51a9a0',
+      sub_status_id: 'aaebf9b9-58eb-498c-8b87-1d2c5b1d1e54',
+      organization_id: organization_id, // Set to organization_id
+    };
+
+    if (isTalentContext) {
+      // Talent context: Send talent_id, set candidate_id to null
+      payload.talent_id = talentId;
+      payload.candidate_id = null;
+    } else {
+      // Candidate context: Send candidate_id, set talent_id to null
+      payload.candidate_id = null;
+      payload.talent_id = null;
+    }
+
+    console.log('Inserting into hr_job_candidates:', JSON.stringify(payload, null, 2));
+
+    const { error } = await supabase.from('hr_job_candidates').insert(payload);
+
+    if (error) {
+      if (error.code === '23505') {
+        throw new Error('Candidate is already assigned to this job');
+      }
+      if (error.code === '23503') {
+        throw new Error('Invalid Job ID or Talent ID not found in talent pool');
+      }
+      throw error;
+    }
+  },
+  onSuccess: () => {
+    toast({
+      title: 'Success',
+      description: 'Candidate assigned to job successfully',
     });
+    setIsAssignModalOpen(false);
+    setOpenCombobox(false);
+    queryClient.invalidateQueries({ queryKey: ['resume-analysis', candidateId] });
+  },
+  onError: (error: any) => {
+    toast({
+      title: 'Error',
+      description: error.message || 'Failed to assign candidate to job',
+      variant: 'destructive',
+    });
+  },
+});
    
     const handleAssignJob = () => {
       if (selectedJobId) {

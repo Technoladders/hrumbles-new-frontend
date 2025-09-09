@@ -91,7 +91,7 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchFilters }) => {
   };
 
   return (
-    <section className="container py-8">
+    <section className=" p-8">
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold text-hrumbles mb-2">Job Openings</h1>
         <p className="text-hrumbles-muted max-w-2xl mx-auto text-sm">
@@ -137,7 +137,7 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchFilters }) => {
       
       <div>
         {filteredJobs.length > 0 ? (
-          <ScrollArea className="h-[550px] pr-4">
+          <ScrollArea className="h-auto pr-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredJobs.map(job => (
                 <JobCard 

@@ -21,6 +21,7 @@ import { Employee, EmployeeGoalTarget, Goal, GoalType } from "@/types/goal";
 
 interface AssignGoalsFormProps {
   onClose: () => void;
+  preselectedGoal?: Goal;
 }
 
 interface Department {
@@ -28,9 +29,13 @@ interface Department {
   name: string;
 }
 
-const AssignGoalsForm: React.FC<AssignGoalsFormProps> = ({ onClose }) => {
-  const [selectedDepartment, setSelectedDepartment] = useState<string>("");
-  const [selectedGoalId, setSelectedGoalId] = useState<string>("");
+const AssignGoalsForm: React.FC<AssignGoalsFormProps> = ({ onClose, preselectedGoal }) => {
+
+    const isContextualMode = !!preselectedGoal;
+
+  // --- NEW: Initialize state from props if in contextual mode ---
+  const [selectedDepartment, setSelectedDepartment] = useState<string>(preselectedGoal?.sector || "");
+  const [selectedGoalId, setSelectedGoalId] = useState<string>(preselectedGoal?.id || "");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [selectedEmployees, setSelectedEmployees] = useState<Employee[]>([]);
   const [goalType, setGoalType] = useState<GoalType>("Monthly");
@@ -72,15 +77,18 @@ const AssignGoalsForm: React.FC<AssignGoalsFormProps> = ({ onClose }) => {
     : employees || [];
 
   // Selected goal from the list
-  const selectedGoal = filteredGoals.find((goal) => goal.id === selectedGoalId);
+ const selectedGoal = goals?.find((goal) => goal.id === selectedGoalId);
 
-  // Reset selections when department changes
+  // --- THIS IS THE FIX ---
+  // The reset logic should only run when NOT in contextual mode.
   useEffect(() => {
-    setSelectedGoalId("");
-    setSelectedEmployees([]);
-    setSelectedEmployeeId("");
-    setEmployeeTargets(new Map());
-  }, [selectedDepartment]);
+    if (!isContextualMode) {
+      setSelectedGoalId("");
+      setSelectedEmployees([]);
+      setSelectedEmployeeId("");
+      setEmployeeTargets(new Map());
+    }
+  }, [selectedDepartment, isContextualMode]); // Add isContextualMode to the dependency array
 
   // Update employee targets when the selected goal changes
   useEffect(() => {
@@ -147,7 +155,7 @@ const AssignGoalsForm: React.FC<AssignGoalsFormProps> = ({ onClose }) => {
   return (
     <DialogContent className="max-w-2xl">
       <DialogHeader>
-        <DialogTitle>Assign Goals to Employees</DialogTitle>
+        <DialogTitle> {isContextualMode ? `Assign More Employees to "${preselectedGoal.name}"` : "Assign Goals to Employees"}</DialogTitle>
       </DialogHeader>
 
       {departmentsError ? (
@@ -155,69 +163,42 @@ const AssignGoalsForm: React.FC<AssignGoalsFormProps> = ({ onClose }) => {
       ) : (
         <form onSubmit={(e) => { e.preventDefault(); assignGoalsMutation.mutate(); }} className="space-y-6">
           {/* Department Selection (exact match to reference) */}
-          <div>
-            <Label htmlFor="department" className="text-sm font-medium">
-              Department
-            </Label>
-            <Select
-              value={selectedDepartment}
-              onValueChange={setSelectedDepartment}
-              disabled={isLoadingDepartments || assignGoalsMutation.isPending}
-            >
-              <SelectTrigger id="department" className="mt-1.5">
-                <SelectValue placeholder="Select department" />
-              </SelectTrigger>
-              <SelectContent>
-                {departments?.map((department) => (
-                  <SelectItem key={department.id} value={department.name}>
-                    {department.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedDepartment && filteredGoals.length === 0 && (
-              <p className="mt-2 text-sm text-amber-600">
-                No goals found for {selectedDepartment}. Please create goals for this department first.
-              </p>
-            )}
-          </div>
+          {isContextualMode ? (
+            <div className="space-y-4 rounded-md border p-4 bg-gray-50/50">
+              <div>
+                <Label className="text-gray-500">Department</Label>
+                <p className="font-semibold">{preselectedGoal.sector}</p>
+              </div>
+              <div>
+                <Label className="text-gray-500">Goal</Label>
+                <p className="font-semibold">{preselectedGoal.name}</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Department and Goal Selection for general mode */}
+              <div>
+                <Label htmlFor="department" className="text-sm font-medium">Department</Label>
+                <Select value={selectedDepartment} onValueChange={setSelectedDepartment} disabled={isLoadingDepartments || assignGoalsMutation.isPending}>
+                  <SelectTrigger id="department" className="mt-1.5"><SelectValue placeholder="Select department" /></SelectTrigger>
+                  <SelectContent>{departments?.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="goal" className="text-sm font-medium">Select a Goal</Label>
+                <Select value={selectedGoalId} onValueChange={setSelectedGoalId} disabled={isLoadingGoals || !selectedDepartment || assignGoalsMutation.isPending}>
+                  <SelectTrigger id="goal" className="mt-1.5"><SelectValue placeholder="Select a goal to assign" /></SelectTrigger>
+                  <SelectContent>{filteredGoals.map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
 
-          {/* Goal Selection */}
+          {/* Goal Type Selection */}
           <div>
-            <Label htmlFor="goal" className="text-sm font-medium">
-              Select a Goal
-            </Label>
-            <Select
-              value={selectedGoalId}
-              onValueChange={(value) => setSelectedGoalId(value)}
-              disabled={isLoadingGoals || !selectedDepartment || assignGoalsMutation.isPending}
-            >
-              <SelectTrigger id="goal" className="mt-1.5">
-                <SelectValue placeholder="Select a goal to assign" />
-              </SelectTrigger>
-              <SelectContent>
-                {filteredGoals.map((goal) => (
-                  <SelectItem key={goal.id} value={goal.id}>
-                    {goal.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Goal Type Selection (exact match to reference) */}
-          <div>
-            <Label htmlFor="goalType" className="text-sm font-medium">
-              Goal Type
-            </Label>
-            <Select
-              value={goalType}
-              onValueChange={(value) => setGoalType(value as GoalType)}
-              disabled={assignGoalsMutation.isPending}
-            >
-              <SelectTrigger id="goalType" className="mt-1.5">
-                <SelectValue placeholder="Select goal type" />
-              </SelectTrigger>
+            <Label htmlFor="goalType" className="text-sm font-medium">Goal Period</Label>
+            <Select value={goalType} onValueChange={(value) => setGoalType(value as GoalType)} disabled={assignGoalsMutation.isPending}>
+              <SelectTrigger id="goalType" className="mt-1.5"><SelectValue placeholder="Select goal period" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Daily">Daily</SelectItem>
                 <SelectItem value="Weekly">Weekly</SelectItem>
@@ -225,35 +206,19 @@ const AssignGoalsForm: React.FC<AssignGoalsFormProps> = ({ onClose }) => {
                 <SelectItem value="Yearly">Yearly</SelectItem>
               </SelectContent>
             </Select>
-            <p className="mt-1 text-xs text-gray-500">
-              Determines how progress is tracked and reported
-            </p>
           </div>
 
           <Separator />
 
+
           {/* Employee Selection */}
           <div>
-            <Label htmlFor="employee" className="text-sm font-medium">
-              Assign to Employees
-            </Label>
-            <Select
-              value={selectedEmployeeId}
-              onValueChange={handleEmployeeSelection}
-              disabled={isLoadingEmployees || !selectedDepartment || assignGoalsMutation.isPending}
-            >
-              <SelectTrigger id="employee" className="mt-1.5">
-                <SelectValue placeholder="Select an employee" />
-              </SelectTrigger>
-              <SelectContent>
-                {filteredEmployees.map((employee) => (
-                  <SelectItem key={employee.id} value={employee.id}>
-                    {employee.name} ({employee.position})
-                  </SelectItem>
-                ))}
-              </SelectContent>
+            <Label htmlFor="employee" className="text-sm font-medium">Assign to Employees</Label>
+            <Select value={selectedEmployeeId} onValueChange={handleEmployeeSelection} disabled={isLoadingEmployees || !selectedDepartment || assignGoalsMutation.isPending}>
+              <SelectTrigger id="employee" className="mt-1.5"><SelectValue placeholder="Select an employee to add" /></SelectTrigger>
+              <SelectContent>{filteredEmployees.map((e) => <SelectItem key={e.id} value={e.id}>{e.name} ({e.position})</SelectItem>)}</SelectContent>
             </Select>
-            {selectedEmployees.length > 0 && (
+            {selectedEmployees.length > 0 && selectedGoal && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {selectedEmployees.map((employee) => (
                   <Badge key={employee.id} variant="secondary" className="p-1 px-2">

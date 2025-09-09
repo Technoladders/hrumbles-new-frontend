@@ -503,3 +503,19 @@ export const getAvailableEmployees = async (): Promise<Employee[]> => {
     return [];
   }
 };
+
+export const updateGoal = async (goalId: string, updates: Partial<GoalWithDetails>): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('hr_goals')
+      .update(updates)
+      .eq('id', goalId);
+    
+    if (error) throw error;
+    
+    return true;
+  } catch (error) {
+    console.error("Error updating goal:", error);
+    return false;
+  }
+};
