@@ -5,6 +5,7 @@ import { UanHistoryResult } from './results/UanHistoryResult';
 import { LatestEmploymentResult } from './results/LatestEmploymentResult';
 import { isVerificationSuccessful } from '@/components/jobs/ai/utils/bgvUtils';
 import { LatestPassbookResult } from './results/LatestPassbookResult';
+import { UanHistoryResultGridlines } from './results/UanHistoryResultGridlines';
 import { Candidate } from '@/lib/types';
 
 interface Props {
@@ -27,6 +28,8 @@ export const VerificationResultDisplay = ({ resultData, verificationType, candid
           return <UanBasicResult key={index} result={resultItem.data} meta={resultItem.meta} candidate={candidate} />;
         case 'uan_full_history':
           return <UanHistoryResult key={index} result={resultItem.data} meta={resultItem.meta} candidate={candidate} />;
+            case 'uan_full_history_gl':
+          return <UanHistoryResultGridlines key={index} result={resultItem.data} meta={resultItem.meta} candidate={candidate} />;
         case 'latest_employment_mobile':
         case 'latest_employment_uan':
           return <LatestEmploymentResult key={index} result={resultItem.data} meta={resultItem.meta} />;

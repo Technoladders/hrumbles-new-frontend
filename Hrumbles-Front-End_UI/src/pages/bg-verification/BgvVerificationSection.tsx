@@ -1,16 +1,18 @@
 // src/pages/jobs/ai/BgvVerificationSection.tsx
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useSelector } from 'react-redux';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Candidate } from '@/lib/types';
-import { useBgvVerifications } from '@/hooks/bg-verification/useBgvVerifications'; // Corrected path
+import { useBgvVerifications } from '@/hooks/bg-verification/useBgvVerifications';
 import { VerificationMenuList } from './VerificationMenuList';
 import { VerificationInputForm } from './VerificationInputForm';
 import { isVerificationSuccessful } from '@/components/jobs/ai/utils/bgvUtils';
 import { AllResultsDisplay } from './results/AllResultsDisplay';
 
+const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
 
-const verificationConfig = {
+const baseVerificationConfig = {
   fetchUan: {
     label: 'Fetch UAN',
     methods: {
@@ -25,12 +27,6 @@ const verificationConfig = {
     inputs: [
       { name: 'uan', placeholder: 'Enter 12-digit UAN', label: 'Candidate UAN' }
     ]
-  },
-  fetchHistory: {
-    label: 'Fetch Employment History',
-    isDirect: true,
-    method: 'uan_full_history',
-    inputs: [{ name: 'uan', placeholder: 'Enter 12-digit UAN', label: 'UAN Number' }]
   },
   fetchLatestMobile: {
     label: 'Fetch Latest Employment (Mobile)',
@@ -50,11 +46,11 @@ const verificationConfig = {
       { name: 'pan', placeholder: 'Enter PAN (Optional)', label: 'Candidate PAN Number' }
     ]
   },
-  viewAll: { // --- THIS IS THE NEW ENTRY ---
+  viewAll: {
     label: 'View All Results',
-    isDirect: true, // Behaves like a direct item
-    method: 'view_all', // A unique key
-    inputs: [], // No inputs needed
+    isDirect: true,
+    method: 'view_all',
+    inputs: [],
   },
 };
 
@@ -63,38 +59,67 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
   const [activeCategory, setActiveCategory] = useState<any | null>(null);
   const [activeMethod, setActiveMethod] = useState<any | null>(null);
 
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
+
+  // --- MODIFIED SECTION: Construct the config in a guaranteed order ---
+  const dynamicVerificationConfig = useMemo(() => {
+    // Start with the first two items
+    const orderedConfig = {
+      fetchUan: baseVerificationConfig.fetchUan,
+      fetchLatestUan: baseVerificationConfig.fetchLatestUan,
+    };
+
+    // Conditionally insert the third item (fetchHistory)
+    if (organizationId === ASCENDION_ORGANIZATION_ID) {
+      orderedConfig.fetchHistory = {
+        label: 'Fetch Employment History',
+        isDirect: true,
+        method: 'uan_full_history_gl',
+        inputs: [{ name: 'uan', placeholder: 'Enter 12-digit UAN', label: 'UAN Number' }]
+      };
+    } else {
+      orderedConfig.fetchHistory = {
+        label: 'Fetch Employment History',
+        isDirect: true,
+        method: 'uan_full_history',
+        inputs: [{ name: 'uan', placeholder: 'Enter 12-digit UAN', label: 'UAN Number' }]
+      };
+    }
+
+    // Add the remaining items to the end
+    orderedConfig.fetchLatestMobile = baseVerificationConfig.fetchLatestMobile;
+    orderedConfig.fetchLatestPassbook = baseVerificationConfig.fetchLatestPassbook;
+    orderedConfig.viewAll = baseVerificationConfig.viewAll;
+    
+    return orderedConfig;
+  }, [organizationId]);
+
+
   const { state, handleInputChange, handleVerify } = useBgvVerifications(candidate);
 
-  console.log('state', state);
-
   const handleSelectCategory = (key: string) => {
-
-        if (key === 'viewAll') {
+    if (key === 'viewAll') {
       setView('all_results');
       return;
     }
 
-    const category = verificationConfig[key];
+    const category = dynamicVerificationConfig[key];
     setActiveCategory({ key, ...category });
 
-    // --- THIS IS THE NEW, SMART LOGIC ---
-    // If the category is not direct (i.e., it has sub-methods)
     if (!category.isDirect) {
-      // Find the key of the FIRST successful method within this category
       const successfulMethodKey = Object.keys(category.methods).find(methodKey => {
         const result = state.results[methodKey];
         return result && isVerificationSuccessful(result.data, methodKey);
       });
 
-      // If we found a successful method, skip the sub-menu and go straight to the result!
       if (successfulMethodKey) {
         setActiveMethod({ key: successfulMethodKey, ...category.methods[successfulMethodKey] });
         setView('form');
-        return; // Exit the function to prevent the default behavior
+        return;
       }
     }
 
-        if (category.isDirect) {
+    if (category.isDirect) {
       setActiveMethod({ key: category.method, ...category });
       setView('form');
     } else {
@@ -102,7 +127,7 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
     }
   };
 
- const handleSelectMethod = (key: string) => {
+  const handleSelectMethod = (key: string) => {
     const method = activeCategory.methods[key];
     setActiveMethod({ key, ...method });
     setView('form');
@@ -115,7 +140,6 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
         return;
     }
     if (view === 'form') {
-      // If we came directly from main menu, go back to main menu
       if (activeCategory.isDirect || isVerificationSuccessful(state.results[activeMethod.key]?.data, activeMethod.key)) {
         setView('main');
         setActiveCategory(null);
@@ -130,7 +154,6 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
     }
   };
 
-  // The animation and rendering logic below remains the same
   let transformValue = 'translateX(0%)';
   if (view === 'submenu') transformValue = 'translateX(-33.333%)';
   if (view === 'form') transformValue = 'translateX(-66.666%)';
@@ -140,8 +163,7 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
       <CardHeader><CardTitle className="text-gray-800">Background Verification</CardTitle></CardHeader>
      <CardContent className="relative h-[calc(100vh-200px)] overflow-y-auto p-0 sm:p-4 mb-4">
 
-       {/* --- NEW: Conditional rendering for the all_results view --- */}
-        {view === 'all_results' ? (
+       {view === 'all_results' ? (
           <div className="p-6 animate-fade-in">
              <AllResultsDisplay 
                 candidate={candidate}
@@ -154,18 +176,16 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
           className="absolute top-0 left-0 w-[300%] h-full flex transition-transform duration-300 ease-in-out"
           style={{ transform: transformValue }}
         >
-          {/* Panel 1: Main Menu */}
           <div className="w-1/3 flex-shrink-0 p-6">
             <VerificationMenuList
               title="Select a Verification"
-              items={Object.entries(verificationConfig).map(([key, value]) => ({ key, label: value.label }))}
+              items={Object.entries(dynamicVerificationConfig).map(([key, value]) => ({ key, label: value.label }))}
               onSelect={handleSelectCategory}
               results={state.results}
-              config={verificationConfig}
+              config={dynamicVerificationConfig}
             />
           </div>
           
-          {/* Panel 2: Sub-Menu */}
           <div className="w-1/3 flex-shrink-0 p-6">
             {activeCategory && !activeCategory.isDirect && (
               <VerificationMenuList
@@ -174,13 +194,12 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
                 onSelect={handleSelectMethod}
                 onBack={handleBack}
                 results={state.results}
-                config={verificationConfig}
+                config={dynamicVerificationConfig}
                 parentKey={activeCategory.key}
               />
             )}
           </div>
           
-          {/* Panel 3: Input Form & Result Display */}
           <div className="w-1/3 flex-shrink-0 p-6">
             {activeMethod && (
               <VerificationInputForm
@@ -201,4 +220,3 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
     </Card>
   );
 };
-// 

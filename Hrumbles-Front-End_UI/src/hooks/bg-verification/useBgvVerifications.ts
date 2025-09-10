@@ -50,7 +50,8 @@ export const useBgvVerifications = (candidate: Candidate) => {
           'uan_full_history', 
           'latest_employment_mobile',
           'latest_passbook_mobile',
-          'latest_employment_uan'
+          'latest_employment_uan',
+          'uan_full_history_gl'
       ])
       .order('created_at', { ascending: false });
 
@@ -96,7 +97,8 @@ export const useBgvVerifications = (candidate: Candidate) => {
       const isGridlinesCheck = [
           'latest_employment_mobile', 
           'latest_passbook_mobile',
-          'latest_employment_uan'
+          'latest_employment_uan',
+           'uan_full_history_gl'
       ].includes(verificationType);
       const functionName = isGridlinesCheck ? 'run-gridlines-check' : 'run-bgv-check';
       

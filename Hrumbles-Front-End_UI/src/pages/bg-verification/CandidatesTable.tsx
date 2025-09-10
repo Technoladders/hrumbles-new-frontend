@@ -49,13 +49,13 @@ const renderVerificationResult = (verification: any) => {
   switch (status) {
     case 1:
     case 1014:
+    case 1013:
     case 1022:
       return <Badge className="bg-green-100 text-green-800">Verified</Badge>;
     case 9:
     case 1015:
       return <Badge className='bg-amber-100 text-amber-800'>Not Found</Badge>;
-    default:
-      return <Badge variant="secondary">In Progress</Badge>;
+   
   }
 };
 

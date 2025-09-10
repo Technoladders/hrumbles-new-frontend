@@ -27,6 +27,12 @@ if (verificationType === 'latest_employment_uan') {
     // We check for string '1014' as API might return it as a string.
     return resultData.data?.code == '1014';
   }
+
+    if (verificationType === 'uan_full_history_gl') {
+    // Code 1013 means history was found. 1011/1015 means a definitive negative result was found.
+    // All are considered a "successful" lookup.
+    return ['1013', '1011', '1015'].includes(resultData.data?.code);
+  }
   // --- TruthScreen Success Check ---
   // Successful TruthScreen lookups have a top-level `status` of 1 or 0.
   if (['mobile_to_uan', 'pan_to_uan', 'uan_full_history', 'mobile', 'pan'].includes(verificationType)) {

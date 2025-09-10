@@ -1990,6 +1990,7 @@ useEffect(() => {
   setFilteredCandidates(candidatesData);
 
   const checkAnalysisData = async () => {
+     if (!jobId) return;
     const { data, error } = await supabase
       .from("candidate_resume_analysis")
       .select("candidate_id, summary, overall_score")

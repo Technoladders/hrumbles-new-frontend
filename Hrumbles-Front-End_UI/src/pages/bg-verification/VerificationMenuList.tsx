@@ -14,6 +14,8 @@ const iconMap: { [key: string]: React.ElementType } = {
   mobile_to_uan: ShieldCheck,
   pan_to_uan: ShieldCheck,
   viewAll: FileText,
+  uan_full_history: History,     
+  uan_full_history_gl: History,  
 };
 
 interface Props {

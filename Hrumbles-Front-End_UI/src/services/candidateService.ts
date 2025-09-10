@@ -868,7 +868,7 @@ export const getAllCandidatesWithVerificationInfo = async () => {
       )
     `)
     .eq('organization_id', organization_id)
-    .order('created_at', { referencedTable: 'uanlookups', ascending: false }); // Sort lookups by date
+    .order('created_at', { ascending: false }); // Sort lookups by date
 
   if (error) {
     console.error("Error fetching all candidates with verification info:", error);

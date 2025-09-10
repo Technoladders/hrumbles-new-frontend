@@ -116,8 +116,8 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const { isOpen: isProfileMenuOpen, onToggle: toggleProfileMenu } = useDisclosure();
 
   const bgColor = "#364153";
-  const activeBg = "#7B43F1";
-  const hoverBg = "#4A5568";
+  const activeBg = "#ffffffff";
+  const hoverBg = "#eee7f1dd";
   const textColor = "white";
 
   const [activeSuite, setActiveSuite] = useState(() => {
@@ -328,7 +328,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       </VStack>
 
       <VStack spacing={2} align="stretch" mt={4}>
-        {isExpanded && (
+        {/* {isExpanded && (
           <Box>
             <Flex
               align="center"
@@ -346,18 +346,18 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
             </Flex>
             <Collapse in={isProfileMenuOpen} animateOpacity>
               <VStack align="stretch" spacing={1} mt={2} pl={2}>
-                {/* {departmentName !== "Finance" && (
+                {departmentName !== "Finance" && (
                   <Text as={Link} to="/profile" p={2} borderRadius="md" _hover={{ bg: hoverBg }}>
                     My Profile
                   </Text>
-                )} */}
+                )}
                 <Text onClick={handleLogout} p={2} borderRadius="md" cursor="pointer" _hover={{bg: hoverBg}}>
                   Logout
                 </Text>
               </VStack>
             </Collapse>
           </Box>
-        )}
+        )} */}
 
         {isCategorized && (
           <HStack
@@ -365,7 +365,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
             spacing={isExpanded ? 4 : 2}
             p={isExpanded ? 2 : 1}
             borderRadius="lg"
-            bg="rgba(0,0,0,0.2)"
+            bg="#7B43F1"
           >
             {(isExpanded ? menuConfig : menuConfig.filter(s => s.title === activeSuite)).map((suite) => (
               <Tooltip key={suite.title} label={suite.title} placement="top" isDisabled={isExpanded}>
@@ -375,8 +375,11 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
                   isRound
                   size="sm"
                   bg={activeSuite === suite.title ? activeBg : 'transparent'}
-                  color="white"
-                  _hover={{ bg: activeSuite !== suite.title && hoverBg }}
+                  color={activeSuite === suite.title ? 'black' : 'white'}
+                  _hover={{
+    bg: activeSuite !== suite.title ? hoverBg : activeBg,
+    color: 'black', // 👈 make icon text white on hover
+  }}
                   onClick={() => handleSuiteChange(suite.title)}
                   flex="1"
                 />
