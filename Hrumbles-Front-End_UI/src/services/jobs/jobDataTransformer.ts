@@ -67,6 +67,6 @@ export const transformToDbJob = (job: JobData): Record<string, any> => {
     number_of_candidates: job.numberOfCandidates || 0,
     organization_id: job.organization,
     created_at: job.createdAt,
-    hr_job_candidates: job.hr_job_candidates
+    // hr_job_candidates: job.hr_job_candidates
   };
 };

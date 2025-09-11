@@ -1,5 +1,5 @@
 // src/pages/ClientNew/page.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import supabase from '@/config/supabaseClient';
 import { useSelector } from 'react-redux';
@@ -20,10 +20,22 @@ import { DateRangePickerField } from '@/components/ui/DateRangePickerField';
 import { Client, ClientContact, ClientMetrics, Candidate, Employee, Job, TimeLog, MonthlyData, HiresByMonth, StatusMap, RecruiterPerformance, PipelineStage } from '@/components/clients-new/ClientTypes';
 
 // --- CONSTANTS ---
-const JOINED_STATUS_ID = "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e";
-const OFFERED_STATUS_ID = "9d4e0b82-0774-4e3b-bb1e-96bc2743f96e"; // Assuming a typo fix from previous
-const JOINED_SUB_STATUS_ID = "c9716374-3477-4606-877a-dfa5704e7680";
-const OFFER_ISSUED_SUB_STATUS_ID = "bcc84d3b-fb76-4912-86cc-e95448269d6b";
+// --- NEW DYNAMIC STATUS ID CONFIGURATION ---
+const STATUS_CONFIG = {
+  default: {
+    OFFERED_STATUS_ID: "9d48d0f9-8312-4f60-aaa4-bafdce067417",
+    OFFER_ISSUED_SUB_STATUS_ID: "bcc84d3b-fb76-4912-86cc-e95448269d6b",
+    JOINED_STATUS_ID: "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e",
+    JOINED_SUB_STATUS_ID: "c9716374-3477-4606-877a-dfa5704e7680",
+  },
+  demo: { // organization_id: 53989f03-bdc9-439a-901c-45b274eff506
+    OFFERED_STATUS_ID: "0557a2c9-6c27-46d5-908c-a826b82a6c47",
+    OFFER_ISSUED_SUB_STATUS_ID: "7ad5ab45-21ab-4af1-92b9-dd0cb1d52887",
+    JOINED_STATUS_ID: "5ab8833c-c409-46b8-a6b0-dbf23591827b",
+    JOINED_SUB_STATUS_ID: "247ef818-9fbe-41ee-a755-a446d620ebb6",
+  }
+};
+const DEMO_ORGANIZATION_ID = '53989f03-bdc9-439a-901c-45b274eff506';
 const USD_TO_INR_RATE = 84;
 
 const ClientViewPage = () => {
@@ -33,6 +45,10 @@ const ClientViewPage = () => {
     const { toast } = useToast();
     const organization_id = useSelector((state: any) => state.auth.organization_id);
     const auth_user_id = useSelector((state: any) => state.auth.user.id);
+
+        const statusIds = useMemo(() => {
+        return organization_id === DEMO_ORGANIZATION_ID ? STATUS_CONFIG.demo : STATUS_CONFIG.default;
+    }, [organization_id]);
 
     const [activeTab, setActiveTab] = useState('overview');
    const [isClientEditDialogOpen, setClientEditDialogOpen] = useState(false); // For main client details
@@ -79,16 +95,69 @@ const [dateRange, setDateRange] = useState<{ startDate: Date | null; endDate: Da
         if (clientData.commission_type === "fixed") return commissionValue;
         return 0;
     };
-    const calculateEmployeeHours = (employeeId: string, projectId: string, timeLogs: TimeLog[]) => timeLogs.filter(log => log.employee_id === employeeId).reduce((acc, log) => acc + (log.project_time_data?.projects?.find(p => p.projectId === projectId)?.hours || 0), 0);
+const calculateEmployeeHours = (employeeId: string, projectId: string, timeLogs: TimeLog[]) => timeLogs.filter(log => log.employee_id === employeeId).reduce((acc, log) => acc + (log.project_time_data?.projects?.find(p => p.projectId === projectId)?.hours || 0), 0);
     const convertToHourly = (amount: number, type: string, currency: string) => {
         if (currency === "USD") amount *= USD_TO_INR_RATE;
         if (type === "LPA") return amount / (365 * 8);
         if (type === "Monthly") return (amount * 12) / (365 * 8);
         return amount;
     };
-    const calculateEmployeeRevenue = (employee: Employee, projectId: string, timeLogs: TimeLog[]) => calculateEmployeeHours(employee.id, projectId, timeLogs) * convertToHourly(employee.client_billing, employee.billing_type, employee.currency);
-    const calculateEmployeeProfit = (employee: Employee, projectId: string, timeLogs: TimeLog[]) => calculateEmployeeRevenue(employee, projectId, timeLogs) - (calculateEmployeeHours(employee.id, projectId, timeLogs) * convertToHourly(employee.salary, employee.salary_type, employee.salary_currency));
+   const calculateEmployeeRevenue = (employee: Employee, projectId: string, timeLogs: TimeLog[]): number => {
+    const hours = calculateEmployeeHours(employee.id, projectId, timeLogs);
+    const config = employee.working_days_config || 'all_days';
+    let clientBilling = Number(employee.client_billing) || 0;
+    if (employee.currency === "USD") {
+        clientBilling *= USD_TO_INR_RATE;
+    }
 
+    let hourlyRate = 0;
+    const avgWorkingDaysInYear = config === 'weekdays_only' ? 260 : config === 'saturday_working' ? 312 : 365;
+    const dailyWorkingHours = employee.working_hours || 8;
+
+    switch (employee.billing_type?.toLowerCase()) {
+        case "monthly":
+            hourlyRate = (clientBilling * 12) / (avgWorkingDaysInYear * dailyWorkingHours);
+            break;
+        case "lpa":
+            hourlyRate = clientBilling / (avgWorkingDaysInYear * dailyWorkingHours);
+            break;
+        case "hourly":
+            hourlyRate = clientBilling;
+            break;
+    }
+    return hours * (hourlyRate || 0);
+};
+
+// NEW: calculateEmployeeProfit (replaces old version)
+const calculateEmployeeProfit = (employee: Employee, projectId: string, timeLogs: TimeLog[]): number => {
+    const revenue = calculateEmployeeRevenue(employee, projectId, timeLogs);
+    const hours = calculateEmployeeHours(employee.id, projectId, timeLogs);
+    const config = employee.working_days_config || 'all_days';
+    let salary = Number(employee.salary) || 0;
+    if (employee.salary_currency === "USD") {
+        salary *= USD_TO_INR_RATE;
+    }
+    
+    let salaryCost = 0;
+    let hourlySalaryRate = 0;
+    const avgWorkingDaysInYear = config === 'weekdays_only' ? 260 : config === 'saturday_working' ? 312 : 365;
+    const dailyWorkingHours = employee.working_hours || 8;
+
+    switch (employee.salary_type?.toLowerCase()) {
+        case "monthly":
+            hourlySalaryRate = (salary * 12) / (avgWorkingDaysInYear * dailyWorkingHours);
+            break;
+        case "lpa":
+            hourlySalaryRate = salary / (avgWorkingDaysInYear * dailyWorkingHours);
+            break;
+        case "hourly":
+            hourlySalaryRate = salary;
+            break;
+    }
+    salaryCost = hours * (hourlySalaryRate || 0);
+
+    return revenue - salaryCost;
+};
 
     // --- DATA FETCHING & PROCESSING (Updated for new charts) ---
 // Update fetchDashboardData to handle null dateRange
@@ -111,7 +180,12 @@ const fetchDashboardData = useCallback(async () => {
         const { data: jobsData } = await supabase.from('hr_jobs').select('id, title, job_type_category').eq('client_owner', clientName);
         if (jobsData) {
             // Remove date filtering when dateRange is null
-            let query = supabase.from("hr_job_candidates").select(`*`).in("job_id", jobsData.map(j => j.id)).or(`main_status_id.eq.${JOINED_STATUS_ID},main_status_id.eq.${OFFERED_STATUS_ID}`).in("sub_status_id", [JOINED_SUB_STATUS_ID, OFFER_ISSUED_SUB_STATUS_ID]);
+             let query = supabase.from("hr_job_candidates")
+                    .select(`*`)
+                    .in("job_id", jobsData.map(j => j.id))
+                    .or(`main_status_id.eq.${statusIds.JOINED_STATUS_ID},main_status_id.eq.${statusIds.OFFERED_STATUS_ID}`)
+                    .in("sub_status_id", [statusIds.JOINED_SUB_STATUS_ID, statusIds.OFFER_ISSUED_SUB_STATUS_ID]);
+
             if (dateRange?.startDate && dateRange?.endDate) {
                 query = query.gte('joining_date', format(dateRange.startDate, 'yyyy-MM-dd')).lte('joining_date', format(dateRange.endDate, 'yyyy-MM-dd'));
             }
@@ -141,22 +215,63 @@ const fetchDashboardData = useCallback(async () => {
             }
             const { data: timeLogsData } = await timeLogsQuery;
             const { data: employeesData } = await supabase.from('hr_project_employees').select(`*, hr_employees:assign_employee(first_name, last_name)`).eq('client_id', clientData.id);
-
+           
             const processedEmployees = employeesData?.map(e => {
-                const baseEmployee: Employee = { id: e.assign_employee, employee_name: `${e.hr_employees.first_name} ${e.hr_employees.last_name}`, project_id: e.project_id, project_name: projectsData.find(p => p.id === e.project_id)?.name || 'Unknown', salary: e.salary, salary_type: e.salary_type, salary_currency: e.salary_currency, client_billing: e.client_billing, billing_type: e.billing_type, currency: clientData.currency, actual_revenue_inr: 0, actual_profit_inr: 0 };
+                const baseEmployee: Employee = { 
+        id: e.assign_employee, 
+        employee_name: `${e.hr_employees.first_name} ${e.hr_employees.last_name}`, 
+        project_id: e.project_id, 
+        project_name: projectsData.find(p => p.id === e.project_id)?.name || 'Unknown', 
+        salary: e.salary, 
+        salary_type: e.salary_type, 
+        salary_currency: e.salary_currency, 
+        client_billing: e.client_billing, 
+        billing_type: e.billing_type, 
+        currency: clientData.currency, 
+        working_hours: e.working_hours, // <-- ADD THIS
+        working_days_config: e.working_days_config, // <-- ADD THIS
+        actual_revenue_inr: 0, 
+        actual_profit_inr: 0,
+        status: e.status,
+    };
                 const revenue = calculateEmployeeRevenue(baseEmployee, e.project_id, timeLogsData || []);
                 const profit = calculateEmployeeProfit(baseEmployee, e.project_id, timeLogsData || []);
                 totalEmployeeRevenue += revenue; totalEmployeeProfit += profit;
                 (timeLogsData || []).forEach(log => {
                     const projectEntry = log.project_time_data?.projects?.find(p => p.projectId === e.project_id);
                     if (log.employee_id === e.assign_employee && projectEntry) {
-                        const monthKey = format(new Date(log.date), 'MMM yyyy');
-                        if (!monthlyAggregates[monthKey]) monthlyAggregates[monthKey] = { revenue: 0, profit: 0 };
-                        const hourlyRate = convertToHourly(e.client_billing, e.billing_type, clientData.currency);
-                        const hourlyCost = convertToHourly(e.salary, e.salary_type, e.salary_currency);
-                        monthlyAggregates[monthKey].revenue += projectEntry.hours * hourlyRate;
-                        monthlyAggregates[monthKey].profit += (projectEntry.hours * hourlyRate) - (projectEntry.hours * hourlyCost);
-                    }
+    const monthKey = format(new Date(log.date), 'MMM yyyy');
+    if (!monthlyAggregates[monthKey]) monthlyAggregates[monthKey] = { revenue: 0, profit: 0 };
+
+    // --- START OF NEW LOGIC ---
+    const config = e.working_days_config || 'all_days';
+    const dailyWorkingHours = e.working_hours || 8;
+    const avgWorkingDaysInYear = config === 'weekdays_only' ? 260 : config === 'saturday_working' ? 312 : 365;
+
+    // Calculate hourly revenue rate
+    let hourlyRate = 0;
+    let clientBilling = Number(e.client_billing) || 0;
+    if (clientData.currency === "USD") clientBilling *= USD_TO_INR_RATE;
+    switch (e.billing_type?.toLowerCase()) {
+        case "monthly": hourlyRate = (clientBilling * 12) / (avgWorkingDaysInYear * dailyWorkingHours); break;
+        case "lpa": hourlyRate = clientBilling / (avgWorkingDaysInYear * dailyWorkingHours); break;
+        case "hourly": hourlyRate = clientBilling; break;
+    }
+
+    // Calculate hourly salary cost
+    let hourlyCost = 0;
+    let salary = Number(e.salary) || 0;
+    if (e.salary_currency === "USD") salary *= USD_TO_INR_RATE;
+    switch (e.salary_type?.toLowerCase()) {
+        case "monthly": hourlyCost = (salary * 12) / (avgWorkingDaysInYear * dailyWorkingHours); break;
+        case "lpa": hourlyCost = salary / (avgWorkingDaysInYear * dailyWorkingHours); break;
+        case "hourly": hourlyCost = salary; break;
+    }
+    
+    monthlyAggregates[monthKey].revenue += projectEntry.hours * hourlyRate;
+    monthlyAggregates[monthKey].profit += (projectEntry.hours * hourlyRate) - (projectEntry.hours * hourlyCost);
+    // --- END OF NEW LOGIC ---
+}
                 });
                 return { ...baseEmployee, actual_revenue_inr: revenue, actual_profit_inr: profit };
             }) || [];
@@ -175,7 +290,7 @@ const fetchDashboardData = useCallback(async () => {
     } finally {
         setLoading(false);
     }
-}, [clientName, organization_id, toast, dateRange]);
+}, [clientName, organization_id, toast, dateRange, statusIds]);
     
     useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
 

@@ -199,6 +199,8 @@ const AscendionOrgSuperAdminMenu = [
         title: "Hiring Suite",
         icon: FaUserShield, // Using the same icon for consistency
         items: [
+           { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
+           
             { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
   // { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
   { icon: MdOutlineManageAccounts, label: "User Management", path: "/user-management" },

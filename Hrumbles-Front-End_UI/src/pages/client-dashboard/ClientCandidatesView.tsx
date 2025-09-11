@@ -37,12 +37,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
-// Status IDs for Offered and Joined candidates
-const OFFERED_STATUS_ID = "9d48d0f9-8312-4f60-aaa4-bafdce067417";
-const OFFER_ISSUED_SUB_STATUS_ID = "bcc84d3b-fb76-4912-86cc-e95448269d6b";
-const JOINED_STATUS_ID = "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e";
-const JOINED_SUB_STATUS_ID = "c9716374-3477-4606-877a-dfa5704e7680";
-
+// --- NEW DYNAMIC STATUS ID CONFIGURATION ---
+const STATUS_CONFIG = {
+  default: {
+    OFFERED_STATUS_ID: "9d48d0f9-8312-4f60-aaa4-bafdce067417",
+    OFFER_ISSUED_SUB_STATUS_ID: "bcc84d3b-fb76-4912-86cc-e95448269d6b",
+    JOINED_STATUS_ID: "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e",
+    JOINED_SUB_STATUS_ID: "c9716374-3477-4606-877a-dfa5704e7680",
+  },
+  demo: { // organization_id: 53989f03-bdc9-439a-901c-45b274eff506
+    OFFERED_STATUS_ID: "0557a2c9-6c27-46d5-908c-a826b82a6c47",
+    OFFER_ISSUED_SUB_STATUS_ID: "7ad5ab45-21ab-4af1-92b9-dd0cb1d52887",
+    JOINED_STATUS_ID: "5ab8833c-c409-46b8-a6b0-dbf23591827b",
+    JOINED_SUB_STATUS_ID: "247ef818-9fbe-41ee-a755-a446d620ebb6",
+  }
+};
+const DEMO_ORGANIZATION_ID = '53989f03-bdc9-439a-901c-45b274eff506';
 
 // Static USD to INR conversion rates
 const USD_TO_INR_RATE_CANDIDATES = 84;
@@ -139,6 +149,9 @@ const ClientCandidatesView = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const organization_id = useSelector((state: any) => state.auth.organization_id);
+    const statusIds = useMemo(() => {
+    return organization_id === DEMO_ORGANIZATION_ID ? STATUS_CONFIG.demo : STATUS_CONFIG.default;
+  }, [organization_id]);
 
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [filteredCandidates, setFilteredCandidates] = useState<Candidate[]>([]);
@@ -390,9 +403,9 @@ const fetchCandidatesAndEmployees = async (client: string) => {
           hr_jobs!hr_job_candidates_job_id_fkey(id, title, job_type_category, client_details)
         `)
         .in("job_id", jobIds)
-       .or(`main_status_id.eq.${JOINED_STATUS_ID},main_status_id.eq.${OFFERED_STATUS_ID}`)
-          .in("sub_status_id", [JOINED_SUB_STATUS_ID, OFFER_ISSUED_SUB_STATUS_ID]);
-
+       .or(`main_status_id.eq.${statusIds.JOINED_STATUS_ID},main_status_id.eq.${statusIds.OFFERED_STATUS_ID}`)
+          .in("sub_status_id", [statusIds.JOINED_SUB_STATUS_ID, statusIds.OFFER_ISSUED_SUB_STATUS_ID]);
+        
       if (candidatesError) throw candidatesError;
 
       if (candidatesData && candidatesData.length > 0) {
@@ -678,11 +691,11 @@ const fetchCandidatesAndEmployees = async (client: string) => {
     navigate("/clients");
   };
 
- const getStatusBadgeColor = (statusId: string | undefined) => {
+  const getStatusBadgeColor = (statusId: string | undefined) => {
     switch (statusId) {
-      case OFFER_ISSUED_SUB_STATUS_ID:
+      case statusIds.OFFER_ISSUED_SUB_STATUS_ID:
         return "bg-yellow-100 text-yellow-800 hover:bg-yellow-200";
-      case JOINED_SUB_STATUS_ID:
+      case statusIds.JOINED_SUB_STATUS_ID:
         return "bg-green-100 text-green-800 hover:bg-green-200";
       default:
         return "bg-gray-100 text-gray-800 hover:bg-gray-200";
@@ -691,9 +704,9 @@ const fetchCandidatesAndEmployees = async (client: string) => {
 
   const getStatusText = (statusId: string | undefined) => {
     switch (statusId) {
-      case OFFER_ISSUED_SUB_STATUS_ID:
+      case statusIds.OFFER_ISSUED_SUB_STATUS_ID:
         return "Offer Issued";
-      case JOINED_SUB_STATUS_ID:
+      case statusIds.JOINED_SUB_STATUS_ID:
         return "Joined";
       default:
         return "Unknown";
@@ -705,9 +718,9 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
     try {
       const { error } = await supabase
         .from("hr_job_candidates")
-        .update({ 
-          main_status_id: subStatusId === OFFER_ISSUED_SUB_STATUS_ID ? OFFERED_STATUS_ID : JOINED_STATUS_ID,
-          sub_status_id: subStatusId 
+         .update({
+          main_status_id: subStatusId === statusIds.OFFER_ISSUED_SUB_STATUS_ID ? statusIds.OFFERED_STATUS_ID : statusIds.JOINED_STATUS_ID,
+          sub_status_id: subStatusId
         })
         .eq("id", candidateId);
 
@@ -1080,13 +1093,13 @@ const handleStatusChange = async (candidateId: string, subStatusId: string) => {
                         <DropdownMenuContent align="center">
                           <DropdownMenuItem
                             className="text-yellow-600 focus:text-yellow-600 focus:bg-yellow-50"
-                            onClick={() => handleStatusChange(candidate.id, OFFER_ISSUED_SUB_STATUS_ID)}
-                          >
+                            onClick={() => handleStatusChange(candidate.id, statusIds.OFFER_ISSUED_SUB_STATUS_ID)}
+                          > 
                             Offer Issued
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-green-600 focus:text-green-600 focus:bg-green-50"
-                            onClick={() => handleStatusChange(candidate.id, JOINED_SUB_STATUS_ID)}
+                            onClick={() => handleStatusChange(candidate.id, statusIds.JOINED_SUB_STATUS_ID)}
                           >
                             Joined
                           </DropdownMenuItem>

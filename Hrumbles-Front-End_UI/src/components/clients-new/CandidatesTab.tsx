@@ -11,11 +11,23 @@ import moment from 'moment';
 import { Candidate, SortConfig } from './ClientTypes';
 import HiddenContactCell from '@/components/ui/HiddenContactCell';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useSelector } from 'react-redux';
 
-const OFFERED_STATUS_ID = "9d48d0f9-8312-4f60-aaa4-bafdce067417";
-const OFFER_ISSUED_SUB_STATUS_ID = "bcc84d3b-fb76-4912-86cc-e95448269d6b";
-const JOINED_STATUS_ID = "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e";
-const JOINED_SUB_STATUS_ID = "c9716374-3477-4606-877a-dfa5704e7680";
+const STATUS_CONFIG = {
+  default: {
+    OFFERED_STATUS_ID: "9d48d0f9-8312-4f60-aaa4-bafdce067417",
+    OFFER_ISSUED_SUB_STATUS_ID: "bcc84d3b-fb76-4912-86cc-e95448269d6b",
+    JOINED_STATUS_ID: "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e",
+    JOINED_SUB_STATUS_ID: "c9716374-3477-4606-877a-dfa5704e7680",
+  },
+  demo: { // organization_id: 53989f03-bdc9-439a-901c-45b274eff506
+    OFFERED_STATUS_ID: "0557a2c9-6c27-46d5-908c-a826b82a6c47",
+    OFFER_ISSUED_SUB_STATUS_ID: "7ad5ab45-21ab-4af1-92b9-dd0cb1d52887",
+    JOINED_STATUS_ID: "5ab8833c-c409-46b8-a6b0-dbf23591827b",
+    JOINED_SUB_STATUS_ID: "247ef818-9fbe-41ee-a755-a446d620ebb6",
+  }
+};
+const DEMO_ORGANIZATION_ID = '53989f03-bdc9-439a-901c-45b274eff506';
 const USD_TO_INR_RATE = 84;
 
 interface CandidatesTabProps {
@@ -26,8 +38,15 @@ interface CandidatesTabProps {
 
 const CandidatesTab: React.FC<CandidatesTabProps> = ({ candidates, loading, onUpdate }) => {
     const { toast } = useToast();
+    const organization_id = useSelector((state: any) => state.auth.organization_id);
     const [sortConfig, setSortConfig] = useState<SortConfig<Candidate>>(null);
     const [statusUpdateLoading, setStatusUpdateLoading] = useState<string | null>(null);
+
+    console.log("sorting config", candidates)
+        // --- ADD THIS HOOK to select the correct IDs ---
+    const statusIds = useMemo(() => {
+        return organization_id === DEMO_ORGANIZATION_ID ? STATUS_CONFIG.demo : STATUS_CONFIG.default;
+    }, [organization_id]);
 
     const parseSalary = (salaryStr?: string): number => {
         if (!salaryStr) return 0;
@@ -43,13 +62,16 @@ const CandidatesTab: React.FC<CandidatesTabProps> = ({ candidates, loading, onUp
 
     const formatCurrency = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(amount);
     const formatDate = (dateString?: string) => dateString ? moment(new Date(dateString)).format("DD MMM YYYY") : "-";
-    const getStatusBadgeColor = (statusId?: string) => statusId === JOINED_SUB_STATUS_ID ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800";
-    const getStatusText = (statusId?: string) => statusId === JOINED_SUB_STATUS_ID ? "Joined" : "Offer Issued";
+     const getStatusBadgeColor = (statusId?: string) => statusId === statusIds.JOINED_SUB_STATUS_ID ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800";
+    const getStatusText = (statusId?: string) => statusId === statusIds.JOINED_SUB_STATUS_ID ? "Joined" : "Offer Issued";
 
      const handleStatusChange = async (candidateId: string, subStatusId: string) => {
         setStatusUpdateLoading(candidateId);
         try {
-            await supabase.from("hr_job_candidates").update({ main_status_id: subStatusId === OFFER_ISSUED_SUB_STATUS_ID ? OFFERED_STATUS_ID : JOINED_STATUS_ID, sub_status_id: subStatusId }).eq("id", candidateId);
+            await supabase.from("hr_job_candidates").update({ 
+                main_status_id: subStatusId === statusIds.OFFER_ISSUED_SUB_STATUS_ID ? statusIds.OFFERED_STATUS_ID : statusIds.JOINED_STATUS_ID, 
+                sub_status_id: subStatusId 
+            }).eq("id", candidateId);
             toast({ title: "Status Updated" });
             onUpdate();
         } catch (error) {
@@ -106,11 +128,12 @@ const CandidatesTab: React.FC<CandidatesTabProps> = ({ candidates, loading, onUp
                             <td className="px-6 py-4 whitespace-nowrap text-sm hidden lg:table-cell">{c.experience || "-"}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDate(c.joining_date)}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                <DropdownMenu>
+                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 px-2 py-0 w-28 justify-start">{statusUpdateLoading === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Badge variant="outline" className={getStatusBadgeColor(c.sub_status_id)}>{getStatusText(c.sub_status_id)}</Badge>}</Button></DropdownMenuTrigger>
                                     <DropdownMenuContent>
-                                        <DropdownMenuItem onClick={() => handleStatusChange(c.id, OFFER_ISSUED_SUB_STATUS_ID)}>Offer Issued</DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleStatusChange(c.id, JOINED_SUB_STATUS_ID)}>Joined</DropdownMenuItem>
+                                        {/* --- UPDATE these onClick handlers --- */}
+                                        <DropdownMenuItem onClick={() => handleStatusChange(c.id, statusIds.OFFER_ISSUED_SUB_STATUS_ID)}>Offer Issued</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleStatusChange(c.id, statusIds.JOINED_SUB_STATUS_ID)}>Joined</DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </td>

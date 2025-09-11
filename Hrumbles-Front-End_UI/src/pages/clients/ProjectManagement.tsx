@@ -40,6 +40,8 @@ interface ProjectEmployee {
   billing_type: string;
   salary_type: string;
   salary_currency: string;
+    working_hours?: number;
+  working_days_config?: 'all_days' | 'weekdays_only' | 'saturday_working';
 }
 
 interface TimeLog {
@@ -136,7 +138,7 @@ const ProjectManagement = () => {
         if (!organization_id) return [];
         const { data, error } = await supabase
             .from("hr_project_employees")
-            .select(`client_id, project_id, assign_employee, salary, client_billing, billing_type, salary_type, salary_currency, organization_id`)
+            .select(`client_id, project_id, assign_employee, salary, client_billing, billing_type, salary_type, salary_currency, organization_id, working_hours, working_days_config`)
             .eq("organization_id", organization_id);
         if (error) throw error;
         return data || [];
@@ -163,113 +165,113 @@ const ProjectManagement = () => {
   });
 
   // --- CALCULATION HELPERS (Unchanged) ---
-   // Calculate total hours per employee from time logs
-  const calculateEmployeeHours = (employeeId: string, projectId: string, logs: TimeLog[]) => {
-    return (
-      logs
-        ?.filter((log: TimeLog) => log.employee_id === employeeId)
-        .reduce((acc: number, log: TimeLog) => {
-          const projectEntry = log.project_time_data?.projects?.find(
-            (proj) => proj.projectId === projectId
-          );
-          return acc + (projectEntry?.hours || 0);
-        }, 0) || 0
-    );
-  };
+// Calculate total hours per employee from time logs (This function remains)
+const calculateEmployeeHours = (employeeId: string, projectId: string, logs: TimeLog[]) => {
+  return (
+    logs
+      ?.filter((log: TimeLog) => log.employee_id === employeeId)
+      .reduce((acc: number, log: TimeLog) => {
+        const projectEntry = log.project_time_data?.projects?.find(
+          (proj) => proj.projectId === projectId
+        );
+        return acc + (projectEntry?.hours || 0);
+      }, 0) || 0
+  );
+};
 
-  // Convert client_billing to hourly rate
-  const convertToHourly = (employee: ProjectEmployee, clientCurrency: string) => {
+// NEW: Calculate revenue for an employee using the improved 'Actual' logic
+const calculateActualRevenue = (employee: ProjectEmployee, projectId: string, clientCurrency: string, logs: TimeLog[]) => {
+    const hours = calculateEmployeeHours(employee.assign_employee, projectId, logs);
+    const config = employee.working_days_config || 'all_days';
     let clientBilling = Number(employee.client_billing) || 0;
-
     if (clientCurrency === "USD") {
-      clientBilling *= EXCHANGE_RATE_USD_TO_INR;
+        clientBilling *= EXCHANGE_RATE_USD_TO_INR;
     }
+
+    let hourlyRate = 0;
+    // Use average working days per year for stable conversion
+    const avgWorkingDaysInYear = config === 'weekdays_only' ? 260 : config === 'saturday_working' ? 312 : 365;
+    const dailyWorkingHours = employee.working_hours || 8;
 
     switch (employee.billing_type) {
-      case "Monthly":
-        clientBilling = (clientBilling * 12) / (365 * 8);
-        break;
-      case "Hourly":
-        break;
-      case "LPA":
-        clientBilling = clientBilling / (365 * 8);
-        break;
-      default:
-        clientBilling = 0;
-        break;
+        case "Monthly":
+            hourlyRate = (clientBilling * 12) / (avgWorkingDaysInYear * dailyWorkingHours);
+            break;
+        case "LPA":
+            hourlyRate = clientBilling / (avgWorkingDaysInYear * dailyWorkingHours);
+            break;
+        case "Hourly":
+            hourlyRate = clientBilling;
+            break;
     }
+    return hours * (hourlyRate || 0);
+};
 
-    return clientBilling;
-  };
-
-  // Calculate revenue for an employee
-  const calculateRevenue = (employee: ProjectEmployee, projectId: string, clientCurrency: string, logs: TimeLog[]) => {
+// NEW: Calculate profit for an employee using the improved 'Actual' logic
+const calculateActualProfit = (employee: ProjectEmployee, projectId: string, clientCurrency: string, logs: TimeLog[]) => {
+    const revenue = calculateActualRevenue(employee, projectId, clientCurrency, logs);
     const hours = calculateEmployeeHours(employee.assign_employee, projectId, logs);
-    const hourlyRate = convertToHourly(employee, clientCurrency);
-    return hours * hourlyRate;
-  };
-
-  // Calculate profit for an employee
-  const calculateProfit = (employee: ProjectEmployee, projectId: string, clientCurrency: string, logs: TimeLog[]) => {
-    const revenue = calculateRevenue(employee, projectId, clientCurrency, logs);
+    const config = employee.working_days_config || 'all_days';
     let salary = Number(employee.salary) || 0;
-    const salaryType = employee?.salary_type || "LPA";
-
     if (employee.salary_currency === "USD") {
-      salary *= EXCHANGE_RATE_USD_TO_INR;
+        salary *= EXCHANGE_RATE_USD_TO_INR;
     }
+    
+    let salaryCost = 0;
+    let hourlySalaryRate = 0;
+    const avgWorkingDaysInYear = config === 'weekdays_only' ? 260 : config === 'saturday_working' ? 312 : 365;
+    const dailyWorkingHours = employee.working_hours || 8;
 
-    const hours = calculateEmployeeHours(employee.assign_employee, projectId, logs);
-
-    let hourlySalary = salary;
-    switch (salaryType) {
-      case "LPA":
-        hourlySalary = salary / (365 * 8);
-        break;
-      case "Monthly":
-        hourlySalary = (salary * 12) / (365 * 8);
-        break;
-      case "Hourly":
-        break;
-      default:
-        hourlySalary = 0;
-        break;
+    switch (employee.salary_type) {
+        case "Monthly":
+            hourlySalaryRate = (salary * 12) / (avgWorkingDaysInYear * dailyWorkingHours);
+            break;
+        case "LPA":
+            hourlySalaryRate = salary / (avgWorkingDaysInYear * dailyWorkingHours);
+            break;
+        case "Hourly":
+            hourlySalaryRate = salary;
+            break;
     }
+    salaryCost = hours * (hourlySalaryRate || 0);
 
-    return revenue - (hours * hourlySalary);
-  };
+    return revenue - salaryCost;
+};
   // --- CORE LOGIC CHANGE: Calculate financials per project ---
-  const projectFinancials: ProjectFinancialData[] = useMemo(() => {
-    if (!projects || !projectEmployees || !timeLogs) {
-      return [];
-    }
+// ~ line 226
+const projectFinancials: ProjectFinancialData[] = useMemo(() => {
+  if (!projects || !projectEmployees || !timeLogs) {
+    return [];
+  }
 
-    return projects.map((project) => {
-      const employeesOnProject = projectEmployees.filter((pe) => pe.project_id === project.id);
-      const projectCurrency = project.hr_clients?.currency || "INR";
+  return projects.map((project) => {
+    const employeesOnProject = projectEmployees.filter((pe) => pe.project_id === project.id);
+    const projectCurrency = project.hr_clients?.currency || "INR";
 
-      const totalRevenueINR = employeesOnProject.reduce(
-        (acc, pe) => acc + calculateRevenue(pe, project.id, projectCurrency, timeLogs),
-        0
-      );
-      const totalProfitINR = employeesOnProject.reduce(
-        (acc, pe) => acc + calculateProfit(pe, project.id, projectCurrency, timeLogs),
-        0
-      );
+    // MODIFIED LINES: Use the new calculation functions
+    const totalRevenueINR = employeesOnProject.reduce(
+      (acc, pe) => acc + calculateActualRevenue(pe, project.id, projectCurrency, timeLogs),
+      0
+    );
+    const totalProfitINR = employeesOnProject.reduce(
+      (acc, pe) => acc + calculateActualProfit(pe, project.id, projectCurrency, timeLogs),
+      0
+    );
 
-      return {
-        ...project,
-        assigned_employees: employeesOnProject.length,
-        revenue_inr: totalRevenueINR,
-        revenue_usd: totalRevenueINR / EXCHANGE_RATE_USD_TO_INR,
-        profit_inr: totalProfitINR,
-        profit_usd: totalProfitINR / EXCHANGE_RATE_USD_TO_INR,
-      };
-    });
-  }, [projects, projectEmployees, timeLogs]);
+    return {
+      ...project,
+      assigned_employees: employeesOnProject.length,
+      revenue_inr: totalRevenueINR,
+      revenue_usd: totalRevenueINR / EXCHANGE_RATE_USD_TO_INR,
+      profit_inr: totalProfitINR,
+      profit_usd: totalProfitINR / EXCHANGE_RATE_USD_TO_INR,
+    };
+  });
+}, [projects, projectEmployees, timeLogs]);
 
   // In ProjectManagement.tsx, after the 'projectFinancials' useMemo hook
 
+// ~ line 251
 const monthlyChartData = useMemo(() => {
   const months = eachMonthOfInterval({ start: dateRange.startDate, end: dateRange.endDate });
   const initialData = months.map(month => ({
@@ -286,7 +288,6 @@ const monthlyChartData = useMemo(() => {
 
     if (monthData && log.project_time_data?.projects) {
       log.project_time_data.projects.forEach(p => {
-        // Find the employee and project details for this specific log entry
         const employee = projectEmployees.find(e => e.assign_employee === log.employee_id && e.project_id === p.projectId);
         const project = projects.find(proj => proj.id === p.projectId);
         
@@ -294,22 +295,36 @@ const monthlyChartData = useMemo(() => {
           const projectCurrency = project.hr_clients?.currency || "INR";
           const hours = p.hours || 0;
 
-          // Calculate revenue for this specific log
-          const hourlyRate = convertToHourly(employee, projectCurrency);
-          const logRevenue = hours * hourlyRate;
+          // --- START OF MODIFIED LOGIC ---
+          const config = employee.working_days_config || 'all_days';
+          const dailyWorkingHours = employee.working_hours || 8;
+          const avgWorkingDaysInYear = config === 'weekdays_only' ? 260 : config === 'saturday_working' ? 312 : 365;
 
+          // Calculate revenue for this specific log
+          let hourlyRate = 0;
+          let clientBilling = Number(employee.client_billing) || 0;
+          if (projectCurrency === 'USD') clientBilling *= EXCHANGE_RATE_USD_TO_INR;
+
+          switch (employee.billing_type) {
+              case "Monthly": hourlyRate = (clientBilling * 12) / (avgWorkingDaysInYear * dailyWorkingHours); break;
+              case "LPA": hourlyRate = clientBilling / (avgWorkingDaysInYear * dailyWorkingHours); break;
+              case "Hourly": hourlyRate = clientBilling; break;
+          }
+          const logRevenue = hours * hourlyRate;
+          
           // Calculate profit for this specific log
           let salary = Number(employee.salary) || 0;
           if (employee.salary_currency === "USD") salary *= EXCHANGE_RATE_USD_TO_INR;
 
           let hourlySalary = 0;
           switch (employee.salary_type) {
-            case "LPA": hourlySalary = salary / (365 * 8); break;
-            case "Monthly": hourlySalary = (salary / 30) / 8; break; // Corrected logic
-            case "Hourly": hourlySalary = salary; break;
+              case "Monthly": hourlySalary = (salary * 12) / (avgWorkingDaysInYear * dailyWorkingHours); break;
+              case "LPA": hourlySalary = salary / (avgWorkingDaysInYear * dailyWorkingHours); break;
+              case "Hourly": hourlySalary = salary; break;
           }
           const logExpense = hours * hourlySalary;
           const logProfit = logRevenue - logExpense;
+          // --- END OF MODIFIED LOGIC ---
           
           // Add to the monthly totals
           monthData.revenue += logRevenue;

@@ -1,14 +1,15 @@
 // src/components/dashboard/HiringSuiteDashboard.tsx
-
+import { useMemo } from "react";
 import { useSelector } from "react-redux";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Crown, Users, Target, Loader2, BrainCircuit, ShieldCheck, Briefcase, Clock } from 'lucide-react';
+import { Crown, Users, Target, Loader2, BrainCircuit, ShieldCheck, Briefcase, Clock, CheckCheck, Tag } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { CalendarCard } from "../employee/profile/cards/CalendarCard"; // Ensure this path is correct
 import { Badge } from "@/components/ui/badge";
+import { HeroCarousel, CarouselSlide } from './HeroCarousel';
 
 // --- Reusable Component for Chart Cards ---
 const ChartCard = ({ title, description, children, isLoading, className = "" }) => (
@@ -30,6 +31,21 @@ const HiringSuiteDashboard = () => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const { user, role } = useSelector((state: any) => state.auth);
 
+    const carouselThemes = [
+    {
+      title: 'Recruiter of the Month!',
+      gradient: 'bg-gradient-to-br from-purple-600 to-indigo-700',
+    },
+    {
+      title: 'Average Time to Hire',
+      gradient: 'bg-gradient-to-br from-sky-500 to-blue-600',
+    },
+    {
+      title: 'Offer Acceptance Rate',
+      gradient: 'bg-gradient-to-br from-emerald-500 to-teal-600',
+    }
+  ];
+
   // --- Data Fetching Hooks ---
 
   const { data: topRecruiter, isLoading: topRecruiterLoading } = useQuery({
@@ -38,6 +54,28 @@ const HiringSuiteDashboard = () => {
       const { data, error } = await supabase.rpc('get_top_recruiter_of_month', { org_id: organizationId });
       if (error) throw error;
       return data?.[0] || null;
+    },
+    enabled: !!organizationId,
+  });
+
+    // NEW: Fetch Average Time to Hire
+  const { data: avgTimeToHire, isLoading: timeToHireLoading } = useQuery({
+    queryKey: ['avgTimeToHire', organizationId],
+    queryFn: async () => {
+        const { data, error } = await supabase.rpc('get_avg_time_to_hire', { org_id: organizationId });
+        if (error) throw error;
+        return data?.[0] || { avg_days: 0 };
+    },
+    enabled: !!organizationId,
+  });
+
+  // NEW: Fetch Offer Acceptance Rate
+  const { data: acceptanceRate, isLoading: acceptanceRateLoading } = useQuery({
+    queryKey: ['offerAcceptanceRate', organizationId],
+    queryFn: async () => {
+        const { data, error } = await supabase.rpc('get_offer_acceptance_rate', { org_id: organizationId });
+        if (error) throw error;
+        return data?.[0] || { acceptance_rate: 0 };
     },
     enabled: !!organizationId,
   });
@@ -97,6 +135,41 @@ const HiringSuiteDashboard = () => {
     enabled: !!organizationId,
   });
 
+   // NEW: Memoize the slides data for the carousel
+const heroSlides: CarouselSlide[] = useMemo(() => {
+    const slides = [];
+
+    if (topRecruiter) {
+        slides.push({
+            title: 'Recruiter of the Month!',
+            value: topRecruiter.recruiter_name,
+            description: `${topRecruiter.hires} Hires`,
+            icon: <Crown size={84} />,
+            theme: carouselThemes.find(t => t.title === 'Recruiter of the Month!'), // Find and add theme
+        });
+    }
+    if (avgTimeToHire) {
+        slides.push({
+            title: 'Average Time to Hire',
+            value: `${Number(avgTimeToHire.avg_days).toFixed(1)} days`,
+            description: 'From job creation to joining',
+            icon: <Clock size={84} />,
+            theme: carouselThemes.find(t => t.title === 'Average Time to Hire'), // Find and add theme
+        });
+    }
+    if (acceptanceRate) {
+        slides.push({
+            title: 'Offer Acceptance Rate',
+            value: `${Number(acceptanceRate.acceptance_rate).toFixed(1)}%`,
+            description: 'Of all offers issued',
+            icon: <Tag size={84} />,
+            theme: carouselThemes.find(t => t.title === 'Offer Acceptance Rate'), // Find and add theme
+        });
+    }
+    return slides;
+  }, [topRecruiter, avgTimeToHire, acceptanceRate]);
+
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-8">
       <div className="max-w-9xl mx-auto space-y-6">
@@ -104,16 +177,10 @@ const HiringSuiteDashboard = () => {
         
         {/* --- ROW 1 --- */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card className="lg:col-span-1 bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg">
-                <CardHeader><CardTitle className="text-xl">Recruiter of the Month!</CardTitle></CardHeader>
-                <CardContent className="flex items-center justify-between">
-                    {topRecruiterLoading ? <Loader2 className="h-8 w-8 animate-spin"/> :
-                    topRecruiter ? (
-                        <div><p className="text-3xl font-bold">{topRecruiter.recruiter_name}</p><p className="text-lg opacity-90">{topRecruiter.hires} Hires</p></div>
-                    ) : <p>No hires recorded yet.</p>}
-                    <Crown size={64} className="opacity-30" />
-                </CardContent>
-            </Card>
+          <HeroCarousel 
+                slides={heroSlides} 
+                isLoading={topRecruiterLoading || timeToHireLoading || acceptanceRateLoading}
+            />
              <ChartCard title="Hiring Funnel" description="Live candidates in main stages" isLoading={funnelLoading} className="lg:col-span-2">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                     {(funnelCounts || []).map(stage => (

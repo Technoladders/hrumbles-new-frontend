@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react'; // For loading spinner (assuming ShadCN or similar)
 import RevenueExpenseChart from "./RevenueExpenseChart";
@@ -371,6 +372,72 @@ return (
   </div>
 );
 }
+
+// --- NEW: Self-Contained Component for the Ascendion Dashboard ---
+const AscendionDashboard = () => {
+    const organizationId = useSelector((state: any) => state.auth.organization_id);
+    const { user, role } = useSelector((state: any) => state.auth);
+
+    // Fetch data for the UAN verification chart
+    const { data: weeklyUanData, isLoading: uanLoading } = useQuery({
+        queryKey: ['weeklyUanVerifications', organizationId], // A unique query key for this data
+        queryFn: async () => {
+            const { data, error } = await supabase.rpc('get_weekly_activity_summary', { org_id: organizationId });
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!organizationId,
+    });
+
+    return (
+        <div className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-8">
+            <div className="max-w-9xl mx-auto space-y-6">
+                {/* <h1 className="text-3xl font-bold text-gray-800 tracking-tight">Dashboard</h1> */}
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Card for the UAN Verification Chart */}
+                   
+
+                    {/* Card for the Calendar */}
+                    <div className="h-full">
+                        <CalendarCard employeeId={user.id} isHumanResourceEmployee={false} role={role} organizationId={organizationId}/>
+                    </div>
+                     <Card className="shadow-md border-none bg-white h-full">
+                        <CardHeader className="pb-4">
+                            <CardTitle className="text-base font-semibold text-gray-700">Weekly Employment Verifications</CardTitle>
+                            <CardDescription className="text-xs">Number of UAN/EPFO checks performed this week</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {uanLoading ? (
+                                <div className="flex justify-center items-center h-[350px]">
+                                    <Loader2 className="h-8 w-8 animate-spin text-indigo-600"/>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="text-3xl font-bold mb-4 text-gray-800">
+                                        {weeklyUanData?.reduce((acc, day) => acc + Number(day.epfo_verifications), 0) ?? 0}
+                                    </div>
+                                    <ResponsiveContainer width="100%" height={250}>
+                                        <BarChart data={weeklyUanData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                            <XAxis dataKey="day_name" axisLine={false} tickLine={false} className="text-xs text-gray-600"/>
+                                            <YAxis axisLine={false} tickLine={false} className="text-xs text-gray-600" />
+                                            <Tooltip 
+                                                cursor={{fill: 'rgba(185, 16, 154, 0.1)'}} 
+                                                contentStyle={{ fontSize: '12px', padding: '4px 8px', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                                            />
+                                            <Bar dataKey="epfo_verifications" name="Verifications" fill="#A855F7" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+        </div>
+    );
+};
  
 
  
@@ -379,12 +446,13 @@ return (
 function OrganizationSuperadminDashboard() {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
+   const ASCENDION_ORG_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
+
   // Define the organizations that will see the new dashboard
   const ITECH_HIRING_SUITE_ORGS = [
     "1961d419-1272-4371-8dc7-63a4ec71be83",
     "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
     "53989f03-bdc9-439a-901c-45b274eff506",
-    "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5",
     "87fd4bb2-dbaf-4775-954a-eb82f70ac961",
     "96593f3f-59fa-4805-bc84-bbec17ed964e"
   ];
@@ -397,12 +465,18 @@ function OrganizationSuperadminDashboard() {
     );
   }
 
-  // Conditionally render the correct dashboard
+  if (organizationId === ASCENDION_ORG_ID) {
+    return <AscendionDashboard />;
+  } 
+  
+  // Then it checks for the other Hiring Suite orgs.
   if (ITECH_HIRING_SUITE_ORGS.includes(organizationId)) {
     return <HiringSuiteDashboard />;
-  } else {
-    return <OriginalDashboardContent />;
-  }
+  } 
+  
+  // Finally, it falls back to the original dashboard.
+  return <OriginalDashboardContent />;
+
 }
 
 export default OrganizationSuperadminDashboard;

@@ -27,12 +27,28 @@ interface RecruiterPerformance { name: string; hires: number; }
 interface PipelineStage { stage: string; count: number; }
 
 // --- CONSTANTS FOR CALCULATION ---
-const INTERVIEW_MAIN_STATUS_ID = "f72e13f8-7825-4793-85e0-e31d669f8097";
-const INTERVIEW_SCHEDULED_SUB_STATUS_IDS = ["4ab0c42a-4748-4808-8f29-e57cb401bde5", "a8eed1eb-f903-4bbf-a91b-e347a0f7c43f", "1de35d8a-c07f-4c1d-b185-12379f559286", "0cc92be8-c8f1-47c6-a38d-3ca04eca6bb8", "48e060dc-5884-47e5-85dd-d717d4debe40"];
-const INTERVIEW_RESCHEDULED_SUB_STATUS_IDS = ["00601f51-90ec-4d75-8ced-3225fed31643", "9ef38a36-cffa-4286-9826-bc7d736a04ce", "2c38a0fb-8b56-47bf-8c7e-e4bd19b68fdf", "d2aef2b3-89b4-4845-84f0-777b6adf9018", "e569facd-7fd0-48b9-86cd-30062c80260b"];
-const INTERVIEW_OUTCOME_SUB_STATUS_IDS = ["1930ab52-4bb4-46a2-a9d1-887629954868", "e5615fa5-f60c-4312-9f6b-4ed543541520", "258741d9-cdb1-44fe-8ae9-ed5e9eed9e27", "0111b1b9-23c9-4be1-8ad4-322ccad6ccf0", "11281dd5-5f33-4d5c-831d-2488a5d3c96e", "31346b5c-1ff4-4842-aab4-645b36b6197a", "1ce3a781-09c7-4b3f-9a58-e4c6cd02721a", "4694aeff-567b-4007-928e-b3fefe558daf", "5b59c8cb-9a6a-43b8-a3cd-8f867c0b30a2", "368aa85f-dd4a-45b5-9266-48898704839b"];
-const JOINED_STATUS_ID = "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e"; const OFFERED_STATUS_ID = "9d48d0f9-8312-4f60-aaa4-bafdce067417"; const JOINED_SUB_STATUS_ID = "c9716374-3477-4606-877a-dfa5704e7680";
-
+// --- NEW DYNAMIC STATUS ID CONFIGURATION ---
+const STATUS_CONFIG = {
+  default: {
+    INTERVIEW_MAIN_STATUS_ID: "f72e13f8-7825-4793-85e0-e31d669f8097",
+    INTERVIEW_SCHEDULED_SUB_STATUS_IDS: ["4ab0c42a-4748-4808-8f29-e57cb401bde5", "a8eed1eb-f903-4bbf-a91b-e347a0f7c43f", "1de35d8a-c07f-4c1d-b185-12379f559286", "0cc92be8-c8f1-47c6-a38d-3ca04eca6bb8", "48e060dc-5884-47e5-85dd-d717d4debe40"],
+    INTERVIEW_RESCHEDULED_SUB_STATUS_IDS: ["00601f51-90ec-4d75-8ced-3225fed31643", "9ef38a36-cffa-4286-9826-bc7d736a04ce", "2c38a0fb-8b56-47bf-8c7e-e4bd19b68fdf", "d2aef2b3-89b4-4845-84f0-777b6adf9018", "e569facd-7fd0-48b9-86cd-30062c80260b"],
+    INTERVIEW_OUTCOME_SUB_STATUS_IDS: ["1930ab52-4bb4-46a2-a9d1-887629954868", "e5615fa5-f60c-4312-9f6b-4ed543541520", "258741d9-cdb1-44fe-8ae9-ed5e9eed9e27", "0111b1b9-23c9-4be1-8ad4-322ccad6ccf0", "11281dd5-5f33-4d5c-831d-2488a5d3c96e", "31346b5c-1ff4-4842-aab4-645b36b6197a", "1ce3a781-09c7-4b3f-9a58-e4c6cd02721a", "4694aeff-567b-4007-928e-b3fefe558daf", "5b59c8cb-9a6a-43b8-a3cd-8f867c0b30a2", "368aa85f-dd4a-45b5-9266-48898704839b"],
+    JOINED_STATUS_ID: "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e",
+    OFFERED_STATUS_ID: "9d48d0f9-8312-4f60-aaa4-bafdce067417",
+    JOINED_SUB_STATUS_ID: "c9716374-3477-4606-877a-dfa5704e7680",
+  },
+  demo: { // organization_id: 53989f03-bdc9-439a-901c-45b274eff506
+    INTERVIEW_MAIN_STATUS_ID: "6f5a6a77-ab6a-46ca-b659-fd207b22ae0d",
+    INTERVIEW_SCHEDULED_SUB_STATUS_IDS: ["84e97908-3a51-4ccd-82c3-ec2ebcc17757", "97e76257-b0c8-4935-8bae-2ef4097d776f", "531a2ca1-551f-43f4-9eb4-cb293f4f7517", "74cba87d-b193-44d0-9ac6-9c378ef971b2", "4a13bb3c-cf3b-45d4-9d80-f9d9c3d4d7d1"],
+    INTERVIEW_RESCHEDULED_SUB_STATUS_IDS: ["72711a0d-5060-4eb9-8a68-6558e73d013d", "708424a6-5d24-4905-a275-f3d3e0519914", "59e371e3-455c-4cf1-912e-aab38872ebad", "7f468dd7-30af-4632-97b9-7668cbd847e0", "c5f48189-07ed-49a8-985b-0a98b46ca831"],
+    INTERVIEW_OUTCOME_SUB_STATUS_IDS: ["fc3acdf6-48f7-4a9f-98fa-bd29d72ed118", "ebb88495-1a66-48d4-afe9-d45cabeecac3", "a8f533cf-5e68-4a86-96eb-c519a48aef1f", "385af9cb-4ae6-49b7-b5a8-45b653ca0c78", "3cca7b15-6b26-470b-b086-406d401c8c28", "743fd5ed-2ebf-45b3-8703-d0114b3607ae", "d9798bab-c375-4748-937a-abb739c5c82a", "fdd2c99c-29a6-4fad-8a58-ad9c3d30d7c5", "5aabfefe-e426-4bf1-b037-0eca402a1a4b", "3f797fc6-caef-48fd-9aa0-3d1fba010168"],
+    JOINED_STATUS_ID: "5ab8833c-c409-46b8-a6b0-dbf23591827b",
+    OFFERED_STATUS_ID: "0557a2c9-6c27-46d5-908c-a826b82a6c47",
+    JOINED_SUB_STATUS_ID: "247ef818-9fbe-41ee-a755-a446d620ebb6",
+  }
+};
+const DEMO_ORGANIZATION_ID = '53989f03-bdc9-439a-901c-45b274eff506';
 
 // --- Helper Functions ---
 const formatCurrency = (value: number | null | undefined) => (value == null) ? 'N/A' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
@@ -88,57 +104,7 @@ const AnalyticsCard: React.FC<{ icon: React.ElementType; title: string; value: s
 
 
 
-// --- NEW STATUS CELL COMPONENT (Replace the old one with this) ---
-const StatusCell: React.FC<{ candidate: Candidate; statusName: string }> = ({ candidate, statusName }) => {
-  const isScheduled = candidate.main_status_id === INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && (INTERVIEW_SCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id));
-  const isRescheduled = candidate.main_status_id === INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && INTERVIEW_RESCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id);
-  const isOutcome = candidate.main_status_id === INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && INTERVIEW_OUTCOME_SUB_STATUS_IDS.includes(candidate.sub_status_id);
 
-  let displayStatusName = statusName;
-  if (isScheduled) {
-    displayStatusName = `${statusName} Scheduled`;
-  }
-
-  return (
-    <div className="flex flex-col">
-      <p className="font-medium">{displayStatusName}</p>
-      
-      {/* --- MODIFIED SECTION for single-line date and time --- */}
-      {(isScheduled || isRescheduled) && candidate.interview_date && (
-        <div className="text-xs text-gray-500 mt-1 flex items-center gap-1.5 whitespace-nowrap">
-          {/* <Calendar size={12} /> */}
-          <span>{formatDate(candidate.interview_date)}</span>
-          {candidate.interview_time && (
-            <>
-              <span className="text-gray-300">|</span>
-              {/* <Clock size={12} /> */}
-              <span>{formatTime(candidate.interview_time)}</span>
-            </>
-          )}
-        </div>
-      )}
-
-      {isOutcome && candidate.interview_feedback && (
-        <TooltipProvider>
-          <ShadTooltip>
-            <TooltipTrigger asChild>
-              <div className="text-xs text-gray-500 mt-1 flex items-start gap-1.5 cursor-help">
-                <MessageSquare size={12} className="flex-shrink-0 mt-0.5" />
-                <p className="truncate">
-                  {candidate.interview_feedback.length > 10 ? `${candidate.interview_feedback.slice(0, 10)}...` : candidate.interview_feedback}
-                </p>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs">
-              <p className="text-sm">{candidate.interview_feedback}</p>
-            </TooltipContent>
-          </ShadTooltip>
-
-        </TooltipProvider>
-      )}
-    </div>
-  );
-};
 
 // --- Main Component ---
 interface AllCandidatesTabProps {
@@ -148,6 +114,10 @@ interface AllCandidatesTabProps {
 
 const AllCandidatesTab: React.FC<AllCandidatesTabProps> = ({ clientName, dateRange }) => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
+    // --- DYNAMICALLY SELECT STATUS IDs ---
+  const statusIds = useMemo(() => {
+    return organizationId === DEMO_ORGANIZATION_ID ? STATUS_CONFIG.demo : STATUS_CONFIG.default;
+  }, [organizationId]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -160,6 +130,55 @@ const AllCandidatesTab: React.FC<AllCandidatesTabProps> = ({ clientName, dateRan
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+
+
+  // --- STATUS CELL COMPONENT (MOVED INSIDE to access statusIds) ---
+  const StatusCell: React.FC<{ candidate: Candidate; statusName: string }> = ({ candidate, statusName }) => {
+    const isScheduled = candidate.main_status_id === statusIds.INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && (statusIds.INTERVIEW_SCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id));
+    const isRescheduled = candidate.main_status_id === statusIds.INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && statusIds.INTERVIEW_RESCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id);
+    const isOutcome = candidate.main_status_id === statusIds.INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && statusIds.INTERVIEW_OUTCOME_SUB_STATUS_IDS.includes(candidate.sub_status_id);
+
+    let displayStatusName = statusName;
+    if (isScheduled) {
+      displayStatusName = `${statusName} Scheduled`;
+    }
+
+    return (
+      <div className="flex flex-col">
+        <p className="font-medium">{displayStatusName}</p>
+        
+        {(isScheduled || isRescheduled) && candidate.interview_date && (
+          <div className="text-xs text-gray-500 mt-1 flex items-center gap-1.5 whitespace-nowrap">
+            <span>{formatDate(candidate.interview_date)}</span>
+            {candidate.interview_time && (
+              <>
+                <span className="text-gray-300">|</span>
+                <span>{formatTime(candidate.interview_time)}</span>
+              </>
+            )}
+          </div>
+        )}
+
+        {isOutcome && candidate.interview_feedback && (
+          <TooltipProvider>
+            <ShadTooltip>
+              <TooltipTrigger asChild>
+                <div className="text-xs text-gray-500 mt-1 flex items-start gap-1.5 cursor-help">
+                  <MessageSquare size={12} className="flex-shrink-0 mt-0.5" />
+                  <p className="truncate">
+                    {candidate.interview_feedback.length > 10 ? `${candidate.interview_feedback.slice(0, 10)}...` : candidate.interview_feedback}
+                  </p>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p className="text-sm">{candidate.interview_feedback}</p>
+              </TooltipContent>
+            </ShadTooltip>
+          </TooltipProvider>
+        )}
+      </div>
+    );
+  };
 
 useEffect(() => {
     const fetchData = async () => {
@@ -233,11 +252,11 @@ useEffect(() => {
 
 
     // --- UPDATED ANALYTICS LOGIC ---
-  const { analytics, pipelineStages, recruiterPerformance } = useMemo(() => {
+    const { analytics, pipelineStages, recruiterPerformance } = useMemo(() => {
     const stageCounts: { [key: string]: number } = {}; let scoreSum = 0; let scoreCount = 0;
     const recruiterProfiles: { [key: string]: number } = {}; const recruiterConversions: { [key: string]: number } = {}; const recruiterJoins: { [key: string]: number } = {};
     let convertedCount = 0; let joinedCount = 0;
-    const conversionStatuses = [INTERVIEW_MAIN_STATUS_ID, OFFERED_STATUS_ID, JOINED_STATUS_ID];
+    const conversionStatuses = [statusIds.INTERVIEW_MAIN_STATUS_ID, statusIds.OFFERED_STATUS_ID, statusIds.JOINED_STATUS_ID];
 
     filteredCandidates.forEach(c => {
       const mainStatusName = statuses[c.main_status_id || ''] || 'Sourced';
@@ -246,10 +265,10 @@ useEffect(() => {
       if (c.recruiter_name && c.recruiter_name !== 'N/A') { 
           recruiterProfiles[c.recruiter_name] = (recruiterProfiles[c.recruiter_name] || 0) + 1;
           if (c.main_status_id && conversionStatuses.includes(c.main_status_id)) { recruiterConversions[c.recruiter_name] = (recruiterConversions[c.recruiter_name] || 0) + 1; }
-          if (c.main_status_id === JOINED_STATUS_ID && c.sub_status_id === JOINED_SUB_STATUS_ID) { recruiterJoins[c.recruiter_name] = (recruiterJoins[c.recruiter_name] || 0) + 1; }
+          if (c.main_status_id === statusIds.JOINED_STATUS_ID && c.sub_status_id === statusIds.JOINED_SUB_STATUS_ID) { recruiterJoins[c.recruiter_name] = (recruiterJoins[c.recruiter_name] || 0) + 1; }
       }
       if (c.main_status_id && conversionStatuses.includes(c.main_status_id)) { convertedCount++; }
-      if (c.main_status_id === JOINED_STATUS_ID && c.sub_status_id === JOINED_SUB_STATUS_ID) { joinedCount++; }
+      if (c.main_status_id === statusIds.JOINED_STATUS_ID && c.sub_status_id === statusIds.JOINED_SUB_STATUS_ID) { joinedCount++; }
     });
     
     const getTopPerformer = (counts: { [key: string]: number }) => Object.keys(counts).sort((a,b) => counts[b] - counts[a])[0] || 'N/A';
