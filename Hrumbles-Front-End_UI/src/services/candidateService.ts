@@ -251,136 +251,130 @@ export const mapCandidateToDbData = (candidate: CandidateData): Partial<HrJobCan
 };
 
 
-// Get all candidates for a job
 export const getCandidatesByJobId = async (jobId: string, statusFilter?: string): Promise<any[]> => {
   try {
     let query = supabase
       .from('hr_job_candidates')
       .select(`
         *,
-        id, 
-        job_id, 
-        name, 
-        status, 
-        experience, 
-        match_score, 
-        applied_date, 
-        skills, 
-        email, 
-        phone, 
-        resume_url, 
-        metadata, 
-        skill_ratings, 
-        applied_from, 
-        current_salary, 
-        expected_salary, 
-        location, 
-        main_status_id, 
-        sub_status_id,
-        has_validated_resume,
-        overall_score,
-        created_at,
-        ctc,
-        accrual_ctc,
-        interview_date, 
-        interview_time,
-        interview_feedback,
-        main_status:job_statuses!main_status_id(*),
-        sub_status:job_statuses!sub_status_id(*)
+        main_status:job_statuses!left!main_status_id(*),
+        sub_status:job_statuses!left!sub_status_id(*)
       `)
       .eq('job_id', jobId)
       .order('created_at', { ascending: false });
-    
+
     if (statusFilter) {
+      console.log('Applying status filter:', statusFilter);
       query = query.eq('status', statusFilter);
     }
-    
-    const { data, error } = await query;
-    
-    if (error) throw error;
 
-    // Set default status if any candidate lacks main/sub status
-    if (data && data.length > 0) {
-      const candidatesToUpdate = data.filter(candidate => !candidate.main_status_id || !candidate.sub_status_id);
-      
-      if (candidatesToUpdate.length > 0) {
-        console.log(`Found ${candidatesToUpdate.length} candidates without a status. Setting default status.`);
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Supabase query error:', error);
+      throw new Error(`Failed to fetch candidates: ${error.message}`);
+    }
+
+    if (!data || data.length === 0) {
+      console.warn(`No candidates found for job_id: ${jobId}`);
+      return [];
+    }
+
+    // Update statuses for candidates missing main_status_id or sub_status_id
+    const candidatesToUpdate = data.filter(candidate => !candidate.main_status_id || !candidate.sub_status_id);
+    
+    if (candidatesToUpdate.length > 0) {
+      console.log(`Found ${candidatesToUpdate.length} candidates without a status. Attempting to set default status.`);
+
+      try {
+        const organization_id = candidatesToUpdate[0].organization_id;
 
         const { data: mainStatuses, error: mainStatusError } = await supabase
           .from('job_statuses')
           .select('*')
           .eq('name', 'New')
           .eq('type', 'main')
+          .eq('organization_id', organization_id)
+          .order('display_order', { ascending: true })
+          .limit(1)
           .single();
 
-        if (mainStatusError) throw mainStatusError;
-
-        if (mainStatuses) {
-          const { data: subStatuses, error: subStatusError } = await supabase
-            .from('job_statuses')
-            .select('*')
-            .eq('parent_id', mainStatuses.id)
-            .eq('type', 'sub');
-
-          if (subStatusError) throw subStatusError;
-
-          const defaultSubStatus = subStatuses && subStatuses.length > 0
-            ? subStatuses[0]
-            : { id: 'new_application' };
-
-          const updatePromises = candidatesToUpdate.map(candidate =>
-            supabase
-              .from('hr_job_candidates')
-              .update({
-                main_status_id: mainStatuses.id,
-                sub_status_id: defaultSubStatus.id,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', candidate.id)
-          );
-
-          const updateResults = await Promise.all(updatePromises);
-          updateResults.forEach(({ error: updateError }) => {
-            if (updateError) {
-              console.error('Error updating candidate status:', updateError);
-            }
-          });
+        if (mainStatusError || !mainStatuses) {
+          console.error('Error fetching New main status:', mainStatusError);
+          throw new Error('Could not find New main status for this organization');
         }
+
+        const { data: subStatuses, error: subStatusError } = await supabase
+          .from('job_statuses')
+          .select('*')
+          .eq('parent_id', mainStatuses.id)
+          .eq('type', 'sub')
+          .eq('organization_id', organization_id)
+          .order('display_order', { ascending: true })
+          .limit(1)
+          .single();
+
+        if (subStatusError || !subStatuses) {
+          console.error('Error fetching sub-status for New main status:', subStatusError);
+          throw new Error('Could not find a sub-status for New main status');
+        }
+
+        const updatePromises = candidatesToUpdate.map(candidate =>
+          supabase
+            .from('hr_job_candidates')
+            .update({
+              main_status_id: mainStatuses.id,
+              sub_status_id: subStatuses.id,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', candidate.id)
+        );
+
+        const updateResults = await Promise.all(updatePromises);
+        updateResults.forEach(({ error: updateError }, index) => {
+          if (updateError) {
+            console.error(`Error updating candidate ${candidatesToUpdate[index].id} status:`, updateError);
+          }
+        });
+      } catch (statusError) {
+        console.error('Failed to update candidate statuses, continuing with fetched candidates:', statusError);
+        // Continue processing candidates even if status updates fail
       }
     }
 
-    // Ensure hasValidatedResume is consistently returned
-    const result = (data || []).map(candidate => ({
+    // Map results with consistent defaults
+    const result = data.map(candidate => ({
       ...candidate,
       hasValidatedResume: candidate.has_validated_resume || false,
-     id: candidate.id,
-  jobId: candidate.job_id,
-  name: candidate.name,
-  status: candidate.status,
-  experience: candidate.experience,
-  matchScore: candidate.match_score || 0,
-  appliedDate: candidate.applied_date,
-  skills: candidate.skills || [],
-  email: candidate.email || undefined,
-  phone: candidate.phone || undefined,
-  resumeUrl: candidate.resume_url || undefined,
-  metadata: candidate.metadata || undefined,
-  skillRatings: candidate.skill_ratings || undefined,
-  appliedFrom: candidate.applied_from ?? undefined,
-  currentSalary: candidate.current_salary ?? undefined,
-  expectedSalary: candidate.expected_salary ?? undefined,
-  location: candidate.location ?? undefined,
-  mainStatusId: candidate.main_status_id,
-  subStatusId: candidate.sub_status_id,
-  main_status: candidate.main_status,
-  sub_status: candidate.sub_status,
-  overallScore: candidate.overall_score || 0
+      id: candidate.id,
+      jobId: candidate.job_id,
+      name: candidate.name,
+      status: candidate.status,
+      experience: candidate.experience || null,
+      matchScore: candidate.match_score || 0,
+      appliedDate: candidate.applied_date,
+      skills: candidate.skills || [],
+      email: candidate.email || undefined,
+      phone: candidate.phone || undefined,
+      resumeUrl: candidate.resume_url || undefined,
+      metadata: candidate.metadata || undefined,
+      skillRatings: candidate.skill_ratings || undefined,
+      appliedFrom: candidate.applied_from ?? undefined,
+      currentSalary: candidate.current_salary ?? undefined,
+      expectedSalary: candidate.expected_salary ?? undefined,
+      location: candidate.location ?? undefined,
+      mainStatusId: candidate.main_status_id || null,
+      subStatusId: candidate.sub_status_id || null,
+      main_status: candidate.main_status || null,
+      sub_status: candidate.sub_status || null,
+      overallScore: candidate.overall_score || 0
     }));
 
+    console.log(`Fetched ${result.length} candidates for job_id: ${jobId}`);
     return result;
   } catch (error) {
     console.error('Error fetching candidates:', error);
-    return [];
+    throw error; // Throw for debugging; consider returning [] if needed for production
   }
 };
 
@@ -449,33 +443,51 @@ const authData = getAuthDataFromLocalStorage();
       
       // Fetch the main status "Processed"
       const { data: processedMainStatus, error: mainStatusError } = await supabase
-        .from("job_statuses")
-        .select("id, name")
-        .eq("type", "main")
-        .eq("name", "Processed")
-        .single();
+    .from("job_statuses")
+    .select("id, name")
+    .eq("type", "main")
+    .eq("name", "Processed")
+    .eq("organization_id", organization_id)
+    .single();
 
-      if (mainStatusError || !processedMainStatus) {
-        console.error("Error fetching Processed main status:", mainStatusError);
-        throw new Error("Could not find Processed main status");
-      }
-      mainStatus = processedMainStatus;
+  if (mainStatusError || !processedMainStatus) {
+    console.error("Error fetching Processed main status:", mainStatusError);
+    
+    // Fallback: Fetch the first main status
+    const { data: fallbackMainStatus, error: fallbackError } = await supabase
+      .from("job_statuses")
+      .select("id, name")
+      .eq("type", "main")
+      .eq("organization_id", organization_id)
+      .order("display_order", { ascending: true })
+      .limit(1)
+      .single();
 
-      // Fetch the sub-status "Processed (Internal)"
-      const { data: processedSubStatus, error: subStatusError } = await supabase
-        .from("job_statuses")
-        .select("id, name")
-        .eq("type", "sub")
-        .eq("name", "Processed (Internal)")
-        .eq("parent_id", mainStatus.id)
-        .single();
-
-      if (subStatusError || !processedSubStatus) {
-        console.error("Error fetching Processed (Internal) sub-status:", subStatusError);
-        throw new Error("Could not find Processed (Internal) sub-status");
-      }
-      subStatus = processedSubStatus;
+    if (fallbackError || !fallbackMainStatus) {
+      console.error("Error fetching fallback main status:", fallbackError);
+      throw new Error("No valid main status found for this organization");
     }
+    mainStatus = fallbackMainStatus;
+  } else {
+    mainStatus = processedMainStatus;
+  }
+
+  // Fetch the sub-status "Processed (Internal)"
+  const { data: processedSubStatus, error: subStatusError } = await supabase
+    .from("job_statuses")
+    .select("id, name")
+    .eq("type", "sub")
+    .eq("name", "Processed (Internal)")
+    .eq("parent_id", mainStatus.id)
+    .eq("organization_id", organization_id)
+    .single();
+
+  if (subStatusError || !processedSubStatus) {
+    console.error("Error fetching Processed (Internal) sub-status:", subStatusError);
+    throw new Error("Could not find Processed (Internal) sub-status for this organization");
+  }
+  subStatus = processedSubStatus;
+}
     
     // --- END OF MODIFICATION ---
     console.log("Payload for createCandidate:", {

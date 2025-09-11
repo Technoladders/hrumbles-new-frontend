@@ -12,6 +12,8 @@ interface ResumeAnalysisSectionProps {
 export const ResumeAnalysisSection: React.FC<ResumeAnalysisSectionProps> = ({
   resumeAnalysis,
 }) => {
+
+  console.log("resumeAnalysis", resumeAnalysis);
   return (
     <div className="space-y-6">
       <h3 className="text-lg font-medium">Resume Analysis</h3>

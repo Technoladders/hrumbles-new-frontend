@@ -1,6 +1,7 @@
 // src/pages/Global_Dashboard.tsx
 
 import { useState, useEffect, FC } from "react";
+import { Link } from "react-router-dom";
 import {
   Box,
   Flex,
@@ -41,7 +42,9 @@ interface Organization {
   status: 'active' | 'inactive' | 'suspended';
   superadmin_email: string | null;
   role_credit_limits: Record<string, number>;
-  user_counts: Record<string, RoleCounts>;
+  user_counts: Record<string, any>; // Keeping it flexible
+  talent_pool_count: number; // New field
+  last_login: string | null; // New field
 }
 
 const roleDisplayNameMap: Record<string, string> = {
@@ -60,11 +63,13 @@ const GlobalSuperadminDashboard: FC = () => {
   const bg = useColorModeValue("gray.50", "gray.900");
   const cardBg = useColorModeValue("white", "gray.800");
 
+  console.log('organizations', organizations);
+
   const fetchOrganizations = async () => {
     setLoading(true);
     try {
       // Call the RPC function we created
-      const { data, error } = await supabase.rpc('get_organizations_with_stats');
+     const { data, error } = await supabase.rpc('get_organizations_with_stats');
       if (error) throw error;
       setOrganizations(data as Organization[]);
     } catch (error: any) {
@@ -135,6 +140,8 @@ const GlobalSuperadminDashboard: FC = () => {
                   <Th>Active Users</Th>
                   <Th>Inactive Users</Th>
                   <Th>Terminated</Th>
+                   <Th>Talent Pool</Th>
+                <Th>Superadmin Last Login</Th>
                   <Th>Created</Th>
                   <Th>Actions</Th>
                 </Tr>
@@ -143,9 +150,14 @@ const GlobalSuperadminDashboard: FC = () => {
                 {organizations.map((org) => (
                   <Tr key={org.id}>
                     <Td>
-                      <Text fontWeight="bold">{org.name}</Text>
-                      <Text fontSize="sm" color="gray.500">{org.superadmin_email || 'No Admin'}</Text>
-                    </Td>
+                    {/* --- MODIFICATION: Make name a link --- */}
+                    <Link to={`/organization/${org.id}`}>
+                      <Text fontWeight="bold" color="blue.500" _hover={{ textDecoration: 'underline' }}>
+                        {org.name}
+                      </Text>
+                    </Link>
+                    <Text fontSize="sm" color="gray.500">{org.superadmin_email || 'No Admin'}</Text>
+                  </Td>
                     <Td>{getStatusBadge(org.status)}</Td>
                     <Td>
                         <VStack align="start" spacing={1} fontSize="xs">
@@ -166,6 +178,14 @@ const GlobalSuperadminDashboard: FC = () => {
                     <Td>{renderCounts(org.user_counts, 'active')}</Td>
                     <Td>{renderCounts(org.user_counts, 'inactive')}</Td>
                     <Td>{renderCounts(org.user_counts, 'terminated')}</Td>
+                     <Td>
+                    <Text fontWeight="bold">{org.talent_pool_count}</Text>
+                  </Td>
+                  <Td fontSize="sm">
+                    {org.last_login 
+                      ? new Date(org.last_login).toLocaleString() 
+                      : <Badge colorScheme="gray">Never</Badge>}
+                  </Td>
                     <Td fontSize="sm">{new Date(org.created_at).toLocaleDateString()}</Td>
                     <Td>
                       <Flex gap={1}>

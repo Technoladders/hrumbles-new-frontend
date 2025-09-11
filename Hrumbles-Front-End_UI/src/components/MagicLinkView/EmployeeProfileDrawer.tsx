@@ -47,6 +47,7 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
     setCandidate,
   } = useEmployeeProfile(shareMode, shareId, initialSharedDataOptions);
 
+
   const {
     documents: verifiedDocuments,
     handleDocumentChange,
@@ -65,6 +66,8 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
   handleVerifySingleWorkHistory,
   updateWorkHistoryItem,
 } = useWorkHistoryVerification(candidate, organization_id);
+
+  console.log("candidateptofile", workHistory);
 
   const { timeline, timelineLoading, timelineError } = useTimeline(
     candidateId,

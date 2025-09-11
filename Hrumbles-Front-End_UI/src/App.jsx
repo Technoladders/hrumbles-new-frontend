@@ -19,6 +19,7 @@ import PrivateRoutes from "./utils/PrivateRoutes";
 
 // Global Superadmin
 import GlobalSuperadminDashboard from "./pages/Global_Dashboard";
+import SingleOrganizationDashboard from "./components/global/SingleOrganizationDashboard";
 import VerificationHubPage from "./pages/verifications/VerificationHubPage";
 import VerificationTypeDashboardPage from "./pages/verifications/VerificationTypeDashboardPage";
 import OrganizationVerificationReportPage from "./pages/verifications/OrganizationVerificationReportPage";
@@ -223,6 +224,11 @@ function App() {
             <Route path="/password" element={<PasswordChange />} />
 
               {/* Global Super Admin */}
+               <Route
+              path="/organization"
+              element={<GlobalSuperadminDashboard />}
+            />
+            <Route path="/organization/:organizationId" element={<SingleOrganizationDashboard />} />
                  <Route path="/verifications" element={<VerificationHubPage />} />
             <Route path="/verifications/:verificationType" element={<VerificationTypeDashboardPage />} />
             <Route path="/verifications/:verificationType/:organizationId" element={<OrganizationVerificationReportPage />} />
@@ -239,10 +245,7 @@ function App() {
 {/* User management */}
 
             <Route path="/user-management" element={<UserManagement />} />
-            <Route
-              path="/organization"
-              element={<GlobalSuperadminDashboard />}
-            />
+           
 
             {/* Employee */}
 
