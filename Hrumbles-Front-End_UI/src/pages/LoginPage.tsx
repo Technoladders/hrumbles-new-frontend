@@ -101,12 +101,13 @@ const LoginPage: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [employeeData, setEmployeeData] = useState<{ first_name: string; last_name: string } | null>(null);
 
   const fetchUserDetails = async (userId: string): Promise<UserDetails> => {
     try {
       const { data: employeeData, error: employeeError } = await supabase
         .from("hr_employees")
-        .select("role_id, department_id, organization_id, status")
+        .select("role_id, department_id, organization_id, status, first_name, last_name")
         .eq("id", userId)
         .single();
 
@@ -115,6 +116,7 @@ const LoginPage: FC = () => {
       }
       
       console.log("[DEBUG] Raw employee data from DB:", employeeData);
+      setEmployeeData(employeeData);
 
       let roleName: string | null = null;
       let departmentName: string | null = null;
@@ -138,6 +140,9 @@ const LoginPage: FC = () => {
         departmentName: departmentName,
         organizationId: employeeData.organization_id,
         status: employeeData.status,
+         first_name: employeeData.first_name,
+        last_name: employeeData.last_name,
+
       };
 
     } catch (error: any) {
@@ -157,68 +162,89 @@ const LoginPage: FC = () => {
     return data ? data.id : null;
   };
 
-  const handleLogin = async (): Promise<void> => {
-    setError(null);
-    setIsLoading(true);
-    console.log("--- LOGIN PROCESS STARTED ---");
+const handleLogin = async (): Promise<void> => {
+    setError(null);
+    setIsLoading(true);
+    console.log("--- LOGIN PROCESS STARTED ---");
 
-    try {
-      console.log(`[1] Reading subdomain from URL: "${organizationSubdomain}"`);
-      const subdomainOrgId = await getOrganizationIdBySubdomain(organizationSubdomain);
-      console.log(`[2] Fetched Organization ID for subdomain: "${subdomainOrgId}"`);
+    try {
+      console.log(`[1] Reading subdomain from URL: "${organizationSubdomain}"`);
+      const subdomainOrgId = await getOrganizationIdBySubdomain(organizationSubdomain);
+      console.log(`[2] Fetched Organization ID for subdomain: "${subdomainOrgId}"`);
 
-      if (!subdomainOrgId) {
-        throw new Error("Invalid or unrecognized organization domain.");
-      }
+      if (!subdomainOrgId) {
+        throw new Error("Invalid or unrecognized organization domain.");
+      }
 
-      console.log("[3] Attempting to sign in user:", email);
-      const { user } = await signIn(email, password);
-      console.log("[4] ✅ User authenticated successfully:", user);
+      console.log("[3] Attempting to sign in user:", email);
+      const { user } = await signIn(email, password);
+      console.log("[4] ✅ User authenticated successfully:", user);
 
-      console.log("[5] Fetching employee details for user ID:", user.id);
-      const { role, departmentName, organizationId: userOrgId, status } = await fetchUserDetails(user.id);
-      console.log("[6] ✅ Fetched employee details:", { role, departmentName, userOrgId, status });
+      console.log("[5] Fetching employee details for user ID:", user.id);
+      // ⚡️ You need to destructure first_name and last_name here
+      const { role, departmentName, organizationId: userOrgId, status, first_name, last_name } = await fetchUserDetails(user.id);
+      console.log("[6] ✅ Fetched employee details:", { role, departmentName, userOrgId, status, first_name, last_name });
 
-      // MODIFICATION: Add the new status check
-    console.log(`[7] Verifying user status: "${status}"`);
-    if (status !== 'active') {
-      throw new Error("Your account is not active. Please contact your administrator.");
-    }
-    console.log("[8] ✅ User status is active.");
-      
-      if (!userOrgId) {
-        throw new Error("Could not determine the user's organization. Please contact support.");
-      }
 
-      console.log(`[9] Comparing Org IDs -> User's Org ID: "${userOrgId}" vs Subdomain's Org ID: "${subdomainOrgId}"`);
-      if (userOrgId !== subdomainOrgId) {
-        throw new Error("Access Denied. Please log in from your organization's assigned domain.");
-      }
-      
-      console.log("[10] ✅ Organization Match Verified. Proceeding to login.");
+      // ⚡️ Corrected fetch request ⚡️
+      try {
+        await fetch('https://kbpeyfietrwlhwcwqhjw.supabase.co/functions/v1/send-login-notification', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userEmail: email,
+            organizationId: userOrgId,
+            // ⚡️ Pass the destructured variables
+            firstName: first_name, 
+            lastName: last_name, 
+          }),
+        });
 
-      await dispatch(fetchUserSession()).unwrap();
+        console.log("Login notification request sent to backend.");
+      } catch (notificationError) {
+        console.error("Failed to send login notification request:", notificationError);
+      }
+      // ⚡ End of New Code ⚡
 
-      let navigateTo = "/dashboard";
-      if (role === "employee" && departmentName === "Finance") {
-        navigateTo = "/finance";
-      }
-      // if (ITECH_ORGANIZATION_ID.includes(userOrgId) || userOrgId === ASCENDION_ORGANIZATION_ID) {
-      //   navigateTo = "/jobs";
-      // }
-      
-      console.log(`[9] Determining navigation path. Role: "${role}", Department: "${departmentName}". Navigating to: "${navigateTo}"`);
-      console.log("--- LOGIN PROCESS COMPLETED SUCCESSFULLY ---");
-      navigate(navigateTo);
+      // MODIFICATION: Add the new status check
+    console.log(`[7] Verifying user status: "${status}"`);
+    if (status !== 'active') {
+      throw new Error("Your account is not active. Please contact your administrator.");
+    }
+    console.log("[8] ✅ User status is active.");
+      
+      if (!userOrgId) {
+        throw new Error("Could not determine the user's organization. Please contact support.");
+      }
 
-    } catch (error: any) {
-      console.error("🔴 LOGIN FAILED:", error.message);
-      setError(error.message);
-      console.log("--- LOGIN PROCESS HALTED DUE TO ERROR ---");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      console.log(`[9] Comparing Org IDs -> User's Org ID: "${userOrgId}" vs Subdomain's Org ID: "${subdomainOrgId}"`);
+      if (userOrgId !== subdomainOrgId) {
+        throw new Error("Access Denied. Please log in from your organization's assigned domain.");
+      }
+      
+      console.log("[10] ✅ Organization Match Verified. Proceeding to login.");
+
+      await dispatch(fetchUserSession()).unwrap();
+
+      let navigateTo = "/dashboard";
+      if (role === "employee" && departmentName === "Finance") {
+        navigateTo = "/finance";
+      }
+      
+      console.log(`[9] Determining navigation path. Role: "${role}", Department: "${departmentName}". Navigating to: "${navigateTo}"`);
+      console.log("--- LOGIN PROCESS COMPLETED SUCCESSFULLY ---");
+      navigate(navigateTo);
+
+    } catch (error: any) {
+      console.error("🔴 LOGIN FAILED:", error.message);
+      setError(error.message);
+      console.log("--- LOGIN PROCESS HALTED DUE TO ERROR ---");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === "Enter") {
