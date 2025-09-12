@@ -337,7 +337,7 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
                       >
                         <SelectTrigger className="w-full">
                           <SelectValue placeholder="Select employees" />
-                        </SelectTrigger>
+                        </SelectTrigger>              
                         <SelectContent>
                           {employees.length > 0 ? (
                             employees.map((employee) => (
@@ -509,3 +509,6 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
     </Dialog>
   );
 }
+
+
+

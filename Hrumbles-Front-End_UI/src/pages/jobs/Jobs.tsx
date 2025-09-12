@@ -67,7 +67,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/jobs/ui/alert-dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/jobs/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/jobs/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,11 +83,18 @@ import { useQuery } from "@tanstack/react-query";
 import AssociateToClientModal from "@/components/jobs/job/AssociateToClientModal";
 import { useSelector } from "react-redux";
 import moment from "moment";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/jobs/ui/avatar";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/jobs/ui/avatar";
 import { fetchEmployeesByIds } from "@/services/jobs/supabaseQueries";
 import Loader from "@/components/ui/Loader";
 // Goal: Import the new DateRangePickerField component
 import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
+import { supabase } from "@/integrations/supabase/client";
+
+
 
 const ITECH_ORGANIZATION_ID = [
   "1961d419-1272-4371-8dc7-63a4ec71be83",
@@ -99,7 +111,12 @@ const AvatarGroup = ({
   children: React.ReactNode;
   limit?: number;
   className?: string;
-  employees?: { id: string; first_name: string; last_name: string; profile_picture_url?: string }[];
+  employees?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    profile_picture_url?: string;
+  }[];
 }) => {
   const childrenArray = React.Children.toArray(children);
   const limitedChildren = childrenArray.slice(0, limit);
@@ -121,9 +138,15 @@ const AvatarGroup = ({
             {employees.map((employee) => {
               const fullName = `${employee.first_name} ${employee.last_name}`;
               return (
-                <DropdownMenuItem key={employee.id} className="flex items-center gap-2">
+                <DropdownMenuItem
+                  key={employee.id}
+                  className="flex items-center gap-2"
+                >
                   <Avatar className="h-6 w-6">
-                    <AvatarImage src={employee.profile_picture_url || ""} alt={fullName} />
+                    <AvatarImage
+                      src={employee.profile_picture_url || ""}
+                      alt={fullName}
+                    />
                     <AvatarFallback>
                       {employee.first_name[0]}
                       {employee.last_name[0]}
@@ -140,25 +163,36 @@ const AvatarGroup = ({
   );
 };
 
-
 const Jobs = () => {
   // Goal: Initialize searchParams to manage state in the URL
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Goal: Initialize state from URL search parameters, providing defaults
-  const [searchTerm, setSearchTerm] = useState(searchParams.get("search") || "");
+  const [searchTerm, setSearchTerm] = useState(
+    searchParams.get("search") || ""
+  );
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "all");
-  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get("page") || "1", 10));
-  const [itemsPerPage, setItemsPerPage] = useState(parseInt(searchParams.get("limit") || "20", 10));
-  
+  const [currentPage, setCurrentPage] = useState(
+    parseInt(searchParams.get("page") || "1", 10)
+  );
+  const [itemsPerPage, setItemsPerPage] = useState(
+    parseInt(searchParams.get("limit") || "20", 10)
+  );
+
   // Goal: Add state for the new client and date range filters, initialized from URL
-  const [selectedClient, setSelectedClient] = useState(searchParams.get("client") || "all");
+  const [selectedClient, setSelectedClient] = useState(
+    searchParams.get("client") || "all"
+  );
   const [dateRange, setDateRange] = useState({
-    startDate: searchParams.get("startDate") ? new Date(searchParams.get("startDate")!) : null,
-    endDate: searchParams.get("endDate") ? new Date(searchParams.get("endDate")!) : null,
+    startDate: searchParams.get("startDate")
+      ? new Date(searchParams.get("startDate")!)
+      : null,
+    endDate: searchParams.get("endDate")
+      ? new Date(searchParams.get("endDate")!)
+      : null,
     key: "selection",
   });
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<JobData | null>(null);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -168,18 +202,26 @@ const Jobs = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState<JobData | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [statusUpdateLoading, setStatusUpdateLoading] = useState<string | null>(null);
+  const [statusUpdateLoading, setStatusUpdateLoading] = useState<string | null>(
+    null
+  );
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [associateModalOpen, setAssociateModalOpen] = useState(false);
-  const [clientselectedJob, setClientSelectedJob] = useState<JobData | null>(null);
+  const [clientselectedJob, setClientSelectedJob] = useState<JobData | null>(
+    null
+  );
 
   const user = useSelector((state: any) => state.auth.user);
   const userRole = useSelector((state: any) => state.auth.role);
-  const organization_id = useSelector((state: any) => state.auth.organization_id);
+  const organization_id = useSelector(
+    (state: any) => state.auth.organization_id
+  );
   // Goal: Get the list of clients from the Redux store
   const clients = useSelector((state: any) => state.clients.clients);
 
-  const isEmployee = userRole === "employee" && user?.id !== "0fa0aa1b-9cb3-482f-b679-5bd8fa355a6e";
+  const isEmployee =
+    userRole === "employee" &&
+    user?.id !== "0fa0aa1b-9cb3-482f-b679-5bd8fa355a6e";
 
   // Goal: This effect syncs the component's state with the URL's query parameters.
   // When any filter, search term, or page number changes, the URL is updated.
@@ -191,25 +233,39 @@ const Jobs = () => {
     if (currentPage !== 1) params.set("page", currentPage.toString());
     if (itemsPerPage !== 10) params.set("limit", itemsPerPage.toString());
     if (selectedClient !== "all") params.set("client", selectedClient);
-    if (dateRange.startDate) params.set("startDate", dateRange.startDate.toISOString());
-    if (dateRange.endDate) params.set("endDate", dateRange.endDate.toISOString());
+    if (dateRange.startDate)
+      params.set("startDate", dateRange.startDate.toISOString());
+    if (dateRange.endDate)
+      params.set("endDate", dateRange.endDate.toISOString());
 
     // Use replace: true to avoid polluting browser history with every filter change
     setSearchParams(params, { replace: true });
-  }, [searchTerm, activeTab, currentPage, itemsPerPage, selectedClient, dateRange, setSearchParams]);
-
+  }, [
+    searchTerm,
+    activeTab,
+    currentPage,
+    itemsPerPage,
+    selectedClient,
+    dateRange,
+    setSearchParams,
+  ]);
 
   // ... (useEffect for loading jobs remains unchanged)
   useEffect(() => {
     const loadJobs = async () => {
-      try {
-        setLoading(true);
+      try {         
+        setLoading(true);   
         let jobs: JobData[];
 
-        if (!ITECH_ORGANIZATION_ID.includes(organization_id) && activeTab === "all") {
+        if (
+          !ITECH_ORGANIZATION_ID.includes(organization_id) &&
+          activeTab === "all"
+        ) {
           jobs = await getAllJobs();
         } else if (!ITECH_ORGANIZATION_ID.includes(organization_id)) {
-          jobs = await getJobsByType(activeTab === "staffing" ? "Staffing" : "Augment Staffing");
+          jobs = await getJobsByType(
+            activeTab === "staffing" ? "Staffing" : "Augment Staffing"
+          );
         } else {
           jobs = await getAllJobs(); // For ITECH, always fetch all jobs
         }
@@ -225,7 +281,6 @@ const Jobs = () => {
 
     loadJobs();
   }, [activeTab, organization_id]);
-
 
   const {
     data: jobs = [],
@@ -244,10 +299,10 @@ const Jobs = () => {
 
   const clientList = useMemo(() => {
     if (!jobs || jobs.length === 0) return [];
-    
+
     const clientNames = jobs
-      .map(job => job.clientOwner)
-      .filter(clientName => clientName && clientName !== "Internal HR"); // Filter out nulls/unwanted values
+      .map((job) => job.clientOwner)
+      .filter((clientName) => clientName && clientName !== "Internal HR"); // Filter out nulls/unwanted values
 
     // Use a Set to get unique names and then convert back to an array and sort
     return Array.from(new Set(clientNames)).sort();
@@ -262,57 +317,69 @@ const Jobs = () => {
 
   // Goal: Update filtering logic to include date range and client filters.
   const filteredJobs = jobs.filter((job) => {
-  const lowercasedSearchTerm = searchTerm.toLowerCase();
+    const lowercasedSearchTerm = searchTerm.toLowerCase();
 
-  const matchesSearch =
-    // 1. Keep existing search on job title and ID
-    job.title.toLowerCase().includes(lowercasedSearchTerm) ||
-    job.jobId.toLowerCase().includes(lowercasedSearchTerm) ||
-    
-    // 2. Add new search condition for candidate names
-    (job.hr_job_candidates && 
-      job.hr_job_candidates.some((candidate) =>
-        candidate.name.toLowerCase().includes(lowercasedSearchTerm)
-      ));
+    const matchesSearch =
+      // 1. Keep existing search on job title and ID
+      job.title.toLowerCase().includes(lowercasedSearchTerm) ||
+      job.jobId.toLowerCase().includes(lowercasedSearchTerm) ||
+      // 2. Add new search condition for candidate names
+      (job.hr_job_candidates &&
+        job.hr_job_candidates.some((candidate) =>
+          candidate.name.toLowerCase().includes(lowercasedSearchTerm)
+        ));
 
-  // --- The rest of the filtering logic remains the same ---
-  const matchesDate = (() => {
-    if (!dateRange.startDate || !dateRange.endDate) return true;
-    const jobDate = moment(job.createdAt);
-    // Set end of day for the end date to include all jobs on that day
-    const endDate = moment(dateRange.endDate).endOf('day');
-    return jobDate.isBetween(dateRange.startDate, endDate, undefined, '[]');
-  })();
+    // --- The rest of the filtering logic remains the same ---
+    const matchesDate = (() => {
+      if (!dateRange.startDate || !dateRange.endDate) return true;
+      const jobDate = moment(job.createdAt);
+      // Set end of day for the end date to include all jobs on that day
+      const endDate = moment(dateRange.endDate).endOf("day");
+      return jobDate.isBetween(dateRange.startDate, endDate, undefined, "[]");
+    })();
 
-  // Client filter logic
-  const matchesClient =
-    selectedClient === "all" || job.clientOwner === selectedClient;
+    // Client filter logic
+    const matchesClient =
+      selectedClient === "all" || job.clientOwner === selectedClient;
 
-  const matchesTab = (() => {
-      if (ITECH_ORGANIZATION_ID.includes(organization_id) || activeTab === "all") return true;
+    const matchesTab = (() => {
+      if (
+        ITECH_ORGANIZATION_ID.includes(organization_id) ||
+        activeTab === "all"
+      )
+        return true;
       if (activeTab === "internal") return job.jobType === "Internal";
       if (activeTab === "external") return job.jobType === "External";
       return true;
-  })();
+    })();
 
-  return matchesSearch && matchesDate && matchesClient && matchesTab;
-});
+    return matchesSearch && matchesDate && matchesClient && matchesTab;
+  });
 
   const totalPages = Math.ceil(filteredJobs.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedJobs = filteredJobs.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedJobs = filteredJobs.slice(
+    startIndex,
+    startIndex + itemsPerPage
+  );
 
   const handleItemsPerPageChange = (value: string) => {
     setItemsPerPage(Number(value));
     setCurrentPage(1);
   };
 
-  const activeJobs = filteredJobs.filter((job) => job.status === "Active" || job.status === "OPEN").length;
-  const pendingJobs = filteredJobs.filter((job) => job.status === "Pending" || job.status === "HOLD").length;
-  const completedJobs = filteredJobs.filter((job) => job.status === "Completed" || job.status === "CLOSE").length;
-  
+  const activeJobs = filteredJobs.filter(
+    (job) => job.status === "Active" || job.status === "OPEN"
+  ).length;
+  const pendingJobs = filteredJobs.filter(
+    (job) => job.status === "Pending" || job.status === "HOLD"
+  ).length;
+  const completedJobs = filteredJobs.filter(
+    (job) => job.status === "Completed" || job.status === "CLOSE"
+  ).length;
+
   // ... (All handler functions and other logic remain unchanged down to the main return statement)
-  
+
   const daysSinceCreated = (createdDate: string) => {
     return moment(createdDate).fromNow();
   };
@@ -373,24 +440,111 @@ const Jobs = () => {
     setEditJob(null);
   };
 
-  const handleCreateNewJob = async (newJob: JobData) => {
+const getAssignedEmployeeEmails = async (assigned_to: JobData['assigned_to']): Promise<string[]> => {
+    if (!assigned_to || assigned_to.type !== 'individual' || !assigned_to.id) {
+      return [];
+    }
+    const employeeIds = assigned_to.id.split(',');
+
     try {
-      if (editJob) {
-        await updateJob(editJob.id.toString(), newJob, user.id);
-        toast.success("Job updated successfully");
-      } else {
-        await createJob(newJob, organization_id, user.id);
-        toast.success("Job created successfully");
+      // getEmployeesByIds needs to return 'email' for this to work
+      const { data: employees, error } = await fetchEmployeesByIds(employeeIds);
+      if (error) {
+        console.error("Error fetching assigned employee emails:", error);
+        return [];
       }
-      await refetch();
-      setIsCreateModalOpen(false);
-      setEditJob(null);
-    } catch (error) {
-      console.error("Error saving job:", error);
-      toast.error(editJob ? "Failed to update job" : "Failed to create job");
+      return employees.map(emp => emp.email).filter(Boolean); // Filter out any null/undefined emails
+    } catch (err) {
+      console.error("Failed to retrieve assigned employee emails:", err);
+      return [];
     }
   };
 
+ const handleCreateNewJob = async (newJob: JobData) => {
+    try {
+      if (editJob) {
+        await updateJob(editJob.id.toString(), newJob, user.id);
+        toast.success("Job updated successfully");
+      } else {
+       const createdJob = await createJob(newJob, organization_id, user.id); // Create the job first!
+
+        // 1. Get emails of assigned staff (if any) from the newly created job
+        const assignedEmployeeEmails = await getAssignedEmployeeEmails(createdJob.assigned_to);
+
+        // 2. Get the email of the user who created the job
+        const creatorEmail = user.email;
+
+        // --- ADDED LOGS HERE ---
+        console.log("Creator Email:", creatorEmail);
+        console.log("Organization ID:", organization_id); // Verify this is correct
+
+      let defaultRecipientEmails: string[] = [];
+      const { data: config, error: configError } = await supabase.from('hr_email_configurations')
+        .select('recipients')
+        .eq('organization_id', organization_id)
+        .eq('report_type', 'job_create_update_notify')
+        .single();
+
+        console.log("Config fetch error:", configError); // Any error fetching config?
+        console.log("Fetched config:", config); // Check if config is found and what its recipients are
+
+        if (config?.recipients?.length > 0) {
+        const { data: recipientEmployees, error: employeesError } = await supabase.from('hr_employees').select('email').in('id', config.recipients);
+            console.log("Recipient employees fetch error:", employeesError); // Any error fetching employees?
+            console.log("Fetched recipientEmployees:", recipientEmployees); // Check what employees are fetched
+        if (recipientEmployees) defaultRecipientEmails = recipientEmployees.map(e => e.email).filter(Boolean); // .filter(Boolean) to remove null/undefined emails
+        }
+        console.log("Default Recipient Emails (after processing):", defaultRecipientEmails);
+        // --- END ADDED LOGS ---
+       
+        // 3. Combine all recipient emails, ensuring no duplicates
+        const allRecipientEmails = [...new Set([...defaultRecipientEmails, creatorEmail])];
+
+        console.log("All Recipient Emails (final list):", allRecipientEmails); // Verify final list
+
+        const createdByName = `${user.user_metadata.first_name || ''} ${user.user_metadata.last_name || ''}`.trim();
+        const finalCreatedByName = createdByName || 'A User';
+
+        const payload = {
+          to: allRecipientEmails,
+          jobDetails: {
+            ...createdJob,
+            createdBy: finalCreatedByName,
+            assigned_to: createdJob.assigned_to,
+            createdDate: createdJob.createdAt,
+            experience: createdJob.experience || {min: {years: 0, months: 0}, max: {years: 0, months: 0}},
+          },
+          createdBy: finalCreatedByName,
+        };
+           
+         const { data: { session }, error: authError } = await supabase.auth.getSession();
+                if (authError || !session) {
+                  throw new Error('No authenticated user found');
+                }
+                const jwt = session.access_token;
+
+        console.log("Payload sent to send-job-created-email:", payload);
+
+        await fetch('https://kbpeyfietrwlhwcwqhjw.supabase.co/functions/v1/-Send-Job-Created-Email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${jwt}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        toast.success("Job created successfully and notification email sent!");
+      }
+
+      await refetch();
+      setIsCreateModalOpen(false);
+      setEditJob(null);
+    } catch (error) {
+      console.error("Error saving job:", error);
+      toast.error(editJob ? "Failed to update job" : "Failed to create job");
+    }
+  };
   const openAssociateModal = (job: JobData) => {
     setClientSelectedJob(job);
     setAssociateModalOpen(true);
@@ -431,7 +585,9 @@ const Jobs = () => {
     );
   }
 
-  const renderAssignedToCell = async (assignedTo: { id: string; name: string; type: string } | null) => {
+  const renderAssignedToCell = async (
+    assignedTo: { id: string; name: string; type: string } | null
+  ) => {
     if (!assignedTo || assignedTo.type !== "individual") {
       return <span className="text-gray-400 text-sm">Not assigned</span>;
     }
@@ -452,7 +608,11 @@ const Jobs = () => {
         .filter((emp) => emp !== undefined);
 
       return (
-        <AvatarGroup className="justify-start" limit={3} employees={orderedEmployees}>
+        <AvatarGroup
+          className="justify-start"
+          limit={3}
+          employees={orderedEmployees}
+        >
           {orderedEmployees.map((employee) => {
             const fullName = `${employee.first_name} ${employee.last_name}`;
             return (
@@ -460,7 +620,10 @@ const Jobs = () => {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Avatar className="h-8 w-8 border-2 border-white">
-                      <AvatarImage src={employee.profile_picture_url || ""} alt={fullName} />
+                      <AvatarImage
+                        src={employee.profile_picture_url || ""}
+                        alt={fullName}
+                      />
                       <AvatarFallback>
                         {employee.first_name[0]}
                         {employee.last_name[0]}
@@ -477,12 +640,21 @@ const Jobs = () => {
         </AvatarGroup>
       );
     } catch (error) {
-      console.error("renderAssignedToCell - Error fetching assigned employees:", error);
-      return <span className="text-red-500 text-sm">Error loading assignees</span>;
+      console.error(
+        "renderAssignedToCell - Error fetching assigned employees:",
+        error
+      );
+      return (
+        <span className="text-red-500 text-sm">Error loading assignees</span>
+      );
     }
   };
 
-  const AssignedToCell = ({ assignedTo }: { assignedTo: { id: string; name: string; type: string } | null }) => {
+  const AssignedToCell = ({
+    assignedTo,
+  }: {
+    assignedTo: { id: string; name: string; type: string } | null;
+  }) => {
     const [content, setContent] = useState<JSX.Element | null>(null);
 
     useEffect(() => {
@@ -495,8 +667,8 @@ const Jobs = () => {
 
     return content || <span className="text-gray-400 text-sm">Loading...</span>;
   };
-  
-    const renderTable = (jobs: JobData[]) => {
+
+  const renderTable = (jobs: JobData[]) => {
     if (jobs.length === 0) {
       return (
         <div className="text-center p-12 text-gray-500">
@@ -519,16 +691,30 @@ const Jobs = () => {
                   </div>
                 </th>
                 {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
-                  <th scope="col" className="table-header-cell">Client</th>
+                  <th scope="col" className="table-header-cell">
+                    Client
+                  </th>
                 )}
-                <th scope="col" className="table-header-cell">Posted By</th>
-                <th scope="col" className="table-header-cell">Created Date</th>
-                <th scope="col" className="table-header-cell">No. of Candidates</th>
-                <th scope="col" className="table-header-cell">Status</th>
-                 {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
-                <th scope="col" className="table-header-cell">Assigned To</th>
+                <th scope="col" className="table-header-cell">
+                  Posted By
+                </th>
+                <th scope="col" className="table-header-cell">
+                  Created Date
+                </th>
+                <th scope="col" className="table-header-cell">
+                  No. of Candidates
+                </th>
+                <th scope="col" className="table-header-cell">
+                  Status
+                </th>
+                {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
+                  <th scope="col" className="table-header-cell">
+                    Assigned To
+                  </th>
                 )}
-                <th scope="col" className="table-header-cell">Actions</th>
+                <th scope="col" className="table-header-cell">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -536,11 +722,17 @@ const Jobs = () => {
                 <tr key={job.id} className="hover:bg-gray-50 transition">
                   <td className="table-cell">
                     <div className="flex flex-col">
-                      <Link to={`/jobs/${job.id}`} className="font-medium text-black-600 hover:underline">
+                      <Link
+                        to={`/jobs/${job.id}`}
+                        className="font-medium text-black-600 hover:underline"
+                      >
                         {job.title}
                       </Link>
                       <span className="text-xs text-gray-500 flex space-x-2">
-                        <Badge variant="outline" className="bg-purple-100 text-purple-800 hover:bg-purple-200 rounded-full text-[10px]">
+                        <Badge
+                          variant="outline"
+                          className="bg-purple-100 text-purple-800 hover:bg-purple-200 rounded-full text-[10px]"
+                        >
                           {job.jobId}
                         </Badge>
                         <Badge
@@ -550,42 +742,45 @@ const Jobs = () => {
                           {job.hiringMode}
                         </Badge>
                         {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
-                        <Badge
-                          variant="outline"
-                          className={`rounded-full text-[10px] ${
-                            job.jobType === "Internal"
-                              ? "bg-amber-100 text-amber-800 hover:bg-blue-200"
-                              : job.jobType === "External"
-                              ? "bg-neutral-100 text-neutral-800 hover:bg-neutral-200"
-                              : "bg-purple-100 text-purple-800 hover:bg-purple-200"
-                          }`}
-                        >
-                          {job.jobType === "External" ? "Client Side" : job.jobType}
-                        </Badge>
+                          <Badge
+                            variant="outline"
+                            className={`rounded-full text-[10px] ${
+                              job.jobType === "Internal"
+                                ? "bg-amber-100 text-amber-800 hover:bg-blue-200"
+                                : job.jobType === "External"
+                                ? "bg-neutral-100 text-neutral-800 hover:bg-neutral-200"
+                                : "bg-purple-100 text-purple-800 hover:bg-purple-200"
+                            }`}
+                          >
+                            {job.jobType === "External"
+                              ? "Client Side"
+                              : job.jobType}
+                          </Badge>
                         )}
                       </span>
                     </div>
                   </td>
                   {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
-                  <td className="table-cell">
-                    <div className="flex flex-col">
-                      <span className="text-gray-800">{job.clientOwner}</span>
-                      <div className="flex items-center">
-                        <Badge
-                          variant="outline"
-                          className="bg-purple-100 text-purple-800 hover:bg-purple-200 rounded-full text-xs inline-flex items-center"
-                        >
-                          {job.clientDetails?.pointOfContact || "N/A"}
-                        </Badge>
+                    <td className="table-cell">
+                      <div className="flex flex-col">
+                        <span className="text-gray-800">{job.clientOwner}</span>
+                        <div className="flex items-center">
+                          <Badge
+                            variant="outline"
+                            className="bg-purple-100 text-purple-800 hover:bg-purple-200 rounded-full text-xs inline-flex items-center"
+                          >
+                            {job.clientDetails?.pointOfContact || "N/A"}
+                          </Badge>
+                        </div>
                       </div>
-                    </div>
-                  </td>
+                    </td>
                   )}
                   <td className="table-cell">
                     {job.createdBy?.first_name} {job.createdBy?.last_name}
                   </td>
                   <td className="table-cell">
-                    {moment(job.createdAt).format("DD MMM YYYY")} ({moment(job.createdAt).fromNow()})
+                    {moment(job.createdAt).format("DD MMM YYYY")} (
+                    {moment(job.createdAt).fromNow()})
                   </td>
                   <td
                     className={`table-cell  ${
@@ -602,17 +797,26 @@ const Jobs = () => {
                   </td>
                   <td className="table-cell">
                     {isEmployee ? (
-                      <Badge variant="outline" className={getStatusBadgeClass(job.status)}>
+                      <Badge
+                        variant="outline"
+                        className={getStatusBadgeClass(job.status)}
+                      >
                         {job.status}
                       </Badge>
                     ) : (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="transparent" className="h-8 px-2 py-0">
+                          <Button
+                            variant="transparent"
+                            className="h-8 px-2 py-0"
+                          >
                             {statusUpdateLoading === job.id ? (
                               <Loader2 className="h-4 w-4 animate-spin mr-1" />
                             ) : (
-                              <Badge variant="outline" className={getStatusBadgeClass(job.status)}>
+                              <Badge
+                                variant="outline"
+                                className={getStatusBadgeClass(job.status)}
+                              >
                                 {job.status}
                               </Badge>
                             )}
@@ -642,9 +846,9 @@ const Jobs = () => {
                     )}
                   </td>
                   {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
-                  <td className="table-cell w-auto min-w-[120px] max-w-[200px]">
-                    <AssignedToCell assignedTo={job.assigned_to} />
-                  </td>
+                    <td className="table-cell w-auto min-w-[120px] max-w-[200px]">
+                      <AssignedToCell assignedTo={job.assigned_to} />
+                    </td>
                   )}
                   <td className="table-cell">
                     <div className="flex space-x-2">
@@ -652,7 +856,11 @@ const Jobs = () => {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Link to={`/jobs/${job.id}`}>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                              >
                                 <Eye className="h-4 w-4" />
                               </Button>
                             </Link>
@@ -683,25 +891,6 @@ const Jobs = () => {
                             </Tooltip>
                           </TooltipProvider>
                           {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => handleAssignJob(job)}
-                                >
-                                  <UserPlus className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Assign Job</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          )}
-                          {!ITECH_ORGANIZATION_ID.includes(organization_id) && job.jobType === "Internal" && (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -709,17 +898,37 @@ const Jobs = () => {
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8"
-                                    onClick={() => openAssociateModal(job)}
+                                    onClick={() => handleAssignJob(job)}
                                   >
-                                    <HousePlus className="h-4 w-4" />
+                                    <UserPlus className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Associate to Client</p>
+                                  <p>Assign Job</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                           )}
+                          {!ITECH_ORGANIZATION_ID.includes(organization_id) &&
+                            job.jobType === "Internal" && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={() => openAssociateModal(job)}
+                                    >
+                                      <HousePlus className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Associate to Client</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -749,13 +958,16 @@ const Jobs = () => {
       </div>
     );
   };
-  
-    const renderPagination = () => {
+
+  const renderPagination = () => {
     return (
       <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-600">Show</span>
-          <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+          <Select
+            value={itemsPerPage.toString()}
+            onValueChange={handleItemsPerPageChange}
+          >
             <SelectTrigger className="w-[70px]">
               <SelectValue />
             </SelectTrigger>
@@ -781,7 +993,10 @@ const Jobs = () => {
 
           <div className="flex items-center gap-1">
             {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))
+              .slice(
+                Math.max(0, currentPage - 3),
+                Math.min(totalPages, currentPage + 2)
+              )
               .map((page) => (
                 <Button
                   key={page}
@@ -797,7 +1012,9 @@ const Jobs = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+            onClick={() =>
+              setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+            }
             disabled={currentPage === totalPages}
           >
             <ChevronRight className="h-4 w-4" />
@@ -805,12 +1022,13 @@ const Jobs = () => {
         </div>
 
         <span className="text-sm text-gray-600">
-          Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredJobs.length)} of {filteredJobs.length} jobs
+          Showing {startIndex + 1} to{" "}
+          {Math.min(startIndex + itemsPerPage, filteredJobs.length)} of{" "}
+          {filteredJobs.length} jobs
         </span>
       </div>
     );
   };
-
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -821,19 +1039,27 @@ const Jobs = () => {
         </div>
 
         {!isEmployee && (
-          <Button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-2">
+          <Button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex items-center gap-2"
+          >
             <Plus size={16} />
             <span>Create New Job</span>
           </Button>
         )}
       </div>
 
-       {/* ... (Stat cards section remains unchanged) */}
-       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="stat-card animate-slide-up" style={{ animationDelay: "0ms" }}>
+      {/* ... (Stat cards section remains unchanged) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card
+          className="stat-card animate-slide-up"
+          style={{ animationDelay: "0ms" }}
+        >
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">Total Jobs</p>
+              <p className="text-sm font-medium text-gray-500 mb-1">
+                Total Jobs
+              </p>
               <h3 className="text-3xl font-bold">{filteredJobs.length}</h3>
               <p className="text-xs text-gray-500 mt-1">All departments</p>
             </div>
@@ -843,12 +1069,20 @@ const Jobs = () => {
           </div>
         </Card>
 
-        <Card className="stat-card animate-slide-up" style={{ animationDelay: "100ms" }}>
+        <Card
+          className="stat-card animate-slide-up"
+          style={{ animationDelay: "100ms" }}
+        >
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">Active Jobs</p>
+              <p className="text-sm font-medium text-gray-500 mb-1">
+                Active Jobs
+              </p>
               <h3 className="text-3xl font-bold">{activeJobs}</h3>
-              <p className="text-xs text-gray-500 mt-1">{Math.round((activeJobs / filteredJobs.length) * 100) || 0}% of total</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {Math.round((activeJobs / filteredJobs.length) * 100) || 0}% of
+                total
+              </p>
             </div>
             <div className="stat-icon stat-icon-green">
               <Calendar size={22} />
@@ -856,12 +1090,20 @@ const Jobs = () => {
           </div>
         </Card>
 
-        <Card className="stat-card animate-slide-up" style={{ animationDelay: "200ms" }}>
+        <Card
+          className="stat-card animate-slide-up"
+          style={{ animationDelay: "200ms" }}
+        >
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">Pending Jobs</p>
+              <p className="text-sm font-medium text-gray-500 mb-1">
+                Pending Jobs
+              </p>
               <h3 className="text-3xl font-bold">{pendingJobs}</h3>
-              <p className="text-xs text-gray-500 mt-1">{Math.round((pendingJobs / filteredJobs.length) * 100) || 0}% of total</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {Math.round((pendingJobs / filteredJobs.length) * 100) || 0}% of
+                total
+              </p>
             </div>
             <div className="stat-icon stat-icon-yellow">
               <Clock size={22} />
@@ -869,12 +1111,20 @@ const Jobs = () => {
           </div>
         </Card>
 
-        <Card className="stat-card animate-slide-up" style={{ animationDelay: "300ms" }}>
+        <Card
+          className="stat-card animate-slide-up"
+          style={{ animationDelay: "300ms" }}
+        >
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">Completed Jobs</p>
+              <p className="text-sm font-medium text-gray-500 mb-1">
+                Completed Jobs
+              </p>
               <h3 className="text-3xl font-bold">{completedJobs}</h3>
-              <p className="text-xs text-gray-500 mt-1">{Math.round((completedJobs / filteredJobs.length) * 100) || 0}% of total</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {Math.round((completedJobs / filteredJobs.length) * 100) || 0}%
+                of total
+              </p>
             </div>
             <div className="stat-icon stat-icon-purple">
               <CheckCircle size={22} />
@@ -883,11 +1133,14 @@ const Jobs = () => {
         </Card>
       </div>
 
-
       {/* Goal: This is the updated filter section */}
       <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
         {!isEmployee && !ITECH_ORGANIZATION_ID.includes(organization_id) && (
-          <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+          <Tabs
+            defaultValue="all"
+            value={activeTab}
+            onValueChange={setActiveTab}
+          >
             <TabsList className="grid grid-cols-3 w-full sm:w-80">
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="internal" className="flex items-center gap-1">
@@ -901,70 +1154,83 @@ const Jobs = () => {
         )}
 
         <div className="relative flex-grow">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+          <Search
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+            size={18}
+          />
           <Input
             placeholder="Search by Job Title, ID, or Candidate Name"
             className="pl-10 h-10"
             value={searchTerm}
             onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1); // Reset to first page on search
+              setSearchTerm(e.target.value);
+              setCurrentPage(1); // Reset to first page on search
             }}
           />
         </div>
 
         {!isEmployee && (
-            <DateRangePickerField
-              dateRange={dateRange as any}
-              onDateRangeChange={(range) => setDateRange(range as any)}
-              onApply={() => setCurrentPage(1)} // Reset to first page on filter change
-            />
+          <DateRangePickerField
+            dateRange={dateRange as any}
+            onDateRangeChange={(range) => setDateRange(range as any)}
+            onApply={() => setCurrentPage(1)} // Reset to first page on filter change
+          />
         )}
 
         {/* Goal: Add Client Filter Dropdown */}
         {!isEmployee && (
-           <Select value={selectedClient} onValueChange={(value) => {
-                setSelectedClient(value);
-                setCurrentPage(1);
-            }}>
-                <SelectTrigger className="w-full md:w-[200px]">
-                    <SelectValue placeholder="Filter by Client" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">All Clients</SelectItem>
-                    {/* Map over the new, derived clientList */}
-                    {clientList.map((clientName) => (
-                        <SelectItem key={clientName} value={clientName}>
-                            {clientName}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
+          <Select
+            value={selectedClient}
+            onValueChange={(value) => {
+              setSelectedClient(value);
+              setCurrentPage(1);
+            }}
+          >
+            <SelectTrigger className="w-full md:w-[200px]">
+              <SelectValue placeholder="Filter by Client" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Clients</SelectItem>
+              {/* Map over the new, derived clientList */}
+              {clientList.map((clientName) => (
+                <SelectItem key={clientName} value={clientName}>
+                  {clientName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
 
         {/* Goal: Add Date Range Filter */}
-        
       </div>
 
-       {/* ... (The rest of the component remains the same) */}
-       {!isEmployee ? (
+      {/* ... (The rest of the component remains the same) */}
+      {!isEmployee ? (
         ITECH_ORGANIZATION_ID.includes(organization_id) ? (
           <div className="space-y-6">
             {renderTable(paginatedJobs)}
             {filteredJobs.length > 0 && renderPagination()}
           </div>
         ) : (
-          <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+          <Tabs
+            defaultValue="all"
+            value={activeTab}
+            onValueChange={setActiveTab}
+          >
             <TabsContent value="all" className="space-y-6">
               {renderTable(paginatedJobs)}
               {filteredJobs.length > 0 && renderPagination()}
             </TabsContent>
             <TabsContent value="internal" className="space-y-6">
-              {renderTable(paginatedJobs.filter((job) => job.jobType === "Internal"))}
+              {renderTable(
+                paginatedJobs.filter((job) => job.jobType === "Internal")
+              )}
               {filteredJobs.length > 0 && renderPagination()}
             </TabsContent>
             <TabsContent value="external" className="space-y-6">
-              {renderTable(paginatedJobs.filter((job) => job.jobType === "External"))}
+              {renderTable(
+                paginatedJobs.filter((job) => job.jobType === "External")
+              )}
               {filteredJobs.length > 0 && renderPagination()}
             </TabsContent>
           </Tabs>
@@ -1006,11 +1272,14 @@ const Jobs = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the job "{jobToDelete?.title}". This action cannot be undone.
+              This will permanently delete the job "{jobToDelete?.title}". This
+              action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={actionLoading}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDeleteJob}
               disabled={actionLoading}
@@ -1028,7 +1297,6 @@ const Jobs = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
     </div>
   );
 };

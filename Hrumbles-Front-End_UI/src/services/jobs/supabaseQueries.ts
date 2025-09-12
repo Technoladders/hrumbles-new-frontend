@@ -176,7 +176,7 @@ export const shareJob = async (jobId) => {
 export const fetchEmployeesByIds = async (employeeIds: string[]) => {
   const { data, error } = await supabase
     .from("hr_employees")
-    .select("id, first_name, last_name, profile_picture_url")
+    .select("id, first_name, last_name, profile_picture_url, email")
     .in("id", employeeIds);
 
   if (error) {
