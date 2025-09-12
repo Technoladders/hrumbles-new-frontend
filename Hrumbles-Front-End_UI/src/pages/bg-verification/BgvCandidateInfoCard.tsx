@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Calendar, Mail, Phone, Eye, Download, FileBadge, MapPin, Briefcase, Copy } from "lucide-react";
+import { Calendar, Mail, Phone, Eye, Download, FileBadge, MapPin, Briefcase, Copy, Pencil } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Candidate } from "@/lib/types";
+import { EditCandidateDetailsModal } from "./EditCandidateDetailsModal";
 
 // Interface for Candidate (aligned with console data)
 interface CandidateInfo {
@@ -30,8 +31,11 @@ interface BgvCandidateInfoCardProps {
   candidate: CandidateInfo;
 }
 
+
+
 export const BgvCandidateInfoCard: React.FC<BgvCandidateInfoCardProps> = ({ candidate }) => {
   const { toast } = useToast();
+   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   // Convert numeric month to name
   const getMonthName = (month: number) => {
@@ -73,12 +77,17 @@ export const BgvCandidateInfoCard: React.FC<BgvCandidateInfoCardProps> = ({ cand
   };
 
   return (
+    <>
     <Card className="bg-white w-full h-full">
       <CardHeader>
         <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
           <div className="flex-1">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-900">{candidate.name}</h2>
+              <Button variant="ghost" size="icon" onClick={() => setIsEditModalOpen(true)}>
+                  <Pencil className="h-4 w-4" />
+                  <span className="sr-only">Edit Candidate Details</span>
+                </Button>
             </div>
             <div className="flex items-center mt-1 text-sm text-gray-500">
               <Calendar className="w-4 h-4 mr-1" />
@@ -167,10 +176,10 @@ export const BgvCandidateInfoCard: React.FC<BgvCandidateInfoCardProps> = ({ cand
           <FileBadge className="w-4 h-4 text-indigo-500" />
           <span>Total Experience • {calculateTotalExperience()}</span>
         </div>
-        <div className="flex items-center space-x-2">
+        {/* <div className="flex items-center space-x-2">
           <MapPin className="w-4 h-4 text-indigo-500" />
           <span>Current Location • {candidate.location || "N/A"}</span>
-        </div>
+        </div> */}
       </div>
       {/* <div className="space-y-4">
         <h3 className="text-sm font-medium">Experience</h3>
@@ -194,6 +203,13 @@ export const BgvCandidateInfoCard: React.FC<BgvCandidateInfoCardProps> = ({ cand
         </div>
       </CardHeader>
     </Card>
+       {/* --- RENDER THE EDIT MODAL --- */}
+      <EditCandidateDetailsModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        candidate={candidate}
+      />
+    </>
   );
 
   // Calculate total experience (unchanged logic, updated format)

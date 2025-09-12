@@ -73,6 +73,8 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
   const user = useSelector((state: any) => state.auth.user);
   const isEditMode = !!candidate;
 
+
+  console.log("jsksoos", job)
   const { 
     data: jobs, 
     isLoading: jobLoading, 
@@ -207,7 +209,7 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
         experience: formatExperience(data.totalExperience, data.totalExperienceMonths),
         matchScore: isEditMode ? (candidate?.matchScore || 0) : 0,
         appliedDate: isEditMode ? (candidate?.appliedDate || new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
-        skills: [],
+        // skills: [],
         email: data.email,
         phone: data.phone,
         currentSalary: data.currentSalary ?? null,
@@ -280,7 +282,7 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
         experience: formatExperience(basicInfoData.totalExperience, basicInfoData.totalExperienceMonths),
         matchScore: candidate?.matchScore || 0,
         appliedDate: candidate?.appliedDate || new Date().toISOString().split('T')[0],
-        skills: data.skills.map(skill => JSON.stringify(skill)),
+        // skills: data.skills.map(skill => JSON.stringify(skill)),
         email: basicInfoData.email,
         phone: basicInfoData.phone,
         currentSalary: basicInfoData.currentSalary ?? null,
@@ -415,3 +417,5 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
 };
 
 export default AddCandidateDrawer;
+
+// 

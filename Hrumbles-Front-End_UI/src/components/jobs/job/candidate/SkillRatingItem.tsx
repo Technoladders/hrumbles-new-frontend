@@ -30,6 +30,8 @@ const SkillRatingItem = ({
   const [isYearsFocused, setIsYearsFocused] = useState(false);
   const [isMonthsFocused, setIsMonthsFocused] = useState(false);
 
+  console.log("Skill Rating Item", skill, rating, experienceYears, experienceMonths, isJobSkill)
+
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-md space-y-2 sm:space-y-0 sm:space-x-6">
       <div className="flex items-center space-x-2">

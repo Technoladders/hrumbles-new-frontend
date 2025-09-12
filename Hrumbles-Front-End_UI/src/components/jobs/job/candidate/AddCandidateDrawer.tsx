@@ -282,6 +282,17 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
         return [yearsStr, monthsStr].filter(Boolean).join(" and ") || "0 years";
       };
 
+          // Parse the JSON-stringified skills and extract only the names
+     const parsedSkills = Array.isArray(parsedResumeData?.skills)
+        ? parsedResumeData.skills
+            .map((skill: { name: string; rating?: number; experienceYears?: number; experienceMonths?: number }) => 
+              skill && typeof skill === "object" && skill.name ? skill.name : null
+            )
+            .filter((name: string | null) => name !== null) // Remove invalid entries
+        : [];
+
+      console.log("Parsed Skills for candidateData:", parsedSkills);
+
       const candidateData = {
         id: candidateId || "",
         name: `${data.firstName} ${data.lastName}`,
@@ -289,7 +300,7 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
         experience: formatExperience(data.totalExperience, data.totalExperienceMonths),
         matchScore: 0,
         appliedDate: new Date().toISOString().split('T')[0],
-        skills: [],
+        skills: parsedSkills,
         email: data.email,
         phone: data.phone,
         currentSalary: data.currentSalary,
@@ -338,9 +349,9 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
       }
 
        // MODIFIED: Pass skills from parsed data to the next tab
-      if (parsedResumeData?.skills && parsedResumeData.skills.length > 0) {
-        skillsForm.setValue("skills", parsedResumeData.skills);
-      }
+      // if (parsedResumeData?.skills && parsedResumeData.skills.length > 0) {
+      //   skillsForm.setValue("skills", parsedResumeData.skills);
+      // }
 
       setActiveTab("skills-info");
 

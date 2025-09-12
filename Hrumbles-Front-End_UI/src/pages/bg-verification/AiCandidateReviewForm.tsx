@@ -1,6 +1,7 @@
 // src/pages/jobs/ai/AiCandidateReviewForm.tsx
 
 import { useState, FC } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSelector } from 'react-redux';
@@ -41,6 +42,7 @@ export const AiCandidateReviewForm: FC<Props> = ({ jobData, resumeFile, onSaveCo
     ...jobData,
     work_experience: (jobData.work_experience || []).map((exp: any) => ({ ...exp, isVerified: true }))
   });
+    const navigate = useNavigate(); 
   const [candidateIdInput, setCandidateIdInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
@@ -75,7 +77,7 @@ export const AiCandidateReviewForm: FC<Props> = ({ jobData, resumeFile, onSaveCo
       const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uploadData.path);
       const resumeUrl = urlData.publicUrl;
 
-      // 2. Prepare the candidate data payload
+     // 2. Prepare the candidate data payload
       const verifiedWorkExperience = formData.work_experience.filter((exp: WorkExperienceEntry) => exp.isVerified);
       const candidatePayload = {
         ...formData,
@@ -83,18 +85,29 @@ export const AiCandidateReviewForm: FC<Props> = ({ jobData, resumeFile, onSaveCo
         existing_candidate_id: candidateIdInput || null,
       };
 
-      // 3. Call the updated RPC function with the resume URL
-      const { error } = await supabase.rpc('create_candidate_from_resume', {
+      // 3. Call the RPC function, which returns the new candidate's ID as a string
+      const { data: newCandidateId, error } = await supabase.rpc('create_candidate_from_resume', {
         p_organization_id: organizationId,
         p_user_id: user.id,
         p_candidate_data: candidatePayload,
-        p_resume_url: resumeUrl // <<< PASS THE URL TO THE FUNCTION
+        p_resume_url: resumeUrl,
       });
 
       if (error) throw error;
 
-      toast.success(`Candidate ${formData.candidate_name} saved successfully.`);
-      onSaveComplete();
+      // --- CHANGE: Updated redirection logic ---
+      // The RPC function returns a string ID, not an object.
+      if (newCandidateId && typeof newCandidateId === 'string') {
+        toast.success(`Candidate ${formData.candidate_name} saved. Redirecting...`);
+        onSaveComplete(); // Close modal/reset state
+        // Navigate to the profile page. Use 'unassigned' for the job ID in the URL,
+        // as the profile page component doesn't use it and can handle candidates without a job.
+        navigate(`/jobs/unassigned/candidate/${newCandidateId}/bgv`);
+      } else {
+        // Fallback to original behavior if the response is not the expected string ID
+        toast.success(`Candidate ${formData.candidate_name} saved successfully.`);
+        onSaveComplete();
+      }
 
     } catch (err: any) {
       toast.error("Failed to save candidate", { description: err.message });
@@ -103,11 +116,13 @@ export const AiCandidateReviewForm: FC<Props> = ({ jobData, resumeFile, onSaveCo
     }
   };
 
+  
   return (
     <div className="flex flex-col h-[75vh]">
       <DialogHeader className="flex-shrink-0">
         <DialogTitle>Step 2: Review & Save Candidate</DialogTitle>
-        <DialogDescription>Edit any details and uncheck experience to exclude. The candidate will be saved to the directory.</DialogDescription>
+        {/* --- CHANGE: Updated instruction text --- */}
+        <DialogDescription>Modify details as required. Uncheck 'Experience' to exclude.</DialogDescription>
       </DialogHeader>
       
       <ScrollArea className="flex-grow mt-4 pr-4">
@@ -117,7 +132,7 @@ export const AiCandidateReviewForm: FC<Props> = ({ jobData, resumeFile, onSaveCo
               <div className="space-y-1"><Label>Name</Label><Input value={formData.candidate_name || ''} onChange={(e) => setFormData({ ...formData, candidate_name: e.target.value })} /></div>
               <div className="space-y-1"><Label>Email</Label><Input type="email" value={formData.email || ''} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></div>
               <div className="space-y-1"><Label>Phone</Label><Input value={formData.phone || ''} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} /></div>
-              <div className="space-y-1"><Label>External ID (Optional)</Label><Input placeholder="Enter existing ID if any" value={candidateIdInput} onChange={(e) => setCandidateIdInput(e.target.value)} /></div>
+               <div className="space-y-1"><Label>Candidate ID (Optional)</Label><Input placeholder="Enter existing ID if any" value={candidateIdInput} onChange={(e) => setCandidateIdInput(e.target.value)} /></div>
             </CardContent>
           </Card>
           

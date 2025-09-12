@@ -22,9 +22,19 @@ const SkillInformationTab = ({
   onCancel 
 }: SkillInformationTabProps) => {
   const [newSkill, setNewSkill] = useState("");
-  
+
   const skills = form.watch("skills");
-  
+  console.log("Skills array:", skills);
+
+  // Normalize skills to ensure it's an array of objects
+  const normalizedSkills = Array.isArray(skills)
+    ? skills.map(skill => 
+        typeof skill === "string" 
+          ? { name: skill, rating: 0, experienceYears: undefined, experienceMonths: undefined }
+          : skill
+      )
+    : [];
+
   const handleAddSkill = () => {
     const trimmedSkill = newSkill.trim();
     
@@ -33,14 +43,12 @@ const SkillInformationTab = ({
       return;
     }
     
-    // Check if skill already exists
-    if (skills.some(s => s.name.toLowerCase() === trimmedSkill.toLowerCase())) {
+    if (normalizedSkills.some(s => s.name.toLowerCase() === trimmedSkill.toLowerCase())) {
       toast.error("Skill already exists.");
       return;
     }
     
-    // Add new skill with default rating of 3 and empty experience fields
-    const updatedSkills = [...skills, { 
+    const updatedSkills = [...normalizedSkills, { 
       name: trimmedSkill, 
       rating: 0, 
       experienceYears: undefined, 
@@ -51,41 +59,37 @@ const SkillInformationTab = ({
   };
   
   const handleRatingChange = (skillName: string, newRating: number) => {
-    const updatedSkills = skills.map(skill => 
+    const updatedSkills = normalizedSkills.map(skill => 
       skill.name === skillName 
         ? { ...skill, rating: newRating } 
         : skill
     );
-    
     form.setValue("skills", updatedSkills);
   };
 
   const handleExperienceYearsChange = (skillName: string, newExperienceYears: number) => {
-    const updatedSkills = skills.map(skill => 
+    const updatedSkills = normalizedSkills.map(skill => 
       skill.name === skillName 
         ? { ...skill, experienceYears: newExperienceYears } 
         : skill
     );
-    
     form.setValue("skills", updatedSkills);
   };
 
   const handleExperienceMonthsChange = (skillName: string, newExperienceMonths: number) => {
-    const updatedSkills = skills.map(skill => 
+    const updatedSkills = normalizedSkills.map(skill => 
       skill.name === skillName 
         ? { ...skill, experienceMonths: newExperienceMonths } 
         : skill
     );
-    
     form.setValue("skills", updatedSkills);
   };
   
   const handleRemoveSkill = (skillName: string) => {
-    const updatedSkills = skills.filter(skill => skill.name !== skillName);
+    const updatedSkills = normalizedSkills.filter(skill => skill.name !== skillName);
     form.setValue("skills", updatedSkills);
   };
 
-  // Validation function for skills
   const validateSkills = (skills: CandidateFormData["skills"]) => {
     if (skills.length === 0) {
       toast.error("At least one skill is required.");
@@ -117,7 +121,6 @@ const SkillInformationTab = ({
     return true;
   };
 
-  // Handle form submission with validation
   const handleSubmit = (data: CandidateFormData) => {
     if (validateSkills(data.skills)) {
       onSave(data);
@@ -130,7 +133,6 @@ const SkillInformationTab = ({
         <div>
           <h3 className="text-lg font-medium mb-4">Candidate Skills</h3>
           
-          {/* Add new skill input */}
           <div className="flex items-center space-x-2 mb-6">
             <Input
               placeholder="Add a new skill"
@@ -155,32 +157,32 @@ const SkillInformationTab = ({
             </Button>
           </div>
           
-          {/* Skills list with ratings */}
           <div className="space-y-4">
-            {skills.length === 0 ? (
+            {normalizedSkills.length === 0 ? (
               <p className="text-muted-foreground text-center py-4">
                 No skills added yet. Add skills to rate the candidate.
               </p>
             ) : (
-              skills.map(skill => (
-                <SkillRatingItem
-                  key={skill.name}
-                  skill={skill.name}
-                  rating={skill.rating}
-                  experienceYears={skill.experienceYears}
-                  experienceMonths={skill.experienceMonths}
-                  isJobSkill={jobSkills.includes(skill.name)}
-                  onRatingChange={(newRating) => handleRatingChange(skill.name, newRating)}
-                  onExperienceYearsChange={(newExperienceYears) => handleExperienceYearsChange(skill.name, newExperienceYears)}
-                  onExperienceMonthsChange={(newExperienceMonths) => handleExperienceMonthsChange(skill.name, newExperienceMonths)}
-                  onRemove={() => handleRemoveSkill(skill.name)}
-                />
-              ))
+              normalizedSkills
+                .filter(skill => skill && skill.name) // Ensure valid skills
+                .map(skill => (
+                  <SkillRatingItem
+                    key={skill.name}
+                    skill={skill.name}
+                    rating={skill.rating ?? 0}
+                    experienceYears={skill.experienceYears}
+                    experienceMonths={skill.experienceMonths}
+                    isJobSkill={jobSkills && Array.isArray(jobSkills) ? jobSkills.includes(skill.name) : false}
+                    onRatingChange={(newRating) => handleRatingChange(skill.name, newRating)}
+                    onExperienceYearsChange={(newExperienceYears) => handleExperienceYearsChange(skill.name, newExperienceYears)}
+                    onExperienceMonthsChange={(newExperienceMonths) => handleExperienceMonthsChange(skill.name, newExperienceMonths)}
+                    onRemove={() => handleRemoveSkill(skill.name)}
+                  />
+                ))
             )}
           </div>
         </div>
         
-        {/* Action Buttons */}
         <div className="flex justify-end space-x-4 pt-4">
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancel

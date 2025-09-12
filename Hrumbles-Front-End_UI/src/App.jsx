@@ -23,6 +23,7 @@ import SingleOrganizationDashboard from "./components/global/SingleOrganizationD
 import VerificationHubPage from "./pages/verifications/VerificationHubPage";
 import VerificationTypeDashboardPage from "./pages/verifications/VerificationTypeDashboardPage";
 import OrganizationVerificationReportPage from "./pages/verifications/OrganizationVerificationReportPage";
+import DetailedResourceView from './components/global/DetailedResourceView';
 
 
 import MainLayout from "./layouts/MainLayout";
@@ -224,14 +225,14 @@ function App() {
             <Route path="/password" element={<PasswordChange />} />
 
               {/* Global Super Admin */}
-               <Route
-              path="/organization"
-              element={<GlobalSuperadminDashboard />}
-            />
+            <Route path="/organization" element={<GlobalSuperadminDashboard />} />
             <Route path="/organization/:organizationId" element={<SingleOrganizationDashboard />} />
-                 <Route path="/verifications" element={<VerificationHubPage />} />
+            <Route path="/verifications" element={<VerificationHubPage />} />
             <Route path="/verifications/:verificationType" element={<VerificationTypeDashboardPage />} />
             <Route path="/verifications/:verificationType/:organizationId" element={<OrganizationVerificationReportPage />} />
+            <Route path="/organization/:organizationId/users" element={<DetailedResourceView resourceType="users" />} />
+            <Route path="/organization/:organizationId/talent" element={<DetailedResourceView resourceType="talent" />} /> 
+            <Route path="/organization/:organizationId/roles" element={<DetailedResourceView resourceType="roles" />} />
             
             {/* <Route path="/employees" element={<Employee/>} /> */}
             <Route path="/projects" element={<ProjectManagement />} />
