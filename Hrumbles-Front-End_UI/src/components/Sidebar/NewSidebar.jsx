@@ -364,52 +364,33 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
           </Box>
         )} */}
 
-       {isCategorized && (
-  <HStack
-    justify="center"
-    spacing={isExpanded ? 4 : 2}
-    p={isExpanded ? 2 : 1}
-    borderRadius="lg"
-    bg="#7B43F1"
-  >
-    {(isExpanded ? menuConfig : menuConfig).map((suite) => (
-      <Tooltip
-        key={suite.title}
-        label={
-          suite.title.charAt(0).toUpperCase() +
-          suite.title.slice(1).toLowerCase()
-        } // Capitalize first letter, lowercase the rest
-        placement="top"
-        hasArrow
-        bg="gray.700"
-        color="white"
-        fontSize="xs" // Reduced font size for smaller tooltip
-        p={1} // Reduced padding for smaller tooltip
-        borderRadius="sm"
-      >
-        <IconButton
-          aria-label={suite.title}
-          icon={
-            <Icon
-              as={suite.icon}
-              fontSize={suite.title === "PROJECT SUITE" ? "20px" : "16px"} // Larger size for CgOrganisation
-            />
-          }
-          isRound
-          size="sm"
-          bg={activeSuite === suite.title ? activeBg : "transparent"}
-          color={activeSuite === suite.title ? "black" : "white"}
-          _hover={{
-            bg: activeSuite !== suite.title ? hoverBg : activeBg,
-            color: "black",
-          }}
-          onClick={() => handleSuiteChange(suite.title)}
-          flex="1"
-        />
-      </Tooltip>
-    ))}
-  </HStack>
-)}
+        {isCategorized && (
+          <HStack
+            justify="center"
+            spacing={isExpanded ? 4 : 0}
+            p={isExpanded ? 2 : 1}
+            borderRadius="lg"
+            bg="#7B43F1"
+          >
+            {(isExpanded ? menuConfig : menuConfig.filter(s => s.title === activeSuite)).map((suite) => (
+              <Tooltip key={suite.title} label={suite.title} placement="top">
+                <IconButton
+                  aria-label={suite.title}
+                  icon={<Icon as={suite.icon} fontSize="16px" />}
+                  isRound
+                  size="sm"
+                  bg={activeSuite === suite.title ? activeBg : 'transparent'}
+                  color={activeSuite === suite.title ? 'black' : 'white'}
+                  _hover={{
+    bg: activeSuite !== suite.title ? hoverBg : activeBg,color: 'black', // 👈 make icon text white on hover
+  }}
+                  onClick={() => handleSuiteChange(suite.title)}
+                  flex="1"
+                />
+              </Tooltip>
+            ))}
+          </HStack>
+        )}
       </VStack>
     </Flex>
   );
