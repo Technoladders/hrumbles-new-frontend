@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Search, User, BarChart2, SlidersHorizontal, CheckCircle, Download, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
-import { DateRangePickerField } from './DateRangePickerField'; // Assuming this component exists
+import { DateRangePickerField } from '@/components/ui/DateRangePickerField'; // Assuming this component exists
 import { supabase } from '@/integrations/supabase/client'; // Assuming this client exists
 import { format } from 'date-fns';
 import Papa from 'papaparse';
@@ -70,7 +70,7 @@ const TalentProfileReport: React.FC = () => {
     const fetchInitialData = async () => {
       if (!organizationId) return;
       try {
-        const { count, error: countError } = await supabase.from('hr_talent_pool').select('*', { count: 'exact', head: true }).eq('organization_id', organizationId);
+        const { count, error: countError } = await supabase.from('hr_talent_pool').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId);
         if (countError) throw countError;
         setTotalProfileCount(count ?? 0);
 
@@ -97,7 +97,7 @@ const TalentProfileReport: React.FC = () => {
           id: item.id,
           created_at: item.created_at,
           created_by: item.created_by,
-          recruiter_name: item.hr_employees ? `${item.hr_employees.first_name} ${item.hr_employees.last_name}` : 'N/A',
+          recruiter_name: item.hr_employees ? `${item.hr_employees.first_name} ${item.hr_employees.last_name}` : 'External Sources',
         }));
         setReportData(formattedData);
       } catch (err: any) {
@@ -108,6 +108,8 @@ const TalentProfileReport: React.FC = () => {
     };
     fetchDataForRange();
   }, [appliedDateRange, organizationId]);
+
+  console.log("reportData", reportData);``
 
   // --- DATA PROCESSING & MEMOIZATION ---
   const aggregatedData: AggregatedData[] = useMemo(() => {

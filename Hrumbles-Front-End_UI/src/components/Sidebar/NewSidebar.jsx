@@ -30,12 +30,12 @@ const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownTogg
   const isActive = location.pathname === path || (dropdown && dropdown.some(sub => location.pathname.startsWith(sub.path)));
   const isDropdownOpen = openDropdown === label;
 
-  const hoverBg = "#4A5568";
+  const hoverBg = "#b9b7f8ff";
   const activeBg = "#7B43F1";
   const activeColor = "white";
-  const textColor = "white";
-  const iconColor = "white";
-  const hoverTextColor = "#CBD5E0";
+  const textColor = "black";
+  const iconColor = "black";
+  const hoverTextColor = "black";
 
   return (
     <Box key={label} w="full">
@@ -48,19 +48,20 @@ const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownTogg
           borderRadius="lg"
           role="group"
           cursor="pointer"
+          justify={isExpanded ? "flex-start" : "center"}
           bg={isActive ? activeBg : "transparent"}
           color={isActive ? activeColor : textColor}
           _hover={{ bg: !isActive && hoverBg, color: !isActive && hoverTextColor }}
-          transition="background 0.2s, color 0.2s"
+          transition="background 0.1s, color 0.1s"
           onClick={(e) => {
             if (dropdown) {
               handleDropdownToggle(label, e);
             }
           }}
         >
-          <Icon as={icon} fontSize="22px" color={isActive ? activeColor : iconColor} _groupHover={{ color: hoverTextColor }} />
+          <Icon as={icon} fontSize="16px" color={isActive ? activeColor : iconColor} _groupHover={{ color: hoverTextColor }} />
           {isExpanded && (
-            <Flex justify="space-between" align="center" w="full" ml={4}>
+            <Flex justify="space-between" align="center" w="full" ml={4} >
               <Text fontWeight="medium">{label}</Text>
               {dropdown && (
                 <Icon
@@ -115,10 +116,10 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const [employeeProfile, setEmployeeProfile] = useState(null);
   const { isOpen: isProfileMenuOpen, onToggle: toggleProfileMenu } = useDisclosure();
 
-  const bgColor = "#364153";
+  const bgColor = "#ffffffff";
   const activeBg = "#ffffffff";
   const hoverBg = "#eee7f1dd";
-  const textColor = "white";
+  const textColor = "black";
 
   const [activeSuite, setActiveSuite] = useState(() => {
     return localStorage.getItem('activeSuite') || null;
@@ -274,7 +275,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       color={textColor}
       height="100vh"
       width={isExpanded ? "210px" : "74px"}
-      transition="width 0.2s ease-in-out"
+      transition="width 0.1s ease-in-out"
       position="fixed"
       left={0}
       top={0}
@@ -282,10 +283,14 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       zIndex={20}
     >
       <Flex align="center" mb={8} minH="40px" px={isExpanded ? 0 : 1}>
-        {isExpanded && <Image src="/hrumbles-wave-white.svg" alt="Logo" width="160px" />}
+        {isExpanded && <Image className="mt-4" src="/1-cropped.svg" alt="Logo" width="120px" />}
+        {!isExpanded && <Image src="/hrumbles-fav-blue-cropped.svg" alt="Logo" width="30px"  />}
+
         <Spacer />
         {!isMobile && (
           <IconButton
+          marginTop={3}
+            fontSize={isExpanded ? "18px" : "8px"}
             aria-label="Toggle Sidebar"
             icon={<Icon as={isExpanded ? ArrowLeftToLine : ArrowRightFromLine} />}
             variant="ghost"
@@ -305,10 +310,10 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
         css={{ "&::-webkit-scrollbar": { display: "none" }, "scrollbar-width": "none" }}
       >
         {isCategorized && isExpanded && (
-          <Text px={3} py={2} fontSize="sm" fontWeight="bold" color="gray.400">
+          <Text px={3} py={2} fontSize="lg" fontWeight="bold" color="black">
             {activeSuite || "Select a Suite"}
           </Text>
-        )}
+        )}a
         {itemsToRender.length > 0 ? (
           itemsToRender.map((item) => (
             <MenuItem
@@ -359,34 +364,52 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
           </Box>
         )} */}
 
-        {isCategorized && (
-          <HStack
-            justify="center"
-            spacing={isExpanded ? 4 : 2}
-            p={isExpanded ? 2 : 1}
-            borderRadius="lg"
-            bg="#7B43F1"
-          >
-            {(isExpanded ? menuConfig : menuConfig.filter(s => s.title === activeSuite)).map((suite) => (
-              <Tooltip key={suite.title} label={suite.title} placement="top" isDisabled={isExpanded}>
-                <IconButton
-                  aria-label={suite.title}
-                  icon={<Icon as={suite.icon} fontSize="16px" />}
-                  isRound
-                  size="sm"
-                  bg={activeSuite === suite.title ? activeBg : 'transparent'}
-                  color={activeSuite === suite.title ? 'black' : 'white'}
-                  _hover={{
-    bg: activeSuite !== suite.title ? hoverBg : activeBg,
-    color: 'black', // 👈 make icon text white on hover
-  }}
-                  onClick={() => handleSuiteChange(suite.title)}
-                  flex="1"
-                />
-              </Tooltip>
-            ))}
-          </HStack>
-        )}
+       {isCategorized && (
+  <HStack
+    justify="center"
+    spacing={isExpanded ? 4 : 2}
+    p={isExpanded ? 2 : 1}
+    borderRadius="lg"
+    bg="#7B43F1"
+  >
+    {(isExpanded ? menuConfig : menuConfig).map((suite) => (
+      <Tooltip
+        key={suite.title}
+        label={
+          suite.title.charAt(0).toUpperCase() +
+          suite.title.slice(1).toLowerCase()
+        } // Capitalize first letter, lowercase the rest
+        placement="top"
+        hasArrow
+        bg="gray.700"
+        color="white"
+        fontSize="xs" // Reduced font size for smaller tooltip
+        p={1} // Reduced padding for smaller tooltip
+        borderRadius="sm"
+      >
+        <IconButton
+          aria-label={suite.title}
+          icon={
+            <Icon
+              as={suite.icon}
+              fontSize={suite.title === "PROJECT SUITE" ? "20px" : "16px"} // Larger size for CgOrganisation
+            />
+          }
+          isRound
+          size="sm"
+          bg={activeSuite === suite.title ? activeBg : "transparent"}
+          color={activeSuite === suite.title ? "black" : "white"}
+          _hover={{
+            bg: activeSuite !== suite.title ? hoverBg : activeBg,
+            color: "black",
+          }}
+          onClick={() => handleSuiteChange(suite.title)}
+          flex="1"
+        />
+      </Tooltip>
+    ))}
+  </HStack>
+)}
       </VStack>
     </Flex>
   );

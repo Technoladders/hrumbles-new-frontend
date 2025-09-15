@@ -216,6 +216,7 @@ export interface Candidate {
   status?: string;
   sub_status?: { id: string; name: string; type: string; color: string; parent_id: string };
   sub_status_id?: string;
+    career_experience?: CareerExperience[]; 
 }
 
 export enum CandidateStatus {
@@ -232,3 +233,10 @@ export enum CandidateStatus {
 }
 
 
+// --- ADD THIS INTERFACE ---
+export interface CareerExperience {
+  company: string;
+  designation: string;
+  start_date: string;
+  end_date: string;
+}

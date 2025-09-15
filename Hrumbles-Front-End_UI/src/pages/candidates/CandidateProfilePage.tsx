@@ -104,10 +104,20 @@ const CandidateProfilePage = () => {
                 <h1 className="text-3xl font-bold text-gray-900">{candidate.candidate_name}</h1>
                 <p className="text-lg text-gray-600">{candidate.suggested_title}</p>
                 {candidate.linkedin_url && (
-                    <a href={candidate.linkedin_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-2">
-                        <Linkedin size={16} /> LinkedIn Profile
-                    </a>
-                )}
+  <a
+    href={
+      candidate.linkedin_url.startsWith("http")
+        ? candidate.linkedin_url
+        : `https://${candidate.linkedin_url}`
+    }
+    target="_blank"
+    rel="noreferrer"
+    className="text-blue-600 hover:underline text-sm flex items-center gap-2"
+  >
+    <Linkedin size={16} /> LinkedIn Profile
+  </a>
+)}
+
                 <div className="pt-2 space-y-2 text-sm text-gray-700">
                     <div className="flex items-center gap-3">
                         <Mail size={16} className="text-gray-500"/>

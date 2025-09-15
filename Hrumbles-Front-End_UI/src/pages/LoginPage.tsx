@@ -101,12 +101,13 @@ const LoginPage: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
+    const [employeeData, setEmployeeData] = useState<{ first_name: string; last_name: string } | null>(null);
 
-  const fetchUserDetails = async (userId: string): Promise<UserDetails> => {
+    const fetchUserDetails = async (userId: string): Promise<UserDetails> => {
     try {
       const { data: employeeData, error: employeeError } = await supabase
         .from("hr_employees")
-        .select("role_id, department_id, organization_id, status")
+        .select("role_id, department_id, organization_id, status, first_name, last_name")
         .eq("id", userId)
         .single();
 
@@ -115,6 +116,7 @@ const LoginPage: FC = () => {
       }
       
       console.log("[DEBUG] Raw employee data from DB:", employeeData);
+      setEmployeeData(employeeData);
 
       let roleName: string | null = null;
       let departmentName: string | null = null;
@@ -138,6 +140,8 @@ const LoginPage: FC = () => {
         departmentName: departmentName,
         organizationId: employeeData.organization_id,
         status: employeeData.status,
+        first_name: employeeData.first_name,
+        last_name: employeeData.last_name,
       };
 
     } catch (error: any) {
@@ -145,6 +149,127 @@ const LoginPage: FC = () => {
       return { role: null, departmentName: null, organizationId: null, status: null };
     }
   };
+
+        const getIpAndLocationDetails = async () => {
+    try {
+      // Using ipapi.co as it supports HTTPS on its free tier
+      const response = await fetch('https://ipapi.co/json/');
+      if (!response.ok) {
+        throw new Error('Failed to fetch IP details from API');
+      }
+      const data = await response.json();
+      return {
+        ip: data.ip,
+        city: data.city,
+        region: data.region,
+        country: data.country_name,
+      };
+    } catch (error) {
+      console.error("Could not fetch IP and location details:", error);
+      // Return default values if the API call fails
+      return {
+        ip: 'Not available',
+        city: 'Not available',
+        region: 'Not available',
+        country: 'Not available',
+      };
+    }
+  };
+  
+
+   const getDeviceLocation = (): Promise<{ latitude: number; longitude: number }> => {
+    return new Promise((resolve, reject) => {
+      // Check if the Geolocation API is supported by the browser
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocation is not supported by this browser."));
+        return;
+      }
+
+      // Request the user's current position
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          // Success: resolve the promise with the coordinates
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+        },
+        (error) => {
+          // Error: The user likely denied permission or location is unavailable
+          let errorMessage = "Could not get device location.";
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = "User denied the request for Geolocation.";
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = "Location information is unavailable.";
+              break;
+            case error.TIMEOUT:
+              errorMessage = "The request to get user location timed out.";
+              break;
+          }
+          reject(new Error(errorMessage));
+        }
+      );
+    });
+  };
+
+    const getIPv6Address = async (): Promise<string> => {
+    try {
+      // This endpoint is ONLY reachable over an IPv6 connection.
+      const response = await fetch('https://api6.ipify.org?format=json');
+      if (!response.ok) {
+        // This will happen if the request is made over IPv4
+        throw new Error('No IPv6 connection detected.');
+      }
+      const data = await response.json();
+      return data.ip;
+    } catch (error) {
+      console.warn("Could not fetch IPv6 address:", error.message);
+      // If the fetch fails, it means the user doesn't have a public IPv6 connection.
+      return 'Not available';
+    }
+  };
+
+  // --- IP & Location Helper Functions ---
+
+  // 1. Specifically gets the IPv4 address.
+  const getIPv4Address = async (): Promise<string> => {
+    try {
+      const response = await fetch('https://api4.ipify.org?format=json');
+      if (!response.ok) throw new Error('No IPv4 connection.');
+      const data = await response.json();
+      return data.ip;
+    } catch (error) {
+      console.warn("Could not fetch IPv4 address:", error.message);
+      return 'Not available';
+    }
+  };
+
+
+
+  // 3. Gets location based on a provided IP address.
+  const getApproximateLocation = async (ipAddress: string) => {
+    // If we don't even have an IP, don't bother trying.
+    if (!ipAddress || ipAddress === 'Not available') {
+        return { city: 'N/A', country: 'N/A' };
+    }
+    try {
+      const response = await fetch(`https://ipapi.co/${ipAddress}/json/`);
+      if (!response.ok) throw new Error('Failed to fetch location from ipapi');
+      const data = await response.json();
+      return {
+        city: data.city || 'N/A',
+        country: data.country_name || 'N/A',
+      };
+    } catch (error) {
+      console.error("Could not fetch location details:", error);
+      return { city: 'N/A', country: 'N/A' };
+    }
+  };
+
+  // 4. Gets precise GPS location (remains the same)
+
 
   const getOrganizationIdBySubdomain = async (subdomain: string | undefined): Promise<string | null> => {
     if (!subdomain) return null;
@@ -157,64 +282,100 @@ const LoginPage: FC = () => {
     return data ? data.id : null;
   };
 
-  const handleLogin = async (): Promise<void> => {
+    // This function runs in the background and does not block the UI
+  const sendLoginNotificationInBackground = async (
+    userDetails: { userEmail: string; organizationId: string | null; firstName: string; lastName: string; }
+  ) => {
+    try {
+      // 1. Fetch IP addresses
+      const ipv4 = await getIPv4Address();
+      const ipv6 = await getIPv6Address();
+
+      // 2. Fetch approximate location based on the reliable IPv4
+      const approxLocation = await getApproximateLocation(ipv4);
+
+      // 3. Try to get precise location, but don't fail if the user denies it
+      let deviceLocation = { latitude: "Not available", longitude: "Not available" };
+      try {
+        const coords = await getDeviceLocation();
+        deviceLocation = { latitude: coords.latitude.toString(), longitude: coords.longitude.toString() };
+      } catch (locationError) {
+        console.warn("Could not get precise device location (this is common).");
+      }
+      
+      // 4. Construct the payload
+      const payload = {
+        userEmail: userDetails.userEmail,
+        organizationId: userDetails.organizationId,
+        firstName: userDetails.firstName,
+        lastName: userDetails.lastName,
+        ipAddress: ipv4, // This is now guaranteed to be IPv4
+        ipv6Address: ipv6,
+        location: `${approxLocation.city}, ${approxLocation.country}`,
+        latitude: deviceLocation.latitude,
+        longitude: deviceLocation.longitude,
+      };
+
+      // 5. Send the request to your backend function
+      await fetch('https://kbpeyfietrwlhwcwqhjw.supabase.co/functions/v1/send-login-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      console.log("Background login notification sent successfully.");
+
+    } catch (error) {
+      // This catch ensures that ANY failure in this process is silent
+      // and only logs to the console, never showing an error to the user.
+      console.error("Failed to send login notification in the background:", error);
+    }
+  };
+
+const handleLogin = async (): Promise<void> => {
     setError(null);
     setIsLoading(true);
     console.log("--- LOGIN PROCESS STARTED ---");
 
     try {
-      console.log(`[1] Reading subdomain from URL: "${organizationSubdomain}"`);
+      // --- CRITICAL PATH START ---
       const subdomainOrgId = await getOrganizationIdBySubdomain(organizationSubdomain);
-      console.log(`[2] Fetched Organization ID for subdomain: "${subdomainOrgId}"`);
+      if (!subdomainOrgId) throw new Error("Invalid organization domain.");
 
-      if (!subdomainOrgId) {
-        throw new Error("Invalid or unrecognized organization domain.");
-      }
-
-      console.log("[3] Attempting to sign in user:", email);
       const { user } = await signIn(email, password);
-      console.log("[4] ✅ User authenticated successfully:", user);
+      console.log("✅ User authenticated successfully");
 
-      console.log("[5] Fetching employee details for user ID:", user.id);
-      const { role, departmentName, organizationId: userOrgId, status } = await fetchUserDetails(user.id);
-      console.log("[6] ✅ Fetched employee details:", { role, departmentName, userOrgId, status });
-
-      // MODIFICATION: Add the new status check
-    console.log(`[7] Verifying user status: "${status}"`);
-    if (status !== 'active') {
-      throw new Error("Your account is not active. Please contact your administrator.");
-    }
-    console.log("[8] ✅ User status is active.");
+      const { role, departmentName, organizationId: userOrgId, status, first_name, last_name } = await fetchUserDetails(user.id);
       
-      if (!userOrgId) {
-        throw new Error("Could not determine the user's organization. Please contact support.");
-      }
+      if (status !== 'active') throw new Error("Your account is not active.");
+      if (userOrgId !== subdomainOrgId) throw new Error("Access Denied. Please log in from your organization's domain.");
+      // --- CRITICAL PATH END ---
 
-      console.log(`[9] Comparing Org IDs -> User's Org ID: "${userOrgId}" vs Subdomain's Org ID: "${subdomainOrgId}"`);
-      if (userOrgId !== subdomainOrgId) {
-        throw new Error("Access Denied. Please log in from your organization's assigned domain.");
-      }
-      
-      console.log("[10] ✅ Organization Match Verified. Proceeding to login.");
+      // --- NON-CRITICAL: FIRE AND FORGET ---
+      // Call the background function WITHOUT 'await'.
+      // This lets the rest of the code run immediately.
+      sendLoginNotificationInBackground({
+        userEmail: email,
+        organizationId: userOrgId,
+        firstName: first_name,
+        lastName: last_name,
+      });
 
+      // Continue with login and navigation immediately
       await dispatch(fetchUserSession()).unwrap();
-
+      
       let navigateTo = "/dashboard";
       if (role === "employee" && departmentName === "Finance") {
         navigateTo = "/finance";
       }
-      // if (ITECH_ORGANIZATION_ID.includes(userOrgId) || userOrgId === ASCENDION_ORGANIZATION_ID) {
-      //   navigateTo = "/jobs";
-      // }
       
-      console.log(`[9] Determining navigation path. Role: "${role}", Department: "${departmentName}". Navigating to: "${navigateTo}"`);
-      console.log("--- LOGIN PROCESS COMPLETED SUCCESSFULLY ---");
+      console.log("--- LOGIN PROCESS COMPLETED ---");
       navigate(navigateTo);
 
     } catch (error: any) {
+      // This catch will now ONLY handle critical login errors (e.g., wrong password)
       console.error("🔴 LOGIN FAILED:", error.message);
       setError(error.message);
-      console.log("--- LOGIN PROCESS HALTED DUE TO ERROR ---");
     } finally {
       setIsLoading(false);
     }

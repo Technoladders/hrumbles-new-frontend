@@ -240,7 +240,7 @@ const MainLayout = () => {
   };
 
   return (
-    <Flex height="100vh" overflow="hidden" bg={colorMode === "dark" ? "gray.800" : "gray.50"}>
+    <Flex height="100vh" overflow="hidden" bg={colorMode === "dark" ? "gray.800" : "#F8F7F7"}>
       {isMobile && isSidebarExpanded && (
         <Box
           position="fixed"
@@ -260,7 +260,7 @@ const MainLayout = () => {
         direction="column" 
         flex="1" 
         ml={{ base: isMobile ? "0" : mainSidebarWidth, md: mainSidebarWidth }}
-        transition="margin-left 0.2s ease-in-out"
+        transition="margin-left 0.1s ease-in-out"
       >
         <Flex
           as="header"
@@ -276,7 +276,7 @@ const MainLayout = () => {
           height="70px"
           bg={colorMode === "dark" ? "base.bgdark" : "white"}
           zIndex={10}
-          transition="width 0.2s ease-in-out"
+          transition="width 0.1s ease-in-out"
           boxShadow="sm"
         >
           <Flex align="center" gap={2}>

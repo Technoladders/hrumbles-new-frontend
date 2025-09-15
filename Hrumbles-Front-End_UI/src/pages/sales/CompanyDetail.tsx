@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useCompanyDetails, useCompanyEmployees } from "@/hooks/use-companies";
+import { useSelector } from 'react-redux';
+import { useQueryClient } from "@tanstack/react-query";
+import { useCompanyDetails, useCompanyEmployees, useFetchCompanyDetails } from "@/hooks/use-companies";
+import { supabase } from "@/integrations/supabase/client";
 
 // --- UI Components & Icons ---
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as ShadcnCardDescription } from "@/components/ui/dialog";
-import { Loader2, ArrowLeft, Edit } from 'lucide-react';
+import { Loader2, ArrowLeft, Edit, RefreshCw } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
 // --- Tab Content & Detail Components ---
@@ -26,7 +29,13 @@ const CompanyDetail = () => {
   const { toast } = useToast();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient(); 
   const companyId = parseInt(id || "0");
+
+   const fetchCompanyDetailsAI = useFetchCompanyDetails();
+  const user = useSelector((state: any) => state.auth.user);
+  const currentUserId = user?.id || null;
+  const [isFetchingAIDetails, setIsFetchingAIDetails] = useState(false);
 
   const { data: company, isLoading, error: companyError, refetch: refetchCompany } = useCompanyDetails(companyId);
   const { data: employees = [], isLoading: isLoadingEmployees, error: employeesError, refetch: refetchEmployees } = useCompanyEmployees(companyId);
@@ -44,6 +53,62 @@ const CompanyDetail = () => {
   const handleDataUpdate = () => {
     refetchCompany();
     refetchEmployees();
+  };
+
+    const handleRefreshAIData = async () => {
+    if (!company?.name) {
+      toast({ title: "Error", description: "Company name is required for AI fetch.", variant: "destructive" });
+      return;
+    }
+    setIsFetchingAIDetails(true);
+    try {
+      const detailsFromAI = await fetchCompanyDetailsAI(company.name);
+      const updatesToApply: Partial<CompanyDetailType> = {};
+
+      // This logic carefully checks for new data before adding it to the update object
+      if (detailsFromAI.name && detailsFromAI.name !== company.name) updatesToApply.name = detailsFromAI.name;
+      if (detailsFromAI.start_date) updatesToApply.start_date = detailsFromAI.start_date;
+      if (detailsFromAI.founded_as) updatesToApply.founded_as = detailsFromAI.founded_as;
+      if (typeof detailsFromAI.employee_count === 'number') updatesToApply.employee_count = detailsFromAI.employee_count;
+      if (detailsFromAI.employee_count_date) updatesToApply.employee_count_date = detailsFromAI.employee_count_date;
+      if (detailsFromAI.address) updatesToApply.address = detailsFromAI.address;
+      if (detailsFromAI.website) updatesToApply.website = detailsFromAI.website;
+      if (detailsFromAI.linkedin) updatesToApply.linkedin = detailsFromAI.linkedin;
+      if (detailsFromAI.industry) updatesToApply.industry = detailsFromAI.industry;
+      if (detailsFromAI.location) updatesToApply.location = detailsFromAI.location;
+      if (detailsFromAI.stage) updatesToApply.stage = detailsFromAI.stage;
+      if (detailsFromAI.about) updatesToApply.about = detailsFromAI.about;
+      if (detailsFromAI.logo_url && typeof detailsFromAI.logo_url === 'string' && detailsFromAI.logo_url.trim() !== '') {
+        updatesToApply.logo_url = detailsFromAI.logo_url;
+      }
+      if (typeof detailsFromAI.revenue === 'string') updatesToApply.revenue = detailsFromAI.revenue;
+      const cashFlowValue = detailsFromAI.cashflow;
+      if (typeof cashFlowValue === 'number') updatesToApply.cashflow = cashFlowValue;
+      if (Array.isArray(detailsFromAI.competitors) && detailsFromAI.competitors.length > 0) updatesToApply.competitors = detailsFromAI.competitors;
+      if (Array.isArray(detailsFromAI.products) && detailsFromAI.products.length > 0) updatesToApply.products = detailsFromAI.products;
+      if (Array.isArray(detailsFromAI.services) && detailsFromAI.services.length > 0) updatesToApply.services = detailsFromAI.services;
+      if (detailsFromAI.key_people === "-" || (Array.isArray(detailsFromAI.key_people) && detailsFromAI.key_people.length > 0)) {
+        updatesToApply.key_people = detailsFromAI.key_people;
+      }
+
+      if (Object.keys(updatesToApply).length > 0) {
+        updatesToApply.updated_by = currentUserId;
+        updatesToApply.updated_at = new Date().toISOString(); 
+        
+        const { error: updateError } = await supabase.from('companies').update(updatesToApply).eq('id', companyId);
+        if (updateError) throw updateError;
+        
+        refetchCompany(); // Use the refetch from your hook
+        queryClient.invalidateQueries({ queryKey: ['companies'] }); // Invalidate the main list
+        toast({ title: "Success", description: "Company details refreshed from AI." });
+      } else {
+        toast({ title: "No New Data", description: "AI did not provide new or different details to update." });
+      }
+    } catch (fetchError: any) {
+      toast({ title: "AI Fetch Error", description: `Operation failed: ${fetchError.message}`, variant: "destructive" });
+    } finally {
+      setIsFetchingAIDetails(false);
+    }
   };
   
   const handleEditEmployeeClick = (employee: CandidateDetail) => {
@@ -95,6 +160,15 @@ const CompanyDetail = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+             <Button
+              variant="outline"
+              onClick={handleRefreshAIData}
+              disabled={isFetchingAIDetails}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${isFetchingAIDetails ? 'animate-spin' : ''}`} />
+              {isFetchingAIDetails ? 'Refreshing...' : 'Refresh AI Data'}
+            </Button>
             <Button variant="outline" onClick={() => setIsCompanyEditDialogOpen(true)}>
               <Edit className="h-4 w-4 mr-2" />Edit Company
             </Button>

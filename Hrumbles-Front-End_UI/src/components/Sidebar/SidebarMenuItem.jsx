@@ -1,7 +1,7 @@
 import { FiUsers, FiBriefcase, FiCheckSquare, FiSettings, FiLogOut, FiList } from "react-icons/fi";
 import { IoCalendarNumberOutline } from "react-icons/io5";
 import { SiAwsorganizations } from "react-icons/si";
-import { MdDashboardCustomize, MdOutlineManageAccounts, MdOutlineEmojiPeople, MdOutlineAccountBalance, MdMoreTime } from "react-icons/md";
+import { MdDashboardCustomize, MdOutlineManageAccounts, MdOutlineEmojiPeople, MdOutlineAccountBalance, MdMoreTime, MdPeopleAlt } from "react-icons/md";
 import { ImProfile } from "react-icons/im";
 import { GoGoal } from "react-icons/go";
 import { AiOutlineProfile } from "react-icons/ai";
@@ -12,9 +12,11 @@ import { VscOrganization } from "react-icons/vsc";
 import { GrDocumentTime } from "react-icons/gr";
 import { LuCalendarPlus, LuUserSearch } from "react-icons/lu";
 import { BsShieldLock, BsShieldCheck } from "react-icons/bs";
-import { FaUserShield, FaProjectDiagram } from 'react-icons/fa';
+import { FaUserShield, FaProjectDiagram, FaUserTie } from 'react-icons/fa';
 import { RiCustomerService2Fill } from 'react-icons/ri';
 import { TbDatabaseSearch } from "react-icons/tb";
+import { LiaBusinessTimeSolid } from "react-icons/lia";
+import { CgOrganisation } from "react-icons/cg";
 
 
 
@@ -89,8 +91,8 @@ const iTechOrgSuperAdminMenu = [
 
 const demoOrgSuperAdminMenu = [
     {
-        title: "Hiring Suite",
-        icon: FaUserShield, // Using the same icon for consistency
+        title: "HIRING SUITE",
+        icon: MdPeopleAlt, // Using the same icon for consistency
         items: [
            { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
   { icon: FiUsers, label: "Employees", path: "/employee" },
@@ -127,14 +129,14 @@ const demoOrgSuperAdminMenu = [
         ],
     },
     {
-        title: "Project Suite",
-        icon: FaProjectDiagram, // Using the same icon for consistency
+        title: "PROJECT SUITE",
+        icon: CgOrganisation, // Using the same icon for consistency
         items: [  { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" }, 
         ],
     },
     {
-        title: "Verification Suite",
+        title: "VERIFICATION SUITE",
         icon: BsShieldCheck, // Using the same icon for consistency
         items: [
             { icon: LuUserSearch, label: "Verification", path: "/all-candidates" },
@@ -144,8 +146,8 @@ const demoOrgSuperAdminMenu = [
 
 const recruitmentFirmOrgSuperAdminMenu = [
     {
-        title: "Hiring Suite",
-        icon: FaUserShield, // Using the same icon for consistency
+        title: "HIRING SUITE",
+        icon: MdPeopleAlt, // Using the same icon for consistency
         items: [
            { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
   { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
@@ -179,14 +181,14 @@ const recruitmentFirmOrgSuperAdminMenu = [
         ],
     },
     {
-        title: "Project Suite",
-        icon: FaProjectDiagram, // Using the same icon for consistency
+        title: "PROJECT SUITE",
+        icon: CgOrganisation, // Using the same icon for consistency
         items: [  { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" }, 
         ],
     },
     {
-        title: "Verification Suite",
+        title: "VERIFICATION SUITE",
         icon: BsShieldCheck, // Using the same icon for consistency
         items: [
             { icon: LuUserSearch, label: "Verification", path: "/all-candidates" },
@@ -196,8 +198,8 @@ const recruitmentFirmOrgSuperAdminMenu = [
 
 const AscendionOrgSuperAdminMenu = [
     {
-        title: "Hiring Suite",
-        icon: FaUserShield, // Using the same icon for consistency
+        title: "HIRING SUITE",
+        icon: MdPeopleAlt, // Using the same icon for consistency
         items: [
            { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
            
@@ -208,7 +210,7 @@ const AscendionOrgSuperAdminMenu = [
         ],
     },
     {
-        title: "Verification Suite",
+        title: "VERIFICATION SUITE",
         icon: BsShieldCheck, // Using the same icon for consistency
         items: [
             { icon: LuUserSearch, label: "Verification", path: "/all-candidates" },
@@ -234,27 +236,27 @@ const hrSuiteItems = orgSuperAdminAllItems.filter(
 // 4. Structure the final menu data with categories AND ICONS
 const categorizedOrgSuperAdminMenu = [
     {
-        title: "Hiring Suite",
-        icon: FaUserShield,
+        title: "HIRING SUITE",
+        icon: MdPeopleAlt,
         items: hrSuiteItems,
     },
     {
-        title: "Project Suite",
-        icon: FaProjectDiagram,
+        title: "PROJECT SUITE",
+        icon: CgOrganisation,
         items: projectSuiteItems,
     },
     {
-        title: "Verification Suite",
+        title: "VERIFICATION SUITE",
         icon: BsShieldCheck,
         items: verificationSuiteItems,
     },
     {
-        title: "Sales Suite",
+        title: "SALES SUITE",
         icon: RiCustomerService2Fill,
         items: salesSuiteItems,
     },
     {
-        title: "Finance Suite",
+        title: "FINANCE SUITE",
         icon: MdOutlineAccountBalance,
         items: financeSuiteItems,
     }
@@ -330,27 +332,27 @@ const createCategorizedAdminMenu = (departmentName) => {
     if (hrItems.length > 0) {
         categorizedMenu.push({
             title: "HR Suite",
-            icon: FaUserShield,
+            icon: MdPeopleAlt,
             items: hrItems,
         });
     }
     if (projectItems.length > 0) {
         categorizedMenu.push({
-            title: "Project Suite",
-            icon: FaProjectDiagram,
+            title: "PROJECT SUITE",
+            icon: CgOrganisation,
             items: projectItems,
         });
     }
     if (salesItems.length > 0) {
         categorizedMenu.push({
-            title: "Sales Suite",
+            title: "SALES SUITE",
             icon: RiCustomerService2Fill,
             items: salesItems,
         });
     }
     if (financeItems.length > 0) {
         categorizedMenu.push({
-            title: "Finance Suite",
+            title: "FINANCE SUITE",
             icon: MdOutlineAccountBalance,
             items: financeItems,
         });
@@ -421,7 +423,7 @@ employee: (departmentName, designationName, userId) => {
       return [
         {
           title: "HR Suite",
-          icon: FaUserShield,
+          icon: MdPeopleAlt,
           // This user gets all core employee items plus the HR-specific items
           items: [
              // Manually order items for the suite view
@@ -431,7 +433,7 @@ employee: (departmentName, designationName, userId) => {
           ],
         },
         {
-          title: "Sales Suite",
+          title: "SALES SUITE",
           icon: RiCustomerService2Fill,
           items: salesSuiteItems,
         }

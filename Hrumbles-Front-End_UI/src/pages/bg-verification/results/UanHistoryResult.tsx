@@ -64,7 +64,7 @@ export const UanHistoryResult = ({ result, meta, candidate }: UanHistoryResultPr
         {history.map((job: Job, i: number) => (
           <div key={i} className="pt-2 first:pt-0">
             <p className="font-bold text-amber-700">{job['Establishment Name'] || 'N/A'}</p>
-            <div className="grid grid-cols-2 gap-x-4 text-sm text-green-800 mt-1">
+            <div className="grid grid-cols-2 gap-x-4  text-green-800 mt-1">
                 <p><strong>Joined:</strong> {formatDate(job.Doj)}</p>
                 <p><strong>Exited:</strong> {formatDate(job.DateOfExitEpf)}</p>
                 <p className="col-span-2"><strong>Member ID:</strong> {job.MemberId || 'N/A'}</p>

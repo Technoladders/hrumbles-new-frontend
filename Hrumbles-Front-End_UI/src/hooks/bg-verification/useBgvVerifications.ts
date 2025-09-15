@@ -78,7 +78,7 @@ export const useBgvVerifications = (candidate: Candidate) => {
         console.log("Grouped results to be set in state:", groupedResults);
       setState(s => ({ ...s, results: groupedResults }));
     }
-  }, [candidate.id]);
+  }, [candidate?.id]);
 
     // --- CHANGE 2: The useEffect now simply calls the function above. ---
   useEffect(() => {
