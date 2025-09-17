@@ -27,12 +27,24 @@ export interface TimeLog {
   workflow_state?: string;
   approval_id?: string | null;
   approval_status?: string | null;
+  break_logs: BreakLog[];
   hr_employees?: {
     id: string;
     name: string;
     department: string;
   } | null;
 }
+
+interface BreakLog {
+  id: string;
+  time_log_id: string;
+  break_start_time: string;   // TIMESTAMPTZ -> string
+  break_end_time: string | null;
+  duration_minutes: number | null;
+  break_type: "lunch" | "coffee" | string; // expand later if needed
+  created_at: string;
+}
+
 
 export interface Employee {
   id: string;

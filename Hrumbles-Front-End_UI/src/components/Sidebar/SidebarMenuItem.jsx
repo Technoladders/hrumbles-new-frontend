@@ -372,7 +372,11 @@ export const menuItemsByRole = {
      { icon: BsShieldCheck, label: "Verifications", path: "/verifications" },
     { icon: FiSettings, label: "Settings", path: "/settings" },
   ],
-organization_superadmin: (organizationId) => {
+organization_superadmin: (organizationId, organization) => {
+
+   if (organization.is_recruitment_firm) {
+      return recruitmentFirmOrgSuperAdminMenu;
+    }
    if (ITECH_ORGANIZATION_ID.includes(organizationId)) {
       return iTechOrgSuperAdminMenu; // Return the simple menu for iTech
     } else if (organizationId === ASCENDION_ORGANIZATION_ID) {
@@ -381,9 +385,7 @@ organization_superadmin: (organizationId) => {
     else if (organizationId === DEMO_ORGANIZATION_ID) {
       return demoOrgSuperAdminMenu; // Return the simple menu for demo
     }
-    else if (RECRUITMENT_FIRM_ID.includes(organizationId)) {
-      return recruitmentFirmOrgSuperAdminMenu;
-    }
+   
     return categorizedOrgSuperAdminMenu; // Return the standard suite menu for everyone else
   },
   admin: (departmentName) => createCategorizedAdminMenu(departmentName), // Use the new categorized function

@@ -376,7 +376,7 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
 
-  const recruitmentStages = ["New", "InReview", "Engaged", "Available", "Offered", "Hired"];
+  const recruitmentStages = ["New Applicants", "InReview", "Engaged", "Available", "Offered", "Hired"];
 
   const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://62.72.51.159:5005";
 
@@ -627,8 +627,8 @@ const { data: clientData } = useQuery({
           location: candidate.location,
           metadata: candidate.metadata,
           skill_ratings: candidate.skillRatings,
-          status: candidate.status || "New",
-          currentStage: candidate.main_status?.name || "New",
+          status: candidate.status || "New Applicant",
+          currentStage: candidate.main_status?.name || "New Applicants",
           createdAt: candidate.created_at,
           hasValidatedResume: candidate.hasValidatedResume || false,
           main_status: candidate.main_status,
@@ -651,9 +651,9 @@ const { data: clientData } = useQuery({
   const setDefaultStatusForCandidate = async (candidateId: string) => {
     try {
       const statuses = await fetchAllStatuses();
-      const newStatus = statuses.find(s => s.name === "New");
+      const newStatus = statuses.find(s => s.name === "New Applicant");
       if (newStatus?.subStatuses?.length) {
-        const defaultSubStatus = newStatus.subStatuses.find(s => s.name === "New Application") || newStatus.subStatuses[0];
+        const defaultSubStatus = newStatus.subStatuses.find(s => s.name === "New Applicant") || newStatus.subStatuses[0];
         
         await updateCandidateStatus(candidateId, defaultSubStatus.id, user?.id);
       }
@@ -1661,7 +1661,7 @@ const handleValidateResume = async (candidateId: string) => {
         <EmptyState onAddCandidate={async () => {
           try {
             const statuses = await fetchAllStatuses();
-            const newStatus = statuses.find(s => s.name === "New");
+            const newStatus = statuses.find(s => s.name === "New Applicant");
             if (newStatus?.subStatuses?.length) {
               await supabase.from("hr_job_candidates").insert({
                 job_id: jobId,

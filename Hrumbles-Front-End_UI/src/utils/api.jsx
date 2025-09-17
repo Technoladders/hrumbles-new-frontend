@@ -218,7 +218,11 @@ export const createOrganizationWithSuperadmin = async (
   lastName,
   orgName,
   roleName,
-  phoneNo
+  phoneNo,
+  subdomain,     
+  roleLimits,   
+  employeeId,   
+  isRecruitmentFirm 
 ) => {
   const user = await getUser();
   if (!user) throw new Error("Auth session missing! Please log in.");
@@ -250,7 +254,11 @@ export const createOrganizationWithSuperadmin = async (
   if (!orgId) {
     const { data: newOrg, error: orgError } = await supabase
       .from("hr_organizations")
-      .insert([{ name: orgName }])
+      .insert([{ 
+        name: orgName, 
+        subdomain: subdomain,
+        role_credit_limits: roleLimits,
+        is_recruitment_firm: isRecruitmentFirm,  }])
       .select("id")
       .single();
 
@@ -266,11 +274,27 @@ export const createOrganizationWithSuperadmin = async (
     first_name: firstName,
     last_name: lastName,
     phone:phoneNo,
-    employee_id: "ASC-001",
+    employee_id: employeeId,
     email: email,
   });
 
   if (profileError) throw profileError;
+
+   // --- START: New Logic to Clone Job Statuses ---
+  if (isRecruitmentFirm) {
+    const TEMPLATE_ORG_ID = '53989f03-bdc9-439a-901c-45b274eff506';
+    const { error: cloneError } = await supabase.rpc('clone_job_statuses', {
+      source_org_id: TEMPLATE_ORG_ID,
+      target_org_id: orgId
+    });
+
+    if (cloneError) {
+      // Log the error but don't block completion of creation
+      console.error("Failed to clone job statuses:", cloneError.message);
+      // Optionally, you could throw the error to notify the user of the partial failure:
+      // throw new Error(`Organization created, but failed to clone job statuses: ${cloneError.message}`);
+    }
+  }
 
   return { user: data.user, organization: orgId };
 };

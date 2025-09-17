@@ -118,7 +118,7 @@ const HomePage = () => {
 
   return (
     <div className="min-h-screen p-8">
-      <MetricsSection employeeId={employeeData.id} department={departmentName} role={role} organizationId={organizationId} />
+      <MetricsSection employeeId={employeeData.id} department={departmentName} role={role} organizationId={organizationId} user={user} />
     </div>
   );
 };

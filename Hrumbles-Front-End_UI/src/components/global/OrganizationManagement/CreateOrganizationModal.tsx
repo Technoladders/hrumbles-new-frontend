@@ -5,7 +5,7 @@ import { useState, useEffect, FC, ChangeEvent } from "react";
 import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
   FormControl, FormLabel, Input, VStack, Button, useToast, NumberInput,
-  NumberInputField, Divider, Heading, Flex, Select
+  NumberInputField, Divider, Heading, Flex, Select, Checkbox
 } from "@chakra-ui/react";
 import { createOrganizationWithSuperadmin, getAvailableRoles } from "../../../utils/api";
 
@@ -31,11 +31,13 @@ const CreateOrganizationModal: FC<CreateOrganizationModalProps> = ({ isOpen, onC
   const [organizationName, setOrganizationName] = useState<string>("");
   const [subdomain, setSubdomain] = useState<string>("");
   const [role, setRole] = useState<string>(""); // State for selected role
+    const [employeeId, setEmployeeId] = useState<string>(""); 
+  const [isRecruitmentFirm, setIsRecruitmentFirm] = useState<boolean>(false);
   const [roles, setRoles] = useState<Role[]>([]);
   const [roleLimits, setRoleLimits] = useState({
     organization_superadmin: 1,
-    admin: 5,
-    employee: 20
+    admin: 0,
+    employee: 0
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const toast = useToast();
@@ -69,7 +71,7 @@ const CreateOrganizationModal: FC<CreateOrganizationModalProps> = ({ isOpen, onC
 
   const handleCreate = async () => {
     // Validate required fields
-    if (!organizationName || !subdomain || !adminDetails.email || !adminDetails.password || !adminDetails.firstName || !adminDetails.lastName || !role) {
+    if (!organizationName || !subdomain || !adminDetails.email || !adminDetails.password || !adminDetails.firstName || !adminDetails.lastName || !role || !employeeId) {
       toast({
         title: "Validation Error",
         description: "Please fill in all required fields, including the role.",
@@ -91,7 +93,9 @@ const CreateOrganizationModal: FC<CreateOrganizationModalProps> = ({ isOpen, onC
         role, // Pass selected role
         phone,
         subdomain,
-        roleLimits
+        roleLimits,
+        employeeId, // Pass employeeId
+        isRecruitmentFirm // Pass isRecruitmentFirm
       );
       toast({
         title: "Organization Created",
@@ -158,13 +162,27 @@ const CreateOrganizationModal: FC<CreateOrganizationModalProps> = ({ isOpen, onC
               </Flex>
             </FormControl>
 
+             <FormControl>
+                <Checkbox 
+                    isChecked={isRecruitmentFirm}
+                    onChange={(e) => setIsRecruitmentFirm(e.target.checked)}
+                >
+                    Is this a Recruitment Firm?
+                </Checkbox>
+            </FormControl>
+
             <Divider my={2} />
             <Heading size="sm" color="gray.600">Superadmin User Details</Heading>
             <Flex gap={4}>
               <FormControl isRequired><FormLabel fontSize="sm">First Name</FormLabel><Input name="firstName" value={adminDetails.firstName} onChange={handleAdminChange} /></FormControl>
               <FormControl isRequired><FormLabel fontSize="sm">Last Name</FormLabel><Input name="lastName" value={adminDetails.lastName} onChange={handleAdminChange} /></FormControl>
             </Flex>
+            <FormControl isRequired>
+                <FormLabel fontSize="sm">Employee ID</FormLabel>
+                <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="e.g., EMP001" />
+              </FormControl>
              <FormControl isRequired><FormLabel fontSize="sm">Email</FormLabel><Input name="email" type="email" value={adminDetails.email} onChange={handleAdminChange} /></FormControl>
+             
             <Flex gap={4}>
               <FormControl isRequired><FormLabel fontSize="sm">Password</FormLabel><Input name="password" type="password" value={adminDetails.password} onChange={handleAdminChange} /></FormControl>
               <FormControl><FormLabel fontSize="sm">Phone Number</FormLabel>

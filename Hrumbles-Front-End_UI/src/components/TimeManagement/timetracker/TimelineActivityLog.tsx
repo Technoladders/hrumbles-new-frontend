@@ -47,7 +47,7 @@ export function TimelineActivityLog({
       {timeLogs.length === 0 ? (
         <TimelineActivityEmpty />
       ) : (
-        <ScrollArea className="h-[400px] pr-4">
+        <ScrollArea className="h-[180px] pr-4">
           <div className="space-y-3">
             {timeLogs.map((log) => (
               <TimelineLogItem

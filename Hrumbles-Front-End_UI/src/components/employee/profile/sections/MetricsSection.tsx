@@ -1,69 +1,86 @@
 import React from "react";
 import TimeTracker from "@/pages/TimeManagement/employee/TimeTracker";
 import { CalendarCard } from "../cards/CalendarCard";
-import { OnboardingTasksCard } from "../cards/OnboardingTasksCard";
-import { UpcomingInterviewsCard } from "../cards/UpcomingInterviewsCard";
 import { CandidateTimelineCard } from "../cards/CandidateTimelineCard";
 import { SubmissionChartCard } from "../cards/SubmissionChartCard";
 import { OnboardingChartCard } from "../cards/OnboardingChartCard";
+import { DashboardHeroCarousel } from "@/components/dashboard/DashboardHeroCarousel";
+import { QuickActionsCard } from "@/components/dashboard/QuickActionsCard";
 
 interface MetricsSectionProps {
   employeeId: string;
   department: string;
-  role: string; // Added role prop
+  role: string;
+  user: any;
   organizationId: string;
 }
 
-export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, department, role, organizationId }) => {
-  console.log("dashboardRole", department, role);
+export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, department, role, organizationId, user }) => {
+  const carouselEmployeeId = role === 'employee' ? employeeId : undefined;
 
-  const isHumanResourceEmployee = department === "Human Resource" && role === "employee";
+  console.log("MetricsSection props:", { employeeId, department, role, organizationId, user });
+
+  // --- START: MODIFIED LOGIC ---
+  // This flag is now more specific. It's true for HR employees,
+  // OR for admins who are NOT in the "Sales & Marketing" department.
+  const showRecruitingWidgets = 
+    (role === 'employee' && department === "Human Resource") ||
+    (role === 'admin' && department !== "Sales & Marketing");
+  // --- END: MODIFIED LOGIC ---
+  
 
   return (
-    <div className="flex flex-col gap-4 h-full">
-      <div className="grid grid-cols-2 gap-4 h-[600px] md:h-[625px] lg:h-[600px]">
-        {/* First Row: TimeTracker and CandidateTimelineCard */}
-        <div className="h-full">
-          <TimeTracker employeeId={employeeId} />
+    <div className="space-y-6">
+      {/* ROW 1: Three-Column Layout for Key Info */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-5">
+        <DashboardHeroCarousel 
+          organizationId={organizationId} 
+          employeeId={carouselEmployeeId}
+          user={user}
+        />
         </div>
-        {!isHumanResourceEmployee && (
+        <div className="lg:col-span-5">
+        <TimeTracker employeeId={employeeId} />
+        </div>
+        {/* Use the new, smarter flag to control the "View Jobs" link */}
+        <div className="lg:col-span-2">
+        <QuickActionsCard showJobsLink={showRecruitingWidgets} />
+        </div>
         
-         <div className="h-full">
-            <CalendarCard employeeId={employeeId} isHumanResourceEmployee={isHumanResourceEmployee} organizationId={organizationId} />
-            </div>
-        )}
-        {isHumanResourceEmployee && (
-          <div className="h-full">
-            <CandidateTimelineCard employeeId={employeeId} />
-          </div>
-        )}
       </div>
-      {isHumanResourceEmployee && (
-        <>
-          <div className="grid grid-cols-2 gap-4 h-full">
-            {/* Second Row: OnboardingTasksCard and UpcomingInterviewsCard */}
-            <div className="h-full">
-              <OnboardingTasksCard employeeId={employeeId} />
-            </div>
-            <div className="h-full">
-            <CalendarCard employeeId={employeeId} isHumanResourceEmployee={isHumanResourceEmployee} organizationId={organizationId} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 h-[300px] md:h-[325px] lg:h-[300px]">
-            {/* Third Row: SubmissionChartCard and OnboardingChartCard */}
-            <div className="h-full">
-              <SubmissionChartCard employeeId={employeeId} />
-            </div>
-            <div className="h-full">
-              <OnboardingChartCard employeeId={employeeId} role={role} />
-            </div>
-          </div>
-          {/* <div className="h-[300px] md:h-[325px] lg:h-[300px]">
-      
-              <UpcomingInterviewsCard employeeId={employeeId} />
 
-          </div> */}
-        </>
+      {/* ROW 2: Two-Column Layout for Main Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Use the new flag to decide if the timeline card should render */}
+        <div className="lg:col-span-1">
+        {showRecruitingWidgets ? (
+          <CandidateTimelineCard employeeId={employeeId} />
+        ) : (
+          // This space is now correctly left blank for Sales Admins,
+          // allowing the layout to remain balanced. It could be used
+          // for a future "Sales Pipeline" card.
+          <div /> 
+        )}
+        </div>
+        <div className="lg:col-span-2">
+        <CalendarCard 
+          employeeId={employeeId} 
+          // This prop also uses the new flag to control interview visibility
+          isHumanResourceEmployee={showRecruitingWidgets}
+          role={role} 
+          organizationId={organizationId}
+        />
+        </div>
+      </div>
+      
+      {/* ROW 3: Conditional Charts for HR/Admins */}
+      {/* The charts will also correctly hide based on the new flag */}
+      {showRecruitingWidgets && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <SubmissionChartCard employeeId={employeeId} role={role} />
+          <OnboardingChartCard employeeId={employeeId} role={role} />
+        </div>
       )}
     </div>
   );

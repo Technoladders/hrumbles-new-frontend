@@ -7,7 +7,7 @@ export const fetchActiveTimeLog = async (employeeId: string): Promise<TimeLog | 
     // Remove the project relationship from the query since it's causing errors
     const { data, error } = await supabase
       .from('time_logs')
-      .select('*')
+      .select('*, break_logs(*)')
       .eq('employee_id', employeeId)
       .is('clock_out_time', null)
       .single();
@@ -38,7 +38,17 @@ export const fetchActiveTimeLog = async (employeeId: string): Promise<TimeLog | 
         clarification_status: data.clarification_status || null,
         clarification_response: data.clarification_response || null,
         clarification_submitted_at: data.clarification_submitted_at || null,
-        total_working_hours: data.total_working_hours || null
+        total_working_hours: data.total_working_hours || null,
+
+       break_logs: (data.break_logs || []).map((b: any) => ({
+          id: b.id,
+          time_log_id: b.time_log_id,
+          break_start_time: b.break_start_time,
+          break_end_time: b.break_end_time,
+          duration_minutes: b.duration_minutes,
+          break_type: b.break_type,
+          created_at: b.created_at,
+        })),
       };
       
       return typedData;

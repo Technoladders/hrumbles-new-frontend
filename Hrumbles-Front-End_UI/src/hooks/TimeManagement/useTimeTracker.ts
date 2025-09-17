@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 
 import { useTimeTrackerBaseState } from "./timeTracker/useTimeTrackerBaseState";
 import { useTimeTrackerData } from "./timeTracker/useTimeTrackerData";
@@ -8,10 +9,15 @@ import { useEmployeeLeaves } from "./useEmployeeLeaves";
 import { hasGracePeriodEnded, isWithinGracePeriod } from "@/utils/timeTrackerUtils";
 import { autoTerminateTimeLog } from "@/api/timeTracker";
 import { useTimeTrackerMonitoring } from "./timeTracker/useTimeTrackerMonitoring";
+import { formatTime } from "@/utils/timeFormatters"; 
 
 export const useTimeTracker = (employeeId: string) => {
   const baseState = useTimeTrackerBaseState();
   const {
+     isOnBreak,
+    currentBreakLog,
+    setIsOnBreak,
+    setCurrentBreakLog,
     isTracking,
     notes,
     timeLogs,
@@ -34,7 +40,12 @@ export const useTimeTracker = (employeeId: string) => {
     setElapsedSeconds,
     time,
     setTime
-  } = useTimer(isTracking);
+  } = useTimer(isTracking && !isOnBreak);
+
+  const {
+    time: breakTime,
+    setElapsedSeconds: setBreakElapsedSeconds
+  } = useTimer(isOnBreak);
 
   const {
     title,
@@ -46,7 +57,7 @@ export const useTimeTracker = (employeeId: string) => {
     prepareClockInData
   } = useProjectTimeData();
 
-  const { leaveDays, isLeaveDay } = useEmployeeLeaves(employeeId);
+  const { isLeaveDay } = useEmployeeLeaves(employeeId);
 
   const handleAutoTerminate = async () => {
     if (!currentTimeLog) return;
@@ -60,6 +71,8 @@ export const useTimeTracker = (employeeId: string) => {
   const { checkForActiveTimeLog, loadTimeLogs } = useTimeTrackerData(
     employeeId,
     {
+      setIsOnBreak,
+      setCurrentBreakLog,
       isLoading,
       lastEmployeeId,
       setIsLoading,
@@ -85,9 +98,15 @@ export const useTimeTracker = (employeeId: string) => {
     handleAutoTerminate
   );
 
-  const { handleClockIn, handleClockOut } = useTimeTrackerOperations(
+  const { handleClockIn, handleClockOut, handleStartBreak, handleEndBreak  } = useTimeTrackerOperations(
     employeeId,
     {
+      setElapsedSeconds,
+      setTime,
+        isOnBreak,
+      currentBreakLog,
+      setIsOnBreak,
+      setCurrentBreakLog,
       notes,
       currentTimeLog,
       resetState,
@@ -99,6 +118,17 @@ export const useTimeTracker = (employeeId: string) => {
       prepareClockInData
     }
   );
+
+  // --- NEW: Effect to calculate ongoing break duration on load ---
+  useEffect(() => {
+    if (isOnBreak && currentBreakLog?.break_start_time) {
+      const breakStartTime = new Date(currentBreakLog.break_start_time);
+      const now = new Date();
+      const diffSeconds = Math.floor((now.getTime() - breakStartTime.getTime()) / 1000);
+      setBreakElapsedSeconds(diffSeconds);
+    }
+  }, [isOnBreak, currentBreakLog, setBreakElapsedSeconds]);
+
 
   return {
     isTracking,
@@ -116,6 +146,10 @@ export const useTimeTracker = (employeeId: string) => {
     inGracePeriod,
     handleClockIn,
     handleClockOut,
+    isOnBreak,
+    breakTime,
+    handleStartBreak,
+    handleEndBreak,
     loadTimeLogs
   };
 };

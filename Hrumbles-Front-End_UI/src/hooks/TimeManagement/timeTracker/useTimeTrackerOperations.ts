@@ -1,5 +1,6 @@
 
-import { clockIn, clockOut } from "@/api/timeTracker";
+import { clockIn, clockOut, startBreak, endBreak } from "@/api/timeTracker";
+import { formatTime } from "@/utils/timeFormatters";
 
 export const useTimeTrackerOperations = (
   employeeId: string,
@@ -12,7 +13,12 @@ export const useTimeTrackerOperations = (
     setIsTracking,
     elapsedSeconds,
     inGracePeriod,
-    prepareClockInData
+    prepareClockInData,
+     setElapsedSeconds,
+    setTime,
+    setIsOnBreak,
+    setCurrentBreakLog,
+    currentBreakLog
   }: any
 ) => {
   const handleClockIn = async () => {
@@ -40,11 +46,39 @@ export const useTimeTrackerOperations = (
     if (success) {
       resetState();
       loadTimeLogs();
+      if (setElapsedSeconds && setTime) {
+        setElapsedSeconds(0);
+        setTime(formatTime(0));
+      }
+    }
+  };
+
+  // --- NEW: handleStartBreak ---
+  const handleStartBreak = async (breakType: 'lunch' | 'coffee') => {
+    if (!currentTimeLog) return;
+    const newBreakLog = await startBreak(currentTimeLog.id, breakType);
+    if (newBreakLog) {
+      setIsOnBreak(true);
+      setCurrentBreakLog(newBreakLog);
+      loadTimeLogs(); // Refresh to show the new break in the log
+    }
+  };
+
+  // --- NEW: handleEndBreak ---
+  const handleEndBreak = async () => {
+    if (!currentBreakLog) return;
+    const success = await endBreak(currentBreakLog.id);
+    if (success) {
+      setIsOnBreak(false);
+      setCurrentBreakLog(null);
+      loadTimeLogs(); // Refresh to get the end time and duration
     }
   };
 
   return {
     handleClockIn,
-    handleClockOut
+    handleClockOut,
+    handleStartBreak, 
+    handleEndBreak
   };
 };

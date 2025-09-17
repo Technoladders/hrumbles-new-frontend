@@ -10,12 +10,16 @@ export const useTimeTrackerBaseState = () => {
   const [inGracePeriod, setInGracePeriod] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [lastEmployeeId, setLastEmployeeId] = useState<string>('');
+    const [isOnBreak, setIsOnBreak] = useState(false);
+  const [currentBreakLog, setCurrentBreakLog] = useState<any | null>(null);
 
   const resetState = () => {
     setIsTracking(false);
     setNotes("");
     setCurrentTimeLog(null);
     setInGracePeriod(false);
+    setIsOnBreak(false);
+    setCurrentBreakLog(null);
   };
 
   return {
@@ -33,6 +37,10 @@ export const useTimeTrackerBaseState = () => {
     setInGracePeriod,
     setIsLoading,
     setLastEmployeeId,
+    isOnBreak,
+    currentBreakLog,
+    setIsOnBreak,
+    setCurrentBreakLog,
     resetState
   };
 };

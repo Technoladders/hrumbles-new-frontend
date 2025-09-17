@@ -3,6 +3,17 @@ import { TimeLog } from "@/types/time-tracker-types";
 import { fetchActiveTimeLog } from "./activeTimeLogAPI";
 import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
 
+interface BreakLog {
+  id: string;
+  time_log_id: string;
+  break_start_time: string;   // TIMESTAMPTZ -> string
+  break_end_time: string | null;
+  duration_minutes: number | null;
+  break_type: "lunch" | "coffee" | string; // expand later if needed
+  created_at: string;
+}
+
+
 export const fetchHrProjectEmployees = async (employeeId: string): Promise<any[]> => {
   try {
     const { data, error } = await supabase
@@ -117,7 +128,7 @@ export const fetchTimeLogs = async (employeeId: string): Promise<TimeLog[]> => {
   try {
     const { data, error } = await supabase
       .from('time_logs')
-      .select('*')
+      .select('*, break_logs(*)')
       .eq('employee_id', employeeId)
       .order('date', { ascending: false })
       .order('clock_in_time', { ascending: false });
@@ -147,7 +158,17 @@ export const fetchTimeLogs = async (employeeId: string): Promise<TimeLog[]> => {
         clarification_status: item.clarification_status || null,
         clarification_response: item.clarification_response || null,
         clarification_submitted_at: item.clarification_submitted_at || null,
-        total_working_hours: item.total_working_hours || null
+        total_working_hours: item.total_working_hours || null,
+
+         break_logs: (item.break_logs || []).map((b: any) => ({
+      id: b.id,
+      time_log_id: b.time_log_id,
+      break_start_time: b.break_start_time,
+      break_end_time: b.break_end_time,
+      duration_minutes: b.duration_minutes,
+      break_type: b.break_type,
+      created_at: b.created_at,
+    })),
       };
     });
     
@@ -245,3 +266,48 @@ export const submitClarificationResponse = async (
   }
 };
 // 
+
+// --- NEW FUNCTION: startBreak ---
+export const startBreak = async (timeLogId: string, breakType: 'lunch' | 'coffee'): Promise<any | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('break_logs')
+      .insert({ time_log_id: timeLogId, break_type: breakType })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error starting break:', error);
+    return null;
+  }
+};
+
+// --- NEW FUNCTION: endBreak ---
+export const endBreak = async (breakLogId: string): Promise<boolean> => {
+  try {
+    // First, get the break start time to calculate duration
+    const { data: breakData, error: fetchError } = await supabase
+      .from('break_logs')
+      .select('break_start_time')
+      .eq('id', breakLogId)
+      .single();
+
+    if (fetchError || !breakData) throw fetchError || new Error("Break not found");
+
+    const startTime = new Date(breakData.break_start_time);
+    const endTime = new Date();
+    const durationMinutes = Math.floor((endTime.getTime() - startTime.getTime()) / (1000 * 60));
+
+    const { error } = await supabase
+      .from('break_logs')
+      .update({ break_end_time: endTime.toISOString(), duration_minutes: durationMinutes })
+      .eq('id', breakLogId);
+    
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Error ending break:', error);
+    return false;
+  }
+};

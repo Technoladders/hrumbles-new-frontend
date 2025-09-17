@@ -114,7 +114,7 @@ export interface CandidateData {
 export const mapDbCandidateToData = (candidate: HrJobCandidate): CandidateData => {
   console.log("Candidate from DB:", candidate); // Debug log
 
-  const rawStatus = candidate.status || "New";
+  const rawStatus = candidate.status || "New Applicant";
   const cleanedStatus = rawStatus.replace(/'::text$/, "") as CandidateStatus;
 
   // Parse skills from JSON strings to an array of skill names

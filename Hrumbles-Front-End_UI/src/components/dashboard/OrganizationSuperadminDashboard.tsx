@@ -445,6 +445,9 @@ const AscendionDashboard = () => {
 // --- Main Component acting as a router ---
 function OrganizationSuperadminDashboard() {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
+  const [organizationDetails, setOrganizationDetails] = useState<{ is_recruitment_firm: boolean } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
 
    const ASCENDION_ORG_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
 
@@ -457,7 +460,40 @@ function OrganizationSuperadminDashboard() {
     "96593f3f-59fa-4805-bc84-bbec17ed964e"
   ];
 
-  if (!organizationId) {
+  // --- START: New useEffect to fetch the organization's properties ---
+  useEffect(() => {
+    if (!organizationId) {
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchOrganizationDetails = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('hr_organizations')
+          .select('is_recruitment_firm')
+          .eq('id', organizationId)
+          .single();
+
+        if (error) throw error;
+        
+        setOrganizationDetails(data);
+      } catch (error) {
+        console.error("Error fetching organization details:", error);
+        setOrganizationDetails(null); // Set to null on error
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchOrganizationDetails();
+  }, [organizationId]); // Rerun this effect if the organizationId changes
+  // --- END: New useEffect ---
+
+  
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
@@ -468,6 +504,10 @@ function OrganizationSuperadminDashboard() {
   if (organizationId === ASCENDION_ORG_ID) {
     return <AscendionDashboard />;
   } 
+
+    if (organizationDetails?.is_recruitment_firm) {
+    return <HiringSuiteDashboard />;
+  }
   
   // Then it checks for the other Hiring Suite orgs.
   if (ITECH_HIRING_SUITE_ORGS.includes(organizationId)) {

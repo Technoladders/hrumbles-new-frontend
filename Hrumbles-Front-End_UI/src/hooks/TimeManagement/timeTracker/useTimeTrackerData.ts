@@ -19,7 +19,9 @@ export const useTimeTrackerData = (
     setNotes,
     setInGracePeriod,
     setTimeLogs,
-    handleAutoTerminate
+    handleAutoTerminate,
+    setIsOnBreak,
+    setCurrentBreakLog,
   }: any
 ) => {
   const checkForActiveTimeLog = async () => {
@@ -31,12 +33,43 @@ export const useTimeTrackerData = (
     if (activeLog) {
       setCurrentTimeLog(activeLog);
       setIsTracking(true);
+      
       const startTime = new Date(activeLog.clock_in_time);
       const currentTime = new Date();
-      const diffSeconds = Math.floor((currentTime.getTime() - startTime.getTime()) / 1000);
-      setElapsedSeconds(diffSeconds);
-      setTime(formatTime(diffSeconds));
+
+      // This is the new logic that correctly calculates work time by subtracting breaks
+      let totalBreakSeconds = 0;
+      let activeBreakLog = null;
+
+      (activeLog.break_logs || []).forEach(breakLog => {
+        if (breakLog.break_end_time) {
+          // Add duration of completed breaks
+          totalBreakSeconds += (breakLog.duration_minutes || 0) * 60;
+        } else {
+          // This is the currently active break
+          activeBreakLog = breakLog;
+          const breakStartTime = new Date(breakLog.break_start_time);
+          // Add its duration from its start until now
+          totalBreakSeconds += Math.floor((currentTime.getTime() - breakStartTime.getTime()) / 1000);
+        }
+      });
+
+      const totalElapsedSecondsSinceClockIn = Math.floor((currentTime.getTime() - startTime.getTime()) / 1000);
+      
+      // Calculate the actual work time by subtracting all break time
+      const actualWorkSeconds = totalElapsedSecondsSinceClockIn - totalBreakSeconds;
+
+      // Initialize the main timer with the corrected work duration
+      setElapsedSeconds(actualWorkSeconds);
+      setTime(formatTime(actualWorkSeconds));
+
       setNotes(activeLog.notes || "");
+      
+      // Restore the "on break" state if an active break was found
+      if (activeBreakLog) {
+        setIsOnBreak(true);
+        setCurrentBreakLog(activeBreakLog);
+      }
       
       if (hasGracePeriodEnded(activeLog.clock_in_time)) {
         handleAutoTerminate();

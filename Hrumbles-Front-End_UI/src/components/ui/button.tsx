@@ -21,6 +21,8 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         copyicon:
         " text-secondary-foreground hover:bg-secondary hover:purple-text-color",
+        copyicon1:
+        " text-white hover:bg-secondary hover:purple-text-color",
         resume:
         "purple-gradient text-white cursor-default",
         resume1:

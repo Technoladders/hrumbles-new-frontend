@@ -109,6 +109,10 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const { role, user } = useSelector((state) => state.auth);
   const organizationId = useSelector((state) => state.auth.organization_id);
 
+    const [organizationDetails, setOrganizationDetails] = useState(null);
+
+    console.log("organizationDetails", organizationDetails);
+
   const [departmentName, setDepartmentName] = useState("Unknown Department");
   const [designationName, setDesignationName] = useState("Unknown Designation"); // New state for designation
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -127,13 +131,41 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
 
   console.log("designatookkmj", designationName);
 
+   // --- START: New useEffect to fetch organization details ---
+  useEffect(() => {
+    const fetchOrganizationDetails = async () => {
+      // Only run this fetch if the user is an org superadmin and has an org ID
+      if (role === 'organization_superadmin' && organizationId) {
+        try {
+          const { data, error } = await supabase
+            .from('hr_organizations')
+            .select('id, is_recruitment_firm') // Select only the needed fields
+            .eq('id', organizationId)
+            .single();
+
+          if (error) {
+            throw error;
+          }
+          
+          setOrganizationDetails(data);
+        } catch (error) {
+          console.error("Error fetching organization details:", error.message);
+          setOrganizationDetails(null); // Reset on error to prevent crashes
+        }
+      }
+    };
+
+    fetchOrganizationDetails();
+  }, [role, organizationId]); // Re-run if role or organizationId changes
+  // --- END: New useEffect ---
+
   const menuConfig = (() => {
     const menuSource = menuItemsByRole[role];
     if (!menuSource) return [];
 
     switch (role) {
       case 'organization_superadmin':
-        return menuSource(organizationId); // Pass the organizationId
+       return organizationDetails ? menuSource(organizationId ,organizationDetails) : [];
       case 'admin':
         return menuSource(departmentName);
       case 'employee':
@@ -373,10 +405,28 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
             bg="#7B43F1"
           >
             {(isExpanded ? menuConfig : menuConfig.filter(s => s.title === activeSuite)).map((suite) => (
-              <Tooltip key={suite.title} label={suite.title} placement="top">
+              <Tooltip
+        key={suite.title}
+        label={
+          suite.title.charAt(0).toUpperCase() +
+          suite.title.slice(1).toLowerCase()
+        }
+        placement="top"
+        hasArrow
+        bg="gray.700"
+        color="white"
+        fontSize="xs"
+        p={1}
+        borderRadius="sm"
+      >
                 <IconButton
                   aria-label={suite.title}
-                  icon={<Icon as={suite.icon} fontSize="16px" />}
+                   icon={
+            <Icon
+              as={suite.icon}
+              fontSize={suite.title === "PROJECT SUITE" ? "20px" : "16px"}
+            />
+          }
                   isRound
                   size="sm"
                   bg={activeSuite === suite.title ? activeBg : 'transparent'}
