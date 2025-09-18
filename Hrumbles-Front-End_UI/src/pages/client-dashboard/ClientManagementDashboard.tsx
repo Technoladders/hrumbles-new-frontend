@@ -19,13 +19,12 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { Briefcase, ChevronLeft, ChevronRight, Eye, Edit, Trash2, Loader2, Plus, ReceiptIndianRupee, TrendingUp, Search, UserCheck2 } from "lucide-react";
 
 // --- Charts ---
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, PieChart, Pie, Cell } from "recharts";
+import { ResponsiveContainer, BarChart, RadialBarChart, Bar, ComposedChart, Line, Area, ScatterChart, Scatter, ErrorBar, LabelList, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,RadialBar, Legend, PieChart, Pie, Cell } from "recharts";
 
 // --- State Management & Dialogs ---
 import { useSelector } from "react-redux";
 import AddClientDialog from "@/components/Client/AddClientDialog";
 
-// --- Constants ---
 // --- Constants ---
 const STATUS_CONFIG = {
   default: {
@@ -43,7 +42,8 @@ const STATUS_CONFIG = {
 };
 const DEMO_ORGANIZATION_ID = '53989f03-bdc9-439a-901c-45b274eff506';
 const USD_TO_INR_RATE = 84;
-const DONUT_CHART_COLORS = ['#4f46e5', '#818cf8', '#a5b4fc'];
+// 🚨 Updated colors to match the target image: purple, orange, green
+const DONUT_CHART_COLORS = ['#8854D2', '#F79B0A', '#10B981']; 
 const STATUS_CHART_COLORS = ['#A74BC8', '#ef4444', '#f59e0b'];
 
 // --- Type Definitions / Interfaces ---
@@ -59,7 +59,6 @@ interface Employee {
     billing_type: string; 
     salary_type: string; 
     salary_currency: string; 
-    // ADD THESE TWO LINES
     working_hours?: number;
     working_days_config?: 'all_days' | 'weekdays_only' | 'saturday_working';
 }
@@ -68,17 +67,26 @@ interface TimeLog { id: string; employee_id: string; date: string; project_time_
 interface Metrics { totalRevenue: number; totalProfit: number; totalClients: number; activeClients: number; }
 
 // --- Reusable Styled Components ---
-const KpiCard = ({ title, value, icon }: { title: string; value: string; icon: React.ReactNode; }) => (
-    <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+// --- Reusable Styled Components (Updated for new design) ---
+const KpiCard = ({ title, value, icon, bgColor, iconColor }) => (
+    <Card className={`shadow-md border-2 border-transparent ${bgColor} transition-shadow duration-300`}>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500">{title}</CardTitle>
-            {icon}
+            <CardTitle className="text-sm font-medium text-gray-700">{title}</CardTitle>
+            <div className={`p-2 rounded-full ${iconColor}`}>{icon}</div>
         </CardHeader>
         <CardContent>
-            <div className="text-3xl font-bold text-gray-800">{value}</div>
+            <div className="text-3xl font-bold text-gray-900">{value}</div>
         </CardContent>
     </Card>
 );
+
+// New color palette for the KPI cards
+const KPI_CARD_COLORS = [
+    { bg: 'bg-gradient-to-br from-teal-50 to-indigo-100', icon: 'text-indigo-600', iconBg: 'bg-indigo-200' },
+    { bg: 'bg-gradient-to-br from-green-50 to-teal-100', icon: 'text-teal-600', iconBg: 'bg-teal-200' },
+    { bg: 'bg-gradient-to-br from-yellow-50 to-orange-100', icon: 'text-orange-600', iconBg: 'bg-orange-200' },
+    { bg: 'bg-gradient-to-br from-pink-50 to-red-100', icon: 'text-red-600', iconBg: 'bg-red-200' },
+];
 
 const ClientManagementDashboard = () => {
     // --- State Management ---
@@ -102,7 +110,7 @@ const ClientManagementDashboard = () => {
     const { toast } = useToast();
     const organization_id = useSelector((state: any) => state.auth.organization_id);
 
-        const statusIds = useMemo(() => {
+    const statusIds = useMemo(() => {
         return organization_id === DEMO_ORGANIZATION_ID ? STATUS_CONFIG.demo : STATUS_CONFIG.default;
     }, [organization_id]);
 
@@ -230,10 +238,10 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
             setClients(clientsData);
 
             const { data: jobsData } = await supabase.from("hr_jobs").select("*");
-           const { data: candidatesData } = await supabase.from("hr_job_candidates")
-                .select(`*, hr_jobs!hr_job_candidates_job_id_fkey(*)`)
-                .or(`main_status_id.eq.${statusIds.JOINED_STATUS_ID},main_status_id.eq.${statusIds.OFFERED_STATUS_ID}`)
-                .in("sub_status_id", [statusIds.JOINED_SUB_STATUS_ID, statusIds.OFFER_ISSUED_SUB_STATUS_ID]);
+            const { data: candidatesData } = await supabase.from("hr_job_candidates")
+                 .select(`*, hr_jobs!hr_job_candidates_job_id_fkey(*)`)
+                 .or(`main_status_id.eq.${statusIds.JOINED_STATUS_ID},main_status_id.eq.${statusIds.OFFERED_STATUS_ID}`)
+                 .in("sub_status_id", [statusIds.JOINED_SUB_STATUS_ID, statusIds.OFFER_ISSUED_SUB_STATUS_ID]);
             const { data: employeesData } = await supabase.from("hr_project_employees").select("*");
             const { data: timeLogs } = await supabase.from("time_logs").select("*").eq("is_approved", true);
 
@@ -373,6 +381,8 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
             setClientToDelete(null);
         }
     };
+
+    
     const handleItemsPerPageChange = (value: string) => { setItemsPerPage(Number(value)); setCurrentPage(1); };
     const renderPagination = () => (
         <div className="flex flex-col items-center gap-4 mt-4 px-6 pb-4 sm:flex-row sm:justify-between">
@@ -399,22 +409,20 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
         </div>
     );
 
-    // --- Add this new useMemo hook with your other derived data hooks ---
-const clientStatusDistribution = useMemo(() => {
-    const distribution = { active: 0, inactive: 0, pending: 0 };
-    clients.forEach(client => {
-        if (client.status === 'active') distribution.active++;
-        else if (client.status === 'inactive') distribution.inactive++;
-        else if (client.status === 'pending') distribution.pending++;
-    });
-    return [
-        { name: 'Active', value: distribution.active },
-        { name: 'Inactive', value: distribution.inactive },
-        { name: 'Pending', value: distribution.pending },
-    ].filter(item => item.value > 0);
-}, [clients]);
+    const clientStatusDistribution = useMemo(() => {
+        const distribution = { active: 0, inactive: 0, pending: 0 };
+        clients.forEach(client => {
+            if (client.status === 'active') distribution.active++;
+            else if (client.status === 'inactive') distribution.inactive++;
+            else if (client.status === 'pending') distribution.pending++;
+        });
+        return [
+            { name: 'Active', value: distribution.active },
+            { name: 'Inactive', value: distribution.inactive },
+            { name: 'Pending', value: distribution.pending },
+        ].filter(item => item.value > 0);
+    }, [clients]);
 
-        // --- Derived Data for Top 10 Chart ---
     const chartData = useMemo(() => {
         return [...clientFinancials]
             .filter(c => c.revenue_inr > 0)
@@ -422,13 +430,44 @@ const clientStatusDistribution = useMemo(() => {
             .slice(0, 10);
     }, [clientFinancials]);
     
-    // --- Loading State Check ---
+    interface CustomLegendProps {
+      payload?: Array<{
+        value: string;
+        payload: {
+          name: string;
+          value: number;
+          fill: string;
+          percent: number;
+        };
+      }>;
+    }
+
+    const CustomLegend = ({ payload }: CustomLegendProps) => {
+      if (!payload) return null;
+
+      return (
+        <div className="flex flex-col justify-center h-full space-y-4">
+          {payload.map((entry, index) => (
+            <div key={`item-${index}`} className="flex items-center text-sm">
+              <div
+                className="w-3 h-3 rounded-full mr-3 flex-shrink-0"
+                style={{ backgroundColor: entry.payload.fill }}
+              />
+              <div className="flex justify-between items-center w-full">
+                <span className="text-gray-600">{entry.value}</span>
+                <span className="font-semibold text-gray-800">
+                  {`${(entry.payload.percent * 100).toFixed(0)}%`}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    };
+
     if (loading) {
         return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-indigo-600" /></div>;
     }
-
-
-
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-6 md:p-8">
@@ -446,195 +485,553 @@ const clientStatusDistribution = useMemo(() => {
                 </div>
 
                 {/* KPI Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <KpiCard title="Total Revenue" value={formatCurrency(metrics.totalRevenue)} icon={<ReceiptIndianRupee className="h-5 w-5 text-gray-400" />} />
-                    <KpiCard title="Total Profit" value={formatCurrency(metrics.totalProfit)} icon={<TrendingUp className="h-5 w-5 text-gray-400" />} />
-                    <KpiCard title="Total Clients" value={metrics.totalClients.toString()} icon={<Briefcase className="h-5 w-5 text-gray-400" />} />
-                    <KpiCard title="Active Clients" value={metrics.activeClients.toString()} icon={<UserCheck2 className="h-5 w-5 text-gray-400" />} />
-                </div>
-
+                {/* KPI Cards */}
+               {/* KPI Cards */}
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+    <KpiCard
+        title="Total Revenue"
+        value={formatCurrency(metrics.totalRevenue)}
+        icon={<ReceiptIndianRupee className="h-5 w-5" />}
+        bgColor={KPI_CARD_COLORS[0].bg}
+        iconColor={KPI_CARD_COLORS[0].icon}
+    />
+    <KpiCard
+        title="Total Profit"
+        value={formatCurrency(metrics.totalProfit)}
+        icon={<TrendingUp className="h-5 w-5" />}
+        bgColor={KPI_CARD_COLORS[1].bg}
+        iconColor={KPI_CARD_COLORS[1].icon}
+    />
+    <KpiCard
+        title="Total Clients"
+        value={metrics.totalClients.toString()}
+        icon={<Briefcase className="h-5 w-5" />}
+        bgColor={KPI_CARD_COLORS[2].bg}
+        iconColor={KPI_CARD_COLORS[2].icon}
+    />
+    <KpiCard
+        title="Active Clients"
+        value={metrics.activeClients.toString()}
+        icon={<UserCheck2 className="h-5 w-5" />}
+        bgColor={KPI_CARD_COLORS[3].bg}
+        iconColor={KPI_CARD_COLORS[3].icon}
+    />
+</div>
                 {/* Main Dashboard Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                    {/* Left Side: Top 10 Clients Chart */}
-                    <Card className="lg:col-span-2 shadow-sm">
-                        <CardHeader>
-                            <CardTitle>Top 10 Clients by Revenue</CardTitle>
-                            <CardDescription>Comparison of revenue and profit for the top performing clients.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="pl-2">
-                            {chartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={530}>
-                                    <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                                        <XAxis dataKey="client_name" tick={{ fontSize: 10 }} stroke="#9ca3af" tickLine={false} axisLine={false} interval={0} angle={0} textAnchor="end" height={60}/>
-                                        <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" tickLine={false} axisLine={false} tickFormatter={(value) => `₹${Number(value) / 1000}k`} />
-                                        <RechartsTooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", borderRadius: "0.5rem" }} formatter={(value: number) => [formatCurrency(value), null]} />
-                                        <Legend wrapperStyle={{ fontSize: "14px", paddingTop: "10px" }} />
-                                        <Bar dataKey="revenue_inr" name="Revenue" fill="#A74BC8" radius={[4, 4, 0, 0]} />
-                                        <Bar dataKey="profit_inr" name="Profit" fill="#B343B5" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            ) : (
-                                <div className="flex items-center justify-center h-[400px]">
-                                    <p className="text-gray-500">No client financial data available to display.</p>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                  {/* Right Side: Smaller Insight Cards */}
-<div className="space-y-6">
-    {/* This card remains the same */}
-    <Card className="shadow-sm">
-        <CardHeader>
-            <CardTitle>Top 5 Clients by Revenue</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-            {topClientsByRevenue.length > 0 ? topClientsByRevenue.map((client, index) => (
-                <div key={index}>
-                    <div className="flex justify-between items-center mb-1">
-                        <p className="text-sm font-medium text-gray-700">{client.client_name}</p>
-                        <p className="text-sm font-semibold text-indigo-600">{formatCurrency(client.revenue_inr)}</p>
-                    </div>
-                    <Progress value={(client.revenue_inr / (topClientsByRevenue[0]?.revenue_inr || 1)) * 100} className="h-2" />
+              {/* Main Dashboard Grid */}
+<div className="grid grid-cols lg:grid-cols-3 gap-2 items-start">
+    {/* Left Column - Main Chart + Service Type */}
+    <div className="lg:col-span-2 space-y-6">
+        {/* Chart 1: Main Revenue & Profit Analysis - Reduced Size */}
+        <Card className="shadow-2xl bg-white/70 backdrop-blur-xl border border-white/20 hover:shadow-3xl transition-all duration-300">
+            <CardHeader className="pb-3">
+                <CardTitle className="flex items-center text-lg font-bold text-gray-900">
+                    <div className="w-1 h-5 bg-gradient-to-b from-blue-500 to-purple-600 rounded-full mr-3"></div>
+                    Top 10 Clients: Revenue & Profit Analysis
+                </CardTitle>
+                <CardDescription className="text-gray-600 text-sm">
+                    Interactive comparison of revenue streams and profitability metrics
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="px-4 h-[300px]">
+            {chartData.length > 0 ? (
+                <ResponsiveContainer width="95%" height="120%">
+                    <ComposedChart
+                        data={chartData.map(item => ({
+                            ...item,
+                            client_name: item.client_name.length > 15 
+                                ? item.client_name.split(' ').length > 2 
+                                    ? item.client_name.split(' ').slice(0, 2).join(' ') + '...'
+                                    : item.client_name.substring(0, 17) + '...'
+                                : item.client_name
+                        }))}
+                        margin={{ top: 10, right: 20, left: 20, bottom: 50 }}
+                        barCategoryGap="20%"
+                    >
+                        <CartesianGrid 
+                            strokeDasharray="3 3" 
+                            stroke="#f0f0f0" 
+                            strokeOpacity={0.7}
+                        />
+                        <XAxis
+                            dataKey="client_name"
+                            angle={0}
+                            textAnchor="middle" 
+                            interval={0}
+                            height={5}
+                            tick={{ 
+                                fontSize: 8, 
+                                fill: '#6b7280'
+                            }}
+                            axisLine={{ stroke: '#d1d5db' }}
+                            tickLine={{ stroke: '#d1d5db' }}
+                        />
+                        <YAxis
+                            yAxisId="left"
+                            padding={{ top: 20, bottom: 20 }}
+                            tick={{ 
+                                fontSize: 11, 
+                                fill: '#4c1d95'
+                            }}
+                            stroke="#4c1d95"
+                            axisLine={{ stroke: '#d1d5db' }}
+                            tickLine={{ stroke: '#d1d5db' }}
+                            tickFormatter={(value) => `₹${Number(value) / 1000}k`}
+                        />
+                        <YAxis
+                            yAxisId="right"
+                            padding={{ top: 20, bottom: 20 }}
+                            orientation="right"
+                            tick={{ 
+                                fontSize: 15, 
+                                fill: '#059669'
+                            }}
+                            stroke="#059669"
+                            axisLine={{ stroke: '#d1d5db' }}
+                            tickLine={{ stroke: '#d1d5db' }}
+                            tickFormatter={(value) => `₹${Number(value) / 1000}k`}
+                        />
+                        <RechartsTooltip 
+                            contentStyle={{
+                                backgroundColor: 'white',
+                                border: '1px solid #e5e7eb',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                            }}
+                            labelStyle={{ fontWeight: 'bold', color: '#374151' }}
+                        />
+                        <Legend 
+                            wrapperStyle={{ paddingTop: '0px', fontSize: '10px' }}
+                            iconType="rect"
+                            iconSize={8}
+                            layout="horizontal"
+                            align="center"
+                            verticalAlign="top"
+                        />
+                        <defs>
+                            <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                                <stop offset="50%" stopColor="#10b981" stopOpacity={0.4} />
+                                <stop offset="100%" stopColor="#10b981" stopOpacity={0.1} />
+                            </linearGradient>
+                        </defs>
+                        <Area
+                            yAxisId="right"
+                            type="monotone"
+                            dataKey="profit_inr"
+                            name="Profit"
+                            stroke="#10b981"
+                            strokeWidth={2}
+                            fill="url(#profitGradient)"
+                            fillOpacity={1}
+                        />
+                        <Bar
+                            yAxisId="left"
+                            dataKey="revenue_inr"
+                            name="Revenue"
+                            fill="#6366f1"
+                            radius={[2, 2, 0, 0]}
+                            maxBarSize={60}
+                        />
+                    </ComposedChart>
+                </ResponsiveContainer>
+            ) : (
+                <div className="flex items-center justify-center h-full">
+                    <p className="text-gray-500">No client financial data available to display.</p>
                 </div>
-            )) : <p className="text-sm text-gray-500">No data available.</p>}
+            )}
         </CardContent>
     </Card>
 
-    {/* NEW: Grid for two side-by-side charts */}
-    <div className=" gap-6">
-        <Card className="shadow-sm">
-            <CardHeader className="pb-2">
-                <CardTitle className="text-base">By Service Type</CardTitle>
+<div className="grid grid-cols-2 lg:grid-cols-2 gap-4  ">
+    <div className="col-span-1 lg:col-span-1">
+    <Card className="shadow-2xl bg-gradient-to-br from-emerald-50/80 to-teal-50/80 backdrop-blur-xl border border-white/30 hover:shadow-3xl transition-all duration-300">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center text-gray-900">
+                        <div className="w-1 h-4 bg-gradient-to-b from-emerald-500 to-teal-600 rounded-full mr-2"></div>
+                        By Service Type
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="flex items-center h-[200px] p-3">
+                    {serviceTypeDistribution.length > 0 ? (
+                        <div className="w-full h-full flex flex-col">
+                            <div className="flex-1 flex justify-center items-center">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <defs>
+                                            <filter id="serviceDonutShadow" x="-50%" y="-50%" width="200%" height="200%">
+                                                <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#000" floodOpacity="0.15"/>
+                                            </filter>
+                                        </defs>
+                                        <Pie
+                                            data={serviceTypeDistribution.map((item, index) => ({
+                                                ...item,
+                                                fill: DONUT_CHART_COLORS[index % DONUT_CHART_COLORS.length]
+                                            }))}
+                                            dataKey="value"
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={30}
+                                            outerRadius={60}
+                                            paddingAngle={0}
+                                            filter="url(#serviceDonutShadow)"
+                                        >
+                                            {serviceTypeDistribution.map((entry, index) => (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={DONUT_CHART_COLORS[index % DONUT_CHART_COLORS.length]}
+                                                    stroke="none"
+                                                />
+                                            ))}
+                                        </Pie>
+                                        <RechartsTooltip formatter={(value) => [`${value} Clients`, "Count"]} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                            <div className="space-y-1 mt-1">
+                                {serviceTypeDistribution.map((entry, index) => (
+                                    <div key={index} className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center">
+                                            <div
+                                                className="w-2 h-2 rounded-full mr-1"
+                                                style={{ backgroundColor: DONUT_CHART_COLORS[index % DONUT_CHART_COLORS.length] }}
+                                            />
+                                            <span className="text-gray-700 font-medium">{entry.name}</span>
+                                        </div>
+                                        <span className="text-gray-900 font-bold">
+                                            {Math.round((entry.value / metrics.totalClients) * 100) || 0}%
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-center w-full">
+                            <p className="text-xs text-gray-500">No data available.</p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+            </div>
+    <div className="col-span-1 lg:col-span-1">
+
+             {/* Chart 3: Top 5 Clients by Profit */}
+             <Card className="shadow-2xl bg-gradient-to-br from-blue-50/80 to-indigo-50/80 backdrop-blur-xl border border-white/30 hover:shadow-3xl transition-all duration-300">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center text-gray-900">
+                        <div className="w-1 h-4 bg-gradient-to-b from-blue-500 to-indigo-600 rounded-full mr-2"></div>
+                        Financial Overview
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="flex items-center h-[200px] p-3">
+                    <div className="w-full h-full flex flex-col">
+                        <div className="flex-1 flex justify-center items-center relative">
+                            <ResponsiveContainer width="130%" height="100%">
+                                <PieChart>
+                                    <defs>
+                                        <filter id="financialDonutShadow" x="-50%" y="-50%" width="200%" height="200%">
+                                            <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#000" floodOpacity="0.15"/>
+                                        </filter>
+                                    </defs>
+                                    <Pie
+                                        data={[
+                                            { name: 'Profit', value: 3127918, color: '#10b981' },
+                                            { name: 'Cost', value: 4960740 - 3127918, color: '#f59e0b' }
+                                        ]}
+                                        dataKey="value"
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={30}
+                                        outerRadius={60}
+                                        paddingAngle={0}
+                                        filter="url(#financialDonutShadow)"
+                                    >
+                                        <Cell fill="#10b981" />
+                                        <Cell fill="#f59e0b" />
+                                    </Pie>
+                                    <RechartsTooltip formatter={(value, name) => [`₹${(value / 100000).toFixed(2)}L`, name]} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                            
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="text-center">
+                                    <div className="text-xs text-gray-600">Total</div>
+                                    <div className="text-sm font-bold text-gray-900">₹49.61L</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-1 mt-1">
+                            <div className="flex items-center justify-between text-xs">
+                                <div className="flex items-center">
+                                    <div className="w-2 h-2 rounded-full mr-1 bg-green-500" />
+                                    <span className="text-gray-700 font-medium">Profit</span>
+                                </div>
+                                <span className="text-green-600 font-bold">₹31L</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                                <div className="flex items-center">
+                                    <div className="w-2 h-2 rounded-full mr-1 bg-amber-500" />
+                                    <span className="text-gray-700 font-medium">Cost</span>
+                                </div>
+                                <span className="text-amber-600 font-bold">₹18L</span>
+                            </div>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+           
+            </div>
+
+            </div>
+
+</div>
+
+    <div className="space-y-6 h-full w-full">
+        {/* Chart 2: Top Clients Radial Chart */}
+        <Card className="shadow-2xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-xl border border-white/30 hover:shadow-3xl transition-all duration-300">
+            <CardHeader className="pb-4">
+                <CardTitle className="flex items-center text-lg font-bold text-gray-900">
+                    <div className="w-1 h-5 bg-gradient-to-b from-purple-500 to-pink-600 rounded-full mr-3"></div>
+                    Top 5 Clients by Revenue
+                </CardTitle>
             </CardHeader>
-            <CardContent>
-                <ResponsiveContainer width="100%" height={200}>
-                    <PieChart>
-                        <Pie data={serviceTypeDistribution} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value" paddingAngle={5}>
-                            {serviceTypeDistribution.map((entry, index) => (<Cell key={`cell-${index}`} fill={DONUT_CHART_COLORS[index % DONUT_CHART_COLORS.length]} />))}
-                        </Pie>
-                        <RechartsTooltip formatter={(value: number) => `${value} Clients`} />
-                        {/* <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} /> */}
-                    </PieChart>
-                </ResponsiveContainer>
+            <CardContent className="h-[320px] p-4">
+                {topClientsByRevenue.length > 0 ? (
+                    <div className="h-full flex flex-col">
+                        <div className="flex-1">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RadialBarChart
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius="50%"
+                                    outerRadius="100%"
+                                    data={topClientsByRevenue.slice(0, 4).map((item, index) => ({
+                                        ...item,
+                                        fill: ['#8b5cf6', '#6366f1', '#3b82f6', '#06b6d4'][index],
+                                        percentage: Math.round((item.revenue_inr / topClientsByRevenue[0].revenue_inr) * 100)
+                                    }))}
+                                >
+                                    <RadialBar
+                                        dataKey="percentage"
+                                        cornerRadius={6}
+                                        stroke="none"
+                                    />
+                                    <RechartsTooltip
+                                        contentStyle={{
+                                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                            backdropFilter: 'blur(10px)',
+                                            border: 'none',
+                                            borderRadius: '12px',
+                                            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+                                        }}
+                                        formatter={(value, name, props) => [
+                                            formatCurrency(props.payload.revenue_inr),
+                                            props.payload.client_name
+                                        ]}
+                                    />
+                                </RadialBarChart>
+                            </ResponsiveContainer>
+                        </div>
+                        
+                        {/* Legend */}
+                        <div className="space-y-1 mt-2">
+                            {topClientsByRevenue.slice(0, 4).map((item, index) => (
+                                <div key={index} className="flex items-center justify-between text-xs">
+                                    <div className="flex items-center">
+                                        <div 
+                                            className="w-2 h-2 rounded-full mr-2"
+                                            style={{ backgroundColor: ['#8b5cf6', '#6366f1', '#3b82f6', '#06b6d4'][index] }}
+                                        />
+                                        <span className="text-gray-700 font-medium truncate">
+                                            {item.client_name.length > 12 ? item.client_name.substring(0, 12) + '...' : item.client_name}
+                                        </span>
+                                    </div>
+                                    <span className="text-gray-900 font-bold">{formatCurrency(item.revenue_inr)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-center h-full">
+                        <p className="text-sm text-gray-500">No data available.</p>
+                    </div>
+                )}
             </CardContent>
         </Card>
 
-        {/* <Card className="shadow-sm">
-            <CardHeader className="pb-2">
-                <CardTitle className="text-base">By Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                    <PieChart>
-                        <Pie data={clientStatusDistribution} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value" paddingAngle={5}>
-                            {clientStatusDistribution.map((entry, index) => (<Cell key={`cell-${index}`} fill={STATUS_CHART_COLORS[index % STATUS_CHART_COLORS.length]} />))}
-                        </Pie>
-                        <RechartsTooltip formatter={(value: number) => `${value} Clients`} />
-                        <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-                    </PieChart>
-                </ResponsiveContainer>
-            </CardContent>
-        </Card> */}
+        {/* Chart 3: Service Type Distribution - Modern Cards */}
+        {/* Bottom Row - Three Charts in a Row */}
+        <div className="space-y-4">
+            
+            {/* Chart 1: By Service Type */}
+            
+            {/* Chart 2: Financial Overview */}
+            
+             <Card className="shadow-2xl bg-gradient-to-br from-purple-50/80 to-pink-50/80 backdrop-blur-xl border border-white/30 hover:shadow-3xl transition-all duration-300">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center text-gray-900">
+                        <div className="w-1 h-4 bg-gradient-to-b from-purple-500 to-pink-600 rounded-full mr-2"></div>
+                        Top 5 Clients by Profit
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="flex items-center h-[195px] p-3">
+                    {chartData.length > 0 ? (
+                        <div className="w-full h-full flex flex-col">
+                            <div className="flex-1 flex justify-center items-center">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <defs>
+                                            <filter id="profitDonutShadow" x="-50%" y="-50%" width="200%" height="200%">
+                                                <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#000" floodOpacity="0.15"/>
+                                            </filter>
+                                        </defs>
+                                        <Pie
+                                            data={chartData.slice(0, 5).map((item, index) => ({
+                                                ...item,
+                                                fill: ['#8b5cf6', '#6366f1', '#3b82f6', '#06b6d4', '#10b981'][index]
+                                            }))}
+                                            dataKey="profit_inr"
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={30}
+                                            outerRadius={60}
+                                            paddingAngle={0}
+                                            filter="url(#profitDonutShadow)"
+                                        >
+                                            {chartData.slice(0, 5).map((entry, index) => (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={['#8b5cf6', '#6366f1', '#3b82f6', '#06b6d4', '#10b981'][index]}
+                                                    stroke="none"
+                                                />
+                                            ))}
+                                        </Pie>
+                                        <RechartsTooltip formatter={(value, name, props) => [
+                                            `₹${(value / 100000).toFixed(1)}L`, 
+                                            props.payload.client_name
+                                        ]} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                            <div className="space-y-1 mt-1 max-h-16 overflow-y-auto">
+                                {chartData.slice(0, 3).map((client, index) => (
+                                    <div key={index} className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center">
+                                            <div 
+                                                className="w-2 h-2 rounded-full mr-1"
+                                                style={{ backgroundColor: ['#8b5cf6', '#6366f1', '#3b82f6'][index] }}
+                                            />
+                                            <span className="text-gray-700 font-medium truncate max-w-16">
+                                                {client.client_name.length > 12 ? 
+                                                    client.client_name.substring(0, 12) + '...' : 
+                                                    client.client_name
+                                                }
+                                            </span>
+                                        </div>
+                                        <span className="text-gray-900 font-bold">
+                                            ₹{(client.profit_inr / 100000).toFixed(1)}L
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-center w-full">
+                            <p className="text-xs text-gray-500">No data available.</p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+           
+        </div>
     </div>
 </div>
-                    
-                </div>
-
                 {/* Client List Table */}
-             {/* Client List Table */}
-    <Tabs value={activeFilter} onValueChange={(value) => { setActiveFilter(value); setCurrentPage(1); }}>
-        {/* NEW: Combined header/filter bar inspired by the reference component */}
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4  py-3 ">
-            <TabsList className="grid grid-cols-4 w-full sm:w-auto">
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="permanent">Permanent</TabsTrigger>
-                <TabsTrigger value="contractual">Contractual</TabsTrigger>
-                <TabsTrigger value="both">Both</TabsTrigger>
-            </TabsList>
-            <div className="relative flex-grow">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-                <Input
-                    placeholder="Search Clients..."
-                    className="pl-9 w-full sm:w-64 h-9"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                />
-            </div>
-        </div>
-
-<Card className="shadow-sm">
-        
-
-        {/* The content area for the table remains the same */}
-        <TabsContent value={activeFilter} className="p-0">
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client Name</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Internal Contact</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Type</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {paginatedClients.length > 0 ? (
-                            paginatedClients.map((client) => (
-                                <tr key={client.id} className="hover:bg-gray-50 transition">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        <span className="text-indigo-600 hover:underline cursor-pointer" onClick={() => handleClientClick(client.client_name)}>{client.client_name}</span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{client.internal_contact || '-'}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex flex-wrap gap-1">
-                                            {client.service_type?.length ? client.service_type.map((type, index) => (
-                                                <Badge key={index} variant="secondary" className="capitalize text-xs">{type}</Badge>
-                                            )) : <span className="text-gray-500">-</span>}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" className="h-8 px-2 py-0 data-[state=open]:bg-gray-100">
-                                                    {statusUpdateLoading === client.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Badge variant="outline" className={getStatusBadgeColor(client.status)}>{client.status || 'Unknown'}</Badge>}
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="center">
-                                                <DropdownMenuItem onClick={() => handleStatusChange(client.id, 'active')}>Active</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleStatusChange(client.id, 'pending')}>Pending</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleStatusChange(client.id, 'inactive')}>Inactive</DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{client.hr_employees ? `${client.hr_employees.first_name} ${client.hr_employees.last_name}` : '-'}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        <div className="flex items-center space-x-1">
-                                            <TooltipProvider>
-                                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleClientClick(client.client_name)}><Eye className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>View Client</p></TooltipContent></Tooltip>
-                                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditClient(client)}><Edit className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Edit Client</p></TooltipContent></Tooltip>
-                                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" onClick={() => handleDeleteClient(client)}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Delete Client</p></TooltipContent></Tooltip>
-                                            </TooltipProvider>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))
-                        ) : (
-                            <tr><td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500">No clients found matching your criteria.</td></tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-            {processedClients.length > itemsPerPage && renderPagination()}
-        </TabsContent>
-</Card>
-
-    </Tabs>
-
-                {/* Dialogs */}
+                <Tabs value={activeFilter} onValueChange={(value) => { setActiveFilter(value); setCurrentPage(1); }}>
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 py-3 ">
+                        <TabsList className="grid grid-cols-4 w-full sm:w-auto">
+                            <TabsTrigger value="all">All</TabsTrigger>
+                            <TabsTrigger value="permanent">Permanent</TabsTrigger>
+                            <TabsTrigger value="contractual">Contractual</TabsTrigger>
+                            <TabsTrigger value="both">Both</TabsTrigger>
+                        </TabsList>
+                        <div className="relative flex-grow">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                            <Input
+                                placeholder="Search Clients..."
+                                className="pl-9 w-full sm:w-64 h-9"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <Card className="shadow-sm">
+                        <TabsContent value={activeFilter} className="p-0">
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client Name</th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Internal Contact</th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Type</th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {paginatedClients.length > 0 ? (
+                                            paginatedClients.map((client) => (
+                                                <tr key={client.id} className="hover:bg-gray-50 transition">
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                                        <span className="text-indigo-600 hover:underline cursor-pointer" onClick={() => handleClientClick(client.client_name)}>{client.client_name}</span>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{client.internal_contact || '-'}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {client.service_type?.length ? client.service_type.map((type, index) => (
+                                                                <Badge key={index} variant="secondary" className="capitalize text-xs">{type}</Badge>
+                                                            )) : <span className="text-gray-500">-</span>}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button variant="ghost" className="h-8 px-2 py-0 data-[state=open]:bg-gray-100">
+                                                                    {statusUpdateLoading === client.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Badge variant="outline" className={getStatusBadgeColor(client.status)}>{client.status || 'Unknown'}</Badge>}
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="center">
+                                                                <DropdownMenuItem onClick={() => handleStatusChange(client.id, 'active')}>Active</DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => handleStatusChange(client.id, 'pending')}>Pending</DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => handleStatusChange(client.id, 'inactive')}>Inactive</DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{client.hr_employees ? `${client.hr_employees.first_name} ${client.hr_employees.last_name}` : '-'}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                        <div className="flex items-center space-x-1">
+                                                            <TooltipProvider>
+                                                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleClientClick(client.client_name)}><Eye className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>View Client</p></TooltipContent></Tooltip>
+                                                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditClient(client)}><Edit className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Edit Client</p></TooltipContent></Tooltip>
+                                                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" onClick={() => handleDeleteClient(client)}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Delete Client</p></TooltipContent></Tooltip>
+                                                            </TooltipProvider>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr><td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500">No clients found matching your criteria.</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {processedClients.length > itemsPerPage && renderPagination()}
+                        </TabsContent>
+                    </Card>
+                </Tabs>
                 <AddClientDialog open={addClientOpen} onOpenChange={(open) => { setAddClientOpen(open); if (!open) setEditClient(null); }} clientToEdit={editClient} onClientAdded={handleClientAdded} />
                 <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
                     <AlertDialogContent>

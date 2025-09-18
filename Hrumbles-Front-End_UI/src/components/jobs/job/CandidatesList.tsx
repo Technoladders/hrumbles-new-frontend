@@ -1,5 +1,6 @@
 
 
+ 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -37,13 +38,13 @@ import { updateCandidateStatus, fetchAllStatuses, updateClientSubmissionStatus }
 import SummaryModal from "./SummaryModal";
 import { supabase } from "@/integrations/supabase/client";
 import { updateCandidateValidationStatus } from "@/services/candidateService";
-
+ 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger, TabsList1, TabsTrigger1 } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -61,12 +62,12 @@ import {
 } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CandidateTimelineModal } from './CandidateTimelineModal';
-
+ 
 import moment from 'moment';
 import { format, isValid } from 'date-fns';
 import { getRoundNameFromResult } from "@/utils/statusTransitionHelper";
 import { Skeleton } from "@/components/ui/skeleton";
-
+ 
 interface CandidatesListProps {
   jobId: string;
   jobdescription: string;
@@ -75,15 +76,16 @@ interface CandidatesListProps {
   onAddCandidate?: () => void;
   onRefresh: () => Promise<void>;
   isCareerPage?: boolean;
+  jobOwnerEmail: string;
 }
-
+ 
 interface HiddenContactCellProps {
   email?: string;
   phone?: string;
   candidateId: string;
 }
-
-
+ 
+ 
 const CandidatesList = ({
   jobId,
   statusFilter,
@@ -98,33 +100,33 @@ const CandidatesList = ({
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const userRole = useSelector((state: any) => state.auth.role);
   const isEmployee = userRole === 'employee';
-
+ 
   const ITECH_ORGANIZATION_ID = [
   "1961d419-1272-4371-8dc7-63a4ec71be83",
   "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
 ];
   const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
-
-
+ 
+ 
     // ADDED: State for dynamic tabs
   const [mainStatuses, setMainStatuses] = useState<MainStatus[]>([]);
   const [areStatusesLoading, setAreStatusesLoading] = useState(true);
-
+ 
 console.log('mainStatuses', mainStatuses)
-
+ 
   const { data: candidatesData = [], isLoading, refetch } = useQuery({
     queryKey: ["job-candidates", jobId],
     queryFn: () => getCandidatesByJobId(jobId),
   });
-
+ 
   console.log('candidatesData', candidatesData)
-
-
+ 
+ 
   const { data: appliedCandidates = [] } = useQuery({
     queryKey: ["applied-candidates", jobId],
     queryFn: () => getCandidatesByJobId(jobId, "Applied"),
   });
-
+ 
   const formatINR = (value: string): string => {
     if (!value) return '';
     // Remove non-numeric characters
@@ -140,7 +142,7 @@ console.log('mainStatuses', mainStatuses)
     }
     return formatted.reverse().join('');
   };
-
+ 
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [filteredCandidates, setFilteredCandidates] = useState<Candidate[]>([]);
   const [activeTab, setActiveTab] = useState("All Candidates");
@@ -157,14 +159,14 @@ console.log('mainStatuses', mainStatuses)
   const [analysisDataAvailable, setAnalysisDataAvailable] = useState<{
     [key: string]: boolean;
   }>({});
-
+ 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedDrawerCandidate, setSelectedDrawerCandidate] = useState<Candidate | null>(null);
-
+ 
   const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [showInterviewFeedbackModal, setShowInterviewFeedbackModal] = useState(false);
   const [showJoiningModal, setShowJoiningModal] = useState(false);
-  const [showActualCtcModal, setShowActualCtcModal] = useState(false); 
+  const [showActualCtcModal, setShowActualCtcModal] = useState(false);
   const [submissionDate, setSubmissionDate] = useState("");
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [interviewDate, setInterviewDate] = useState("");
@@ -186,39 +188,40 @@ console.log('mainStatuses', mainStatuses)
   const [currentRound, setCurrentRound] = useState<string | null>(null);
   const [needsReschedule, setNeedsReschedule] = useState(false);
   const [candidateFilter, setCandidateFilter] = useState<"All" | "Yours">("All"); // New filter state
-
+ 
   const [isTimelineModalOpen, setIsTimelineModalOpen] = useState(false);
 const [selectedCandidateForTimeline, setSelectedCandidateForTimeline] = useState<Candidate | null>(null);
-
+ 
   const [showOfferJoiningModal, setShowOfferJoiningModal] = useState(false);
 
+ 
   // Create a handler function to open the modal
 const handleViewTimeline = (candidate: Candidate) => {
   setSelectedCandidateForTimeline(candidate);
   setIsTimelineModalOpen(true);
 };
-
-
+ 
+ 
 const [currentSubStatus, setCurrentSubStatus] = useState<{ id: string; name: string; parentId?: string | null } | null>(null);
   const currencies = [
     { value: "INR", symbol: "₹" },
     { value: "USD", symbol: "$" },
   ];
-
+ 
   // Budget type options
   const budgetTypes = ["LPA", "Monthly", "Hourly"];
-
+ 
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-
+ 
   // New state to track visibility of contact details
   const [visibleContacts, setVisibleContacts] = useState<{
     [key: string]: { email: boolean; phone: boolean };
   }>({});
-
-
-
+ 
+ 
+ 
   const {
     data: job,
     isLoading: jobLoading,
@@ -228,16 +231,16 @@ const [currentSubStatus, setCurrentSubStatus] = useState<{ id: string; name: str
     queryFn: () => getJobById(jobId || ""),
     enabled: !!jobId,
   });
-
-
+ 
+ 
     // Inside CandidatesList.tsx (or a shared constants file)
 const INTERVIEW_MAIN_STATUS_ID = "f72e13f8-7825-4793-85e0-e31d669f8097";
 const INTERVIEW_SCHEDULED_SUB_STATUS_IDS = ["4ab0c42a-4748-4808-8f29-e57cb401bde5", "a8eed1eb-f903-4bbf-a91b-e347a0f7c43f", "1de35d8a-c07f-4c1d-b185-12379f558286", "0cc92be8-c8f1-47c6-a38d-3ca04eca6bb8", "48e060dc-5884-47e5-85dd-d717d4debe40"];
 const INTERVIEW_RESCHEDULED_SUB_STATUS_IDS = ["00601f51-90ec-4d75-8ced-3225fed31643", "9ef38a36-cffa-4286-9826-bc7d736a04ce", "2c38a0fb-8b56-47bf-8c7e-e4bd19b68fdf", "d2aef2b3-89b4-4845-84f0-777b6adf9018", "e569facd-7fd0-48b9-86cd-30062c80260b"];
 const INTERVIEW_OUTCOME_SUB_STATUS_IDS = ["1930ab52-4bb4-46a2-a9d1-887629954868", "e5615fa5-f60c-4312-9f6b-4ed543541520", "258741d9-cdb1-44fe-8ae9-ed5e9eed9e27", "0111b1b9-23c9-4be1-8ad4-322ccad6ccf0", "11281dd5-5f33-4d5c-831d-2488a5d3c96e", "31346b5c-1ff4-4842-aab4-645b36b6197a", "1ce3a781-09c7-4b3f-9a58-e4c6cd02721a", "4694aeff-567b-4007-928e-b3fefe558daf", "5b59c8cb-9a6a-43b8-a3cd-8f867c0b30a2", "368aa85f-dd4a-45b5-9266-48898704839b"];
-
-
-
+ 
+ 
+ 
 // Helper function for formatting time (from AllCandidatesTab.tsx)
 const formatTime = (time?: string | null) => {
   if (!time || typeof time !== 'string') return '';
@@ -250,17 +253,17 @@ const formatTime = (time?: string | null) => {
     return time;
   }
 };
-
+ 
 const formatDate = (date: string) => isValid(new Date(date)) ? format(new Date(date), 'MMM d, yyyy') : 'N/A';
-
+ 
 interface InterviewDetailsCellProps {
   candidate: Candidate;
 }
-
+ 
 const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }) => {
   const isScheduled = candidate.main_status_id === INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && (INTERVIEW_SCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id) || INTERVIEW_RESCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id));
   const isOutcome = candidate.main_status_id === INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && INTERVIEW_OUTCOME_SUB_STATUS_IDS.includes(candidate.sub_status_id);
-
+ 
   if (isScheduled && candidate.interview_date) {
     return (
       <div className="flex flex-col">
@@ -277,7 +280,7 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
       </div>
     );
   }
-
+ 
   if (isOutcome && candidate.interview_feedback) {
     return (
       <TooltipProvider>
@@ -297,12 +300,12 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
       </TooltipProvider>
     );
   }
-
+ 
   return <span className="text-muted-foreground">-</span>;
 };
-
-
-
+ 
+ 
+ 
     // Initialize dialog fields when opening
     useEffect(() => {
       if (showActualCtcModal && job?.clientDetails?.clientBudget) {
@@ -311,14 +314,14 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
         const budgetParts = clientBudget.replace(currentCurrency.symbol, "").trim().split(" ");
         const amount = budgetParts[0] || "";
         const type = budgetParts[1] || "LPA";
-  
+ 
         setCurrencyType(currentCurrency.value);
         setBudgetType(type);
         setActualCtc(amount);
         setSubmissionDate("");
       }
     }, [showActualCtcModal, job]);
-
+ 
     // Add useEffect to fetch existing CTC data for "Joined" and reset dialog state (around line 330, after other useEffect)
     useEffect(() => {
       if (showJoiningModal && currentSubStatusId && currentCandidateId && jobId) {
@@ -327,7 +330,7 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
         setJoiningDate("");
         setCurrencyType("INR");
         setBudgetType("LPA");
-    
+   
         // Fetch job's client budget as default
         if (job?.clientDetails?.clientBudget) {
           const clientBudget = job.clientDetails.clientBudget;
@@ -335,12 +338,13 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
           const budgetParts = clientBudget.replace(currentCurrency.symbol, "").trim().split(" ");
           const amount = budgetParts[0] || "";
           const type = budgetParts[1] || "LPA";
-    
+   
           setCurrencyType(currentCurrency.value);
           setBudgetType(type);
           setCtc(amount);
         }
-    
+   
+ 
         // Fetch existing joining details for "Offer Issued" or "Joined" status
         if (currentSubStatus?.name === 'Offer Issued' || currentSubStatus?.name === 'Joined') {
           const fetchJoiningData = async () => {
@@ -349,14 +353,14 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
                 .from('hr_candidate_joining_details')
                 .select('final_salary, currency_type, budget_type, client_budget, joining_date')
                 .eq('candidate_id', currentCandidateId)
-                
+               
                 .maybeSingle();
-    
+   
               if (error && !error.message.includes('No rows found')) {
                 console.error('Error fetching joining details:', error);
                 return;
               }
-    
+   
               if (data) {
                 setCtc(data.final_salary?.toString() || "");
                 setCurrencyType(data.currency_type || "INR");
@@ -371,15 +375,15 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
         }
       }
     }, [showJoiningModal, currentCandidateId, currentSubStatusId, job, jobId, currentSubStatus]);
-
+ 
   const [validatingId, setValidatingId] = useState<string | null>(null);
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
-
+ 
   const recruitmentStages = ["New", "InReview", "Engaged", "Available", "Offered", "Hired"];
-
+ 
   const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://62.72.51.159:5005";
-
+ 
     // ADDED: useEffect to fetch and set dynamic tabs
   useEffect(() => {
     const loadStatuses = async () => {
@@ -397,10 +401,10 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
     };
     loadStatuses();
   }, []);
-
+ 
 useEffect(() => {
   // setFilteredCandidates(candidatesData);
-
+ 
   const checkAnalysisData = async () => {
      if (!jobId) return;
     const { data, error } = await supabase
@@ -408,31 +412,31 @@ useEffect(() => {
       .select("candidate_id, summary, overall_score")
       .eq("job_id", jobId)
       .not("summary", "is", null);
-
+ 
     if (error) {
       console.error("Error checking analysis data:", error);
       // Console log the error
       console.log("checkAnalysisData error:", error);
       return;
     }
-
+ 
     // Console log the fetched data
     console.log("checkAnalysisData fetched data:", data);
-
+ 
     const availableData: { [key: string]: boolean } = {};
     const analysisDataTemp: { [key: string]: any } = {};
     data.forEach((item) => {
       availableData[item.candidate_id] = true;
       analysisDataTemp[item.candidate_id] = { overall_score: item.overall_score };
     });
-
+ 
     setAnalysisDataAvailable(availableData);
     setCandidateAnalysisData((prev) => ({ ...prev, ...analysisDataTemp }));
   };
-
+ 
   checkAnalysisData();
 }, [candidatesData, jobId]);
-
+ 
  const fetchAnalysisData = async (candidateId: string) => {
   try {
     const { data, error } = await supabase
@@ -441,12 +445,12 @@ useEffect(() => {
       .eq("job_id", jobId)
       .eq("candidate_id", candidateId)
       .single();
-
+ 
     if (error) throw error;
-
+ 
     // Console log the fetched data
     console.log(`fetchAnalysisData for candidate ${candidateId}:`, data);
-
+ 
     setAnalysisData({
       overall_score: data.overall_score || 0,
       summary: data.summary || "",
@@ -482,23 +486,23 @@ useEffect(() => {
     }));
   }
 };
-
+ 
   // Static USD to INR conversion rate
 const USD_TO_INR_RATE = 84;
-
-
-
+ 
+ 
+ 
 // Parse salary and return amount with budgetType
 const parseSalary = (salary: string | number | undefined): { amount: number; budgetType: string } => {
-
+ 
   if (!salary) {
-
+ 
     return { amount: 0, budgetType: "LPA" };
   }
   let amount = 0;
   let currency = currencies[0]; // Default to INR
   let budgetType = "LPA";
-
+ 
   if (typeof salary === "string") {
     // Check if the string is a valid number (e.g., "2000000")
     if (!isNaN(parseFloat(salary)) && !salary.includes(" ")) {
@@ -515,41 +519,42 @@ const parseSalary = (salary: string | number | undefined): { amount: number; bud
   } else {
     amount = salary;
   }
-
+ 
   let convertedAmount = amount;
   if (currency.value === "USD") {
     convertedAmount *= USD_TO_INR_RATE;
   }
-
+ 
   return { amount: convertedAmount, budgetType };
 };
-
+ 
+ 
 // Calculate profit based on budgetType period for Internal jobs
 const calculateProfit = (
   candidate: any,
   job: any,
   client: any
 ): { profit: number | null; period: string } => {
-
-
+ 
+ 
   let salary = candidate.ctc || candidate.expected_salary || 0;
   let budget = candidate.accrual_ctc;
   let commissionValue = client?.commission_value || 0;
-
-
+ 
+ 
   const salaryParsed = parseSalary(salary);
   const budgetParsed = budget ? parseSalary(budget) : { amount: 0, budgetType: "LPA" };
   let salaryAmount = salaryParsed.amount;
   let budgetAmount = budgetParsed.amount;
   let profitPeriod = budgetParsed.budgetType; // Use accrual_ctc's budgetType for period
-
-
+ 
+ 
   if (job.jobType === "Internal") {
     // Skip profit calculation if accrual_ctc is missing
     if (budget == null || budget === "") {
       return { profit: null, period: profitPeriod };
     }
-
+ 
     // For Monthly or Hourly, convert to Monthly profit
     if (profitPeriod === "Monthly" || profitPeriod === "Hourly") {
       if (profitPeriod === "Hourly") {
@@ -559,18 +564,18 @@ const calculateProfit = (
       salaryAmount /= 12;
     }
     // For LPA, both budget and salary are already in LPA, no conversion needed
-
+ 
     const profit = budgetAmount - salaryAmount;
     return { profit, period: profitPeriod };
   } else {
     // For External jobs, calculate profit using commission (yearly, as original)
     const effectiveCommissionType = client?.commission_type || (commissionValue ? "percentage" : null);
-
+ 
     // Salary is already in LPA, no conversion needed
     if (client?.currency === "USD" && client?.commission_type === "fixed") {
       commissionValue *= USD_TO_INR_RATE;
     }
-
+ 
     if (effectiveCommissionType === "percentage" && commissionValue) {
       const profit = (salaryAmount * commissionValue) / 100;
       return { profit, period: "LPA" };
@@ -580,7 +585,7 @@ const calculateProfit = (
     return { profit: 0, period: "LPA" };
   }
 };
-
+ 
 // Format currency
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("en-IN", {
@@ -589,7 +594,7 @@ const formatCurrency = (amount: number) => {
     maximumFractionDigits: 2,
   }).format(amount);
 };
-
+ 
 // Fetch client data
 const { data: clientData } = useQuery({
   queryKey: ["client", job?.clientOwner],
@@ -605,8 +610,8 @@ const { data: clientData } = useQuery({
   },
   enabled: !!job?.clientOwner,
 });
-  
-
+ 
+ 
   useEffect(() => {
     if (candidatesData.length > 0) {
       const transformedCandidates: Candidate[] = candidatesData.map((candidate) => {
@@ -643,28 +648,28 @@ const { data: clientData } = useQuery({
           interview_feedback: candidate.interview_feedback,
         };
       });
-
+ 
       setCandidates(transformedCandidates);
     }
   }, [candidatesData, job, clientData]);
-
+ 
   const setDefaultStatusForCandidate = async (candidateId: string) => {
     try {
       const statuses = await fetchAllStatuses();
       const newStatus = statuses.find(s => s.name === "New");
       if (newStatus?.subStatuses?.length) {
         const defaultSubStatus = newStatus.subStatuses.find(s => s.name === "New Application") || newStatus.subStatuses[0];
-        
+       
         await updateCandidateStatus(candidateId, defaultSubStatus.id, user?.id);
       }
     } catch (error) {
       console.error("Error setting default status:", error);
     }
   };
-
+ 
   useEffect(() => {
     let filtered = [...candidates];
-    
+   
     if (activeTab === "All Candidates") {
       filtered = filtered.filter(c => c.main_status?.name !== "Applied" || c.created_by);
     } else if (activeTab === "Applied") {
@@ -672,22 +677,22 @@ const { data: clientData } = useQuery({
     } else {
       filtered = filtered.filter(c => c.main_status?.name === activeTab);
     }
-    
+   
     if (statusFilters && statusFilters.length > 0) {
-      filtered = filtered.filter(c => 
-        statusFilters.includes(c.main_status_id || '') || 
+      filtered = filtered.filter(c =>
+        statusFilters.includes(c.main_status_id || '') ||
         statusFilters.includes(c.sub_status_id || '')
       );
     }
-    
+   
     if (statusFilter) {
       filtered = filtered.filter(c => c.main_status?.name === statusFilter);
     }
-    
+   
     if (isCareerPage) {
       filtered = filtered.filter(c => c.appliedFrom === "Candidate");
     }
-
+ 
         // Apply "Yours" filter
         if (candidateFilter === "Yours") {
           const userFullName = `${user.user_metadata.first_name} ${user.user_metadata.last_name}`;
@@ -695,29 +700,29 @@ const { data: clientData } = useQuery({
             c => c.owner === userFullName || c.appliedFrom === userFullName
           );
         }
-    
+   
     setFilteredCandidates(filtered);
   }, [candidates, appliedCandidates, activeTab, statusFilters, statusFilter, isCareerPage, candidateFilter]);
-
+ 
   const handleStatusChange = async (value: string, candidate: Candidate) => {
     try {
       if (!value) {
         toast.error("Invalid status selected");
         return;
       }
-  
+ 
       const statuses = await fetchAllStatuses();
       const subStatuses = statuses.flatMap(s => s.subStatuses || []);
       const newSubStatus = subStatuses.find(s => s.id === value);
-      
+     
       if (!newSubStatus) {
         toast.error("Status not found");
         return;
       }
-      
+     
       const newMainStatus = statuses.find(s => s.id === newSubStatus.parent_id);
       const oldSubStatusName = candidate.sub_status?.name;
-      
+     
       setCurrentCandidateId(candidate.id);
       setCurrentSubStatusId(value);
       setCurrentSubStatus({
@@ -725,15 +730,15 @@ const { data: clientData } = useQuery({
         name: newSubStatus.name,
         parentId: newSubStatus.parent_id,
       });
-  
+ 
       const { getRequiredInteractionType, getInterviewRoundName } = await import('@/utils/statusTransitionHelper');
       const interactionType = getRequiredInteractionType(oldSubStatusName, newSubStatus.name);
-      
+     
       if (interactionType === 'interview-schedule' || interactionType === 'reschedule') {
         const roundName = getInterviewRoundName(newSubStatus.name);
         setCurrentRound(roundName);
         setNeedsReschedule(interactionType === 'reschedule');
-  
+ 
         const { data: interviews, error } = await supabase
           .from('hr_candidate_interviews')
           .select('*')
@@ -741,13 +746,13 @@ const { data: clientData } = useQuery({
           .eq('interview_round', roundName)
           .order('created_at', { ascending: false })
           .limit(1);
-          
+         
         if (error) {
           console.error("Error fetching interview:", error);
           toast.error("Failed to load interview details");
           return;
         }
-  
+ 
         if (interviews && interviews.length > 0) {
           const interview = interviews[0];
           setInterviewDate(interview.interview_date || '');
@@ -762,11 +767,11 @@ const { data: clientData } = useQuery({
           setInterviewType('Technical');
           setInterviewerName('');
         }
-  
+ 
         setShowInterviewModal(true);
         return;
       }
-      
+     
       if (interactionType === 'interview-feedback') {
         const roundName = getRoundNameFromResult(newSubStatus.name);
         if (roundName) {
@@ -776,72 +781,96 @@ const { data: clientData } = useQuery({
           return;
         }
       }
-      
+     
       if (interactionType === 'joining') {
         setShowJoiningModal(true);
         return;
       }
-  
+ 
       if (interactionType === 'actual-ctc') {
         setShowActualCtcModal(true);
         return;
       }
-      
+     
       if (interactionType === 'reject') {
         setShowRejectModal(true);
         return;
       }
-      
-      updateCandidateStatus(candidate.id, value, user?.id)
-        .then(success => {
-          if (success) {
-            toast.success("Status updated successfully");
-            onRefresh();
-          } else {
-            toast.error("Failed to update status");
+     
+       updateCandidateStatus(candidate.id, value, user?.id)
+      .then(async success => { // ⚡️ Change this line to async ⚡️
+        if (success) {
+          const jobOwnerEmail = job.owner_email; 
+          const changerEmail = user?.email;
+          const creatorName = user?.user_metadata?.first_name ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}` : "Unknown User";
+
+          if (user?.email && jobOwnerEmail) {
+            await fetch('YOUR_SUPABASE_FUNCTION_URL', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                candidateName: candidate.name,
+                newStatus: newSubStatus.name,
+                oldStatus: oldSubStatusName,
+                jobTitle: job.title,
+                jobId: job.id,
+                jobOwnerEmail: jobOwnerEmail,
+                changerEmail: changerEmail,
+                changerName: creatorName,
+                jobOwnerName: job.owner_name,
+              }),
+            });
           }
-        })
-        .catch(error => {
-          console.error("Error updating status:", error);
+
+          toast.success("Status updated successfully");
+          onRefresh();
+        } else {
           toast.error("Failed to update status");
-        });
-    } catch (error) {
-      console.error("Error in handleStatusChange:", error);
-      toast.error("Failed to update status");
-    }
-  };
-
-
+        }
+      })
+      .catch(error => {
+        console.error("Error updating status:", error);
+        toast.error("Failed to update status");
+      });
+  } catch (error) {
+    console.error("Error in handleStatusChange:", error);
+    toast.error("Failed to update status");
+  }
+};
+ 
+ 
  // --- UPDATED handleValidateResume using Proxy for POST, Direct for GET ---
 const handleValidateResume = async (candidateId: string) => {
   let rqJobId: string | null = null;
-
+ 
   if (validatingId) return;
-
+ 
   try {
     setValidatingId(candidateId);
     toast.info("Starting resume validation...");
-
+ 
     const candidate = filteredCandidates.find((c) => c.id === candidateId);
     console.log("candidate", candidate)
     if (!candidate || !candidate.resume) {
       throw new Error("Candidate or resume data missing.");
     }
-
+ 
     const resumeUrlParts = candidate.resume.split("candidate_resumes/");
     const extractedResumeUrl = resumeUrlParts.length > 1 ? resumeUrlParts[1] : candidate.resume;
-
+ 
     const { data: jobData, error: jobError } = await supabase
       .from("hr_jobs")
       .select("job_id")
       .eq("id", jobId)
       .single();
-
+ 
     if (jobError || !jobData) {
       throw new Error("Invalid job configuration. Could not find job details.");
     }
     const jobTextId = jobData.job_id;
-
+ 
     const payload = {
       job_id: jobTextId,
       candidate_id: candidateId,
@@ -851,16 +880,16 @@ const handleValidateResume = async (candidateId: string) => {
       user_id: user.id,
     };
     console.log("Sending payload to backend:", payload);
-
+ 
     const backendUrl = 'https://dev.hrumbles.ai/api/validate-candidate';
     console.log(`Using backend URL: ${backendUrl}`);
-
+ 
     const response = await fetch(backendUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(payload),
     });
-
+ 
     const contentType = response.headers.get("Content-Type");
     if (!response.ok || !contentType?.includes("application/json")) {
       const errorText = await response.text();
@@ -872,18 +901,18 @@ const handleValidateResume = async (candidateId: string) => {
         `Invalid response: Expected JSON, received ${contentType || "unknown"} - ${errorText.slice(0, 200)}`
       );
     }
-
+ 
     const responseData = await response.json();
     console.log("Backend validation response:", responseData);
     if (!responseData.job_id) {
       throw new Error("Backend did not return a job ID to track.");
     }
     rqJobId = responseData.job_id;
-
+ 
     let attempts = 0;
     const maxAttempts = 24;
     const interval = 5000;
-
+ 
     const pollJobStatus = (): Promise<string> => {
       return new Promise(async (resolve, reject) => {
         if (attempts >= maxAttempts) {
@@ -892,12 +921,12 @@ const handleValidateResume = async (candidateId: string) => {
         }
         attempts++;
         console.log(`Polling attempt ${attempts}/${maxAttempts} for job ${rqJobId}...`);
-
+ 
         try {
           const statusApiUrl = `https://dev.hrumbles.ai/api/job-status/${encodeURIComponent(rqJobId)}`;
           console.log(`Polling URL: ${statusApiUrl}`);
           const statusResponse = await fetch(statusApiUrl);
-
+ 
           const statusContentType = statusResponse.headers.get("Content-Type");
           if (!statusResponse.ok || !statusContentType?.includes("application/json")) {
             const pollErrorText = await statusResponse.text();
@@ -905,10 +934,10 @@ const handleValidateResume = async (candidateId: string) => {
             setTimeout(() => pollJobStatus().then(resolve).catch(reject), interval);
             return;
           }
-
+ 
           const statusData = await statusResponse.json();
           console.log(`Polling status data:`, statusData);
-
+ 
           if (statusData.status === "finished") {
             console.log("Job finished!");
             return resolve(statusData.status);
@@ -948,10 +977,10 @@ const handleValidateResume = async (candidateId: string) => {
         }
       });
     };
-
+ 
     await pollJobStatus();
     toast.success("Resume validation process completed successfully!");
-
+ 
     const finalAnalysisData = await fetchAnalysisData(candidateId);
     if (finalAnalysisData) {
       console.log("Displaying modal with final data:", finalAnalysisData);
@@ -970,11 +999,11 @@ const handleValidateResume = async (candidateId: string) => {
     setValidatingId(null);
   }
 };
-
-
-
-
-
+ 
+ 
+ 
+ 
+ 
   const handleViewResume = (candidateId: string) => {
     const candidate = filteredCandidates.find((c) => c.id === candidateId);
     if (candidate?.resume) {
@@ -983,13 +1012,13 @@ const handleValidateResume = async (candidateId: string) => {
       toast.error("Resume not available");
     }
   };
-
+ 
   const handleEditCandidate = (candidate: Candidate) => {
     console.log("Editing candidate:", candidate);
     setSelectedCandidate(candidate);
     setIsEditDrawerOpen(true);
   };
-
+ 
   const handleCandidateUpdated = () => {
     setIsEditDrawerOpen(false);
     setSelectedCandidate(null);
@@ -997,10 +1026,11 @@ const handleValidateResume = async (candidateId: string) => {
     toast.success("Candidate updated successfully");
   };
 
-  const handleInterviewSubmit = async () => {
+ 
+const handleInterviewSubmit = async () => {
     // Add a check for currentSubStatus to the guard clause
     if (!currentCandidateId || !currentSubStatusId || !currentRound || !currentSubStatus) return;
-    
+   
     const interviewData = {
       interview_date: interviewDate,
       interview_time: interviewTime,
@@ -1009,7 +1039,7 @@ const handleValidateResume = async (candidateId: string) => {
       interviewer_name: interviewerName,
       round: currentRound
     };
-    
+   
     try {
       // First, find if an interview record for this round already exists
       const { data: existingInterviews, error: fetchError } = await supabase
@@ -1019,12 +1049,12 @@ const handleValidateResume = async (candidateId: string) => {
         .eq('interview_round', currentRound)
         .order('created_at', { ascending: false })
         .limit(1);
-      
+     
       if (fetchError) throw fetchError;
-
+ 
       // Determine if this is a new schedule or a reschedule/update
       const isUpdateAction = needsReschedule || (existingInterviews && existingInterviews.length > 0);
-
+ 
       if (isUpdateAction) {
         // Update the existing interview record
         const { error } = await supabase
@@ -1040,7 +1070,7 @@ const handleValidateResume = async (candidateId: string) => {
             updated_at: new Date().toISOString()
           })
           .eq('id', existingInterviews[0].id);
-          
+         
         if (error) throw error;
       } else {
         // Insert a new interview record
@@ -1057,15 +1087,15 @@ const handleValidateResume = async (candidateId: string) => {
             status: 'scheduled',
             created_by: user.id,
             organization_id: organizationId
-            
+           
           });
-          
+         
         if (error) throw error;
       }
-      
+     
       // --- FIX: Determine the correct final status for the candidate ---
       let finalSubStatusId = currentSubStatusId;
-
+ 
       // If this was a 'reschedule' action, we must set the status back to the
       // actual scheduled state (e.g., 'L1') instead of leaving it as 'Reschedule L1'.
       if (needsReschedule) {
@@ -1073,7 +1103,7 @@ const handleValidateResume = async (candidateId: string) => {
         const targetScheduledStatus = statuses
           .flatMap(main => main.subStatuses || [])
           .find(sub => sub.name === currentRound); // currentRound holds the base name like 'L1'
-
+ 
         if (targetScheduledStatus) {
           finalSubStatusId = targetScheduledStatus.id;
         } else {
@@ -1083,10 +1113,10 @@ const handleValidateResume = async (candidateId: string) => {
           // We proceed with the original 'Reschedule...' status ID, but the bug will persist for this one instance.
         }
       }
-
+ 
       // Update candidate status using the determined finalSubStatusId
       await updateCandidateStatus(currentCandidateId, finalSubStatusId, user.id, interviewData);
-      
+     
       setShowInterviewModal(false);
       resetInterviewForm();
       await onRefresh();
@@ -1096,16 +1126,16 @@ const handleValidateResume = async (candidateId: string) => {
       toast.error("Failed to schedule/reschedule interview");
     }
   };
-
+ 
   const handleInterviewFeedbackSubmit = async () => {
     if (!currentCandidateId || !currentSubStatusId || !currentRound) return;
-    
+   
     const feedbackData = {
       interview_feedback: interviewFeedback,
       interview_result: interviewResult,
       round: currentRound
     };
-    
+   
     const { data: interviews, error: interviewError } = await supabase
       .from('hr_candidate_interviews')
       .select('*')
@@ -1113,13 +1143,13 @@ const handleValidateResume = async (candidateId: string) => {
       .eq('interview_round', currentRound)
       .order('created_at', { ascending: false })
       .limit(1);
-      
+     
     if (interviewError) {
       console.error("Error fetching interview:", interviewError);
       toast.error("Failed to fetch interview details");
       return;
     }
-    
+   
     if (interviews && interviews.length > 0) {
       const { error } = await supabase
         .from('hr_candidate_interviews')
@@ -1133,57 +1163,57 @@ const handleValidateResume = async (candidateId: string) => {
           status: interviewResult === 'selected' ? 'completed' : 'rejected'
         })
         .eq('id', interviews[0].id);
-        
+       
       if (error) {
         console.error("Error updating interview:", error);
         toast.error("Failed to update interview feedback");
         return;
       }
     }
-    
+   
     await updateCandidateStatus(currentCandidateId, currentSubStatusId, user.id, feedbackData);
-      
+     
     setShowInterviewFeedbackModal(false);
     setInterviewFeedback('');
     setInterviewResult('selected');
     await onRefresh();
     toast.success("Interview feedback saved");
   };
-
+ 
   const handleJoiningSubmit = async () => {
     if (!currentCandidateId || !currentSubStatusId || !jobId) return;
-  
+ 
     // Validate CTC
     const cleanedCtc = parseFloat(ctc);
     if (isNaN(cleanedCtc) || cleanedCtc <= 0) {
       toast.error("Please enter a valid CTC");
       return;
     }
-  
+ 
     // Validate Joining Date
     if (!joiningDate) {
       toast.error("Please select a joining date");
       return;
     }
-  
+ 
     try {
       // Get current currency symbol
       const currentCurrency = currencies.find((c) => c.value === currencyType) || currencies[0];
-  
+ 
       // Format client_budget
       const clientBudget = `${currentCurrency.symbol}${cleanedCtc} ${budgetType}`;
-  
+ 
       // Update or insert into hr_candidate_joining_details
       const { data: existingDetails, error: fetchError } = await supabase
         .from("hr_candidate_joining_details")
         .select("*")
         .eq("candidate_id", currentCandidateId)
         .maybeSingle();
-  
+ 
       if (fetchError && !fetchError.message.includes("No rows found")) {
         throw fetchError;
       }
-  
+ 
       const joiningDetails = {
         candidate_id: currentCandidateId,
        
@@ -1198,7 +1228,7 @@ const handleValidateResume = async (candidateId: string) => {
         onboarding_status: "pending",
         organization_id: organizationId,
       };
-  
+ 
       if (existingDetails) {
         const { error } = await supabase
           .from("hr_candidate_joining_details")
@@ -1211,24 +1241,24 @@ const handleValidateResume = async (candidateId: string) => {
             updated_at: new Date().toISOString(),
           })
           .eq("id", existingDetails.id);
-  
+ 
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from("hr_candidate_joining_details")
           .insert(joiningDetails);
-  
+ 
         if (error) throw error;
       }
-  
+ 
       // Prepare data for updateCandidateStatus
       const joiningData = {
         ctc: clientBudget,
         joining_date: joiningDate,
       };
-  
+ 
       await updateCandidateStatus(currentCandidateId, currentSubStatusId, user.id, joiningData);
-  
+ 
       setShowJoiningModal(false);
       setCtc("");
       setJoiningDate("");
@@ -1241,31 +1271,31 @@ const handleValidateResume = async (candidateId: string) => {
       toast.error("Failed to save joining details");
     }
   };
-
-
+ 
+ 
   const handleActualCtcSubmit = async () => {
     if (!currentCandidateId || !currentSubStatusId) return;
-  
+ 
     // Validate CTC
     const cleanedCtc = parseFloat(actualCtc);
     if (isNaN(cleanedCtc) || cleanedCtc <= 0) {
       toast.error("Please enter a valid CTC");
       return;
     }
-  
+ 
     // Validate Submission Date
     if (!submissionDate) {
       toast.error("Please select a submission date");
       return;
     }
-  
+ 
     try {
       // Get current currency symbol
       const currentCurrency = currencies.find((c) => c.value === currencyType) || currencies[0];
-  
+ 
       // Format clientBudget
       const clientBudget = `${currentCurrency.symbol}${cleanedCtc} ${budgetType}`;
-  
+ 
       // Update or insert into hr_candidate_accrual_ctc
       const { data: existingDetails, error: fetchError } = await supabase
         .from("hr_candidate_accrual_ctc")
@@ -1273,11 +1303,11 @@ const handleValidateResume = async (candidateId: string) => {
         .eq("candidate_id", currentCandidateId)
         .eq("job_id", jobId)
         .maybeSingle();
-  
+ 
       if (fetchError && !fetchError.message.includes("No rows found")) {
         throw fetchError;
       }
-  
+ 
       if (existingDetails) {
         const { error } = await supabase
           .from("hr_candidate_accrual_ctc")
@@ -1289,7 +1319,7 @@ const handleValidateResume = async (candidateId: string) => {
             updated_at: submissionDate ? new Date(submissionDate).toISOString() : new Date().toISOString(),
           })
           .eq("id", existingDetails.id);
-  
+ 
         if (error) throw error;
       } else {
         const { error } = await supabase
@@ -1306,16 +1336,16 @@ const handleValidateResume = async (candidateId: string) => {
             updated_at: submissionDate ? new Date(submissionDate).toISOString() : new Date().toISOString(),
             organization_id: organizationId,
           });
-  
+ 
         if (error) throw error;
       }
-  
+ 
       // Prepare data for status update
       const additionalData = {
         accrual_ctc: clientBudget,
         submission_date: submissionDate,
       };
-  
+ 
       // Use the new client submission status update function
       const success = await updateClientSubmissionStatus(
         currentCandidateId,
@@ -1324,11 +1354,11 @@ const handleValidateResume = async (candidateId: string) => {
         user.id,
         additionalData
       );
-  
+ 
       if (!success) {
         throw new Error('Failed to update client submission status');
       }
-  
+ 
       setShowActualCtcModal(false);
       setActualCtc("");
       setCurrencyType("INR");
@@ -1341,26 +1371,26 @@ const handleValidateResume = async (candidateId: string) => {
       toast.error("Failed to save actual CTC");
     }
   };
-
-
-
+ 
+ 
+ 
   const handleRejectSubmit = async () => {
     if (!currentCandidateId || !currentSubStatusId) return;
-    
+   
     const rejectData = {
       reject_reason: rejectReason,
       reject_type: rejectType
     };
-    
+   
     await updateCandidateStatus(currentCandidateId, currentSubStatusId, user.id, rejectData);
-    
+   
     setShowRejectModal(false);
     setRejectReason('');
     setRejectType('internal');
     await onRefresh();
     toast.success("Candidate rejected");
   };
-
+ 
   const resetInterviewForm = () => {
     setInterviewDate('');
     setInterviewTime('');
@@ -1370,7 +1400,7 @@ const handleValidateResume = async (candidateId: string) => {
     setCurrentRound(null);
     setNeedsReschedule(false);
   };
-
+ 
   const handleAddToJob = async (candidateId: string) => {
     try {
       toast.success("Candidate added to job");
@@ -1379,7 +1409,7 @@ const handleValidateResume = async (candidateId: string) => {
       toast.error("Failed to add candidate to job");
     }
   };
-
+ 
   if (isLoading || jobLoading) {
     return (
       <div className="flex justify-center py-8">
@@ -1387,26 +1417,26 @@ const handleValidateResume = async (candidateId: string) => {
       </div>
     );
   }
-
+ 
   const getTabCount = (tabName: string) => {
     if (tabName === "All Candidates") return candidates.filter(c => c.main_status?.name !== "Applied" || c.created_by).length;
     if (tabName === "Applied") return appliedCandidates.length;
     return candidates.filter(c => c.main_status?.name === tabName).length;
   };
-
+ 
   const totalPages = Math.ceil(filteredCandidates.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedCandidates = filteredCandidates.slice(
     startIndex,
     startIndex + itemsPerPage
   );
-
-
+ 
+ 
   const handleItemsPerPageChange = (value: string) => {
     setItemsPerPage(Number(value));
     setCurrentPage(1);
   };
-
+ 
   const renderPagination = () => {
     return (
       <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
@@ -1428,7 +1458,7 @@ const handleValidateResume = async (candidateId: string) => {
           </Select>
           <span className="text-sm text-gray-600">per page</span>
         </div>
-
+ 
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -1438,7 +1468,7 @@ const handleValidateResume = async (candidateId: string) => {
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-
+ 
           <div className="flex items-center gap-1">
             {Array.from({ length: totalPages }, (_, i) => i + 1)
               .slice(
@@ -1456,7 +1486,7 @@ const handleValidateResume = async (candidateId: string) => {
                 </Button>
               ))}
           </div>
-
+ 
           <Button
             variant="outline"
             size="sm"
@@ -1468,7 +1498,7 @@ const handleValidateResume = async (candidateId: string) => {
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-
+ 
         <span className="text-sm text-gray-600">
           Showing {startIndex + 1} to{" "}
           {Math.min(startIndex + itemsPerPage, filteredCandidates.length)} of{" "}
@@ -1477,7 +1507,7 @@ const handleValidateResume = async (candidateId: string) => {
       </div>
     );
   };
-
+ 
   const toggleContactVisibility = (
     candidateId: string,
     field: "email" | "phone"
@@ -1490,7 +1520,7 @@ const handleValidateResume = async (candidateId: string) => {
       },
     }));
   };
-
+ 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text).then(() => {
       toast.success(`${field} copied to clipboard`);
@@ -1498,11 +1528,11 @@ const handleValidateResume = async (candidateId: string) => {
       toast.error(`Failed to copy ${field}`);
     });
   };
-
+ 
   const HiddenContactCell = ({ email, phone, candidateId }: HiddenContactCellProps) => {
     const [justCopiedEmail, setJustCopiedEmail] = useState(false);
     const [justCopiedPhone, setJustCopiedPhone] = useState(false);
-  
+ 
     const copyToClipboard = (value: string, field: "Email" | "Phone") => {
       navigator.clipboard.writeText(value);
       if (field === "Email") {
@@ -1513,11 +1543,16 @@ const handleValidateResume = async (candidateId: string) => {
         setTimeout(() => setJustCopiedPhone(false), 2000);
       }
     };
-  
+ 
     if (!email && !phone) {
       return <TableCell className="text-muted-foreground">N/A</TableCell>;
     }
-  
+ 
+ 
+   if (!email && !phone) {
+      return <TableCell className="text-muted-foreground">N/A</TableCell>;
+    }
+ 
     return (
       <TableCell>
         <div className="flex items-center gap-2">
@@ -1602,7 +1637,7 @@ const handleValidateResume = async (candidateId: string) => {
       </TableCell>
     );
   };
-
+ 
   return (
     <>
     {isEmployee && <div className="flex justify-between items-center mb-4">
@@ -1727,7 +1762,7 @@ const handleValidateResume = async (candidateId: string) => {
     </span>
   </div>
 </TableCell>
-
+ 
 {!isEmployee && <TableCell>{candidate.owner || candidate.appliedFrom}</TableCell>}
                   <HiddenContactCell
                     email={candidate.email}
@@ -1858,7 +1893,7 @@ const handleValidateResume = async (candidateId: string) => {
         </div>
       )}
       {filteredCandidates.length > 0 && renderPagination()}
-
+ 
       {selectedCandidate && (
         <EditCandidateDrawer
           job={{
@@ -1872,7 +1907,7 @@ const handleValidateResume = async (candidateId: string) => {
           onOpenChange={setIsEditDrawerOpen}
         />
       )}
-
+ 
       {isSummaryModalOpen && analysisData && (
         <SummaryModal
           analysisData={analysisData}
@@ -1882,7 +1917,7 @@ const handleValidateResume = async (candidateId: string) => {
           }}
         />
       )}
-
+ 
       {/* --- ADD THIS NEW MODAL RENDER --- */}
       {selectedCandidateForTimeline && (
         <CandidateTimelineModal
@@ -1891,9 +1926,9 @@ const handleValidateResume = async (candidateId: string) => {
           candidate={selectedCandidateForTimeline}
         />
       )}
-
-      
-
+ 
+     
+ 
       <Dialog open={showInterviewModal} onOpenChange={setShowInterviewModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -1905,43 +1940,43 @@ const handleValidateResume = async (candidateId: string) => {
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right" htmlFor="date">Date</Label>
-              <input 
-                id="date" 
-                type="date" 
-                value={interviewDate} 
-                onChange={e => setInterviewDate(e.target.value)} 
+              <input
+                id="date"
+                type="date"
+                value={interviewDate}
+                onChange={e => setInterviewDate(e.target.value)}
                 className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2"
                 required
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right" htmlFor="time">Time</Label>
-              <input 
-                id="time" 
-                type="time" 
-                value={interviewTime} 
-                onChange={e => setInterviewTime(e.target.value)} 
+              <input
+                id="time"
+                type="time"
+                value={interviewTime}
+                onChange={e => setInterviewTime(e.target.value)}
                 className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2"
                 required
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right" htmlFor="location">Location</Label>
-              <input 
-                id="location" 
-                type="text" 
-                value={interviewLocation} 
-                onChange={e => setInterviewLocation(e.target.value)} 
+              <input
+                id="location"
+                type="text"
+                value={interviewLocation}
+                onChange={e => setInterviewLocation(e.target.value)}
                 className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2"
                 placeholder="Virtual or Office Address"
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right" htmlFor="type">Type</Label>
-              <select 
-                id="type" 
-                value={interviewType} 
-                onChange={e => setInterviewType(e.target.value)} 
+              <select
+                id="type"
+                value={interviewType}
+                onChange={e => setInterviewType(e.target.value)}
                 className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2"
               >
                 <option value="Technical">Technical</option>
@@ -1952,11 +1987,11 @@ const handleValidateResume = async (candidateId: string) => {
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right" htmlFor="interviewer">Interviewer</Label>
-              <input 
-                id="interviewer" 
-                type="text" 
-                value={interviewerName} 
-                onChange={e => setInterviewerName(e.target.value)} 
+              <input
+                id="interviewer"
+                type="text"
+                value={interviewerName}
+                onChange={e => setInterviewerName(e.target.value)}
                 className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2"
                 placeholder="Interviewer Name"
               />
@@ -1968,7 +2003,7 @@ const handleValidateResume = async (candidateId: string) => {
           </div>
         </DialogContent>
       </Dialog>
-
+ 
       <Dialog open={showInterviewFeedbackModal} onOpenChange={setShowInterviewFeedbackModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -1980,9 +2015,9 @@ const handleValidateResume = async (candidateId: string) => {
           <div className="grid gap-4 py-4">
             <div className="space-y-2 hidden">
               <Label htmlFor="result">Interview Result</Label>
-              <RadioGroup 
-                id="result" 
-                value={interviewResult} 
+              <RadioGroup
+                id="result"
+                value={interviewResult}
                 onValueChange={setInterviewResult}
                 className="flex flex-col space-y-1"
               >
@@ -1998,10 +2033,10 @@ const handleValidateResume = async (candidateId: string) => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="feedback">Feedback</Label>
-              <Textarea 
-                id="feedback" 
-                value={interviewFeedback} 
-                onChange={e => setInterviewFeedback(e.target.value)} 
+              <Textarea
+                id="feedback"
+                value={interviewFeedback}
+                onChange={e => setInterviewFeedback(e.target.value)}
                 placeholder="Enter interview feedback"
                 className="min-h-[120px]"
               />
@@ -2013,7 +2048,7 @@ const handleValidateResume = async (candidateId: string) => {
           </div>
         </DialogContent>
       </Dialog>
-
+ 
       <Dialog open={showJoiningModal} onOpenChange={setShowJoiningModal}>
   <DialogContent className="sm:max-w-md">
     <DialogHeader>
@@ -2091,7 +2126,7 @@ const handleValidateResume = async (candidateId: string) => {
     </div>
   </DialogContent>
 </Dialog>
-
+ 
       <Dialog open={showRejectModal} onOpenChange={setShowRejectModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -2103,10 +2138,10 @@ const handleValidateResume = async (candidateId: string) => {
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="reject-reason">Rejection Reason</Label>
-              <Textarea 
-                id="reject-reason" 
-                value={rejectReason} 
-                onChange={e => setRejectReason(e.target.value)} 
+              <Textarea
+                id="reject-reason"
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
                 placeholder="Enter rejection reason"
                 className="min-h-[100px]"
               />
@@ -2118,7 +2153,7 @@ const handleValidateResume = async (candidateId: string) => {
           </div>
         </DialogContent>
       </Dialog>
-
+ 
       <Dialog open={showActualCtcModal} onOpenChange={setShowActualCtcModal}>
   <DialogContent className="sm:max-w-md">
     <DialogHeader>
@@ -2208,5 +2243,6 @@ const handleValidateResume = async (candidateId: string) => {
     </>
   );
 };
-
+ 
 export default CandidatesList;
+ 

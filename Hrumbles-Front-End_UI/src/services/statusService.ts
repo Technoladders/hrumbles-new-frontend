@@ -358,26 +358,27 @@ const getDefaultStatuses = (): MainStatus[] => {
 
 // Update candidate status and create timeline entry
 export const updateCandidateStatus = async (
-  candidateId: string, 
+  candidateId: string,
   subStatusId: string,
   userId?: string,
   additionalData: Record<string, any> = {}
-): Promise<boolean> => {
+): Promise<{ success: boolean; oldStatusName?: string; newStatusName?: string }> => {
   try {
-    // Get the sub status to find its parent
-    const { data: subStatus, error: subError } = await supabase
+    // Get the new sub status to find its parent and name
+    const { data: newSubStatus, error: subError } = await supabase
       .from('job_statuses')
-      .select('*')
+      .select('name, parent_id') // We only need name and parent_id for this logic
       .eq('id', subStatusId)
       .single();
     
     if (subError) {
-      console.error('Error fetching sub status:', subError);
-      // If no sub status is found, use default New status
-      return updateCandidateToDefaultStatus(candidateId, userId, additionalData);
+      console.error('Error fetching new sub status:', subError);
+      // Fallback to default status if needed, but for now, we'll return a failure object
+      // as the status doesn't exist.
+      return { success: false };
     }
 
-    // Get the previous status data
+    // Get the previous status data to find the old status name
     const { data: prevCandidateData, error: prevError } = await supabase
       .from('hr_job_candidates')
       .select(`
@@ -388,41 +389,43 @@ export const updateCandidateStatus = async (
         sub_status:job_statuses!sub_status_id (name)
       `)
       .eq('id', candidateId)
-      .maybeSingle(); // Use maybeSingle instead of single
+      .single(); // Using single() here, but maybeSingle() is safer if a candidate might not exist
 
-    if (prevError && !prevError.message.includes('No rows found')) {
-      console.error('Error fetching previous status:', prevError);
+    if (prevError) {
+      console.error('Error fetching previous status (this is not critical):', prevError);
+      // We can still proceed even if we can't get the old status name for the email
     }
     
-    // Create the update data including additional fields if provided
+    // Create the update data
     const updateData = {
-      main_status_id: subStatus.parent_id,
+      main_status_id: newSubStatus.parent_id,
       sub_status_id: subStatusId,
       updated_by: userId || null,
       updated_at: new Date().toISOString(),
       ...additionalData
     };
     
-    // Update the candidate with both main and sub status
-    const { error } = await supabase
+    // Update the candidate's status in the database
+    const { error: updateError } = await supabase
       .from('hr_job_candidates')
       .update(updateData)
       .eq('id', candidateId);
     
-    if (error) throw error;
+    if (updateError) throw updateError;
 
-    // Get the new status data for timeline entry
+    // --- YOUR EXISTING LOGIC FOR TIMELINE AND COUNTS REMAINS UNCHANGED ---
+    // Get the new main status data for the timeline entry
     const { data: mainStatus, error: mainStatusError } = await supabase
       .from('job_statuses')
       .select('name')
-      .eq('id', subStatus.parent_id)
+      .eq('id', newSubStatus.parent_id)
       .single();
     
     if (mainStatusError) {
-      console.error('Error fetching main status:', mainStatusError);
+      console.error('Error fetching main status name for timeline:', mainStatusError);
     }
 
-    // Create timeline entry for status change
+    // Create timeline entry
     await createStatusChangeTimelineEntry(
       candidateId,
       userId || 'System',
@@ -434,35 +437,42 @@ export const updateCandidateStatus = async (
           subStatusName: prevCandidateData.sub_status?.name
         } : null,
         newState: {
-          mainStatusId: subStatus.parent_id,
+          mainStatusId: newSubStatus.parent_id,
           subStatusId: subStatusId,
           mainStatusName: mainStatus?.name,
-          subStatusName: subStatus.name
+          subStatusName: newSubStatus.name
         },
         additionalData
       }
     );
     
-    // Use the fixed updateCandidateStatusCounts function from candidateService
+    // Update status change counts
     if (prevCandidateData?.job_id) {
       await import('@/services/candidateService').then((module) => {
         module.updateCandidateStatusCounts(
           candidateId,
           prevCandidateData.job_id,
-          subStatus.parent_id,
+          newSubStatus.parent_id,
           subStatusId,
           userId
         );
       });
     }
     
-    return true;
+    // --- THIS IS THE KEY CHANGE ---
+    // Return an object with success status and the names for the email function
+    return {
+      success: true,
+      oldStatusName: prevCandidateData?.sub_status?.name || 'N/A', // Use optional chaining for safety
+      newStatusName: newSubStatus.name
+    };
+    
   } catch (error) {
     console.error('Error updating candidate status:', error);
-    return false;
+    // Return the failure object on any error
+    return { success: false };
   }
 };
-
 // Function to set a candidate to default New status
 const updateCandidateToDefaultStatus = async (
   candidateId: string,
