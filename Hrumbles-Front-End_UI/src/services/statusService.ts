@@ -411,6 +411,20 @@ export const updateCandidateStatus = async (
     
     if (error) throw error;
 
+     if (prevCandidateData?.job_id && userId) {
+      // This is a "fire-and-forget" call. We don't wait for it (`await`)
+      // so that email issues do not block the UI or the main operation.
+      // The .catch() ensures any errors are logged without crashing the app.
+      sendStatusUpdateNotification(
+        candidateId,
+        prevCandidateData.sub_status?.name, // The old status name
+        subStatus.name,                    // The new status name
+        userId,                            // The ID of the user who made the change
+        prevCandidateData.job_id,
+        additionalData         // The job ID
+      ).catch(err => console.error("Email notification dispatch failed:", err));
+    }
+
     // Get the new status data for timeline entry
     const { data: mainStatus, error: mainStatusError } = await supabase
       .from('job_statuses')
@@ -968,6 +982,17 @@ const authData = getAuthDataFromLocalStorage();
       throw timelineError;
     }
 
+    if (userId) {
+      sendStatusUpdateNotification(
+        candidateId,
+        prevCandidateData?.sub_status?.name,
+        subStatus.name,
+        userId,
+        jobId,
+        additionalData // Pass the submission data
+      ).catch(err => console.error("Email notification dispatch failed:", err));
+    }
+
     return true;
   } catch (error) {
     console.error('Error in updateClientSubmissionStatus:', error);
@@ -1081,5 +1106,100 @@ export const updateNoteTimelineEvent = async (
     console.error('Error updating note timeline event:', error);
     toast.error("Failed to update note.");
     return false;
+  }
+};
+
+export const sendStatusUpdateNotification = async (
+  candidateId: string,
+  oldStatusName: string | undefined,
+  newStatusName: string,
+  changerUserId: string,
+  jobId: string,
+  additionalData: Record<string, any> = {}
+) => {
+  try {
+    const { data: { session }, error: authError } = await supabase.auth.getSession();
+    if (authError || !session) {
+      console.error('Email Notification Error: Authentication session not found.');
+      return;
+    }
+
+    const [candidateRes, jobRes, changerRes] = await Promise.all([
+      supabase.from('hr_job_candidates').select('name, created_by').eq('id', candidateId).single(),
+      supabase.from('hr_jobs').select('title, created_by').eq('id', jobId).single(),
+      supabase.from('hr_employees').select('email, first_name, last_name').eq('id', changerUserId).single()
+    ]);
+
+    if (candidateRes.error || jobRes.error || changerRes.error) {
+      console.error('Email Notification Error: Failed to fetch core data.', { 
+        candidateError: candidateRes.error, jobError: jobRes.error, changerError: changerRes.error 
+      });
+      return;
+    }
+
+    const candidate = candidateRes.data;
+    const job = jobRes.data;
+    const changer = changerRes.data;
+
+    const candidateOwnerId = candidate.created_by;
+    const jobOwnerId = job.created_by;
+
+    const [candidateOwnerRes, jobOwnerRes, emailConfigRes] = await Promise.all([
+        supabase.from('hr_employees').select('email, first_name, last_name').eq('id', candidateOwnerId).single(),
+        supabase.from('hr_employees').select('email, first_name, last_name').eq('id', jobOwnerId).single(),
+        supabase.from('hr_email_configurations').select('recipients').eq('report_type', 'status_update').limit(1).single()
+    ]);
+    
+    const recipientEmails = new Set<string>();
+    if (changer?.email) recipientEmails.add(changer.email);
+    if (candidateOwnerRes.data?.email) recipientEmails.add(candidateOwnerRes.data.email);
+    if (jobOwnerRes.data?.email) recipientEmails.add(jobOwnerRes.data.email);
+    
+    if (emailConfigRes.data?.recipients && emailConfigRes.data.recipients.length > 0) {
+        const { data: configuredEmployees } = await supabase
+            .from('hr_employees').select('email').in('id', emailConfigRes.data.recipients);
+        if (configuredEmployees) {
+            configuredEmployees.forEach(emp => { if(emp.email) recipientEmails.add(emp.email); });
+        }
+    }
+    
+    if (recipientEmails.size === 0) return;
+
+    const jobOwner = jobOwnerRes.data;
+    const changerName = `${changer.first_name || ''} ${changer.last_name || ''}`.trim();
+    const jobOwnerName = `${jobOwner?.first_name || ''} ${jobOwner?.last_name || ''}`.trim();
+
+    const payload = {
+      candidateName: candidate.name,
+      newStatus: newStatusName,
+      oldStatus: oldStatusName || 'None',
+      jobTitle: job.title,
+      jobId: jobId,
+      changerName: changerName,
+      recipients: Array.from(recipientEmails),
+      details: additionalData,
+      // --- THIS IS THE NEW LINE TO ADD ---
+      candidateOwnerEmail: candidateOwnerRes.data?.email || null,
+      APP_BASE_URL: window.location.origin, // Dynamically get the base URL, e.g., https://technoladders.hrumbles.ai
+    };
+    
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-status-update-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Edge function request failed with status ${response.status}`);
+    }
+
+    console.log('Successfully triggered status update email notification.');
+  } catch (err) {
+    console.error('Failed to send status update notification:', err.message);
   }
 };

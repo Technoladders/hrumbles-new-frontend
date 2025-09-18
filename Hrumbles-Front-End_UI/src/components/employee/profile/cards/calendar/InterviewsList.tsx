@@ -26,75 +26,77 @@ interface InterviewsListProps {
 export const InterviewsList: React.FC<InterviewsListProps> = ({ employeeId, selectedDate, role, organizationId }) => {
   const [interviews, setInterviews] = useState<Interview[]>([]);
 
-  useEffect(() => {
-    const fetchInterviews = async () => {
-      try {
-        let fullName = '';
-        if (role !== 'organization_superadmin') {
-          const { data: employeeData, error: employeeError } = await supabase
-            .from("hr_employees")
-            .select("first_name, last_name")
-            .eq("id", employeeId)
-            .single();
+useEffect(() => {
+  // Define the asynchronous function to fetch and process interviews
+  const fetchInterviews = async () => {
+    try {
+      // 1. Call the database function to get all upcoming interviews for the organization.
+      // This single call replaces the previous two separate queries.
+      const { data: allInterviews, error: rpcError } = await supabase.rpc('get_upcoming_interviews', {
+        p_organization_id: organizationId
+      });
 
-          if (employeeError) throw employeeError;
-
-          if (employeeData) {
-            fullName = `${employeeData.first_name} ${employeeData.last_name}`;
-          }
-        }
-
-        const query = supabase
-          .from("hr_job_candidates")
-          .select("id, job_id, name, interview_date, interview_time, interview_location, interview_type, round, applied_from")
-          .eq("organization_id", organizationId);
-
-        if (role !== 'organization_superadmin') {
-          query.eq("applied_from", fullName);
-        }
-
-        const { data: candidatesData, error: candidatesError } = await query
-          .eq("main_status_id", "f72e13f8-7825-4793-85e0-e31d669f8097")
-          .not("interview_date", 'is', null);
-
-        if (candidatesError) throw candidatesError;
-
-        const currentDate = new Date();
-        const upcomingInterviews = candidatesData
-          .filter((candidate) => {
-            if (!candidate.interview_date) return false;
-            const interviewDateTime = new Date(
-              `${candidate.interview_date}T${candidate.interview_time || "00:00:00"}+05:30`
-            );
-            return interviewDateTime >= currentDate;
-          })
-          .map((candidate) => ({
-            name: candidate.name,
-            candidate_id: candidate.id,
-            job_id: candidate.job_id,
-            interview_date: candidate.interview_date,
-            interview_time: candidate.interview_time,
-            interview_location: candidate.interview_location,
-            interview_type: candidate.interview_type,
-            round: candidate.round,
-            employee_name: candidate.applied_from,
-          }))
-          // Sort by interview_date (ascending) and interview_time (ascending) for same dates
-          .sort((a, b) => {
-            const dateA = new Date(`${a.interview_date}T${a.interview_time || "00:00:00"}+05:30`);
-            const dateB = new Date(`${b.interview_date}T${b.interview_time || "00:00:00"}+05:30`);
-            return dateA.getTime() - dateB.getTime();
-          });
-
-        setInterviews(upcomingInterviews);
-      } catch (error) {
-        console.error("Error fetching interviews:", error);
-        toast.error("Failed to load interviews");
+      // Handle any errors from the RPC call
+      if (rpcError) {
+        throw rpcError;
       }
-    };
 
-    fetchInterviews();
-  }, [employeeId, role]);
+      // If there's no data, set interviews to an empty array and exit.
+      if (!allInterviews) {
+        setInterviews([]);
+        return;
+      }
+
+      let interviewsToDisplay = allInterviews;
+
+      // 2. If the user is NOT a superadmin, filter the results on the client-side.
+      if (role !== 'organization_superadmin') {
+        // First, we need the employee's full name to filter by.
+        const { data: employeeData, error: employeeError } = await supabase
+          .from("hr_employees")
+          .select("first_name, last_name")
+          .eq("id", employeeId)
+          .single();
+
+        if (employeeError) {
+          throw employeeError;
+        }
+
+        if (employeeData) {
+          const fullName = `${employeeData.first_name} ${employeeData.last_name}`;
+          // Filter the list to only include interviews where 'employee_name' (applied_from) matches.
+          interviewsToDisplay = allInterviews.filter(
+            (interview) => interview.employee_name === fullName
+          );
+        } else {
+          // If employee not found, they have no interviews to see.
+          interviewsToDisplay = [];
+        }
+      }
+
+      // 3. Sort the final list of interviews chronologically.
+      // This is done on the client-side to ensure correct ordering.
+      const sortedInterviews = interviewsToDisplay.sort((a, b) => {
+        const dateA = new Date(`${a.interview_date}T${a.interview_time || "00:00:00"}+05:30`);
+        const dateB = new Date(`${b.interview_date}T${b.interview_time || "00:00:00"}+05:30`);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+      // 4. Update the component's state with the final, sorted list.
+      setInterviews(sortedInterviews);
+
+    } catch (error) {
+      // Catch and display any errors that occurred during the process
+      console.error("Error fetching interviews:", error);
+      toast.error("Failed to load interviews");
+    }
+  };
+
+  // Execute the fetch function when the component mounts or dependencies change.
+  fetchInterviews();
+
+  // The dependency array ensures this effect re-runs if the user, role, or organization changes.
+}, [employeeId, role, organizationId]);
 
   console.log("intervies", interviews)
 
