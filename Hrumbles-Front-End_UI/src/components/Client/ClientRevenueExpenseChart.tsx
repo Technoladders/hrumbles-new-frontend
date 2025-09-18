@@ -52,7 +52,7 @@ const ClientRevenueExpenseChart: React.FC<Props> = ({ chartData, dataType, isLoa
         label: dataType === "revenue" ? "Revenue" : "Profit",
         data: chartData.map((data) => (dataType === "revenue" ? data.revenue : data.profit)),
         backgroundColor: (context: any) =>
-          createGradient(context, dataType === "revenue" ? "#9333ea" : "#eab308", dataType === "revenue" ? "#6366f1" : "#facc15"),
+          createGradient(context, dataType === "revenue" ? "#505050" : "#eab308", dataType === "revenue" ? "#505050" : "#facc15"),
         borderWidth: 0,
         borderRadius: 8,
       },

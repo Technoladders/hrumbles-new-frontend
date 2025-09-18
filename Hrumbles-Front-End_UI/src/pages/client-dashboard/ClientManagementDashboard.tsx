@@ -610,9 +610,9 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
                         />
                         <defs>
                             <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
-                                <stop offset="50%" stopColor="#10b981" stopOpacity={0.4} />
-                                <stop offset="100%" stopColor="#10b981" stopOpacity={0.1} />
+                                <stop offset="0%" stopColor="#A855F7" stopOpacity={0.8} />
+                                <stop offset="50%" stopColor="#A855F7" stopOpacity={0.4} />
+                                <stop offset="100%" stopColor="#A855F7" stopOpacity={0.1} />
                             </linearGradient>
                         </defs>
                         <Area
@@ -620,7 +620,7 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
                             type="monotone"
                             dataKey="profit_inr"
                             name="Profit"
-                            stroke="#10b981"
+                            stroke="#A855F7"
                             strokeWidth={2}
                             fill="url(#profitGradient)"
                             fillOpacity={1}
@@ -629,8 +629,8 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
                             yAxisId="left"
                             dataKey="revenue_inr"
                             name="Revenue"
-                            fill="#6366f1"
-                            radius={[2, 2, 0, 0]}
+                            fill="#505050"
+                            radius={[6, 6, 0, 0]}
                             maxBarSize={60}
                         />
                     </ComposedChart>
@@ -645,78 +645,82 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
 
 <div className="grid grid-cols-2 lg:grid-cols-2 gap-4  ">
     <div className="col-span-1 lg:col-span-1">
-    <Card className="shadow-2xl bg-gradient-to-br from-emerald-50/80 to-teal-50/80 backdrop-blur-xl border border-white/30 hover:shadow-3xl transition-all duration-300">
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold flex items-center text-gray-900">
-                        <div className="w-1 h-4 bg-gradient-to-b from-emerald-500 to-teal-600 rounded-full mr-2"></div>
-                        By Service Type
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="flex items-center h-[200px] p-3">
-                    {serviceTypeDistribution.length > 0 ? (
-                        <div className="w-full h-full flex flex-col">
-                            <div className="flex-1 flex justify-center items-center">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <defs>
-                                            <filter id="serviceDonutShadow" x="-50%" y="-50%" width="200%" height="200%">
-                                                <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#000" floodOpacity="0.15"/>
-                                            </filter>
-                                        </defs>
-                                        <Pie
-                                            data={serviceTypeDistribution.map((item, index) => ({
-                                                ...item,
-                                                fill: DONUT_CHART_COLORS[index % DONUT_CHART_COLORS.length]
-                                            }))}
-                                            dataKey="value"
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={30}
-                                            outerRadius={60}
-                                            paddingAngle={0}
-                                            filter="url(#serviceDonutShadow)"
-                                        >
-                                            {serviceTypeDistribution.map((entry, index) => (
-                                                <Cell
-                                                    key={`cell-${index}`}
-                                                    fill={DONUT_CHART_COLORS[index % DONUT_CHART_COLORS.length]}
-                                                    stroke="none"
-                                                />
-                                            ))}
-                                        </Pie>
-                                        <RechartsTooltip formatter={(value) => [`${value} Clients`, "Count"]} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                            <div className="space-y-1 mt-1">
-                                {serviceTypeDistribution.map((entry, index) => (
-                                    <div key={index} className="flex items-center justify-between text-xs">
-                                        <div className="flex items-center">
-                                            <div
-                                                className="w-2 h-2 rounded-full mr-1"
-                                                style={{ backgroundColor: DONUT_CHART_COLORS[index % DONUT_CHART_COLORS.length] }}
-                                            />
-                                            <span className="text-gray-700 font-medium">{entry.name}</span>
-                                        </div>
-                                        <span className="text-gray-900 font-bold">
-                                            {Math.round((entry.value / metrics.totalClients) * 100) || 0}%
+   {/* <Card className="shadow-2xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-xl border border-white/30 hover:shadow-3xl transition-all duration-300">
+            <CardHeader className="pb-4">
+                <CardTitle className="flex items-center text-lg font-bold text-gray-900">
+                    <div className="w-1 h-5 bg-gradient-to-b from-purple-500 to-pink-600 rounded-full mr-3"></div>
+                    Top 5 Clients by Revenue
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="h-[320px] p-4">
+                {topClientsByRevenue.length > 0 ? (
+                    <div className="h-full flex flex-col">
+                        <div className="flex-1">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RadialBarChart
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius="50%"
+                                    outerRadius="100%"
+                                    data={topClientsByRevenue.slice(0, 4).map((item, index) => ({
+                                        ...item,
+                                        fill: ['#8b5cf6', '#6366f1', '#3b82f6', '#06b6d4'][index],
+                                        percentage: Math.round((item.revenue_inr / topClientsByRevenue[0].revenue_inr) * 100)
+                                    }))}
+                                >
+                                    <RadialBar
+                                        dataKey="percentage"
+                                        cornerRadius={6}
+                                        stroke="none"
+                                    />
+                                    <RechartsTooltip
+                                        contentStyle={{
+                                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                            backdropFilter: 'blur(10px)',
+                                            border: 'none',
+                                            borderRadius: '12px',
+                                            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+                                        }}
+                                        formatter={(value, name, props) => [
+                                            formatCurrency(props.payload.revenue_inr),
+                                            props.payload.client_name
+                                        ]}
+                                    />
+                                </RadialBarChart>
+                            </ResponsiveContainer>
+                        </div>
+                       
+                        {/* Legend */}
+                        {/* <div className="space-y-1 mt-2">
+                            {topClientsByRevenue.slice(0, 4).map((item, index) => (
+                                <div key={index} className="flex items-center justify-between text-xs">
+                                    <div className="flex items-center">
+                                        <div
+                                            className="w-2 h-2 rounded-full mr-2"
+                                            style={{ backgroundColor: ['#8b5cf6', '#6366f1', '#3b82f6', '#06b6d4'][index] }}
+                                        />
+                                        <span className="text-gray-700 font-medium truncate">
+                                            {item.client_name.length > 12 ? item.client_name.substring(0, 12) + '...' : item.client_name}
                                         </span>
                                     </div>
-                                ))}
-                            </div>
+                                    <span className="text-gray-900 font-bold">{formatCurrency(item.revenue_inr)}</span>
+                                </div>
+                            ))}
                         </div>
-                    ) : (
-                        <div className="flex items-center justify-center w-full">
-                            <p className="text-xs text-gray-500">No data available.</p>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-center h-full">
+                        <p className="text-sm text-gray-500">No data available.</p>
+                    </div>
+                )}
+            </CardContent>
+        </Card> */}
+ 
             </div>
     <div className="col-span-1 lg:col-span-1">
 
              {/* Chart 3: Top 5 Clients by Profit */}
-             <Card className="shadow-2xl bg-gradient-to-br from-blue-50/80 to-indigo-50/80 backdrop-blur-xl border border-white/30 hover:shadow-3xl transition-all duration-300">
+             {/* <Card className="shadow-2xl bg-gradient-to-br from-blue-50/80 to-indigo-50/80 backdrop-blur-xl border border-white/30 hover:shadow-3xl transition-all duration-300">
                 <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-semibold flex items-center text-gray-900">
                         <div className="w-1 h-4 bg-gradient-to-b from-blue-500 to-indigo-600 rounded-full mr-2"></div>
@@ -779,7 +783,7 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
                         </div>
                     </div>
                 </CardContent>
-            </Card>
+            </Card> */}
            
             </div>
 
@@ -789,76 +793,78 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
 
     <div className="space-y-6 h-full w-full">
         {/* Chart 2: Top Clients Radial Chart */}
-        <Card className="shadow-2xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-xl border border-white/30 hover:shadow-3xl transition-all duration-300">
-            <CardHeader className="pb-4">
-                <CardTitle className="flex items-center text-lg font-bold text-gray-900">
-                    <div className="w-1 h-5 bg-gradient-to-b from-purple-500 to-pink-600 rounded-full mr-3"></div>
-                    Top 5 Clients by Revenue
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="h-[320px] p-4">
-                {topClientsByRevenue.length > 0 ? (
-                    <div className="h-full flex flex-col">
-                        <div className="flex-1">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <RadialBarChart
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius="50%"
-                                    outerRadius="100%"
-                                    data={topClientsByRevenue.slice(0, 4).map((item, index) => ({
-                                        ...item,
-                                        fill: ['#8b5cf6', '#6366f1', '#3b82f6', '#06b6d4'][index],
-                                        percentage: Math.round((item.revenue_inr / topClientsByRevenue[0].revenue_inr) * 100)
-                                    }))}
-                                >
-                                    <RadialBar
-                                        dataKey="percentage"
-                                        cornerRadius={6}
-                                        stroke="none"
-                                    />
-                                    <RechartsTooltip
-                                        contentStyle={{
-                                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                                            backdropFilter: 'blur(10px)',
-                                            border: 'none',
-                                            borderRadius: '12px',
-                                            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
-                                        }}
-                                        formatter={(value, name, props) => [
-                                            formatCurrency(props.payload.revenue_inr),
-                                            props.payload.client_name
-                                        ]}
-                                    />
-                                </RadialBarChart>
-                            </ResponsiveContainer>
+       <Card className="shadow-2xl bg-gradient-to-br from-emerald-50/80 to-teal-50/80 backdrop-blur-xl border border-white/30 hover:shadow-3xl transition-all duration-300">
+    <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-semibold flex items-center text-gray-900">
+            <div className="w-1 h-4 bg-gradient-to-b from-emerald-500 to-teal-600 rounded-full mr-2"></div>
+            By Service Type
+        </CardTitle>
+    </CardHeader>
+    <CardContent className="flex items-center h-[330px] p-3">
+        {serviceTypeDistribution.length > 0 ? (
+            <div className="h-full flex flex-col w-full">
+                <div className="flex-1">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <RadialBarChart
+                            cx="50%"
+                            cy="50%"
+                            innerRadius="50%"
+                            outerRadius="100%"
+                            data={serviceTypeDistribution.map((item, index) => ({
+                                ...item,
+                                fill: DONUT_CHART_COLORS[index % DONUT_CHART_COLORS.length],
+                                percentage: Math.round((item.value / metrics.totalClients) * 100) || 0
+                            }))}
+                        >
+                            <RadialBar
+                                dataKey="percentage"
+                                cornerRadius={6}
+                                stroke="none"
+                            />
+                            <RechartsTooltip
+                                contentStyle={{
+                                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                    backdropFilter: 'blur(10px)',
+                                    border: 'none',
+                                    borderRadius: '12px',
+                                    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+                                }}
+                                formatter={(value, name, props) => [
+                                    `${props.payload.value} Clients (${value}%)`,
+                                    props.payload.name
+                                ]}
+                            />
+                        </RadialBarChart>
+                    </ResponsiveContainer>
+                </div>
+                
+                {/* Legend */}
+                <div className="space-y-1 mt-2">
+                    {serviceTypeDistribution.map((entry, index) => (
+                        <div key={index} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center">
+                                <div
+                                    className="w-2 h-2 rounded-full mr-2"
+                                    style={{ backgroundColor: DONUT_CHART_COLORS[index % DONUT_CHART_COLORS.length] }}
+                                />
+                                <span className="text-gray-700 font-medium truncate">
+                                    {entry.name}
+                                </span>
+                            </div>
+                            <span className="text-gray-900 font-bold">
+                                {Math.round((entry.value / metrics.totalClients) * 100) || 0}%
+                            </span>
                         </div>
-                        
-                        {/* Legend */}
-                        <div className="space-y-1 mt-2">
-                            {topClientsByRevenue.slice(0, 4).map((item, index) => (
-                                <div key={index} className="flex items-center justify-between text-xs">
-                                    <div className="flex items-center">
-                                        <div 
-                                            className="w-2 h-2 rounded-full mr-2"
-                                            style={{ backgroundColor: ['#8b5cf6', '#6366f1', '#3b82f6', '#06b6d4'][index] }}
-                                        />
-                                        <span className="text-gray-700 font-medium truncate">
-                                            {item.client_name.length > 12 ? item.client_name.substring(0, 12) + '...' : item.client_name}
-                                        </span>
-                                    </div>
-                                    <span className="text-gray-900 font-bold">{formatCurrency(item.revenue_inr)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex items-center justify-center h-full">
-                        <p className="text-sm text-gray-500">No data available.</p>
-                    </div>
-                )}
-            </CardContent>
-        </Card>
+                    ))}
+                </div>
+            </div>
+        ) : (
+            <div className="flex items-center justify-center w-full">
+                <p className="text-xs text-gray-500">No data available.</p>
+            </div>
+        )}
+    </CardContent>
+</Card>
 
         {/* Chart 3: Service Type Distribution - Modern Cards */}
         {/* Bottom Row - Three Charts in a Row */}
@@ -868,7 +874,7 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
             
             {/* Chart 2: Financial Overview */}
             
-             <Card className="shadow-2xl bg-gradient-to-br from-purple-50/80 to-pink-50/80 backdrop-blur-xl border border-white/30 hover:shadow-3xl transition-all duration-300">
+             {/* <Card className="shadow-2xl bg-gradient-to-br from-purple-50/80 to-pink-50/80 backdrop-blur-xl border border-white/30 hover:shadow-3xl transition-all duration-300">
                 <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-semibold flex items-center text-gray-900">
                         <div className="w-1 h-4 bg-gradient-to-b from-purple-500 to-pink-600 rounded-full mr-2"></div>
@@ -942,7 +948,7 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
                         </div>
                     )}
                 </CardContent>
-            </Card>
+            </Card> */}
 
            
         </div>

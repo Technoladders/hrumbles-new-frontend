@@ -9,8 +9,9 @@ import RevenueExpenseChart from "./RevenueExpenseChart";
 import { useSelector } from "react-redux";
 import { CalendarCard } from "../employee/profile/cards/CalendarCard";
 import { TimelineCard } from "../employee/profile/cards/SuperadminTimeline";
-import { SubmissionChartCard } from "../employee/profile/cards/SubmissionChartCard";
-import {OnboardingChartCard} from "../employee/profile/cards/OnboardingChartCard";
+import SubmissionChartCard from '@/components/employee/profile/cards/SubmissionChartCard';
+// import {OnboardingChartCard} from "../employee/profile/cards/OnboardingChartCard";
+import CombinedSubmissionOnboardingChart from '@/components/employee/profile/cards/SubmissionChartCard';
 import HiringSuiteDashboard from "./HiringSuiteDashboard";
  
 interface RecruiterData {
