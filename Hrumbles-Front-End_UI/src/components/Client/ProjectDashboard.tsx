@@ -1260,9 +1260,13 @@ console.log("pagiodkmndndu", assignEmployee)
           </Tabs>
         </div>
 
-        {/* Stats Overview and Finance Chart */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <Card className="lg:col-span-1 purple-gradient h-[350px] flex flex-col">
+               {/* ======================================================================= */}
+        {/* === START OF NEW COMBINED OVERVIEW & CHART LAYOUT ===================== */}
+        {/* ======================================================================= */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          {/* --- Card 1: Project Overview (Takes up 1 of 3 columns) --- */}
+          <Card className="lg:col-span-1 purple-gradient h-full flex flex-col">
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-lg font-semibold text-white flex items-center">
                 <Briefcase className="mr-2" size={18} />
@@ -1272,149 +1276,56 @@ console.log("pagiodkmndndu", assignEmployee)
             <CardContent className="pt-2 flex-grow overflow-auto">
               <ul className="space-y-3">
                 <li className="flex items-start justify-between">
-                  <div className="flex items-center text-sm text-white">
-                    <FileText size={16} className="mr-2 text-white" />
-                    <span className="text-sm">Project Name:</span>
-                  </div>
-                  <span className="font-small text-sm text-right text-white">{project?.name}</span>
+                  <div className="flex items-center text-sm text-white"><FileText size={16} className="mr-2"/><span>Project Name:</span></div>
+                  <span className="font-medium text-sm text-right text-white">{project?.name}</span>
                 </li>
                 <li className="flex items-start justify-between">
-                  <div className="flex items-center text-sm text-white">
-                    <Calendar size={16} className="mr-2 text-white" />
-                    <span>Start Date:</span>
-                  </div>
-                  <span className="font-small text-sm text-right text-white">
-                    {project?.start_date ? new Date(project.start_date).toLocaleDateString() : "N/A"}
-                  </span>
+                  <div className="flex items-center text-sm text-white"><Calendar size={16} className="mr-2"/><span>Start Date:</span></div>
+                  <span className="font-medium text-sm text-right text-white">{project?.start_date ? new Date(project.start_date).toLocaleDateString() : "N/A"}</span>
                 </li>
                 <li className="flex items-start justify-between">
-                  <div className="flex items-center text-sm text-white">
-                    <Calendar size={16} className="mr-2 text-white" />
-                    <span>End Date:</span>
-                  </div>
-                  <span className="font-small text-sm text-right text-white">
-                    {project?.end_date ? new Date(project.end_date).toLocaleDateString() : "N/A"}
-                  </span>
+                  <div className="flex items-center text-sm text-white"><Calendar size={16} className="mr-2"/><span>End Date:</span></div>
+                  <span className="font-medium text-sm text-right text-white">{project?.end_date ? new Date(project.end_date).toLocaleDateString() : "N/A"}</span>
                 </li>
                 <li className="flex items-start justify-between">
-                  <div className="flex items-center text-sm text-white">
-                    <Users size={16} className="mr-2 text-white" />
-                    <span>Total Employees:</span>
-                  </div>
-                  <span className="font-small text-sm text-right text-white">{totalEmployees}</span>
+                  <div className="flex items-center text-sm text-white"><Users size={16} className="mr-2"/><span>Total Employees:</span></div>
+                  <span className="font-medium text-sm text-right text-white">{totalEmployees}</span>
                 </li>
                 <li className="flex items-start justify-between">
-                  <div className="flex items-center text-sm text-white">
-                    <UserRoundCheck size={16} className="mr-2 text-white" />
-                    <span>Working Employees:</span>
-                  </div>
-                  <span className="font-small text-sm text-right text-white">{workingCount}</span>
+                  <div className="flex items-center text-sm text-white"><UserRoundCheck size={16} className="mr-2"/><span>Working Employees:</span></div>
+                  <span className="font-medium text-sm text-right text-white">{workingCount}</span>
                 </li>
                 <li className="flex items-start justify-between">
-                  <div className="flex items-center text-sm text-white">
-                    <UserRoundX size={16} className="mr-2 text-white" />
-                    <span>Relieved Employees:</span>
-                  </div>
-                  <span className="font-small text-sm text-right text-white">{relievedCount}</span>
+                  <div className="flex items-center text-sm text-white"><UserRoundX size={16} className="mr-2"/><span>Relieved Employees:</span></div>
+                  <span className="font-medium text-sm text-right text-white">{relievedCount}</span>
                 </li>
                 <li className="flex items-start justify-between">
-                  <div className="flex items-center text-sm text-white">
-                    <UserRoundX size={16} className="mr-2 text-white" />
-                    <span>Terminated Employees:</span>
-                  </div>
-                  <span className="font-small text-sm text-right text-white">{terminatedCount}</span>
+                  <div className="flex items-center text-sm text-white"><UserRoundX size={16} className="mr-2"/><span>Terminated Employees:</span></div>
+                  <span className="font-medium text-sm text-right text-white">{terminatedCount}</span>
                 </li>
                 <li className="flex items-start justify-between">
-                  <div className="flex items-center text-sm text-white">
-                    <ReceiptIndianRupee size={16} className="mr-2 text-white" />
-                    <span>Total Revenue:</span>
-                  </div>
-                  <span className="font-small text-sm text-right text-white">{formatINR(totalRevenue)}</span>
+                  <div className="flex items-center text-sm text-white"><ReceiptIndianRupee size={16} className="mr-2"/><span>Total Revenue:</span></div>
+                  <span className="font-medium text-sm text-right text-white">{formatINR(totalRevenue)}</span>
                 </li>
                 <li className="flex items-start justify-between">
-                  <div className="flex items-center text-sm text-white">
-                    <TrendingUp size={16} className="mr-2 text-white" />
-                    <span>Total Profit:</span>
-                  </div>
-                  <span className="font-small text-sm text-right text-white">{formatINR(totalProfit)}</span>
+                  <div className="flex items-center text-sm text-white"><TrendingUp size={16} className="mr-2"/><span>Total Profit:</span></div>
+                  <span className="font-medium text-sm text-right text-white">{formatINR(totalProfit)}</span>
                 </li>
               </ul>
             </CardContent>
           </Card>
-          <div className="lg:col-span-3">
-            {calculationMode === "actual" ? (
-              <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl h-[350px]">
-                <CardHeader className="purple-gradient text-white p-3">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-xl md:text-2xl font-semibold">
-                        Logged Hours (Financial Year {financialYear}-{financialYear + 1})
-                      </h2>
-                      {spansMultipleYears && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info size={18} className="text-white cursor-pointer" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>
-                              The date range spans multiple financial years. Showing data for the most recent financial year
-                              ({financialYear}-{financialYear + 1}). Adjust the table's date range to view a specific financial year.
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart
-                      data={calculateTotalHoursByInterval()}
-                      margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
-                      className="animate-fade-in"
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis
-                        dataKey="name"
-                        angle={0}
-                        textAnchor="middle"
-                        interval={0}
-                        height={50}
-                        label={{ value: "Months", position: "insideBottom", offset: -10, fill: "#4b5563" }}
-                        className="text-sm font-medium purple-text-color"
-                        tick={{ fontSize: 12, fill: "#4b5563" }}
-                        tickFormatter={(value) => (value.length > 7 ? `${value.slice(0, 7)}...` : value)}
-                      />
-                      <YAxis
-                        label={{ value: "Hours", angle: -90, position: "insideLeft", offset: -10, fill: "#4b5563" }}
-                        className="text-sm font-medium purple-text-color"
-                        tick={{ fontSize: 12, fill: "#4b5563" }}
-                      />
-                      <RechartsTooltip
-                        contentStyle={{
-                          backgroundColor: "#fff",
-                          border: "1px solid oklch(62.7% 0.265 303.9)",
-                          borderRadius: "8px",
-                          boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                        }}
-                        formatter={(value: number) => `${value.toFixed(2)} hours`}
-                        itemStyle={{ color: "#4b5563" }}
-                        cursor={{ fill: "#f3e8ff" }}
-                      />
-                      <Bar dataKey="hours" fill="#7B43F1" name="Logged Hours" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            ) : (
-              <RevenueExpenseChart
-                projectId={id}
+
+          {/* --- Card 2: New Combined Revenue & Profit Chart (Takes up 2 of 3 columns) --- */}
+          <div className="lg:col-span-2">
+             <RevenueExpenseChart
                 assignEmployee={assignEmployee}
-                calculationMode={calculationMode}
               />
-            )}
           </div>
+
         </div>
+        {/* ======================================================================= */}
+        {/* === END OF NEW COMBINED LAYOUT ======================================== */}
+        {/* ======================================================================= */}
 
         {/* Table Section */}
         <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl rounded-2xl">

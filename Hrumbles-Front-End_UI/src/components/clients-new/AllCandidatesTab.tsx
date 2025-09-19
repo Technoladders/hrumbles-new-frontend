@@ -70,7 +70,7 @@ const formatTime = (time?: string | null) => {
 // --- Reusable Analytics Card Component (Updated) ---
 const AnalyticsCard: React.FC<{ icon: React.ElementType; title: string; value: string | number; subMetrics?: { label: string; value: string | number }[]; }> = ({ icon: Icon, title, value, subMetrics }) => (
   <Card className="shadow-sm hover:shadow-md transition-shadow h-full">
-    <CardContent className="p-4 flex flex-col justify-between h-full">
+    <CardContent className="p-4 flex flex-col justify-between h-full bg--300">
       <div>
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium text-gray-500">{title}</p>

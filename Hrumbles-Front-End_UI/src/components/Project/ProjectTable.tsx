@@ -25,13 +25,13 @@ interface ExtendedProjectData extends ProjectFinancialData {
 }
 
 interface ProjectTableProps {
-  projectFinancials: ExtendedProjectData[];
+  data: ExtendedProjectData[];
   setAddProjectOpen: (open: boolean) => void;
   setEditingProject: (project: ExtendedProjectData | null) => void;
   isLoading: boolean;
 }
 
-const ProjectTable = ({ projectFinancials, setAddProjectOpen, setEditingProject, isLoading }: ProjectTableProps) => {
+const ProjectTable = ({ data, setAddProjectOpen, setEditingProject, isLoading }: ProjectTableProps) => { // <-- Change the name to 'data'
   const queryClient = useQueryClient();
   const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
@@ -41,9 +41,9 @@ const ProjectTable = ({ projectFinancials, setAddProjectOpen, setEditingProject,
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Sort projects by revenue_inr (descending)
-  const sortedProjects = useMemo(() => {
-    return [...projectFinancials].sort((a, b) => b.revenue_inr - a.revenue_inr);
-  }, [projectFinancials]);
+ const sortedProjects = useMemo(() => {
+    return [...data].sort((a, b) => b.revenue_inr - a.revenue_inr);
+  }, [data]); // <-- Change the name to 'data'
 
   // Filter Projects Based on Search & Status
   const filteredProjects = useMemo(() => {
