@@ -100,7 +100,7 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
     let baseOptions: SubStatus[] = [];
   
     // --- Start of Your Original Logic (modified to populate baseOptions) ---
-    if (selectedMainStatus.name === 'New' && mainStatus.name === 'Processed') {
+    if (selectedMainStatus.name === 'New Applicants' && mainStatus.name === 'Processed') {
       baseOptions = mainStatus.subStatuses.filter(s => s.name === 'Processed (Internal)');
     } else if ((selectedSubStatus.name === 'Processed (Internal)' || selectedSubStatus.name === 'Internal Hold' || selectedSubStatus.name === 'Candidate on hold') && mainStatus.name === 'Processed') {
       baseOptions = mainStatus.subStatuses.filter(s => ['Processed (Client)', 'Duplicate (Internal)', 'Internal Reject', 'Internal Hold'].includes(s.name));

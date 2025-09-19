@@ -58,7 +58,7 @@ const RecentActivityCard = ({ candidates, onAddCandidate }: RecentActivityCardPr
         .select(`
           *,
           candidate:hr_job_candidates(name),
-          creator:hr_employees(first_name, last_name)
+          creator:hr_employees!fk_created_by(first_name, last_name)
         `)
         .in('candidate_id', candidateIds)
         .order('created_at', { ascending: false })

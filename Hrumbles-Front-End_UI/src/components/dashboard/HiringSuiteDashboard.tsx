@@ -12,6 +12,8 @@ import { HeroCarousel, CarouselSlide } from './HeroCarousel';
 import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { GreetingSlide, EventsSlide, CelebrationsSlide } from './DashboardCarouselSlides';
 import { DashboardHeroCarousel } from './DashboardHeroCarousel';
+import CombinedSubmissionOnboardingChart from '@/components/employee/profile/cards/SubmissionChartCard';
+
 
 // --- Reusable Component for Chart Cards ---
 const ChartCard = ({ title, description, children, isLoading, className = "" }) => (
@@ -31,7 +33,7 @@ const ChartCard = ({ title, description, children, isLoading, className = "" }) 
 );
 
 // --- Main Dashboard Component ---
-const HiringSuiteDashboard = () => {
+const HiringSuiteDashboard = ({ employeeId }: { employeeId: string; role: string }) => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const { user, role } = useSelector((state: any) => state.auth);
 
@@ -310,8 +312,17 @@ const HiringSuiteDashboard = () => {
           </div>
         </div>
       </div>
+        <div className="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-1 gap-4 sm:gap-6">
+
+      <div className="w-full h-[300px] md:h-[325px] lg:h-[300px] mt-5">
+                <SubmissionChartCard employeeId={employeeId} role={role} />
+                {/* <OnboardingChartCard employeeId={employeeId} role={role} /> */}
+              </div>
+              </div>
     </div>
   );
 };
+
+export const SubmissionChartCard = CombinedSubmissionOnboardingChart;
 
 export default HiringSuiteDashboard;

@@ -705,7 +705,7 @@ export const updateCandidateValidationStatus = async (candidateId: string): Prom
   try {
     const { error } = await supabase
       .from('hr_job_candidates')
-      .update({ has_validated_resume: true })
+      .update({ has_validated_resume: true, updated_at: new Date().toISOString() })
       .eq('id', candidateId);
 
     if (error) {

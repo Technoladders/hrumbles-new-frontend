@@ -2,10 +2,11 @@ import React from "react";
 import TimeTracker from "@/pages/TimeManagement/employee/TimeTracker";
 import { CalendarCard } from "../cards/CalendarCard";
 import { CandidateTimelineCard } from "../cards/CandidateTimelineCard";
-import { SubmissionChartCard } from "../cards/SubmissionChartCard";
+// import { SubmissionChartCard } from "../cards/SubmissionChartCard";
 import { OnboardingChartCard } from "../cards/OnboardingChartCard";
 import { DashboardHeroCarousel } from "@/components/dashboard/DashboardHeroCarousel";
 import { QuickActionsCard } from "@/components/dashboard/QuickActionsCard";
+import CombinedSubmissionOnboardingChart from '@/components/employee/profile/cards/SubmissionChartCard';
 
 interface MetricsSectionProps {
   employeeId: string;
@@ -77,11 +78,13 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, depa
       {/* ROW 3: Conditional Charts for HR/Admins */}
       {/* The charts will also correctly hide based on the new flag */}
       {showRecruitingWidgets && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="w-full h-[300px] md:h-[325px] lg:h-[300px]">
           <SubmissionChartCard employeeId={employeeId} role={role} />
-          <OnboardingChartCard employeeId={employeeId} role={role} />
+          {/* <OnboardingChartCard employeeId={employeeId} role={role} /> */}
         </div>
       )}
     </div>
   );
 };
+
+export const SubmissionChartCard = CombinedSubmissionOnboardingChart;

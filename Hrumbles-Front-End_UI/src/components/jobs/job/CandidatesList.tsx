@@ -1,8 +1,8 @@
 
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, forwardRef, useImperativeHandle, useMemo  } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { toast } from "sonner";
 import { getCandidatesByJobId } from "@/services/candidateService";
@@ -61,11 +61,16 @@ import {
 } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CandidateTimelineModal } from './CandidateTimelineModal';
+import { ShareCandidateModal } from './ShareCandidateModal';
 
 import moment from 'moment';
 import { format, isValid } from 'date-fns';
 import { getRoundNameFromResult } from "@/utils/statusTransitionHelper";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+
+
+const VALIDATION_QUEUE_KEY = "validationQueue";
 
 interface CandidatesListProps {
   jobId: string;
@@ -75,6 +80,8 @@ interface CandidatesListProps {
   onAddCandidate?: () => void;
   onRefresh: () => Promise<void>;
   isCareerPage?: boolean;
+  scoreFilter?: string;
+   rejection_reason?: string; 
 }
 
 interface HiddenContactCellProps {
@@ -84,15 +91,18 @@ interface HiddenContactCellProps {
 }
 
 
-const CandidatesList = ({
-  jobId,
-  statusFilter,
-  statusFilters = [],
-  onAddCandidate,
-  jobdescription,
-  onRefresh,
-  isCareerPage = false
-}: CandidatesListProps) => {
+const CandidatesList = forwardRef((props: CandidatesListProps, ref) => {
+  const queryClient = useQueryClient();
+  const {
+    jobId,
+    statusFilter,
+    statusFilters = [],
+    onAddCandidate,
+    jobdescription,
+    onRefresh,
+    scoreFilter = "all",
+    isCareerPage = false
+  } = props;
   const navigate = useNavigate();
   const user = useSelector((state: any) => state.auth.user);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
@@ -109,6 +119,7 @@ const CandidatesList = ({
     // ADDED: State for dynamic tabs
   const [mainStatuses, setMainStatuses] = useState<MainStatus[]>([]);
   const [areStatusesLoading, setAreStatusesLoading] = useState(true);
+   const [validatingIds, setValidatingIds] = useState<string[]>([]);
 
 console.log('mainStatuses', mainStatuses)
 
@@ -141,8 +152,8 @@ console.log('mainStatuses', mainStatuses)
     return formatted.reverse().join('');
   };
 
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [filteredCandidates, setFilteredCandidates] = useState<Candidate[]>([]);
+
+
   const [activeTab, setActiveTab] = useState("All Candidates");
   const [analysisData, setAnalysisData] = useState<{
     overall_score: number;
@@ -190,7 +201,37 @@ console.log('mainStatuses', mainStatuses)
   const [isTimelineModalOpen, setIsTimelineModalOpen] = useState(false);
 const [selectedCandidateForTimeline, setSelectedCandidateForTimeline] = useState<Candidate | null>(null);
 
-  const [showOfferJoiningModal, setShowOfferJoiningModal] = useState(false);
+  const [showOfferJoiningModal, setShowOfferJoiningModal] = useState(false);  
+    const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set());
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareModalData, setShareModalData] = useState<{
+    candidate: Candidate;
+    jobTitle: string;
+    emailType: 'shortlist' | 'rejection' | 'generic';
+    ownerName: string;
+  } | null>(null);
+  const [isFetchingOwner, setIsFetchingOwner] = useState<string | null>(null);
+
+    const handleSelectCandidate = (candidateId: string, isSelected: boolean) => {
+    setSelectedCandidates(prev => {
+      const newSet = new Set(prev);
+      if (isSelected) {
+        newSet.add(candidateId);
+      } else {
+        newSet.delete(candidateId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = (isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedCandidates(new Set(paginatedCandidates.map(c => c.id)));
+    } else {
+      setSelectedCandidates(new Set());
+    }
+  };
+  
 
   // Create a handler function to open the modal
 const handleViewTimeline = (candidate: Candidate) => {
@@ -372,7 +413,7 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
       }
     }, [showJoiningModal, currentCandidateId, currentSubStatusId, job, jobId, currentSubStatus]);
 
-  const [validatingId, setValidatingId] = useState<string | null>(null);
+
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
 
@@ -398,11 +439,13 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
     loadStatuses();
   }, []);
 
-useEffect(() => {
-  // setFilteredCandidates(candidatesData);
+  
 
+useEffect(() => {
   const checkAnalysisData = async () => {
-     if (!jobId) return;
+    // No need to check candidatesData here, as the hook depends on it.
+    if (!jobId) return;
+    
     const { data, error } = await supabase
       .from("candidate_resume_analysis")
       .select("candidate_id, summary, overall_score")
@@ -411,13 +454,8 @@ useEffect(() => {
 
     if (error) {
       console.error("Error checking analysis data:", error);
-      // Console log the error
-      console.log("checkAnalysisData error:", error);
       return;
     }
-
-    // Console log the fetched data
-    console.log("checkAnalysisData fetched data:", data);
 
     const availableData: { [key: string]: boolean } = {};
     const analysisDataTemp: { [key: string]: any } = {};
@@ -427,11 +465,19 @@ useEffect(() => {
     });
 
     setAnalysisDataAvailable(availableData);
-    setCandidateAnalysisData((prev) => ({ ...prev, ...analysisDataTemp }));
+    setCandidateAnalysisData(prevData => {
+      const hasNewData = Object.keys(analysisDataTemp).some(key => 
+        !prevData[key] || prevData[key].overall_score !== analysisDataTemp[key].overall_score
+      );
+      if (hasNewData) {
+        return { ...prevData, ...analysisDataTemp };
+      }
+      return prevData;
+    });
   };
 
   checkAnalysisData();
-}, [candidatesData, jobId]);
+}, [candidatesData, jobId]); // <-- CRITICAL CHANGE: Add candidatesData back to the dependency array
 
  const fetchAnalysisData = async (candidateId: string) => {
   try {
@@ -605,12 +651,53 @@ const { data: clientData } = useQuery({
   },
   enabled: !!job?.clientOwner,
 });
+
+   // --- ADD THIS NEW POLLING MECHANISM ---
+  useEffect(() => {
+    // If no candidates are currently being validated, do nothing.
+    if (validatingIds.length === 0) {
+      return;
+    }
+
+    // Start an interval that refreshes the data every 7 seconds.
+    const intervalId = setInterval(() => {
+      console.log("Polling for validation results...");
+      onRefresh();
+    }, 7000); // Poll every 7 seconds
+
+    // This is the cleanup function. It runs when the component unmounts
+    // or when the dependencies (validatingIds) change.
+    return () => {
+      clearInterval(intervalId); // Stop the interval
+    };
+  }, [validatingIds, onRefresh]); // Rerun this effect only if the queue or onRefresh changes.
   
 
-  useEffect(() => {
-    if (candidatesData.length > 0) {
-      const transformedCandidates: Candidate[] = candidatesData.map((candidate) => {
-        const profit = calculateProfit(candidate, job, clientData);
+const candidates = useMemo(() => {
+    if (!candidatesData || candidatesData.length === 0) {
+      return [];
+    }
+
+    // Check if any candidates in the validation queue have completed.
+    const completedIds = new Set<string>();
+    validatingIds.forEach(id => {
+      const candidateInData = candidatesData.find(c => c.id === id);
+      if (candidateInData && candidateInData.has_validated_resume) {
+        completedIds.add(id);
+      }
+    });
+
+    // If we found completed candidates, remove them from the queue.
+    // We use a timeout to avoid a React warning about setting state during a render.
+    if (completedIds.size > 0) {
+      setTimeout(() => {
+        setValidatingIds(prev => prev.filter(id => !completedIds.has(id)));
+      }, 0);
+    }
+
+    // This transformation now happens only when the source data changes.
+    return candidatesData.map((candidate) => {
+      const profit = calculateProfit(candidate, job, clientData);
         return {
           id: candidate.id,
           name: candidate.name,
@@ -641,12 +728,9 @@ const { data: clientData } = useQuery({
           interview_date: candidate.interview_date,
           interview_time: candidate.interview_time,
           interview_feedback: candidate.interview_feedback,
-        };
-      });
-
-      setCandidates(transformedCandidates);
-    }
-  }, [candidatesData, job, clientData]);
+    };
+    });
+  }, [candidatesData, job, clientData, validatingIds]);
 
   const setDefaultStatusForCandidate = async (candidateId: string) => {
     try {
@@ -662,42 +746,23 @@ const { data: clientData } = useQuery({
     }
   };
 
+ // --- ADDED: Load validation queue from localStorage on initial render ---
   useEffect(() => {
-    let filtered = [...candidates];
-    
-    if (activeTab === "All Candidates") {
-      filtered = filtered.filter(c => c.main_status?.name !== "Applied" || c.created_by);
-    } else if (activeTab === "Applied") {
-      filtered = appliedCandidates;
-    } else {
-      filtered = filtered.filter(c => c.main_status?.name === activeTab);
+    const storedQueue = localStorage.getItem(`${VALIDATION_QUEUE_KEY}_${jobId}`);
+    if (storedQueue) {
+      setValidatingIds(JSON.parse(storedQueue));
     }
-    
-    if (statusFilters && statusFilters.length > 0) {
-      filtered = filtered.filter(c => 
-        statusFilters.includes(c.main_status_id || '') || 
-        statusFilters.includes(c.sub_status_id || '')
-      );
-    }
-    
-    if (statusFilter) {
-      filtered = filtered.filter(c => c.main_status?.name === statusFilter);
-    }
-    
-    if (isCareerPage) {
-      filtered = filtered.filter(c => c.appliedFrom === "Candidate");
-    }
+  }, [jobId]);
 
-        // Apply "Yours" filter
-        if (candidateFilter === "Yours") {
-          const userFullName = `${user.user_metadata.first_name} ${user.user_metadata.last_name}`;
-          filtered = filtered.filter(
-            c => c.owner === userFullName || c.appliedFrom === userFullName
-          );
-        }
-    
-    setFilteredCandidates(filtered);
-  }, [candidates, appliedCandidates, activeTab, statusFilters, statusFilter, isCareerPage, candidateFilter]);
+  // --- ADDED: Save validation queue to localStorage whenever it changes ---
+  useEffect(() => {
+    if (validatingIds.length > 0) {
+      localStorage.setItem(`${VALIDATION_QUEUE_KEY}_${jobId}`, JSON.stringify(validatingIds));
+    } else {
+      localStorage.removeItem(`${VALIDATION_QUEUE_KEY}_${jobId}`);
+    }
+  }, [validatingIds, jobId]);
+
 
   const handleStatusChange = async (value: string, candidate: Candidate) => {
     try {
@@ -813,166 +878,267 @@ const { data: clientData } = useQuery({
 
 
  // --- UPDATED handleValidateResume using Proxy for POST, Direct for GET ---
-const handleValidateResume = async (candidateId: string) => {
-  let rqJobId: string | null = null;
+    const handleValidateResume = async (candidateId: string) => {
+    if (validatingIds.includes(candidateId)) return;
 
-  if (validatingId) return;
+    try {
+      // Add to the loading queue to start the spinner and the polling.
+      setValidatingIds(prev => [...prev, candidateId]);
+      toast.info(`Validation has been queued for ${candidates.find(c => c.id === candidateId)?.name || 'candidate'}...`);
 
-  try {
-    setValidatingId(candidateId);
-    toast.info("Starting resume validation...");
+      // --- Call the backend to start the analysis ---
+      const candidate = candidates.find((c) => c.id === candidateId);
+      if (!candidate || !candidate.resume) throw new Error("Candidate or resume data missing.");
+      
+      const resumeUrlParts = candidate.resume.split("candidate_resumes/");
+      const extractedResumeUrl = resumeUrlParts.length > 1 ? resumeUrlParts[1] : candidate.resume;
+      
+      const { data: jobData, error: jobError } = await supabase.from("hr_jobs").select("job_id").eq("id", jobId).single();
+      if (jobError || !jobData) throw new Error("Invalid job configuration.");
+      
+      const jobTextId = jobData.job_id;
+      const payload = { job_id: jobTextId, candidate_id: candidateId, resume_url: extractedResumeUrl, job_description: jobdescription, organization_id: organizationId, user_id: user.id };
+      
+      const backendUrl = 'https://dev.hrumbles.ai/api/validate-candidate';
+      const response = await fetch(backendUrl, { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: JSON.stringify(payload) });
 
-    const candidate = filteredCandidates.find((c) => c.id === candidateId);
-    console.log("candidate", candidate)
-    if (!candidate || !candidate.resume) {
-      throw new Error("Candidate or resume data missing.");
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend Error: ${errorText.slice(0, 200)}`);
+      }
+      // We don't need to poll the backend task status anymore. We just poll for the final DB result.
+
+    } catch (error: any) {
+      console.error("Error starting validation:", error);
+      toast.error(error.message || "Failed to start validation");
+      // On failure to start, remove from the queue to stop the loader.
+      setValidatingIds(prev => prev.filter(id => id !== candidateId));
+    }
+  };
+
+// --- ADDED: Function to handle the batch validation process ---
+  // --- ADDED: Function to handle the batch validation process ---
+  const handleBatchValidate = async () => {
+    const unvalidatedCandidates = candidates.filter(c => !c.hasValidatedResume && !validatingIds.includes(c.id));
+
+    if (unvalidatedCandidates.length === 0) {
+      toast.info("All candidates have already been validated.");
+      return;
     }
 
-    const resumeUrlParts = candidate.resume.split("candidate_resumes/");
-    const extractedResumeUrl = resumeUrlParts.length > 1 ? resumeUrlParts[1] : candidate.resume;
+    toast.success(`Starting batch validation for ${unvalidatedCandidates.length} candidates.`);
+    
+    // Add all candidates to the validation queue immediately for instant UI feedback
+    const idsToValidate = unvalidatedCandidates.map(c => c.id);
+    setValidatingIds(prev => [...new Set([...prev, ...idsToValidate])]);
 
-    const { data: jobData, error: jobError } = await supabase
-      .from("hr_jobs")
-      .select("job_id")
-      .eq("id", jobId)
-      .single();
+    // Process validations concurrently without stopping if one fails
+    await Promise.allSettled(
+      unvalidatedCandidates.map(candidate => handleValidateResume(candidate.id))
+    );
 
-    if (jobError || !jobData) {
-      throw new Error("Invalid job configuration. Could not find job details.");
-    }
-    const jobTextId = jobData.job_id;
+    toast.info("Batch validation process complete.");
+  };
 
-    const payload = {
-      job_id: jobTextId,
-      candidate_id: candidateId,
-      resume_url: extractedResumeUrl,
-      job_description: jobdescription,
-      organization_id: organizationId,
-      user_id: user.id,
-    };
-    console.log("Sending payload to backend:", payload);
 
-    const backendUrl = 'https://dev.hrumbles.ai/api/validate-candidate';
-    console.log(`Using backend URL: ${backendUrl}`);
-
-    const response = await fetch(backendUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const contentType = response.headers.get("Content-Type");
-    if (!response.ok || !contentType?.includes("application/json")) {
-      const errorText = await response.text();
-      console.error(`Backend validation request failed: ${response.status} - ${response.statusText}`);
-      console.error("Content-Type:", contentType);
-      console.error("Response headers:", Object.fromEntries(response.headers.entries()));
-      console.error("Response body:", errorText.slice(0, 200));
-      throw new Error(
-        `Invalid response: Expected JSON, received ${contentType || "unknown"} - ${errorText.slice(0, 200)}`
-      );
+    // Helper to fetch rejection reasons from the analysis table
+  const fetchRejectionReasons = async (candidateIds: string[]): Promise<Record<string, string>> => {
+    if (candidateIds.length === 0) return {};
+    const { data, error } = await supabase
+      .from('candidate_resume_analysis')
+      .select('candidate_id, summary')
+      .in('candidate_id', candidateIds)
+      .eq('job_id', jobId);
+    
+    if (error) {
+      console.error("Error fetching rejection reasons:", error);
+      return {};
     }
 
-    const responseData = await response.json();
-    console.log("Backend validation response:", responseData);
-    if (!responseData.job_id) {
-      throw new Error("Backend did not return a job ID to track.");
+    return data.reduce((acc, item) => {
+      acc[item.candidate_id] = item.summary;
+      return acc;
+    }, {});
+  };
+
+  // Main handler to prepare and open the modal
+  const openShareModal = async (candidatesToShare: Candidate[], emailType: 'shortlist' | 'rejection') => {
+    setIsFetchingOwner(candidatesToShare.map(c => c.id).join(',')); // Use a truthy value
+    try {
+      // For now, using a generic owner name. You can enhance this later if needed.
+      const ownerName = `${user.user_metadata.first_name || ''} ${user.user_metadata.last_name || ''}`.trim() || "The Talent Team";
+
+      let finalCandidates = candidatesToShare;
+
+      if (emailType === 'rejection') {
+        const reasons = await fetchRejectionReasons(finalCandidates.map(c => c.id));
+        finalCandidates = finalCandidates.map(c => ({
+          ...c,
+          rejection_reason: reasons[c.id] || "The position was highly competitive."
+        }));
+      }
+
+      setShareModalData({
+        candidates: finalCandidates,
+        jobTitle: job?.title || 'the role',
+        emailType,
+        ownerName
+      });
+      setIsShareModalOpen(true);
+    } catch (error) {
+      toast.error("Could not prepare email. See console for details.");
+      console.error(error);
+    } finally {
+      setIsFetchingOwner(null);
     }
-    rqJobId = responseData.job_id;
+  };
 
-    let attempts = 0;
-    const maxAttempts = 24;
-    const interval = 5000;
+  // Expose bulk share trigger to parent
+  useImperativeHandle(ref, () => ({
+    triggerBatchValidate() { /* ... */ },
+    triggerBulkShare(emailType: 'shortlist' | 'rejection') {
+      const candidatesToShare = selectedCandidates.size > 0
+        ? candidates.filter(c => selectedCandidates.has(c.id))
+        : filteredCandidates; // Default to all visible if none are selected
+      
+      if (candidatesToShare.length === 0) {
+        toast.info("No candidates to send mail to.");
+        return;
+      }
+      openShareModal(candidatesToShare, emailType);
+    }
+  }));
 
-    const pollJobStatus = (): Promise<string> => {
-      return new Promise(async (resolve, reject) => {
-        if (attempts >= maxAttempts) {
-          console.error(`Polling timed out after ${maxAttempts} attempts for job ${rqJobId}.`);
-          return reject(new Error("Validation timed out. Check server logs."));
+
+// Add this new handler function inside your CandidatesList component
+
+  const handleShareClick = async (candidate: Candidate) => {
+    // Determine the email type based on the candidate's current status
+    const statusName = candidate.sub_status?.name;
+    let emailType: 'shortlist' | 'rejection' | 'generic' = 'generic';
+
+    if (statusName === 'Processed (Client)') {
+      emailType = 'shortlist';
+    } else if (statusName && statusName.toLowerCase().includes('reject')) {
+      if (!candidate.reject_reason) {
+        toast.error("Cannot send email: A rejection reason must be added to the candidate first.");
+        return;
+      }
+      emailType = 'rejection';
+    }
+
+    if (!candidate.email) {
+        toast.error("Cannot send email: Candidate has no email address.");
+        return;
+    }
+
+    setIsFetchingOwner(candidate.id);
+    try {
+      let ownerName = "The Talent Team";
+      // The 'owner' field you added in transformation is the name, if it's there use it.
+      // Otherwise, fetch from DB using created_by UUID.
+      if (candidate.owner) {
+        ownerName = candidate.owner;
+      } else if (candidate.metadata?.createdBy) { // Assuming createdBy is the UUID
+        const { data: ownerData, error } = await supabase
+          .from('hr_employees')
+          .select('first_name, last_name')
+          .eq('id', candidate.metadata.createdBy)
+          .single();
+        if (error) throw error;
+        ownerName = `${ownerData.first_name || ''} ${ownerData.last_name || ''}`.trim();
+      }
+
+      setShareModalData({
+        candidate,
+        jobTitle: job?.title || 'the role',
+        emailType,
+        ownerName
+      });
+      setIsShareModalOpen(true);
+
+    } catch (error) {
+      console.error("Error fetching candidate owner:", error);
+      toast.error("Could not fetch owner details for signature.");
+    } finally {
+      setIsFetchingOwner(null);
+    }
+  };
+
+  // --- MODIFIED: Expose both batch functions to the parent component via ref ---
+  useImperativeHandle(ref, () => ({
+    // This is the existing function for batch validation
+    triggerBatchValidate() {
+      handleBatchValidate();
+    },
+    // --- THIS IS THE NEW FUNCTION YOU NEED TO ADD ---
+    triggerBulkShare(emailType: 'shortlist' | 'rejection') {
+      const candidatesToShare = selectedCandidates.size > 0
+        ? candidates.filter(c => selectedCandidates.has(c.id))
+        : filteredCandidates; // Default to all visible if none are selected
+      
+      if (candidatesToShare.length === 0) {
+        toast.info("No candidates to send mail to.");
+        return;
+      }
+      openShareModal(candidatesToShare, emailType);
+    }
+  }));
+
+
+  const filteredCandidates = useMemo(() => {
+    let filtered = [...candidates];
+
+    // Score filtering logic
+    if (scoreFilter !== "all") {
+      filtered = filtered.filter(c => {
+        const score = candidateAnalysisData[c.id]?.overall_score;
+        if (scoreFilter === 'not_validated') {
+          return !c.hasValidatedResume && score === undefined;
         }
-        attempts++;
-        console.log(`Polling attempt ${attempts}/${maxAttempts} for job ${rqJobId}...`);
-
-        try {
-          const statusApiUrl = `https://dev.hrumbles.ai/api/job-status/${encodeURIComponent(rqJobId)}`;
-          console.log(`Polling URL: ${statusApiUrl}`);
-          const statusResponse = await fetch(statusApiUrl);
-
-          const statusContentType = statusResponse.headers.get("Content-Type");
-          if (!statusResponse.ok || !statusContentType?.includes("application/json")) {
-            const pollErrorText = await statusResponse.text();
-            console.warn(`Polling status check failed (attempt ${attempts}): ${statusResponse.status} - ${pollErrorText}`);
-            setTimeout(() => pollJobStatus().then(resolve).catch(reject), interval);
-            return;
-          }
-
-          const statusData = await statusResponse.json();
-          console.log(`Polling status data:`, statusData);
-
-          if (statusData.status === "finished") {
-            console.log("Job finished!");
-            return resolve(statusData.status);
-          } else if (statusData.status === "failed") {
-            console.error("Backend job failed:", statusData.result?.error);
-            try {
-              const logApiUrl = `https://dev.hrumbles.ai/api/job-logs?jobId=${encodeURIComponent(rqJobId)}`;
-              console.log(`Fetching failure logs from: ${logApiUrl}`);
-              const logResponse = await fetch(logApiUrl);
-              if (logResponse.ok) {
-                const logsJson = await logResponse.json();
-                console.log("Failure Logs:", logsJson.logs);
-                const errorLog = logsJson.logs?.find((log: any) => log.step?.includes("error"));
-                const errorMessage = errorLog?.data?.error_message || statusData.result?.error || "Analysis failed on backend.";
-                return reject(new Error(errorMessage));
-              } else {
-                console.warn(`Failed to fetch logs (${logResponse.status}), using original error.`);
-                return reject(new Error(statusData.result?.error || "Analysis failed (could not fetch logs)."));
-              }
-            } catch (logError) {
-              console.warn("Error fetching failure logs:", logError);
-              return reject(new Error(statusData.result?.error || "Analysis failed (log fetch error)."));
-            }
-          } else {
-            setTimeout(() => pollJobStatus().then(resolve).catch(reject), interval);
-          }
-        } catch (error) {
-          console.error("Network or other error during polling attempt:", error);
-          if (error instanceof TypeError && error.message.includes("fetch")) {
-            return reject(new Error("Network error polling job status. Check backend connectivity."));
-          }
-          if (attempts < maxAttempts) {
-            setTimeout(() => pollJobStatus().then(resolve).catch(reject), interval);
-          } else {
-            reject(new Error("Polling failed after multiple retry attempts."));
-          }
+        if (score === undefined || score === null) return false;
+        switch (scoreFilter) {
+          case 'shortlisted': return score > 80;
+          case 'review': return score === 80;
+          case 'not_shortlisted': return score < 80;
+          default: return true;
         }
       });
-    };
-
-    await pollJobStatus();
-    toast.success("Resume validation process completed successfully!");
-
-    const finalAnalysisData = await fetchAnalysisData(candidateId);
-    if (finalAnalysisData) {
-      console.log("Displaying modal with final data:", finalAnalysisData);
-      setAnalysisDataAvailable((prev) => ({ ...prev, [candidateId]: true }));
-      setCandidateAnalysisData((prev) => ({ ...prev, [candidateId]: finalAnalysisData }));
-      setAnalysisData(finalAnalysisData);
-      setIsSummaryModalOpen(true);
-    } else {
-      toast.warn("Validation complete, but failed to load final analysis details.");
-      setAnalysisDataAvailable((prev) => ({ ...prev, [candidateId]: false }));
     }
-  } catch (error: any) {
-    console.error("Overall validation error in handleValidateResume:", error);
-    toast.error(error.message || "Failed to validate resume");
-  } finally {
-    setValidatingId(null);
-  }
-};
+    
+    // Tab and status filtering logic
+    if (activeTab === "All Candidates") {
+      filtered = filtered.filter(c => c.main_status?.name !== "Applied" || c.created_by);
+    } else if (activeTab === "Applied") {
+      filtered = appliedCandidates;
+    } else {
+      filtered = filtered.filter(c => c.main_status?.name === activeTab);
+    }
+    
+    if (statusFilters && statusFilters.length > 0) {
+      filtered = filtered.filter(c => 
+        statusFilters.includes(c.main_status_id || '') || 
+        statusFilters.includes(c.sub_status_id || '')
+      );
+    }
+    
+    if (statusFilter) {
+      filtered = filtered.filter(c => c.main_status?.name === statusFilter);
+    }
+    
+    if (isCareerPage) {
+      filtered = filtered.filter(c => c.appliedFrom === "Candidate");
+    }
 
-
-
+    if (candidateFilter === "Yours") {
+      const userFullName = `${user.user_metadata.first_name} ${user.user_metadata.last_name}`;
+      filtered = filtered.filter(
+        c => c.owner === userFullName || c.appliedFrom === userFullName
+      );
+    }
+    
+    return filtered;
+  }, [candidates, appliedCandidates, activeTab, statusFilters, statusFilter, isCareerPage, candidateFilter, scoreFilter, candidateAnalysisData, user]); // Added user to dependencies
 
 
   const handleViewResume = (candidateId: string) => {
@@ -1689,6 +1855,12 @@ const handleValidateResume = async (candidateId: string) => {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
+              <TableHead className="w-[40px]">
+  <Checkbox
+    checked={paginatedCandidates.length > 0 && selectedCandidates.size === paginatedCandidates.length}
+    onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
+  />
+</TableHead>
                 <TableHead className="w-[150px] sm:w-[200px]">Candidate Name</TableHead>
                 {!isEmployee && <TableHead className="w-[100px] sm:w-[150px]">Owner</TableHead>}
                 <TableHead className="w-[50px] sm:w-[100px]">
@@ -1706,6 +1878,12 @@ const handleValidateResume = async (candidateId: string) => {
             <TableBody>
               {paginatedCandidates.map((candidate) => (
                 <TableRow key={candidate.id}>
+                   <TableCell>
+    <Checkbox
+      checked={selectedCandidates.has(candidate.id)}
+      onCheckedChange={(checked) => handleSelectCandidate(candidate.id, Boolean(checked))}
+    />
+  </TableCell>
                   <TableCell className="font-medium">
   <div
     className="flex flex-col cursor-pointer"
@@ -1784,8 +1962,8 @@ const handleValidateResume = async (candidateId: string) => {
                         isValidated={candidate.hasValidatedResume || false}
                         candidateId={candidate.id}
                         onValidate={handleValidateResume}
-                        isLoading={validatingId === candidate.id}
-                        overallScore={candidateAnalysisData[candidate.id]?.overall_score}
+                         isLoading={validatingIds.includes(candidate.id)}
+    overallScore={candidateAnalysisData[candidate.id]?.overall_score}
                       />
                       {analysisDataAvailable[candidate.id] && (
                         <Button
@@ -1849,6 +2027,20 @@ const handleValidateResume = async (candidateId: string) => {
     >
       <MessageSquare className="h-4 w-4" />
     </Button>
+
+    
+      {candidate.hasValidatedResume && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => openShareModal([candidate], scoreFilter === 'not_shortlisted' ? 'rejection' : 'shortlist')}
+          disabled={isFetchingOwner !== null}
+          title={`Share update with ${candidate.name}`}
+        >
+          <Mail className="h-4 w-4" />
+        </Button>
+      )}
+
                     </div>
                   </TableCell>
                 </TableRow>
@@ -1891,6 +2083,14 @@ const handleValidateResume = async (candidateId: string) => {
           candidate={selectedCandidateForTimeline}
         />
       )}
+
+{isShareModalOpen && (
+  <ShareCandidateModal
+    isOpen={isShareModalOpen}
+    onClose={() => setIsShareModalOpen(false)}
+    data={shareModalData}
+  />
+)}
 
       
 
@@ -2207,6 +2407,6 @@ const handleValidateResume = async (candidateId: string) => {
 </Dialog>
     </>
   );
-};
+});
 
 export default CandidatesList;

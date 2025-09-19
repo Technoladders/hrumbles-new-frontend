@@ -3,192 +3,261 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { BarChart } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart2, Users } from "lucide-react";
+import { ComposedChart, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { MiniDateRangePicker } from "@/components/ui/MiniDateRangePicker"; // <-- Use the new component
 
-interface SubmissionChartCardProps {
+interface CombinedChartCardProps {
   employeeId: string;
   role: string;
 }
 
 interface ChartData {
   name: string;
-  count: number;
+  submissions: number;
+  onboarding: number;
 }
 
-export const SubmissionChartCard: React.FC<SubmissionChartCardProps> = ({ employeeId, role }) => {
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+  key: string;
+}
+
+
+export const CombinedSubmissionOnboardingChart: React.FC<CombinedChartCardProps> = ({ employeeId, role }) => {
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"week" | "month" | "year">("week");
+  const [dateRange, setDateRange] = useState<DateRange | null>(null); 
 
+  const isEmployee = role === "employee";
   const isSuperAdmin = role === "organization_superadmin";
+  const currentYear = new Date().getFullYear().toString();
 
-  useEffect(() => {
-    const fetchCandidateData = async () => {
-      try {
-        setLoading(true);
+useEffect(() => {
+  const fetchCombinedData = async () => {
+    try {
+      setLoading(true);
 
-        let query = supabase
-          .from("hr_status_change_counts")
-          .select(`
-            count,
-            created_at,
-            hr_job_candidates (
-              submission_date
-            )
-          `)
-          .eq("sub_status_id", "71706ff4-1bab-4065-9692-2a1237629dda");
+      let startDate: Date;
+      let endDate: Date;
+      const now = new Date();
 
-        // Apply candidate_owner filter only if not organization_superadmin
-        if (!isSuperAdmin) {
-          query = query.eq("candidate_owner", employeeId);
-        }
-
-        const now = new Date();
-        let data: ChartData[] = [];
-
+      // --- NEW LOGIC: Determine the date range to fetch ---
+      if (dateRange && dateRange.startDate && dateRange.endDate) {
+        // 1. A custom date range from the picker has been selected
+        startDate = dateRange.startDate;
+        endDate = dateRange.endDate;
+      } else {
+        // 2. No custom range, so use the active tab
         if (activeTab === "week") {
-          const startOfWeek = new Date(now);
-          startOfWeek.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
-          startOfWeek.setHours(0, 0, 0, 0);
-          const endOfWeek = new Date(startOfWeek);
-          endOfWeek.setDate(startOfWeek.getDate() + 6);
-          endOfWeek.setHours(23, 59, 59, 999);
-
-          const { data: counts, error } = await query
-            .gte("created_at", startOfWeek.toISOString())
-            .lte("created_at", endOfWeek.toISOString());
-
-          if (error) throw error;
-
-          const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-          data = days.map((day, index) => {
-            const dayDate = new Date(startOfWeek);
-            dayDate.setDate(startOfWeek.getDate() + index);
-            const dayCount = counts
-              .filter((record) => {
-                const date = record.hr_job_candidates?.submission_date
-                  ? new Date(record.hr_job_candidates.submission_date)
-                  : new Date(record.created_at);
-                return date.toDateString() === dayDate.toDateString();
-              })
-              .reduce((sum, record) => sum + record.count, 0);
-            return { name: day, count: dayCount };
-          });
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
+          endDate = new Date(startDate);
+          endDate.setDate(startDate.getDate() + 6);
         } else if (activeTab === "month") {
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-          const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        } else { // Year
+          startDate = new Date(now.getFullYear(), 0, 1);
+          endDate = new Date(now.getFullYear(), 11, 31);
+        }
+      }
 
-          const { data: counts, error } = await query
-            .gte("created_at", startOfMonth.toISOString())
-            .lte("created_at", endOfMonth.toISOString());
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
 
-          if (error) throw error;
+      // --- The Supabase queries are now much simpler ---
+      let submissionQuery = supabase.from("hr_status_change_counts")
+        .select("count, created_at, hr_job_candidates(submission_date)")
+        .eq("sub_status_id", "71706ff4-1bab-4065-9692-2a1237629dda")
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString());
 
-          const weeks: { [key: string]: number } = {};
-          counts.forEach((record) => {
-            const date = record.hr_job_candidates?.submission_date
-              ? new Date(record.hr_job_candidates.submission_date)
-              : new Date(record.created_at);
-            const weekNumber = Math.floor((date.getDate() - 1) / 7) + 1;
-            const weekKey = `Week ${weekNumber}`;
-            weeks[weekKey] = (weeks[weekKey] || 0) + record.count;
-          });
+      let onboardingQuery = supabase.from("hr_status_change_counts")
+        .select("count, created_at, hr_job_candidates(joining_date)")
+        .eq("sub_status_id", "c9716374-3477-4606-877a-dfa5704e7680")
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString());
 
-          data = Array.from({ length: 5 }, (_, i) => `Week ${i + 1}`).map((week) => ({
-            name: week,
-            count: weeks[week] || 0,
-          }));
-        } else if (activeTab === "year") {
-          const startOfYear = new Date(now.getFullYear(), 0, 1);
-          const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+      if (!isSuperAdmin) {
+        submissionQuery = submissionQuery.eq("candidate_owner", employeeId);
+        onboardingQuery = onboardingQuery.eq("candidate_owner", employeeId);
+      }
+      
+      const [submissionResult, onboardingResult] = await Promise.all([submissionQuery, onboardingQuery]);
+      if (submissionResult.error || onboardingResult.error) throw submissionResult.error || onboardingResult.error;
 
-          const { data: counts, error } = await query
-            .gte("created_at", startOfYear.toISOString())
-            .lte("created_at", endOfYear.toISOString());
-
-          if (error) throw error;
-
-          const months = [
-            "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-          ];
-          data = months.map((month, index) => {
-            const monthCount = counts
-              .filter((record) => {
-                const date = record.hr_job_candidates?.submission_date
-                  ? new Date(record.hr_job_candidates.submission_date)
-                  : new Date(record.created_at);
-                return date.getMonth() === index;
-              })
-              .reduce((sum, record) => sum + record.count, 0);
-            return { name: month, count: monthCount };
-          });
+      // --- Data processing logic remains similar, just adapted ---
+      let data: ChartData[] = [];
+      if (activeTab === 'year' && !dateRange) {
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        data = months.map((month, index) => {
+          const submissionCount = submissionResult.data.filter(r => new Date(r.hr_job_candidates?.submission_date || r.created_at).getMonth() === index).reduce((sum, r) => sum + r.count, 0);
+          const onboardingCount = onboardingResult.data.filter(r => new Date(r.hr_job_candidates?.joining_date || r.created_at).getMonth() === index).reduce((sum, r) => sum + r.count, 0);
+          return { name: month, submissions: submissionCount, onboarding: onboardingCount };
+        });
+      } else {
+        // Logic for Week, Month, and Custom Date Ranges (daily breakdown)
+        const labels: { name: string; date: Date }[] = [];
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+          labels.push({ name: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), date: new Date(d) });
         }
 
-        setChartData(data);
-      } catch (error: any) {
-        console.error("Error fetching submission count:", error);
-        toast.error(`Error loading submission data: ${error.message}`);
-      } finally {
-        setLoading(false);
+        data = labels.map(label => {
+          const submissionCount = submissionResult.data.filter(r => new Date(r.hr_job_candidates?.submission_date || r.created_at).toDateString() === label.date.toDateString()).reduce((sum, r) => sum + r.count, 0);
+          const onboardingCount = onboardingResult.data.filter(r => new Date(r.hr_job_candidates?.joining_date || r.created_at).toDateString() === label.date.toDateString()).reduce((sum, r) => sum + r.count, 0);
+          return { name: label.name, submissions: submissionCount, onboarding: onboardingCount };
+        });
       }
-    };
 
-    if (employeeId || isSuperAdmin) {
-      fetchCandidateData();
+      setChartData(data);
+    } catch (error: any) {
+      console.error("Error fetching combined data:", error);
+      toast.error(`Error loading chart data: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
-  }, [employeeId, role, activeTab]);
+  };
+
+  if (employeeId || isSuperAdmin) {
+    fetchCombinedData();
+  }
+}, [employeeId, role, activeTab, dateRange]); // <-- IMPORTANT: Add dateRange to the dependency array
 
   return (
-    <Card className="shadow-md rounded-xl h-[300px] md:h-[325px] lg:h-[300px] flex flex-col ">
+    <Card className="shadow-2xl bg-white/70 backdrop-blur-xl border border-white/20 hover:shadow-3xl transition-all duration-300 rounded-xl h-[300px] md:h-[280px] md:h-[300px] lg:h-[280px] flex flex-col">
       <CardContent className="pt-6 flex flex-col h-full">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
-            <BarChart className="h-5 w-5 text-purple-500 dark:text-purple-400 mr-2" />
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Submission Count</h3>
+            {/* <div className="flex items-center space-x-2">
+              <BarChart2 className="h-5 w-5 text-purple-500 mr-1" />
+              <Users className="h-5 w-5 text-green-500 mr-2" />
+            </div> */}
+            <h3 className="text-lg font-bold text-gray-800 flex items-center">
+              <div className="w-1 h-6 bg-gradient-to-b from-purple-500 to-green-500 rounded-full mr-3"></div>
+              Submission & Onboarding Analytics
+            </h3>
           </div>
-          <Tabs defaultValue="week" onValueChange={(value) => setActiveTab(value as "week" | "month" | "year")}>
-            <TabsList className="grid grid-cols-3">
-              <TabsTrigger value="week">Week</TabsTrigger>
-              <TabsTrigger value="month">Month</TabsTrigger>
-              <TabsTrigger value="year">Year</TabsTrigger>
-            </TabsList>
-          </Tabs>
+           <div className="flex items-center gap-4"> 
+          <Tabs 
+  value={activeTab} 
+  onValueChange={(value) => {
+    setActiveTab(value as "week" | "month" | "year");
+    setDateRange(null); // Clear custom date range when a tab is clicked
+  }}
+>
+  <TabsList className="grid grid-cols-3"> {/* Simplified to always show 3 tabs */}
+    <TabsTrigger value="week">Week</TabsTrigger>
+    <TabsTrigger value="month">Month</TabsTrigger>
+    <TabsTrigger value="year">Year</TabsTrigger>
+  </TabsList>
+</Tabs>
+           <MiniDateRangePicker
+      dateRange={dateRange}
+      onDateRangeChange={setDateRange}
+      onApply={() => {}} // You can add logic here if needed when Apply is clicked
+    />
         </div>
+      </div>
+        
         <div className="flex-1 overflow-y-auto pr-2">
           {loading ? (
-            <div className="text-gray-500 dark:text-gray-400 italic">Loading chart...</div>
+            <div className="text-gray-500 italic">Loading chart...</div>
           ) : chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-    data={chartData}
-    margin={{ top: 10, right: 0, left: 0, bottom: 0 }}
-  >
-    <defs>
-      <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#4f46e5" stopOpacity={0.8} /> {/* indigo-600 */}
-        <stop offset="100%" stopColor="#7e22ce" stopOpacity={0.8} /> {/* purple-700 */}
-      </linearGradient>
-    </defs>
+              <ComposedChart
+                data={chartData}
+                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+              >
+                <defs>
+                  <linearGradient id="submissionGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#7235DD" stopOpacity={0.8} />
+                    <stop offset="50%" stopColor="#7235DD" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#7235DD" stopOpacity={0.1} />
+                  </linearGradient>
+                  <linearGradient id="onboardingGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#505050" stopOpacity={0.8} />
+                    <stop offset="50%" stopColor="#505050" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#505050" stopOpacity={0.1} />
+                  </linearGradient>
+                </defs>
+                
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" strokeOpacity={0.5} />
+                
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fontSize: 11, fill: '#64748b' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                
+                <YAxis 
+                  yAxisId="left"
+                  orientation="left"
+                  tick={{ fontSize: 11, fill: '#7235DD', fontWeight: '600' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                
+                <YAxis 
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: 11, fill: '#10b981', fontWeight: '600' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(255, 255, 255, 0.95)",
+                    backdropFilter: "blur(10px)",
+                    border: "none",
+                    borderRadius: "12px",
+                    boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)"
+                  }}
+                  labelStyle={{ fontWeight: 'bold', color: '#374151' }}
+                />
+                
+                <Legend 
+                  verticalAlign="top" 
+                  height={36} 
+                  wrapperStyle={{ fontSize: "12px", color: "#4b5563", paddingBottom: "10px" }}
+                  iconType="rect"
+                />
 
-    <CartesianGrid strokeDasharray="3 3" />
-    <XAxis dataKey="name" />
-    <YAxis />
-    <Tooltip />
-    <Area
-      type="monotone"
-      dataKey="count"
-      stroke="#7e22ce"
-      fill="url(#colorCount)"
-    />
-  </AreaChart>
-</ResponsiveContainer>
+                {/* Submission Area Chart (Background) */}
+                <Area
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="submissions"
+                  name="Submissions"
+                  stroke="#7e22ce"
+                  strokeWidth={2}
+                  fill="url(#submissionGradient)"
+                  fillOpacity={1}
+                />
+
+                {/* Onboarding Bar Chart */}
+                <Bar
+                  yAxisId="right"
+                  dataKey="onboarding"
+                  name="Onboarding"
+                  fill="url(#onboardingGradient)"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={40}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
           ) : (
-            <div className="text-gray-500 dark:text-gray-400 italic">No submission data available</div>
+            <div className="text-gray-500 italic">No data available</div>
           )}
         </div>
       </CardContent>
     </Card>
   );
 };
+
+
+export default CombinedSubmissionOnboardingChart; // This is CORRECT

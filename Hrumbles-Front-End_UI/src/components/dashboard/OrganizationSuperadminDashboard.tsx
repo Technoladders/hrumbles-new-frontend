@@ -9,9 +9,11 @@ import RevenueExpenseChart from "./RevenueExpenseChart";
 import { useSelector } from "react-redux";
 import { CalendarCard } from "../employee/profile/cards/CalendarCard";
 import { TimelineCard } from "../employee/profile/cards/SuperadminTimeline";
-import { SubmissionChartCard } from "../employee/profile/cards/SubmissionChartCard";
+// import { SubmissionChartCard } from "../employee/profile/cards/SubmissionChartCard";
 import {OnboardingChartCard} from "../employee/profile/cards/OnboardingChartCard";
 import HiringSuiteDashboard from "./HiringSuiteDashboard";
+import CombinedSubmissionOnboardingChart from '@/components/employee/profile/cards/SubmissionChartCard';
+
  
 interface RecruiterData {
   recruiter: string;
@@ -362,7 +364,7 @@ return (
                                 <SubmissionChartCard employeeId={user.id} role={role} />
                               </div>
                               <div className="h-full">
-                                <OnboardingChartCard employeeId={user.id} role={role} />
+                                {/* <OnboardingChartCard employeeId={user.id} role={role} /> */}
                               </div>
       </div>
  
@@ -506,7 +508,7 @@ function OrganizationSuperadminDashboard() {
   } 
 
     if (organizationDetails?.is_recruitment_firm) {
-    return <HiringSuiteDashboard />;
+    return <HiringSuiteDashboard employeeId={user.id}/>;
   }
   
   // Then it checks for the other Hiring Suite orgs.
@@ -518,5 +520,7 @@ function OrganizationSuperadminDashboard() {
   return <OriginalDashboardContent />;
 
 }
+
+export const SubmissionChartCard = CombinedSubmissionOnboardingChart;
 
 export default OrganizationSuperadminDashboard;
