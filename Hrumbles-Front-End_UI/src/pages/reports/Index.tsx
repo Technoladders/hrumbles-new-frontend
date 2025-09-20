@@ -57,6 +57,8 @@ const ReportIndex: React.FC = () => {
 
   // MODIFIED: Get full auth state
   const { organization_id: organizationId, user, role } = useSelector((state: any) => state.auth);
+    const { details: organizationDetails, status: firmOrgStatus } = useSelector((state: any) => state.firmOrganization);
+    
 
   // NEW: State for department fetching
   const [departmentName, setDepartmentName] = useState<string | null>(null);
@@ -136,7 +138,7 @@ const ReportIndex: React.FC = () => {
     (ITECH_ORGANIZATION_ID.includes(organizationId)) || 
     (role === 'employee' && departmentName === 'Human Resource');
 
-  const showRecruitmentFirmReports = (RECRUITMENT_FIRM_ID.includes(organizationId))
+ const showRecruitmentFirmReports = organizationDetails?.is_recruitment_firm;
 
   return (
     <div className="p-6 space-y-6 min-h-screen bg-gray-50">
@@ -154,6 +156,18 @@ const ReportIndex: React.FC = () => {
           ) : showRecruitmentFirmReports ? (
             <>
               {/* --- Reports for Recruitment Firms --- */}
+              <Card onClick={() => handleSelectReport('client')} className="cursor-pointer ...">
+                 <CardHeader className="bg-indigo-50"><CardTitle className="flex items-center text-indigo-700"><Building2 className="mr-2 h-6 w-6" /> Client Performance</CardTitle></CardHeader>
+                 <CardContent className="p-4 text-gray-600">View candidate status counts and distributions for each client.</CardContent>
+              </Card>
+              <Card onClick={() => handleSelectReport('individual')} className="cursor-pointer ...">
+                <CardHeader className="bg-blue-50"><CardTitle className="flex items-center text-blue-700"><Users className="mr-2 h-6 w-6" /> Individual Report</CardTitle></CardHeader>
+                <CardContent className="p-4 text-gray-600">View candidate status counts by individual employees.</CardContent>
+              </Card>
+              <Card onClick={() => handleSelectReport('recruiter')} className="cursor-pointer ...">
+                <CardHeader className="bg-green-50"><CardTitle className="flex items-center text-green-700"><UserCheck className="mr-2 h-6 w-6" /> Recruiter Performance</CardTitle></CardHeader>
+                <CardContent className="p-4 text-gray-600">Track recruiter performance with detailed metrics.</CardContent>
+              </Card>
               <Card onClick={() => handleSelectReport('recruitment_firm_submission')} className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up">
                 <CardHeader className="bg-cyan-50"><CardTitle className="flex items-center text-cyan-700"><FileUp className="mr-2 h-6 w-6" /> Submission Report</CardTitle></CardHeader>
                 <CardContent className="p-4 text-gray-600">Track and analyze all candidate submissions.</CardContent>

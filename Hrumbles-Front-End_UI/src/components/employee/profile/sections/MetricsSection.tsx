@@ -79,7 +79,7 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, depa
       {/* The charts will also correctly hide based on the new flag */}
       {showRecruitingWidgets && (
         <div className="w-full h-[300px] md:h-[325px] lg:h-[300px]">
-          <SubmissionChartCard employeeId={employeeId} role={role} />
+          <SubmissionChartCard employeeId={employeeId} role={role} organizationId={organizationId} />
           {/* <OnboardingChartCard employeeId={employeeId} role={role} /> */}
         </div>
       )}

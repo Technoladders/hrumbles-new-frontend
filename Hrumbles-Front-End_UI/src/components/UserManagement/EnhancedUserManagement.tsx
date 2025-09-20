@@ -21,10 +21,12 @@ const EnhancedUserManagement = () => {
 
   // MODIFICATION: Get the current user's organization ID from Redux
   const organizationId = useSelector((state: any) => state.auth.organization_id);
+    const { details: organizationDetails, status: firmOrgStatus } = useSelector((state: any) => state.firmOrganization);
 
   // MODIFICATION: Create a boolean flag for easier conditional rendering
   const isAscendionUser = organizationId === ASCENDION_ORGANIZATION_ID;
-  const isRecruitmentFirmUser = organizationId === RECRUITMENT_FIRM_ID;
+  const isRecruitmentFirmUser = organizationDetails?.is_recruitment_firm;
+  
 
   // MODIFICATION: Dynamically set the grid columns class based on the flag
   const gridColsClass = isAscendionUser ? "grid-cols-3" : "grid-cols-6";

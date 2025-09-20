@@ -315,7 +315,7 @@ const HiringSuiteDashboard = ({ employeeId }: { employeeId: string; role: string
         <div className="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-1 gap-4 sm:gap-6">
 
       <div className="w-full h-[300px] md:h-[325px] lg:h-[300px] mt-5">
-                <SubmissionChartCard employeeId={employeeId} role={role} />
+                <SubmissionChartCard employeeId={employeeId} role={role} organizationId={organizationId} />
                 {/* <OnboardingChartCard employeeId={employeeId} role={role} /> */}
               </div>
               </div>

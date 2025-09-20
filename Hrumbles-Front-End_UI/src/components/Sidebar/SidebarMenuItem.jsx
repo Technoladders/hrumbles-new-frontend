@@ -150,7 +150,8 @@ const recruitmentFirmOrgSuperAdminMenu = [
         icon: MdPeopleAlt, // Using the same icon for consistency
         items: [
            { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
-  { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+  { icon: FiUsers, label: "Employees", path: "/employee" },
+  { icon: FiBriefcase, label: "Jobs", path: "/jobs" }, 
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
   // { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x" },
   { icon: GoGoal, label: "Goals", path: "/goals" },

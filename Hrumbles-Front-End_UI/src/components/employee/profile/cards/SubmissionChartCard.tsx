@@ -10,6 +10,7 @@ import { MiniDateRangePicker } from "@/components/ui/MiniDateRangePicker"; // <-
 interface CombinedChartCardProps {
   employeeId: string;
   role: string;
+  organizationId: string;
 }
 
 interface ChartData {
@@ -25,7 +26,7 @@ interface DateRange {
 }
 
 
-export const CombinedSubmissionOnboardingChart: React.FC<CombinedChartCardProps> = ({ employeeId, role }) => {
+export const CombinedSubmissionOnboardingChart: React.FC<CombinedChartCardProps> = ({ employeeId, role, organizationId }) => {
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"week" | "month" | "year">("week");
@@ -35,10 +36,41 @@ export const CombinedSubmissionOnboardingChart: React.FC<CombinedChartCardProps>
   const isSuperAdmin = role === "organization_superadmin";
   const currentYear = new Date().getFullYear().toString();
 
+  console.log("CombinedSubmissionOnboardingChart", employeeId, role, organizationId);
+
 useEffect(() => {
   const fetchCombinedData = async () => {
+
+     if (!organizationId || (!employeeId && !isSuperAdmin)) {
+        setLoading(false);
+        return;
+      }
+
     try {
       setLoading(true);
+
+       const { data: statuses, error: statusError } = await supabase
+          .from('job_statuses')
+          .select('id, name')
+          .eq('type', 'sub')
+          .eq('organization_id', organizationId)
+          .in('name', ['Processed (Client)', 'Joined']);
+
+        if (statusError) throw statusError;
+
+        const submissionStatus = statuses.find(s => s.name === 'Processed (Client)');
+        const onboardingStatus = statuses.find(s => s.name === 'Joined');
+
+        // If the required statuses don't exist for this org, we can't show the chart.
+        if (!submissionStatus || !onboardingStatus) {
+          console.warn("Required statuses ('Processed (Client)' or 'Joined') not found for this organization.");
+          setChartData([]);
+          setLoading(false);
+          return;
+        }
+
+        const submissionStatusId = submissionStatus.id;
+        const onboardingStatusId = onboardingStatus.id;
 
       let startDate: Date;
       let endDate: Date;
@@ -70,24 +102,24 @@ useEffect(() => {
 
       // --- The Supabase queries are now much simpler ---
       let submissionQuery = supabase.from("hr_status_change_counts")
-        .select("count, created_at, hr_job_candidates(submission_date)")
-        .eq("sub_status_id", "71706ff4-1bab-4065-9692-2a1237629dda")
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
+          .select("count, created_at, hr_job_candidates(submission_date)")
+          .eq("sub_status_id", submissionStatusId) // <-- DYNAMIC ID
+          .gte("created_at", startDate.toISOString())
+          .lte("created_at", endDate.toISOString());
 
-      let onboardingQuery = supabase.from("hr_status_change_counts")
-        .select("count, created_at, hr_job_candidates(joining_date)")
-        .eq("sub_status_id", "c9716374-3477-4606-877a-dfa5704e7680")
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
+        let onboardingQuery = supabase.from("hr_status_change_counts")
+          .select("count, created_at, hr_job_candidates(joining_date)")
+          .eq("sub_status_id", onboardingStatusId) // <-- DYNAMIC ID
+          .gte("created_at", startDate.toISOString())
+          .lte("created_at", endDate.toISOString());
 
       if (!isSuperAdmin) {
-        submissionQuery = submissionQuery.eq("candidate_owner", employeeId);
-        onboardingQuery = onboardingQuery.eq("candidate_owner", employeeId);
-      }
-      
-      const [submissionResult, onboardingResult] = await Promise.all([submissionQuery, onboardingQuery]);
-      if (submissionResult.error || onboardingResult.error) throw submissionResult.error || onboardingResult.error;
+          submissionQuery = submissionQuery.eq("candidate_owner", employeeId);
+          onboardingQuery = onboardingQuery.eq("candidate_owner", employeeId);
+        }
+        
+        const [submissionResult, onboardingResult] = await Promise.all([submissionQuery, onboardingQuery]);
+        if (submissionResult.error || onboardingResult.error) throw submissionResult.error || onboardingResult.error;
 
       // --- Data processing logic remains similar, just adapted ---
       let data: ChartData[] = [];
@@ -121,10 +153,10 @@ useEffect(() => {
     }
   };
 
-  if (employeeId || isSuperAdmin) {
+  
     fetchCombinedData();
-  }
-}, [employeeId, role, activeTab, dateRange]); // <-- IMPORTANT: Add dateRange to the dependency array
+  
+}, [employeeId, role, activeTab, dateRange, organizationId, isSuperAdmin]); // <-- IMPORTANT: Add dateRange to the dependency array
 
   return (
     <Card className="shadow-2xl bg-white/70 backdrop-blur-xl border border-white/20 hover:shadow-3xl transition-all duration-300 rounded-xl h-[300px] md:h-[280px] md:h-[300px] lg:h-[280px] flex flex-col">

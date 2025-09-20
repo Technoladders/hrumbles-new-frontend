@@ -4,11 +4,12 @@
 import { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
 import ReactGA from 'react-ga4';
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 
 // Import the Redux action and the utility
 import { setOrganization } from "./Redux/organizationSlice";
 import { getOrganizationSubdomain } from "./utils/subdomain";
+import { fetchFirmOrganizationDetails } from "./Redux/firmOrganizationSlice";
 
 // Import your pages
 import DomainVerificationPage from "./pages/DomainVerificationPage";
@@ -154,7 +155,20 @@ const RouteChangeTracker = () => {
 function App() {
 
   const organizationSubdomain = getOrganizationSubdomain();
+  const organizationId = useSelector((state) => state.auth.organization_id);
+  const firmOrgStatus = useSelector((state) => state.firmOrganization.status);
   const dispatch = useDispatch();
+
+   useEffect(() => {
+    // This condition is key:
+    // - We must have an organizationId to fetch.
+    // - We only fetch if the status is 'idle' (meaning we haven't tried yet).
+    // This prevents re-fetching on every page navigation.
+    if (organizationId && firmOrgStatus === 'idle') {
+      dispatch(fetchFirmOrganizationDetails(organizationId));
+    }
+  }, [organizationId, firmOrgStatus, dispatch]); // Dependencies for the effect
+  // --- END: New logic ---
 
   useEffect(() => {
     // If a subdomain is found, dispatch it to the Redux store.

@@ -361,7 +361,7 @@ return (
                   </div>
  
                    <div className="h-full">
-                                <SubmissionChartCard employeeId={user.id} role={role} />
+                                <SubmissionChartCard employeeId={user.id} role={role} organizationId={organizationId} />
                               </div>
                               <div className="h-full">
                                 {/* <OnboardingChartCard employeeId={user.id} role={role} /> */}
@@ -447,6 +447,7 @@ const AscendionDashboard = () => {
 // --- Main Component acting as a router ---
 function OrganizationSuperadminDashboard() {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
+  const { role, user } = useSelector((state) => state.auth);
   const [organizationDetails, setOrganizationDetails] = useState<{ is_recruitment_firm: boolean } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
