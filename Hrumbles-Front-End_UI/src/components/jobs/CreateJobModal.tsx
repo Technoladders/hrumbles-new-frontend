@@ -91,7 +91,7 @@ export const CreateJobModal = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent
         className={`${
-          showStepper ? "sm:max-w-4xl max-h-[90vh] overflow-y-auto" : "sm:max-w-md"
+          showStepper ? "sm:max-w-4xl max-h-[90vh] overflow-y-auto" : "sm:max-w-4xl  h-[420px]"
         }`}
         onInteractOutside={(e) => e.preventDefault()}
       >
@@ -116,7 +116,7 @@ export const CreateJobModal = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-6">
             <Button
               variant="cardButton"
-              className="group flex flex-col items-center justify-center h-40 p-6 border-2 transition-all hover:border-gray-300"
+              className="group flex flex-col items-center justify-center h-50 p-6 border-2 transition-all hover:border-gray-300"
               onClick={() => handleJobTypeSelect("Internal")}
             >
               <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center mb-4">
@@ -130,7 +130,7 @@ export const CreateJobModal = ({
 
             <Button
               variant="cardButton"
-              className="group flex flex-col items-center justify-center h-40 p-6 border-2 transition-all hover:border-gray-300"
+              className="group flex flex-col items-center justify-center h-50 p-6 border-2 transition-all hover:border-gray-300"
               onClick={() => handleJobTypeSelect("External")}
             >
               <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mb-4">

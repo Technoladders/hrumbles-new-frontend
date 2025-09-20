@@ -29,7 +29,7 @@ const GoalsIndex = () => {
   const [activeDepartments, setActiveDepartments] = useState<{ id: string; name: string }[]>([]);
   const [createGoalDialogOpen, setCreateGoalDialogOpen] = useState(false);
   const [assignGoalDialogOpen, setAssignGoalDialogOpen] = useState(false);
-  const [chartTimeframe, setChartTimeframe] = useState<'day' | 'week' | 'month' | 'year'>('week');
+  const [chartTimeframe, setChartTimeframe] = useState<'day' | 'week' | 'month' | 'year'>('year');
 
   useEffect(() => {
     fetchData();

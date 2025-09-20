@@ -13,7 +13,7 @@ const StepperNavigation = ({ currentStep, totalSteps, jobType }: StepperNavigati
     if (jobType === "Internal") {
       return ["Job Information", "Experience & Skills", "Job Description"];
     } else { // External
-      return ["Client Details", "Job Information", "Experience & Skills", "Job Description"];
+      return ["Client Details", "Job Information", "Job Description", "Experience & Skills"];
     }
   };
   

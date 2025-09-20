@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { format, isValid } from 'date-fns';
 import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sigma, BarChart2, Star, Tag, User, Loader2, GitMerge, UserCheck, Crown, Calendar, Clock, MessageSquare } from 'lucide-react';
 import { Tooltip as ShadTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Tooltip } from 'recharts';
+import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Legend,Radar, Tooltip } from 'recharts';
 import { Progress } from '@/components/ui/progress';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
@@ -252,7 +252,7 @@ useEffect(() => {
 
 
     // --- UPDATED ANALYTICS LOGIC ---
-    const { analytics, pipelineStages, recruiterPerformance } = useMemo(() => {
+   const { analytics, pipelineStages, recruiterPerformance } = useMemo(() => {
     const stageCounts: { [key: string]: number } = {}; let scoreSum = 0; let scoreCount = 0;
     const recruiterProfiles: { [key: string]: number } = {}; const recruiterConversions: { [key: string]: number } = {}; const recruiterJoins: { [key: string]: number } = {};
     let convertedCount = 0; let joinedCount = 0;
@@ -273,6 +273,14 @@ useEffect(() => {
     
     const getTopPerformer = (counts: { [key: string]: number }) => Object.keys(counts).sort((a,b) => counts[b] - counts[a])[0] || 'N/A';
     
+    // --- THIS IS THE ONLY PART THAT CHANGES INSIDE THE HOOK ---
+    // We re-format the data for the colorful chart.
+    const pipelineStagesForChart = Object.entries(stageCounts).map(([stage, count]) => ({
+      stage: stage,
+      [stage]: count, // The key is the stage name itself, e.g., { stage: 'Processed', Processed: 247 }
+    }));
+    // --- END OF CHANGE ---
+    
     return {
         analytics: {
             totalCandidates: filteredCandidates.length, convertedCount, joinedCount,
@@ -283,10 +291,10 @@ useEffect(() => {
             topConvertedRecruiter: getTopPerformer(recruiterConversions),
             topJoinedRecruiter: getTopPerformer(recruiterJoins),
         },
-        pipelineStages: Object.entries(stageCounts).map(([stage, count]) => ({ stage, count })),
+        pipelineStages: pipelineStagesForChart, // Use the newly formatted data
         recruiterPerformance: Object.entries(recruiterProfiles).map(([name, hires]) => ({ name, hires })).sort((a,b) => b.hires - a.hires)
     };
-  }, [filteredCandidates, statuses]);
+}, [filteredCandidates, statuses, statusIds]);
 
   const groupedBySubStatus = useMemo<GroupedData>(() => filteredCandidates.reduce((acc: GroupedData, c) => { const s = statuses[c.sub_status_id || ''] || 'Uncategorized'; if (!acc[s]) acc[s] = []; acc[s].push(c); return acc; }, {}), [filteredCandidates, statuses]);
   const tableRows = useMemo<TableRowData[]>(() => !isGrouped ? filteredCandidates.map(c => ({ type: 'data', candidate: c, statusName: statuses[c.sub_status_id || ''] || 'Uncategorized' })) : Object.entries(groupedBySubStatus).sort((a, b) => a[0].localeCompare(b[0])).flatMap(([s, g]) => [{ type: 'header', statusName: s, count: g.length }, ...expandedGroups.includes(s) ? g.map(c => ({ type: 'data', candidate: c, statusName: s })) : []]), [isGrouped, filteredCandidates, groupedBySubStatus, expandedGroups, statuses]);
@@ -376,21 +384,34 @@ useEffect(() => {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2">
-            <CardHeader><CardTitle className="text-base font-semibold">Candidate Pipeline Stage</CardTitle></CardHeader>
-            <CardContent>
-                {pipelineStages.length > 2 ? (
-                     <ResponsiveContainer width="100%" height={280}>
-                        <RadarChart cx="50%" cy="50%" outerRadius="80%" data={pipelineStages}>
-                            <PolarGrid />
-                            <PolarAngleAxis dataKey="stage" tick={{ fontSize: 12 }} />
-                            <PolarRadiusAxis angle={30} domain={[0, 'dataMax']} tick={false} axisLine={false} />
-                            <Radar name="Candidates" dataKey="count" stroke="#6366F1" fill="#818CF8" fillOpacity={0.6} />
-                            <Tooltip />
-                        </RadarChart>
-                    </ResponsiveContainer>
-                ) : <div className="h-[280px] flex items-center justify-center text-sm text-gray-500">Not enough pipeline data for chart.</div>}
-            </CardContent>
-        </Card>
+    <CardHeader><CardTitle className="text-base font-semibold">Candidate Pipeline Stage</CardTitle></CardHeader>
+    <CardContent>
+        {pipelineStages.length > 0 ? (
+             <ResponsiveContainer width="100%" height={280}>
+                <RadarChart cx="50%" cy="50%" outerRadius="80%" data={pipelineStages}>
+                    <PolarGrid />
+                    <PolarAngleAxis dataKey="stage" tick={{ fontSize: 12 }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 'dataMax']} tick={false} axisLine={false} />
+                    <Tooltip />
+                    <Legend />
+                    
+                    {/* This creates a separate, colorful <Radar> for each stage */}
+                    {pipelineStages.map((entry, index) => (
+                        <Radar 
+                            key={entry.stage}
+                            name={entry.stage}
+                            dataKey={entry.stage} // The dataKey now matches the stage name
+                            stroke={["#8884d8", "#82ca9d", "#ffc658", "#ff8042", "#8dd1e1", "#d0ed57"][index % 6]}
+                            fill={["#8884d8", "#82ca9d", "#ffc658", "#ff8042", "#8dd1e1", "#d0ed57"][index % 6]}
+                            fillOpacity={0.6}
+                        />
+                    ))}
+
+                </RadarChart>
+            </ResponsiveContainer>
+        ) : <div className="h-[280px] flex items-center justify-center text-sm text-gray-500">Not enough pipeline data for chart.</div>}
+    </CardContent>
+</Card>
         <Card>
             <CardHeader><CardTitle className="text-base font-semibold">Pofiles by Recruiter</CardTitle></CardHeader>
             <CardContent className="space-y-3">

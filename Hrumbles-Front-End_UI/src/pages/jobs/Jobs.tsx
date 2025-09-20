@@ -1169,13 +1169,7 @@ const getAssignedEmployeeEmails = async (assigned_to: JobData['assigned_to']): P
           />
         </div>
 
-        {!isEmployee && (
-          <DateRangePickerField
-            dateRange={dateRange as any}
-            onDateRangeChange={(range) => setDateRange(range as any)}
-            onApply={() => setCurrentPage(1)} // Reset to first page on filter change
-          />
-        )}
+     
 
         {/* Goal: Add Client Filter Dropdown */}
         {!isEmployee && (
@@ -1185,6 +1179,7 @@ const getAssignedEmployeeEmails = async (assigned_to: JobData['assigned_to']): P
               setSelectedClient(value);
               setCurrentPage(1);
             }}
+
           >
             <SelectTrigger className="w-full md:w-[200px]">
               <SelectValue placeholder="Filter by Client" />
@@ -1201,6 +1196,13 @@ const getAssignedEmployeeEmails = async (assigned_to: JobData['assigned_to']): P
           </Select>
         )}
 
+         {!isEmployee && (
+          <DateRangePickerField
+            dateRange={dateRange as any}
+            onDateRangeChange={(range) => setDateRange(range as any)}
+            onApply={() => setCurrentPage(1)} // Reset to first page on filter change
+          />
+        )}
         {/* Goal: Add Date Range Filter */}
       </div>
 

@@ -378,12 +378,32 @@ const ProfilePageEmployee = () => {
         <div className="md:col-span-2">
           <Tabs defaultValue="personal" onValueChange={setActiveTab}>
             <div className="mb-6 flex justify-between items-center w-full">
-              <TabsList className="flex space-x-2">
-                <TabsTrigger value="personal" className="rounded-full">Personal Details</TabsTrigger>
-                <TabsTrigger value="professional" className="rounded-full">Professional Info</TabsTrigger>
-                <TabsTrigger value="bank" className="rounded-full">Bank Details</TabsTrigger>
-                <TabsTrigger value="activity" className="rounded-full">Activity</TabsTrigger>
-              </TabsList>
+             <TabsList className="flex space-x-2">
+  <TabsTrigger 
+    value="personal" 
+    className="rounded-full px-4 data-[state=active]:text-purple-700 data-[state=active]:!bg-transparent data-[state=active]:shadow-[0_4px_5px_-3px_#8b5cf6,0_-4px_5px_-3px_#8b5cf6]"
+  >
+    Personal Details
+  </TabsTrigger>
+  <TabsTrigger 
+    value="professional" 
+    className="rounded-full px-4 data-[state=active]:text-purple-700 data-[state=active]:!bg-transparent data-[state=active]:shadow-[0_4px_5px_-3px_#8b5cf6,0_-4px_5px_-3px_#8b5cf6]"
+  >
+    Professional Info
+  </TabsTrigger>
+  <TabsTrigger 
+    value="bank" 
+    className="rounded-full px-4 data-[state=active]:text-purple-700 data-[state=active]:!bg-transparent data-[state=active]:shadow-[0_4px_5px_-3px_#8b5cf6,0_-4px_5px_-3px_#8b5cf6]"
+  >
+    Bank Details
+  </TabsTrigger>
+  <TabsTrigger 
+    value="activity" 
+    className="rounded-full px-4 data-[state=active]:text-purple-700 data-[state=active]:!bg-transparent data-[state=active]:shadow-[0_4px_5px_-3px_#8b5cf6,0_-4px_5px_-3px_#8b5cf6]"
+  >
+    Activity
+  </TabsTrigger>
+</TabsList>
               <Button
                 onClick={() => navigate(`/employee/${userId}`)}
                 className="bg-purple-500 hover:bg-purple-600 text-white rounded-full"
