@@ -402,7 +402,7 @@ const IndividualReport: React.FC = () => {
         />
       </div>
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
           <div className="w-full sm:w-48">
             <Label className="block text-sm font-medium text-gray-700">Filter Employees</Label>
@@ -499,14 +499,14 @@ const IndividualReport: React.FC = () => {
             </Popover>
           </div>
         </div>
-      </div>
+      </div> */}
 
-      <div className="w-full overflow-x-auto">
+      {/* <div className="w-full overflow-x-auto">
         <Tabs defaultValue="overview" className="w-full min-w-[320px]">
           <TabsList className="flex flex-wrap gap-2">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="comparison">Comparison</TabsTrigger>
-            {/* <TabsTrigger value="flow">Flow</TabsTrigger> */}
+            <TabsTrigger value="flow">Flow</TabsTrigger>
             <TabsTrigger value="performance">Performance</TabsTrigger>
           </TabsList>
 
@@ -542,12 +542,12 @@ const IndividualReport: React.FC = () => {
                         itemStyle={{ color: '#333' }}
                         cursor={{ fill: 'transparent' }}
                       />
-                      {/* <Legend
+                      <Legend
                         verticalAlign="top"
                         align="right"
                         layout="vertical"
                         wrapperStyle={{ fontSize: '12px', color: '#333', maxWidth: '200px', overflowY: 'auto', maxHeight: '300px' }}
-                      /> */}
+                      />
                       {selectedStatuses.map((status) => (
                         <Bar
                           key={status}
@@ -607,7 +607,7 @@ const IndividualReport: React.FC = () => {
             </Card>
           </TabsContent>
 
-          {/* <TabsContent value="flow">
+          <TabsContent value="flow">
             <Card>
               <CardHeader>
                 <CardTitle>Candidate Flow by Stage</CardTitle>
@@ -638,7 +638,7 @@ const IndividualReport: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent> */}
+          </TabsContent>
 
           <TabsContent value="performance">
             <Card>
@@ -707,10 +707,10 @@ const IndividualReport: React.FC = () => {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
+      </div> */}
 
       <Card>
-        <CardHeader>
+        <CardHeader className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle>Detailed Report</CardTitle>
             <div className="flex space-x-2">

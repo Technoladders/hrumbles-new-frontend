@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { debounce } from 'lodash';
-import { DateRangePickerField } from './DateRangePickerField';
+import { DateRangePickerField } from '@/components/ui/DateRangePickerField';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import { autoTable } from 'jspdf-autotable'; // Explicitly import autoTable
@@ -287,7 +287,7 @@ const ClientWiseReport: React.FC = () => {
         />
       </div>
 
-      <Tabs defaultValue="overview" className="w-full">
+      {/* <Tabs defaultValue="overview" className="w-full">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="distribution">Distribution</TabsTrigger>
@@ -385,7 +385,7 @@ const ClientWiseReport: React.FC = () => {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
+      </Tabs> */}
 
       <Card className="shadow-lg border-0 overflow-hidden">
         <CardHeader className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white">

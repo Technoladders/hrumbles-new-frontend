@@ -173,6 +173,14 @@ const ReportIndex: React.FC = () => {
                 <CardContent className="p-4 text-gray-600">Track recruiter performance with detailed metrics.</CardContent>
               </Card>
               <ConsolidatedReportCard onSelect={() => handleSelectReport('consolidated_status')} />
+                 <Card onClick={() => handleSelectReport('talent')} className="cursor-pointer ...">
+                <CardHeader className="bg-purple-50"><CardTitle className="flex items-center text-purple-700"><UserCheck className="mr-2 h-6 w-6" /> Talent Profile Report</CardTitle></CardHeader>
+                <CardContent className="p-4 text-gray-600">View talent profile status distributions.</CardContent>
+              </Card>
+              <Card onClick={() => handleSelectReport('talent_trends')} className="cursor-pointer ...">
+                <CardHeader className="bg-teal-50"><CardTitle className="flex items-center text-teal-700"><BarChart2 className="mr-2 h-6 w-6" /> Talent Trends Report</CardTitle></CardHeader>
+                <CardContent className="p-4 text-gray-600">Analyze trends in talent data.</CardContent>
+              </Card>
                 <Card onClick={() => handleSelectReport('attendance')} className="cursor-pointer ...">
                 <CardHeader className="bg-green-50"><CardTitle className="flex items-center text-green-700"><Clock className="mr-2 h-6 w-6" /> Attendance Report</CardTitle></CardHeader>
                 <CardContent className="p-4 text-gray-600">View attendance records and details.</CardContent>

@@ -508,9 +508,9 @@ const dataForChart = useMemo(() => {
               <YAxis yAxisId="right" orientation="right" stroke="#10b981" />
               <Tooltip formatter={(value: number) => `₹${value.toLocaleString('en-IN')}`} />
               <Legend />
-              <Bar yAxisId="left" dataKey="revenue" name="Revenue" fill="url(#onboardingGradient)" radius={[4, 4, 0, 0]} />
+              <Bar yAxisId="left" dataKey="profit" name="Profit" fill="url(#onboardingGradient)" radius={[4, 4, 0, 0]} />
             
-              <Area yAxisId="right" type="monotone" dataKey="profit" name="Profit" fill="url(#submissionGradient)" stroke="#7235DD" fillOpacity={0.6} />
+              <Area yAxisId="right" type="monotone"  dataKey="revenue" name="Revenue" fill="url(#submissionGradient)" stroke="#7235DD" fillOpacity={0.6} />
            
             </ComposedChart>
                         </ResponsiveContainer>
@@ -539,10 +539,10 @@ const dataForChart = useMemo(() => {
         <Loader size={40} className="border-[4px] animate-spin text-indigo-600" />
       </div>
     ) : dataForChart && dataForChart.length > 0 ? (
-      <div className="h-[300px]">
+      <div className="h-[250px]">
         <div className="overflow-x-auto h-full">
           <div style={{ minWidth: `${dataForChart.length * 80}px`, height: '100%' }}>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250}>
               <ComposedChart
                 data={dataForChart}
                 margin={{ top: 20, right: 40, left: 40, bottom: 20 }}

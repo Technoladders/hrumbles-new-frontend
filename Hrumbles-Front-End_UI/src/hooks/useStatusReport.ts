@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ReportData } from '@/types/reports';
+import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
 
 interface RecruiterPerformanceData {
   recruiter: string;
@@ -41,14 +42,22 @@ export const useStatusReport = () => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchClientReport = async (startDate: Date, endDate: Date) => {
+       
+
     setIsLoading(true);
     setError(null);
 
     try {
+       const authData = getAuthDataFromLocalStorage();
+            if (!authData) {
+              throw new Error('Failed to retrieve authentication data');
+            }
+            const { organization_id, userId } = authData;
       // Fetch all statuses to map main and sub-statuses
       const { data: allStatuses, error: statusError } = await supabase
         .from('job_statuses')
-        .select('id, name, type, parent_id');
+        .select('id, name, type, parent_id')
+        .eq('organization_id', organization_id);
 
       if (statusError) throw statusError;
 
