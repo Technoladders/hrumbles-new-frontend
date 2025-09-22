@@ -14,6 +14,7 @@ const EmployeeView = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const user = useSelector((state: any) => state.auth.user);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
   const userRole = useSelector((state: any) => state.auth.role);
   const isEmployee = userRole === 'employee';
 
@@ -44,6 +45,7 @@ const EmployeeView = () => {
             hr_departments (name)
           `)
           .eq("id", user.id)
+          .eq("organization_id", organizationId)
           .single();
 
         if (error) {

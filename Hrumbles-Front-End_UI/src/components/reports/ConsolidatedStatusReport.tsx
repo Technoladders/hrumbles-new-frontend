@@ -280,7 +280,7 @@ const ConsolidatedStatusReport: React.FC = () => {
   const filteredCandidates = useMemo(() => {
     return candidates
       .filter(c => {
-        const statusName = statuses[c.sub_status_id || ''] || 'Uncategorized';
+        const statusName = statuses[c.sub_status_id || ''] || 'New Applicant';
         const statusMatch = statusFilter === 'all' || statusName === statusFilter;
         const clientMatch = clientFilter === 'all' || c.client_name === clientFilter;
         // MODIFIED: Recruiter filter logic now considers the restricted view
@@ -302,7 +302,7 @@ const ConsolidatedStatusReport: React.FC = () => {
 
   const groupedBySubStatus = useMemo<GroupedData>(() => {
     return filteredCandidates.reduce((acc: GroupedData, candidate) => {
-      const statusName = statuses[candidate.sub_status_id || ''] || 'Uncategorized';
+      const statusName = statuses[candidate.sub_status_id || ''] || 'New Applicant';
       if (!acc[statusName]) acc[statusName] = [];
       acc[statusName].push(candidate);
       return acc;
@@ -320,7 +320,7 @@ const ConsolidatedStatusReport: React.FC = () => {
       return filteredCandidates.map(c => ({
         type: 'data',
         candidate: c,
-        statusName: statuses[c.sub_status_id || ''] || 'Uncategorized',
+        statusName: statuses[c.sub_status_id || ''] || 'New Applicant',
       }));
     }
     return Object.entries(groupedBySubStatus)
@@ -358,7 +358,7 @@ const ConsolidatedStatusReport: React.FC = () => {
   const exportToCSV = () => {
     const dataForExport = filteredCandidates.map(c => ({
       'Candidate Name': c.name,
-      'Status': statuses[c.sub_status_id || ''] || 'Uncategorized',
+      'Status': statuses[c.sub_status_id || ''] || 'New Applicant',
       'AI Score': formatValue(c.overall_score),
       'Job Title': formatValue(c.job_title),
       'Client': formatValue(c.client_name),
@@ -382,7 +382,7 @@ const ConsolidatedStatusReport: React.FC = () => {
     doc.text('Consolidated Status Report', 14, 20);
     const tableData = filteredCandidates.map(c => [
       c.name,
-      statuses[c.sub_status_id || ''] || 'Uncategorized',
+      statuses[c.sub_status_id || ''] || 'New Applicant',
       formatValue(c.overall_score),
       formatValue(c.job_title),
       formatValue(c.client_name),
@@ -739,7 +739,11 @@ const ConsolidatedStatusReport: React.FC = () => {
                           <TableRow key={candidate!.id} className="hover:bg-gray-50 transition">
                             <TableCell className="sticky left-0 bg-white z-10 font-medium text-gray-800 px-4 py-2">
                                <Link
-              to={`/employee/${candidate!.id}/${candidate!.job_id}`}
+              to={
+                candidate!.job_id
+                  ? `/employee/${candidate!.id}/${candidate!.job_id}`
+                  : `/jobs/unassigned/candidate/${candidate!.id}/bgv`
+              }
               className="text-indigo-600 hover:underline hover:text-indigo-800"
             >
               {candidate!.name}

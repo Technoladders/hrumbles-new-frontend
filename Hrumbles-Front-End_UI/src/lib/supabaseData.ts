@@ -151,6 +151,12 @@ const calculateGoalStatus = (
 
 // API functions to interact with Supabase
 export const getEmployees = async (): Promise<Employee[]> => {
+
+  const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id, userId } = authData;
   try {
     const { data, error } = await supabase
       .from('hr_employees')
@@ -162,7 +168,8 @@ export const getEmployees = async (): Promise<Employee[]> => {
         profile_picture_url,
         hr_departments(name),
         hr_designations(name)
-      `);
+      `)
+      .eq('organization_id', organization_id);
 
     if (error) {
       console.error('Error fetching employees:', error);

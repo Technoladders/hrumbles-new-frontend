@@ -168,15 +168,15 @@ const recruitmentFirmOrgSuperAdminMenu = [
       { icon: TbCheckbox , label:"Leave", path: "/approvals/leave"},
     ],
   },
-  {
-    icon: FiSettings,
-    label: "Settings",
-    path: "#",
-    dropdown: [
-      { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies" },
-      { icon: IoCalendarNumberOutline, label: "Official Holidays", path: "/admin/holidays" },
-    ],
-  },
+  // {
+  //   icon: FiSettings,
+  //   label: "Settings",
+  //   path: "#",
+  //   dropdown: [
+  //     { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies" },
+  //     { icon: IoCalendarNumberOutline, label: "Official Holidays", path: "/admin/holidays" },
+  //   ],
+  // },
   { icon: MdOutlineManageAccounts, label: "User Management", path: "/user-management" },
 
         ],

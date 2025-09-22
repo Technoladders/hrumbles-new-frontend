@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useSelector } from 'react-redux';
 import {
   DialogContent,
   DialogHeader,
@@ -34,6 +35,7 @@ interface CreateGoalFormProps {
 
 const CreateGoalForm: React.FC<CreateGoalFormProps> = ({ onClose }) => {
   const [sector, setSector] = useState<SectorType>();
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
   const [metricType, setMetricType] = useState<MetricType>();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
@@ -46,6 +48,8 @@ const CreateGoalForm: React.FC<CreateGoalFormProps> = ({ onClose }) => {
   const [isAutomated, setIsAutomated] = useState(false);
   const [selectedAutomationSource, setSelectedAutomationSource] = useState<string>("");
   const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [dynamicStatuses, setDynamicStatuses] = useState<{ label: string; value: string }[]>([]);
+  const [isLoadingStatuses, setIsLoadingStatuses] = useState(false);
 const [sourceTable, setSourceTable] = useState("");
 const [sourceValueColumn, setSourceValueColumn] = useState("");
 const [sourceEmployeeColumn, setSourceEmployeeColumn] = useState("");
@@ -58,6 +62,47 @@ const [filters, setFilters] = useState<{ key: string; value: string }[]>([
   const currentSourceConfig = useMemo(() => {
     return AUTOMATION_SOURCES.find(source => source.value === selectedAutomationSource);
   }, [selectedAutomationSource]);
+
+  useEffect(() => {
+    const fetchDynamicStatuses = async () => {
+      if (currentSourceConfig?.isDynamic) {
+        setIsLoadingStatuses(true);
+        setDynamicStatuses([]); // Clear previous statuses
+        setSelectedStatus("");
+
+        // Get the names of the statuses we need to find (e.g., ["Joined"])
+        const statusNamesToFetch = currentSourceConfig.statuses.map(s => s.value);
+        
+        try {
+          const { data, error } = await supabase
+            .from('job_statuses')
+            .select('id, name')
+            .eq('organization_id', organizationId)
+            .in('name', statusNamesToFetch)
+            .eq('type', 'sub'); // Ensure we only get sub-statuses like "Joined"
+
+          if (error) throw error;
+
+          // Map the result to the format our dropdown needs
+          const fetchedStatuses = data.map(status => ({
+            label: status.name, // e.g., "Joined"
+            value: status.id,   // e.g., "c9716374-..." (the correct UUID!)
+          }));
+          
+          setDynamicStatuses(fetchedStatuses);
+
+        } catch (error) {
+          toast.error("Could not load hiring statuses for your organization.");
+          console.error(error);
+        } finally {
+          setIsLoadingStatuses(false);
+        }
+      }
+    };
+
+    fetchDynamicStatuses();
+  }, [currentSourceConfig, organizationId]);
+
 
     useEffect(() => {
     // Reset the status selection whenever the source changes
@@ -235,9 +280,9 @@ const handleFilterChange = (index: number, field: 'key' | 'value', val: string) 
                 <Select value={selectedStatus} onValueChange={setSelectedStatus} disabled={!currentSourceConfig}>
                   <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select a status..." /></SelectTrigger>
                   <SelectContent>
-                    {currentSourceConfig?.statuses.map(status => (
-                      <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>
-    ))}
+                    {(currentSourceConfig?.isDynamic ? dynamicStatuses : currentSourceConfig?.statuses || []).map(status => (
+                    <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>
+                  ))}
                   </SelectContent>
                 </Select>
               </div>

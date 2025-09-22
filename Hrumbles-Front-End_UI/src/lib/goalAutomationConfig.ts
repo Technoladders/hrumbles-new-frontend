@@ -8,6 +8,7 @@ export interface AutomationSource {
   employeeColumn: string; // The column linking to the employee
   dateColumn: string; // The date column for filtering
   filterColumn: string; // The column that contains the status/stage
+   isDynamic: boolean; 
   statuses: { label: string; value: string }[]; // The list of statuses for the dropdown
 }
 
@@ -20,9 +21,8 @@ export const AUTOMATION_SOURCES: AutomationSource[] = [
     employeeColumn: "candidate_owner",
     dateColumn: "created_at",
     filterColumn: "sub_status_id",
-    statuses: [
-      { label: "Submission", value: "71706ff4-1bab-4065-9692-2a1237629dda" },
-    ],
+    isDynamic: true,
+    statuses: [{ label: "Processed (Client)", value: "Processed (Client)" }],
   },
   {
     label: "Hiring (Onboarding)",
@@ -32,9 +32,8 @@ export const AUTOMATION_SOURCES: AutomationSource[] = [
     employeeColumn: "candidate_owner",
     dateColumn: "created_at",
     filterColumn: "sub_status_id",
-    statuses: [
-      { label: "Onboarding", value: "c9716374-3477-4606-877a-dfa5704e7680" },
-    ],
+     isDynamic: true, 
+   statuses: [{ label: "Joined", value: "Joined" }],
   },
   {
     label: "Contacts",
@@ -44,6 +43,7 @@ export const AUTOMATION_SOURCES: AutomationSource[] = [
     employeeColumn: "employee_id",
     dateColumn: "changed_at",
     filterColumn: "stage_name",
+    isDynamic: false,
     statuses: [
       { label: "Identified", value: "Identified" },
       { label: "Contacted", value: "Contacted" },
@@ -60,6 +60,7 @@ export const AUTOMATION_SOURCES: AutomationSource[] = [
     employeeColumn: "employee_id",
     dateColumn: "changed_at",
     filterColumn: "status_name",
+    isDynamic: false,
     statuses: [
       { label: "Identified", value: "Identified" },
       { label: "Proposal Sent", value: "Proposal Sent / In Discussion" },

@@ -1,4 +1,4 @@
-import React, { useState, Component, useMemo } from "react";
+import React, { useState, Component, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import ProjectTable from "@/components/Project/ProjectTable"; // UPDATED
@@ -7,7 +7,7 @@ import ClientRevenueExpenseChart from "@/components/Client/ClientRevenueExpenseC
 import { Button } from "@/components/ui/button";
 import { Plus, Briefcase, UserRoundCheck, UserRoundX, ReceiptIndianRupee, TrendingUp, Star, CheckCircle, XCircle } from "lucide-react";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { ResponsiveContainer, BarChart, Bar, XAxis, Area, ComposedChart, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import Loader from "@/components/ui/Loader";
 import { useSelector } from "react-redux";
 import { Tooltip as ReactTooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -93,6 +93,8 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
 const ProjectManagement = () => {
   const [addProjectOpen, setAddProjectOpen] = useState(false); // UPDATED
   const [dataType, setDataType] = useState<"revenue" | "profit">("revenue");
+  const [chartView, setChartView] = useState<'topRevenue' | 'topProfit' | 'all'>('topRevenue');
+const [currentPage, setCurrentPage] = useState(0);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   const [editingProject, setEditingProject] = useState<ProjectFinancialData | null>(null);
   const [dateRange, setDateRange] = useState<{ startDate: Date; endDate: Date; key: string }>({
@@ -100,6 +102,13 @@ const ProjectManagement = () => {
     endDate: new Date(),
     key: "selection",
   });
+
+  const ITEMS_PER_PAGE = 10;
+
+// Reset current page when chart view changes
+useEffect(() => {
+  setCurrentPage(0);
+}, [chartView]);
 
   // Fetch Projects (Primary data source is now projects)
   const { data: projects, isLoading: loadingProjects, isSuccess: successProjects } = useQuery({
@@ -337,10 +346,22 @@ const monthlyChartData = useMemo(() => {
   return initialData;
 }, [timeLogs, projectEmployees, projects, dateRange]);
 
-  // Filter projects with non-zero revenue or profit for the chart
-  const filteredProjectFinancials = projectFinancials.filter(project =>
-    dataType === "revenue" ? project.revenue_inr > 0 : project.profit_inr > 0
-  );
+const dataForChart = useMemo(() => {
+  const projectsCopy = [...projectFinancials];
+
+  switch (chartView) {
+    case 'topRevenue':
+      return projectsCopy.sort((a, b) => b.revenue_inr - a.revenue_inr).slice(0, 10);
+    case 'topProfit':
+      return projectsCopy.sort((a, b) => b.profit_inr - a.profit_inr).slice(0, 10);
+    case 'all':
+      const startIndex = currentPage * ITEMS_PER_PAGE;
+      const endIndex = startIndex + ITEMS_PER_PAGE;
+      return projectsCopy.slice(startIndex, endIndex);
+    default:
+      return projectsCopy.sort((a, b) => b.revenue_inr - a.revenue_inr).slice(0, 10);
+  }
+}, [projectFinancials, chartView, currentPage]);
 
   // --- UPDATED STATS FOR OVERVIEW CARD ---
    const topPerformer = projectFinancials.reduce((top, project) => (!top || project.revenue_inr > top.revenue_inr) ? project : top, null);
@@ -450,88 +471,172 @@ const monthlyChartData = useMemo(() => {
               </ul>
             </CardContent>
           </Card>
-           <div className="lg:col-span-2">
-            <ErrorBoundary>
-              {/* This component can be reused if its internal logic is based on props */}
-              <ClientRevenueExpenseChart 
-      chartData={monthlyChartData} 
-      dataType={dataType} 
-      isLoading={isDataLoading} />
-            </ErrorBoundary>
+         <div className="lg:col-span-2">
+            <Card className="shadow-xl border-none bg-white overflow-hidden h-full">
+              <CardHeader className="p-6">
+                <CardTitle className="text-xl md:text-xl font-semibold text-gray-800">
+                  Monthly Revenue vs. Profit
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <ErrorBoundary>
+                    {isDataLoading ? (
+                        <div className="flex items-center justify-center h-[240px]">
+                            <Loader size={40} />
+                        </div>
+                    ) : (
+                        <ResponsiveContainer width="100%" height={240}>
+                            <ComposedChart
+              data={monthlyChartData} // Uses the data you already calculated
+              margin={{ top: 20, right: 20, left: 20, bottom: 5 }}
+            >
+              <defs>
+                <linearGradient id="onboardingGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#505050" stopOpacity={0.8} />
+                  <stop offset="50%" stopColor="#505050" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="#505050" stopOpacity={0.1} />
+                </linearGradient>
+                <linearGradient id="submissionGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#7235DD" stopOpacity={0.6} /> 
+                  <stop offset="50%" stopColor="#7235DD" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="#7235DD" stopOpacity={0.1} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis yAxisId="left" orientation="left" stroke="#505050" />
+              <YAxis yAxisId="right" orientation="right" stroke="#10b981" />
+              <Tooltip formatter={(value: number) => `₹${value.toLocaleString('en-IN')}`} />
+              <Legend />
+              <Bar yAxisId="left" dataKey="revenue" name="Revenue" fill="url(#onboardingGradient)" radius={[4, 4, 0, 0]} />
+            
+              <Area yAxisId="right" type="monotone" dataKey="profit" name="Profit" fill="url(#submissionGradient)" stroke="#7235DD" fillOpacity={0.6} />
+           
+            </ComposedChart>
+                        </ResponsiveContainer>
+                    )}
+                </ErrorBoundary>
+              </CardContent>
+            </Card>
           </div>
         </div>
 
         {/* REVENUE/PROFIT PER PROJECT CHART (updated) */}
-        <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardHeader className="purple-gradient text-white p-3 flex justify-between items-center">
-            <div className="flex items-center justify-between w-full">
-              <h2 className="text-xl md:text-2xl font-semibold">
-                {dataType === "revenue" ? "Revenue" : "Profit"} per Project {/* UPDATED */}
-              </h2>
-              <Tabs value={dataType} onValueChange={(value) => setDataType(value as "revenue" | "profit")}>
-                <TabsList>
-                  <TabsTrigger value="revenue">Revenue</TabsTrigger>
-                  <TabsTrigger value="profit">Profit</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-          </CardHeader>
-          <CardContent className="p-6 overflow-x-auto">
-            <div style={{ minWidth: `${filteredProjectFinancials.length * 100}px` }}>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart
-                  data={filteredProjectFinancials} // USE PROJECT FINANCIALS
-                  margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
-                  className="animate-fade-in"
-                  barSize={40}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis
-                    dataKey="name" // UPDATED from display_name to name
-                    angle={0}
-                    textAnchor="middle"
-                    interval={0}
-                    height={50}
-                    label={{ value: "Projects", position: "insideBottom", offset: -10, fill: "#4b5563" }} // UPDATED
-                    tick={{ fontSize: 12, fill: "#4b5563" }}
-                    tickFormatter={(value) => (value.length > 10 ? `${value.slice(0, 10)}...` : value)}
-                  />
-                  <YAxis
-                    label={{ value: dataType === "revenue" ? "Revenue (INR)" : "Profit (INR)", angle: -90, position: "insideLeft", offset: -10, fill: "#4b5563" }}
-                    tick={{ fontSize: 12, fill: "#4b5563" }}
-                  />
-                  <Tooltip
-                             contentStyle={{
-                               backgroundColor: "#fff",
-                               border: "1px solid oklch(62.7% 0.265 303.9)",
-                               borderRadius: "8px",
-                               boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                             }}
-                             formatter={(value, name) => {
-                               const val = Number(value);
-                               const usd = val / EXCHANGE_RATE_USD_TO_INR;
-                               return [
-                                 `₹${val.toLocaleString()} ($${usd.toLocaleString(undefined, {
-                                   maximumFractionDigits: 0,
-                                 })})`,
-                                 name,
-                               ];
-                             }}
-                             itemStyle={{ color: "#4b5563" }}
-                             cursor={{ fill: "#f3e8ff" }}
-                           />
-                  <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "14px", color: "#4b5563" }} />
-                  <Bar
-                    dataKey={dataType === "revenue" ? "revenue_inr" : "profit_inr"}
-                    fill={dataType === "revenue" ? "#7B43F1" : "#B343B5"}
-                    name={dataType === "revenue" ? "Revenue" : "Profit"}
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+     <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
+  <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6">
+    <h2 className="text-xl md:text-xl font-semibold text-gray-800">
+      Revenue & Profit per Project
+    </h2>
+    <div className="flex items-center gap-2">
+      <Button variant={chartView === 'topRevenue' ? 'default' : 'outline'} size="sm" onClick={() => setChartView('topRevenue')}>Top 10 Revenue</Button>
+      <Button variant={chartView === 'topProfit' ? 'default' : 'outline'} size="sm" onClick={() => setChartView('topProfit')}>Top 10 Profit</Button>
+      <Button variant={chartView === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setChartView('all')}>Show All</Button>
+    </div>
+  </CardHeader>
+  <CardContent className="p-6 pt-0">
+    {isDataLoading ? (
+      <div className="flex items-center justify-center h-[300px]">
+        <Loader size={40} className="border-[4px] animate-spin text-indigo-600" />
+      </div>
+    ) : dataForChart && dataForChart.length > 0 ? (
+      <div className="h-[300px]">
+        <div className="overflow-x-auto h-full">
+          <div style={{ minWidth: `${dataForChart.length * 80}px`, height: '100%' }}>
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart
+                data={dataForChart}
+                margin={{ top: 20, right: 40, left: 40, bottom: 20 }}
+              >
+                <defs>
+                  <linearGradient id="projectRevenueGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#505050" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#505050" stopOpacity={1} />
+                  </linearGradient>
+                  <linearGradient id="projectProfitGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                    <stop offset="50%" stopColor="#10b981" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="name"
+                  angle={0} 
+                  textAnchor="middle"
+                  interval={0}
+                  height={50} 
+                  tick={{ fontSize: 11, fill: '#64748b' }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(value) => (value.length > 15 ? `${value.slice(0, 15)}...` : value)}
+                />
+                <YAxis
+                  yAxisId="revenue"
+                  orientation="left"
+                  tickCount={5}
+                  tick={{ fontSize: 11, fill: '#7B43F1', fontWeight: '600' }}
+                  axisLine={false}
+                  tickLine={false}
+                  label={{ value: "Revenue (₹)", angle: -90, position: "insideLeft", style: { textAnchor: 'middle', fill: '#7B43F1' }}}
+                  tickFormatter={(value) => `₹${(value / 100000).toFixed(0)}L`}
+                />
+                <YAxis
+                  yAxisId="profit"
+                  orientation="right"
+                  tickCount={5}
+                  tick={{ fontSize: 11, fill: '#10b981', fontWeight: '600' }}
+                  axisLine={false}
+                  tickLine={false}
+                  label={{ value: "Profit (₹)", angle: 90, position: "insideRight", style: { textAnchor: 'middle', fill: '#10b981' }}}
+                  tickFormatter={(value) => `₹${(value / 100000).toFixed(0)}L`}
+                />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(10px)", border: "none", borderRadius: "12px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)"}}
+                  formatter={(value, name) => {
+                    const val = Number(value);
+                    const usd = val / EXCHANGE_RATE_USD_TO_INR;
+                    return [`₹${val.toLocaleString()} ($${usd.toLocaleString(undefined, { maximumFractionDigits: 0 })})`, name];
+                  }}
+                  labelStyle={{ fontWeight: 'bold', color: '#374151' }}
+                />
+                <Legend verticalAlign="top" height={46} wrapperStyle={{ fontSize: "14px", color: "#4b5563", paddingBottom: "20px" }} iconType="rect"/>
+                <Area yAxisId="profit" type="monotone" dataKey="profit_inr" name="Profit" stroke="#10b981" strokeWidth={3} fill="url(#projectProfitGradient)" fillOpacity={1}/>
+                <Bar yAxisId="revenue" dataKey="revenue_inr" name="Revenue" fill="url(#projectRevenueGradient)" radius={[10, 10, 0, 0]} maxBarSize={60}/>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        {chartView === 'all' && projectFinancials.length > ITEMS_PER_PAGE && (
+          <div className="flex items-center justify-center gap-4 mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(currentPage - 1)}
+              disabled={currentPage === 0}
+            >
+              Previous
+            </Button>
+            <span className="text-sm font-medium text-gray-600">
+              Page {currentPage + 1} of {Math.ceil(projectFinancials.length / ITEMS_PER_PAGE)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={currentPage >= Math.ceil(projectFinancials.length / ITEMS_PER_PAGE) - 1}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </div>
+    ) : (
+      <div className="flex items-center justify-center h-[400px] text-gray-500 bg-gray-50 rounded-lg">
+        <p>No project data to display for the selected period.</p>
+      </div>
+    )}
+  </CardContent>
+</Card>
 
         {/* Table Section - Now using ProjectTable */}
         <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl rounded-2xl">

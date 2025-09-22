@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { DateRangePickerField } from './DateRangePickerField';
+import { DateRangePickerField } from '@/components/ui/DateRangePickerField';
 import { CSVLink } from 'react-csv';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -542,12 +542,12 @@ const IndividualReport: React.FC = () => {
                         itemStyle={{ color: '#333' }}
                         cursor={{ fill: 'transparent' }}
                       />
-                      <Legend
+                      {/* <Legend
                         verticalAlign="top"
                         align="right"
                         layout="vertical"
                         wrapperStyle={{ fontSize: '12px', color: '#333', maxWidth: '200px', overflowY: 'auto', maxHeight: '300px' }}
-                      />
+                      /> */}
                       {selectedStatuses.map((status) => (
                         <Bar
                           key={status}
