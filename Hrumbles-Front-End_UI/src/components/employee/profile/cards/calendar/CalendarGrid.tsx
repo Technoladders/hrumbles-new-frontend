@@ -30,14 +30,14 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         {weekDays.map((day) => (
           <div
             key={day.name}
-            className="h-14 flex items-center justify-center text-xs font-medium text-white"
+            className="h-14 flex items-center justify-center text-xs font-medium text-black"
           >
             {day.label}
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-6">
+      <div className="grid grid-cols-7 gap-8">
         {days.map((day, index) => (
           <div 
             key={index}
@@ -53,7 +53,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               ),
               day.isToday && (day.hasInterview || day.hasHoliday || day.hasLeave) && !isSameDay(day.date, selectedDate) && "border border-blue-200",
               day.isSunday && !day.hasInterview && !day.hasHoliday && !day.hasLeave && !isSameDay(day.date, selectedDate) && "text-[#F59E0B]",
-              !day.isSunday && day.isCurrentMonth && !day.isToday && !day.hasInterview && !day.hasHoliday && !day.hasLeave && !isSameDay(day.date, selectedDate) && "text-white hover:bg-gray-100 hover:text-gray-900",
+              !day.isSunday && day.isCurrentMonth && !day.isToday && !day.hasInterview && !day.hasHoliday && !day.hasLeave && !isSameDay(day.date, selectedDate) && "text-black hover:bg-gray-100 hover:text-gray-900",
               isSameDay(day.date, selectedDate) && "bg-[#1A73E8] text-white hover:bg-[#1A73E8]/90"
             )}
             onClick={() => onSelectDate(day.date, day.hasInterview, day.hasHoliday, day.hasLeave)}

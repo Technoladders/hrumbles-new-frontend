@@ -54,6 +54,15 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, depa
       {/* ROW 2: Two-Column Layout for Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Use the new flag to decide if the timeline card should render */}
+        <div className="lg:col-span-2">
+        <CalendarCard 
+          employeeId={employeeId} 
+          // This prop also uses the new flag to control interview visibility
+          isHumanResourceEmployee={showRecruitingWidgets}
+          role={role} 
+          organizationId={organizationId}
+        />
+        </div>
         <div className="lg:col-span-1">
         {showRecruitingWidgets ? (
           <CandidateTimelineCard employeeId={employeeId} />
@@ -64,15 +73,7 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, depa
           <div /> 
         )}
         </div>
-        <div className="lg:col-span-2">
-        <CalendarCard 
-          employeeId={employeeId} 
-          // This prop also uses the new flag to control interview visibility
-          isHumanResourceEmployee={showRecruitingWidgets}
-          role={role} 
-          organizationId={organizationId}
-        />
-        </div>
+        
       </div>
       
       {/* ROW 3: Conditional Charts for HR/Admins */}

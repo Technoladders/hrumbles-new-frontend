@@ -29,7 +29,7 @@ interface DateRange {
 export const CombinedSubmissionOnboardingChart: React.FC<CombinedChartCardProps> = ({ employeeId, role, organizationId }) => {
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"week" | "month" | "year">("week");
+  const [activeTab, setActiveTab] = useState<"week" | "month" | "year">("year");
   const [dateRange, setDateRange] = useState<DateRange | null>(null); 
 
   const isEmployee = role === "employee";

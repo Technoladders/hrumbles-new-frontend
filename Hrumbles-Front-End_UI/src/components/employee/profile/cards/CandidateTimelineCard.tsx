@@ -64,7 +64,7 @@ export const CandidateTimelineCard: React.FC<{ employeeId: string }> = ({ employ
   }, [error]);
 
   return (
-    <Card className="shadow-md rounded-xl h-[300px] md:h-[325px] lg:h-[400px] flex flex-col">
+    <Card className="shadow-md rounded-xl h-[300px] md:h-[325px] lg:h-[350px] flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center text-lg">
           <Activity className="h-5 w-5 text-purple-500 mr-2" />

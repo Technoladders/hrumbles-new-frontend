@@ -284,6 +284,9 @@ const HiringSuiteDashboard = ({ employeeId }: { employeeId: string; role: string
         
         {/* --- ROW 3 --- */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="sm:col-span-2">
+            <CalendarCard employeeId={user.id} isHumanResourceEmployee={false} role={role} organizationId={organizationId} />
+          </div>
           <div className="sm:col-span-2 lg:col-span-1">
             <ChartCard title="Pipeline Hotspots" description="Candidates awaiting action the longest" isLoading={awaitingActionLoading} className="sm:col-span-2 lg:col-span-1">
               <ul className="space-y-3 sm:space-y-4">
@@ -307,9 +310,7 @@ const HiringSuiteDashboard = ({ employeeId }: { employeeId: string; role: string
               </ul>
             </ChartCard>
           </div>
-          <div className="sm:col-span-2">
-            <CalendarCard employeeId={user.id} isHumanResourceEmployee={false} role={role} organizationId={organizationId} />
-          </div>
+        
         </div>
       </div>
         <div className="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-1 gap-4 sm:gap-6">

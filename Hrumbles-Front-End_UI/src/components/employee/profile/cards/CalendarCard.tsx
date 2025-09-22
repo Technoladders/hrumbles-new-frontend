@@ -72,24 +72,24 @@ const HolidaysList: React.FC<{ holidays: Holiday[], leaves: LeaveRequest[], sele
 
   return (
     <div className="overflow-y-auto max-h-[250px] pr-2 overflow-x-hidden">
-      <h4 className="text-sm font-semibold mb-2">Holidays & Leaves for {format(selectedDate, 'MMMM d, yyyy')}</h4>
+      <h4 className="text-[10px] font-semibold mb-2">Festivals & Leaves for {format(selectedDate, 'MMMM d, yyyy')}</h4>
       {filteredHolidays.length === 0 && filteredLeaves.length === 0 ? (
        <div className="mb-10 p-3 bg-red-50 rounded-lg">
-              <p className="text-sm italic text-gray-600">No holidays or leaves on this date</p>
+              <p className="text-[10px] italic text-gray-600">No Festivals or leaves on this date</p>
             </div>
       ) : (
         <>
           {filteredHolidays.map((holiday, index) => (
             <div key={`holiday-${index}`} className="mb-2 p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm font-semibold">{holiday.localName}</p>
-              <p className="text-xs text-gray-600">{holiday.name}</p>
+              <p className="text-[10px] font-semibold">{holiday.localName}</p>
+              <p className="text-[8px] text-gray-600">{holiday.name}</p>
             </div>
           ))}
           {filteredLeaves.map((leave, index) => (
             <div key={`leave-${index}`} className={`mb-2 p-3 ${leave.status === 'approved' ? 'bg-green-50' : 'bg-amber-50'} rounded-lg`}>
-              <p className="text-sm font-semibold">Leave ({leave.status})</p>
-              <p className="text-xs text-gray-600">{leave.notes || 'No notes provided'}</p>
-              <p className="text-xs text-gray-600">
+              <p className="text-[10px] font-semibold">Leave ({leave.status})</p>
+              <p className="text-[8px] text-gray-600">{leave.notes || 'No notes provided'}</p>
+              <p className="text-[8px] text-gray-600">
                 {leave.start_date === leave.end_date
                   ? leave.start_date
                   : `${leave.start_date} to ${leave.end_date}`}
@@ -98,20 +98,20 @@ const HolidaysList: React.FC<{ holidays: Holiday[], leaves: LeaveRequest[], sele
           ))}
         </>
       )}
-      <h4 className="text-sm font-semibold mb-2">Upcoming Holidays & Leaves (Next 30 Days)</h4>
+      <h4 className="text-[10px] font-semibold mb-2">Upcoming Festivals & Leaves (Next 30 Days)</h4>
       {upcomingHolidays.length > 0 || upcomingLeaves.length > 0 ? (
         <>
           {upcomingHolidays.map((holiday, index) => (
             <div key={`upcoming-holiday-${index}`} className="mb-2 p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm font-semibold">{holiday.localName}</p>
-              <p className="text-xs text-gray-600">{holiday.name} - {holiday.date}</p>
+              <p className="text-[10px] font-semibold">{holiday.localName}</p>
+              <p className="text-[8px] text-gray-600">{holiday.name} - {holiday.date}</p>
             </div>
           ))}
           {upcomingLeaves.map((leave, index) => (
             <div key={`upcoming-leave-${index}`} className={`mb-2 p-3 ${leave.status === 'approved' ? 'bg-green-50' : 'bg-amber-50'} rounded-lg`}>
-              <p className="text-sm font-semibold">Leave ({leave.status})</p>
-              <p className="text-xs text-gray-600">{leave.notes || 'No notes provided'}</p>
-              <p className="text-xs text-gray-600">
+              <p className="text-[10px] font-semibold">Leave ({leave.status})</p>
+              <p className="text-[8px] text-gray-600">{leave.notes || 'No notes provided'}</p>
+              <p className="text-[8px] text-gray-600">
                 {leave.start_date === leave.end_date
                   ? leave.start_date
                   : `${leave.start_date} to ${leave.end_date}`}
@@ -120,7 +120,7 @@ const HolidaysList: React.FC<{ holidays: Holiday[], leaves: LeaveRequest[], sele
           ))}
         </>
       ) : (
-        <div className="text-gray-500 italic">No upcoming holidays or leaves</div>
+        <div className="text-gray-500 italic">No upcoming festivals or leaves</div>
       )}
     </div>
   );
@@ -162,26 +162,26 @@ const AllEventsList: React.FC<{ interviewDates: string[], holidays: Holiday[], l
 
   return (
     <div className="overflow-y-auto max-h-[320px] pr-2 overflow-x-hidden">
-      <h4 className="text-sm font-semibold mb-2">Events for {format(selectedDate, 'MMMM d, yyyy')}</h4>
+      <h4 className="text-[10px] font-semibold mb-2">Events for {format(selectedDate, 'MMMM d, yyyy')}</h4>
       {hasInterviews || filteredHolidays.length > 0 || filteredLeaves.length > 0 ? (
         <>
           {hasInterviews && (
             <div className="mb-2 p-3 bg-purple-50 rounded-lg">
-              <p className="text-sm font-semibold">Interview Scheduled</p>
-              <p className="text-xs text-gray-600">Check Interviews tab for details</p>
+              <p className="text-[10px] font-semibold">Interview Scheduled</p>
+              <p className="text-[8px] text-gray-600">Check Interviews tab for details</p>
             </div>
           )}
           {filteredHolidays.map((holiday, index) => (
             <div key={`holiday-${index}`} className="mb-2 p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm font-semibold">{holiday.localName}</p>
-              <p className="text-xs text-gray-600">{holiday.name}</p>
+              <p className="text-[10px] font-semibold">{holiday.localName}</p>
+              <p className="text-[8px] text-gray-600">{holiday.name}</p>
             </div>
           ))}
           {filteredLeaves.map((leave, index) => (
             <div key={`leave-${index}`} className={`mb-2 p-3 ${leave.status === 'approved' ? 'bg-green-50' : 'bg-amber-50'} rounded-lg`}>
-              <p className="text-sm font-semibold">Leave ({leave.status})</p>
-              <p className="text-xs text-gray-600">{leave.notes || 'No notes provided'}</p>
-              <p className="text-xs text-gray-600">
+              <p className="text-[10px] font-semibold">Leave ({leave.status})</p>
+              <p className="text-[8px] text-gray-600">{leave.notes || 'No notes provided'}</p>
+              <p className="text-[8px] text-gray-600">
                 {leave.start_date === leave.end_date
                   ? leave.start_date
                   : `${leave.start_date} to ${leave.end_date}`}
@@ -191,29 +191,29 @@ const AllEventsList: React.FC<{ interviewDates: string[], holidays: Holiday[], l
         </>
       ) : (
          <div className="mb-12 p-3 bg-red-50 rounded-lg">
-              <p className="text-sm italic text-gray-600">No events on this date</p>
+              <p className="text-[10px] italic text-gray-600">No events on this date</p>
             </div>
       )}
-      <h4 className="text-sm font-semibold mb-2">Upcoming Events (Next 30 Days)</h4>
+      <h4 className="text-[10px] font-semibold mb-2">Upcoming Events (Next 30 Days)</h4>
       {upcomingInterviews.length > 0 || upcomingHolidays.length > 0 || upcomingLeaves.length > 0 ? (
         <>
           {upcomingInterviews.map((date, index) => (
             <div key={`upcoming-interview-${index}`} className="mb-2 p-3 bg-purple-50 rounded-lg">
-              <p className="text-sm font-semibold">Interview Scheduled</p>
-              <p className="text-xs text-gray-600">Date: {date}</p>
+              <p className="text-[10px] font-semibold">Interview Scheduled</p>
+              <p className="text-[8px] text-gray-600">Date: {date}</p>
             </div>
           ))}
           {upcomingHolidays.map((holiday, index) => (
             <div key={`upcoming-holiday-${index}`} className="mb-2 p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm font-semibold">{holiday.localName}</p>
-              <p className="text-xs text-gray-600">{holiday.name} - {holiday.date}</p>
+              <p className="text-[10px] font-semibold">{holiday.localName}</p>
+              <p className="text-[8px] text-gray-600">{holiday.name} - {holiday.date}</p>
             </div>
           ))}
           {upcomingLeaves.map((leave, index) => (
             <div key={`upcoming-leave-${index}`} className={`mb-2 p-3 ${leave.status === 'approved' ? 'bg-green-50' : 'bg-amber-50'} rounded-lg`}>
-              <p className="text-sm font-semibold">Leave ({leave.status})</p>
-              <p className="text-xs text-gray-600">{leave.notes || 'No notes provided'}</p>
-              <p className="text-xs text-gray-600">
+              <p className="text-[10px] font-semibold">Leave ({leave.status})</p>
+              <p className="text-[8px] text-gray-600">{leave.notes || 'No notes provided'}</p>
+              <p className="text-[8px] text-gray-600">
                 {leave.start_date === leave.end_date
                   ? leave.start_date
                   : `${leave.start_date} to ${leave.end_date}`}
@@ -437,9 +437,9 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
   }
 
   return (
-    <Card className="p-4 hover:shadow-md transition-shadow h-[400px] overflow-hidden ">
+    <Card className="p-4 hover:shadow-md transition-shadow h-[350px] overflow-hidden ">
       <div className="grid grid-cols-[2fr_3fr] gap-4 h-full">
-        <div className="bg-gradient-to-b from-indigo-600 to-purple-700 rounded-lg p-5 flex flex-col space-y-2 min-w-0">
+        <div className="bg-white rounded-lg p-5 flex flex-col space-y-2 min-w-0">
           <CalendarHeader 
             currentDate={currentDate}
             onPrevMonth={prevMonth}
@@ -461,7 +461,7 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
               </TabsTrigger>
               <TabsTrigger value="holidays" className="flex items-center gap-1 text-xs">
                 <Sun className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">Holidays</span>
+                <span className="truncate">Festivals</span>
               </TabsTrigger>
               {(isHumanResourceEmployee || role === 'organization_superadmin') && (
                 <TabsTrigger value="interviews" className="flex items-center gap-1 text-xs">
