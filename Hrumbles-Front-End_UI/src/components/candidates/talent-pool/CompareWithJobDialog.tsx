@@ -78,8 +78,10 @@ const CompareWithJobDialog = ({ isOpen, onClose, candidateId }: CompareWithJobDi
     onClose();
     toast.success(`Analysis complete for ${result.candidate_name}.`);
     // Navigate to the job view to see the new candidate in the list
-    navigate(`/jobs/${result.job_id}`);
+    // navigate(`/jobs/${result.job_id}`);
+    navigate(`/resume-analysis/${result.job_id}/${result.candidate_id}?talentId=${result.candidate_id}`);
   };
+  
 
   if (isAnalysisModalOpen && selectedJobId) {
     // We reuse your existing powerful modal. We just need to feed it the right initial data.

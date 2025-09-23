@@ -408,7 +408,7 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
  
               // Add entry for the candidate_companies junction table
               companyEntries.push({
-                candidate_id: currentCandidateId,
+                candidate_id: candidateId,
                 job_id: jobId,
                 company_id: companyId,
                 designation: company.designation || '-',
@@ -449,7 +449,7 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
             const { data: savedCompanies, error: fetchError } = await supabase
               .from('candidate_companies')
               .select('company_id, designation, years, companies (id, name)') // Select company name too
-              .eq('candidate_id', currentCandidateId)
+              .eq('candidate_id', candidateId)
               .eq('job_id', jobId);
  
             if (fetchError) {

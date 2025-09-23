@@ -143,8 +143,16 @@ const AddUserModal = ({ isOpen, onClose, onSuccess }: AddUserModalProps) => {
             creating_user_id: user.id
         };
 
-        const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`;
-        const response = await fetch(functionUrl, { /* ... your fetch config */ });
+       const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`;
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`, // Add Supabase auth token
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, // Add Supabase anonymous key
+      },
+      body: JSON.stringify(functionPayload),
+    });
 
         if (!response.ok) {
             const errorData = await response.json();

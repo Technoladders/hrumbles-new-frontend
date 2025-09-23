@@ -290,7 +290,7 @@ function App() {
             {/* Jobs */}
             <Route path="/jobs" element={<JobRouteHandler />} />
             <Route path="/jobs/:id" element={<JobViewRouteHandler />} />
-            <Route path="/resume-analysis/:candidateId" element={<ResumeAnalysisDetailView />} />
+           <Route path="/resume-analysis/:jobId/:candidateId" element={<ResumeAnalysisDetailView />} />
             <Route path="/jobs/:id/description" element={<JobDescription />} />
             <Route path="/jobs/edit/:id" element={<JobDescription />} />
             <Route path="/jobstatuses" element={<StatusSettings />} />

@@ -326,7 +326,7 @@ const JobView = () => {
                             <Button 
                               variant="ghost" 
                               size="sm"
-                              onClick={() => navigate(`/resume-analysis/${item.candidate_id}`)}
+                              onClick={() => navigate(`/resume-analysis/${id}/${item.candidate_id}`)}
                               className="text-purple-600 hover:text-purple-800"
                             >
                               <Eye size={16} />

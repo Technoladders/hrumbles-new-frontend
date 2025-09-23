@@ -1,6 +1,6 @@
 // components/ResumeAnalysisDetailView.tsx
-import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
+import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,30 +27,59 @@ import { toast } from "@/components/ui/use-toast";
 import { useSelector } from "react-redux";
 
 const ResumeAnalysisDetailView = () => {
-  const { candidateId } = useParams<{ candidateId: string }>();
+  const { jobId, candidateId } = useParams<{ jobId: string, candidateId: string }>();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null); // hr_jobs.id (UUID)
   const [openCombobox, setOpenCombobox] = useState(false);
+
+    const location = useLocation();
+  const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const talentId = queryParams.get('talentId');
  
    const user = useSelector((state: any) => state.auth.user); // ✅ Get logged-in user
       const organization_id = useSelector((state: any) => state.auth.organization_id); // ✅ Get organization ID
  
   const { data: analysis, isLoading } = useQuery({
-    queryKey: ['resume-analysis', candidateId],
+    queryKey: ['resume-analysis', jobId, candidateId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('resume_analysis')
         .select('*')
+        .eq('job_id', jobId)
         .eq('candidate_id', candidateId)
         .single();
       if (error) throw error;
       return data;
     },
-    enabled: !!candidateId,
+    enabled: !!jobId && !!candidateId,
   });
 
   console.log("analysis", analysis)
+
+   // --- START: MODIFICATION ---
+  // New query to fetch the candidate's data from the talent pool if a talentId is available
+  const { data: talentPoolCandidate } = useQuery({
+    queryKey: ['talentPoolCandidate', talentId],
+    queryFn: async () => {
+      if (!talentId) return null;
+      const { data, error } = await supabase
+        .from('hr_talent_pool')
+        .select('resume_path') 
+        .eq('id', talentId)
+        .single();
+      
+      if (error) {
+        // Don't throw an error if not found, just return null
+        if (error.code === 'PGRST116') return null; 
+        throw error;
+      }
+      return data;
+    },
+    enabled: !!talentId, // This query will only run if talentId exists in the URL
+  });
+  // --- END: MODIFICATION ---
 
     // Fetch all jobs
     const { data: jobs, isLoading: isJobsLoading } = useQuery({
@@ -92,9 +121,7 @@ const assignJobMutation = useMutation({
       : 'Unknown';
     const createdBy = user?.id;
 
-    // Check for talentId in query parameters (e.g., ?talentId=xxx)
-    const queryParams = new URLSearchParams(location.search);
-    const talentId = queryParams.get('talentId');
+   
     const isTalentContext = !!talentId;
 
     const payload: any = {
@@ -113,12 +140,13 @@ const assignJobMutation = useMutation({
       organization_id: organization_id, // Set to organization_id
     };
 
-    if (isTalentContext) {
-      // Talent context: Send talent_id, set candidate_id to null
+  if (isTalentContext) {
       payload.talent_id = talentId;
       payload.candidate_id = null;
+       if (talentPoolCandidate?.resume_path) {
+          payload.resume_url = talentPoolCandidate.resume_path;
+        }
     } else {
-      // Candidate context: Send candidate_id, set talent_id to null
       payload.candidate_id = null;
       payload.talent_id = null;
     }
@@ -136,15 +164,20 @@ const assignJobMutation = useMutation({
       }
       throw error;
     }
+
+    return { jobId };
   },
-  onSuccess: () => {
+  onSuccess: (data) => {
+     const assignedJobId = data.jobId;
     toast({
       title: 'Success',
       description: 'Candidate assigned to job successfully',
     });
     setIsAssignModalOpen(false);
     setOpenCombobox(false);
-    queryClient.invalidateQueries({ queryKey: ['resume-analysis', candidateId] });
+    queryClient.invalidateQueries({ queryKey: ['job-candidates', assignedJobId] });
+      queryClient.invalidateQueries({ queryKey: ['job', assignedJobId] });
+     navigate(`/jobs/${assignedJobId}`);
   },
   onError: (error: any) => {
     toast({

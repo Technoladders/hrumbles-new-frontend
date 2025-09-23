@@ -36,7 +36,7 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
       try {
         setLoading(true);
         const data = await fetchAllStatuses();
-        const pipelineOrder = ['New', 'Processed', 'Interview', 'Offered', 'Joined'];
+        const pipelineOrder = ['New Applicants', 'Processed', 'Interview', 'Offered', 'Joined'];
         const sortedData = [...data].sort((a, b) => {
           const aIndex = pipelineOrder.indexOf(a.name);
           const bIndex = pipelineOrder.indexOf(b.name);
@@ -89,7 +89,7 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
   const getFilteredSubStatuses = (mainStatus: MainStatus): SubStatus[] => {
     if (!mainStatus.subStatuses || mainStatus.subStatuses.length === 0) return [];
     if (!selectedMainStatus || !selectedSubStatus) {
-      return mainStatus.name === 'New' ? mainStatus.subStatuses : [];
+      return mainStatus.name === 'New Applicants' ? mainStatus.subStatuses : [];
     }
   
     // Use the helper to check for any terminal status
