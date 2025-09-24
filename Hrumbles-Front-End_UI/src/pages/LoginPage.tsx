@@ -341,9 +341,14 @@ const handleLogin = async (): Promise<void> => {
       // --- CRITICAL PATH START ---
       const subdomainOrgId = await getOrganizationIdBySubdomain(organizationSubdomain);
       if (!subdomainOrgId) throw new Error("Invalid organization domain.");
+      
 
-      const { user } = await signIn(email, password);
+      const { user, session } = await signIn(email, password);
       console.log("✅ User authenticated successfully");
+
+       if (session) {
+        localStorage.setItem('supabase-session-backup', JSON.stringify(session));
+      }
 
       const { role, departmentName, organizationId: userOrgId, status, first_name, last_name } = await fetchUserDetails(user.id);
       
