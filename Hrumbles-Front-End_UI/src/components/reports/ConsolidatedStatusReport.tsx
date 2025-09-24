@@ -42,10 +42,13 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  Legend,      // <-- ADD THIS
+  LabelList,   // <-- ADD THIS
 } from 'recharts';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { Candidate } from '@/lib/types';
 
 // --- Type Definitions ---
 interface Candidate {
@@ -120,12 +123,118 @@ const getScoreBadgeClass = (score: number | null | undefined): string => {
   }
   return 'bg-red-100 text-red-800'; // Red
 };
+
+
+// --- NEW: Smart, Context-Aware Custom Tooltip ---
+// --- NEW: Smart, Context-Aware Custom Tooltip ---
+const CustomFunnelTooltip = (props: any) => {
+  const { active, payload, label, mainStatuses, subStatuses } = props;
+
+  if (active && payload && payload.length) {
+    // Find the ID of the main status we are hovering over (e.g., "Processed")
+    const currentMainStatus = mainStatuses.find((ms: any) => ms.name === label);
+    if (!currentMainStatus) return null;
+
+    // Get the complete list of sub-statuses that belong to this main status
+    const relevantSubStatuses = subStatuses.filter(
+      (ss: any) => ss.parent_id === currentMainStatus.id
+    );
+
+    // If the main status is "New Applicants", it has a special sub-status
+    if (label === 'New Applicants') {
+      const newAppSubStatus = subStatuses.find((ss: any) => ss.name === 'New Applicants');
+      if (newAppSubStatus) {
+        relevantSubStatuses.push(newAppSubStatus);
+      }
+    }
+
+    // Get the full data for the current bar from the payload's source
+    const currentRowData = payload[0].payload;
+
+    return (
+      <div className="p-3 text-sm bg-white border border-gray-300 rounded-lg shadow-xl animate-fade-in">
+        <p className="font-bold text-gray-800 mb-2">{label}</p>
+       <div className="space-y-1">
+  {/* Iterate through the DEFINED sub-statuses */}
+  {relevantSubStatuses.map((subStatus: any, index: number) => {
+      const subStatusKey = subStatus.name.replace(/\s+/g, '');
+      const value = currentRowData[subStatusKey] || 0;
+
+      if (value === 0) return null;
+
+      // --- NEW LOGIC: Override the display name for the "Joined" status ---
+      const displayName = (label === 'Joined') ? 'Joined' : subStatus.name;
+
+      return (
+        <div key={index} className="flex items-center">
+          <div
+            className="w-3 h-3 rounded-sm mr-2"
+            style={{ backgroundColor: subStatus.color }}
+          />
+          {/* Use the new displayName variable here */}
+          <span className="text-gray-600">{`${displayName}: `}</span>
+          <span className="font-semibold text-gray-800">{value}</span>
+        </div>
+      );
+    })}
+</div>
+        <div className="border-t mt-2 pt-2 flex justify-between font-bold">
+          <span>Total:</span>
+          <span>{currentRowData.total}</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+// --- NEW: Smart Custom Legend for the Funnel Chart ---
+const CustomLegend = (props: any) => {
+  const { payload, chartData } = props; // We will pass in 'chartData' ourselves
+
+  if (!chartData || chartData.length === 0) {
+    return null;
+  }
+
+  // 1. Create a Set of all sub-statuses (dataKeys) that have a count > 0 in the data.
+  const activeDataKeys = new Set();
+  chartData.forEach((row: any) => {
+    Object.keys(row).forEach(key => {
+      if (typeof row[key] === 'number' && row[key] > 0) {
+        activeDataKeys.add(key);
+      }
+    });
+  });
+
+  // 2. Filter the legend items provided by Recharts ('payload').
+  const activeLegendItems = payload.filter((entry: any) =>
+    activeDataKeys.has(entry.dataKey)
+  );
+
+  return (
+    <div className="flex flex-wrap justify-center items-center gap-x-4 gap-y-2 mt-4 text-xs text-gray-600 px-4">
+      {activeLegendItems.map((entry: any, index: number) => (
+        <div key={`item-${index}`} className="flex items-center">
+          <div
+            className="w-3 h-3 rounded-sm mr-1.5"
+            style={{ backgroundColor: entry.color }}
+          />
+          <span>{entry.value}</span> {/* 'entry.value' is the sub-status name */}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // --- Main Component ---
 const ConsolidatedStatusReport: React.FC = () => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
     const { user, role } = useSelector((state: any) => state.auth);
+
   const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [statuses, setStatuses] = useState<StatusMap>({});
+  const [mainStatuses, setMainStatuses] = useState<{ id: string; name: string; display_order: number }[]>([]);
+  const [subStatuses, setSubStatuses] = useState<{ id: string; name: string; parent_id: string; color: string }[]>([]);
+  const [statusNameMap, setStatusNameMap] = useState<StatusMap>({}); // Renamed from 'statuses'
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isGrouped, setIsGrouped] = useState(false);
@@ -199,6 +308,7 @@ const ConsolidatedStatusReport: React.FC = () => {
 
 
   // --- Data Fetching ---
+  // --- Data Fetching ---
   useEffect(() => {
     const fetchData = async () => {
       if (!organizationId || isDepartmentLoading) return;
@@ -206,7 +316,6 @@ const ConsolidatedStatusReport: React.FC = () => {
       setIsLoading(true);
       setError(null);
        try {
-        // MODIFIED: Build query dynamically based on user role/department
         let candidatesQuery = supabase
           .from('hr_job_candidates')
           .select(
@@ -223,14 +332,14 @@ const ConsolidatedStatusReport: React.FC = () => {
           .lte('created_at', dateRange.endDate.toISOString())
           .order('created_at', { ascending: false });
 
-        // MODIFIED: If it's the restricted view, add a filter for the current user's ID
         if (isRestrictedView && user?.id) {
             candidatesQuery = candidatesQuery.eq('created_by', user.id);
         }
 
+        // UPDATED: Fetch more status details (color, type, etc.)
         const [candidatesResponse, statusesResponse] = await Promise.all([
           candidatesQuery,
-          supabase.from('job_statuses').select('id, name').eq('organization_id', organizationId),
+          supabase.from('job_statuses').select('id, name, type, parent_id, color, display_order').eq('organization_id', organizationId),
         ]);
 
         if (candidatesResponse.error) throw candidatesResponse.error;
@@ -255,11 +364,22 @@ const ConsolidatedStatusReport: React.FC = () => {
         }));
         setCandidates(formattedCandidates);
 
-        const statusMap = statusesResponse.data.reduce((acc: StatusMap, status) => {
+        // NEW: Process the detailed status data
+        const allStatuses = statusesResponse.data || [];
+        
+        const nameMap = allStatuses.reduce((acc: StatusMap, status) => {
           acc[status.id] = status.name;
           return acc;
         }, {});
-        setStatuses(statusMap);
+        setStatusNameMap(nameMap);
+
+        const mains = allStatuses
+            .filter(s => s.type === 'main')
+            .sort((a, b) => a.display_order - b.display_order);
+        const subs = allStatuses.filter(s => s.type === 'sub');
+
+        setMainStatuses(mains);
+        setSubStatuses(subs);
 
         const uniqueClients = [...new Set(formattedCandidates.map(c => c.client_name).filter(c => c && c !== 'N/A'))].sort();
         const uniqueRecruiters = [...new Set(formattedCandidates.map(c => c.recruiter_name).filter(r => r && r !== 'N/A'))].sort();
@@ -273,17 +393,18 @@ const ConsolidatedStatusReport: React.FC = () => {
       }
     };
     fetchData();
-  // MODIFIED: Added dependencies to re-run fetch when user context changes
-  }, [organizationId, dateRange, user?.id, isDepartmentLoading, isRestrictedView]); 
+  }, [organizationId, dateRange, user?.id, isDepartmentLoading, isRestrictedView]);
 
   // --- Memoized Data Transformations ---
+  // --- Memoized Data Transformations ---
+   // --- Memoized Data Transformations ---
+   // --- Memoized Data Transformations ---
   const filteredCandidates = useMemo(() => {
     return candidates
       .filter(c => {
-        const statusName = statuses[c.sub_status_id || ''] || 'New Applicant';
+        const statusName = statusNameMap[c.sub_status_id || ''] || 'New Applicant';
         const statusMatch = statusFilter === 'all' || statusName === statusFilter;
         const clientMatch = clientFilter === 'all' || c.client_name === clientFilter;
-        // MODIFIED: Recruiter filter logic now considers the restricted view
         const recruiterMatch = isRestrictedView || recruiterFilter === 'all' || c.recruiter_name === recruiterFilter;
         return statusMatch && clientMatch && recruiterMatch;
       })
@@ -298,16 +419,16 @@ const ConsolidatedStatusReport: React.FC = () => {
           c.location?.toLowerCase().includes(search)
         );
       });
-  }, [candidates, searchTerm, statuses, statusFilter, clientFilter, recruiterFilter, isRestrictedView]);
+  }, [candidates, searchTerm, statusNameMap, statusFilter, clientFilter, recruiterFilter, isRestrictedView]);
 
   const groupedBySubStatus = useMemo<GroupedData>(() => {
     return filteredCandidates.reduce((acc: GroupedData, candidate) => {
-      const statusName = statuses[candidate.sub_status_id || ''] || 'New Applicant';
+      const statusName = statusNameMap[candidate.sub_status_id || ''] || 'New Applicant';
       if (!acc[statusName]) acc[statusName] = [];
       acc[statusName].push(candidate);
       return acc;
     }, {});
-  }, [filteredCandidates, statuses]);
+  }, [filteredCandidates, statusNameMap]);
 
   const chartData = useMemo(() => {
     return Object.entries(groupedBySubStatus)
@@ -315,12 +436,45 @@ const ConsolidatedStatusReport: React.FC = () => {
       .sort((a, b) => b.value - a.value);
   }, [groupedBySubStatus]);
 
+  const dynamicChartConfig = useMemo(() => {
+    if (mainStatuses.length === 0) {
+      return { barDefinitions: [], funnelData: [] };
+    }
+    const barDefinitions = subStatuses.map(sub => ({
+      key: sub.name.replace(/\s+/g, ''),
+      name: sub.name,
+      color: sub.color || '#cccccc',
+      parent_id: sub.parent_id,
+    }));
+    const subToMainIdMap = new Map(subStatuses.map(s => [s.id, s.parent_id]));
+    const dataTemplate = new Map(mainStatuses.map(main => [main.id, {
+        name: main.name,
+        total: 0,
+        ...barDefinitions.reduce((acc, bar) => ({ ...acc, [bar.key]: 0 }), {})
+    }]));
+    filteredCandidates.forEach(candidate => {
+        const subStatusId = candidate.sub_status_id;
+        const mainStatusId = candidate.main_status_id || (subStatusId ? subToMainIdMap.get(subStatusId) : null);
+        if (mainStatusId && dataTemplate.has(mainStatusId)) {
+            const entry = dataTemplate.get(mainStatusId)!;
+            const subStatusName = statusNameMap[subStatusId || ''] || 'New Applicant';
+            const subStatusKey = subStatusName.replace(/\s+/g, '');
+            if (entry.hasOwnProperty(subStatusKey)) {
+                entry[subStatusKey]++;
+                entry.total++;
+            }
+        }
+    });
+    const funnelData = Array.from(dataTemplate.values());
+    return { barDefinitions, funnelData };
+  }, [mainStatuses, subStatuses, filteredCandidates, statusNameMap]);
+
   const tableRows = useMemo<TableRowData[]>(() => {
     if (!isGrouped) {
       return filteredCandidates.map(c => ({
         type: 'data',
         candidate: c,
-        statusName: statuses[c.sub_status_id || ''] || 'New Applicant',
+        statusName: statusNameMap[c.sub_status_id || ''] || 'New Applicant',
       }));
     }
     return Object.entries(groupedBySubStatus)
@@ -339,7 +493,7 @@ const ConsolidatedStatusReport: React.FC = () => {
             }))
           : [],
       ]);
-  }, [isGrouped, filteredCandidates, groupedBySubStatus, expandedGroups, statuses]);
+  }, [isGrouped, filteredCandidates, groupedBySubStatus, expandedGroups, statusNameMap]);
 
   // --- Summary Metrics ---
   const totalCandidates = filteredCandidates.length;
@@ -352,78 +506,28 @@ const ConsolidatedStatusReport: React.FC = () => {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedData = tableRows.slice(startIndex, startIndex + itemsPerPage);
 
-  console.log(paginatedData)
-
   // --- Export Functions ---
-  const exportToCSV = () => {
-    const dataForExport = filteredCandidates.map(c => ({
-      'Candidate Name': c.name,
-      'Status': statuses[c.sub_status_id || ''] || 'New Applicant',
-      'AI Score': formatValue(c.overall_score),
-      'Job Title': formatValue(c.job_title),
-      'Client': formatValue(c.client_name),
-      'Recruiter': formatValue(c.recruiter_name),
-      'Applied': formatDate(c.created_at),
-      'CCTC (INR)': formatCurrency(c.current_salary),
-      'ECTC (INR)': formatCurrency(c.expected_salary),
-      'Notice Period': formatValue(c.notice_period),
-      'Location': formatValue(c.location),
-    }));
-    const csv = Papa.unparse(dataForExport, { header: true });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `consolidated_status_report_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-  };
-
-  const exportToPDF = () => {
-    const doc = new jsPDF({ orientation: 'landscape' });
-    doc.text('Consolidated Status Report', 14, 20);
-    const tableData = filteredCandidates.map(c => [
-      c.name,
-      statuses[c.sub_status_id || ''] || 'New Applicant',
-      formatValue(c.overall_score),
-      formatValue(c.job_title),
-      formatValue(c.client_name),
-      formatValue(c.recruiter_name),
-      formatDate(c.created_at),
-      formatCurrency(c.current_salary),
-      formatCurrency(c.expected_salary),
-      formatValue(c.notice_period),
-      formatValue(c.location),
-    ]);
-    (doc as any).autoTable({
-      head: [['Candidate Name', 'Status', 'AI Score', 'Job Title', 'Client', 'Recruiter', 'Applied', 'CCTC (INR)', 'ECTC (INR)', 'Notice Period', 'Location']],
-      body: tableData,
-      startY: 30,
-      theme: 'grid',
-      styles: { fontSize: 7, cellPadding: 2 },
-      headStyles: { fillColor: [123, 67, 241] },
-    });
-    doc.save(`consolidated_status_report_${new Date().toISOString().split('T')[0]}.pdf`);
-  };
+  const exportToCSV = () => { /* ... your existing code ... */ };
+  const exportToPDF = () => { /* ... your existing code ... */ };
 
   // --- Toggle Group Expansion ---
-  const toggleGroup = (statusName: string) => {
-    setExpandedGroups(prev =>
-      prev.includes(statusName)
-        ? prev.filter(g => g !== statusName)
-        : [...prev, statusName]
-    );
-  };
+  const toggleGroup = (statusName: string) => { /* ... your existing code ... */ };
 
   // --- Handle Filters ---
-  const handleApplyFilters = () => {
-    setAppliedDateRange(draftDateRange);
-    setCurrentPage(1);
-  };
+  const onFilterChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (value: string) => { /* ... your existing code ... */ };
 
-  const onFilterChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (value: string) => {
-    setter(value);
-    setCurrentPage(1);
+  // --- DYNAMIC AXIS LOGIC ---
+  const generateAxisTicks = (data: any[], step: number, minDomain: number) => {
+    const maxTotalInData = Math.max(...data.map(d => d.total), 0);
+    const axisTopValue = Math.max(minDomain, Math.ceil(maxTotalInData / step) * step);
+    const ticks = [];
+    for (let i = 0; i <= axisTopValue; i += step) {
+      ticks.push(i);
+    }
+    return { domain: [0, axisTopValue], ticks };
   };
-
+  const { domain: axisDomain, ticks: axisTicks } = generateAxisTicks(dynamicChartConfig.funnelData, 20,  200);
+  
  if ((isLoading && candidates.length === 0 && !error) || isDepartmentLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -441,6 +545,9 @@ const ConsolidatedStatusReport: React.FC = () => {
       </div>
     );
   }
+
+
+
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-6 md:p-10 animate-fade-in">
@@ -505,7 +612,7 @@ const ConsolidatedStatusReport: React.FC = () => {
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
+          {/* <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
             <CardHeader className="bg-purple-500 text-white p-3">
               <CardTitle className="text-base">Status Distribution</CardTitle>
             </CardHeader>
@@ -554,49 +661,127 @@ const ConsolidatedStatusReport: React.FC = () => {
                 )}
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
 
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
-            <CardHeader className="bg-purple-500 text-white p-3">
-              <CardTitle className="text-base">Candidates per Status</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="max-h-[300px] overflow-y-auto">
-                {isLoading ? (
-                  <div className="flex h-[300px] w-full items-center justify-center">
-                    <LoadingSpinner size={60} className="border-[6px] animate-spin text-indigo-600" />
-                  </div>
-                ) : chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={chartData.length * 40 > 300 ? chartData.length * 40 : 300}>
-                    <BarChart data={chartData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12, fill: '#4b5563' }} />
-                      <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12, fill: '#4b5563' }} interval={0} />
-                      <Tooltip
-                        cursor={{ fill: '#f3e8ff' }}
-                        contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid oklch(62.7% 0.265 303.9)',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                        }}
-                        itemStyle={{ color: '#4b5563' }}
-                        formatter={(value: number) => [`${value} candidates`, 'Candidates']}
-                      />
-                      <Bar dataKey="value" name="Candidates" fill="#7B43F1" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex h-[300px] w-full items-center justify-center">
-                    <Alert className="w-auto bg-gray-50 border-gray-200">
-                      <AlertCircle className="h-4 w-4 text-gray-500" />
-                      <AlertDescription className="text-gray-600">No data for this period.</AlertDescription>
-                    </Alert>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+         <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl lg:col-span-2">
+  <CardHeader className="bg-gray-50 border-b p-4">
+    <CardTitle className="text-lg text-gray-800">Candidate per Status</CardTitle>
+  </CardHeader>
+  <CardContent className="p-6">
+    <div className="h-[450px] w-full animate-fade-in">
+      {isLoading ? (
+        <div className="flex h-full w-full items-center justify-center">
+          <LoadingSpinner size={60} />
+        </div>
+      ) : dynamicChartConfig.funnelData.length > 0 ? (
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={dynamicChartConfig.funnelData}
+            layout="vertical"
+            margin={{ top: 20, right: 40, left: 20, bottom: 20 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+            <XAxis 
+              type="number" 
+              allowDecimals={false} 
+              tick={{ fontSize: 12, fill: '#6b7280' }} 
+              domain={axisDomain}
+              ticks={axisTicks}
+            />
+            <YAxis
+              dataKey="name"
+              type="category"
+              width={120}
+              tick={{ fontSize: 12, fill: '#374151', fontWeight: 'bold' }}
+              interval={0}
+            />
+            <Tooltip
+              cursor={{ fill: 'rgba(239, 246, 255, 0.7)' }}
+              content={<CustomFunnelTooltip mainStatuses={mainStatuses} subStatuses={subStatuses} />} 
+            />
+                     
+
+            {/* This section is now 100% dynamic */}
+                       {/* --- THIS ENTIRE SECTION IS REPLACED --- */}
+                        {/* --- THIS ENTIRE SECTION IS REPLACED FOR THE FINAL TIME --- */}
+            {dynamicChartConfig.barDefinitions.map(bar => (
+              <Bar 
+                key={bar.key} 
+                dataKey={bar.key} 
+                stackId="a"
+                name={bar.name}
+                fill={bar.color}
+              >
+                {/* This label is for the number INSIDE each colored segment */}
+                <LabelList 
+                  dataKey={bar.key} 
+                  position="center" 
+                  fill="#fff" 
+                  fontSize={12} 
+                  fontWeight="bold"
+                  formatter={(value: number) => (value > 0 ? value : '')}
+                />
+
+                {/* --- NEW: This is the smart TOTAL label renderer --- */}
+             {/* --- NEW: This is the smart TOTAL label renderer --- */}
+<LabelList
+  dataKey="total"
+  content={(props) => {
+    const { x, y, width, height, index, value } = props;
+    const currentRow = dynamicChartConfig.funnelData[index];
+
+    // Only render the label if this bar is the LAST visible bar and has a value
+    if (currentRow && currentRow.lastKey === bar.key && value > 0) {
+      return (
+        <text
+          // Always position the label 8px to the RIGHT of the bar
+          x={x + width + 8}
+          y={y + height / 2}
+          dy={5}
+          // Always anchor the text from the start (left side)
+          textAnchor="start"
+          // Always use a dark color for readability against the background
+          fill="#111827"
+          fontSize={14}
+          fontWeight="bold"
+        >
+          {value}
+        </text>
+      );
+    }
+    return null;
+  }}
+/>
+              </Bar>
+            ))}
+
+            {/* The old invisible bar is now gone, as the logic is handled above. */}
+
+            {/* This invisible bar is NOW ONLY for the total label */}
+            <Bar dataKey="total" stackId="a" fill="transparent">
+                <LabelList
+                    dataKey="total"
+                    position="right"
+                    offset={-40} // Pull the label back inside the chart area
+                    fill="#111827"
+                    fontSize={14}
+                    fontWeight="bold"
+                    formatter={(value: number) => (value > 0 ? value : '')}
+                />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="flex h-full w-full items-center justify-center">
+          <Alert className="w-auto bg-gray-50 border-gray-200">
+            <AlertCircle className="h-4 w-4 text-gray-500" />
+            <AlertDescription className="text-gray-600">No data for this period.</AlertDescription>
+          </Alert>
+        </div>
+      )}
+    </div>
+  </CardContent>
+</Card>
         </div>
 
         {/* Filter Bar and Table */}
@@ -610,7 +795,7 @@ const ConsolidatedStatusReport: React.FC = () => {
                 onApply={() => setCurrentPage(1)} // Reset page on apply
               />
               </div>
-              <Select value={statusFilter} onValueChange={onFilterChange(setStatusFilter)}>
+                            <Select value={statusFilter} onValueChange={onFilterChange(setStatusFilter)}>
                 <SelectTrigger>
                   <div className="flex items-center gap-2">
                     <Tag size={16} className="text-gray-500" />
@@ -619,7 +804,7 @@ const ConsolidatedStatusReport: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  {Object.values(statuses).sort().map(s => (
+                  {Object.values(statusNameMap).sort().map(s => ( // Corrected
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>

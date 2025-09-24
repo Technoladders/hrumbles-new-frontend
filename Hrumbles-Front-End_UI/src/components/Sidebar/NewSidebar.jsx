@@ -226,6 +226,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
               .from("hr_departments")
               .select("name")
               .eq("id", employeeData.department_id)
+              .eq('organization_id', organizationId)
               .single();
             if (departmentError) throw departmentError;
             setDepartmentName(departmentData.name || "Unknown Department");
@@ -239,6 +240,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
               .from("hr_designations")
               .select("name")
               .eq("id", employeeData.designation_id)
+              .eq('organization_id', organizationId)
               .single();
             if (designationError) throw designationError;
             setDesignationName(designationData.name || "Unknown Designation");

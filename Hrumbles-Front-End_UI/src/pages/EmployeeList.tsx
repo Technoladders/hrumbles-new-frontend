@@ -110,6 +110,9 @@ const EmployeeList = () => {
       setLoading(false);
     }
   };
+    const handleEmployeeAdded = () => {
+    fetchEmployees();
+  };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this employee? This action cannot be undone.")) {
@@ -265,7 +268,7 @@ const EmployeeList = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl font-bold">Employees</h1>
         <Button onClick={onOpen}>+ Add Employee</Button>
-        <AddEmployeeModal isOpen={isOpen} onClose={onClose} />
+        <AddEmployeeModal isOpen={isOpen} onClose={onClose} onEmployeeAdded={handleEmployeeAdded} />
       </div>
       
       {/* Dashboard Cards */}

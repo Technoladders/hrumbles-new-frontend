@@ -34,7 +34,7 @@ interface BasicInformationTabProps {
   onSaveAndNext: (data: CandidateFormData) => void;
   onCancel: () => void;
   // ADDED: Prop to send the full parsed data back to the parent
-  onParseComplete: (data: any) => void;
+onParseComplete: (parsedData: any, rawText: string) => void;
 }
 
 // --- ADDED: Helper function to calculate experience from work history ---
@@ -139,7 +139,7 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
       form.setValue("resume", publicUrl);
       toast.success("Resume uploaded. Parsing with AI, please wait...");
 
-      const { data: parsedData, error: functionError } = await supabase.functions.invoke('parse-resume', {
+          const { data: responseData, error: functionError } = await supabase.functions.invoke('parse-resume-test', {
         body: { 
             fileUrl: publicUrl,
             user_id: user?.id,
@@ -148,35 +148,29 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
       });
       if (functionError) throw new Error(`AI Parsing Error: ${functionError.message}`);
 
-       // ADDED: Call the callback with the full parsed data object
-      if (parsedData) {
-        onParseComplete(parsedData);
+      const { parsedData, rawText } = responseData;
+
+      // --- MODIFIED: Call the parent callback with both pieces of data ---
+      if (parsedData && rawText) {
+        onParseComplete(parsedData, rawText);
       }
       
-      if (parsedData) {
-        // --- KEY CHANGE: Handle the new, richer data structure ---
+     if (parsedData) {
         if (parsedData.firstName) form.setValue("firstName", parsedData.firstName, { shouldValidate: true });
         if (parsedData.lastName) form.setValue("lastName", parsedData.lastName, { shouldValidate: true });
         if (parsedData.email) form.setValue("email", parsedData.email, { shouldValidate: true });
-        if (parsedData.linkedInId) form.setValue("linkedInId", parsedData.linkedInId, { shouldValidate: true });
-        
+        if (parsedData.linkedin_url) form.setValue("linkedInId", parsedData.linkedin_url, { shouldValidate: true });
         if (parsedData.phone) {
           let phoneNumber = parsedData.phone.replace(/\s+/g, '');
           if (!phoneNumber.startsWith('+')) phoneNumber = `+91${phoneNumber}`;
           form.setValue("phone", phoneNumber, { shouldValidate: true });
         }
-        
         if (parsedData.currentLocation) form.setValue("currentLocation", parsedData.currentLocation, { shouldValidate: true });
 
-        // Calculate and set total experience from the new work_experience array
         if (parsedData.work_experience && parsedData.work_experience.length > 0) {
             const exp = calculateExperienceFromHistory(parsedData.work_experience);
             form.setValue("totalExperience", exp.years, { shouldValidate: true });
             form.setValue("totalExperienceMonths", exp.months, { shouldValidate: true });
-        } else {
-             // Fallback to old fields if work_experience is not present
-            if (parsedData.totalExperience !== undefined) form.setValue("totalExperience", parsedData.totalExperience, { shouldValidate: true });
-            if (parsedData.totalExperienceMonths !== undefined) form.setValue("totalExperienceMonths", parsedData.totalExperienceMonths, { shouldValidate: true });
         }
       }
       

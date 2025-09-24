@@ -24,7 +24,7 @@ const ForgotPasswordPage: FC = () => {
             }
             
             // Construct the redirect URL with the subdomain
-            const redirectTo = `http://${subdomain}.hrumbles.ai/set-password`;
+            const redirectTo = `https://${subdomain}.hrumbles.ai/set-password`;
 
 
             const { error: supabaseError } = await supabase.auth.resetPasswordForEmail(email, {

@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { X } from "lucide-react";
 import PhoneInput from "react-phone-number-input";
 import "react-phone-number-input/style.css";
+import { supabase } from "@/integrations/supabase/client";
+import { unwrapResult } from '@reduxjs/toolkit';
 
 // Define interfaces for type safety
 interface FormData {
@@ -78,6 +80,7 @@ interface FormInputProps {
   type?: string;
   suffix?: string;
   formattedValue?: string;
+  required?: boolean;
 }
 
 const FormInput: React.FC<FormInputProps> = ({
@@ -89,10 +92,11 @@ const FormInput: React.FC<FormInputProps> = ({
   type = "text",
   suffix,
   formattedValue,
+  required = false,
 }) => (
   <div>
     <Label htmlFor={name} className="mb-1 block">
-      {label}
+      {label} {required && <span className="text-red-500">*</span>}
     </Label>
     <div className="relative">
       <Input
@@ -103,6 +107,7 @@ const FormInput: React.FC<FormInputProps> = ({
         onChange={onChange}
         type={type}
         className="w-full pr-10"
+        required={required}
       />
       {suffix && (
         <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">
@@ -122,6 +127,7 @@ interface FormSelectProps {
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   disabled?: boolean;
+  required?: boolean;
 }
 
 const FormSelect: React.FC<FormSelectProps> = ({
@@ -132,10 +138,11 @@ const FormSelect: React.FC<FormSelectProps> = ({
   onChange,
   options,
   disabled = false,
+  required = false,
 }) => (
   <div>
     <Label htmlFor={name} className="mb-1 block">
-      {label}
+      {label} {required && <span className="text-red-500">*</span>}
     </Label>
     <Select value={value} onValueChange={onChange} disabled={disabled || options.length === 0}>
       <SelectTrigger id={name} className="w-full">
@@ -159,9 +166,10 @@ const FormSelect: React.FC<FormSelectProps> = ({
 interface AddEmployeeModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onEmployeeAdded: () => void;
 }
 
-const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose }) => {
+const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose, onEmployeeAdded }) => {
   const dispatch = useDispatch();
   const { organization_id } = useSelector((state: RootState) => state.auth);
 
@@ -174,10 +182,10 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose }) 
     phone: "",
     department_id: "",
     designation_id: "",
-    hire_type: "",
+    hire_type: "Full Time", // Default hire type
     salary: "",
     salary_type: "LPA",
-    joining_date: "", 
+    joining_date: "",
   });
 
   const [formattedSalary, setFormattedSalary] = useState<string>("");
@@ -221,33 +229,70 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose }) 
   };
 
   const handleSubmit = async () => {
+    // Check for mandatory fields
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password || !formData.employee_id) {
+      toast.error("First Name, Last Name, Email, Password, and Employee ID are required fields.");
+      return;
+    }
+    
     if (!formData.department_id || !formData.designation_id || !formData.hire_type) {
-      toast.error("Select a department, designation, and hire type.");
-      return;
-    }
-
-    if (!formData.salary || isNaN(Number(formData.salary)) || Number(formData.salary) <= 0) {
-      toast.error("Please enter a valid positive salary.");
-      return;
-    }
-
-    if (!formData.salary_type) {
-      toast.error("Please select a salary type.");
-      return;
-    }
-
-    if (!formData.phone || !/^\+\d{1,3}\d{4,}$/.test(formData.phone)) {
-      toast.error("Please enter a valid phone number with country code.");
-      return;
+        toast.error("Department, Designation, and Type of Hire are required fields.");
+        return;
     }
 
     try {
-      await dispatch(createEmployee({ ...formData, organization_id }));
+      // Check organization's credit limit for employees
+      const { data: orgData, error: orgError } = await supabase
+        .from('hr_organizations')
+        .select('role_credit_limits')
+        .eq('id', organization_id)
+        .single();
+
+      if (orgError) throw new Error('Could not verify organization details.');
+      
+      const creditLimit = orgData?.role_credit_limits?.employee;
+
+      if (typeof creditLimit === 'number') {
+        const { count, error: countError } = await supabase
+          .from('hr_employees')
+          .select('*', { count: 'exact', head: true })
+          .eq('role_id', '28f74164-1f9b-4eb2-b418-17d8d8232871')
+          .eq('organization_id', organization_id);
+
+        if (countError) throw new Error('Failed to count existing employees.');
+
+        if (count !== null && count >= creditLimit) {
+          toast.error(`Employee credit limit of ${creditLimit} has been reached. Cannot add more employees.`);
+          return;
+        }
+      }
+
+      // Prepare employee data
+      const employeeData = {
+        ...formData,
+        organization_id,
+        joining_date: formData.joining_date || null,
+        salary: formData.salary || 0,
+      };
+
+      await dispatch(createEmployee(employeeData)).unwrap();
       toast.success("Employee Created");
+      onEmployeeAdded(); 
       onClose();
-    } catch (error: any) {
-      toast.error(error.message);
-    }
+   } catch (error: any) {
+    console.error("Failed to create employee:", error);
+
+    // UPDATED ERROR HANDLING
+    // 1. Check for the specific error message in `error.payload.message` (from rejectWithValue)
+    // 2. Fall back to the generic `error.message`
+    // 3. Provide a final default message
+    const errorMessage = 
+      error?.payload?.message || 
+      error?.message || 
+      'User already exists or an unexpected error occurred. Please try again.';
+    
+    toast.error(errorMessage);
+  }
   };
 
   const departmentOptions = departments.map((dept) => ({
@@ -305,6 +350,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose }) 
               name="firstName"
               value={formData.firstName}
               onChange={handleChange}
+              required
             />
             <FormInput
               label="Last Name"
@@ -312,6 +358,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose }) 
               name="lastName"
               value={formData.lastName}
               onChange={handleChange}
+              required
             />
             <FormInput
               label="Email"
@@ -319,6 +366,8 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose }) 
               name="email"
               value={formData.email}
               onChange={handleChange}
+              type="email"
+              required
             />
             <FormInput
               label="Password"
@@ -327,6 +376,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose }) 
               value={formData.password}
               onChange={handleChange}
               type="password"
+              required
             />
             <FormInput
               label="Employee ID"
@@ -334,6 +384,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose }) 
               name="employee_id"
               value={formData.employee_id}
               onChange={handleChange}
+              required
             />
             <div>
               <Label htmlFor="phone" className="mb-1 block">
@@ -357,6 +408,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose }) 
               value={formData.department_id}
               onChange={handleSelectChange("department_id")}
               options={departmentOptions}
+              required
             />
             <FormSelect
               label="Designation"
@@ -366,6 +418,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose }) 
               onChange={handleSelectChange("designation_id")}
               options={designationOptions}
               disabled={!formData.department_id}
+              required
             />
             <div className="md:col-span-2">
               <FormSelect
@@ -375,10 +428,11 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose }) 
                 value={formData.hire_type}
                 onChange={handleSelectChange("hire_type")}
                 options={hireTypeOptions}
+                required
               />
             </div>
             <div className="md:col-span-2 grid grid-cols-2 gap-4">
-              <FormInput
+              {/* <FormInput
                 label="Salary"
                 placeholder="Enter salary"
                 name="salary"
@@ -395,16 +449,15 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose }) 
                 value={formData.salary_type}
                 onChange={handleSelectChange("salary_type")}
                 options={salaryTypeOptions}
-              />
+              /> */}
               <FormInput
-  label="Joining Date"
-  placeholder="Select joining date"
-  name="joining_date"
-  value={formData.joining_date}
-  onChange={handleChange}
-  type="date"
-/>
-
+                label="Joining Date"
+                placeholder="Select joining date"
+                name="joining_date"
+                value={formData.joining_date}
+                onChange={handleChange}
+                type="date"
+              />
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-6">

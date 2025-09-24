@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,18 +11,32 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select1,
-  SelectGroup2,
-  SelectValue3,
-  SelectTrigger4,
-  SelectContent7,
-  SelectLabel8,
-  SelectItem9,
+  Select,
+  SelectGroup,
+  SelectValue,
+  SelectTrigger,
+  SelectContent,
+  SelectLabel,
+  SelectItem,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { JobData } from "@/lib/types";
 import { useQuery } from "@tanstack/react-query";
 import supabase from "@/config/supabaseClient";
 import { toast } from "sonner";
+import { Loader2, Plus, ChevronsUpDown, Check } from "lucide-react";
 
 interface AssociateToClientModalProps {
   isOpen: boolean;
@@ -60,81 +75,70 @@ const AssociateToClientModal = ({
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [budgetType, setBudgetType] = useState<string>("LPA");
   const [budget, setBudget] = useState<string>("");
-  const [currencyType, setCurrencyType] = useState<string>("INR"); // New state for currency
+  const [currencyType, setCurrencyType] = useState<string>("INR");
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [selectedContact, setSelectedContact] = useState<string>("");
   const [isInternPaid, setIsInternPaid] = useState<string>("Paid");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [openClientPopover, setOpenClientPopover] = useState(false);
   const isInitialMount = useRef(true);
+  const navigate = useNavigate();
 
-  // Currency options
   const currencies = [
     { value: "INR", symbol: "₹" },
     { value: "USD", symbol: "$" },
   ];
 
-  // Fetch clients with service type "Contractual" or "Permanent"
-  const { data: clients = [] } = useQuery({
+  const { data: clients = [], isLoading: isLoadingClients } = useQuery({
     queryKey: ['clients-permanent-contractual'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('hr_clients')
         .select('id, client_name, service_type');
-      
       if (error) throw error;
       return data as Client[];
     }
   });
   
-  // Filter clients based on service_type
   const filteredClients = clients.filter(client => 
     client.service_type.includes("permanent") || 
     client.service_type.includes("contractual")
   );
   
-  // Fetch projects for selected client
   const { data: projects = [], refetch: refetchProjects } = useQuery({
     queryKey: ['client-projects', selectedClient],
     queryFn: async () => {
       if (!selectedClient) return [];
-      
       const { data, error } = await supabase
         .from('hr_projects')
         .select('id, name, client_id')
         .eq('client_id', selectedClient);
-      
       if (error) throw error;
       return data as ClientProject[];
     },
     enabled: !!selectedClient,
   });
   
-  // Fetch contacts for selected client
   const { data: contacts = [], refetch: refetchContacts } = useQuery({
     queryKey: ['client-contacts', selectedClient],
     queryFn: async () => {
       if (!selectedClient) return [];
-      
       const { data, error } = await supabase
         .from('hr_client_contacts')
         .select('id, name, email, phone, designation, client_id')
         .eq('client_id', selectedClient);
-      
       if (error) throw error;
       return data as Contact[];
     },
     enabled: !!selectedClient,
   });
   
-  // Initialize form with existing client details only on modal open
   useEffect(() => {
     if (isOpen && isInitialMount.current) {
       if (job.clientDetails?.clientName) {
         const client = clients.find(c => c.client_name === job.clientDetails.clientName);
         if (client) {
           setSelectedClient(client.id);
-          
-          // Parse budget and currency
           if (job.clientDetails.clientBudget) {
             const currentCurrency = currencies.find(c => job.clientDetails.clientBudget.startsWith(c.symbol)) || currencies[0];
             const budgetParts = job.clientDetails.clientBudget.replace(currentCurrency.symbol, "").trim().split(' ');
@@ -144,15 +148,12 @@ const AssociateToClientModal = ({
             setBudgetType(type);
             setCurrencyType(currentCurrency.value);
           }
-          
-          // Set project
           setSelectedProject(job.clientProjectId || '');
         }
       }
       isInitialMount.current = false;
     }
     
-    // Reset flag and fields when modal closes
     if (!isOpen) {
       isInitialMount.current = true;
       setSelectedClient('');
@@ -164,7 +165,6 @@ const AssociateToClientModal = ({
     }
   }, [isOpen, job.clientDetails, clients, job.clientProjectId]);
   
-  // Set contact after contacts are loaded
   useEffect(() => {
     if (selectedClient && contacts.length > 0 && job.clientDetails?.pointOfContact) {
       const contact = contacts.find(c => c.name === job.clientDetails.pointOfContact);
@@ -172,7 +172,6 @@ const AssociateToClientModal = ({
     }
   }, [contacts, selectedClient, job.clientDetails]);
   
-  // Set budget type based on hiring mode
   useEffect(() => {
     if (job.hiringMode === "Full Time" || job.hiringMode === "Permanent") {
       setBudgetType("LPA");
@@ -183,7 +182,6 @@ const AssociateToClientModal = ({
     }
   }, [job.hiringMode, isInternPaid]);
   
-  // Reset dependent fields when client changes
   useEffect(() => {
     setSelectedProject("");
     setSelectedContact("");
@@ -193,43 +191,33 @@ const AssociateToClientModal = ({
     }
   }, [selectedClient, refetchProjects, refetchContacts]);
   
-  const handleClientChange = (clientId: string) => {
-    setSelectedClient(clientId);
-  };
-
   const handleCurrencyChange = (value: string) => {
     setCurrencyType(value);
+  };
+
+  const handleNavigateToClients = () => {
+    onClose();
+    navigate('/clients');
   };
   
   const handleSubmit = async () => {
     try {
       setIsSubmitting(true);
-      
       if (!selectedClient) {
         toast.error("Please select a client");
         return;
       }
-      
       if (!budget && budgetType !== "Unpaid") {
         toast.error("Please enter a budget");
         return;
       }
-      
-      // Get client name from the selected client
       const client = clients.find(c => c.id === selectedClient);
-      
       if (!client) {
         toast.error("Selected client not found");
         return;
       }
-      
-      // Get selected contact details
       const contact = contacts.find(c => c.id === selectedContact);
-      
-      // Get current currency symbol
       const currentCurrency = currencies.find(c => c.value === currencyType) || currencies[0];
-      
-      // Create updated job object
       const updatedJob: JobData = {
         ...job,
         submissionType: "Client",
@@ -239,15 +227,12 @@ const AssociateToClientModal = ({
           clientName: client.client_name,
           clientBudget: budgetType === "Unpaid" ? "Unpaid" : `${currentCurrency.symbol}${budget} ${budgetType}`,
           pointOfContact: contact ? contact.name : '',
-          currency_type: currencyType, // Include currency_type
+          currency_type: currencyType,
         },
         clientProjectId: selectedProject || undefined,
         currency_type: currencyType
       };
-      
-      // Call the onAssociate callback with the updated job
       await onAssociate(updatedJob);
-      
       toast.success("Job successfully associated with client");
       onClose();
     } catch (error) {
@@ -259,17 +244,9 @@ const AssociateToClientModal = ({
   };
   
   const getBudgetTypeOptions = () => {
-    if (job.hiringMode === "Full Time") {
-      return ["LPA", "Monthly", "Hourly"];
-    } else if (job.hiringMode === "Contract" || job.hiringMode === "Part Time") {
-      return ["Monthly", "Hourly"];
-    } else if (job.hiringMode === "Intern") {
-      if (isInternPaid === "Paid") {
-        return ["Stipend"];
-      } else {
-        return ["Unpaid"];
-      }
-    }
+    if (job.hiringMode === "Full Time") return ["LPA", "Monthly", "Hourly"];
+    if (job.hiringMode === "Contract" || job.hiringMode === "Part Time") return ["Monthly", "Hourly"];
+    if (job.hiringMode === "Intern") return isInternPaid === "Paid" ? ["Stipend"] : ["Unpaid"];
     return ["LPA"];
   };
   
@@ -279,39 +256,84 @@ const AssociateToClientModal = ({
         <DialogHeader>
           <DialogTitle>Associate Job to Client</DialogTitle>
         </DialogHeader>
-        
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="client">Select Client <span className="text-red-500">*</span></Label>
-            <Select1
-              value={selectedClient}
-              onValueChange={handleClientChange}
-            >
-              <SelectTrigger4 id="client">
-                <SelectValue3 placeholder="Select a client" />
-              </SelectTrigger4>
-              <SelectContent7>
-                {filteredClients.map(client => (
-                  <SelectItem9 key={client.id} value={client.id}>
-                    {client.client_name}
-                  </SelectItem9>
-                ))}
-              </SelectContent7>
-            </Select1>
+            {isLoadingClients ? (
+              <div className="flex items-center justify-center h-10 border rounded-md">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Loading clients...</span>
+              </div>
+            ) : (
+              <Popover open={openClientPopover} onOpenChange={setOpenClientPopover}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openClientPopover}
+                    className="w-full justify-between font-normal"
+                  >
+                    {selectedClient
+                      ? clients.find((client) => client.id === selectedClient)?.client_name
+                      : "Select a client..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                  <Command>
+                    <CommandInput placeholder="Search client..." />
+                    <CommandList>
+                      <CommandEmpty>
+                        <div className="py-4 text-center text-sm text-muted-foreground">
+                          No client found.
+                        </div>
+                      </CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          onSelect={() => {
+                            setOpenClientPopover(false);
+                            handleNavigateToClients();
+                          }}
+                          className="text-indigo-600 hover:bg-indigo-50 cursor-pointer"
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add New Client
+                        </CommandItem>
+                        {filteredClients.map((client) => (
+                          <CommandItem
+                            key={client.id}
+                            value={client.client_name}
+                            onSelect={() => {
+                              setSelectedClient(client.id);
+                              setOpenClientPopover(false);
+                            }}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${selectedClient === client.id ? "opacity-100" : "opacity-0"}`}
+                            />
+                            {client.client_name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
           
           {job.hiringMode === "Intern" && (
             <div className="space-y-2">
               <Label>Internship Type <span className="text-red-500">*</span></Label>
-              <Select1 value={isInternPaid} onValueChange={setIsInternPaid}>
-                <SelectTrigger4 id="internType">
-                  <SelectValue3 placeholder="Select internship type" />
-                </SelectTrigger4>
-                <SelectContent7>
-                  <SelectItem9 value="Paid">Paid</SelectItem9>
-                  <SelectItem9 value="Unpaid">Unpaid</SelectItem9>
-                </SelectContent7>
-              </Select1>
+              <Select value={isInternPaid} onValueChange={setIsInternPaid}>
+                <SelectTrigger id="internType">
+                  <SelectValue placeholder="Select internship type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Paid">Paid</SelectItem>
+                  <SelectItem value="Unpaid">Unpaid</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           )}
           
@@ -321,24 +343,21 @@ const AssociateToClientModal = ({
                 {budgetType === "Stipend" ? "Stipend (Monthly)" : "Budget"} <span className="text-red-500">*</span>
               </Label>
               <div className="flex">
-              <Select1 
-                  value={currencyType} 
-                  onValueChange={handleCurrencyChange}
-                >
-                  <SelectTrigger4 className="w-[80px] rounded-r-none border-r-0">
-                    <SelectValue3 />
-                  </SelectTrigger4>
-                  <SelectContent7>
-                    <SelectGroup2>
-                      <SelectLabel8>Currency</SelectLabel8>
+                <Select value={currencyType} onValueChange={handleCurrencyChange}>
+                  <SelectTrigger className="w-[80px] rounded-r-none border-r-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Currency</SelectLabel>
                       {currencies.map(currency => (
-                        <SelectItem9 key={currency.value} value={currency.value}>
+                        <SelectItem key={currency.value} value={currency.value}>
                           {currency.symbol} {currency.value}
-                        </SelectItem9>
+                        </SelectItem>
                       ))}
-                    </SelectGroup2>
-                  </SelectContent7>
-                </Select1>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
                 <Input
                   id="budget"
                   type="text"
@@ -347,20 +366,16 @@ const AssociateToClientModal = ({
                   onChange={(e) => setBudget(e.target.value)}
                   className="rounded-none"
                 />
-                <Select1 
-                  value={budgetType} 
-                  onValueChange={setBudgetType}
-                  disabled={getBudgetTypeOptions().length <= 1}
-                >
-                  <SelectTrigger4 className="w-[110px] rounded-l-none border-l-0">
-                    <SelectValue3 />
-                  </SelectTrigger4>
-                  <SelectContent7>
+                <Select value={budgetType} onValueChange={setBudgetType} disabled={getBudgetTypeOptions().length <= 1}>
+                  <SelectTrigger className="w-[110px] rounded-l-none border-l-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
                     {getBudgetTypeOptions().map(type => (
-                      <SelectItem9 key={type} value={type}>{type}</SelectItem9>
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
                     ))}
-                  </SelectContent7>
-                </Select1>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           )}
@@ -369,46 +384,36 @@ const AssociateToClientModal = ({
             <>
               <div className="space-y-2">
                 <Label htmlFor="project">Client Project (Optional)</Label>
-                <Select1
-                  value={selectedProject}
-                  onValueChange={setSelectedProject}
-                >
-                  <SelectTrigger4 id="project">
-                    <SelectValue3 placeholder="Select a project" />
-                  </SelectTrigger4>
-                  <SelectContent7>
+                <Select value={selectedProject} onValueChange={setSelectedProject}>
+                  <SelectTrigger id="project">
+                    <SelectValue placeholder="Select a project" />
+                  </SelectTrigger>
+                  <SelectContent>
                     {projects.map(project => (
-                      <SelectItem9 key={project.id} value={project.id}>
+                      <SelectItem key={project.id} value={project.id}>
                         {project.name}
-                      </SelectItem9>
+                      </SelectItem>
                     ))}
-                  </SelectContent7>
-                </Select1>
-                <p className="text-xs text-gray-500">
-                  Select an existing project or leave blank
-                </p>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500">Select an existing project or leave blank</p>
               </div>
               
               <div className="space-y-2">
                 <Label htmlFor="contact">SPOC Contact (Optional)</Label>
-                <Select1
-                  value={selectedContact}
-                  onValueChange={setSelectedContact}
-                >
-                  <SelectTrigger4 id="contact">
-                    <SelectValue3 placeholder="Select a contact" />
-                  </SelectTrigger4>
-                  <SelectContent7>
+                <Select value={selectedContact} onValueChange={setSelectedContact}>
+                  <SelectTrigger id="contact">
+                    <SelectValue placeholder="Select a contact" />
+                  </SelectTrigger>
+                  <SelectContent>
                     {contacts.map(contact => (
-                      <SelectItem9 key={contact.id} value={contact.id}>
+                      <SelectItem key={contact.id} value={contact.id}>
                         {contact.name}{contact.email ? ` (${contact.email})` : ''}
-                      </SelectItem9>
+                      </SelectItem>
                     ))}
-                  </SelectContent7>
-                </Select1>
-                <p className="text-xs text-gray-500">
-                  Select a contact person or leave blank
-                </p>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500">Select a contact person or leave blank</p>
               </div>
             </>
           )}
@@ -418,7 +423,7 @@ const AssociateToClientModal = ({
           <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting}>
+          <Button onClick={handleSubmit} disabled={isSubmitting || !selectedClient}>
             {isSubmitting ? "Assigning..." : "Assign to Client"}
           </Button>
         </DialogFooter>

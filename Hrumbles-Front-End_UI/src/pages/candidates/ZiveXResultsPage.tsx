@@ -2,6 +2,8 @@
 
 import { FC, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import CandidateSearchFilters from '@/components/candidates/zive-x/CandidateSearchFilters';
@@ -12,6 +14,7 @@ import { SearchFilters, CandidateSearchResult } from '@/types/candidateSearch';
 const ZiveXResultsPage: FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
 
   // Parse filters from the URL
  // In ZiveXResultsPage.tsx
@@ -30,7 +33,7 @@ const filters: SearchFilters = useMemo(() => ({
 }), [searchParams]);
 
 const { data: searchResults = [], isLoading } = useQuery<CandidateSearchResult[]>({
-    queryKey: ['candidateSearchResults', filters],
+    queryKey: ['candidateSearchResults', organizationId, filters],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('search_unified_candidates', {
         p_keywords: filters.keywords,
@@ -44,6 +47,7 @@ const { data: searchResults = [], isLoading } = useQuery<CandidateSearchResult[]
         // Add new params to the RPC call
         p_companies: filters.companies,
         p_educations: filters.educations,
+        p_organization_id: organizationId
       });
       if (error) throw new Error(error.message);
       return data || [];

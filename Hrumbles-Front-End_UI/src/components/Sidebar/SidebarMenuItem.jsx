@@ -153,7 +153,7 @@ const recruitmentFirmOrgSuperAdminMenu = [
   { icon: FiUsers, label: "Employees", path: "/employee" },
   { icon: FiBriefcase, label: "Jobs", path: "/jobs" }, 
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
-  // { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x" },
+  { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x" },
   { icon: GoGoal, label: "Goals", path: "/goals" },
   { icon: ImProfile, label: "My Profile", path: "/profile" },
   { icon: AiOutlineProfile, label: "Reports", path: "/reports" },

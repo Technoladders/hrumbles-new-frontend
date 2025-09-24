@@ -67,6 +67,30 @@ const CandidateProfilePage = () => {
  
   const professionalSummaryPoints = candidate.professional_summary; // Keep raw data
   const workExperience = parseJsonArray(candidate.work_experience);
+  // --- START: Add this sorting logic ---
+const getEndYear = (duration) => {
+  if (!duration || typeof duration !== 'string') return 0;
+
+  // Prioritize "Present" or "Current" jobs by giving them a future year
+  if (duration.toLowerCase().includes('present') || duration.toLowerCase().includes('current')) {
+    return new Date().getFullYear() + 1;
+  }
+
+  // Find all 4-digit numbers (years) in the string
+  const years = duration.match(/\d{4}/g);
+  if (!years) return 0;
+  
+  // Return the highest year found (handles "2021-2023" correctly)
+  return Math.max(...years.map(year => parseInt(year, 10)));
+};
+
+// Create a new sorted array to avoid modifying the original data directly
+const sortedWorkExperience = [...workExperience].sort((a, b) => {
+    const yearB = getEndYear(b.duration);
+    const yearA = getEndYear(a.duration);
+    return yearB - yearA; // Sorts in descending order (most recent first)
+});
+// --- END: Sorting Logic ---
   const education = parseJsonArray(candidate.education);
   const certifications = parseJsonArray(candidate.certifications);
   const topSkills = parseJsonArray(candidate.top_skills);
@@ -131,25 +155,25 @@ const CandidateProfilePage = () => {
                     </div>
                 </div>
               </div>
-              <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-48">
-                <Button size="sm" variant="datepicker" onClick={() => setCompareModalOpen(true)} className="w-full flex items-center justify-center gap-2">
-                    <ScanSearch size={16} />
-                    <span>Compare with Job</span>
-                </Button>
-                <Button size="sm" variant="outline1" onClick={() => setHistoryModalOpen(true)} className="w-full flex items-center justify-center gap-2" variant="secondary">
-                    <History size={16} />
-                    <span>Analysis History</span>
-                </Button>
-               
-                {candidate.resume_path && (
-                  <a href={candidate.resume_path} download={resumeFileName} className="w-full">
-                    <Button size="sm" variant="datepicker" className="w-full flex items-center justify-center gap-2">
-                        <Download size={16} />
-                        <span>Download CV</span>
-                    </Button>
-                  </a>
-                )}
-              </div>
+          <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0 w-full sm:w-auto">
+    <Button size="sm" variant="outline" onClick={() => setCompareModalOpen(true)} className="w-full sm:w-auto flex-grow sm:flex-grow-0 flex items-center justify-center gap-2">
+        <ScanSearch size={16} />
+        <span>Compare with Job</span>
+    </Button>
+    {/* <Button size="sm" variant="outline1" onClick={() => setHistoryModalOpen(true)} className="w-full flex items-center justify-center gap-2" variant="secondary">
+        <History size={16} />
+        <span>Analysis History</span>
+    </Button> */}
+    
+    {candidate.resume_path && (
+        <a href={candidate.resume_path} download={resumeFileName} className="w-full sm:w-auto">
+        <Button size="sm" variant="datepicker" className="w-full flex items-center justify-center gap-2">
+            <Download size={16} />
+            <span>Download CV</span>
+        </Button>
+        </a>
+    )}
+</div>
             </div>
           </CardContent>
         </Card>
@@ -169,7 +193,7 @@ const CandidateProfilePage = () => {
                     <CardHeader><CardTitle className="text-xl font-bold">Work Experience</CardTitle></CardHeader>
                     <CardContent>
                         <div className="relative pl-8 pt-4 space-y-10 border-l-2 border-gray-100">
-                            {workExperience.map((exp, index) => (
+                            {sortedWorkExperience.map((exp, index) => (
                                 <div key={index} className="relative">
                                     <div className="absolute -left-[50px] top-1 w-12 h-12 rounded-md bg-purple-50 flex items-center justify-center text-sm font-bold text-purple-600 ring-4 ring-white">{exp.company?.charAt(0) || 'W'}</div>
                                     <p className="font-bold text-md text-gray-800 uppercase tracking-wide">{exp.designation} <span className="ml-2 font-normal text-sm text-purple-600 normal-case">{exp.duration}</span></p>
