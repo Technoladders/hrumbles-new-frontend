@@ -30,6 +30,46 @@ const MainLayout = () => {
 
   console.log("userrrrrrrr", user);
 
+   const logUserActivity = async (
+    userId, // No type annotation here as it's a .jsx file, not .tsx
+    organizationId,
+    eventType,
+    details = {} // Default to empty object if no details are provided
+  ) => {
+    try {
+      // Ensure we have essential data before attempting to log
+      if (!userId || !organizationId) {
+        console.warn("Skipping activity log: Missing userId or organizationId.");
+        return;
+      }
+
+      const { error } = await supabase
+        .from('user_activity_logs')
+        .insert({
+          user_id: userId,
+          organization_id: organizationId,
+          event_type: eventType,
+          ip_address: details.ip_address,
+          ipv6_address: details.ipv6_address,
+          city: details.city,
+          country: details.country,
+          latitude: details.latitude,
+          longitude: details.longitude,
+          device_info: details.device_info || navigator.userAgent, // Capture user agent
+          details: details.errorMessage ? { errorMessage: details.errorMessage } : null, // Store error message for failed logins
+        });
+
+      if (error) {
+        console.error("Error logging user activity:", error.message);
+      } else {
+        console.log(`User activity '${eventType}' logged successfully for user ${userId}.`);
+      }
+    } catch (err) {
+      console.error("Unexpected error logging user activity:", err);
+    }
+  };
+
+
   useEffect(() => {
     setSidebarExpanded(!isMobile);
   }, [isMobile]);
@@ -212,10 +252,23 @@ const MainLayout = () => {
   employee: 'Users',
 };
 
-  const handleLogout = () => {
-    dispatch(logout());
-    navigate("/login");
+   const handleLogout = async () => { // MAKE THIS FUNCTION ASYNC
+    // NEW: Log the logout event before proceeding with the actual logout
+    if (user?.id && organizationId) {
+      // For logout, you might not need IP/location details from the client-side
+      // as they should already be logged on login.
+      // However, you could fetch them if desired, similar to LoginPage.
+      await logUserActivity(user.id, organizationId, 'logout', {
+        device_info: navigator.userAgent // Example: Log device info again
+      });
+    }
+
+    // Perform actual logout actions
+    dispatch(logout()); // Clear Redux state
+    await signOut(); // Invalidate Supabase session (ensure this is an async call)
+    navigate("/login"); // Redirect to login page
   };
+
 
   const formatInterviewDate = (date) => {
     const interviewDate = new Date(date);

@@ -11,7 +11,7 @@ import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import moment from 'moment';
 import {
     ArrowLeft, Users, FileText, BrainCircuit, ListChecks,
-    Clock, ArrowRight, Loader2
+    Clock, ArrowRight, Loader2, BriefcaseBusiness, Building2
 } from 'lucide-react';
 
 // --- Reusable Component for Stat Cards with Optional Footer ---
@@ -53,16 +53,25 @@ const SingleOrganizationDashboard: FC = () => {
     };
 
     // --- DATA FETCHING HOOKS ---
-    const { data: details, isLoading: detailsLoading } = useQuery({
+    // This query now fetches all the main details, including total_jobs and total_clients
+    const { data: details, isLoading: detailsLoading, error: detailsError } = useQuery({ // Added detailsError for overall debugging
         queryKey: ['organizationDashboardDetails', organizationId],
         queryFn: async () => {
             if (!organizationId) return null;
+            // console.log("Fetching organization details for:", organizationId); // Optional debug
             const { data, error } = await supabase.rpc('get_organization_dashboard_details', { org_id: organizationId });
-            if (error) throw error;
+            if (error) {
+                console.error("Error fetching organization details:", error.message); // Debug log
+                throw error;
+            }
+            // console.log("Organization details fetched:", data); // Optional debug
             return data;
         },
         enabled: !!organizationId,
     });
+
+    // --- REMOVED: Separate useQuery hooks for totalJobsCount and totalClientsCount ---
+    // These are now handled by the 'details' query
 
     const { data: weeklyActivity, isLoading: weeklyActivityLoading } = useQuery({
         queryKey: ['orgWeeklyActivity', organizationId],
@@ -86,13 +95,20 @@ const SingleOrganizationDashboard: FC = () => {
         enabled: !!organizationId
     });
 
+    // --- Reverted isLoading to depend only on the main data fetches ---
     const isLoading = detailsLoading || weeklyActivityLoading || loginsLoading;
+
+    // --- Optional Error Display (for the main details fetch) ---
+    if (detailsError) {
+        return <div className="p-8 text-red-500">Error loading organization data: {detailsError.message}</div>;
+    }
 
     if (isLoading) {
         return <div className="flex items-center justify-center h-screen"><Loader size={60} /></div>;
     }
+    // Check if details is null even after loading, which could indicate no data found for the org_id
     if (!details) {
-        return <div className="p-8 text-red-500">Error loading organization data.</div>;
+        return <div className="p-8 text-red-500">No organization data found for ID: {organizationId}.</div>;
     }
 
     return (
@@ -104,24 +120,47 @@ const SingleOrganizationDashboard: FC = () => {
                 </RouterLink>
 
                 <h1 className="text-3xl font-bold text-gray-800 tracking-tight">{details.name}</h1>
-                
-                {/* --- ROW 1: New Stat Cards --- */}
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mt-6">
-                    <StatCard 
-                        title="Total Users" 
-                        value={details.total_users} 
+
+                {/* --- ROW 1: Stat Cards --- */}
+                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-6 mt-6">
+                    <RouterLink to={`/organization/${organizationId}/users`} className=" hover:bg-slate-100 rounded-lg transition-colors">
+                    <StatCard
+                        title="Total Users"
+                        value={details.total_users}
                         icon={<Users className="h-4 w-4 text-muted-foreground" />}
                         footer={
                             <div className="flex flex-wrap gap-2">
                                 {Object.entries(details.user_counts_by_role).map(([role, count]) => (
                                     <Badge key={role} variant="secondary">{roleDisplayNameMap[role] || role}: {count as number}</Badge>
                                 ))}
+
                             </div>
+
                         }
                     />
-                    <StatCard title="Talent Pool" value={details.talent_pool_count} icon={<FileText className="h-4 w-4 text-muted-foreground" />} footer={<p>Total Candidates</p>} />
+                    </RouterLink>
+                      <RouterLink to={`/organization/${organizationId}/talent`} className="hover:bg-slate-100 rounded-lg transition-colors">
+                    <StatCard title="Talent Pool" value={details.talent_pool_count} icon={<FileText className="h-4 w-4 text-muted-foreground" />} footer={<p>Total Candidates</p>} /></RouterLink>
                     <StatCard title="Total EPFO Verifications" value={details.total_epfo_verifications} icon={<ListChecks className="h-4 w-4 text-muted-foreground" />} footer={<p>All-time background checks</p>} />
                     <StatCard title="Total AI Usage" value={details.total_ai_tokens_used.toLocaleString()} icon={<BrainCircuit className="h-4 w-4 text-muted-foreground" />} footer={<p>Tokens consumed</p>} />
+
+                    {/* --- NOW READING total_jobs and total_clients DIRECTLY FROM 'details' --- */}
+                    <RouterLink to={`/organization/${organizationId}/jobs`} className="hover:bg-slate-100 rounded-lg transition-colors">
+                    <StatCard
+                        title="Total Jobs"
+                        value={details.total_jobs || 0} // Using the value from the 'details' object
+                        icon={<BriefcaseBusiness className="h-4 w-4 text-muted-foreground" />}
+                        footer={<p>Active job postings</p>}
+                    />
+                    </RouterLink>
+                    <RouterLink to={`/organization/${organizationId}/clients`} className="hover:bg-slate-100 rounded-lg transition-colors">
+                    <StatCard
+                        title="Total Clients"
+                        value={details.total_clients || 0} // Using the value from the 'details' object
+                        icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
+                        footer={<p>Registered client organizations</p>}
+                    />
+                    </RouterLink>
                 </div>
 
                 {/* --- ROW 2: Recent Logins & Detailed Views --- */}
@@ -151,6 +190,21 @@ const SingleOrganizationDashboard: FC = () => {
                                 <CardDescription>Drill down into specific areas for management and insights.</CardDescription>
                             </CardHeader>
                             <CardContent className="flex-grow flex flex-col justify-center space-y-4">
+                              <RouterLink to={`/organization/${organizationId}/jobs`} className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors">
+                           <div>
+                             <h3 className="font-semibold">Job Postings</h3>
+                             <p className="text-sm text-gray-600">Manage all job advertisements and applications.</p>
+                          </div>
+                           <ArrowRight className="h-5 w-5 text-gray-500"/>
+                          </RouterLink>
+                        <RouterLink to={`/organization/${organizationId}/clients`} className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors">
+                        <div>
+                         <h3 className="font-semibold">Client Overview</h3>
+                          <p className="text-sm text-gray-600">View and manage all registered clients.</p>
+                        </div>
+                          <ArrowRight className="h-5 w-5 text-gray-500"/>
+                           </RouterLink>
+                            
                                 <RouterLink to={`/organization/${organizationId}/users`} className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors">
                                     <div>
                                         <h3 className="font-semibold">User Management</h3>

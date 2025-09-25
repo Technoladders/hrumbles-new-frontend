@@ -17,8 +17,7 @@ import { RiCustomerService2Fill } from 'react-icons/ri';
 import { TbDatabaseSearch } from "react-icons/tb";
 import { LiaBusinessTimeSolid } from "react-icons/lia";
 import { CgOrganisation } from "react-icons/cg";
-
-
+import { BarChart3, TrendingUp, LayoutDashboard } from 'lucide-react'; 
 
 const ITECH_ORGANIZATION_ID = [
   "1961d419-1272-4371-8dc7-63a4ec71be83",
@@ -42,6 +41,16 @@ const orgSuperAdminAllItems = [
   { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x" },
   { icon: GoGoal, label: "Goals", path: "/goals" },
   { icon: ImProfile, label: "My Profile", path: "/profile" },
+    {
+    icon: BarChart3, // Using BarChart3 from lucide-react
+    label: "Reports",
+    path: "/reports", // Parent path
+    dropdown: [
+      { icon: TrendingUp, label: "Org. Talent Trends", path: "/reports/organization-talent-trends" },
+      // Add other reports specific to an organization here
+    ],
+  },
+
   { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
   { icon: MdOutlineAccountBalance, label: "Finance", path: "/finance",  },
   
@@ -84,6 +93,10 @@ const iTechOrgSuperAdminMenu = [
     // { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
     // { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" },
     { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+
+    { icon: BarChart3, label: "Reports", path: "/reports", // NEW
+      dropdown: [{ icon: TrendingUp, label: "Org. Talent Trends", path: "/reports/organization-talent-trends" }] // NEW
+    },
     // { icon: GoGoal, label: "Goals", path: "/goals" },
     // { icon: ImProfile, label: "My Profile", path: "/profile" },
     { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
@@ -294,6 +307,16 @@ const adminAllItems = [
             { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices",  department: "Human Resource", },
             { icon: FaSackDollar, label: "Expenses", path: "/accounts/expenses",  department: "Human Resource", },
             { icon: FiBriefcase, label: "Payroll", path: "/payroll",  department: "Human Resource", },
+
+             {
+        icon: BarChart3, // Using BarChart3
+        label: "Reports",
+        path: "/reports",
+        dropdown: [
+            { icon: TrendingUp, label: "Org. Talent Trends", path: "/reports/organization-talent-trends" },
+        ],
+        department: "Human Resource", // Assign to appropriate department if needed
+    },
       
   
     {
@@ -371,6 +394,15 @@ export const menuItemsByRole = {
     { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
     { icon: SiAwsorganizations, label: "Organization", path: "/organization" },
      { icon: BsShieldCheck, label: "Verifications", path: "/verifications" },
+       {
+      icon: BarChart3, // Use BarChart3 from lucide-react
+      label: "Reports",
+      path: "/reports", // Parent path
+      dropdown: [
+        { icon: TrendingUp, label: "Org. Talent Trends", path: "/reports/organization-talent-trends" },
+        // Add other global reports here if needed
+      ],
+    },
     { icon: FiSettings, label: "Settings", path: "/settings" },
   ],
 organization_superadmin: (organizationId, organization) => {
