@@ -507,14 +507,71 @@ const ConsolidatedStatusReport: React.FC = () => {
   const paginatedData = tableRows.slice(startIndex, startIndex + itemsPerPage);
 
   // --- Export Functions ---
-  const exportToCSV = () => { /* ... your existing code ... */ };
-  const exportToPDF = () => { /* ... your existing code ... */ };
+  const exportToCSV = () => {
+    const dataForExport = filteredCandidates.map(c => ({
+      'Candidate Name': c.name,
+      'Status': statusNameMap[c.sub_status_id || ''] || 'New Applicant',
+      'AI Score': formatValue(c.overall_score),
+      'Job Title': formatValue(c.job_title),
+      'Client': formatValue(c.client_name),
+      'Recruiter': formatValue(c.recruiter_name),
+      'Applied': formatDate(c.created_at),
+      'CCTC (INR)': formatCurrency(c.current_salary),
+      'ECTC (INR)': formatCurrency(c.expected_salary),
+      'Notice Period': formatValue(c.notice_period),
+      'Location': formatValue(c.location),
+    }));
+    const csv = Papa.unparse(dataForExport, { header: true });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `consolidated_status_report_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape' });
+    doc.text('Consolidated Status Report', 14, 20);
+    const tableData = filteredCandidates.map(c => [
+      c.name,
+      statusNameMap[c.sub_status_id || ''] || 'New Applicant',
+      formatValue(c.overall_score),
+      formatValue(c.job_title),
+      formatValue(c.client_name),
+      formatValue(c.recruiter_name),
+      formatDate(c.created_at),
+      formatCurrency(c.current_salary),
+      formatCurrency(c.expected_salary),
+      formatValue(c.notice_period),
+      formatValue(c.location),
+    ]);
+    (doc as any).autoTable({
+      head: [['Candidate Name', 'Status', 'AI Score', 'Job Title', 'Client', 'Recruiter', 'Applied', 'CCTC (INR)', 'ECTC (INR)', 'Notice Period', 'Location']],
+      body: tableData,
+      startY: 30,
+      theme: 'grid',
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: [123, 67, 241] },
+    });
+    doc.save(`consolidated_status_report_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
 
   // --- Toggle Group Expansion ---
-  const toggleGroup = (statusName: string) => { /* ... your existing code ... */ };
+  const toggleGroup = (statusName: string) => {
+    setExpandedGroups(prev =>
+      prev.includes(statusName)
+        ? prev.filter(g => g !== statusName)
+        : [...prev, statusName]
+    );
+  };
 
   // --- Handle Filters ---
-  const onFilterChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (value: string) => { /* ... your existing code ... */ };
+  const onFilterChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (value: string) => {
+    setter(value);
+    setCurrentPage(1);
+  };
+
+  
 
   // --- DYNAMIC AXIS LOGIC ---
   const generateAxisTicks = (data: any[], step: number, minDomain: number) => {

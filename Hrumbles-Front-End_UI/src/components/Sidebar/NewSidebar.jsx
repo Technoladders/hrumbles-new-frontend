@@ -22,7 +22,7 @@ import { useLocation, Link, useNavigate } from "react-router-dom";
 import { logout } from "../../Redux/authSlice";
 import { ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
 import { menuItemsByRole } from "./SidebarMenuItem";
-import { ArrowRightFromLine, ArrowLeftToLine, BarChart3, TrendingUp } from 'lucide-react'; // <-- ADD THESE
+import { ArrowRightFromLine, ArrowLeftToLine, BarChart3, TrendingUp } from 'lucide-react';
 import supabase from "../../config/supabaseClient";
 
 const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownToggle }) => {

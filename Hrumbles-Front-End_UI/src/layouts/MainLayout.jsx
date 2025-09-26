@@ -30,7 +30,7 @@ const MainLayout = () => {
 
   console.log("userrrrrrrr", user);
 
-   const logUserActivity = async (
+  const logUserActivity = async (
     userId, // No type annotation here as it's a .jsx file, not .tsx
     organizationId,
     eventType,
@@ -68,7 +68,6 @@ const MainLayout = () => {
       console.error("Unexpected error logging user activity:", err);
     }
   };
-
 
   useEffect(() => {
     setSidebarExpanded(!isMobile);
@@ -252,7 +251,7 @@ const MainLayout = () => {
   employee: 'Users',
 };
 
-   const handleLogout = async () => { // MAKE THIS FUNCTION ASYNC
+ const handleLogout = async () => { // MAKE THIS FUNCTION ASYNC
     // NEW: Log the logout event before proceeding with the actual logout
     if (user?.id && organizationId) {
       // For logout, you might not need IP/location details from the client-side
@@ -268,7 +267,6 @@ const MainLayout = () => {
     await signOut(); // Invalidate Supabase session (ensure this is an async call)
     navigate("/login"); // Redirect to login page
   };
-
 
   const formatInterviewDate = (date) => {
     const interviewDate = new Date(date);
@@ -356,47 +354,7 @@ const MainLayout = () => {
 
           <Flex align="center" gap={4}>
 
-             {role === 'organization_superadmin' && (
-              <Flex 
-                align="center" 
-                gap={4} // Increased gap for better spacing between vertical blocks
-                display={{ base: "none", lg: "flex" }} 
-                bg={colorMode === 'dark' ? 'gray.700' : 'gray.100'}
-                px={3} // Use padding on X-axis
-                py={1} // Use padding on Y-axis
-                borderRadius="md"
-              >
-                <Text fontSize="sm" fontWeight="bold" alignSelf="center">Subscription:</Text>
-                {isLoadingCredits ? (
-                  <Spinner size="sm" />
-                ) : (
-                  orgCredits && Object.entries(orgCredits).map(([roleName, data]) => (
-                    data.limit > 0 && (
-                      // MODIFICATION: Changed Flex direction and content
-                      <Flex 
-                        key={roleName} 
-                        direction="column" // Stack items vertically
-                        align="center"     // Center them horizontally
-                      >
-                        <Text fontSize="xs" fontWeight="medium">
-                          {/* Use the map to get the display name, with a fallback */}
-                          {roleDisplayNameMap[roleName] || roleName}
-                        </Text>
-                        <Badge 
-                          colorScheme={data.count >= data.limit ? "red" : "green"}
-                          variant="solid"
-                          fontSize="xs"
-                          w="full" // Make badge take full width of the flex container
-                          textAlign="center"
-                        >
-                          {data.count}/{data.limit}
-                        </Badge>
-                      </Flex>
-                    )
-                  ))
-                )}
-              </Flex>
-            )}
+            
             <Menu>
               <MenuButton
                 as={IconButton}

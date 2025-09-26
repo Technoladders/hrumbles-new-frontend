@@ -251,8 +251,7 @@ function App() {
             <Route path="/organization/:organizationId/roles" element={<DetailedResourceView resourceType="roles" />} />
             <Route path="/organization/:organizationId/jobs" element={<DetailedResourceView resourceType="jobs" />} />
             <Route path="/organization/:organizationId/clients" element={<DetailedResourceView resourceType="clients" />} />
-
-            <Route path="/reports/organization-talent-trends" element={<OrganizationTalentTrendsReport />} />
+             <Route path="/reports/organization-talent-trends" element={<OrganizationTalentTrendsReport />} />
             
             {/* <Route path="/employees" element={<Employee/>} /> */}
             <Route path="/projects" element={<ProjectManagement />} />
