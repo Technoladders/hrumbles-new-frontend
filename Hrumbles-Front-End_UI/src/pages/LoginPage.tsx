@@ -103,6 +103,53 @@ const LoginPage: FC = () => {
   const [showPassword, setShowPassword] = useState<boolean>(false);
     const [employeeData, setEmployeeData] = useState<{ first_name: string; last_name: string } | null>(null);
 
+
+ const logUserActivity = async (
+    userId: string,
+    organizationId: string,
+    eventType: 'login' | 'logout' | 'failed_login',
+    details?: {
+      ip_address?: string;
+      ipv6_address?: string;
+      city?: string;
+      country?: string;
+      latitude?: string;
+      longitude?: string;
+      device_info?: string; // Add this if you want to capture it
+      errorMessage?: string; // For failed logins
+    }
+  ) => {
+    try {
+         // Ensure we have essential data before attempting to log
+      if (!userId || !organizationId) { // Added check for organizationId too
+        console.warn("Skipping activity log: Missing userId or organizationId.");
+        return; // Stop logging if essential data is missing
+      }
+      const { error } = await supabase
+        .from('user_activity_logs')
+        .insert({
+          user_id: userId,
+          organization_id: organizationId,
+          event_type: eventType,
+          ip_address: details?.ip_address,
+          ipv6_address: details?.ipv6_address,
+          city: details?.city,
+          country: details?.country,
+          latitude: details?.latitude,
+          longitude: details?.longitude,
+          device_info: details?.device_info || navigator.userAgent, // Capture user agent
+          details: details?.errorMessage ? { errorMessage: details.errorMessage } : null, // Store error message for failed logins
+        });
+
+      if (error) {
+        console.error("Error logging user activity:", error.message);
+      }
+    } catch (err) {
+      console.error("Unexpected error logging user activity:", err);
+    }
+  };
+
+
     const fetchUserDetails = async (userId: string): Promise<UserDetails> => {
     try {
       const { data: employeeData, error: employeeError } = await supabase
@@ -110,6 +157,8 @@ const LoginPage: FC = () => {
         .select("role_id, department_id, organization_id, status, first_name, last_name")
         .eq("id", userId)
         .single();
+
+           console.log("[DEBUG] Supabase query result for user ID:", userId, { employeeData, employeeError });
 
       if (employeeError || !employeeData) {
         throw new Error("Employee profile not found for this user.");
@@ -146,7 +195,7 @@ const LoginPage: FC = () => {
 
     } catch (error: any) {
       console.error("Error in fetchUserDetails:", error.message);
-      return { role: null, departmentName: null, organizationId: null, status: null };
+      return { role: null, departmentName: null, organizationId: null,  organizationId: null, status: null };
     }
   };
 
@@ -176,6 +225,8 @@ const LoginPage: FC = () => {
     }
   };
   
+
+
 
    const getDeviceLocation = (): Promise<{ latitude: number; longitude: number }> => {
     return new Promise((resolve, reject) => {
@@ -283,8 +334,8 @@ const LoginPage: FC = () => {
   };
 
     // This function runs in the background and does not block the UI
-  const sendLoginNotificationInBackground = async (
-    userDetails: { userEmail: string; organizationId: string | null; firstName: string; lastName: string; }
+ const sendLoginNotificationInBackground = async (
+    userDetails: { userEmail: string; organizationId: string | null; userId: string; firstName: string; lastName: string; } 
   ) => {
     try {
       // 1. Fetch IP addresses
@@ -304,7 +355,7 @@ const LoginPage: FC = () => {
       }
       
       // 4. Construct the payload
-      const payload = {
+      const notificationPayload  = {
         userEmail: userDetails.userEmail,
         organizationId: userDetails.organizationId,
         firstName: userDetails.firstName,
@@ -315,6 +366,24 @@ const LoginPage: FC = () => {
         latitude: deviceLocation.latitude,
         longitude: deviceLocation.longitude,
       };
+
+       // NEW: Log the successful login to user_activity_logs table
+      if (userDetails.userId && userDetails.organizationId) {
+        await logUserActivity(
+          userDetails.userId,
+          userDetails.organizationId,
+          'login',
+          {
+            ip_address: ipv4,
+            ipv6_address: ipv6,
+            city: approxLocation.city,
+            country: approxLocation.country,
+            latitude: deviceLocation.latitude,
+            longitude: deviceLocation.longitude,
+            device_info: navigator.userAgent, // Capture user agent here
+          }
+        );
+      }
 
       // 5. Send the request to your backend function
       await fetch('https://kbpeyfietrwlhwcwqhjw.supabase.co/functions/v1/send-login-notification', {
@@ -337,50 +406,76 @@ const handleLogin = async (): Promise<void> => {
     setIsLoading(true);
     console.log("--- LOGIN PROCESS STARTED ---");
 
+    let userId: string | null = null;
+    let userOrgId: string | null = null;
+
     try {
       // --- CRITICAL PATH START ---
       const subdomainOrgId = await getOrganizationIdBySubdomain(organizationSubdomain);
       if (!subdomainOrgId) throw new Error("Invalid organization domain.");
-      
+      userOrgId = subdomainOrgId;
 
-      const { user, session } = await signIn(email, password);
+      const { user } = await signIn(email, password);
       console.log("✅ User authenticated successfully");
+      userId = user.id;
 
-       if (session) {
-        localStorage.setItem('supabase-session-backup', JSON.stringify(session));
+      const {
+        role,
+        departmentName,
+        organizationId: fetchedOrgIdFromUserDetails,
+        status,
+        first_name,
+        last_name
+      } = await fetchUserDetails(user.id);
+
+      userOrgId = fetchedOrgIdFromUserDetails;
+
+      if (!userOrgId) {
+          throw new Error("User's organization ID could not be determined.");
       }
 
-      const { role, departmentName, organizationId: userOrgId, status, first_name, last_name } = await fetchUserDetails(user.id);
-      
-      if (status !== 'active') throw new Error("Your account is not active.");
-      if (userOrgId !== subdomainOrgId) throw new Error("Access Denied. Please log in from your organization's domain.");
-      // --- CRITICAL PATH END ---
+      if (status !== 'active') {
+          if (userId && userOrgId) {
+            await logUserActivity(userId, userOrgId, 'failed_login', { errorMessage: "Account not active" });
+          }
+          throw new Error("Your account is not active.");
+      }
+      if (userOrgId !== subdomainOrgId) {
+          if (userId && userOrgId) {
+            await logUserActivity(userId, userOrgId, 'failed_login', { errorMessage: "Organization domain mismatch" });
+          }
+          throw new Error("Access Denied. Please log in from your organization's domain.");
+      }
 
-      // --- NON-CRITICAL: FIRE AND FORGET ---
-      // Call the background function WITHOUT 'await'.
-      // This lets the rest of the code run immediately.
-      sendLoginNotificationInBackground({
+      // --- CRITICAL CHANGE HERE ---
+      // AWAIT the background function. This ensures the login activity is logged
+      // BEFORE navigation occurs.
+      await sendLoginNotificationInBackground({ // <--- ADD AWAIT HERE
         userEmail: email,
         organizationId: userOrgId,
+        userId: userId,
         firstName: first_name,
         lastName: last_name,
       });
 
-      // Continue with login and navigation immediately
+      // Continue with login and navigation
       await dispatch(fetchUserSession()).unwrap();
-      
+
       let navigateTo = "/dashboard";
       if (role === "employee" && departmentName === "Finance") {
         navigateTo = "/finance";
       }
-      
+
       console.log("--- LOGIN PROCESS COMPLETED ---");
       navigate(navigateTo);
 
     } catch (error: any) {
-      // This catch will now ONLY handle critical login errors (e.g., wrong password)
       console.error("🔴 LOGIN FAILED:", error.message);
       setError(error.message);
+
+      if (userId && userOrgId) {
+          await logUserActivity(userId, userOrgId, 'failed_login', { errorMessage: error.message });
+      }
     } finally {
       setIsLoading(false);
     }

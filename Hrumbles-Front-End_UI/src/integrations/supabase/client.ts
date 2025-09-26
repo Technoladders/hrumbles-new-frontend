@@ -10,23 +10,18 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-supabase.auth.onAuthStateChange(async (event, session) => {
-  console.log("Auth event:", event);
+const SUPABASE_AUTH_TOKEN_KEY = 'sb-kbpeyfietrwlhwcwqhjw-auth-token';
 
-  // When the user signs in or the token is refreshed, save a backup.
-  if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-    if (session) {
-      localStorage.setItem('supabase-session-backup', JSON.stringify(session));
-    }
+supabase.auth.onAuthStateChange(async (event, session) => {
+  if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+    localStorage.setItem('supabase-session-backup', JSON.stringify(session));
   }
 
-  // If a token refresh fails, try to restore the session from the backup.
-  // This often happens due to a 429 "Too Many Requests" error.
-  if (event === 'TOKEN_REFRESH_FAILED') {
-    console.warn('Token refresh failed. Attempting to restore from backup.');
+  if (event === 'TOKEN_REFRESH_FAILED' || event === 'SIGNED_OUT') {
     const backup = localStorage.getItem('supabase-session-backup');
     if (backup) {
-      console.log('Restoring session from backup.');
+      console.warn(`Auth event '${event}', restoring session from backup.`);
+      localStorage.setItem(SUPABASE_AUTH_TOKEN_KEY, backup);
       const backupSession = JSON.parse(backup);
       await supabase.auth.setSession({
         access_token: backupSession.access_token,

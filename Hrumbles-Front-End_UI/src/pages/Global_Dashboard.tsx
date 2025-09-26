@@ -26,6 +26,7 @@ import { AddIcon, EditIcon, ViewIcon } from "@chakra-ui/icons";
 import { supabase } from "../integrations/supabase/client";
 import CreateOrganizationModal from "../components/global/OrganizationManagement/CreateOrganizationModal";
 import EditOrganizationModal from "../components/global/OrganizationManagement/EditOrganizationModal";
+// import OrganizationTalentTrendsReport from "../components/global/OrganizationManagement/OrganizationTalentTrendsReport";
 
 // --- Type Definitions ---
 interface RoleCounts {
@@ -225,5 +226,4 @@ const GlobalSuperadminDashboard: FC = () => {
     </Box>
   );
 };
-
 export default GlobalSuperadminDashboard;

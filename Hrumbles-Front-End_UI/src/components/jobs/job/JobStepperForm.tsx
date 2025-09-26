@@ -1,3 +1,4 @@
+// JobStepperForm.tsx
 
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,9 @@ import { useSelector } from "react-redux";
 
 interface JobStepperFormProps {
   jobType: "Internal" | "External";
+  // MODIFICATION START: Add `internalType` to the component's props.
+  internalType: "Inhouse" | "Client Side" | null;
+  // MODIFICATION END
   onClose: () => void;
   editJob: JobData | null;
   onSave: (job: JobData) => void;
@@ -18,19 +22,24 @@ interface JobStepperFormProps {
 
 export const JobStepperForm = ({ 
   jobType,
+  // MODIFICATION START: Destructure the new prop.
+  internalType,
+  // MODIFICATION END
   onClose, 
   editJob = null,
   onSave
 }: JobStepperFormProps) => {
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = getTotalSteps(jobType);
+  // MODIFICATION START: Pass `internalType` to `getTotalSteps` to get the correct number of steps.
+  const totalSteps = getTotalSteps(jobType, internalType);
+  // MODIFICATION END
   
   const { formData, updateFormData } = useJobFormState({ 
     jobType,
     editJob
   });
   const user = useSelector((state: any) => state.auth.user);
-const organization_id = useSelector((state: any) => state.auth.organization_id);
+  const organization_id = useSelector((state: any) => state.auth.organization_id);
   
   const handleNext = () => {
     if (currentStep < totalSteps) {
@@ -48,25 +57,25 @@ const organization_id = useSelector((state: any) => state.auth.organization_id);
     updateFormData(step, data);
   };
   
-  const isCurrentStepValid = validateStep(currentStep, formData, jobType);
+  // MODIFICATION START: Pass `internalType` to `validateStep` for correct step validation.
+  const isCurrentStepValid = validateStep(currentStep, formData, jobType, internalType);
+  // MODIFICATION END
   console.log("Is Current Step Valid:", isCurrentStepValid);
   
   const handleSave = () => {
     try {
-      // Map form data to JobData structure
       console.log("Form data being mapped:", formData);
-      const jobData = mapFormDataToJobData(formData, editJob, jobType);
+      // MODIFICATION START: Pass `internalType` to the mapping function to ensure correct data structure.
+      const jobData = mapFormDataToJobData(formData, editJob, jobType, internalType);
+      // MODIFICATION END
   
-      // Attach organization_id and created_by
       const finalJobData = {
         ...jobData,
         organization_id,
-        created_by: user?.id, // Assuming user object has an `id`
+        created_by: user?.id,
       };
   
       console.log("Final job data with organization and creator:", finalJobData);
-  
-      // Pass updated job data to parent component
       onSave(finalJobData);
     } catch (error) {
       console.error("Error saving job:", error);
@@ -75,25 +84,28 @@ const organization_id = useSelector((state: any) => state.auth.organization_id);
   
   return (
     <div className="space-y-8 py-4">
-      {/* Stepper Navigation */}
       <StepperNavigation 
         currentStep={currentStep} 
         totalSteps={totalSteps}
         jobType={jobType}
+        // MODIFICATION START: Pass `internalType` to the navigation component.
+        internalType={internalType}
+        // MODIFICATION END
       />
       
-      {/* Step Content */}
       <div className="mt-8">
         <StepRenderer 
           currentStep={currentStep}
           jobType={jobType}
           formData={formData}
+          // MODIFICATION START: Pass `internalType` to the step renderer.
+          internalType={internalType}
+          // MODIFICATION END
           onChange={handleStepChange}
           updateFormData={updateFormData}
         />
       </div>
       
-      {/* Navigation Buttons */}
       <div className="flex justify-between pt-4">
         <Button 
           variant="outline" 

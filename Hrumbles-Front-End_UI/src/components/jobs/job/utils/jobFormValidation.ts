@@ -1,20 +1,33 @@
+// utils/jobFormValidation.ts
 
 import { JobFormData } from "../hooks/useJobFormState";
 
-export const getTotalSteps = (jobType: "Internal" | "External"): number => {
-  if (jobType === "Internal") {
-    return 3; // Job Info, Experience & Skills, Job Description
-  } else { // External
-    return 4; // Client Details, Job Info, Experience & Skills, Job Description
+// MODIFICATION START: Define types for clarity and to pass the new `internalType`.
+type JobType = "Internal" | "External";
+type InternalType = "Inhouse" | "Client Side" | null;
+
+export const getTotalSteps = (jobType: JobType, internalType: InternalType): number => {
+  // An internal job for a "Client Side" is treated like an external job, so it has 4 steps.
+  if (jobType === "Internal" && internalType === "Client Side") {
+    return 4;
   }
+  // A standard "Inhouse" internal job has 3 steps.
+  if (jobType === "Internal" && internalType === "Inhouse") {
+    return 3;
+  }
+  // External jobs have 4 steps.
+  return 4;
 };
 
-export const validateStep = (step: number, formData: JobFormData, jobType: "Internal" | "External"): boolean => {
+export const validateStep = (step: number, formData: JobFormData, jobType: JobType, internalType: InternalType): boolean => {
+// MODIFICATION END
  
   console.log("Validating Step:", step);
   console.log("Form Data:", formData);
-  if (jobType === "Internal") {
-    // Validation for Internal jobs
+  
+  // MODIFICATION START: The validation logic now checks for the "Inhouse" type specifically.
+  if (jobType === "Internal" && internalType === "Inhouse") {
+  // MODIFICATION END
     switch(step) {
       case 1: // Job Information
         return formData.jobInformation.jobId.trim() !== "" && 
@@ -33,7 +46,8 @@ export const validateStep = (step: number, formData: JobFormData, jobType: "Inte
         return true;
     }
   } else {
-    // Validation for External jobs
+    // MODIFICATION START: This block now handles both "External" jobs and "Internal (Client Side)" jobs.
+    // The logic is the same for both.
     switch(step) {
       case 1: // Client Details
         return formData.clientDetails.clientName.trim() !== "" &&
@@ -54,5 +68,6 @@ export const validateStep = (step: number, formData: JobFormData, jobType: "Inte
       default:
         return true;
     }
+    // MODIFICATION END
   }
 };

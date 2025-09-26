@@ -5,16 +5,23 @@ interface StepperNavigationProps {
   currentStep: number;
   totalSteps: number;
   jobType: "Internal" | "External";
+   internalType: "Inhouse" | "Client Side" | null;
 }
 
-const StepperNavigation = ({ currentStep, totalSteps, jobType }: StepperNavigationProps) => {
+const StepperNavigation = ({ currentStep, totalSteps, jobType, internalType }: StepperNavigationProps) => {
   // Generate steps based on job type
   const getSteps = (): string[] => {
-    if (jobType === "Internal") {
-      return ["Job Information", "Experience & Skills", "Job Description"];
-    } else { // External
+    // MODIFICATION START: Update logic to generate steps. If the job is for a client
+    // (either "External" or "Internal - Client Side"), it should include the "Client Details" step.
+    if (jobType === "External" || (jobType === "Internal" && internalType === "Client Side")) {
       return ["Client Details", "Job Information", "Experience & Skills", "Job Description"];
     }
+    if (jobType === "Internal" && internalType === "Inhouse") {
+      return ["Job Information", "Experience & Skills", "Job Description"];
+    }
+    // Default fallback for external jobs
+    return ["Client Details", "Job Information", "Experience & Skills", "Job Description"];
+    // MODIFICATION END
   };
   
   const steps = getSteps();
