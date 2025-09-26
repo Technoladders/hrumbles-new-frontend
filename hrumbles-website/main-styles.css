@@ -7158,3 +7158,110 @@ figcaption {
 
 /* New styles */
 
+/* ===================================================
+Popup Modal Styles (LIGHT THEME - Using Site Variables)
+==================================================== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /* The dark backdrop is still ideal to create focus */
+  background-color: rgba(36, 0, 41, 0.8); 
+  backdrop-filter: blur(5px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.modal-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-content {
+  /* Using your primary page background color */
+  background-color: var(--colors-page-wrapper--background, var(--colors-white--1000, white));
+  /* Using your primary text color */
+  color: var(--colors-page-wrapper--text, var(--colors-black--1000, #240029));
+  padding: 40px;
+  /* Using a defined radius from your design system */
+  border-radius: var(--radius--large, 1.375rem);
+  /* Using your standard border color for components */
+  border: 1px solid var(--component-card--border-color, var(--colors-black--200, #2900291c));
+  /* Using your brand's semi-transparent black for a consistent shadow */
+  box-shadow: 0 10px 30px var(--colors-black--500, rgba(41, 0, 41, 0.5));
+  max-width: 500px;
+  width: 90%;
+  position: relative;
+  transform: scale(0.95);
+  transition: transform 0.3s ease;
+}
+
+.modal-overlay.show .modal-content {
+    transform: scale(1);
+}
+
+/* Update modal text styles to be dark */
+.modal-content .embed_heading {
+    color: var(--colors-black--1000, #240029);
+}
+.modal-content .embed_text-muted {
+    color: var(--colors-page-wrapper--text-muted, var(--colors-black--600, #290029ad));
+}
+
+.modal-close {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  /* Using your muted text color for the close icon */
+  color: var(--colors-page-wrapper--text-muted, var(--colors-black--600, #290029ad)); 
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.modal-close:hover {
+  /* Using your main text color for hover */
+  color: var(--colors-page-wrapper--text, var(--colors-black--1000, #240029)); 
+}
+
+/* Success and Error message styling */
+.modal-success-message {
+    text-align: center;
+    padding: 40px;
+}
+.modal-success-message .embed_heading {
+    color: var(--colors-black--1000, #240029);
+}
+
+.modal-error-message {
+  /* This variable works on light backgrounds too */
+  color: var(--colors-general--error, #ef4444);
+  display: none;
+  margin-top: 15px;
+  text-align: center;
+}
+
+/* Light theme styles for form elements inside the modal */
+.modal-content .embed_input {
+    background-color: var(--colors-white--1000, white);
+    border-color: var(--component-input--border-color, var(--colors-black--300, #29002933));
+    color: var(--colors-black--1000, #240029);
+}
+
+.modal-content .embed_input:focus {
+    /* Optional: Add a focus style, like your primary color */
+    border-color: var(--colors-general--primary, #fc1);
+    box-shadow: 0 0 0 3px rgba(255, 204, 17, 0.3);
+}
+
+.modal-content .embed_input-label {
+    color: var(--colors-page-wrapper--text-muted, var(--colors-black--600, #290029ad));
+}

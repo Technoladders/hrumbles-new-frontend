@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Modal from 'react-modal';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+// import { GoogleGenerativeAI } from '@google/generative-ai';
 import { supabase } from '../../integrations/supabase/client'; // Adjust import path as needed
 import { v4 as uuidv4 } from 'uuid';
 import { useSelector } from 'react-redux';
@@ -23,11 +23,10 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
     const user = useSelector((state) => state.auth.user);
   const organizationId = useSelector((state) => state.auth.organization_id);
  
-  // Gemini setup
-  const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  const geminiModel = 'gemini-1.5-pro';
-  const genAI = new GoogleGenerativeAI(geminiApiKey);
-  const model = genAI.getGenerativeModel({ model: geminiModel });
+
+
+    const openAIApiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  const openAIModel = 'gpt-4o';
  
   useEffect(() => {
     const getJobDescription = async () => {
@@ -131,13 +130,34 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
           Use symbols: ✅ for 'yes', ⚠️ for 'partial', ❌ for 'no'. Return ONLY the JSON object.
         `;
    
-         const result = await model.generateContent(prompt);
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openAIApiKey}`
+        },
+        body: JSON.stringify({
+          model: openAIModel,
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+          temperature: 0.2,
+          max_tokens: 4000,
+        })
+      });
 
-        // --- START: MODIFICATION ---
-        inputTokens = result.response.usageMetadata?.promptTokenCount || 0;
-        outputTokens = result.response.usageMetadata?.candidatesTokenCount || 0;
-        responseText = result.response.text();
-        // --- END: MODIFICATION ---
+      if (!response.ok) {
+        const errorBody = await response.json();
+        throw new Error(`OpenAI API request failed: ${response.status} - ${errorBody.error.message}`);
+      }
+      
+      const result = await response.json();
+      responseText = result.choices[0]?.message?.content || "";
+      inputTokens = result.usage?.prompt_tokens ?? 0;
+      outputTokens = result.usage?.completion_tokens ?? 0;
+
+      if (!responseText) {
+        throw new Error("OpenAI did not provide a response.");
+      }
         
         const cleanedText = cleanResponse(responseText);
         const parsedResult = JSON.parse(cleanedText);
@@ -238,7 +258,7 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
           output_tokens: outputTokens,
           analysis_response: analysisForLog,
           parsed_email: analysisForLog?.email || null,
-          usage_type: 'resume_initial_analysis'
+          usage_type: 'resume_initial_analysis_openai' 
         });
         // --- END: MODIFICATION ---
         setIsLoading(false);
@@ -547,13 +567,35 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
           Return ONLY the JSON object.
         `;
    
-         const result = await model.generateContent(prompt);
+        
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openAIApiKey}`
+        },
+        body: JSON.stringify({
+          model: openAIModel,
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+          temperature: 0.1,
+          max_tokens: 2000,
+        })
+      });
 
-        // --- START: MODIFICATION ---
-        inputTokens = result.response.usageMetadata?.promptTokenCount || 0;
-        outputTokens = result.response.usageMetadata?.candidatesTokenCount || 0;
-        responseText = result.response.text();
-        // --- END: MODIFICATION ---
+      if (!response.ok) {
+        const errorBody = await response.json();
+        throw new Error(`OpenAI API request failed: ${response.status} - ${errorBody.error.message}`);
+      }
+      
+      const result = await response.json();
+      responseText = result.choices[0]?.message?.content || "";
+      inputTokens = result.usage?.prompt_tokens ?? 0;
+      outputTokens = result.usage?.completion_tokens ?? 0;
+
+      if (!responseText) {
+        throw new Error("OpenAI did not provide a response for revalidation.");
+      }
         
         const cleanedText = cleanResponse(responseText);
         const updatedScores = JSON.parse(cleanedText);
@@ -649,7 +691,7 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
           output_tokens: outputTokens,
           analysis_response: analysisForLog,
           parsed_email: email, // Use the email from component state
-          usage_type: 'resume_revalidation'
+          usage_type: 'resume_revalidation_openai'
         });
         // --- END: MODIFICATION ---
         setIsLoading(false);
