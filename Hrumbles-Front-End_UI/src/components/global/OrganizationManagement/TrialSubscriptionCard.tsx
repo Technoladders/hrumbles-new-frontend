@@ -13,7 +13,9 @@ interface TrialSubscriptionCardProps {
   subscriptionPlan?: string;
   trialExtended?: boolean;
   onUpgradeClick: (orgId: string) => void;
-  onExtendTrialClick: (orgId: string) => void;
+// --- MODIFIED PROP NAME AND SIGNATURE ---
+  onStartOrExtendTrial: (orgId: string, durationDays: number, isExtendedCall: boolean) => void;
+  // --- END MODIFIED ---
   onOpenManageSubscription: () => void; 
 }
 
@@ -24,9 +26,9 @@ const TrialSubscriptionCard: FC<TrialSubscriptionCardProps> = ({
   trialEndDate,
   subscriptionPlan,
   trialExtended,
-  onUpgradeClick,
-  onExtendTrialClick,
-  onOpenManageSubscription,
+onUpgradeClick,
+onStartOrExtendTrial,
+onOpenManageSubscription,
 }) => {
   const now = moment();
   let daysLeft: number | null = null;
@@ -88,58 +90,49 @@ const TrialSubscriptionCard: FC<TrialSubscriptionCardProps> = ({
   };
 
   return (
-    <Card className="shadow-lg border-none bg-white transition-all duration-300 hover:shadow-xl col-span-full">
-      <CardContent className="p-6 flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 md:space-x-6">
-        <div className="flex items-center gap-4">
-          <Rocket size={40} className="text-purple-600" />
-          <div>
-            <p className="text-sm font-medium text-gray-500 mb-1">Your Organization's Subscription</p>
-            <h3 className="text-xl font-bold text-gray-800">{renderStatus()}</h3>
-            {trialStartDate && (
-              <p className="text-xs text-gray-500 mt-1">
-                Trial started: {moment(trialStartDate).format("MMM D, YYYY")}
-              </p>
-            )}
-          </div>
+  <Card className="shadow-lg border-none bg-white transition-all duration-300 hover:shadow-xl col-span-full">
+    <CardContent className="p-6 flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 md:space-x-6">
+      <div className="flex items-center gap-4">
+        <Rocket size={40} className="text-purple-600" />
+        <div>
+          <p className="text-sm font-medium text-gray-500 mb-1">Your Organization's Subscription</p>
+          <h3 className="text-xl font-bold text-gray-800">{renderStatus()}</h3>
+          {trialStartDate && (
+            <p className="text-xs text-gray-500 mt-1">
+              Trial started: {moment(trialStartDate).format("MMM D, YYYY")}
+            </p>
+          )}
         </div>
+      </div>
 
-        <div className="flex gap-3 mt-4 md:mt-0">
-          {/* Show Upgrade if trial expired */}
-          {subscriptionStatus === 'trial' && (daysLeft === null || daysLeft <= 0) && (
-            <Button variant="destructive" onClick={() => onUpgradeClick(organizationId)}>
-              Upgrade Now
+      <div className="flex gap-3 mt-4 md:mt-0">
+        {/* --- CONSOLIDATED TRIAL ACTION BUTTON --- */}
+        {/* Show "Upgrade Now" if status is trial AND it's expired */}
+        {(subscriptionStatus === 'trial' && (daysLeft === null || daysLeft <= 0)) ? (
+          <Button variant="destructive" onClick={() => onUpgradeClick(organizationId)}>
+            Upgrade Now
+          </Button>
+        ) : (
+          // Show "Start Trial (7 Days)" if NO trial has started OR trial has completely expired
+          // This button is for initiating a fresh 7-day trial.
+          // It will NOT show if a trial is currently ongoing (daysLeft > 0).
+          (!trialStartDate || daysLeft === null || daysLeft <= 0) && ( // Check if there's no active trial
+            <Button variant="outline" onClick={() => onStartOrExtendTrial(organizationId, 7, false)}>
+              Start Trial (7 Days)
             </Button>
-          )}
-          {/* Show Extend Trial if in trial and not extended yet */}
-          {subscriptionStatus === 'trial' && daysLeft && daysLeft > 0 && !trialExtended && (
-            <Button variant="outline" onClick={() => onExtendTrialClick(organizationId)}>
-              Extend Trial (21 Days)
-            </Button>
-          )}
-          {/* Show Trial Extended if in trial and already extended */}
-          {subscriptionStatus === 'trial' && daysLeft && daysLeft > 0 && trialExtended && (
-            <Button variant="outline" disabled>
-              Trial Extended
-            </Button>
-          )}
-          {/* Show View Plans if not active/trial (e.g., inactive, canceled, expired) */}
-          {subscriptionStatus !== 'active' && subscriptionStatus !== 'trial' && (daysLeft === null || daysLeft <= 0) && (
-            <Button onClick={() => onUpgradeClick(organizationId)}>
-              View Plans
-            </Button>
-          )}
+          )
+        )}
+        {/* --- END CONSOLIDATED TRIAL ACTION BUTTON --- */}
 
-            {/* --- NEW: Manage Subscription button --- */}
-        {/* This button should always be visible to an admin on this card */}
+        {/* Manage Subscription button (remains as is, always visible to admin) */}
         <Button variant="outline" onClick={onOpenManageSubscription} className="flex items-center gap-1">
           <Pencil className="h-4 w-4" />
-          <span className="hidden sm:inline">Manage Subscription</span> {/* Hide text on very small screens */}
+          <span className="hidden sm:inline">Manage Subscription</span>
         </Button>
-        {/* --- END NEW --- */}
-        </div>
-      </CardContent>
-    </Card>
-  );
+      </div>
+    </CardContent>
+  </Card>
+);
 };
 
 export default TrialSubscriptionCard;

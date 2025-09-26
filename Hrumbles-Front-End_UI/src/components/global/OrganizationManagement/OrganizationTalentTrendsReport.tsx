@@ -449,6 +449,10 @@ const OrganizationTalentTrendsReport: React.FC = () => { // Renamed component
                   onDateRangeChange={setDraftDateRange}
                   className="pl-10 h-10 w-full"
                 />
+                   <Button onClick={handleApplyFilters} className="w-full sm:w-auto flex-shrink-0 bg-indigo-600 hover:bg-indigo-700">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Apply Filters
+              </Button>
               </div>
               <Popover>
                 <PopoverTrigger asChild>

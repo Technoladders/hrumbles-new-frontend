@@ -1,6 +1,6 @@
 // src/components/global/SingleOrganizationDashboard.tsx
 
-import { FC,useState, useEffect } from 'react';
+import { FC,useState, useEffect, useRef } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../integrations/supabase/client';
@@ -76,6 +76,51 @@ interface OrganizationDetails {
 
 const SingleOrganizationDashboard: FC = () => {
     const { organizationId } = useParams<{ organizationId: string }>();
+
+     const emailSentFlags = useRef<{ [key: string]: boolean }>({}); // To prevent sending multiple times per session
+    const lastReminderCheckDate = useRef<string | null>(null); // To 
+
+    // --- NEW: Helper function to send emails via Edge Function ---
+    const sendSubscriptionEmail = async (
+        recipients: string[],
+        eventType: string,
+        templateData: { organizationName: string; recipientName?: string; trialEndDate?: string; subscriptionPlan?: string; daysLeft?: number; }
+    ) => {
+        if (!recipients || recipients.length === 0) {
+            console.warn("No recipients provided, skipping email send for event:", eventType);
+            return;
+        }
+        try {
+            // Ensure this URL is correct for your deployed organization-email-subscription-notification Edge Function
+            const webhookUrl = `https://${import.meta.env.VITE_SUPABASE_REF}.supabase.co/functions/v1/organization-email-subscription-notification`;
+            
+            const response = await fetch(webhookUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // Pass anon key for Edge Function invocation
+                    'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY 
+                },
+                body: JSON.stringify({
+                    recipients,
+                    eventType,
+                    templateData
+                }),
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.json();
+                console.error(`Failed to send email for ${eventType}:`, errorBody.error);
+                throw new Error(`Email send failed for ${eventType}: ${errorBody.error}`);
+            }
+            console.log(`Email for ${eventType} sent successfully to: ${recipients.join(', ')}`);
+        } catch (error: any) {
+            console.error("Error in sendSubscriptionEmail:", error.message);
+            // Optionally show toast to superadmin that email failed
+        }
+    };
+
+   
 
     const roleDisplayNameMap = {
         organization_superadmin: 'Super Admin',
@@ -187,6 +232,36 @@ const handleExtendTrialClick = async (orgId: string) => {
 
 // ... (rest of loading/error checks and return statement) ...
 
+// --- MODIFIED/NEW: Unified handler for Start/Extend Trial ---
+const handleStartOrExtendTrial = async (orgId: string, durationDays: number, isExtendedCall: boolean) => {
+    try {
+        alert(`Setting/Extending Trial for ${durationDays} days...`); // Placeholder alert
+        
+        // We'll use the update_organization_subscription_details RPC directly
+        // to ensure trial_start_date is set/updated and trial_end_date is calculated.
+        const newTrialStartDate = moment().toISOString();
+        const newTrialEndDate = moment().add(durationDays, 'days').toISOString();
+
+        const { error } = await supabase.rpc('update_organization_subscription_details', {
+            p_org_id: orgId,
+            p_subscription_status: 'trial', // Always set to trial
+            p_subscription_plan: null, // Clear plan for trial
+            p_trial_start_date: newTrialStartDate,
+            p_trial_end_date: newTrialEndDate,
+            p_trial_extended: isExtendedCall, // Pass the flag from the button context
+        });
+
+        if (error) throw error;
+
+        alert(`Trial set/extended for organization ${orgId} for ${durationDays} days!`); // Placeholder alert
+        detailsRefetch(); // Re-fetch the data to update the UI
+    } catch (err: any) {
+        console.error("Error setting/extending trial:", err.message);
+        alert(`Error setting/extending trial: ${err.message}`); // Placeholder alert
+    }
+};
+// --- END MODIFIED/NEW Handlers ---
+
  // --- NEW: Function to open the form directly (e.g., from an 'Edit' button) ---
   const handleOpenManageSubscription = () => {
     setIsManageSubscriptionModalOpen(true);
@@ -213,11 +288,11 @@ const handleExtendTrialClick = async (orgId: string) => {
                 onUpgradeClick={handleUpgradeClick}
                 onExtendTrialClick={handleExtendTrialClick}
                 onOpenManageSubscription={handleOpenManageSubscription} 
+                onStartOrExtendTrial={handleStartOrExtendTrial}
             />
             {/* --- END NEW --- */}
 
-                 
-
+                
 
                 {/* --- ROW 1: Stat Cards --- */}
                 <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-6 mt-6">

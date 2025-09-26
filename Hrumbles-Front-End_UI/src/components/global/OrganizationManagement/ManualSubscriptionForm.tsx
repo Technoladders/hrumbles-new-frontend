@@ -226,17 +226,7 @@ const ManualSubscriptionForm: FC<ManualSubscriptionFormProps> = ({
               </div>
 
               {/* Trial Extended Checkbox */}
-              <div className="flex items-center space-x-3 col-span-full justify-end"> {/* Ensured it's full width */}
-                <Checkbox
-                  id="trial-extended"
-                  checked={currentTrialExtended}
-                  onCheckedChange={(checked) => setCurrentTrialExtended(!!checked)}
-                  className="h-5 w-5" // Larger checkbox
-                />
-                <Label htmlFor="trial-extended" className="text-base font-medium leading-none"> {/* Larger label */}
-                  Trial Extended (e.g., to 21 days)
-                </Label>
-              </div>
+              
             </>
           )}
         </div>

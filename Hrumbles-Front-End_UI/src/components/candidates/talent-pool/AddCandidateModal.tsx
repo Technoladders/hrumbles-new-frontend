@@ -1,7 +1,9 @@
 import React, { useState, FC } from 'react';
 import Modal from 'react-modal';
 import { toast } from 'sonner';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+/// --- HIGHLIGHT START: Remove or comment out this import ---
+// import { GoogleGenerativeAI } from '@google/generative-ai';
+/// --- HIGHLIGHT END ---
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -60,16 +62,42 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
   };
 
   const cleanResponse = (text: string): string => {
+    console.log('Raw LLaMA response:', text);
+    
     const match = text.match(/{[\s\S]*}/);
-    if (!match) throw new Error('AI response is not valid JSON.');
-    return match[0];
+    if (!match) {
+      throw new Error('AI response does not contain a JSON object. Raw response: ' + text.substring(0, 200) + '...');
+    }
+    
+    const jsonStr = match[0];
+    
+    if (!jsonStr.trim().endsWith('}')) {
+      throw new Error('AI response was truncated. Please increase max_tokens or simplify the resume content.');
+    }
+    
+    try {
+      JSON.parse(jsonStr);
+      return jsonStr;
+    } catch (parseError) {
+      throw new Error('AI response is not valid JSON: ' + parseError.message);
+    }
   };
 
   const analyseAndSaveProfile = async (text: string, resumeFile?: File): Promise<{status: string; profile: any}> => {
-    const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY_TALENT;
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+    /// --- HIGHLIGHT START: LLaMA.cpp LOCAL SERVER INTEGRATION CHANGES ---
+
+    // --- REMOVE OR COMMENT OUT THESE TWO LINES (Gemini API Key and instantiation) ---
+    // const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY_TALENT;
+    // const genAI = new GoogleGenerativeAI(geminiApiKey);
+    // const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+    // --- END REMOVAL/COMMENT OUT ---
     
+    // --- ADD THESE TWO LINES (Local LLaMA Server URL and Model Name) ---
+    const LOCAL_LLAMA_SERVER_URL = 'http://127.0.0.1:8080/v1/chat/completions';
+    const LOCAL_LLAMA_MODEL_NAME = 'mistral-7b-instruct-v0.2.Q4_K_M.gguf'; // The model you successfully loaded
+    // --- END ADDITION ---
+
+    // --- YOUR ORIGINAL 'prompt' VARIABLE - PRESERVED AS REQUESTED ---
     const prompt = `
      Based on the following resume text, perform a detailed extraction to create a professional profile. Return ONLY a single, valid JSON object with the exact keys specified below.
  
@@ -105,11 +133,13 @@ Rules:
  
 "top_skills": array of strings (List of key technical and soft skills).  
  
-"work_experience": array of objects, each with "company", "designation", "duration", and "responsibilities" (array of strings).  
-Rule: If a company and a client are mentioned (e.g., "Company X | Client: Client Y"), extract only the primary company name ("Company X") into the "company" field.  
+ "work_experience": array of objects, each with "company", "designation", "duration", and "responsibilities" (array of strings).
++Rule: This MUST be a valid JSON array of objects, separated by commas. Example: [{"company": "A"}, {"company": "B"}].
+ Rule: If a company and a client are mentioned (e.g., "Company X | Client: Client Y"), extract only the primary company name ("Company X") into the "company" field.
  
-"education": array of objects, each with "institution", "degree", and "year".  
-Rule: If an institution name is not explicitly stated, return null for "institution".  
+ "education": array of objects, each with "institution", "degree", and "year".
++Rule: This MUST be a valid JSON array of objects, separated by commas. Example: [{"institution": "A"}, {"institution": "B"}].
+ Rule: If an institution name is not explicitly stated, return null for "institution".
  
 "projects": array of strings  
 Rules:  
@@ -137,23 +167,95 @@ Important:
   Resume Text:
  
   ---
-   ${text} 
+   ${text}
   ---
 `;
+    // --- END OF YOUR ORIGINAL 'prompt' VARIABLE ---
 
-    const result = await model.generateContent(prompt);
+    // --- ADD CRUCIAL NEWLINE SANITIZATION AND DYNAMIC MESSAGE CONSTRUCTION ---
+    // This explicitly replaces any non-standard newlines in the *actual resume text*.
+    // JSON.stringify will then correctly escape the standard \n when sending the payload.
+    const sanitizedResumeInput = text
+      .replace(/\r\n/g, '\n') // Replace Windows newlines with Unix newlines
+      .replace(/\r/g, '\n');  // Replace old Mac newlines with Unix newlines
+
+    // Extract the system part from your original 'prompt' string.
+    // We assume the system instructions end just before "Resume Text:"
+    const systemInstructionEndIndex = prompt.indexOf("Resume Text:");
+    const SYSTEM_PROMPT_CONTENT = systemInstructionEndIndex !== -1 
+        ? prompt.substring(0, systemInstructionEndIndex).trim() 
+        : prompt.trim(); // Fallback if "Resume Text:" not found
+
+    // Construct the user content, embedding the sanitized resume text
+    const USER_CONTENT = `Resume Text:\n\n---\n${sanitizedResumeInput}\n---`;
+
+    // Construct the messages array for the OpenAI-compatible API
+    const messages = [
+      { role: "system", content: SYSTEM_PROMPT_CONTENT },
+      { role: "user", content: USER_CONTENT }
+    ];
+    // --- END ADDITION/MODIFICATION FOR PROMPT ---
+
+    // --- Optional: Debugging log to see the exact payload being sent ---
+    console.log("--- DEBUG: Full JSON Payload to LLaMA server ---");
+    console.log(JSON.stringify({
+      model: LOCAL_LLAMA_MODEL_NAME,
+      messages: messages,
+      max_tokens: 4000,
+      temperature: 0.75,
+    }, null, 2)); // Pretty-print for readability in console
+    console.log("--- END DEBUG ---");
+    // --- End Optional Debugging ---
+
+    // --- REPLACE THE Gemini `model.generateContent(prompt)` CALL WITH `fetch` ---
+    // This section replaces the Gemini API call with a fetch request to your local LLaMA server.
+    const response = await fetch(LOCAL_LLAMA_SERVER_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // No Authorization header (API key) is needed for local llama-server by default
+      },
+      body: JSON.stringify({
+        model: LOCAL_LLAMA_MODEL_NAME,
+        messages: messages, // Use the new messages array constructed from your prompt content
+        max_tokens: 2500, // Increased from 1000 to 2500
+        temperature: 0.0, // Set to 0.0 for more deterministic output, good for extraction
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({ message: 'Unknown error', details: response.statusText }));
+      throw new Error(`Local LLaMA server error: ${response.status} - ${errorBody.message || JSON.stringify(errorBody)}`);
+    }
+
+    const result = await response.json();
+
+    // Add response validation
+    if (!result.choices || !result.choices[0] || !result.choices[0].message) {
+      throw new Error('Invalid response structure from LLaMA server');
+    }
+
+    // Check if response was truncated
+    if (result.choices[0].finish_reason === 'length') {
+      throw new Error('Response was truncated due to token limit. Please increase max_tokens.');
+    }
+
+    // --- MODIFY TOKEN USAGE EXTRACTION ---
+    // The token usage structure from llama-server's OpenAI-compatible API is different from Gemini.
+    // The structure is result.usage.prompt_tokens and result.usage.completion_tokens
+    const inputTokens = result.usage?.prompt_tokens || 0;
+    const outputTokens = result.usage?.completion_tokens || 0;
     
-    // Extract token usage from the response
-    const usageMetadata = result.response.usageMetadata;
-    const inputTokens = usageMetadata?.promptTokenCount || 0;
-    const outputTokens = usageMetadata?.candidatesTokenCount || 0;
-    
-    const cleanedJson = cleanResponse(result.response.text());
-    // --- END: MODIFICATION ---
+    // The model's actual generated content is in result.choices[0].message.content
+    // Ensure you pass THIS content to cleanResponse
+    const cleanedJson = cleanResponse(result.choices[0].message.content);
+    // --- END TOKEN USAGE MODIFICATION ---
+
+    /// --- HIGHLIGHT END: LLaMA.cpp LOCAL SERVER INTEGRATION CHANGES ---
+
     const profileData = JSON.parse(cleanedJson);
     let resumePath: string | null = null;
     if (resumeFile) {
-        // --- FIX: Sanitize the filename before uploading ---
         const sanitizedName = sanitizeFileName(resumeFile.name);
         const fileName = `${uuidv4()}-${sanitizedName}`;
         
@@ -161,7 +263,7 @@ Important:
             .from(BUCKET_NAME)
             .upload(fileName, resumeFile);
         
-        if (uploadError) throw new Error(`File Upload Error: ${uploadError.message}`);
+        if (uploadError) throw new Error(`File Upload Error: ${uploadData?.path || uploadError.message}`); // Fix for uploadData being null
 
         const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uploadData.path);
         resumePath = urlData.publicUrl;
@@ -180,7 +282,6 @@ Important:
 
     if (rpcError) throw new Error(`Database Error: ${rpcError.message}`);
     
-    // The RPC function now returns 'SKIPPED_NO_EMAIL' for bad parses
     if (status === 'SKIPPED_NO_EMAIL') {
         throw new Error('Could not extract a valid email from the resume.');
     }
@@ -188,7 +289,7 @@ Important:
     return { status, profile: profileData };
   };
 
-  // --- HANDLERS ---
+  // --- HANDLERS (remain unchanged) ---
   const handleSingleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -243,7 +344,7 @@ Important:
     if (!files || files.length === 0) return;
 
     setIsLoading(true);
-    setIsBulkProcessing(true); // --- FIX: Use a separate state for bulk processing
+    setIsBulkProcessing(true);
     setBulkResults([]);
     setBulkProgress(0);
     const results: BulkUploadResult[] = [];
@@ -267,17 +368,14 @@ Important:
     
     toast.success("Bulk processing complete. Check results below.");
     setIsLoading(false);
-    // onCandidateAdded(); 
   };
   
   const handleClose = () => {
-    // If a bulk process has run, we should refetch the list.
     if (isBulkProcessing) {
         onCandidateAdded();
     } else {
         onClose();
     }
-    // Reset all state when closing
     setResumeText('');
     setBulkResults([]);
     setBulkProgress(0);
@@ -290,7 +388,6 @@ Important:
     <Modal 
       isOpen={isOpen} 
       onRequestClose={handleClose} 
-      // --- FIX: Responsive and Overflow Styling ---
       style={{
         content: {
           top: '50%',
@@ -299,12 +396,12 @@ Important:
           bottom: 'auto',
           marginRight: '-50%',
           transform: 'translate(-50%, -50%)',
-          width: '90%', // Responsive width
-          maxWidth: '800px', // Max width for larger screens
-          maxHeight: '90vh', // Max height to prevent overflow
+          width: '90%',
+          maxWidth: '800px',
+          maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
-          padding: '0' // Remove default padding
+          padding: '0'
         },
         overlay: {
           backgroundColor: 'rgba(0, 0, 0, 0.75)'
@@ -312,7 +409,6 @@ Important:
       }}
       contentLabel="Add Candidate Modal"
     >
-      {/* --- FIX: Modal Layout for Scrolling --- */}
       <div className="flex justify-between items-center p-4 border-b">
         <h2 className="text-xl font-semibold">Add Candidate to Talent Pool</h2>
         <Button variant="ghost" size="icon" onClick={handleClose}>

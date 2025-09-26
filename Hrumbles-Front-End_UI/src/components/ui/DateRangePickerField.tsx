@@ -19,6 +19,7 @@ interface DateRangePickerFieldProps {
   onDateRangeChange: (range: DateRange | null) => void;
   onApply: () => void;
   className?: string;
+  onApply?: () => void;
 }
 
 export const DateRangePickerField: React.FC<DateRangePickerFieldProps> = ({
@@ -35,6 +36,7 @@ export const DateRangePickerField: React.FC<DateRangePickerFieldProps> = ({
       key: dateRange?.key || 'selection',
     },
   ]);
+  
 
   const handleSelect = (item: { selection: DateRange }) => {
     setTempRange([item.selection]);
