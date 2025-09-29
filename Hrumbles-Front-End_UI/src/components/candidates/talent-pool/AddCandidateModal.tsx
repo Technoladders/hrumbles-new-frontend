@@ -133,7 +133,7 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     `;
     
     const result = await openai.chat.completions.create({
-      model: 'gpt-4o', // Using the latest model for best results
+      model: 'gpt-4.1-nano', // Using the latest model for best results
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },

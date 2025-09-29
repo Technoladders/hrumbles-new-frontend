@@ -195,7 +195,7 @@ const LoginPage: FC = () => {
 
     } catch (error: any) {
       console.error("Error in fetchUserDetails:", error.message);
-      return { role: null, departmentName: null, organizationId: null,  organizationId: null, status: null };
+       return { role: null, departmentName: null, organizationId: null,  organizationId: null, status: null };
     }
   };
 
@@ -335,17 +335,14 @@ const LoginPage: FC = () => {
 
     // This function runs in the background and does not block the UI
  const sendLoginNotificationInBackground = async (
+    // The function now accepts 'userId'
     userDetails: { userEmail: string; organizationId: string | null; userId: string; firstName: string; lastName: string; } 
   ) => {
     try {
-      // 1. Fetch IP addresses
+      // ... (IP and location fetching logic remains the same) ...
       const ipv4 = await getIPv4Address();
       const ipv6 = await getIPv6Address();
-
-      // 2. Fetch approximate location based on the reliable IPv4
       const approxLocation = await getApproximateLocation(ipv4);
-
-      // 3. Try to get precise location, but don't fail if the user denies it
       let deviceLocation = { latitude: "Not available", longitude: "Not available" };
       try {
         const coords = await getDeviceLocation();
@@ -354,20 +351,19 @@ const LoginPage: FC = () => {
         console.warn("Could not get precise device location (this is common).");
       }
       
-      // 4. Construct the payload
-      const notificationPayload  = {
+      const notificationPayload  = { // Renamed from 'payload' to 'notificationPayload'
         userEmail: userDetails.userEmail,
         organizationId: userDetails.organizationId,
         firstName: userDetails.firstName,
         lastName: userDetails.lastName,
-        ipAddress: ipv4, // This is now guaranteed to be IPv4
+        ipAddress: ipv4,
         ipv6Address: ipv6,
         location: `${approxLocation.city}, ${approxLocation.country}`,
         latitude: deviceLocation.latitude,
         longitude: deviceLocation.longitude,
       };
 
-       // NEW: Log the successful login to user_activity_logs table
+       // NEW: This block was added to log the successful login.
       if (userDetails.userId && userDetails.organizationId) {
         await logUserActivity(
           userDetails.userId,
@@ -380,7 +376,7 @@ const LoginPage: FC = () => {
             country: approxLocation.country,
             latitude: deviceLocation.latitude,
             longitude: deviceLocation.longitude,
-            device_info: navigator.userAgent, // Capture user agent here
+            device_info: navigator.userAgent,
           }
         );
       }
@@ -389,14 +385,13 @@ const LoginPage: FC = () => {
       await fetch('https://kbpeyfietrwlhwcwqhjw.supabase.co/functions/v1/send-login-notification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        // BUG: This line uses 'payload', which is not defined. It should be 'notificationPayload'.
+        body: JSON.stringify(notificationPayload),
       });
 
       console.log("Background login notification sent successfully.");
 
     } catch (error) {
-      // This catch ensures that ANY failure in this process is silent
-      // and only logs to the console, never showing an error to the user.
       console.error("Failed to send login notification in the background:", error);
     }
   };
@@ -406,6 +401,7 @@ const handleLogin = async (): Promise<void> => {
     setIsLoading(true);
     console.log("--- LOGIN PROCESS STARTED ---");
 
+    // New variables to hold user/org IDs for logging failed attempts
     let userId: string | null = null;
     let userOrgId: string | null = null;
 
@@ -413,11 +409,11 @@ const handleLogin = async (): Promise<void> => {
       // --- CRITICAL PATH START ---
       const subdomainOrgId = await getOrganizationIdBySubdomain(organizationSubdomain);
       if (!subdomainOrgId) throw new Error("Invalid organization domain.");
-      userOrgId = subdomainOrgId;
+      userOrgId = subdomainOrgId; // Store orgId
 
       const { user } = await signIn(email, password);
       console.log("✅ User authenticated successfully");
-      userId = user.id;
+      userId = user.id; // Store userId
 
       const {
         role,
@@ -433,7 +429,8 @@ const handleLogin = async (): Promise<void> => {
       if (!userOrgId) {
           throw new Error("User's organization ID could not be determined.");
       }
-
+      
+      // New blocks to log specific failure reasons
       if (status !== 'active') {
           if (userId && userOrgId) {
             await logUserActivity(userId, userOrgId, 'failed_login', { errorMessage: "Account not active" });
@@ -447,10 +444,10 @@ const handleLogin = async (): Promise<void> => {
           throw new Error("Access Denied. Please log in from your organization's domain.");
       }
 
-      // --- CRITICAL CHANGE HERE ---
-      // AWAIT the background function. This ensures the login activity is logged
-      // BEFORE navigation occurs.
-      await sendLoginNotificationInBackground({ // <--- ADD AWAIT HERE
+      // --- PERFORMANCE BOTTLENECK ---
+      // This 'await' forces the login to wait for all background tasks (IP, location, logging, email)
+      // to finish before navigating, making the login feel slow.
+      await sendLoginNotificationInBackground({
         userEmail: email,
         organizationId: userOrgId,
         userId: userId,
@@ -472,7 +469,8 @@ const handleLogin = async (): Promise<void> => {
     } catch (error: any) {
       console.error("🔴 LOGIN FAILED:", error.message);
       setError(error.message);
-
+      
+      // Generic catch block to log any other failed login reason
       if (userId && userOrgId) {
           await logUserActivity(userId, userOrgId, 'failed_login', { errorMessage: error.message });
       }

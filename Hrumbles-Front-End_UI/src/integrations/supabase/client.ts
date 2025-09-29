@@ -10,23 +10,3 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-const SUPABASE_AUTH_TOKEN_KEY = 'sb-kbpeyfietrwlhwcwqhjw-auth-token';
-
-supabase.auth.onAuthStateChange(async (event, session) => {
-  if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
-    localStorage.setItem('supabase-session-backup', JSON.stringify(session));
-  }
-
-  if (event === 'TOKEN_REFRESH_FAILED' || event === 'SIGNED_OUT') {
-    const backup = localStorage.getItem('supabase-session-backup');
-    if (backup) {
-      console.warn(`Auth event '${event}', restoring session from backup.`);
-      localStorage.setItem(SUPABASE_AUTH_TOKEN_KEY, backup);
-      const backupSession = JSON.parse(backup);
-      await supabase.auth.setSession({
-        access_token: backupSession.access_token,
-        refresh_token: backupSession.refresh_token,
-      });
-    }
-  }
-});
