@@ -527,7 +527,13 @@ return async (identifier: string): Promise<Partial<CompanyDetailTypeFromTypes>> 
 
   try {
       const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: GEMINI_MODEL_NAME });
+      const model = new GenerativeModel(
+  GEMINI_API_KEY,
+  { model: GEMINI_MODEL_NAME },
+  {
+    baseUrl: "https://asia-southeast1-aiplatform.googleapis.com/v1",
+  }
+);
       const generationConfig = { temperature: 0.2, topK: 1, topP: 1, maxOutputTokens: 3000 };
       const safetySettings: { category: HarmCategory; threshold: HarmBlockThreshold }[] = [
           { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },

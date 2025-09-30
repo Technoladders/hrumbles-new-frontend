@@ -5,9 +5,14 @@ import { JobFormData } from "../hooks/useJobFormState";
 export const mapFormDataToJobData = (
   formData: JobFormData, 
   editJob: JobData | null,
-  jobType: "Internal" | "External"
+  jobType: "Internal" | "External",
+   internalType: "Inhouse" | "Client Side" | null
 ): JobData => {
   console.log("Mapping form data to job data:", formData);
+
+  const isClientSideInternal = jobType === "Internal" && internalType === "Client Side";
+  const submissionType = isClientSideInternal || jobType === "External" ? "Client" : "Internal";
+  const clientOwner = submissionType === "Client" ? formData.clientDetails.clientName : "Internal HR";
   
   // Create the job data object
   const jobData: JobData = {
@@ -21,9 +26,10 @@ export const mapFormDataToJobData = (
     postedDate: editJob?.postedDate || new Date().toISOString().split('T')[0],
     applications: editJob?.applications || 0,
     dueDate: editJob?.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    clientOwner: formData.clientDetails.clientName || "Internal HR",
+    clientOwner: clientOwner,
+    submissionType: submissionType,
     hiringMode: formData.jobInformation.hiringMode || "Full Time",
-    submissionType: jobType === "Internal" ? "Internal" : "Client",
+    
     jobType: jobType, // Set the job type
     experience: {
       min: { 

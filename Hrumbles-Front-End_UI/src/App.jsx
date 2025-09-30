@@ -25,6 +25,7 @@ import VerificationHubPage from "./pages/verifications/VerificationHubPage";
 import VerificationTypeDashboardPage from "./pages/verifications/VerificationTypeDashboardPage";
 import OrganizationVerificationReportPage from "./pages/verifications/OrganizationVerificationReportPage";
 import DetailedResourceView from './components/global/DetailedResourceView';
+import OrganizationTalentTrendsReport from "./components/global/OrganizationManagement/OrganizationTalentTrendsReport";
 
 
 import MainLayout from "./layouts/MainLayout";
@@ -247,6 +248,9 @@ function App() {
             <Route path="/organization/:organizationId/users" element={<DetailedResourceView resourceType="users" />} />
             <Route path="/organization/:organizationId/talent" element={<DetailedResourceView resourceType="talent" />} /> 
             <Route path="/organization/:organizationId/roles" element={<DetailedResourceView resourceType="roles" />} />
+            <Route path="/organization/:organizationId/jobs" element={<DetailedResourceView resourceType="jobs" />} />
+            <Route path="/organization/:organizationId/clients" element={<DetailedResourceView resourceType="clients" />} />
+             <Route path="/reports/organization-talent-trends" element={<OrganizationTalentTrendsReport />} />
             
             {/* <Route path="/employees" element={<Employee/>} /> */}
             <Route path="/projects" element={<ProjectManagement />} />

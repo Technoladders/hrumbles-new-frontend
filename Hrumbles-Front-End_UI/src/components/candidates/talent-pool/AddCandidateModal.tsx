@@ -1,8 +1,9 @@
 import React, { useState, FC } from 'react';
 import Modal from 'react-modal';
 import { toast } from 'sonner';
-import OpenAI from 'openai';
-import { v4 as uuidv4 } from 'uuid';
+// import OpenAI from 'openai'; // <--- REMOVED: No longer needed client-side
+// import { GoogleGenerativeAI } from '@google/generative-ai'; // <--- REMOVED: No longer needed client-side
+import { v4 as uuidv4 } from 'uuid'; // Still used for unique file names before upload
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,6 +15,7 @@ import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
 
+// --- TYPES ---
 interface AddCandidateModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -23,11 +25,15 @@ interface BulkUploadResult {
   fileName: string;
   status: 'success' | 'skipped' | 'failed';
   message: string;
+  candidate_name?: string; // Added to display name in report
+  job_queue_id?: string; // Edge Functions don't use RQ, but keep if your EF returns it for consistency
 }
 
 const BUCKET_NAME = 'talent-pool-resumes';
 
+// --- HELPER FUNCTION: Sanitize Filenames ---
 const sanitizeFileName = (fileName: string): string => {
+  // Replace illegal characters and multiple spaces/underscores with a single underscore.
   return fileName.replace(/[\[\]\+\s]+/g, '_');
 };
 
@@ -42,116 +48,110 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
   const user = useSelector((state: any) => state.auth.user);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
+  // --- HELPER FUNCTIONS ---
   const parseFileToText = async (file: File): Promise<string> => {
+    // This part is good, it uses a Supabase Function for PDF parsing, or client-side for DOCX
     if (file.type === 'application/pdf') {
-      const { data, error } = await supabase.functions.invoke('talent-pool-parser', { body: file });
-      if (error) throw new Error(`PDF Parsing Error: ${error.message}`);
-      return data.text;
+        const { data, error } = await supabase.functions.invoke('talent-pool-parser', {
+          body: file,
+          // You might need to specify a Content-Type for file uploads in Supabase Functions
+          // headers: { 'Content-Type': 'application/pdf' }
+        });
+        if (error) throw new Error(`PDF Parsing Error: ${error.message}`);
+        // Supabase Function invocation data comes as { data: { text: "..." } }
+        return data.text;
     } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      const arrayBuffer = await file.arrayBuffer();
-      const result = await mammoth.extractRawText({ arrayBuffer });
-      return result.value;
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        return result.value;
     }
     throw new Error('Unsupported file type. Please use PDF or DOCX.');
   };
 
-  // ✅ NEW: Batch version (using your exact systemPrompt)
-  const analyseAndSaveProfilesBatch = async (resumes: { text: string; file?: File }[]): Promise<BulkUploadResult[]> => {
-    const openai = new OpenAI({
-      apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-      dangerouslyAllowBrowser: true,
-    });
+  // --- MODIFIED: analyseAndSaveProfilesBatch - Now calls a Supabase Edge Function for secure processing ---
+  // This function will handle both single and batch calls to the backend
+  const analyseAndSaveProfilesBatch = async (
+    resumes: Array<{ text: string; file?: File; fileName?: string }>
+  ): Promise<BulkUploadResult[]> => {
+    const backendPayload: Array<{
+      resume_text: string;
+      resume_path_input: string | null;
+      file_name: string;
+      organization_id: string;
+      user_id: string;
+    }> = [];
 
-    const systemPrompt = `
-      Based on the provided resume text, perform a detailed extraction to create a professional profile. 
-      Return ONLY a single, valid JSON object with the exact keys specified below. Do not include any markdown formatting or explanations.
-      JSON Schema and Strict Instructions:
-      "suggested_title": string.
-      "candidate_name": string.
-      "email": string.
-      "phone": string.
-      "linkedin_url": string.
-      "github_url": string.
-      "current_location": string.
-      "professional_summary": array of strings.
-      "top_skills": array of strings.
-      "work_experience": array of objects.
-      "education": array of objects.
-      "projects": array of strings.
-      "certifications": array of strings.
-      "other_details": object.
-      Important: preserve all fields exactly as specified.
-    `;
+    // Step 1: Upload all files to Supabase Storage concurrently BEFORE calling the Edge Function
+    const fileUploadPromises = resumes.map(async (resume, index) => {
+      let resumePath: string | null = null;
+      let originalFileName: string = resume.fileName || `resume-${index}.txt`;
 
-    const userPrompt = resumes
-      .map((r, i) => `### Resume ${i + 1}\n${r.text}`)
-      .join("\n\n");
+      if (resume.file) {
+        const sanitizedName = sanitizeFileName(resume.file.name);
+        originalFileName = resume.file.name;
+        const uniqueFileName = `${uuidv4()}-${sanitizedName}`;
 
-    console.log(`🔄 Sending ${resumes.length} resumes in ONE batch request...`);
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from(BUCKET_NAME)
+          .upload(uniqueFileName, resume.file, { cacheControl: '3600', upsert: false });
 
-    const result = await openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Parse the following resumes and return {"resumes":[...]}\n\n${userPrompt}` },
-      ],
-    });
+        if (uploadError) throw new Error(`File Upload Error for ${originalFileName}: ${uploadError.message}`);
 
-    const responseJson = result.choices[0].message.content;
-    if (!responseJson) throw new Error('AI response was empty.');
-
-    const parsed = JSON.parse(responseJson);
-    const profiles = parsed.resumes || [];
-    const results: BulkUploadResult[] = [];
-
-    for (let i = 0; i < profiles.length; i++) {
-      try {
-        let resumePath: string | null = null;
-        if (resumes[i].file) {
-          const sanitizedName = sanitizeFileName(resumes[i].file.name);
-          const fileName = `${uuidv4()}-${sanitizedName}`;
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from(BUCKET_NAME)
-            .upload(fileName, resumes[i].file);
-          if (uploadError) throw new Error(`File Upload Error: ${uploadError.message}`);
-          const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uploadData.path);
-          resumePath = urlData.publicUrl;
-        }
-
-        const { data: status, error: rpcError } = await supabase.rpc(
-          'upsert_candidate_with_timeframe',
-          {
-            profile_data: profiles[i],
-            resume_text: resumes[i].text,
-            organization_id_input: organizationId,
-            user_id_input: user.id,
-            resume_path_input: resumePath,
-            input_tokens_used: result.usage?.prompt_tokens || 0,
-            output_tokens_used: result.usage?.completion_tokens || 0,
-            usage_type_input: 'talent_pool_ingestion',
-          }
-        );
-
-        if (rpcError) throw rpcError;
-
-        results.push({
-          fileName: resumes[i].file?.name || `Resume ${i + 1}`,
-          status: 'success',
-          message: `${profiles[i].candidate_name || 'N/A'} - Profile ${status.toLowerCase()}`,
-        });
-      } catch (error) {
-        results.push({
-          fileName: resumes[i].file?.name || `Resume ${i + 1}`,
-          status: 'failed',
-          message: error instanceof Error ? error.message : 'Unknown error',
-        });
+        const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uploadData.path);
+        resumePath = urlData.publicUrl;
       }
+
+      backendPayload.push({
+        resume_text: resume.text,
+        resume_path_input: resumePath, // This is the public URL
+        file_name: originalFileName,
+        organization_id: organizationId,
+        user_id: user.id,
+      });
+    });
+
+    await Promise.all(fileUploadPromises); // Wait for all file uploads to complete
+
+    // Step 2: Call the Supabase Edge Function with the prepared batch payload
+    try {
+      console.log("[AddCandidateModal] Invoking Supabase Edge Function: 'talent-pool-process-batch-candidates'"); // Log
+      console.log("[AddCandidateModal] Backend payload for Edge Function:", backendPayload); // Log
+
+      const { data, error } = await supabase.functions.invoke(
+        'talent-pool-process-batch-candidates', // <--- Your deployed Edge Function name
+        { body: backendPayload }
+      );
+
+      console.log("[AddCandidateModal] Supabase Function Invoke Data:", data); // Log
+      console.log("[AddCandidateModal] Supabase Function Invoke Error:", error); // Log
+
+      if (error) {
+        // This 'error' object is from Supabase JS client itself (e.g., network error, function not found)
+        throw new Error(`Backend Processing Error: ${error.message}`);
+      }
+      if (!data || !Array.isArray(data.batch_results)) {
+        throw new Error('Invalid response from backend function: Expected batch_results array.');
+      }
+
+      return data.batch_results.map((item: any) => ({
+        fileName: item.file_name || 'N/A',
+        status: item.status === 'success' || item.status === 'enqueued' ? 'success' : item.status === 'skipped' ? 'skipped' : 'failed',
+        message: item.message || item.error || 'Processing initiated.',
+        candidate_name: item.candidate_name, // Should come from EF response
+      }));
+
+    } catch (backendError) {
+      console.error("[AddCandidateModal] Error calling Supabase Edge Function for batch processing:", backendError);
+      // Return a failed status for all original resumes if the batch call itself fails
+      return resumes.map(resume => ({
+        fileName: resume.fileName || 'N/A',
+        status: 'failed',
+        message: backendError instanceof Error ? backendError.message : 'Unknown backend error'
+      }));
     }
-    return results;
   };
 
-  // ✅ Updated to call batch function with one resume
+  // --- HANDLERS ---
   const handleSingleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -160,18 +160,24 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     toast.promise(
       (async () => {
         const text = await parseFileToText(file);
-        const results = await analyseAndSaveProfilesBatch([{ text, file }]);
-        const first = results[0];
-        if (first.status === 'success') {
+        // Treat single file as a batch of one for consistency in backend call
+        const results = await analyseAndSaveProfilesBatch([{ text, file, fileName: file.name }]);
+        const firstResult = results[0];
+
+        if (firstResult.status === 'success') {
           onCandidateAdded();
-          return first.message;
+          return `Candidate processing enqueued! Check Talent Pool list shortly. (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
+        } else if (firstResult.status === 'skipped') {
+          onCandidateAdded(); // Still refresh parent as candidate might have been updated
+          return `Candidate skipped: ${firstResult.message} (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
+        } else {
+          throw new Error(firstResult.message);
         }
-        throw new Error(first.message);
       })(),
       {
-        loading: 'Parsing and processing resume...',
-        success: (msg) => msg,
-        error: (err) => err.message || 'Error occurred',
+        loading: 'Parsing, uploading and processing resume securely...',
+        success: (message) => message,
+        error: (err) => err.message || 'An unexpected error occurred.',
         finally: () => setIsLoading(false),
       }
     );
@@ -182,18 +188,24 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     setIsLoading(true);
     toast.promise(
       (async () => {
-        const results = await analyseAndSaveProfilesBatch([{ text: resumeText }]);
-        const first = results[0];
-        if (first.status === 'success') {
+        // Treat pasted text as a batch of one
+        const results = await analyseAndSaveProfilesBatch([{ text: resumeText, fileName: 'pasted_resume.txt' }]);
+        const firstResult = results[0];
+
+        if (firstResult.status === 'success') {
           onCandidateAdded();
-          return first.message;
+          return `Candidate processing enqueued! Check Talent Pool list shortly. (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
+        } else if (firstResult.status === 'skipped') {
+          onCandidateAdded();
+          return `Candidate skipped: ${firstResult.message} (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
+        } else {
+          throw new Error(firstResult.message);
         }
-        throw new Error(first.message);
       })(),
       {
-        loading: 'Analysing and saving profile...',
-        success: (msg) => msg,
-        error: (err) => err.message || 'Error occurred',
+        loading: 'Analysing and saving profile securely...',
+        success: (message) => message,
+        error: (err) => err.message || 'An unexpected error occurred.',
         finally: () => setIsLoading(false),
       }
     );
@@ -208,41 +220,82 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     setBulkResults([]);
     setBulkProgress(0);
 
+    const filesArray = Array.from(files);
+    const resumesToParse: Array<{ text: string; file?: File; fileName?: string }> = [];
+    const interimResults: BulkUploadResult[] = []; // To show parsing progress
+
+    // Step 1: Parse all files concurrently (local or via Supabase Function for PDFs)
+    await Promise.all(
+      filesArray.map(async (file, index) => {
+        try {
+          const text = await parseFileToText(file); // Parse locally or via Supabase Function
+          resumesToParse.push({ text, file, fileName: file.name });
+          interimResults.push({ fileName: file.name, status: 'success', message: 'Parsed and ready for upload.' }); // Initial status
+
+        } catch (error) {
+          interimResults.push({ fileName: file.name, status: 'failed', message: error instanceof Error ? error.message : 'Unknown error during parsing.' });
+          console.error(`Error parsing file ${file.name}:`, error);
+        }
+        setBulkProgress(((index + 1) / filesArray.length) * 50); // Progress for local parsing
+        setBulkResults([...interimResults]); // Update UI with current file parsing status
+      })
+    );
+    
+    // Filter out files that failed parsing
+    const successfullyParsedResumes = resumesToParse.filter(r => r.text);
+    if (successfullyParsedResumes.length === 0) {
+      toast.error("No valid resumes could be parsed for batch processing. Check report.");
+      setIsLoading(false);
+      setIsBulkProcessing(false);
+      return;
+    }
+
+    toast.info(`Calling backend for batch analysis of ${successfullyParsedResumes.length} resumes...`);
+    setBulkProgress(50); // Indicate start of backend call phase
+
+    // Step 2: Call the secure backend (Edge Function) with the batch of parsed texts/uploaded file paths
     try {
-      const resumes = await Promise.all(
-        Array.from(files).map(async (file) => ({
-          text: await parseFileToText(file),
-          file,
-        }))
-      );
-      const results = await analyseAndSaveProfilesBatch(resumes);
-      setBulkResults(results);
+      const finalResults = await analyseAndSaveProfilesBatch(successfullyParsedResumes);
+      setBulkResults(finalResults);
       setBulkProgress(100);
-      toast.success('Bulk processing complete.');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Bulk processing failed');
+
+      const successfulCount = finalResults.filter(r => r.status === 'success' || r.status === 'skipped').length;
+      if (successfulCount > 0) {
+        toast.success(`Batch processing jobs enqueued for ${successfulCount} candidates. Profiles will appear in Talent Pool shortly.`);
+        onCandidateAdded(); // Trigger refetch in parent
+      } else {
+        toast.error("No candidates were successfully enqueued. Check report for details.");
+      }
+      
+    } catch (backendError) {
+      toast.error(backendError instanceof Error ? backendError.message : 'An unexpected error occurred during batch API call.');
+      console.error("Error during batch talent pool ingest API call:", backendError);
+      setBulkResults(prev => prev.map(res => ({ ...res, status: 'failed', message: res.message || 'Batch API call failed.' })));
+      setBulkProgress(100); // Complete progress bar even on error
     } finally {
       setIsLoading(false);
+      setIsBulkProcessing(false);
     }
   };
 
   const handleClose = () => {
-    if (isBulkProcessing) {
-      onCandidateAdded();
-    } else {
-      onClose();
-    }
-    setResumeText('');
-    setBulkResults([]);
-    setBulkProgress(0);
-    setIsBulkProcessing(false);
-    setActiveTab('paste');
+      // Only trigger refetch if some processing was initiated
+      const hasProcessedAnything = isBulkProcessing || (activeTab === 'paste' && resumeText.trim()) || (activeTab === 'upload' && !isLoading);
+      if (hasProcessedAnything) {
+          onCandidateAdded();
+      }
+      onClose(); // Always close the modal
+      setResumeText('');
+      setBulkResults([]);
+      setBulkProgress(0);
+      setIsBulkProcessing(false);
+      setActiveTab('paste');
   };
 
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onRequestClose={handleClose} 
+    <Modal
+      isOpen={isOpen}
+      onRequestClose={handleClose}
       style={{
         content: {
           top: '50%',
@@ -278,7 +331,7 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
             <TabsTrigger value="upload">Upload Single Resume</TabsTrigger>
             <TabsTrigger value="bulk">Bulk Upload</TabsTrigger>
           </TabsList>
-          
+         
           <TabsContent value="paste">
             <Textarea placeholder="Paste the full resume text here..." rows={15} value={resumeText} onChange={(e) => setResumeText(e.target.value)} className="mt-2" disabled={isLoading} />
           </TabsContent>
@@ -286,14 +339,14 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
           <TabsContent value="upload">
             <div className="mt-2 p-6 border-2 border-dashed rounded-lg text-center">
               <Input type="file" accept=".pdf,.docx" onChange={handleSingleFileChange} disabled={isLoading} />
-              <p className="text-sm text-gray-500 mt-2">The file will be parsed, analysed, and saved immediately.</p>
+              <p className="text-sm text-gray-500 mt-2">The file will be parsed, analysed, and saved securely.</p>
             </div>
           </TabsContent>
 
           <TabsContent value="bulk">
             <div className="mt-2 p-6 border-2 border-dashed rounded-lg text-center">
               <Input type="file" accept=".pdf,.docx" onChange={handleBulkFileChange} disabled={isLoading} multiple />
-              <p className="text-sm text-gray-500 mt-2">Select multiple PDF or DOCX files.</p>
+              <p className="text-sm text-gray-500 mt-2">Select multiple PDF or DOCX files. They will be parsed, analysed, and saved securely.</p>
             </div>
             {isBulkProcessing && <Progress value={bulkProgress} className="w-full mt-4" />}
             {bulkResults.length > 0 && (

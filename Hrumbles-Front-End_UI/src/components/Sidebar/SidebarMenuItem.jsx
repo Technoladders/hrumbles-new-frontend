@@ -18,6 +18,8 @@ import { TbDatabaseSearch } from "react-icons/tb";
 import { LiaBusinessTimeSolid } from "react-icons/lia";
 import { CgOrganisation } from "react-icons/cg";
 
+import { BarChart3, TrendingUp, LayoutDashboard } from 'lucide-react';
+
 
 
 const ITECH_ORGANIZATION_ID = [
@@ -371,6 +373,15 @@ export const menuItemsByRole = {
     { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
     { icon: SiAwsorganizations, label: "Organization", path: "/organization" },
      { icon: BsShieldCheck, label: "Verifications", path: "/verifications" },
+     {
+    icon: BarChart3, // Using BarChart3 from lucide-react
+    label: "Reports",
+    path: "/reports", // Parent path
+    dropdown: [
+      { icon: TrendingUp, label: "Org. Talent Trends", path: "/reports/organization-talent-trends" },
+      // Add other reports specific to an organization here
+    ],
+  },
     { icon: FiSettings, label: "Settings", path: "/settings" },
   ],
 organization_superadmin: (organizationId, organization) => {

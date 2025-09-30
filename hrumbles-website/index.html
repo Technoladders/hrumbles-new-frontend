@@ -1180,7 +1180,7 @@ Structured Data (Schema Markup) for Rich Search Results
             <div class="row row-justify-center u-mb-1-5">
               <div class="col">
                 <div class="u-text-center">
-                  <h1>AI-Powered<br />Reduce Hiring Risks with hrumbles.ai</h1>
+                  <h1>Reduce Hiring Risks with hrumbles.ai</h1>
                 </div>
               </div>
             </div>
@@ -1198,17 +1198,18 @@ Structured Data (Schema Markup) for Rich Search Results
 </div>
             <div class="row u-mb-2">
               <div class="col">
-                <div class="u-d-flex cc-justify-center cc-gap-1">
-                  <a class="btn w-inline-block" href="#"
-                    ><div>
-                      Start Free Trial
-                    </div></a
-                  ><a
-                    class="btn cc-secondary w-inline-block"
-                    href="#"
-                    ><div>Book a Demo</div></a
-                  >
-                </div>
+               <div class="u-d-flex cc-justify-center cc-gap-1">
+  <a id="start-trial-btn" class="btn w-inline-block" href="#"
+    ><div>
+      Start Free Trial
+    </div></a
+  ><a
+    id="book-demo-btn"
+    class="btn cc-secondary w-inline-block"
+    href="#"
+    ><div>Book a Demo</div></a
+  >
+</div>
               </div>
             </div>
          
@@ -2589,7 +2590,96 @@ Structured Data (Schema Markup) for Rich Search Results
         </section>
       </section>
 
+<!-- ===================================================
+Popup Modals
+==================================================== -->
+<!-- Free Trial Modal -->
+<div id="trial-modal" class="modal-overlay" style="display: none;">
+  <div class="modal-content">
+    <span id="close-trial-modal" class="modal-close">&times;</span>
+    <div id="trial-form-body">
+      <h2 class="embed_heading h3 u-mb-0 u-text-center">Start Your Free Trial</h2>
+      <p class="embed_text-muted" style="text-align: center; margin-top: 8px; margin-bottom: 24px;">
+        Enter your details below to get started.
+      </p>
+      <form id="trial-signup-form" method="POST">
+          <!-- Form fields are reused from your existing styles -->
+          <div class="embed_input-group">
+            <label class="embed_input-label">Email</label>
+            <input name="email" class="embed_input" type="email" required />
+          </div>
+          <div class="row row-sm-gutters">
+            <div class="col">
+              <div class="embed_input-group">
+                <label class="embed_input-label">First name</label>
+                <input name="firstName" class="embed_input" type="text" required />
+              </div>
+            </div>
+            <div class="col">
+              <div class="embed_input-group">
+                <label class="embed_input-label">Last name</label>
+                <input name="lastName" class="embed_input" type="text" required />
+              </div>
+            </div>
+          </div>
+          <div class="embed_input-group">
+            <label class="embed_input-label">Organization</label>
+            <input name="organization" class="embed_input" type="text" required/>
+          </div>
+          <button type="submit" class="embed_btn w-button">Get Started</button>
+          <div class="modal-error-message" style="display: none; color: #ffbaba; margin-top: 15px; text-align: center;"></div>
+      </form>
+    </div>
+    <div id="trial-success-message" class="modal-success-message" style="display: none;">
+      <h3 class="embed_heading h3 u-mb-0 u-text-center">Thank You!</h3>
+      <p class="embed_text-muted">We've received your request and will be in touch shortly.</p>
+    </div>
+  </div>
+</div>
 
+<!-- Book a Demo Modal -->
+<div id="demo-modal" class="modal-overlay" style="display: none;">
+  <div class="modal-content">
+    <span id="close-demo-modal" class="modal-close">&times;</span>
+    <div id="demo-form-body">
+        <h2 class="embed_heading h3 u-mb-0 u-text-center">Book a Demo</h2>
+        <p class="embed_text-muted" style="text-align: center; margin-top: 8px; margin-bottom: 24px;">
+          Let's find a time to chat about your hiring needs.
+        </p>
+        <form id="demo-signup-form" method="POST">
+            <!-- Form fields reused from your existing styles -->
+            <div class="embed_input-group">
+                <label class="embed_input-label">Work Email</label>
+                <input name="email" class="embed_input" type="email" required />
+            </div>
+            <div class="row row-sm-gutters">
+                <div class="col">
+                    <div class="embed_input-group">
+                        <label class="embed_input-label">First name</label>
+                        <input name="firstName" class="embed_input" type="text" required />
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="embed_input-group">
+                        <label class="embed_input-label">Last name</label>
+                        <input name="lastName" class="embed_input" type="text" required />
+                    </div>
+                </div>
+            </div>
+            <div class="embed_input-group">
+                <label class="embed_input-label">Organization</label>
+                <input name="organization" class="embed_input" type="text" required/>
+            </div>
+            <button type="submit" class="embed_btn cc-secondary w-button">Request Demo</button>
+            <div class="modal-error-message" style="display: none; color: #ffbaba; margin-top: 15px; text-align: center;"></div>
+        </form>
+    </div>
+    <div id="demo-success-message" class="modal-success-message" style="display: none;">
+      <h3 class="embed_heading h3 u-mb-0 u-text-center">Request Sent!</h3>
+      <p class="embed_text-muted">Our team will contact you shortly to schedule your demo.</p>
+    </div>
+  </div>
+</div>
       
     <!-- ===================================================
     Public CDN Libraries (Safe to use)
@@ -2730,6 +2820,127 @@ document.addEventListener('DOMContentLoaded', () => {
       submitButton.textContent = 'Sign Up';
     }
   });
+});
+</script>
+
+<!-- ===================================================
+Popup Modal Controller Script
+==================================================== -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+  // --- Element Selectors ---
+  const trialModal = document.getElementById('trial-modal');
+  const demoModal = document.getElementById('demo-modal');
+
+  const startTrialBtn = document.getElementById('start-trial-btn');
+  const bookDemoBtn = document.getElementById('book-demo-btn');
+
+  const closeTrialModalBtn = document.getElementById('close-trial-modal');
+  const closeDemoModalBtn = document.getElementById('close-demo-modal');
+
+  // --- Modal Control Functions ---
+  const openModal = (modal) => {
+    if (modal) {
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('show'), 10); // For transition
+    }
+  };
+
+  const closeModal = (modal) => {
+    if (modal) {
+        modal.classList.remove('show');
+        setTimeout(() => (modal.style.display = 'none'), 300); // Wait for transition
+    }
+  };
+
+  // --- Event Listeners to Open Modals ---
+  startTrialBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    openModal(trialModal);
+  });
+
+  bookDemoBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    openModal(demoModal);
+  });
+
+  // --- Event Listeners to Close Modals ---
+  closeTrialModalBtn.addEventListener('click', () => closeModal(trialModal));
+  closeDemoModalBtn.addEventListener('click', () => closeModal(demoModal));
+
+  // Close modal if user clicks on the overlay background
+  trialModal.addEventListener('click', (e) => {
+    if (e.target === trialModal) closeModal(trialModal);
+  });
+  demoModal.addEventListener('click', (e) => {
+    if (e.target === demoModal) closeModal(demoModal);
+  });
+  
+  // --- Reusable Form Submission Handler ---
+  const handleFormSubmit = async (formElement, formType) => {
+    const submitButton = formElement.querySelector('button[type="submit"]');
+    const errorMessageDiv = formElement.querySelector('.modal-error-message');
+    
+    // Prevent default form submission
+    event.preventDefault();
+
+    // Give user feedback
+    submitButton.disabled = true;
+    submitButton.textContent = 'Submitting...';
+    errorMessageDiv.style.display = 'none';
+
+    // Collect form data
+    const formData = new FormData(formElement);
+    const data = Object.fromEntries(formData.entries());
+
+    // Add the form type to the data payload so your email can be customized
+    data.type = formType; 
+
+    // Your Supabase details (same as in your original script)
+    const edgeFunctionUrl = 'https://kbpeyfietrwlhwcwqhjw.supabase.co/functions/v1/website-signup-handler';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImticGV5ZmlldHJ3bGh3Y3dxaGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4NDA5NjEsImV4cCI6MjA1NDQxNjk2MX0.A-K4DO6D2qQZ66qIXY4BlmoHxc-W5B0itV-HAAM84YA';
+
+    try {
+      const response = await fetch(edgeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (response.ok) {
+        // Show success message
+        const formBody = formElement.parentElement;
+        const successMessage = formBody.nextElementSibling;
+        formBody.style.display = 'none';
+        successMessage.style.display = 'block';
+      } else {
+        // Handle server errors
+        const errorResult = await response.json();
+        errorMessageDiv.textContent = errorResult.error || 'An unexpected error occurred.';
+        errorMessageDiv.style.display = 'block';
+        submitButton.disabled = false;
+        submitButton.textContent = formType === 'Free Trial' ? 'Get Started' : 'Request Demo';
+      }
+    } catch (error) {
+      // Handle network errors
+      errorMessageDiv.textContent = 'Could not connect to the server. Please try again later.';
+      errorMessageDiv.style.display = 'block';
+      submitButton.disabled = false;
+      submitButton.textContent = formType === 'Free Trial' ? 'Get Started' : 'Request Demo';
+    }
+  };
+
+  // --- Attach the handler to each form ---
+  const trialForm = document.getElementById('trial-signup-form');
+  const demoForm = document.getElementById('demo-signup-form');
+  
+  trialForm.addEventListener('submit', () => handleFormSubmit(trialForm, 'Free Trial Request'));
+  demoForm.addEventListener('submit', () => handleFormSubmit(demoForm, 'Demo Request'));
 });
 </script>
 </body>
