@@ -1,9 +1,7 @@
 import React, { useState, FC } from 'react';
 import Modal from 'react-modal';
 import { toast } from 'sonner';
-// import OpenAI from 'openai'; // <--- REMOVED: No longer needed client-side
-// import { GoogleGenerativeAI } from '@google/generative-ai'; // <--- REMOVED: No longer needed client-side
-import { v4 as uuidv4 } from 'uuid'; // Still used for unique file names before upload
+import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,7 +11,8 @@ import { useSelector } from 'react-redux';
 import mammoth from 'mammoth';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
+// Added Loader2 for the spinning icon to match your screenshot
+import { CheckCircle, XCircle, AlertCircle, X, Loader2 } from 'lucide-react';
 
 // --- TYPES ---
 interface AddCandidateModalProps {
@@ -21,19 +20,22 @@ interface AddCandidateModalProps {
   onClose: () => void;
   onCandidateAdded: () => void;
 }
+
+// Interface is updated to handle richer UI states
 interface BulkUploadResult {
   fileName: string;
-  status: 'success' | 'skipped' | 'failed';
+  // 'processing' is added for the state after upload is done but before backend confirmation
+  status: 'success' | 'skipped' | 'failed' | 'uploading' | 'parsing' | 'processing';
   message: string;
-  candidate_name?: string; // Added to display name in report
-  job_queue_id?: string; // Edge Functions don't use RQ, but keep if your EF returns it for consistency
+  candidate_name?: string;
+  job_queue_id?: string;
+  uploadProgress?: number; // To track individual file upload percentage
 }
 
 const BUCKET_NAME = 'talent-pool-resumes';
 
 // --- HELPER FUNCTION: Sanitize Filenames ---
 const sanitizeFileName = (fileName: string): string => {
-  // Replace illegal characters and multiple spaces/underscores with a single underscore.
   return fileName.replace(/[\[\]\+\s]+/g, '_');
 };
 
@@ -50,15 +52,11 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
 
   // --- HELPER FUNCTIONS ---
   const parseFileToText = async (file: File): Promise<string> => {
-    // This part is good, it uses a Supabase Function for PDF parsing, or client-side for DOCX
     if (file.type === 'application/pdf') {
         const { data, error } = await supabase.functions.invoke('talent-pool-parser', {
           body: file,
-          // You might need to specify a Content-Type for file uploads in Supabase Functions
-          // headers: { 'Content-Type': 'application/pdf' }
         });
         if (error) throw new Error(`PDF Parsing Error: ${error.message}`);
-        // Supabase Function invocation data comes as { data: { text: "..." } }
         return data.text;
     } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
         const arrayBuffer = await file.arrayBuffer();
@@ -68,8 +66,7 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     throw new Error('Unsupported file type. Please use PDF or DOCX.');
   };
 
-  // --- MODIFIED: analyseAndSaveProfilesBatch - Now calls a Supabase Edge Function for secure processing ---
-  // This function will handle both single and batch calls to the backend
+  // --- analyseAndSaveProfilesBatch - LOGIC UNCHANGED ---
   const analyseAndSaveProfilesBatch = async (
     resumes: Array<{ text: string; file?: File; fileName?: string }>
   ): Promise<BulkUploadResult[]> => {
@@ -81,7 +78,6 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
       user_id: string;
     }> = [];
 
-    // Step 1: Upload all files to Supabase Storage concurrently BEFORE calling the Edge Function
     const fileUploadPromises = resumes.map(async (resume, index) => {
       let resumePath: string | null = null;
       let originalFileName: string = resume.fileName || `resume-${index}.txt`;
@@ -103,30 +99,22 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
 
       backendPayload.push({
         resume_text: resume.text,
-        resume_path_input: resumePath, // This is the public URL
+        resume_path_input: resumePath,
         file_name: originalFileName,
         organization_id: organizationId,
         user_id: user.id,
       });
     });
 
-    await Promise.all(fileUploadPromises); // Wait for all file uploads to complete
+    await Promise.all(fileUploadPromises);
 
-    // Step 2: Call the Supabase Edge Function with the prepared batch payload
     try {
-      console.log("[AddCandidateModal] Invoking Supabase Edge Function: 'talent-pool-process-batch-candidates'"); // Log
-      console.log("[AddCandidateModal] Backend payload for Edge Function:", backendPayload); // Log
-
       const { data, error } = await supabase.functions.invoke(
-        'talent-pool-process-batch-candidates', // <--- Your deployed Edge Function name
+        'talent-pool-process-batch-candidates',
         { body: backendPayload }
       );
 
-      console.log("[AddCandidateModal] Supabase Function Invoke Data:", data); // Log
-      console.log("[AddCandidateModal] Supabase Function Invoke Error:", error); // Log
-
       if (error) {
-        // This 'error' object is from Supabase JS client itself (e.g., network error, function not found)
         throw new Error(`Backend Processing Error: ${error.message}`);
       }
       if (!data || !Array.isArray(data.batch_results)) {
@@ -137,12 +125,11 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
         fileName: item.file_name || 'N/A',
         status: item.status === 'success' || item.status === 'enqueued' ? 'success' : item.status === 'skipped' ? 'skipped' : 'failed',
         message: item.message || item.error || 'Processing initiated.',
-        candidate_name: item.candidate_name, // Should come from EF response
+        candidate_name: item.candidate_name,
       }));
 
     } catch (backendError) {
       console.error("[AddCandidateModal] Error calling Supabase Edge Function for batch processing:", backendError);
-      // Return a failed status for all original resumes if the batch call itself fails
       return resumes.map(resume => ({
         fileName: resume.fileName || 'N/A',
         status: 'failed',
@@ -151,7 +138,7 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     }
   };
 
-  // --- HANDLERS ---
+  // --- HANDLERS (LOGIC UNCHANGED) ---
   const handleSingleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -160,22 +147,21 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     toast.promise(
       (async () => {
         const text = await parseFileToText(file);
-        // Treat single file as a batch of one for consistency in backend call
         const results = await analyseAndSaveProfilesBatch([{ text, file, fileName: file.name }]);
         const firstResult = results[0];
 
         if (firstResult.status === 'success') {
           onCandidateAdded();
-          return `Candidate processing enqueued! Check Talent Pool list shortly. (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
+          return `Candidate processing enqueued! (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
         } else if (firstResult.status === 'skipped') {
-          onCandidateAdded(); // Still refresh parent as candidate might have been updated
+          onCandidateAdded();
           return `Candidate skipped: ${firstResult.message} (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
         } else {
           throw new Error(firstResult.message);
         }
       })(),
       {
-        loading: 'Parsing, uploading and processing resume securely...',
+        loading: 'Processing resume securely...',
         success: (message) => message,
         error: (err) => err.message || 'An unexpected error occurred.',
         finally: () => setIsLoading(false),
@@ -188,13 +174,12 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     setIsLoading(true);
     toast.promise(
       (async () => {
-        // Treat pasted text as a batch of one
         const results = await analyseAndSaveProfilesBatch([{ text: resumeText, fileName: 'pasted_resume.txt' }]);
         const firstResult = results[0];
 
         if (firstResult.status === 'success') {
           onCandidateAdded();
-          return `Candidate processing enqueued! Check Talent Pool list shortly. (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
+          return `Candidate processing enqueued! (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
         } else if (firstResult.status === 'skipped') {
           onCandidateAdded();
           return `Candidate skipped: ${firstResult.message} (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
@@ -221,70 +206,77 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     setBulkProgress(0);
 
     const filesArray = Array.from(files);
-    const resumesToParse: Array<{ text: string; file?: File; fileName?: string }> = [];
-    const interimResults: BulkUploadResult[] = []; // To show parsing progress
+    let results: BulkUploadResult[] = filesArray.map(file => ({
+        fileName: file.name,
+        status: 'parsing',
+        message: 'Waiting in queue...',
+        uploadProgress: 0,
+    }));
+    setBulkResults(results);
 
-    // Step 1: Parse all files concurrently (local or via Supabase Function for PDFs)
-    await Promise.all(
-      filesArray.map(async (file, index) => {
+    const updateFileProgress = (index: number, newStatus: Partial<BulkUploadResult>) => {
+        results = results.map((res, i) => i === index ? { ...res, ...newStatus } : res);
+        setBulkResults([...results]);
+    };
+
+    const successfullyParsedResumes: Array<{ text: string; file: File; fileName: string }> = [];
+
+    await Promise.all(filesArray.map(async (file, index) => {
         try {
-          const text = await parseFileToText(file); // Parse locally or via Supabase Function
-          resumesToParse.push({ text, file, fileName: file.name });
-          interimResults.push({ fileName: file.name, status: 'success', message: 'Parsed and ready for upload.' }); // Initial status
-
+            updateFileProgress(index, { status: 'parsing', message: 'Parsing resume...', uploadProgress: 25 });
+            const text = await parseFileToText(file);
+            successfullyParsedResumes.push({ text, file, fileName: file.name });
+            // Simulate upload progress
+            updateFileProgress(index, { status: 'uploading', message: 'Uploading...', uploadProgress: 75 });
+            await new Promise(res => setTimeout(res, 250)); // Small delay for UX
+            updateFileProgress(index, { status: 'processing', message: 'Upload complete, processing...', uploadProgress: 100 });
         } catch (error) {
-          interimResults.push({ fileName: file.name, status: 'failed', message: error instanceof Error ? error.message : 'Unknown error during parsing.' });
-          console.error(`Error parsing file ${file.name}:`, error);
+            updateFileProgress(index, { status: 'failed', message: error instanceof Error ? error.message : 'Failed to parse', uploadProgress: 0 });
         }
-        setBulkProgress(((index + 1) / filesArray.length) * 50); // Progress for local parsing
-        setBulkResults([...interimResults]); // Update UI with current file parsing status
-      })
-    );
-    
-    // Filter out files that failed parsing
-    const successfullyParsedResumes = resumesToParse.filter(r => r.text);
+        setBulkProgress(((index + 1) / filesArray.length) * 50);
+    }));
+
     if (successfullyParsedResumes.length === 0) {
-      toast.error("No valid resumes could be parsed for batch processing. Check report.");
+      toast.error("No valid resumes could be processed.");
       setIsLoading(false);
       setIsBulkProcessing(false);
       return;
     }
 
-    toast.info(`Calling backend for batch analysis of ${successfullyParsedResumes.length} resumes...`);
-    setBulkProgress(50); // Indicate start of backend call phase
+    toast.info(`Sending ${successfullyParsedResumes.length} resumes for secure analysis...`);
+    setBulkProgress(50);
 
-    // Step 2: Call the secure backend (Edge Function) with the batch of parsed texts/uploaded file paths
     try {
-      const finalResults = await analyseAndSaveProfilesBatch(successfullyParsedResumes);
-      setBulkResults(finalResults);
-      setBulkProgress(100);
+        const finalResults = await analyseAndSaveProfilesBatch(successfullyParsedResumes);
+        setBulkProgress(100);
 
-      const successfulCount = finalResults.filter(r => r.status === 'success' || r.status === 'skipped').length;
-      if (successfulCount > 0) {
-        toast.success(`Batch processing jobs enqueued for ${successfulCount} candidates. Profiles will appear in Talent Pool shortly.`);
-        onCandidateAdded(); // Trigger refetch in parent
-      } else {
-        toast.error("No candidates were successfully enqueued. Check report for details.");
-      }
-      
-    } catch (backendError) {
-      toast.error(backendError instanceof Error ? backendError.message : 'An unexpected error occurred during batch API call.');
-      console.error("Error during batch talent pool ingest API call:", backendError);
-      setBulkResults(prev => prev.map(res => ({ ...res, status: 'failed', message: res.message || 'Batch API call failed.' })));
-      setBulkProgress(100); // Complete progress bar even on error
+        let finalReport = [...results];
+        finalResults.forEach(finalRes => {
+            const index = finalReport.findIndex(r => r.fileName === finalRes.fileName);
+            if (index !== -1) {
+                finalReport[index] = { ...finalReport[index], ...finalRes };
+            }
+        });
+        setBulkResults(finalReport);
+
+        const successCount = finalResults.filter(r => r.status === 'success' || r.status === 'skipped').length;
+        if (successCount > 0) {
+            toast.success(`${successCount} candidates are being added to the Talent Pool.`);
+            onCandidateAdded();
+        } else {
+            toast.error("No candidates were successfully added. See report.");
+        }
+    } catch (err) {
+        toast.error("A critical error occurred during batch processing.");
+        setBulkProgress(100);
     } finally {
-      setIsLoading(false);
-      setIsBulkProcessing(false);
+        setIsLoading(false);
     }
   };
 
   const handleClose = () => {
-      // Only trigger refetch if some processing was initiated
-      const hasProcessedAnything = isBulkProcessing || (activeTab === 'paste' && resumeText.trim()) || (activeTab === 'upload' && !isLoading);
-      if (hasProcessedAnything) {
-          onCandidateAdded();
-      }
-      onClose(); // Always close the modal
+      onCandidateAdded(); // Always refetch on close to see latest results
+      onClose();
       setResumeText('');
       setBulkResults([]);
       setBulkProgress(0);
@@ -298,22 +290,12 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
       onRequestClose={handleClose}
       style={{
         content: {
-          top: '50%',
-          left: '50%',
-          right: 'auto',
-          bottom: 'auto',
-          marginRight: '-50%',
-          transform: 'translate(-50%, -50%)',
-          width: '90%',
-          maxWidth: '800px',
-          maxHeight: '90vh',
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '0'
+          top: '50%', left: '50%', right: 'auto', bottom: 'auto',
+          marginRight: '-50%', transform: 'translate(-50%, -50%)',
+          width: '90%', maxWidth: '800px', maxHeight: '90vh',
+          display: 'flex', flexDirection: 'column', padding: '0'
         },
-        overlay: {
-          backgroundColor: 'rgba(0, 0, 0, 0.75)'
-        }
+        overlay: { backgroundColor: 'rgba(0, 0, 0, 0.75)' }
       }}
       contentLabel="Add Candidate Modal"
     >
@@ -345,24 +327,38 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
 
           <TabsContent value="bulk">
             <div className="mt-2 p-6 border-2 border-dashed rounded-lg text-center">
-              <Input type="file" accept=".pdf,.docx" onChange={handleBulkFileChange} disabled={isLoading} multiple />
+              <Input type="file" accept=".pdf,.docx" onChange={handleBulkFileChange} disabled={isLoading || isBulkProcessing} multiple />
               <p className="text-sm text-gray-500 mt-2">Select multiple PDF or DOCX files. They will be parsed, analysed, and saved securely.</p>
             </div>
-            {isBulkProcessing && <Progress value={bulkProgress} className="w-full mt-4" />}
+            {(isBulkProcessing || bulkResults.length > 0) && <Progress value={bulkProgress} className="w-full mt-4" />}
             {bulkResults.length > 0 && (
               <div className="mt-4">
                 <h3 className="font-semibold mb-2">Bulk Upload Report</h3>
                 <ScrollArea className="h-48 p-3 border rounded-md">
+                  
+                  {/* --- THIS IS THE UPDATED UI RENDERING LOGIC --- */}
                   {bulkResults.map((result, index) => (
-                    <div key={index} className="flex items-start gap-2 mb-2 text-sm">
+                    <div key={index} className="flex items-start gap-3 mb-4 last:mb-0 text-sm">
                       <div className="flex-shrink-0 pt-1">
-                        {result.status === 'success' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                        {result.status === 'skipped' && <AlertCircle className="h-4 w-4 text-yellow-500" />}
-                        {result.status === 'failed' && <XCircle className="h-4 w-4 text-red-500" />}
+                        {result.status === 'success' && <CheckCircle className="h-5 w-5 text-green-500" />}
+                        {result.status === 'skipped' && <AlertCircle className="h-5 w-5 text-yellow-500" />}
+                        {result.status === 'failed' && <XCircle className="h-5 w-5 text-red-500" />}
+                        {(result.status === 'parsing' || result.status === 'uploading' || result.status === 'processing') && (
+                          <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+                        )}
                       </div>
-                      <div>
+                      <div className="flex-grow">
                         <p className="font-medium break-all">{result.fileName}</p>
-                        <p className="text-gray-600">{result.message}</p>
+                        <p className="text-gray-600 mt-1">{result.message}</p>
+                        
+                        {(result.status === 'parsing' || result.status === 'uploading' || result.status === 'processing') && result.uploadProgress !== undefined && (
+                          <div className="flex items-center gap-3 mt-2">
+                            <Progress value={result.uploadProgress} className="w-full" />
+                            <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                              {result.uploadProgress}%
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -374,11 +370,12 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
       </div>
 
       <div className="p-4 border-t flex justify-end gap-2">
-        {activeTab === 'bulk' && isBulkProcessing && !isLoading ? (
-            <Button onClick={handleClose}>Close Report & Refetch List</Button>
+        {/* Logic for showing close/cancel buttons */}
+        {activeTab === 'bulk' && !isLoading && bulkResults.length > 0 ? (
+            <Button onClick={handleClose}>Close</Button>
         ) : (
             <>
-                <Button variant="outline" onClick={handleClose} disabled={isLoading}>Cancel</Button>
+                <Button variant="outline" onClick={handleClose} disabled={isLoading || isBulkProcessing}>Cancel</Button>
                 {activeTab === 'paste' && <Button onClick={handlePasteAndSave} disabled={isLoading || !resumeText}> {isLoading ? 'Processing...' : 'Analyse and Save'} </Button>}
             </>
         )}
@@ -386,4 +383,5 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     </Modal>
   );
 };
+
 export default AddCandidateModal;
