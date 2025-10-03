@@ -1,128 +1,194 @@
 // src/components/candidates/zive-x/CandidateSearchFilters.tsx
 
 import { useState, FC } from 'react';
+import { SkillSelector } from '@/components/candidates/zive-x/SkillSelector'; // Import the new component
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { SearchFilters } from '@/types/candidateSearch';
+import { Search, MapPin, Briefcase, GraduationCap, Clock, TrendingUp } from 'lucide-react';
 
 interface CandidateSearchFiltersProps {
   onSearch: (filters: SearchFilters) => void;
   isSearching: boolean;
   initialFilters?: Partial<SearchFilters>;
+  organizationId: string; 
 }
 
-const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({ onSearch, isSearching, initialFilters }) => {
+const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({ onSearch, isSearching, initialFilters, organizationId }) => {
   const [keywords, setKeywords] = useState(initialFilters?.keywords?.join(', ') || '');
+  const [selectedSkills, setSelectedSkills] = useState<string[]>(initialFilters?.filter_skills || []);
+  const [companyKeywords, setCompanyKeywords] = useState(initialFilters?.filter_companies?.join(', ') || '');
+  const [educationKeywords, setEducationKeywords] = useState(initialFilters?.filter_educations?.join(', ') || '');
   const [locations, setLocations] = useState(initialFilters?.locations?.join(', ') || '');
   const [minExp, setMinExp] = useState(initialFilters?.min_exp?.toString() || '');
   const [maxExp, setMaxExp] = useState(initialFilters?.max_exp?.toString() || '');
-  const [minSalary, setMinSalary] = useState(initialFilters?.min_salary?.toString() || '');
-  const [maxSalary, setMaxSalary] = useState(initialFilters?.max_salary?.toString() || '');
-  const [gender, setGender] = useState(initialFilters?.gender || 'All candidates');
-  const [noticePeriod, setNoticePeriod] = useState(initialFilters?.notice_period || 'Any');
-  const [companies, setCompanies] = useState(initialFilters?.companies?.join(', ') || '');
-  const [educations, setEducations] = useState(initialFilters?.educations?.join(', ') || '');
+  const [datePosted, setDatePosted] = useState(initialFilters?.date_posted || 'all_time');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSearch({
       keywords: keywords.split(',').map(k => k.trim()).filter(Boolean),
+      filter_skills: selectedSkills,
+      filter_companies: companyKeywords.split(',').map(c => c.trim()).filter(Boolean),
+      filter_educations: educationKeywords.split(',').map(e => e.trim()).filter(Boolean),
       locations: locations.split(',').map(l => l.trim()).filter(Boolean),
       min_exp: minExp ? parseInt(minExp) : null,
       max_exp: maxExp ? parseInt(maxExp) : null,
-      min_salary: minSalary ? parseFloat(minSalary) : null,
-      max_salary: maxSalary ? parseFloat(maxSalary) : null,
-      gender: gender,
-      notice_period: noticePeriod,
-      companies: companies.split(',').map(c => c.trim()).filter(Boolean),
-      educations: educations.split(',').map(e => e.trim()).filter(Boolean),
+      date_posted: datePosted,
     });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="p-4 border rounded-lg bg-white space-y-4">
-        <div>
-          <label className="text-sm font-medium">Keywords</label>
-          <Input placeholder="Skills, designation, company..." value={keywords} onChange={e => setKeywords(e.target.value)} />
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Quick Search Section */}
+      <div className="bg-gradient-to-r from-purple-50 to-fuchsia-50 p-6 rounded-xl border border-purple-100">
+        <div className="flex items-center mb-4">
+          <Search className="h-5 w-5 text-purple-600 mr-2" />
+          <h3 className="text-lg font-semibold text-gray-900">Quick Search</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="minExp" className="text-sm font-medium">Min Experience</label>
-            <Input id="minExp" type="number" placeholder="Years" value={minExp} onChange={e => setMinExp(e.target.value)} />
+            <label className="block text-sm font-medium text-gray-700 mb-2">Keywords</label>
+            <Input 
+              placeholder="e.g., Software Engineer, DevOps, Salesforce" 
+              value={keywords} 
+              onChange={e => setKeywords(e.target.value)}
+              className="border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+            />
           </div>
           <div>
-            <label htmlFor="maxExp" className="text-sm font-medium">Max Experience</label>
-            <Input id="maxExp" type="number" placeholder="Years" value={maxExp} onChange={e => setMaxExp(e.target.value)} />
-          </div>
-        </div>
-        <div>
-          <label htmlFor="locations" className="text-sm font-medium">Current location of candidate</label>
-          <Input id="locations" placeholder="Add locations, comma separated" value={locations} onChange={e => setLocations(e.target.value)} />
-        </div>
-        {/* RESPONSIVE CHANGE HERE */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="minSalary" className="text-sm font-medium">Min Salary (Lacs)</label>
-            <Input id="minSalary" type="number" placeholder="e.g., 5" value={minSalary} onChange={e => setMinSalary(e.target.value)} />
-          </div>
-          <div>
-            <label htmlFor="maxSalary" className="text-sm font-medium">Max Salary (Lacs)</label>
-            <Input id="maxSalary" type="number" placeholder="e.g., 15" value={maxSalary} onChange={e => setMaxSalary(e.target.value)} />
+            <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
+            <Input 
+              id="locations" 
+              placeholder="e.g., Bangalore, Hyderabad, Remote" 
+              value={locations} 
+              onChange={e => setLocations(e.target.value)}
+              className="border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+            />
           </div>
         </div>
       </div>
 
-      <Accordion type="multiple" className="w-full space-y-2" defaultValue={['employment', 'education', 'diversity']}>
-        <AccordionItem value="employment" className="border rounded-lg bg-white px-4">
-          <AccordionTrigger>Employment Details</AccordionTrigger>
-          <AccordionContent className="pt-4 space-y-4">
-            <div>
-              <label className="text-sm font-medium">Department / Role / Industry / Company</label>
-              <Input placeholder="e.g., IT Support, Software Product" value={companies} onChange={e => setCompanies(e.target.value)} />
+      {/* Advanced Filters Accordion */}
+      <Accordion type="multiple" className="space-y-0" defaultValue={['skills', 'employment', 'education', 'experience', 'date']}>
+        <AccordionItem value="skills" className="border border-gray-200 rounded-xl mx-0 mb-2 hover:shadow-md transition-shadow">
+          <AccordionTrigger className="px-6 py-4 text-left hover:no-underline">
+            <div className="flex items-center">
+              <TrendingUp className="h-4 w-4 mr-2 text-purple-600" />
+              <span className="font-medium text-gray-900">Top Skills</span>
             </div>
-            <div>
-              <label className="text-sm font-medium block mb-2">Notice Period</label>
-              <ToggleGroup type="single" value={noticePeriod} onValueChange={val => { if (val) setNoticePeriod(val); }} defaultValue="Any">
-                <ToggleGroupItem value="Any">Any</ToggleGroupItem>
-                <ToggleGroupItem value="15 Days">0-15 days</ToggleGroupItem>
-                <ToggleGroupItem value="1 month">1 month +</ToggleGroupItem>
-                <ToggleGroupItem value="2 months">2 months +</ToggleGroupItem>
-              </ToggleGroup>
+          </AccordionTrigger>
+          <AccordionContent className="px-6 pb-6">
+            <SkillSelector selectedSkills={selectedSkills} onSelectionChange={setSelectedSkills} organizationId={organizationId}/>
+          </AccordionContent>
+        </AccordionItem>
+        
+        <AccordionItem value="employment" className="border border-gray-200 rounded-xl mx-0 mb-2 hover:shadow-md transition-shadow">
+          <AccordionTrigger className="px-6 py-4 text-left hover:no-underline">
+            <div className="flex items-center">
+              <Briefcase className="h-4 w-4 mr-2 text-purple-600" />
+              <span className="font-medium text-gray-900">Employment History</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-6 pb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Company / Role Keywords</label>
+            <Input 
+              placeholder="e.g., Google, AWS, Product Manager" 
+              value={companyKeywords} 
+              onChange={e => setCompanyKeywords(e.target.value)}
+              className="border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+            />
+          </AccordionContent>
+        </AccordionItem>
+        
+        <AccordionItem value="education" className="border border-gray-200 rounded-xl mx-0 mb-2 hover:shadow-md transition-shadow">
+          <AccordionTrigger className="px-6 py-4 text-left hover:no-underline">
+            <div className="flex items-center">
+              <GraduationCap className="h-4 w-4 mr-2 text-purple-600" />
+              <span className="font-medium text-gray-900">Education</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-6 pb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Degree / Institution Keywords</label>
+            <Input 
+              placeholder="e.g., IIT, MBA, Computer Science" 
+              value={educationKeywords} 
+              onChange={e => setEducationKeywords(e.target.value)}
+              className="border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+            />
+          </AccordionContent>
+        </AccordionItem>
+        
+        <AccordionItem value="experience" className="border border-gray-200 rounded-xl mx-0 mb-2 hover:shadow-md transition-shadow">
+          <AccordionTrigger className="px-6 py-4 text-left hover:no-underline">
+            <div className="flex items-center">
+              <TrendingUp className="h-4 w-4 mr-2 text-purple-600" />
+              <span className="font-medium text-gray-900">Experience Level</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-6 pb-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="minExp" className="block text-sm font-medium text-gray-700 mb-2">Min Years</label>
+                <Input 
+                  id="minExp" 
+                  type="number" 
+                  placeholder="0" 
+                  value={minExp} 
+                  onChange={e => setMinExp(e.target.value)}
+                  className="border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="maxExp" className="block text-sm font-medium text-gray-700 mb-2">Max Years</label>
+                <Input 
+                  id="maxExp" 
+                  type="number" 
+                  placeholder="15+" 
+                  value={maxExp} 
+                  onChange={e => setMaxExp(e.target.value)}
+                  className="border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+                />
+              </div>
             </div>
           </AccordionContent>
         </AccordionItem>
-
-        <AccordionItem value="education" className="border rounded-lg bg-white px-4">
-          <AccordionTrigger>Education Details</AccordionTrigger>
-          <AccordionContent className="pt-4 space-y-4">
-            <div>
-              <label className="text-sm font-medium">UG / PG / Doctorate Keywords</label>
-              <Input placeholder="e.g., B.Tech, Computers, JNTU, Amity" value={educations} onChange={e => setEducations(e.target.value)} />
+        
+        <AccordionItem value="date" className="border border-gray-200 rounded-xl mx-0 mb-2 hover:shadow-md transition-shadow">
+          <AccordionTrigger className="px-6 py-4 text-left hover:no-underline">
+            <div className="flex items-center">
+              <Clock className="h-4 w-4 mr-2 text-purple-600" />
+              <span className="font-medium text-gray-900">Date Posted</span>
             </div>
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem value="diversity" className="border rounded-lg bg-white px-4">
-          <AccordionTrigger>Diversity & Additional Details</AccordionTrigger>
-          <AccordionContent className="pt-4 space-y-4">
-             <div>
-                <label className="text-sm font-medium block mb-2">Gender</label>
-                <ToggleGroup type="single" value={gender} onValueChange={val => { if (val) setGender(val); }} defaultValue="All candidates">
-                    <ToggleGroupItem value="All candidates">All</ToggleGroupItem>
-                    <ToggleGroupItem value="Male">Male</ToggleGroupItem>
-                    <ToggleGroupItem value="Female">Female</ToggleGroupItem>
-                </ToggleGroup>
-            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-6 pb-6">
+            <ToggleGroup 
+              type="single" 
+              value={datePosted} 
+              onValueChange={val => { if (val) setDatePosted(val); }} 
+              defaultValue="all_time" 
+              className="flex flex-wrap gap-2"
+            >
+              <ToggleGroupItem value="all_time" className="data-[state=on]:bg-purple-500 data-[state=on]:text-white">All Time</ToggleGroupItem>
+              <ToggleGroupItem value="last_24_hours" className="data-[state=on]:bg-purple-500 data-[state=on]:text-white">24h</ToggleGroupItem>
+              <ToggleGroupItem value="last_7_days" className="data-[state=on]:bg-purple-500 data-[state=on]:text-white">7d</ToggleGroupItem>  
+              <ToggleGroupItem value="last_14_days" className="data-[state=on]:bg-purple-500 data-[state=on]:text-white">14d</ToggleGroupItem>  
+              <ToggleGroupItem value="last_30_days" className="data-[state=on]:bg-purple-500 data-[state=on]:text-white">30d</ToggleGroupItem>
+            </ToggleGroup>
           </AccordionContent>
         </AccordionItem>
       </Accordion>
 
-      <div className="flex justify-end pt-4">
-        <Button type="submit" disabled={isSearching} size="lg" className="w-full md:w-auto">
-          {isSearching ? 'Searching...' : 'Search Candidates'}
+      <div className="pt-4">
+        <Button 
+          type="submit" 
+          disabled={isSearching} 
+          size="lg" 
+          className="w-full  font-semibold py-3 rounded-xl shadow-lg"
+        >
+          {isSearching ? 'Searching...' : '🔍 Find Top Candidates'}
         </Button>
       </div>
     </form>
