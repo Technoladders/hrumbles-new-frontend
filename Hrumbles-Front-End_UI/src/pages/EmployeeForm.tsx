@@ -1611,14 +1611,16 @@ const handleExpUpload = async (
             .insert(bankDetailsData);
         }
         
-        toast.success(`Employee ${isEditing ? 'updated' : 'added'} successfully`);
-        if (activeTab === "documents") {
-          navigate('/employee'); // Navigate to /employee
-        } else {
-          // Move to the next tab
-          const nextTab = getNextTab(activeTab);
-          setActiveTab(nextTab);
-        }
+   toast.success(`Data saved successfully!`);
+
+if (activeTab === "documents") {
+  // If on the last tab, navigate to the employee list page
+  navigate('/employee'); 
+} else {
+  // Otherwise, move to the next tab
+  const nextTab = getNextTab(activeTab);
+  setActiveTab(nextTab);
+}
       }
       
     } catch (error: any) {
@@ -2722,18 +2724,16 @@ const handleExpUpload = async (
         + Upload File <span className="text-xs text-gray-500">(Supported format: PDF, PNG, JPG)</span>
       </Label>
       {formData.bankDetails.documentUrl && (
-        <Button
-          variant="ghost1"
-          size="xs"
-          title="View Bank Document"
-          className="p-1"
-          onClick={() =>
-            window.open(formData.bankDetails.documentUrl, "_blank", "noopener,noreferrer")
-          }
-        >
-        <FileText className="h-4 w-4" />
-        </Button>
-      )}
+    <a
+      href={formData.bankDetails.documentUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="View Bank Document"
+      className="inline-block ml-2"
+    >
+      <FaRegFilePdf className="h-8 w-8 text-red-600 cursor-pointer" />
+    </a>
+)}
     </div>
   </div>
 </div>
@@ -2802,22 +2802,20 @@ const handleExpUpload = async (
                             <p className="text-red-500 text-xs mt-1">{errors[`${docType}Number`]}</p>
                           )}
 
-          {/* View Document Link */}
-          {formData[`${docType}Url`] && (
-            <div className="mt-2">
-              <Button
-    variant="ghost1"
-    size="xs"
-    title="View uploaded Documents"
-    className="p-1"
-    onClick={() =>
-      window.open(formData[`${docType}Url`], "_blank", "noopener,noreferrer")
-    }
-  >
-    view <FileText className="h-4 w-4" />
-  </Button>
-            </div>
-          )}
+          {/* View Document Icon */}
+{formData[`${docType}Url`] && (
+  <div className="mt-2">
+    <a
+      href={formData[`${docType}Url`]}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="View Document"
+      className="inline-block"
+    >
+      <FaRegFilePdf className="h-8 w-8 text-red-600 cursor-pointer" />
+    </a>
+  </div>
+)}
         </div>
       ))}
     </div>
@@ -3285,10 +3283,12 @@ const handleExpUpload = async (
       )}
 
                 <div className="mt-6 flex justify-end">
-                  <Button type="submit" disabled={loading}>
-                    {loading ? "Saving..." : (isEditing ? "Update Employee" : "Add Employee")}
-                  </Button>
-                </div>
+  <Button type="submit" disabled={loading}>
+    {loading 
+      ? "Saving..." 
+      : (activeTab === "documents" ? "Save and Finish" : "Save and Next")}
+  </Button>
+</div>
               </form>
             </Tabs>
           )}

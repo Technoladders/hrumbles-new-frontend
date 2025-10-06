@@ -1,3 +1,5 @@
+// src/components/ui/popover.tsx
+
 import * as React from "react"
 import * as PopoverPrimitive from "@radix-ui/react-popover"
 
@@ -6,6 +8,9 @@ import { cn } from "@/lib/utils"
 const Popover = PopoverPrimitive.Root
 
 const PopoverTrigger = PopoverPrimitive.Trigger
+
+// NEW: Add PopoverAnchor to the list of available primitives
+const PopoverAnchor = PopoverPrimitive.Anchor
 
 const PopoverContent = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Content>,
@@ -26,4 +31,5 @@ const PopoverContent = React.forwardRef<
 ))
 PopoverContent.displayName = PopoverPrimitive.Content.displayName
 
-export { Popover, PopoverTrigger, PopoverContent }
+// NEW: Export the PopoverAnchor alongside the other components
+export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor }

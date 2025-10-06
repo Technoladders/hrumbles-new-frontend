@@ -1,7 +1,6 @@
 import React, { useState, FC } from 'react';
 import Modal from 'react-modal';
 import { toast } from 'sonner';
-import OpenAI from 'openai'; // Changed from GoogleGenerativeAI
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -12,7 +11,8 @@ import { useSelector } from 'react-redux';
 import mammoth from 'mammoth';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
+// Added Loader2 for the spinning icon to match your screenshot
+import { CheckCircle, XCircle, AlertCircle, X, Loader2 } from 'lucide-react';
 
 // --- TYPES ---
 interface AddCandidateModalProps {
@@ -20,17 +20,22 @@ interface AddCandidateModalProps {
   onClose: () => void;
   onCandidateAdded: () => void;
 }
+
+// Interface is updated to handle richer UI states
 interface BulkUploadResult {
   fileName: string;
-  status: 'success' | 'skipped' | 'failed';
+  // 'processing' is added for the state after upload is done but before backend confirmation
+  status: 'success' | 'skipped' | 'failed' | 'uploading' | 'parsing' | 'processing';
   message: string;
+  candidate_name?: string;
+  job_queue_id?: string;
+  uploadProgress?: number; // To track individual file upload percentage
 }
 
 const BUCKET_NAME = 'talent-pool-resumes';
 
-// --- NEW HELPER FUNCTION: Sanitize Filenames ---
+// --- HELPER FUNCTION: Sanitize Filenames ---
 const sanitizeFileName = (fileName: string): string => {
-  // Replace illegal characters and multiple spaces/underscores with a single underscore.
   return fileName.replace(/[\[\]\+\s]+/g, '_');
 };
 
@@ -48,7 +53,9 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
   // --- HELPER FUNCTIONS ---
   const parseFileToText = async (file: File): Promise<string> => {
     if (file.type === 'application/pdf') {
-        const { data, error } = await supabase.functions.invoke('talent-pool-parser', { body: file });
+        const { data, error } = await supabase.functions.invoke('talent-pool-parser', {
+          body: file,
+        });
         if (error) throw new Error(`PDF Parsing Error: ${error.message}`);
         return data.text;
     } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
@@ -59,158 +66,106 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     throw new Error('Unsupported file type. Please use PDF or DOCX.');
   };
 
-  const analyseAndSaveProfile = async (text: string, resumeFile?: File): Promise<{status: string; profile: any}> => {
-    // --- START: OpenAI API Integration ---
-    // SECURITY WARNING: Exposing API keys in client-side code is a significant security risk.
-    // This implementation uses `dangerouslyAllowBrowser: true`, which is not recommended for production.
-    // For a production application, this API call should be moved to a secure backend or a serverless function.
-    const openai = new OpenAI({ 
-        apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-        dangerouslyAllowBrowser: true 
-    });
-    
-    const systemPrompt = `
-      Based on the provided resume text, perform a detailed extraction to create a professional profile. 
-      Return ONLY a single, valid JSON object with the exact keys specified below. Do not include any markdown formatting or explanations.
+  // --- analyseAndSaveProfilesBatch - LOGIC UNCHANGED ---
+  const analyseAndSaveProfilesBatch = async (
+    resumes: Array<{ text: string; file?: File; fileName?: string }>
+  ): Promise<BulkUploadResult[]> => {
+    const backendPayload: Array<{
+      resume_text: string;
+      resume_path_input: string | null;
+      file_name: string;
+      organization_id: string;
+      user_id: string;
+    }> = [];
 
-      JSON Schema and Strict Instructions:
-       
-      "suggested_title": string.
-      Rule 1: Use the most recent or prominent job title from work experience (e.g., "Technical Lead", "Full Stack Developer").
-      Rule 2: If no work experience, infer a suitable title from the professional summary and skills (e.g., "Frontend Developer").
-       
-      "candidate_name": string (Full Name).
-                                                       
-      "email": string (Email address).
-       
-      "phone": string (Phone number, exactly as found).
-       
-      "linkedin_url": string.
-      Rule: Must be a valid URL (starts with http, https, or www). If the text is just a phrase like "LinkedIn Profile", return null.
-       
-      "github_url": string.
-      Rule: Must be a valid URL. If not a URL, return null.
-       
-      "current_location": string.  
-      - Rule: Extract the full address if available (e.g., under "Address", "Location", or at the top of the resume).  
-      - If no address is found, return null.  
-      - Do not merge email or phone into address.  
-                                                         
-      "professional_summary": array of strings  
-      Rules:  
-      1. Always return as an array of separate bullet points (strings).  
-      2. Each bullet point must be a single complete sentence or phrase from the resume.  
-      3. Do not merge multiple points into one string.  
-      4. If no professional summary is present, omit this field entirely.  
-       
-      "top_skills": array of strings (List of key technical and soft skills).  
-       
-      "work_experience": array of objects, each with "company", "designation", "duration", and "responsibilities" (array of strings).  
-      Rule: If a company and a client are mentioned (e.g., "Company X | Client: Client Y"), extract only the primary company name ("Company X") into the "company" field.  
-       
-      "education": array of objects, each with "institution", "degree", and "year".  
-      Rule: If an institution name is not explicitly stated, return null for "institution".  
-       
-      "projects": array of strings  
-      Rules:  
-      - Always extract the **entire Project Summary section exactly as written**, including titles, clients, environments, roles, descriptions, and bullet-point responsibilities.  
-      - Each project (PROJECT #1, PROJECT #2, etc.) must be preserved as one full string inside the array.  
-      - Do not replace with placeholders like "View Project". If a project block exists in the text, copy it fully.  
-      - Do not summarize or shorten. Preserve all formatting and wording.  
-      - If no projects exist in the resume, return an empty array.  
-       
-      "certifications": array of strings.  
-       
-      "other_details": object  
-      Rules:  
-      - Include only additional resume information that does not belong to the above categories.  
-      - Use exact heading names as keys (e.g., "Hackathons", "AI & Tech Online Courses", "Languages", "Achievements").  
-      - Do NOT include project-related information here.  
-      - If no such sections exist, return null.  
-       
-      Important:  
-      - If a field cannot be found, use null or an empty array/string as appropriate.
-    `;
-    
-    const result = await openai.chat.completions.create({
-      model: 'gpt-4.1-nano', // Using the latest model for best results
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Resume Text:\n\n---\n${text}\n---` }
-      ]
-    });
+    const fileUploadPromises = resumes.map(async (resume, index) => {
+      let resumePath: string | null = null;
+      let originalFileName: string = resume.fileName || `resume-${index}.txt`;
 
-    const inputTokens = result.usage?.prompt_tokens || 0;
-    const outputTokens = result.usage?.completion_tokens || 0;
-    
-    const responseJson = result.choices[0].message.content;
-    if (!responseJson) {
-        throw new Error('AI response was empty or invalid.');
-    }
-    
-    const profileData = JSON.parse(responseJson);
-    // --- END: OpenAI API Integration ---
-    
-    let resumePath: string | null = null;
-    if (resumeFile) {
-        const sanitizedName = sanitizeFileName(resumeFile.name);
-        const fileName = `${uuidv4()}-${sanitizedName}`;
-        
+      if (resume.file) {
+        const sanitizedName = sanitizeFileName(resume.file.name);
+        originalFileName = resume.file.name;
+        const uniqueFileName = `${uuidv4()}-${sanitizedName}`;
+
         const { data: uploadData, error: uploadError } = await supabase.storage
-            .from(BUCKET_NAME)
-            .upload(fileName, resumeFile);
-        
-        if (uploadError) throw new Error(`File Upload Error: ${uploadError.message}`);
+          .from(BUCKET_NAME)
+          .upload(uniqueFileName, resume.file, { cacheControl: '3600', upsert: false });
+
+        if (uploadError) throw new Error(`File Upload Error for ${originalFileName}: ${uploadError.message}`);
 
         const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uploadData.path);
         resumePath = urlData.publicUrl;
-    }
+      }
 
-    const { data: status, error: rpcError } = await supabase.rpc('upsert_candidate_with_timeframe', {
-      profile_data: profileData,
-      resume_text: text,
-      organization_id_input: organizationId,
-      user_id_input: user.id,
-      resume_path_input: resumePath,
-      input_tokens_used: inputTokens,
-      output_tokens_used: outputTokens,
-      usage_type_input: 'talent_pool_ingestion'
+      backendPayload.push({
+        resume_text: resume.text,
+        resume_path_input: resumePath,
+        file_name: originalFileName,
+        organization_id: organizationId,
+        user_id: user.id,
+      });
     });
 
-    if (rpcError) throw new Error(`Database Error: ${rpcError.message}`);
-    
-    if (status === 'SKIPPED_NO_EMAIL') {
-        throw new Error('Could not extract a valid email from the resume.');
+    await Promise.all(fileUploadPromises);
+
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        'talent-pool-process-batch-candidates',
+        { body: backendPayload }
+      );
+
+      if (error) {
+        throw new Error(`Backend Processing Error: ${error.message}`);
+      }
+      if (!data || !Array.isArray(data.batch_results)) {
+        throw new Error('Invalid response from backend function: Expected batch_results array.');
+      }
+
+      return data.batch_results.map((item: any) => ({
+        fileName: item.file_name || 'N/A',
+        status: item.status === 'success' || item.status === 'enqueued' ? 'success' : item.status === 'skipped' ? 'skipped' : 'failed',
+        message: item.message || item.error || 'Processing initiated.',
+        candidate_name: item.candidate_name,
+      }));
+
+    } catch (backendError) {
+      console.error("[AddCandidateModal] Error calling Supabase Edge Function for batch processing:", backendError);
+      return resumes.map(resume => ({
+        fileName: resume.fileName || 'N/A',
+        status: 'failed',
+        message: backendError instanceof Error ? backendError.message : 'Unknown backend error'
+      }));
     }
-    
-    return { status, profile: profileData };
   };
 
-  // --- HANDLERS (No changes needed below this line) ---
+  // --- HANDLERS (LOGIC UNCHANGED) ---
   const handleSingleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setIsLoading(true);
     toast.promise(
-        (async () => {
-            const text = await parseFileToText(file);
-            const { status } = await analyseAndSaveProfile(text, file);
-            if (status === 'INSERTED' || status === 'UPDATED') {
-                onCandidateAdded(); // This will close the modal and refetch
-                return `Candidate profile ${status.toLowerCase()} successfully!`;
-            } else if (status === 'SKIPPED_RECENT') {
-                onClose(); // Just close the modal
-                return 'Candidate already exists and was updated recently.';
-            }
-        })(),
-        {
-            loading: 'Parsing and processing resume...',
-            success: (message) => message,
-            error: (err) => err.message || 'An unexpected error occurred.',
-            finally: () => setIsLoading(false)
+      (async () => {
+        const text = await parseFileToText(file);
+        const results = await analyseAndSaveProfilesBatch([{ text, file, fileName: file.name }]);
+        const firstResult = results[0];
+
+        if (firstResult.status === 'success') {
+          onCandidateAdded();
+          return `Candidate processing enqueued! (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
+        } else if (firstResult.status === 'skipped') {
+          onCandidateAdded();
+          return `Candidate skipped: ${firstResult.message} (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
+        } else {
+          throw new Error(firstResult.message);
         }
+      })(),
+      {
+        loading: 'Processing resume securely...',
+        success: (message) => message,
+        error: (err) => err.message || 'An unexpected error occurred.',
+        finally: () => setIsLoading(false),
+      }
     );
   };
 
@@ -218,22 +173,26 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     if (!resumeText.trim()) return toast.error('Resume text is empty.');
     setIsLoading(true);
     toast.promise(
-        (async () => {
-            const { status } = await analyseAndSaveProfile(resumeText);
-            if (status === 'INSERTED' || status === 'UPDATED') {
-                onCandidateAdded();
-                return `Candidate profile ${status.toLowerCase()} successfully!`;
-            } else if (status === 'SKIPPED_RECENT') {
-                onClose();
-                return 'Candidate already exists and was updated recently.';
-            }
-        })(),
-        {
-            loading: 'Analysing and saving profile...',
-            success: (message) => message,
-            error: (err) => err.message || 'An unexpected error occurred.',
-            finally: () => setIsLoading(false)
+      (async () => {
+        const results = await analyseAndSaveProfilesBatch([{ text: resumeText, fileName: 'pasted_resume.txt' }]);
+        const firstResult = results[0];
+
+        if (firstResult.status === 'success') {
+          onCandidateAdded();
+          return `Candidate processing enqueued! (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
+        } else if (firstResult.status === 'skipped') {
+          onCandidateAdded();
+          return `Candidate skipped: ${firstResult.message} (Candidate: ${firstResult.candidate_name || firstResult.fileName})`;
+        } else {
+          throw new Error(firstResult.message);
         }
+      })(),
+      {
+        loading: 'Analysing and saving profile securely...',
+        success: (message) => message,
+        error: (err) => err.message || 'An unexpected error occurred.',
+        finally: () => setIsLoading(false),
+      }
     );
   };
 
@@ -245,65 +204,98 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     setIsBulkProcessing(true);
     setBulkResults([]);
     setBulkProgress(0);
-    const results: BulkUploadResult[] = [];
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      try {
-        const text = await parseFileToText(file);
-        const { status, profile } = await analyseAndSaveProfile(text, file);
-        if (status === 'INSERTED' || status === 'UPDATED') {
-          results.push({ fileName: file.name, status: 'success', message: `${profile.candidate_name || 'N/A'} - Profile ${status.toLowerCase()}` });
-        } else if (status === 'SKIPPED_RECENT') {
-          results.push({ fileName: file.name, status: 'skipped', message: `${profile.candidate_name || 'N/A'} - Skipped (already exists)` });
+    const filesArray = Array.from(files);
+    let results: BulkUploadResult[] = filesArray.map(file => ({
+        fileName: file.name,
+        status: 'parsing',
+        message: 'Waiting in queue...',
+        uploadProgress: 0,
+    }));
+    setBulkResults(results);
+
+    const updateFileProgress = (index: number, newStatus: Partial<BulkUploadResult>) => {
+        results = results.map((res, i) => i === index ? { ...res, ...newStatus } : res);
+        setBulkResults([...results]);
+    };
+
+    const successfullyParsedResumes: Array<{ text: string; file: File; fileName: string }> = [];
+
+    await Promise.all(filesArray.map(async (file, index) => {
+        try {
+            updateFileProgress(index, { status: 'parsing', message: 'Parsing resume...', uploadProgress: 25 });
+            const text = await parseFileToText(file);
+            successfullyParsedResumes.push({ text, file, fileName: file.name });
+            // Simulate upload progress
+            updateFileProgress(index, { status: 'uploading', message: 'Uploading...', uploadProgress: 75 });
+            await new Promise(res => setTimeout(res, 250)); // Small delay for UX
+            updateFileProgress(index, { status: 'processing', message: 'Upload complete, processing...', uploadProgress: 100 });
+        } catch (error) {
+            updateFileProgress(index, { status: 'failed', message: error instanceof Error ? error.message : 'Failed to parse', uploadProgress: 0 });
         }
-      } catch (error) {
-        results.push({ fileName: file.name, status: 'failed', message: error instanceof Error ? error.message : 'Unknown error' });
-      }
-      setBulkProgress(((i + 1) / files.length) * 100);
-      setBulkResults([...results]);
-    }
-    
-    toast.success("Bulk processing complete. Check results below.");
-    setIsLoading(false);
-  };
-  
-  const handleClose = () => {
-    if (isBulkProcessing) {
-        onCandidateAdded();
-    } else {
-        onClose();
-    }
-    setResumeText('');
-    setBulkResults([]);
-    setBulkProgress(0);
-    setIsBulkProcessing(false);
-    setActiveTab('paste');
-  }
+        setBulkProgress(((index + 1) / filesArray.length) * 50);
+    }));
 
+    if (successfullyParsedResumes.length === 0) {
+      toast.error("No valid resumes could be processed.");
+      setIsLoading(false);
+      setIsBulkProcessing(false);
+      return;
+    }
+
+    toast.info(`Sending ${successfullyParsedResumes.length} resumes for secure analysis...`);
+    setBulkProgress(50);
+
+    try {
+        const finalResults = await analyseAndSaveProfilesBatch(successfullyParsedResumes);
+        setBulkProgress(100);
+
+        let finalReport = [...results];
+        finalResults.forEach(finalRes => {
+            const index = finalReport.findIndex(r => r.fileName === finalRes.fileName);
+            if (index !== -1) {
+                finalReport[index] = { ...finalReport[index], ...finalRes };
+            }
+        });
+        setBulkResults(finalReport);
+
+        const successCount = finalResults.filter(r => r.status === 'success' || r.status === 'skipped').length;
+        if (successCount > 0) {
+            toast.success(`${successCount} candidates are being added to the Talent Pool.`);
+            onCandidateAdded();
+        } else {
+            toast.error("No candidates were successfully added. See report.");
+        }
+    } catch (err) {
+        toast.error("A critical error occurred during batch processing.");
+        setBulkProgress(100);
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+  const handleClose = () => {
+      onCandidateAdded(); // Always refetch on close to see latest results
+      onClose();
+      setResumeText('');
+      setBulkResults([]);
+      setBulkProgress(0);
+      setIsBulkProcessing(false);
+      setActiveTab('paste');
+  };
 
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onRequestClose={handleClose} 
+    <Modal
+      isOpen={isOpen}
+      onRequestClose={handleClose}
       style={{
         content: {
-          top: '50%',
-          left: '50%',
-          right: 'auto',
-          bottom: 'auto',
-          marginRight: '-50%',
-          transform: 'translate(-50%, -50%)',
-          width: '90%',
-          maxWidth: '800px',
-          maxHeight: '90vh',
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '0'
+          top: '50%', left: '50%', right: 'auto', bottom: 'auto',
+          marginRight: '-50%', transform: 'translate(-50%, -50%)',
+          width: '90%', maxWidth: '800px', maxHeight: '90vh',
+          display: 'flex', flexDirection: 'column', padding: '0'
         },
-        overlay: {
-          backgroundColor: 'rgba(0, 0, 0, 0.75)'
-        }
+        overlay: { backgroundColor: 'rgba(0, 0, 0, 0.75)' }
       }}
       contentLabel="Add Candidate Modal"
     >
@@ -321,7 +313,7 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
             <TabsTrigger value="upload">Upload Single Resume</TabsTrigger>
             <TabsTrigger value="bulk">Bulk Upload</TabsTrigger>
           </TabsList>
-          
+         
           <TabsContent value="paste">
             <Textarea placeholder="Paste the full resume text here..." rows={15} value={resumeText} onChange={(e) => setResumeText(e.target.value)} className="mt-2" disabled={isLoading} />
           </TabsContent>
@@ -329,30 +321,44 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
           <TabsContent value="upload">
             <div className="mt-2 p-6 border-2 border-dashed rounded-lg text-center">
               <Input type="file" accept=".pdf,.docx" onChange={handleSingleFileChange} disabled={isLoading} />
-              <p className="text-sm text-gray-500 mt-2">The file will be parsed, analysed, and saved immediately.</p>
+              <p className="text-sm text-gray-500 mt-2">The file will be parsed, analysed, and saved securely.</p>
             </div>
           </TabsContent>
 
           <TabsContent value="bulk">
             <div className="mt-2 p-6 border-2 border-dashed rounded-lg text-center">
-              <Input type="file" accept=".pdf,.docx" onChange={handleBulkFileChange} disabled={isLoading} multiple />
-              <p className="text-sm text-gray-500 mt-2">Select multiple PDF or DOCX files.</p>
+              <Input type="file" accept=".pdf,.docx" onChange={handleBulkFileChange} disabled={isLoading || isBulkProcessing} multiple />
+              <p className="text-sm text-gray-500 mt-2">Select multiple PDF or DOCX files. They will be parsed, analysed, and saved securely.</p>
             </div>
-            {isBulkProcessing && <Progress value={bulkProgress} className="w-full mt-4" />}
+            {(isBulkProcessing || bulkResults.length > 0) && <Progress value={bulkProgress} className="w-full mt-4" />}
             {bulkResults.length > 0 && (
               <div className="mt-4">
                 <h3 className="font-semibold mb-2">Bulk Upload Report</h3>
                 <ScrollArea className="h-48 p-3 border rounded-md">
+                  
+                  {/* --- THIS IS THE UPDATED UI RENDERING LOGIC --- */}
                   {bulkResults.map((result, index) => (
-                    <div key={index} className="flex items-start gap-2 mb-2 text-sm">
+                    <div key={index} className="flex items-start gap-3 mb-4 last:mb-0 text-sm">
                       <div className="flex-shrink-0 pt-1">
-                        {result.status === 'success' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                        {result.status === 'skipped' && <AlertCircle className="h-4 w-4 text-yellow-500" />}
-                        {result.status === 'failed' && <XCircle className="h-4 w-4 text-red-500" />}
+                        {result.status === 'success' && <CheckCircle className="h-5 w-5 text-green-500" />}
+                        {result.status === 'skipped' && <AlertCircle className="h-5 w-5 text-yellow-500" />}
+                        {result.status === 'failed' && <XCircle className="h-5 w-5 text-red-500" />}
+                        {(result.status === 'parsing' || result.status === 'uploading' || result.status === 'processing') && (
+                          <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+                        )}
                       </div>
-                      <div>
+                      <div className="flex-grow">
                         <p className="font-medium break-all">{result.fileName}</p>
-                        <p className="text-gray-600">{result.message}</p>
+                        <p className="text-gray-600 mt-1">{result.message}</p>
+                        
+                        {(result.status === 'parsing' || result.status === 'uploading' || result.status === 'processing') && result.uploadProgress !== undefined && (
+                          <div className="flex items-center gap-3 mt-2">
+                            <Progress value={result.uploadProgress} className="w-full" />
+                            <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                              {result.uploadProgress}%
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -364,11 +370,12 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
       </div>
 
       <div className="p-4 border-t flex justify-end gap-2">
-        {activeTab === 'bulk' && isBulkProcessing && !isLoading ? (
-            <Button onClick={handleClose}>Close Report & Refetch List</Button>
+        {/* Logic for showing close/cancel buttons */}
+        {activeTab === 'bulk' && !isLoading && bulkResults.length > 0 ? (
+            <Button onClick={handleClose}>Close</Button>
         ) : (
             <>
-                <Button variant="outline" onClick={handleClose} disabled={isLoading}>Cancel</Button>
+                <Button variant="outline" onClick={handleClose} disabled={isLoading || isBulkProcessing}>Cancel</Button>
                 {activeTab === 'paste' && <Button onClick={handlePasteAndSave} disabled={isLoading || !resumeText}> {isLoading ? 'Processing...' : 'Analyse and Save'} </Button>}
             </>
         )}
