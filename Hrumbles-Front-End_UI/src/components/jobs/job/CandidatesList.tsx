@@ -898,8 +898,8 @@ const candidates = useMemo(() => {
       
       const jobTextId = jobData.job_id;
       const payload = { job_id: jobTextId, candidate_id: candidateId, resume_url: extractedResumeUrl, job_description: jobdescription, organization_id: organizationId, user_id: user.id };
-      
-      const backendUrl = 'https://dev.hrumbles.ai/api/validate-candidate';
+
+      const backendUrl = 'http://127.0.0.1:5005/api/validate-candidate';
       const response = await fetch(backendUrl, { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: JSON.stringify(payload) });
 
       if (!response.ok) {
@@ -919,7 +919,7 @@ const candidates = useMemo(() => {
 // --- ADDED: Function to handle the batch validation process ---
   // --- ADDED: Function to handle the batch validation process ---
   const handleBatchValidate = async () => {
-    const unvalidatedCandidates = candidates.filter(c => !c.hasValidatedResume && !validatingIds.includes(c.id));
+    const unvalidatedCandidates = paginatedCandidates.filter(c => !c.hasValidatedResume && !validatingIds.includes(c.id));
 
     if (unvalidatedCandidates.length === 0) {
       toast.info("All candidates have already been validated.");
@@ -933,10 +933,9 @@ const candidates = useMemo(() => {
     setValidatingIds(prev => [...new Set([...prev, ...idsToValidate])]);
 
     // Process validations concurrently without stopping if one fails
-    await Promise.allSettled(
-      unvalidatedCandidates.map(candidate => handleValidateResume(candidate.id))
-    );
-
+   for (const candidate of unvalidatedCandidates) {
+      await handleValidateResume(candidate.id);
+    }
     toast.info("Batch validation process complete.");
   };
 

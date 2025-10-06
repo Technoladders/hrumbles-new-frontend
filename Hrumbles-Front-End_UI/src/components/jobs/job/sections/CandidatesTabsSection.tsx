@@ -37,6 +37,7 @@ const CandidatesTabsSection = ({
   candidates,
   onAddCandidate 
 }: CandidatesTabsSectionProps) => {
+    console.log("[CandidatesTabsSection Debug] jobId prop received:", jobId); // <--- ADD THIS LOG
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   
   const [showStatusDialog, setShowStatusDialog] = useState(false);
