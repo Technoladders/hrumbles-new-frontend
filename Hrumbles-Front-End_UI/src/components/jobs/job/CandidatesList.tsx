@@ -919,7 +919,7 @@ const candidates = useMemo(() => {
 // --- ADDED: Function to handle the batch validation process ---
   // --- ADDED: Function to handle the batch validation process ---
   const handleBatchValidate = async () => {
-    const unvalidatedCandidates = candidates.filter(c => !c.hasValidatedResume && !validatingIds.includes(c.id));
+    const unvalidatedCandidates = paginatedCandidates.filter(c => !c.hasValidatedResume && !validatingIds.includes(c.id));
 
     if (unvalidatedCandidates.length === 0) {
       toast.info("All candidates have already been validated.");
@@ -933,11 +933,10 @@ const candidates = useMemo(() => {
     setValidatingIds(prev => [...new Set([...prev, ...idsToValidate])]);
 
     // Process validations concurrently without stopping if one fails
-    await Promise.allSettled(
-      unvalidatedCandidates.map(candidate => handleValidateResume(candidate.id))
-    );
-
-    toast.info("Batch validation process complete.");
+     for (const candidate of unvalidatedCandidates) {
+      await handleValidateResume(candidate.id);
+    }
+    toast.info("Batch validation processing.");
   };
 
 

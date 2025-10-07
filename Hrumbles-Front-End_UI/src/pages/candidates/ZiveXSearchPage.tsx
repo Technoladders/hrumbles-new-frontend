@@ -53,7 +53,7 @@ const ZiveXSearchPage: FC = () => {
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-8xl mx-auto">
         <div className=" mb-6">
-          <h1 className="text-4xl font-bold text-gray-600 mb-4">Find Top Talent That Matches Your Needs Perfectly</h1>
+          <h1 className="text-4xl font-bold text-gray-600 mb-4">Find Top Talent from Your Talent Pool That Matches Your Needs Perfectly</h1>
           {/* <p className="text-xl text-gray-600 max-w-2xl mx-auto">Search from our unified talent pool to find candidates that match your needs perfectly.</p> */}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">

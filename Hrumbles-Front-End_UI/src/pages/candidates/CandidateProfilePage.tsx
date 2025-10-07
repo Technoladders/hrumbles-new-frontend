@@ -14,7 +14,8 @@ import {
   Info,
   Lightbulb,
   History,     
-  ScanSearch,   
+  ScanSearch,
+  Sparkles,   
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -27,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import CompareWithJobDialog from '@/components/candidates/talent-pool/CompareWithJobDialog';
 import AnalysisHistoryDialog from '@/components/candidates/AnalysisHistoryDialog';
+import EnrichDataDialog from "@/components/candidates/talent-pool/EnrichDataDialog";
 import { generateDocx, generatePdf } from "@/utils/cvGenerator"; // Import the new functions
 
  
@@ -49,6 +51,7 @@ const CandidateProfilePage = () => {
   const { candidateId } = useParams<{ candidateId: string }>();
     const [isCompareModalOpen, setCompareModalOpen] = useState(false);
   const [isHistoryModalOpen, setHistoryModalOpen] = useState(false);
+  const [isEnrichModalOpen, setEnrichModalOpen] = useState(false);
  
   const { data: candidate, isLoading } = useQuery({
     queryKey: ["talentPoolCandidate", candidateId],
@@ -206,11 +209,63 @@ const sortedWorkExperience = [...workExperience].sort((a, b) => {
       </Button>
     </a>
   )}
+   <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full flex items-center justify-center gap-2"
+                  onClick={() => setEnrichModalOpen(true)}
+                >
+                  <Sparkles size={16} />
+                  <span>Enrich Data</span>
+                </Button>
 </div>
 
             </div>
           </CardContent>
         </Card>
+
+         {/* --- START: Added for Enrich Data --- */}
+        {/* This new card provides a quick overview of the enriched data */}
+       {/* <Card className="mb-8">
+            <CardContent className="p-4">
+               
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 text-center">
+             
+                    {candidate.total_experience && (
+                        <div>
+                            <p className="text-sm text-gray-500">Experience</p>
+                            <p className="font-semibold text-gray-800">{candidate.total_experience}</p>
+                        </div>
+                    )}
+                    {candidate.notice_period && (
+                        <div>
+                            <p className="text-sm text-gray-500">Notice Period</p>
+                            <p className="font-semibold text-gray-800">{candidate.notice_period}</p>
+                        </div>
+                    )}
+                    {candidate.current_salary && (
+                         <div>
+                            <p className="text-sm text-gray-500">Current Salary</p>
+                            <p className="font-semibold text-gray-800">{candidate.current_salary}</p>
+                        </div>
+                    )}
+                    {candidate.current_location && (
+                        <div>
+                            <p className="text-sm text-gray-500">Location</p>
+                            <p className="font-semibold text-gray-800">{candidate.current_location}</p>
+                        </div>
+                    )}
+                    
+                    {candidate.highest_education && (
+                        <div>
+                            <p className="text-sm text-gray-500">Highest Education</p>
+                            <p className="font-semibold text-gray-800">{candidate.highest_education}</p>
+                        </div>
+                    )}
+                  
+                </div>
+            </CardContent>
+        </Card> */}
  
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* --- Main Content (Left) --- */}
@@ -283,6 +338,8 @@ const sortedWorkExperience = [...workExperience].sort((a, b) => {
                     </CardContent>
                 </Card>
              )}
+
+
              
              {education && education.length > 0 && (
                 <Card className="border rounded-lg">
@@ -314,6 +371,17 @@ const sortedWorkExperience = [...workExperience].sort((a, b) => {
                     </CardContent>
                 </Card>
             )}
+
+                          {/* --- START: Added for Enrich Data --- */}
+             {/* This card displays the preferred locations from the enriched data */}
+             {candidate.preferred_locations && candidate.preferred_locations.length > 0 && (
+                <Card className="border rounded-lg">
+                    <CardHeader><CardTitle className="text-xl font-bold">Preferred Locations</CardTitle></CardHeader>
+                    <CardContent className="flex flex-wrap gap-2">
+                      {parseJsonArray(candidate.preferred_locations).map((loc: string) => (<Badge key={loc} className="bg-blue-200 text-blue-800" >{loc}</Badge>))}
+                    </CardContent>
+                </Card>
+             )}
           </div>
         </div>
 
@@ -330,6 +398,11 @@ const sortedWorkExperience = [...workExperience].sort((a, b) => {
                   onClose={() => setHistoryModalOpen(false)}
                   candidateId={candidateId}
                   candidateName={candidate.candidate_name}
+                />
+                <EnrichDataDialog
+                  isOpen={isEnrichModalOpen}
+                  onClose={() => setEnrichModalOpen(false)}
+                  candidate={candidate}
                 />
             </>
         )}

@@ -55,6 +55,8 @@ const CandidateSearchResults: FC<CandidateSearchResultsProps> = ({ results }) =>
   const [contactInfo, setContactInfo] = useState<ContactInfo>(null);
   const [isCopied, setIsCopied] = useState(false);
 
+  console.log("results", results);
+
   const highlightQuery = useMemo(() => {
     const params = new URLSearchParams(searchParams);
     const queries: string[] = [];
