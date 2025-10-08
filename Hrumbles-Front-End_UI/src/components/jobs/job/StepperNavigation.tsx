@@ -1,71 +1,72 @@
+// StepperNavigation.tsx
 
 import { Check } from "lucide-react";
 
 interface StepperNavigationProps {
   currentStep: number;
-  totalSteps: number;
   jobType: "Internal" | "External";
-   internalType: "Inhouse" | "Client Side" | null;
+  internalType: "Inhouse" | "Client Side" | null;
+  onStepClick: (step: number) => void;
 }
 
-const StepperNavigation = ({ currentStep, totalSteps, jobType, internalType }: StepperNavigationProps) => {
-  // Generate steps based on job type
+const StepperNavigation = ({ currentStep, jobType, internalType, onStepClick }: StepperNavigationProps) => {
   const getSteps = (): string[] => {
-    // MODIFICATION START: Update logic to generate steps. If the job is for a client
-    // (either "External" or "Internal - Client Side"), it should include the "Client Details" step.
     if (jobType === "External" || (jobType === "Internal" && internalType === "Client Side")) {
       return ["Client Details", "Job Information", "Experience & Skills", "Job Description"];
     }
     if (jobType === "Internal" && internalType === "Inhouse") {
       return ["Job Information", "Experience & Skills", "Job Description"];
     }
-    // Default fallback for external jobs
-    return ["Client Details", "Job Information", "Experience & Skills", "Job Description"];
-    // MODIFICATION END
+    return [];
   };
-  
+
   const steps = getSteps();
+  const totalSteps = steps.length;
   
+  const progressPercentage = totalSteps > 1 ? ((currentStep - 1) / (totalSteps - 1)) * 100 : 0;
+
   return (
-    <div className="relative">
-      <div className="flex items-center justify-between">
-        {steps.map((step, index) => (
-          <div key={index} className="relative flex flex-col items-center">
-            <div 
-              className={`w-10 h-10 rounded-full flex items-center justify-center z-10 ${
-                index + 1 < currentStep
-                  ? "bg-button text-white"
-                  : index + 1 === currentStep
-                  ? "bg-button text-white ring-4 ring-blue-200"
-                  : "bg-gray-200 text-gray-500"
-              }`}
-            >
-              {index + 1 < currentStep ? (
-                <Check className="w-6 h-6" />
-              ) : (
-                <span>{index + 1}</span>
-              )}
-            </div>
-            <span 
-              className={`text-xs font-medium mt-2 text-center ${
-                index + 1 <= currentStep ? "text-blue-600" : "text-gray-500"
-              }`}
-            >
-              {step}
-            </span>
-          </div>
-        ))}
-      </div>
-      
-      {/* Progress bar */}
-      <div 
-        className="absolute top-5 h-0.5 bg-gray-200 left-0 right-0 -translate-y-1/2 z-0"
-        style={{ transform: "translate(0, -50%)" }}
-      >
+    <div className="relative w-full">
+      <div className="flex justify-between items-center">
+        {/* Progress Bar */}
+        <div className="absolute top-4 left-0 w-full h-0.5 bg-gray-200" />
         <div 
-          className="h-full bg-button-hover transition-all duration-300"
-          style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%` }}
-        ></div>
+          className="absolute top-4 left-0 h-0.5 bg-blue-600 transition-all duration-500 ease-in-out"
+          style={{ width: `calc(${progressPercentage}% - 1rem)` }}
+        />
+        
+        {steps.map((step, index) => {
+          const stepNumber = index + 1;
+          const isCompleted = stepNumber < currentStep;
+          const isActive = stepNumber === currentStep;
+
+          return (
+            <button
+              key={index}
+              disabled={!isCompleted}
+              onClick={() => onStepClick(stepNumber)}
+              className="z-10 flex flex-col items-center disabled:cursor-not-allowed"
+            >
+              <div 
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300
+                  ${isCompleted ? "bg-blue-600 text-white" : ""}
+                  ${isActive ? "bg-blue-600 text-white ring-4 ring-blue-100" : ""}
+                  ${!isCompleted && !isActive ? "bg-white border-2 border-gray-300 text-gray-500" : ""}
+                `}
+              >
+                {isCompleted ? <Check className="w-5 h-5" /> : <span>{stepNumber}</span>}
+              </div>
+              <h4 
+                className={`mt-2 text-xs text-center font-medium transition-colors duration-300 w-24
+                  ${isActive ? "text-blue-700" : "text-gray-500"}
+                  ${isCompleted ? "text-gray-600 group-hover:text-blue-700" : ""}
+                `}
+              >
+                {step}
+              </h4>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
