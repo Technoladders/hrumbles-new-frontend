@@ -415,34 +415,62 @@ useEffect(() => {
             <Button variant="outline" onClick={() => setIsGrouped(!isGrouped)} className="w-full sm:w-auto">{isGrouped ? <List className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />} {isGrouped ? 'Ungroup' : 'Group'}</Button>
             <div className="flex gap-2"><Button variant="outline" size="sm" onClick={exportToCSV}><Download className="w-4 h-4 mr-2" />CSV</Button><Button variant="outline" size="sm" onClick={exportToPDF}><Download className="w-4 h-4 mr-2" />PDF</Button></div>
           </div>
-          <div className="rounded-md border overflow-x-auto"><Table>
-              <TableHeader><TableRow className="bg-gray-50 hover:bg-gray-50">
-                <TableHead className="w-[200px]">Candidate</TableHead><TableHead>Status</TableHead><TableHead>AI Score</TableHead><TableHead>Job Title</TableHead><TableHead>Recruiter</TableHead><TableHead>Applied</TableHead><TableHead>CCTC</TableHead><TableHead>ECTC</TableHead><TableHead>Notice</TableHead><TableHead>Location</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>
-                {paginatedData.length > 0 ? paginatedData.map((row) => {
-                  if (row.type === 'header') return (<TableRow key={row.statusName} className="bg-gray-100"><TableCell colSpan={10} className="font-bold"><div className="flex items-center gap-2"><Button variant="ghost" size="sm" onClick={() => toggleGroup(row.statusName!)} className="p-0 h-6 w-6">{expandedGroups.includes(row.statusName!) ? <ChevronUp /> : <ChevronDown />}</Button>{row.statusName} <Badge variant="secondary">{row.count}</Badge></div></TableCell></TableRow>);
-                  const { candidate, statusName } = row;
-                  return (
-                    <TableRow key={candidate!.id} className="hover:bg-gray-50">
-                      <TableCell className="font-medium"><Link to={`/candidates/${candidate!.id}/${candidate!.job_id}`} className="text-purple-600 hover:underline">{candidate!.name}</Link></TableCell>
-                      <TableCell>
-                        <StatusCell candidate={candidate!} statusName={statusName!} />
-                      </TableCell>
-                      <TableCell><Badge className={getScoreBadgeClass(candidate!.overall_score)}>{formatValue(candidate!.overall_score)}</Badge></TableCell>
-                      <TableCell><Link to={`/jobs/${candidate!.job_id}`} className="hover:underline">{formatValue(candidate!.job_title)}</Link></TableCell>
-                      <TableCell>{formatValue(candidate!.recruiter_name)}</TableCell>
-                      <TableCell>{formatDate(candidate!.created_at)}</TableCell>
-                      <TableCell>{formatCurrency(candidate!.current_salary)}</TableCell>
-                      <TableCell>{formatCurrency(candidate!.expected_salary)}</TableCell>
-                      <TableCell>{formatValue(candidate!.notice_period)}</TableCell>
-                      <TableCell>{formatValue(candidate!.location)}</TableCell>
-                    </TableRow>
-                  );
-                }) : <TableRow><TableCell colSpan={10} className="h-24 text-center">No candidates found matching your criteria.</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          </div>
+       <div className="relative rounded-md border overflow-x-auto">
+  <Table>
+    <TableHeader>
+      <TableRow className="bg-gray-50 hover:bg-gray-50">
+        {/* MODIFIED LINE */}
+        <TableHead className="w-[200px] sticky left-0 bg-gray-50 z-10">Candidate</TableHead>
+        <TableHead>Status</TableHead>
+        <TableHead>AI Score</TableHead>
+        <TableHead>Job Title</TableHead>
+        <TableHead>Recruiter</TableHead>
+        <TableHead>Applied</TableHead>
+        <TableHead>CCTC</TableHead>
+        <TableHead>ECTC</TableHead>
+        <TableHead>Notice</TableHead>
+        <TableHead>Location</TableHead>
+      </TableRow>
+    </TableHeader>
+    <TableBody>
+      {paginatedData.length > 0 ? paginatedData.map((row) => {
+        if (row.type === 'header') return (
+          <TableRow key={row.statusName} className="bg-gray-100">
+            <TableCell colSpan={10} className="font-bold">
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => toggleGroup(row.statusName!)} className="p-0 h-6 w-6">{expandedGroups.includes(row.statusName!) ? <ChevronUp /> : <ChevronDown />}</Button>
+                {row.statusName} <Badge variant="secondary">{row.count}</Badge>
+              </div>
+            </TableCell>
+          </TableRow>
+        );
+        const { candidate, statusName } = row;
+        return (
+          // MODIFIED LINE: Added "group" class
+          <TableRow key={candidate!.id} className="hover:bg-gray-50 group">
+            {/* MODIFIED CELL with sticky classes */}
+            <TableCell className="font-medium sticky left-0 bg-white group-hover:bg-gray-50">
+              <Link to={`/candidates/${candidate!.id}/${candidate!.job_id}`} className="text-purple-600 hover:underline">
+                {candidate!.name}
+              </Link>
+            </TableCell>
+            <TableCell>
+              <StatusCell candidate={candidate!} statusName={statusName!} />
+            </TableCell>
+            <TableCell><Badge className={getScoreBadgeClass(candidate!.overall_score)}>{formatValue(candidate!.overall_score)}</Badge></TableCell>
+            <TableCell><Link to={`/jobs/${candidate!.job_id}`} className="hover:underline">{formatValue(candidate!.job_title)}</Link></TableCell>
+            <TableCell>{formatValue(candidate!.recruiter_name)}</TableCell>
+            <TableCell>{formatDate(candidate!.created_at)}</TableCell>
+            <TableCell>{formatCurrency(candidate!.current_salary)}</TableCell>
+            <TableCell>{formatCurrency(candidate!.expected_salary)}</TableCell>
+            <TableCell>{formatValue(candidate!.notice_period)}</TableCell>
+            <TableCell>{formatValue(candidate!.location)}</TableCell>
+          </TableRow>
+        );
+      }) : <TableRow><TableCell colSpan={10} className="h-24 text-center">No candidates found matching your criteria.</TableCell></TableRow>}
+    </TableBody>
+  </Table>
+</div>
           {totalPages > 1 && <div className="flex justify-between items-center mt-4">
               <span className="text-sm text-gray-600">Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, tableRows.length)} of {tableRows.length}</span>
               <div className="flex items-center gap-2">

@@ -13,6 +13,9 @@ import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { GreetingSlide, EventsSlide, CelebrationsSlide } from './DashboardCarouselSlides';
 import { DashboardHeroCarousel } from './DashboardHeroCarousel';
 import CombinedSubmissionOnboardingChart from '@/components/employee/profile/cards/SubmissionChartCard';
+import RevenueByRecruiterChart from './RevenueByRecruiterChart';
+// --- V V V --- IMPORT THE NEW CARD --- V V V ---
+import CandidateFunnelCard from '@/components/dashboard/CandidateFunnelCard';
 
 
 // --- Reusable Component for Chart Cards ---
@@ -243,8 +246,8 @@ const HiringSuiteDashboard = ({ employeeId }: { employeeId: string; role: string
         </div>
 
         {/* --- ROW 2 --- */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          <ChartCard title="Top Jobs" description="By total candidate volume" isLoading={topJobsLoading} className="sm:col-span-2 lg:col-span-1">
+      
+          {/* <ChartCard title="Top Jobs" description="By total candidate volume" isLoading={topJobsLoading} className="sm:col-span-2 lg:col-span-1">
             <div className="space-y-3 sm:space-y-4">
               {topJobs?.jobs.length > 0 ? topJobs.jobs.map((job, index) => (
                 <div key={index}>
@@ -279,8 +282,14 @@ const HiringSuiteDashboard = ({ employeeId }: { employeeId: string; role: string
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
-          </div>
+          </div> */}
+
+       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+           <RevenueByRecruiterChart />
+           {/* --- V V V --- USE THE NEW FUNNEL CARD HERE --- V V V --- */}
+           <CandidateFunnelCard />
         </div>
+        
         
         {/* --- ROW 3 --- */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">

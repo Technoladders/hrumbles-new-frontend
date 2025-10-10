@@ -16,6 +16,149 @@ import { supabase } from '@/integrations/supabase/client';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { saveAs } from 'file-saver';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  LabelList,
+} from 'recharts';
+
+
+// --- START: Added from ConsolidatedStatusReport for the new chart ---
+
+// Helper to generate a dynamic X-axis
+const generateAxisTicks = (data: any[], step: number) => {
+  const maxTotalInData = Math.max(...data.map(d => d.total), 0);
+  if (maxTotalInData === 0) {
+    const defaultMax = 40;
+    const defaultTicks = [];
+    for (let i = 0; i <= defaultMax; i += 10) {
+      defaultTicks.push(i);
+    }
+    return { domain: [0, defaultMax], ticks: defaultTicks };
+  }
+  const axisTopValue = Math.ceil((maxTotalInData + (step / 4)) / step) * step;
+  const ticks = [];
+  for (let i = 0; i <= axisTopValue; i += step) {
+    ticks.push(i);
+  }
+  return { domain: [0, axisTopValue], ticks };
+};
+
+
+// Custom Tooltip for the new chart
+const CustomFunnelTooltip = (props: any) => {
+  const { active, payload, label, barDefinitions } = props;
+
+  if (active && payload && payload.length) {
+    const currentRowData = payload[0].payload;
+    const activeBars = barDefinitions.filter((bar: any) => (currentRowData[bar.key] || 0) > 0);
+
+    return (
+      <div className="p-3 text-sm bg-white border border-gray-200 rounded-lg shadow-lg animate-fade-in">
+        <p className="font-bold text-gray-800 mb-2">{label}</p>
+        <div className="space-y-1.5">
+          {activeBars.map((bar: any, index: number) => {
+            const value = currentRowData[bar.key];
+            return (
+              <div key={index} className="flex items-center">
+                <div
+                  className="w-3 h-3 rounded-sm mr-2"
+                  style={{ backgroundColor: bar.color }}
+                />
+                <span className="text-gray-600">{`${bar.name}: `}</span>
+                <span className="font-semibold text-gray-800">{value}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="border-t border-gray-200 mt-3 pt-2 flex justify-between font-bold text-gray-900">
+          <span>Total:</span>
+          <span>{currentRowData.total}</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+
+// The new stacked bar chart component for the recruitment funnel
+const RecruitmentFunnelChart: React.FC<{ funnelData: any[], barDefinitions: any[] }> = ({ funnelData, barDefinitions }) => {
+  const { domain: axisDomain, ticks: axisTicks } = generateAxisTicks(funnelData, 20);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Recruitment Funnel</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[450px] w-full">
+          {funnelData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={funnelData}
+                layout="vertical"
+                margin={{ top: 20, right: 50, left: 40, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" horizontal={false} />
+                <XAxis
+                  type="number"
+                  allowDecimals={false}
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  domain={axisDomain}
+                  ticks={axisTicks}
+                />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  width={120}
+                  tick={{ fontSize: 12, fill: '#374151', fontWeight: 'bold' }}
+                  interval={0}
+                />
+                <RechartsTooltip
+                  cursor={{ fill: 'rgba(239, 246, 255, 0.7)' }}
+                  content={<CustomFunnelTooltip barDefinitions={barDefinitions} />}
+                />
+                {barDefinitions.map(bar => (
+                  <Bar
+                    key={bar.key}
+                    dataKey={bar.key}
+                    stackId="a"
+                    name={bar.name}
+                    fill={bar.color}
+                    radius={[0, 4, 4, 0]}
+                  >
+                    <LabelList
+                      dataKey={bar.key}
+                      position="center"
+                      fill="#fff"
+                      fontSize={12}
+                      fontWeight="bold"
+                      formatter={(value: number) => (value > 0 ? value : '')}
+                    />
+                  </Bar>
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-gray-500">
+              No funnel data available for the selected period.
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+
+// --- END: Added sections ---
+
 
 interface RecruiterPerformanceData {
   recruiter: string;
@@ -276,6 +419,103 @@ const RecruiterReportPage: React.FC = () => {
     '#ec4899', '#14b8a6', '#f43f5e', '#eab308', '#a855f7'
   ];
 
+  // --- START: New data processor for the stacked bar chart ---
+  const getRecruitmentFunnelData = () => {
+    const totals = data.reduce((acc, rec) => {
+        acc.profiles_submitted += rec.profiles_submitted;
+        acc.sent_to_client += rec.sent_to_client;
+        acc.technical += rec.interviews.technical;
+        acc.technical_selected += rec.interviews.technical_selected;
+        acc.technical_reject += rec.interviews.technical_reject;
+        acc.l1 += rec.interviews.l1;
+        acc.l1_selected += rec.interviews.l1_selected;
+        acc.l1_reject += rec.interviews.l1_reject;
+        acc.l2 += rec.interviews.l2;
+        acc.l2_reject += rec.interviews.l2_reject;
+        acc.end_client += rec.interviews.end_client;
+        acc.end_client_reject += rec.interviews.end_client_reject;
+        acc.offers_made += rec.offers.made;
+        acc.offers_accepted += rec.offers.accepted;
+        acc.offers_rejected += rec.offers.rejected;
+        acc.joined += rec.joining.joined;
+        acc.no_show += rec.joining.no_show;
+        return acc;
+    }, {
+        profiles_submitted: 0, sent_to_client: 0,
+        technical: 0, technical_selected: 0, technical_reject: 0,
+        l1: 0, l1_selected: 0, l1_reject: 0,
+        l2: 0, l2_reject: 0,
+        end_client: 0, end_client_reject: 0,
+        offers_made: 0, offers_accepted: 0, offers_rejected: 0,
+        joined: 0, no_show: 0
+    });
+
+    const funnelData = [
+      {
+          name: 'Processed',
+          submitted: totals.profiles_submitted,
+          sent_to_client: totals.sent_to_client,
+          total: totals.profiles_submitted + totals.sent_to_client,
+      },
+      {
+          name: 'Technical',
+          selected: totals.technical_selected,
+          rejected: totals.technical_reject,
+          pending: totals.technical - totals.technical_selected - totals.technical_reject,
+          total: totals.technical,
+      },
+      {
+          name: 'L1 Interview',
+          selected: totals.l1_selected,
+          rejected: totals.l1_reject,
+          pending: totals.l1 - totals.l1_selected - totals.l1_reject,
+          total: totals.l1,
+      },
+      {
+          name: 'L2 Interview',
+          rejected: totals.l2_reject,
+          pending: totals.l2 - totals.l2_reject,
+          total: totals.l2,
+      },
+      {
+          name: 'End Client',
+          rejected: totals.end_client_reject,
+          pending: totals.end_client - totals.end_client_reject,
+          total: totals.end_client,
+      },
+      {
+          name: 'Offer',
+          accepted: totals.offers_accepted,
+          rejected: totals.offers_rejected,
+          pending: totals.offers_made - totals.offers_accepted - totals.offers_rejected,
+          total: totals.offers_made,
+      },
+      {
+          name: 'Joining',
+          joined: totals.joined,
+          no_show: totals.no_show,
+          total: totals.offers_accepted, // Base for joining is offers accepted
+      }
+    ];
+
+    const barDefinitions = [
+        { key: 'submitted', name: 'Submitted', color: '#4f46e5' },
+        { key: 'sent_to_client', name: 'Sent to Client', color: '#3b82f6' },
+        { key: 'pending', name: 'Pending', color: '#eab308' },
+        { key: 'selected', name: 'Selected', color: '#10b981' },
+        { key: 'accepted', name: 'Accepted', color: '#10b981' },
+        { key: 'joined', name: 'Joined', color: '#10b981' },
+        { key: 'rejected', name: 'Rejected', color: '#f43f5e' },
+        { key: 'no_show', name: 'No Show', color: '#b91c1c' },
+    ];
+
+    return { funnelData, barDefinitions };
+  };
+
+  const { funnelData: recruitmentFunnelData, barDefinitions: recruitmentFunnelBarDefinitions } = getRecruitmentFunnelData();
+  // --- END: New data processor ---
+
+
   // Generate funnel chart data
   const getFunnelData = () => {
     const totalSubmitted = data.reduce((sum, rec) => sum + rec.profiles_submitted, 0);
@@ -446,7 +686,11 @@ const RecruiterReportPage: React.FC = () => {
             <RecruiterPerformanceTable data={data} />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <FunnelChart data={getFunnelData()} title="Recruitment Funnel" />
+              {/* --- MODIFICATION: Replaced FunnelChart with new component --- */}
+              <RecruitmentFunnelChart
+                funnelData={recruitmentFunnelData}
+                barDefinitions={recruitmentFunnelBarDefinitions}
+              />
               <RecruiterRadarChart
                 data={getRadarData()}
                 title="Recruiter Performance Comparison"
@@ -470,10 +714,11 @@ const RecruiterReportPage: React.FC = () => {
 
         <TabsContent value="funnelAnalysis">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FunnelChart
-              data={getFunnelData()}
-              title="Recruitment Funnel"
-            />
+             {/* --- MODIFICATION: Replaced FunnelChart with new component --- */}
+             <RecruitmentFunnelChart
+                funnelData={recruitmentFunnelData}
+                barDefinitions={recruitmentFunnelBarDefinitions}
+              />
             <div className="grid grid-cols-1 gap-6">
               <PieChartComponent
                 data={getOfferOutcomesData()}
