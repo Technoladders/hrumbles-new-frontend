@@ -24,9 +24,6 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
   const organizationId = useSelector((state) => state.auth.organization_id);
  
 
-
-    const openAIApiKey = import.meta.env.VITE_OPENAI_API_KEY;
-  const openAIModel = 'gpt-4o';
  
   useEffect(() => {
     const getJobDescription = async () => {
@@ -50,222 +47,126 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
     getJobDescription();
   }, [jobId, setError]);
  
-  const cleanResponse = (text) => {
-    const jsonMatch = text.match(/{[\s\S]*}/);
-    if (!jsonMatch) throw new Error('No valid JSON found in response');
-    return jsonMatch[0];
-  };
- 
-  const analyzeResume = async () => {
-      if (!jobDescription || !resumeText) {
-        setError('Please provide both job description and resume.');
-        return;
-      }
-   
-      setIsLoading(true);
-      const newCandidateId = candidateId || uuidv4();
-      setCandidateId(newCandidateId);
 
-       // --- START: MODIFICATION ---
-      let inputTokens = 0;
-      let outputTokens = 0;
-      let status = 'FAILURE';
-      let analysisForLog = null;
-      let responseText = "";
-      // --- END: MODIFICATION ---
-   
-      try {
-        const prompt = `
-          Analyze this resume against the job description and return ONLY a valid JSON response with:
-          - overall_match_score (percentage, 0-100)
-          - matched_skills (array of objects with:
-              requirement (detailed, e.g., "Python for automation"),
-              matched ('yes', 'partial', 'no'),
-              details (specific evidence from resume or "Not mentioned" if absent))
-          - summary (short plain text summary)
-          - companies (array of company names found in the resume)
-          - missing_or_weak_areas (array of strings listing gaps)
-          - top_skills (array of candidate's strongest skills)
-          - development_gaps (array of skills needing improvement)
-          - additional_certifications (array of strings listing certifications not required by JD)
-          - section_wise_scoring (object with main sections, each containing submenus:
-              {
-                section (string),
-                weightage (percentage),
-                submenus (array of { submenu (string), weightage (percentage of section), score (out of 10), weighted_score (calculated), remarks (string) })
-              })
-          - candidate_name (string, extracted from resume or "Unknown" if not found)
-          - email (string, extracted from resume or "" if not found)
-          - github (string, extracted from resume or "" if not found)
-          - linkedin (string, extracted from resume or "" if not found)
-   
-          Job Description: ${jobDescription}
-          Resume: ${resumeText}
-   
-          Structure section_wise_scoring with main sections and submenus:
-          - Technical Skills (weightage: 40%, submenus: Core Skills 60%, Tools 40%)
-          - Work Experience (weightage: 30%, submenus: Relevant Experience 70%, Duration 30%)
-          - Projects (weightage: 15%, submenus: Personal Projects 50%, Professional Projects 50%)
-          - Education (weightage: 10%, submenus: Degree, Certifications; weightage depends on JD:
-            - If JD requires a specific certification: Degree 30%, Certifications 70%
-            - If JD does not require a certification: Degree 50%, Certifications 50%)
-          - Achievements (weightage: 5%, submenus: Awards 50%, Recognitions 50%)
-          - Soft Skills (weightage: 5%, submenus: Leadership 50%, Communication 50%)
-   
-          Scoring Guidelines:
-          - 'yes' (8-10/10): Clear evidence of the skill matching the JD.
-          - 'partial' (4-7/10): Implied or indirect evidence.
-          - 'no' (0-3/10): No evidence.
-          - Infer skills from context (e.g., "Python used in automation tasks" matches "Python for automation").
-          - Calculate overall_match_score as the sum of each section's weighted contribution:
-            - section_score = sum(submenu.weightage * submenu.score) / 100
-            - overall_match_score = sum(section.weightage * section_score) / 100
-   
-          For companies:
-        - Extract company names, designations, and years from work experience sections.
-        - If designation is not explicitly mentioned, use "-".
-        - If years are not specified (e.g., "2019 - 2022"), use "-".
-        - Example: "Senior Developer at TCS, 2019 - 2022" becomes { "name": "TCS", "designation": "Senior Developer", "years": "2019 - 2022" }
-   
-          Use symbols: ✅ for 'yes', ⚠️ for 'partial', ❌ for 'no'. Return ONLY the JSON object.
-        `;
-   
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openAIApiKey}`
+ 
+const analyzeResume = async () => {
+    if (!jobDescription || !resumeText) {
+      setError('Please provide both job description and resume.');
+      return;
+    }
+
+    setIsLoading(true);
+    const newCandidateId = candidateId || uuidv4();
+    setCandidateId(newCandidateId);
+
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let status = 'FAILURE';
+    let analysisForLog = null;
+    let rawResponseForLog = null;
+
+    try {
+      // --- REPLACED: Direct fetch call with Supabase Edge Function invoke ---
+      const { data, error: functionError } = await supabase.functions.invoke('initial-analysis-4o', {
+        body: {
+          type: 'initial',
+          payload: {
+            jobDescription,
+            resumeText,
+          },
         },
-        body: JSON.stringify({
-          model: openAIModel,
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-          temperature: 0.2,
-          max_tokens: 4000,
-        })
       });
 
-      if (!response.ok) {
-        const errorBody = await response.json();
-        throw new Error(`OpenAI API request failed: ${response.status} - ${errorBody.error.message}`);
+      if (functionError) {
+        // Try to parse the error message if it's JSON from our function
+        try {
+            const errorBody = JSON.parse(functionError.message);
+            throw new Error(errorBody.error || functionError.message);
+        } catch {
+            throw new Error(`Failed to analyze resume: ${functionError.message}`);
+        }
       }
       
-      const result = await response.json();
-      responseText = result.choices[0]?.message?.content || "";
-      inputTokens = result.usage?.prompt_tokens ?? 0;
-      outputTokens = result.usage?.completion_tokens ?? 0;
+      const { analysis: parsedResult, usage } = data;
+      rawResponseForLog = parsedResult; // For logging the successful analysis
 
-      if (!responseText) {
-        throw new Error("OpenAI did not provide a response.");
+      if (!parsedResult) {
+        throw new Error("Edge Function did not provide a valid analysis.");
       }
-        
-        const cleanedText = cleanResponse(responseText);
-        const parsedResult = JSON.parse(cleanedText);
+      
+      inputTokens = usage?.prompt_tokens ?? 0;
+      outputTokens = usage?.completion_tokens ?? 0;
+      status = 'SUCCESS';
+      analysisForLog = parsedResult;
 
-        // --- START: MODIFICATION ---
-        status = 'SUCCESS';
-        analysisForLog = parsedResult;
-        // --- END: MODIFICATION ---
-        // Normalize company names
-        // const normalizeCompanyName = (name) => {
-        //   const lowerName = name.toLowerCase().trim();
-        //   if (lowerName === "infosys" || lowerName === "infosys ltd") return "Infosys";
-        //   if (lowerName === "infosys infotech") return "Infosys Infotech";
-        //   return name.trim();
-        // };
- 
-        const normalizeCompanyName = (name) => {
-          if (!name || typeof name !== 'string') {
-            return ""; // Handle empty or non-string input
-          }
-          let normalized = name.toLowerCase().trim();
-          // Remove common company suffixes (case-insensitive) like ltd, inc, corp, llc, co
-          normalized = normalized.replace(/\s*(ltd|limited|inc|corp|corporation|llc|co)\.?\s*$/i, '');
-          // Remove characters that are not word characters (alphanumeric + _), whitespace, or hyphens
-          normalized = normalized.replace(/[^\w\s-]/g, '');
-          // Normalize whitespace (replace multiple spaces with single space, trim again)
-          normalized = normalized.split(/\s+/).join(' ').trim();
-          return normalized;
-        };
-        // END: Updated Normalization Function
- 
-   
-        // const companyData = parsedResult.companies.map(company => ({
-        //   name: normalizeCompanyName(company.name),
-        //   designation: company.designation || '-',
-        //   years: company.years || '-',
-        // }));
- 
-        const companyData = (parsedResult.companies || []).map(company => {
-          const normalizedName = normalizeCompanyName(company.name);
-          // Filter out entries with empty normalized names if necessary
-          if (!normalizedName) return null;
-          return {
-            name: normalizedName, // Store the normalized name
-            original_name: company.name, // Keep original if needed elsewhere, but normalization is primary
-            designation: company.designation || '-',
-            years: company.years || '-',
-          }
-        }).filter(Boolean); // Remove null entries resulting from empty names
-   
- 
-        // const uniqueCompanies = Array.from(
-        //   new Map(companyData.map(item => [item.name, item])).values()
-        // ); // Deduplicate by name, keeping latest designation/years
- 
-                // Deduplicate based on the *normalized* name, keeping the first occurrence
-        // (or adjust logic if you need latest/combined data)
-        const uniqueCompanies = Array.from(
-          new Map(companyData.map(item => [item.name, item])).values()
-        );
- 
-        // Prepare final structure for saving (using normalized name)
-        const companiesToSave = uniqueCompanies.map(c => ({
-            name: c.name, // Use the normalized name for saving/lookup
-            designation: c.designation,
-            years: c.years,
-        }));
-       
-        setAnalysisResult({...parsedResult, companies: companiesToSave});
-        setUpdatedSkills(parsedResult.matched_skills || []);
-        setCandidateName(parsedResult.candidate_name || 'Unknown');
-        setEmail(parsedResult.email || '');
-        setGithub(parsedResult.github || '');
-        setLinkedin(parsedResult.linkedin || '');
-        const saved = await saveData(resumeText, { ...parsedResult, companies: uniqueCompanies }, newCandidateId, true);
-        if (saved) {
-          onAnalysisComplete({
-            job_id: jobId,
-            candidate_id: newCandidateId,
-            candidate_name: parsedResult.candidate_name,
-            overall_score: parsedResult.overall_match_score,
-          });
-          setIsAnalysisComplete(true);
+      // --- The rest of the logic remains the same ---
+      const normalizeCompanyName = (name) => {
+        if (!name || typeof name !== 'string') return "";
+        let normalized = name.toLowerCase().trim();
+        normalized = normalized.replace(/\s*(ltd|limited|inc|corp|corporation|llc|co)\.?\s*$/i, '');
+        normalized = normalized.replace(/[^\w\s-]/g, '');
+        normalized = normalized.split(/\s+/).join(' ').trim();
+        return normalized;
+      };
+
+      const companyData = (parsedResult.companies || []).map(company => {
+        const normalizedName = normalizeCompanyName(company.name);
+        if (!normalizedName) return null;
+        return {
+          name: normalizedName,
+          original_name: company.name,
+          designation: company.designation || '-',
+          years: company.years || '-',
         }
-        setShowResults(false);
-      } catch (err) {
-        setError('Error analyzing resume: ' + err.message);
-        // --- START: MODIFICATION ---
-        analysisForLog = { error: err.message, raw_response: responseText };
-        // --- END: MODIFICATION ---
-      } finally {
-        // --- START: MODIFICATION ---
-        await supabase.from('hr_gemini_usage_log').insert({
-          organization_id: organizationId,
-          created_by: user.id,
-          status: status,
-          input_tokens: inputTokens,
-          output_tokens: outputTokens,
-          analysis_response: analysisForLog,
-          parsed_email: analysisForLog?.email || null,
-          usage_type: 'resume_initial_analysis_openai' 
+      }).filter(Boolean);
+
+      const uniqueCompanies = Array.from(
+        new Map(companyData.map(item => [item.name, item])).values()
+      );
+
+      const companiesToSave = uniqueCompanies.map(c => ({
+          name: c.name,
+          designation: c.designation,
+          years: c.years,
+      }));
+      
+      setAnalysisResult({...parsedResult, companies: companiesToSave});
+      setUpdatedSkills(parsedResult.matched_skills || []);
+      setCandidateName(parsedResult.candidate_name || 'Unknown');
+      setEmail(parsedResult.email || '');
+      setGithub(parsedResult.github || '');
+      setLinkedin(parsedResult.linkedin || '');
+
+      const saved = await saveData(resumeText, { ...parsedResult, companies: uniqueCompanies }, newCandidateId, true);
+      if (saved) {
+        onAnalysisComplete({
+          job_id: jobId,
+          candidate_id: newCandidateId,
+          candidate_name: parsedResult.candidate_name,
+          overall_score: parsedResult.overall_match_score,
         });
-        // --- END: MODIFICATION ---
-        setIsLoading(false);
+        setIsAnalysisComplete(true);
       }
-    };
+      setShowResults(false);
+    } catch (err) {
+      setError('Error analyzing resume: ' + err.message);
+      analysisForLog = { error: err.message, raw_response: rawResponseForLog };
+    } finally {
+      await supabase.from('hr_gemini_usage_log').insert({
+        organization_id: organizationId,
+        created_by: user.id,
+        status: status,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        analysis_response: analysisForLog,
+        parsed_email: analysisForLog?.email || null,
+        usage_type: 'resume_initial_analysis_openai' 
+      });
+      setIsLoading(false);
+    }
+  };
    
-    const saveData = async (resumeText, result, candidateId, isInitial = false) => {
+const saveData = async (resumeText, result, candidateId, isInitial = false) => {
       try {
         if (isInitial && result.email) {
           const { data: existing } = await supabase
@@ -320,72 +221,6 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
           console.error('Supabase Resume Error:', JSON.stringify(resumeError, null, 2));
           throw new Error(`Resume upsert failed: ${resumeError.message}`);
         }
-   
-        // // Step 3: Save and check company associations in candidate_companies
-        // if (result.companies && Array.isArray(result.companies)) {
-        //   const companyEntries = [];
-        //   for (const company of result.companies) {
-        //     const { data: existingCompany, error: companyError } = await supabase
-        //       .from('companies')
-        //       .select('id')
-        //       .eq('name', company.name)
-        //       .single();
-   
-        //     if (companyError && companyError.code !== 'PGRST116') {
-        //       console.error('Supabase Company Error:', JSON.stringify(companyError, null, 2));
-        //       throw new Error(`Company query failed: ${companyError.message}`);
-        //     }
-   
-        //     let companyId;
-        //     if (existingCompany) {
-        //       companyId = existingCompany.id;
-        //     } else {
-        //       const { data: newCompany, error: insertError } = await supabase
-        //         .from('companies')
-        //         .insert({ name: company.name })
-        //         .select('id')
-        //         .single();
-        //       if (insertError) {
-        //         console.error('Supabase Company Insert Error:', JSON.stringify(insertError, null, 2));
-        //         throw new Error(`Company insert failed: ${insertError.message}`);
-        //       }
-        //       companyId = newCompany.id;
-        //     }
-   
-        //     companyEntries.push({
-        //       candidate_id: candidateId,
-        //       job_id: jobId,
-        //       company_id: companyId,
-        //       designation: company.designation || '-',
-        //       years: company.years || '-',
-        //     });
-        //   }
-   
-        //   if (companyEntries.length > 0) {
-        //     const { error: linkError } = await supabase
-        //       .from('candidate_companies')
-        //       .upsert(companyEntries, { onConflict: ['candidate_id', 'job_id', 'company_id'] });
-   
-        //     if (linkError) {
-        //       console.error('Supabase Candidate Companies Error:', JSON.stringify(linkError, null, 2));
-        //       throw new Error(`Candidate companies upsert failed: ${linkError.message}`);
-        //     }
-   
-        //     // Step 4: Verify saved company data
-        //     const { data: savedCompanies, error: fetchError } = await supabase
-        //       .from('candidate_companies')
-        //       .select('company_id, designation, years, companies (name)')
-        //       .eq('candidate_id', candidateId)
-        //       .eq('job_id', jobId);
-   
-        //     if (fetchError) {
-        //       console.error('Supabase Fetch Error:', JSON.stringify(fetchError, null, 2));
-        //       throw new Error(`Failed to verify company data: ${fetchError.message}`);
-        //     }
-   
-        //     console.log('Verified Saved Companies:', JSON.stringify(savedCompanies, null, 2));
-        //   }
-        // }
    
         // START: Updated Step 3 - Company Association Logic using Upsert
         // ****************************************************************
@@ -499,6 +334,7 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
         return false;
       }
     };
+
    
     const updateSkillLocally = (index, newStatus) => {
       const newSkills = [...updatedSkills];
@@ -507,196 +343,165 @@ function ResumeAnalysisModal({ jobId, onClose, setError, onAnalysisComplete = ()
       setUpdatedSkills(newSkills);
     };
    
-    const revalidateSkills = async () => {
-      setIsLoading(true);
+const revalidateSkills = async () => {
+    setIsLoading(true);
 
-      // --- START: MODIFICATION ---
-      let inputTokens = 0;
-      let outputTokens = 0;
-      let status = 'FAILURE';
-      let analysisForLog = null;
-      let responseText = "";
-      // --- END: MODIFICATION ---
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let status = 'FAILURE';
+    let analysisForLog = null;
+    let rawResponseForLog = null; // To store the raw response for error logging
 
-      try {
-
-       
-   
-        const prompt = `
-          Recalculate scores based ONLY on the provided updated skills and initial section-wise scores. Do NOT re-analyze the resume or job description. Return ONLY a valid JSON response with:
-          - overall_match_score (percentage, 0-100)
-          - section_wise_scoring (object with main sections, each containing submenus:
-              {
-                section (string),
-                weightage (percentage),
-                submenus (array of { submenu (string), weightage (percentage of section), score (out of 10), weighted_score (calculated), remarks (string) })
-              })
-   
-          Updated Skills: ${JSON.stringify(updatedSkills)}
-          Initial Section-wise Scoring: ${JSON.stringify(analysisResult.section_wise_scoring)}
-   
-          Scoring Rules:
-          - 'yes' = 10/10
-          - 'partial' = 5/10
-          - 'no' = 0/10
-   
-          Structure section_wise_scoring:
-          - Technical Skills (weightage: 40%, submenus: Core Skills 60%, Tools 40%)
-          - Work Experience (weightage: 30%, submenus: Relevant Experience 70%, Duration 30%)
-          - Projects (weightage: 15%, submenus: Personal Projects 50%, Professional Projects 50%)
-          - Education (weightage: 10%, submenus: Degree 50%, Certifications 50%)
-          - Achievements (weightage: 5%, submenus: Awards 50%, Recognitions 50%)
-   
-          Skill-to-Submenu Mapping:
-          - Core Skills: "Python for automation", "Bash for automation", "PowerShell for automation", "Ansible for automation", "Familiarity with scripting languages like JavaScript", "Experience with REST APIs", "Experience with AI integrated workflows"
-          - Tools: "Familiarity with Jenkins", "Familiarity with Selenium", "Knowledge on containerization", "VMware VRO experience"
-          - Relevant Experience: "RPA Automation experience", "Event, Incident and IT Process Automations experience", "Linux/Windows system administration experience"
-          - Duration: "Linux/Windows system administration experience" (for 5+ years)
-          - Professional Projects: "RPA Automation experience", "Event, Incident and IT Process Automations experience"
-   
-          Instructions:
-          - Start with the initial section_wise_scoring scores.
-          - Update ONLY the submenus affected by the updated skills:
-            - For each submenu, calculate the new score as the average of the mapped skills' scores (10 for 'yes', 5 for 'partial', 0 for 'no').
-            - If a submenu has no mapped skills updated, retain its initial score and remarks.
-          - Recalculate weighted_score = submenu.weightage * score / 100 for each submenu.
-          - Compute section_score = sum(submenu.weightage * submenu.score) / 100 for each section.
-          - Compute overall_match_score = sum(section.weightage * section_score) / 100.
-          - Total weightage of main sections must sum to 100%.
-   
-          Return ONLY the JSON object.
-        `;
-   
-        
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openAIApiKey}`
-        },
-        body: JSON.stringify({
-          model: openAIModel,
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-          temperature: 0.1,
-          max_tokens: 2000,
-        })
+    try {
+      // Step 1: Call the Supabase Edge Function for revalidation
+      const { data, error: functionError } = await supabase.functions.invoke('initial-analysis-4o', {
+          body: {
+              type: 'revalidation',
+              payload: {
+                  updatedSkills, // The locally modified skills
+                  initialSectionWiseScoring: analysisResult.section_wise_scoring, // The original scoring rubric
+              },
+          },
       });
 
-      if (!response.ok) {
-        const errorBody = await response.json();
-        throw new Error(`OpenAI API request failed: ${response.status} - ${errorBody.error.message}`);
+      // Handle errors returned from the Edge Function
+      if (functionError) {
+        try {
+            // The function might return a JSON error object, try to parse it
+            const errorBody = JSON.parse(functionError.message);
+            throw new Error(errorBody.error || functionError.message);
+        } catch {
+            // Otherwise, use the raw error message
+            throw new Error(`Failed to revalidate skills: ${functionError.message}`);
+        }
+      }
+
+      const { analysis: updatedScores, usage } = data;
+      rawResponseForLog = updatedScores; // Store successful response for potential logging
+
+      if (!updatedScores || !updatedScores.overall_match_score) {
+        throw new Error("Edge Function did not provide a valid revalidation response.");
       }
       
-      const result = await response.json();
-      responseText = result.choices[0]?.message?.content || "";
-      inputTokens = result.usage?.prompt_tokens ?? 0;
-      outputTokens = result.usage?.completion_tokens ?? 0;
+      // Step 2: Set variables for successful logging
+      inputTokens = usage?.prompt_tokens ?? 0;
+      outputTokens = usage?.completion_tokens ?? 0;
+      status = 'SUCCESS';
+      analysisForLog = updatedScores;
+      
+      console.log('Updated Scores from Edge Function:', updatedScores);
 
-      if (!responseText) {
-        throw new Error("OpenAI did not provide a response for revalidation.");
+      // Step 3: Prepare the final result object with the new scores
+      const updatedResult = {
+        ...analysisResult,
+        overall_match_score: Math.round(updatedScores.overall_match_score),
+        section_wise_scoring: updatedScores.section_wise_scoring,
+        matched_skills: updatedSkills, // Keep the user-modified skills
+      };
+
+      if (!jobId || !candidateId) {
+        throw new Error('Missing required fields: job_id or candidate_id');
       }
-        
-        const cleanedText = cleanResponse(responseText);
-        const updatedScores = JSON.parse(cleanedText);
-        
-        // --- START: MODIFICATION ---
-        status = 'SUCCESS';
-        analysisForLog = updatedScores;
-        // --- END: MODIFICATION ---
+      
+      // Step 4: Update state and save the data
+      setAnalysisResult(updatedResult);
+      setIsRevalidated(true);
+      const saved = await saveData(resumeText, updatedResult, candidateId, false);
+      
+      if (saved) {
+        onAnalysisComplete({
+          job_id: jobId,
+          candidate_id: candidateId,
+          candidate_name: candidateName,
+          overall_score: updatedResult.overall_match_score,
+        });
+      }
+      setShowResults(false);
 
-        console.log('Updated Scores from Gemini:', updatedScores);
-   
-        const updatedResult = {
-          ...analysisResult,
-          overall_match_score: Math.round(updatedScores.overall_match_score), // Round to integer for database
-          section_wise_scoring: updatedScores.section_wise_scoring,
-          matched_skills: updatedSkills,
-        };
-   
-        // Validate required fields before saving
-        if (!jobId || !candidateId) {
-          throw new Error('Missing required fields: job_id or candidate_id');
-        }
-   
-        setAnalysisResult(updatedResult);
-        setIsRevalidated(true);
-        const saved = await saveData(resumeText, updatedResult, candidateId, false);
-        if (saved) {
-          onAnalysisComplete({
-            job_id: jobId,
-            candidate_id: candidateId,
-            candidate_name: candidateName,
-            overall_score: updatedResult.overall_match_score, // Use rounded value
-          });
-        }
-        setShowResults(false);
-      } catch (err) {
-        setError('Error re-evaluating scores: ' + err.message);
-        // --- START: MODIFICATION ---
-        analysisForLog = { error: err.message, raw_response: responseText };
-        // --- END: MODIFICATION ---
-        // Local fallback calculation if Gemini fails
-        const updatedScoring = { ...analysisResult.section_wise_scoring };
-        const skillMap = {
-          "Core Skills": ["Python for automation", "Bash for automation", "PowerShell for automation", "Ansible for automation", "Familiarity with scripting languages like JavaScript", "Experience with REST APIs", "Experience with AI integrated workflows"],
-          "Tools": ["Familiarity with Jenkins", "Familiarity with Selenium", "Knowledge on containerization", "VMware VRO experience"],
-          "Relevant Experience": ["RPA Automation experience", "Event, Incident and IT Process Automations experience", "Linux/Windows system administration experience"],
-          "Duration": ["Linux/Windows system administration experience"],
-          "Professional Projects": ["RPA Automation experience", "Event, Incident and IT Process Automations experience"],
-        };
-   
-        Object.keys(skillMap).forEach(submenu => {
-          const mappedSkills = skillMap[submenu];
-          const relevantSkills = updatedSkills.filter(skill => mappedSkills.includes(skill.requirement));
-          if (relevantSkills.length > 0) {
-            const avgScore = relevantSkills.reduce((sum, skill) => sum + (skill.matched === 'yes' ? 10 : skill.matched === 'partial' ? 5 : 0), 0) / relevantSkills.length;
-            const section = Object.keys(updatedScoring).find(sec => updatedScoring[sec].submenus.some(sub => sub.submenu === submenu));
-            const submenuObj = updatedScoring[section].submenus.find(sub => sub.submenu === submenu);
-            submenuObj.score = avgScore;
-            submenuObj.weighted_score = (submenuObj.weightage * avgScore) / 100;
+    } catch (err) {
+      // --- CATCH BLOCK with LOCAL FALLBACK ---
+      setError('Error re-evaluating scores (using local fallback): ' + err.message);
+      analysisForLog = { error: err.message, raw_response: rawResponseForLog };
+      
+      console.warn("Revalidation via Edge Function failed. Attempting local fallback calculation.");
+
+      // Local fallback calculation if the API/Edge Function fails
+      const updatedScoring = JSON.parse(JSON.stringify(analysisResult.section_wise_scoring)); // Deep copy
+      const skillMap = {
+        "Core Skills": ["Python for automation", "Bash for automation", "PowerShell for automation", "Ansible for automation", "Familiarity with scripting languages like JavaScript", "Experience with REST APIs", "Experience with AI integrated workflows"],
+        "Tools": ["Familiarity with Jenkins", "Familiarity with Selenium", "Knowledge on containerization", "VMware VRO experience"],
+        "Relevant Experience": ["RPA Automation experience", "Event, Incident and IT Process Automations experience", "Linux/Windows system administration experience"],
+        "Duration": ["Linux/Windows system administration experience"],
+        "Professional Projects": ["RPA Automation experience", "Event, Incident and IT Process Automations experience"],
+      };
+
+      // Recalculate scores based on the skill map
+      Object.keys(skillMap).forEach(submenuName => {
+        const mappedSkillRequirements = skillMap[submenuName];
+        const relevantSkills = updatedSkills.filter(skill => mappedSkillRequirements.includes(skill.requirement));
+        
+        if (relevantSkills.length > 0) {
+          const totalScore = relevantSkills.reduce((sum, skill) => {
+            if (skill.matched === 'yes') return sum + 10;
+            if (skill.matched === 'partial') return sum + 5;
+            return sum + 0;
+          }, 0);
+          const avgScore = totalScore / relevantSkills.length;
+
+          // Find and update the correct submenu in our scoring object
+          for (const sectionKey in updatedScoring) {
+              const section = updatedScoring[sectionKey];
+              const submenuObj = section.submenus.find(sub => sub.submenu === submenuName);
+              if (submenuObj) {
+                  submenuObj.score = avgScore;
+                  submenuObj.weighted_score = (submenuObj.weightage * avgScore) / 100;
+                  break; // Move to the next skillMap key once found
+              }
           }
-        });
-   
-        const overallMatchScore = Object.values(updatedScoring).reduce((total, section) => {
-          const sectionScore = section.submenus.reduce((sum, submenu) => sum + submenu.weighted_score, 0);
-          return total + (sectionScore * section.weightage) / 100;
-        }, 0);
-   
-        const updatedResultFallback = {
-          ...analysisResult,
-          overall_match_score: Math.round(overallMatchScore), // Round to integer for database
-          section_wise_scoring: updatedScoring,
-          matched_skills: updatedSkills,
-        };
-   
-        setAnalysisResult(updatedResultFallback);
-        setIsRevalidated(true);
-        const saved = await saveData(resumeText, updatedResultFallback, candidateId, false);
-        if (saved) {
-          onAnalysisComplete({
-            job_id: jobId,
-            candidate_id: candidateId,
-            candidate_name: candidateName,
-            overall_score: updatedResultFallback.overall_match_score, // Use rounded value
-          });
         }
-      } finally {
-         // --- START: MODIFICATION ---
-        await supabase.from('hr_gemini_usage_log').insert({
-          organization_id: organizationId,
-          created_by: user.id,
-          status: status,
-          input_tokens: inputTokens,
-          output_tokens: outputTokens,
-          analysis_response: analysisForLog,
-          parsed_email: email, // Use the email from component state
-          usage_type: 'resume_revalidation_openai'
+      });
+      
+      // Recalculate the overall score from the locally updated section scores
+      const overallMatchScore = Object.values(updatedScoring).reduce((total, section) => {
+        const sectionScore = section.submenus.reduce((sum, submenu) => sum + (submenu.weighted_score || 0), 0);
+        return total + (sectionScore * section.weightage) / 100;
+      }, 0);
+
+      const updatedResultFallback = {
+        ...analysisResult,
+        overall_match_score: Math.round(overallMatchScore),
+        section_wise_scoring: updatedScoring,
+        matched_skills: updatedSkills,
+      };
+
+      // Update state and save the fallback data
+      setAnalysisResult(updatedResultFallback);
+      setIsRevalidated(true);
+      const saved = await saveData(resumeText, updatedResultFallback, candidateId, false);
+      if (saved) {
+        onAnalysisComplete({
+          job_id: jobId,
+          candidate_id: candidateId,
+          candidate_name: candidateName,
+          overall_score: updatedResultFallback.overall_match_score,
         });
-        // --- END: MODIFICATION ---
-        setIsLoading(false);
       }
-    };
+      
+    } finally {
+      // This will run after either the try or catch block completes
+      await supabase.from('hr_gemini_usage_log').insert({
+        organization_id: organizationId,
+        created_by: user.id,
+        status: status, // Will be 'FAILURE' if catch block was entered, 'SUCCESS' otherwise
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        analysis_response: analysisForLog,
+        parsed_email: email,
+        usage_type: 'resume_revalidation_openai'
+      });
+      setIsLoading(false);
+    }
+  };
  
   return (
     <Modal

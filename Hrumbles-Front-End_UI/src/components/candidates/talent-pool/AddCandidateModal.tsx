@@ -60,98 +60,6 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
   };
 
   const analyseAndSaveProfile = async (text: string, resumeFile?: File): Promise<{status: string; profile: any}> => {
-    // --- START: OpenAI API Integration ---
-    // SECURITY WARNING: Exposing API keys in client-side code is a significant security risk.
-    // This implementation uses `dangerouslyAllowBrowser: true`, which is not recommended for production.
-    // For a production application, this API call should be moved to a secure backend or a serverless function.
-    const openai = new OpenAI({ 
-        apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-        dangerouslyAllowBrowser: true 
-    });
-    
-    const systemPrompt = `
-      Based on the provided resume text, perform a detailed extraction to create a professional profile. 
-      Return ONLY a single, valid JSON object with the exact keys specified below. Do not include any markdown formatting or explanations.
-
-      JSON Schema and Strict Instructions:
-       
-      "suggested_title": string.
-      Rule 1: Use the most recent or prominent job title from work experience (e.g., "Technical Lead", "Full Stack Developer").
-      Rule 2: If no work experience, infer a suitable title from the professional summary and skills (e.g., "Frontend Developer").
-       
-      "candidate_name": string (Full Name).
-                                                       
-      "email": string (Email address).
-       
-      "phone": string (Phone number, exactly as found).
-       
-      "linkedin_url": string.
-      Rule: Must be a valid URL (starts with http, https, or www). If the text is just a phrase like "LinkedIn Profile", return null.
-       
-      "github_url": string.
-      Rule: Must be a valid URL. If not a URL, return null.
-       
-      "current_location": string.  
-      - Rule: Extract the full address if available (e.g., under "Address", "Location", or at the top of the resume).  
-      - If no address is found, return null.  
-      - Do not merge email or phone into address.  
-                                                         
-      "professional_summary": array of strings  
-      Rules:  
-      1. Always return as an array of separate bullet points (strings).  
-      2. Each bullet point must be a single complete sentence or phrase from the resume.  
-      3. Do not merge multiple points into one string.  
-      4. If no professional summary is present, omit this field entirely.  
-       
-      "top_skills": array of strings (List of key technical and soft skills).  
-       
-      "work_experience": array of objects, each with "company", "designation", "duration", and "responsibilities" (array of strings).  
-      Rule: If a company and a client are mentioned (e.g., "Company X | Client: Client Y"), extract only the primary company name ("Company X") into the "company" field.  
-       
-      "education": array of objects, each with "institution", "degree", and "year".  
-      Rule: If an institution name is not explicitly stated, return null for "institution".  
-       
-      "projects": array of strings  
-      Rules:  
-      - Always extract the **entire Project Summary section exactly as written**, including titles, clients, environments, roles, descriptions, and bullet-point responsibilities.  
-      - Each project (PROJECT #1, PROJECT #2, etc.) must be preserved as one full string inside the array.  
-      - Do not replace with placeholders like "View Project". If a project block exists in the text, copy it fully.  
-      - Do not summarize or shorten. Preserve all formatting and wording.  
-      - If no projects exist in the resume, return an empty array.  
-       
-      "certifications": array of strings.  
-       
-      "other_details": object  
-      Rules:  
-      - Include only additional resume information that does not belong to the above categories.  
-      - Use exact heading names as keys (e.g., "Hackathons", "AI & Tech Online Courses", "Languages", "Achievements").  
-      - Do NOT include project-related information here.  
-      - If no such sections exist, return null.  
-       
-      Important:  
-      - If a field cannot be found, use null or an empty array/string as appropriate.
-    `;
-    
-    const result = await openai.chat.completions.create({
-      model: 'gpt-4.1-nano', // Using the latest model for best results
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Resume Text:\n\n---\n${text}\n---` }
-      ]
-    });
-
-    const inputTokens = result.usage?.prompt_tokens || 0;
-    const outputTokens = result.usage?.completion_tokens || 0;
-    
-    const responseJson = result.choices[0].message.content;
-    if (!responseJson) {
-        throw new Error('AI response was empty or invalid.');
-    }
-    
-    const profileData = JSON.parse(responseJson);
-    // --- END: OpenAI API Integration ---
-    
     let resumePath: string | null = null;
     if (resumeFile) {
         const sanitizedName = sanitizeFileName(resumeFile.name);
@@ -159,7 +67,10 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
         
         const { data: uploadData, error: uploadError } = await supabase.storage
             .from(BUCKET_NAME)
-            .upload(fileName, resumeFile);
+            .upload(fileName, resumeFile, {
+                cacheControl: '3600',
+                upsert: false,
+            });
         
         if (uploadError) throw new Error(`File Upload Error: ${uploadError.message}`);
 
@@ -167,24 +78,36 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
         resumePath = urlData.publicUrl;
     }
 
-    const { data: status, error: rpcError } = await supabase.rpc('upsert_candidate_with_timeframe', {
-      profile_data: profileData,
-      resume_text: text,
-      organization_id_input: organizationId,
-      user_id_input: user.id,
-      resume_path_input: resumePath,
-      input_tokens_used: inputTokens,
-      output_tokens_used: outputTokens,
-      usage_type_input: 'talent_pool_ingestion'
+    // --- CALL THE NEW SUPABASE EDGE FUNCTION ---
+    const { data, error: edgeFunctionError } = await supabase.functions.invoke('talent-analyse-resume', {
+        body: {
+            resumeText: text,
+            organizationId: organizationId, // Pass these to the Edge Function
+            userId: user.id,             // Pass these to the Edge Function
+            resumePath: resumePath,      // Pass the uploaded path
+        },
+        // headers: { 'Content-Type': 'application/json' } // invoke handles this for JSON body
     });
 
-    if (rpcError) throw new Error(`Database Error: ${rpcError.message}`);
+    if (edgeFunctionError) {
+        console.error('Edge Function invocation error:', edgeFunctionError);
+        // The Edge Function returns structured error, try to parse it
+        try {
+            const errorBody = JSON.parse(edgeFunctionError.message);
+            throw new Error(errorBody.error || edgeFunctionError.message);
+        } catch {
+            throw new Error(`Failed to process resume: ${edgeFunctionError.message}`);
+        }
+    }
     
+    // The Edge Function now returns the status and profile directly
+    const { status, profile } = data;
+
     if (status === 'SKIPPED_NO_EMAIL') {
         throw new Error('Could not extract a valid email from the resume.');
     }
     
-    return { status, profile: profileData };
+    return { status, profile };
   };
 
   // --- HANDLERS (No changes needed below this line) ---
