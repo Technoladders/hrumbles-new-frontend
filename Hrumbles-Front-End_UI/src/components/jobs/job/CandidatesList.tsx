@@ -985,6 +985,7 @@ const candidates = useMemo(() => {
 // --- ADDED: Function to handle the batch validation process ---
   // --- ADDED: Function to handle the batch validation process ---
   const handleBatchValidate = async () => {
+   
     const unvalidatedCandidates = paginatedCandidates.filter(c => !c.hasValidatedResume && !validatingIds.includes(c.id));
 
     if (unvalidatedCandidates.length === 0) {

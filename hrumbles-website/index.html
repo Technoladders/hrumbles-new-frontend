@@ -926,7 +926,7 @@ Structured Data (Schema Markup) for Rich Search Results
                     data-o-anonymous="1"
                     data-o-auth="1"
                     data-widget-mode="login"
-                    href="https://app.hrumbles.ai"
+                    href="https://app.oorwin.ai"
                     o-processed="1"
                     >Log in</a
                   >
@@ -1328,6 +1328,13 @@ Structured Data (Schema Markup) for Rich Search Results
   background: rgba(255, 255, 255, 1);
 }
 </style>
+
+<iframe 
+  id="landing-page-iframe" 
+  src="landing-page/index.html" 
+  style="width: 100%; border: none; display: block; visibility: hidden; transition: visibility 0.3s;" 
+  scrolling="no">
+</iframe>
 
 <section class="section u-bg-tertiary u-pb-0">
   <div class="container u-mb-3 u-z-index-2">
@@ -2941,6 +2948,41 @@ document.addEventListener('DOMContentLoaded', () => {
   
   trialForm.addEventListener('submit', () => handleFormSubmit(trialForm, 'Free Trial Request'));
   demoForm.addEventListener('submit', () => handleFormSubmit(demoForm, 'Demo Request'));
+});
+</script>
+
+<!-- SCRIPT TO MANAGE IFRAME HEIGHT AND SCROLL EVENTS -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const iframe = document.getElementById('landing-page-iframe');
+    if (!iframe) return;
+
+    const iframeWindow = iframe.contentWindow;
+    let isTicking = false;
+
+    // 1. Listen for messages FROM the iframe to adjust its height
+    window.addEventListener('message', function(event) {
+        if (event.data && event.data.type === 'iframe-resize') {
+            // Set the height received from the iframe
+            iframe.style.height = event.data.height + 'px';
+            // Make the iframe visible now that it has the correct height
+            iframe.style.visibility = 'visible';
+        }
+    });
+
+    // 2. Listen for scroll events on the main page to send TO the iframe
+    window.addEventListener('scroll', function() {
+        if (!isTicking) {
+            window.requestAnimationFrame(function() {
+                iframeWindow.postMessage({
+                    type: 'parent-scroll',
+                    scrollTop: window.scrollY
+                }, '*'); // Use your specific domain in production instead of '*'
+                isTicking = false;
+            });
+            isTicking = true;
+        }
+    });
 });
 </script>
 </body>

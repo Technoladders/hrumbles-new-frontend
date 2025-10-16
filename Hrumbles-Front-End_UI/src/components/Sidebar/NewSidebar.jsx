@@ -62,7 +62,28 @@ const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownTogg
           <Icon as={icon} fontSize="16px" color={isActive ? activeColor : iconColor} _groupHover={{ color: hoverTextColor }} />
           {isExpanded && (
             <Flex justify="space-between" align="center" w="full" ml={4} >
-              <Text fontWeight="medium">{label}</Text>
+              <Box position="relative" display="inline-block">
+  <Text fontWeight="medium">{label}</Text>
+  {item.beta && (
+    <Box
+      position="absolute"
+      top="-5px"
+      right="-34px"
+      fontSize="9px"
+      fontWeight="bold"
+      px={1.5}
+      py="1px"
+      borderRadius="sm"
+      bg="red.500"
+      color="white"
+      lineHeight="1"
+      textTransform="uppercase"
+    >
+      Beta
+    </Box>
+  )}
+</Box>
+
               {dropdown && (
                 <Icon
                   as={isDropdownOpen ? ChevronUpIcon : ChevronDownIcon}

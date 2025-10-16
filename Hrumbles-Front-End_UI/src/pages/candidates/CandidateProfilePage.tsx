@@ -14,13 +14,22 @@ import {
   Info,
   Lightbulb,
   History,     
-  ScanSearch,   
+  ScanSearch,
+  Sparkles,   
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"; 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import CompareWithJobDialog from '@/components/candidates/talent-pool/CompareWithJobDialog';
 import AnalysisHistoryDialog from '@/components/candidates/AnalysisHistoryDialog';
+import EnrichDataDialog from "@/components/candidates/talent-pool/EnrichDataDialog";
+import { generateDocx, generatePdf } from "@/utils/cvGenerator"; // Import the new functions
 
  
 // Helper to safely parse JSON arrays from the database
@@ -42,6 +51,7 @@ const CandidateProfilePage = () => {
   const { candidateId } = useParams<{ candidateId: string }>();
     const [isCompareModalOpen, setCompareModalOpen] = useState(false);
   const [isHistoryModalOpen, setHistoryModalOpen] = useState(false);
+  const [isEnrichModalOpen, setEnrichModalOpen] = useState(false);
  
   const { data: candidate, isLoading } = useQuery({
     queryKey: ["talentPoolCandidate", candidateId],
@@ -111,11 +121,11 @@ const sortedWorkExperience = [...workExperience].sort((a, b) => {
   return (
     <div className="bg-white min-h-screen">
       <div className="container mx-auto p-4 md:p-8">
-        <Link to="/talent-pool" className="mb-6 inline-block"> 
-          <Button variant="outline" className="border-gray-300">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Talent Pool
+   
+          <Button variant="outline" className="border-gray-300 mb-6" onClick={() => window.history.back()}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back
           </Button>
-        </Link>
+       
  
         {/* --- Header Section --- */}
         <Card className="mb-8 overflow-hidden border rounded-lg">
@@ -155,28 +165,107 @@ const sortedWorkExperience = [...workExperience].sort((a, b) => {
                     </div>
                 </div>
               </div>
-          <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0 w-full sm:w-auto">
-    <Button size="sm" variant="outline" onClick={() => setCompareModalOpen(true)} className="w-full sm:w-auto flex-grow sm:flex-grow-0 flex items-center justify-center gap-2">
-        <ScanSearch size={16} />
-        <span>Compare with Job</span>
-    </Button>
-    {/* <Button size="sm" variant="outline1" onClick={() => setHistoryModalOpen(true)} className="w-full flex items-center justify-center gap-2" variant="secondary">
-        <History size={16} />
-        <span>Analysis History</span>
-    </Button> */}
-    
-    {candidate.resume_path && (
-        <a href={candidate.resume_path} download={resumeFileName} className="w-full sm:w-auto">
-        <Button size="sm" variant="datepicker" className="w-full flex items-center justify-center gap-2">
-            <Download size={16} />
-            <span>Download CV</span>
-        </Button>
-        </a>
-    )}
+  <div className="flex flex-col gap-4 flex-shrink-0 w-50">
+  <Button
+    size="sm"
+    variant="outline"
+    className="w-full flex items-center justify-center gap-2"
+    onClick={() => setCompareModalOpen(true)}
+  >
+    <ScanSearch size={16} />
+    <span>Compare with Job</span>
+  </Button>
+
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button
+        size="sm"
+        variant="datepicker"
+        className="w-full flex items-center justify-center gap-2"
+      >
+        <Download size={16} />
+        <span>Download Formatted CV</span>
+      </Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent>
+      <DropdownMenuItem onClick={() => generateDocx(candidate)}>
+        Download as DOCX
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => generatePdf(candidate)}>
+        Download as PDF
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
+
+  {candidate.resume_path && (
+    <a href={candidate.resume_path} download={resumeFileName} title="Download original uploaded resume">
+      <Button
+        size="sm"
+        variant="secondary"
+        className="w-full flex items-center justify-center gap-2"
+      >
+        <Download size={16} />
+        <span>Original CV</span>
+      </Button>
+    </a>
+  )}
+   <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full flex items-center justify-center gap-2"
+                  onClick={() => setEnrichModalOpen(true)}
+                >
+                  <Sparkles size={16} />
+                  <span>Enrich Data</span>
+                </Button>
 </div>
+
             </div>
           </CardContent>
         </Card>
+
+         {/* --- START: Added for Enrich Data --- */}
+        {/* This new card provides a quick overview of the enriched data */}
+       {/* <Card className="mb-8">
+            <CardContent className="p-4">
+               
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 text-center">
+             
+                    {candidate.total_experience && (
+                        <div>
+                            <p className="text-sm text-gray-500">Experience</p>
+                            <p className="font-semibold text-gray-800">{candidate.total_experience}</p>
+                        </div>
+                    )}
+                    {candidate.notice_period && (
+                        <div>
+                            <p className="text-sm text-gray-500">Notice Period</p>
+                            <p className="font-semibold text-gray-800">{candidate.notice_period}</p>
+                        </div>
+                    )}
+                    {candidate.current_salary && (
+                         <div>
+                            <p className="text-sm text-gray-500">Current Salary</p>
+                            <p className="font-semibold text-gray-800">{candidate.current_salary}</p>
+                        </div>
+                    )}
+                    {candidate.current_location && (
+                        <div>
+                            <p className="text-sm text-gray-500">Location</p>
+                            <p className="font-semibold text-gray-800">{candidate.current_location}</p>
+                        </div>
+                    )}
+                    
+                    {candidate.highest_education && (
+                        <div>
+                            <p className="text-sm text-gray-500">Highest Education</p>
+                            <p className="font-semibold text-gray-800">{candidate.highest_education}</p>
+                        </div>
+                    )}
+                  
+                </div>
+            </CardContent>
+        </Card> */}
  
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* --- Main Content (Left) --- */}
@@ -249,6 +338,8 @@ const sortedWorkExperience = [...workExperience].sort((a, b) => {
                     </CardContent>
                 </Card>
              )}
+
+
              
              {education && education.length > 0 && (
                 <Card className="border rounded-lg">
@@ -280,6 +371,17 @@ const sortedWorkExperience = [...workExperience].sort((a, b) => {
                     </CardContent>
                 </Card>
             )}
+
+                          {/* --- START: Added for Enrich Data --- */}
+             {/* This card displays the preferred locations from the enriched data */}
+             {candidate.preferred_locations && candidate.preferred_locations.length > 0 && (
+                <Card className="border rounded-lg">
+                    <CardHeader><CardTitle className="text-xl font-bold">Preferred Locations</CardTitle></CardHeader>
+                    <CardContent className="flex flex-wrap gap-2">
+                      {parseJsonArray(candidate.preferred_locations).map((loc: string) => (<Badge key={loc} className="bg-blue-200 text-blue-800" >{loc}</Badge>))}
+                    </CardContent>
+                </Card>
+             )}
           </div>
         </div>
 
@@ -296,6 +398,11 @@ const sortedWorkExperience = [...workExperience].sort((a, b) => {
                   onClose={() => setHistoryModalOpen(false)}
                   candidateId={candidateId}
                   candidateName={candidate.candidate_name}
+                />
+                <EnrichDataDialog
+                  isOpen={isEnrichModalOpen}
+                  onClose={() => setEnrichModalOpen(false)}
+                  candidate={candidate}
                 />
             </>
         )}

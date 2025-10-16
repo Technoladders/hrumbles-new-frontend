@@ -438,7 +438,7 @@ const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
         </div>
       </div>
     </div>
-
+ 
     {!shareMode && (
       <EmployeeDataSelection
         open={showDataSelection}

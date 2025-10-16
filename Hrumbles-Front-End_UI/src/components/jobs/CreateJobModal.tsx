@@ -1,3 +1,5 @@
+// CreateJobModal.tsx
+
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/jobs/ui/button";
 import {
@@ -8,8 +10,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/jobs/ui/dialog";
-import { Briefcase, Users, Building, UserCheck } from "lucide-react";
-import { toast } from "sonner";
+import { Briefcase, Building, UserCheck, ArrowLeft, Users, ChevronRight } from "lucide-react";
 import { JobStepperForm } from "./job/JobStepperForm";
 import { JobData } from "@/lib/types";
 import { useSelector } from "react-redux";
@@ -21,174 +22,163 @@ interface CreateJobModalProps {
   onSave?: (job: JobData) => void;
 }
 
+type ViewState = 'SELECT_JOB_TYPE' | 'SELECT_INTERNAL_TYPE' | 'SHOW_STEPPER';
+
 const ITECH_ORGANIZATION_ID = [
   "1961d419-1272-4371-8dc7-63a4ec71be83",
   "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
 ];
 
 export const CreateJobModal = ({ isOpen, onClose, editJob = null, onSave }: CreateJobModalProps) => {
+  const [view, setView] = useState<ViewState>('SELECT_JOB_TYPE');
   const [jobType, setJobType] = useState<"Internal" | "External" | null>(null);
   const [internalType, setInternalType] = useState<"Inhouse" | "Client Side" | null>(null);
-  const [showStepper, setShowStepper] = useState(false);
 
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
-  const handleReset = useCallback(() => {
+  const fullReset = useCallback(() => {
+    setView('SELECT_JOB_TYPE');
     setJobType(null);
     setInternalType(null);
-    setShowStepper(false);
   }, []);
 
   useEffect(() => {
     if (isOpen) {
       if (editJob) {
         setJobType(editJob.jobType || "Internal");
-        setShowStepper(true);
         if (editJob.jobType === "Internal") {
           setInternalType(editJob.submissionType === "Client" ? "Client Side" : "Inhouse");
         }
+        setView('SHOW_STEPPER');
       } else if (Array.isArray(ITECH_ORGANIZATION_ID) && ITECH_ORGANIZATION_ID.includes(organizationId)) {
         setJobType("Internal");
         setInternalType("Inhouse");
-        setShowStepper(true);
+        setView('SHOW_STEPPER');
       } else {
-        handleReset();
+        fullReset();
       }
-    } else if (!isOpen) {
-      handleReset();
+    } else {
+      fullReset();
     }
-  }, [isOpen, editJob, organizationId, handleReset]);
-
-  const handleClose = () => {
-    handleReset();
-    onClose();
-  };
+  }, [isOpen, editJob, organizationId, fullReset]);
 
   const handleJobTypeSelect = (type: "Internal" | "External") => {
     setJobType(type);
-    if (type === "External") {
-      setShowStepper(true);
-    }
+    setView(type === 'Internal' ? 'SELECT_INTERNAL_TYPE' : 'SHOW_STEPPER');
   };
 
   const handleInternalTypeSelect = (type: "Inhouse" | "Client Side") => {
     setInternalType(type);
-    setShowStepper(true);
+    setView('SHOW_STEPPER');
   };
 
-  const handleSaveJob = (job: JobData) => {
-    if (onSave) {
-      onSave(job);
+  const handleBack = () => {
+    if (view === 'SELECT_INTERNAL_TYPE') {
+      setView('SELECT_JOB_TYPE');
+      setJobType(null);
     }
   };
 
+  const handleBackFromStepper = () => {
+    setView(jobType === 'Internal' ? 'SELECT_INTERNAL_TYPE' : 'SELECT_JOB_TYPE');
+  };
+  
+  const handleSaveJob = (job: JobData) => {
+    if (onSave) onSave(job);
+  };
+
+  const SelectionCard = ({ label, description, icon, onClick }: { label: string; description: string; icon: React.ReactNode; onClick: () => void; }) => (
+    <button onClick={onClick} className="group flex flex-col items-center justify-center border rounded-xl text-center transition-all duration-300 w-96 p-8 min-h-[180px] hover:border-gray-400 hover:shadow-lg">
+      {icon}
+      <h3 className="font-semibold text-xl mt-4">{label}</h3>
+      <p className="text-sm text-gray-500 mt-1">{description}</p>
+    </button>
+  );
+
+    const HeaderButton = ({ label, icon }: { label: string; icon: React.ReactNode; }) => (
+    <div className="flex items-center justify-center p-3 border-2 rounded-lg text-center bg-blue-50/50 border-blue-500 w-48">
+      {icon}
+      <span className="font-medium">{label}</span>
+    </div>
+  );
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent
-        className={`${showStepper ? 'sm:max-w-5xl w-11/12 max-h-[90vh] overflow-y-auto' : 'sm:max-w-lg'}`}
-        onInteractOutside={(e) => e.preventDefault()}
-      >
-        <DialogHeader className="sticky top-0 z-10 bg-background pb-4 text-center">
-          <DialogTitle className="text-xl">
-            {!showStepper
-              ? editJob ? "Edit Job" : "Create New Job"
-              : `${jobType}${internalType ? ` (${internalType})` : ''} Job`}
-          </DialogTitle>
-          <DialogDescription>
-            {!showStepper ? `Select the type of job you want to ${editJob ? 'edit' : 'create'}` :
-              `Fill in the required information to ${editJob ? 'update' : 'create a new'} job`
-            }
-          </DialogDescription>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-6xl w-11/12 max-h-[90vh] flex flex-col" onInteractOutside={(e) => e.preventDefault()}>
+        <DialogHeader className="sticky top-0 z-10 bg-background pt-6 pb-4 text-center">
+          <DialogTitle className="text-2xl font-bold">{editJob ? "Edit Job" : "Create New Job"}</DialogTitle>
+          <DialogDescription>Fill in the required information to create a new job</DialogDescription>
         </DialogHeader>
 
-        {!showStepper && !jobType && !editJob && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-6">
-            {/* MODIFICATION START: Restored original button structure for correct layout */}
-            <Button
-              variant="cardButton"
-              className="group flex flex-col items-center justify-center h-40 p-6 border-2 transition-all hover:border-gray-300"
-              onClick={() => handleJobTypeSelect("Internal")}
-            >
-              <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center mb-4">
-                <Briefcase className="h-8 w-8 text-blue-600" />
-              </div>
-              <h3 className="font-medium text-center">Internal</h3>
-              <p className="text-xs text-gray-500 group-hover:text-white mt-1 text-center whitespace-normal max-w-full">
-                Create positions for your organization
-              </p>
-            </Button>
-            <Button
-              variant="cardButton"
-              className="group flex flex-col items-center justify-center h-40 p-6 border-2 transition-all hover:border-gray-300"
-              onClick={() => handleJobTypeSelect("External")}
-            >
-              <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
-                <Users className="h-8 w-8 text-green-600" />
-              </div>
-              <h3 className="font-medium text-center">External</h3>
-              <p className="text-xs text-gray-500 group-hover:text-white mt-1 text-center whitespace-normal max-w-full">
-                Create positions for clients
-              </p>
-            </Button>
-            {/* MODIFICATION END */}
-          </div>
-        )}
-
-        {!showStepper && jobType === "Internal" && (
-          <div className="py-6">
-            <h4 className="text-center text-md font-medium mb-4">Is this an in-house position or for a client?</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* MODIFICATION START: Applied consistent styling to new buttons */}
-              <Button
-                variant="cardButton"
-                className="group flex flex-col items-center justify-center h-40 p-6 border-2 transition-all hover:border-gray-300"
-                onClick={() => handleInternalTypeSelect("Inhouse")}
-              >
-                <div className="h-16 w-16 rounded-full bg-indigo-100 flex items-center justify-center mb-4">
-                  <Building className="h-8 w-8 text-indigo-600" />
-                </div>
-                <h3 className="font-medium text-center">Inhouse</h3>
-                <p className="text-xs text-gray-500 group-hover:text-white mt-1 text-center whitespace-normal max-w-full">
-                  A position within your own company.
-                </p>
-              </Button>
-              <Button
-                variant="cardButton"
-                className="group flex flex-col items-center justify-center h-40 p-6 border-2 transition-all hover:border-gray-300"
-                onClick={() => handleInternalTypeSelect("Client Side")}
-              >
-                <div className="h-16 w-16 rounded-full bg-teal-100 flex items-center justify-center mb-4">
-                  <UserCheck className="h-8 w-8 text-teal-600" />
-                </div>
-                <h3 className="font-medium text-center">Client Side</h3>
-                <p className="text-xs text-gray-500 group-hover:text-white mt-1 text-center whitespace-normal max-w-full">
-                  An internal resource assigned to a client project.
-                </p>
-              </Button>
-              {/* MODIFICATION END */}
+        <div className="flex-grow overflow-y-auto px-6 pb-6">
+          {/* View 1: Initial Selection */}
+          <div className={`transition-all duration-500 ease-in-out overflow-hidden ${view === 'SELECT_JOB_TYPE' ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+            <div className="flex justify-center gap-8 py-8">
+              <SelectionCard label="Internal" description="A position in your organization" icon={<Briefcase className="h-10 w-10 text-blue-600" />} onClick={() => handleJobTypeSelect('Internal')} />
+              <SelectionCard label="External" description="A position for one of your clients" icon={<Users className="h-10 w-10 text-green-600" />} onClick={() => handleJobTypeSelect('External')} />
             </div>
           </div>
-        )}
 
-        {showStepper && (
-          <div className="overflow-y-auto max-h-[calc(90vh-150px)]">
-            <JobStepperForm
-              jobType={jobType as "Internal" | "External"}
-              internalType={internalType}
-              onClose={handleClose}
-              editJob={editJob}
-              onSave={handleSaveJob}
-            />
+          {/* View 2: Internal Sub-selection */}
+          <div className={`transition-all duration-500 ease-in-out overflow-hidden ${view === 'SELECT_INTERNAL_TYPE' ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+            <div className="flex flex-col items-center gap-6 py-8">
+              <div className="flex items-center justify-center p-4 border-2 border-blue-500 rounded-lg w-72 bg-blue-50/50">
+                <Briefcase className="h-8 w-8 text-blue-600" />
+                <h3 className="font-semibold text-xl ml-4">Internal</h3>
+              </div>
+              <div className="flex items-center justify-center gap-4 text-gray-400">
+                <div className="w-24 h-px bg-gray-300" />
+                <span>SELECT TYPE</span>
+                <div className="w-24 h-px bg-gray-300" />
+              </div>
+              <p className="text-center text-gray-600 text-lg font-medium mb-6">Is this an in-house position or for a client?</p>
+              <div className="flex justify-center items-center gap-12">
+                <button onClick={() => handleInternalTypeSelect('Inhouse')} className="group flex flex-col items-center justify-center border rounded-xl text-center transition-all duration-300 w-96 p-8 min-h-[180px] hover:border-gray-400 hover:shadow-lg">
+                  <Building className="h-10 w-10 text-indigo-600" />
+                  <h3 className="font-semibold text-xl mt-4">Inhouse</h3>
+                  <p className="text-sm text-gray-500 mt-1">A position within your own company.</p>
+                </button>
+                <div className="h-16 w-px bg-gray-300" />
+                <button onClick={() => handleInternalTypeSelect('Client Side')} className="group flex flex-col items-center justify-center border rounded-xl text-center transition-all duration-300 w-96 p-8 min-h-[180px] hover:border-gray-400 hover:shadow-lg">
+                  <UserCheck className="h-10 w-10 text-teal-600" />
+                  <h3 className="font-semibold text-xl mt-4">Client Side</h3>
+                  <p className="text-sm text-gray-500 mt-1">An internal resource assigned to a client project.</p>
+                </button>
+              </div>
+            </div>
+            <div className="flex justify-start pt-4">
+              <Button variant="outline" onClick={handleBack}><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
+            </div>
           </div>
-        )}
 
-        {!showStepper && (
-          <DialogFooter>
-            <Button variant="outline" onClick={jobType ? handleReset : handleClose}>
-              {jobType ? "Back" : "Cancel"}
-            </Button>
-          </DialogFooter>
-        )}
+          {/* View 3: Stepper Form */}
+          <div className={`transition-all duration-500 ease-in-out ${view === 'SHOW_STEPPER' ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+            {view === 'SHOW_STEPPER' && (
+            <div key="v3" className="animate-slide-up">
+              {!editJob && (
+                <div className="flex items-center justify-center gap-4 mb-6">
+                  {jobType === 'Internal' ? (
+                    <>
+                      <HeaderButton label="Internal" icon={<Briefcase className="mr-3 h-5 w-5 text-blue-600" />} />
+                      <ChevronRight className="h-5 w-5 text-gray-400" />
+                      <HeaderButton label={internalType!} icon={internalType === 'Inhouse' ? <Building className="mr-3 h-5 w-5 text-indigo-600" /> : <UserCheck className="mr-3 h-5 w-5 text-teal-600" />} />
+                    </>
+                  ) : (
+                    <HeaderButton label="External" icon={<Users className="mr-3 h-5 w-5 text-green-600" />} />
+                  )}
+                </div>
+              )}
+              <JobStepperForm
+                jobType={jobType as "Internal" | "External"}
+                internalType={internalType}
+                onBack={editJob ? onClose : handleBackFromStepper}
+                editJob={editJob}
+                onSave={handleSaveJob}
+              />
+            </div>
+          )}
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

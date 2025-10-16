@@ -251,21 +251,24 @@ const MainLayout = () => {
   employee: 'Users',
 };
 
- const handleLogout = async () => { // MAKE THIS FUNCTION ASYNC
-    // NEW: Log the logout event before proceeding with the actual logout
-    if (user?.id && organizationId) {
-      // For logout, you might not need IP/location details from the client-side
-      // as they should already be logged on login.
-      // However, you could fetch them if desired, similar to LoginPage.
-      await logUserActivity(user.id, organizationId, 'logout', {
-        device_info: navigator.userAgent // Example: Log device info again
-      });
+ const handleLogout = async () => {
+    try {
+      if (user?.id && organizationId) {
+        await logUserActivity(user.id, organizationId, 'logout', {
+          device_info: navigator.userAgent
+        });
+      }
+      dispatch(logout());
+      await signOut();
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (error) {
+      console.error("Error during logout:", error);
+      localStorage.clear();
+      sessionStorage.clear();
+    } finally {
+      navigate("/login");
     }
-
-    // Perform actual logout actions
-    dispatch(logout()); // Clear Redux state
-    await signOut(); // Invalidate Supabase session (ensure this is an async call)
-    navigate("/login"); // Redirect to login page
   };
 
   const formatInterviewDate = (date) => {

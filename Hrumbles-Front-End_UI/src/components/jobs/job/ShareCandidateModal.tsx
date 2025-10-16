@@ -37,7 +37,7 @@ const buildFullHtmlEmail = (subject: string, innerContent: string): string => {
     <!DOCTYPE html><html><head><meta charset="UTF-8"><title>${subject}</title></head>
     <body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
       <div style="max-width: 600px; margin: 20px auto; padding: 20px; background-color: #ffffff; border-radius: 8px;">
-        <img src="https://app.hrumbles.ai/hrumbles-fav-blue-cropped.svg" alt="hrumbles.ai Logo" width="40" style="display: block; margin: 0 auto 25px auto;">
+        <img src="https://app.oorwin.ai/hrumbles-fav-blue-cropped.svg" alt="hrumbles.ai Logo" width="40" style="display: block; margin: 0 auto 25px auto;">
         
         <div style="padding: 10px; text-align: left; line-height: 1.6; color: #333;">
           ${innerContent}

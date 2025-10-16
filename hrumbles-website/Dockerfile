@@ -5,7 +5,7 @@ FROM nginx:1.25-alpine
 RUN rm -rf /usr/share/nginx/html/*
 
 # Copy your website files to the nginx public folder
-COPY . /usr/share/nginx/html
+COPY ./landing-dark/ /usr/share/nginx/html
 
 # Expose port 80
 EXPOSE 80
