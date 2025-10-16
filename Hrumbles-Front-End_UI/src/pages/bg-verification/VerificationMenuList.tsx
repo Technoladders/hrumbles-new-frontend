@@ -79,7 +79,7 @@ export const VerificationMenuList = ({ title, items, onSelect, onBack, results, 
               className="group w-full text-left p-4 bg-white border border-gray-200 rounded-lg flex justify-between items-center hover:bg-indigo-50 hover:border-indigo-300 hover:shadow-sm transition-all duration-200"
             >
               <div className="flex items-center">
-                <Icon className={`h-5 w-5 mr-4 ${verified ? 'text-green-500' : 'text-indigo-600'}`} />
+                <Icon className="h-5 w-5 mr-4 text-purple-500" />
                 <span className="font-medium text-gray-700">{item.label}</span>
               </div>
               {verified ? (

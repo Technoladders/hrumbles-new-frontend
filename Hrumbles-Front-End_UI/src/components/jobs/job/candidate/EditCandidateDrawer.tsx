@@ -6,7 +6,6 @@ import {
   SheetContent, 
   SheetHeader, 
   SheetTitle,
-  SheetTrigger
 } from "@/components/ui/sheet";
 import { 
   Tabs, 
@@ -14,16 +13,16 @@ import {
   TabsTrigger,
   TabsContent 
 } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { JobData, CandidateStatus, Candidate } from "@/lib/types";
+import { JobData, Candidate, CandidateData } from "@/lib/types"; // Assuming CandidateData type exists
 import BasicInformationTab from "./BasicInformationTab";
 import SkillInformationTab from "./SkillInformationTab";
-import { createCandidate, updateCandidate, updateCandidateSkillRatings, editCandidate } from "@/services/candidateService";
+import { createCandidate, editCandidate } from "@/services/candidateService";
 import { useSelector } from "react-redux";
-import { supabase } from "@/integrations/supabase/client";
 import { getJobById } from "@/services/jobService";
 import { useQuery } from "@tanstack/react-query";
 import ProofIdTab from "./ProofIdTab";
+import { FileText, UserPlus } from "lucide-react"; 
+import { motion } from "framer-motion"; 
 
 interface AddCandidateDrawerProps {
   job: JobData;
@@ -55,13 +54,14 @@ export type CandidateFormData = {
   location?: string;
   expectedSalary?: number;
   currentSalary?: number;
-  noticePeriod?: number;
+  noticePeriod?: string;
   lastWorkingDay?: string;
   uan?: string;
   pan?: string;
   pf?: string;
   esicNumber?: string;
   linkedInId?: string;
+  isLinkedInRequired?: boolean;
   hasOffers?: "Yes" | "No";
   offerDetails?: string;
 };
@@ -70,16 +70,12 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("basic-info");
   const [candidateId, setCandidateId] = useState<string | null>(candidate?.id || null);
+  const [isSaving, setIsSaving] = useState(false); // State for final save button
   const user = useSelector((state: any) => state.auth.user);
   const isEditMode = !!candidate;
 
-
-  console.log("jsksoos", job)
   const { 
     data: jobs, 
-    isLoading: jobLoading, 
-    error: jobError,
-    refetch: refetchJob
   } = useQuery({
     queryKey: ['job', job.id],
     queryFn: () => getJobById(job.id || ""),
@@ -91,23 +87,7 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
 
   const basicInfoForm = useForm<CandidateFormData>({
     defaultValues: {
-      firstName: "",
-      lastName: "",
-      email: "",
-      phone: "",
-      currentLocation: "",
-      preferredLocations: [],
-      totalExperience: undefined,
-      totalExperienceMonths: undefined,
-      relevantExperience: undefined,
-      relevantExperienceMonths: undefined,
-      currentSalary: undefined,
-      expectedSalary: undefined,
-      linkedInId: "",
-      hasOffers: undefined,
-      offerDetails: "",
-      resume: null,
-      skills: [],
+      // initial values
     },
   });
 
@@ -117,7 +97,6 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
     }
   });
 
-  // Initialize proofIdForm with default empty values
   const proofIdForm = useForm<CandidateFormData>({
     defaultValues: {
       uan: "",
@@ -144,7 +123,6 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
         currentSalary: candidate.currentSalary ?? candidate.metadata?.currentSalary,
         expectedSalary: candidate.expectedSalary ?? candidate.metadata?.expectedSalary,
         resume: candidate.resume || null,
-        skills: candidate.skillRatings || candidate.skills || [],
         noticePeriod: candidate?.metadata?.noticePeriod || "",
         lastWorkingDay: candidate?.metadata?.lastWorkingDay || "", 
         linkedInId: candidate.metadata?.linkedInId || "",
@@ -152,15 +130,13 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
         offerDetails: candidate.metadata?.offerDetails || "",
       });
 
-      // Populate skills form
       const candidateSkills = candidate.skillRatings || candidate.skills || [];
       skillsForm.reset({
         skills: candidateSkills.length > 0 
           ? candidateSkills 
-          : (jobs?.skills?.map(skill => ({ name: skill, rating: 0 })) || [])
+          : (jobs?.skills?.map(skill => ({ name: skill, rating: 0, experienceYears: 0, experienceMonths: 0 })) || [])
       });
 
-      // Reset and populate proofIdForm with candidate data
       proofIdForm.reset({
         uan: candidate.metadata?.uan || "",
         pan: candidate.metadata?.pan || "",
@@ -168,88 +144,124 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
         esicNumber: candidate.metadata?.esicNumber || "",
       });
     } else {
-      // Reset all forms when not in edit mode
-      basicInfoForm.reset();
-      skillsForm.reset();
+      basicInfoForm.reset({ skills: jobs?.skills?.map(skill => ({ name: skill, rating: 0, experienceYears: 0, experienceMonths: 0 })) || [] });
+      skillsForm.reset({ skills: jobs?.skills?.map(skill => ({ name: skill, rating: 0, experienceYears: 0, experienceMonths: 0 })) || [] });
       proofIdForm.reset();
+      setCandidateId(null);
     }
-  }, [candidate, isEditMode, basicInfoForm, skillsForm, proofIdForm, jobs]);
+  }, [candidate, isEditMode, basicInfoForm, skillsForm, proofIdForm, jobs, controlledOpen]);
+
+  // FIX: Added handler to receive parsed resume data and populate form
+  const handleParseComplete = (parsedData: any) => {
+    if (!parsedData) return;
+
+    if (parsedData.firstName) basicInfoForm.setValue("firstName", parsedData.firstName, { shouldValidate: true });
+    if (parsedData.lastName) basicInfoForm.setValue("lastName", parsedData.lastName, { shouldValidate: true });
+    if (parsedData.email) basicInfoForm.setValue("email", parsedData.email, { shouldValidate: true });
+    if (parsedData.linkedin_url) basicInfoForm.setValue("linkedInId", parsedData.linkedin_url, { shouldValidate: true });
+    
+    if (parsedData.phone) {
+      let phoneNumber = parsedData.phone.replace(/\s+/g, '');
+      if (!phoneNumber.startsWith('+')) phoneNumber = `+91${phoneNumber}`;
+      basicInfoForm.setValue("phone", phoneNumber, { shouldValidate: true });
+    }
+    
+    if (parsedData.currentLocation) basicInfoForm.setValue("currentLocation", parsedData.currentLocation, { shouldValidate: true });
+
+    if (parsedData.work_experience?.length > 0) {
+      const calculateExperience = (workHistory: any[]) => {
+          let totalMonths = 0;
+          workHistory.forEach(job => {
+              try {
+                  const startDate = new Date(job.start_date);
+                  const endDate = job.end_date === 'Present' ? new Date() : new Date(job.end_date);
+                  if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                      let months = (endDate.getFullYear() - startDate.getFullYear()) * 12;
+                      months -= startDate.getMonth();
+                      months += endDate.getMonth();
+                      totalMonths += months <= 0 ? 0 : months;
+                  }
+              } catch (e) { console.warn("Could not parse date", job); }
+          });
+          return { years: Math.floor(totalMonths / 12), months: totalMonths % 12 };
+      };
+      const exp = calculateExperience(parsedData.work_experience);
+      basicInfoForm.setValue("totalExperience", exp.years, { shouldValidate: true });
+      basicInfoForm.setValue("totalExperienceMonths", exp.months, { shouldValidate: true });
+    }
+  };
+
 
   const handleClose = () => {
     basicInfoForm.reset();
     skillsForm.reset();
-    proofIdForm.reset(); // Add reset for proofIdForm
-    setCandidateId(isEditMode ? candidate?.id : null);
+    proofIdForm.reset();
+    setCandidateId(null);
     setActiveTab("basic-info");
-    controlledOnオープンChange(false);
+    controlledOnOpenChange(false);
   };
 
   const formatExperience = (years?: number, months?: number): string => {
-    const yearsStr = years !== undefined && years > 0 ? `${years} year${years === 1 ? "" : "s"}` : "";
-    const monthsStr = months !== undefined && months > 0 ? `${months} month${months === 1 ? "" : "s"}` : "";
+    const yearsStr = years && years > 0 ? `${years} year${years === 1 ? "" : "s"}` : "";
+    const monthsStr = months && months > 0 ? `${months} month${months === 1 ? "" : "s"}` : "";
     return [yearsStr, monthsStr].filter(Boolean).join(" and ") || "0 years";
   };
+  
+  const buildPayload = () => {
+    const basicInfoData = basicInfoForm.getValues();
+    const skillsData = skillsForm.getValues();
+    const proofIdData = proofIdForm.getValues();
 
-  const handleSaveBasicInfo = async (data: CandidateFormData) => {
+    const appliedFrom = user?.user_metadata ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}` : "Unknown";
+
+    const payload: CandidateData = {
+      id: candidateId || undefined,
+      name: `${basicInfoData.firstName} ${basicInfoData.lastName}`,
+      status: candidate?.status || "Screening",
+      experience: formatExperience(basicInfoData.totalExperience, basicInfoData.totalExperienceMonths),
+      matchScore: candidate?.matchScore || 0,
+      appliedDate: candidate?.appliedDate || new Date().toISOString().split('T')[0],
+      email: basicInfoData.email,
+      phone: basicInfoData.phone,
+      currentSalary: basicInfoData.currentSalary ?? null,
+      expectedSalary: basicInfoData.expectedSalary ?? null,
+      location: basicInfoData.currentLocation || "",
+      appliedFrom: candidate?.appliedFrom || appliedFrom,
+      resumeUrl: basicInfoData.resume,
+      createdBy: candidate?.createdBy || user?.id,
+      updatedBy: user?.id,
+      skillRatings: skillsData.skills || [],
+      metadata: {
+        currentLocation: basicInfoData.currentLocation,
+        preferredLocations: basicInfoData.preferredLocations,
+        totalExperience: basicInfoData.totalExperience,
+        totalExperienceMonths: basicInfoData.totalExperienceMonths,
+        relevantExperience: basicInfoData.relevantExperience,
+        relevantExperienceMonths: basicInfoData.relevantExperienceMonths,
+        currentSalary: basicInfoData.currentSalary,
+        expectedSalary: basicInfoData.expectedSalary,
+        resume_url: basicInfoData.resume,
+        noticePeriod: basicInfoData.noticePeriod,
+        lastWorkingDay: basicInfoData.lastWorkingDay,
+        linkedInId: basicInfoData.linkedInId,
+        hasOffers: basicInfoData.hasOffers,
+        offerDetails: basicInfoData.offerDetails,
+        uan: proofIdData.uan || undefined,
+        pan: proofIdData.pan || undefined,
+        pf: proofIdData.pf || undefined,
+        esicNumber: proofIdData.esicNumber || undefined,
+      },
+      progress: candidate?.progress || { screening: false, interview: false, offer: false, hired: false, joined: false }
+    };
+    return payload;
+  }
+
+  const handleSaveBasicInfo = async () => {
     try {
-      if (!job.id) {
-        toast.error("Job ID is missing");
-        return;
-      }
+      if (!job.id) throw new Error("Job ID is missing");
+      const payload = buildPayload();
 
-      const appliedFrom = user?.user_metadata
-        ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
-        : "Unknown";
-      const createdBy = user?.id;
-
-      const payload: CandidateData = {
-        id: candidateId || "",
-        name: `${data.firstName} ${data.lastName}`,
-        status: isEditMode ? (candidate?.status || "Screening") : "Screening",
-        experience: formatExperience(data.totalExperience, data.totalExperienceMonths),
-        matchScore: isEditMode ? (candidate?.matchScore || 0) : 0,
-        appliedDate: isEditMode ? (candidate?.appliedDate || new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
-        // skills: [],
-        email: data.email,
-        phone: data.phone,
-        currentSalary: data.currentSalary ?? null,
-        expectedSalary: data.expectedSalary ?? null,
-        location: data.currentLocation || "",
-        appliedFrom: isEditMode ? candidate?.appliedFrom : appliedFrom,
-        resumeUrl: data.resume,
-        createdBy: isEditMode ? candidate?.createdBy : createdBy,
-        updatedBy: user?.id,
-        metadata: {
-          currentLocation: data.currentLocation,
-          preferredLocations: data.preferredLocations,
-          totalExperience: data.totalExperience,
-          totalExperienceMonths: data.totalExperienceMonths,
-          relevantExperience: data.relevantExperience,
-          relevantExperienceMonths: data.relevantExperienceMonths,
-          currentSalary: data.currentSalary,
-          expectedSalary: data.expectedSalary,
-          resume_url: data.resume,
-          noticePeriod: data.noticePeriod,
-          lastWorkingDay: data.lastWorkingDay,
-          linkedInId: data.linkedInId,
-          hasOffers: data.hasOffers,
-          offerDetails: data.offerDetails,
-          uan: data.uan || undefined,
-          pan: data.pan || undefined,
-          pf: data.pf || undefined,
-          esicNumber: data.esicNumber || undefined,
-        },
-        skillRatings: skillsForm.getValues().skills || [],
-        progress: candidate?.progress || {
-          screening: false,
-          interview: false,
-          offer: false,
-          hired: false,
-          joined: false
-        }
-      };
-
-      if (!candidateId || !isEditMode) {
+      if (!candidateId) {
         const newCandidate = await createCandidate(job.id, payload);
         setCandidateId(newCandidate.id);
         toast.success("Candidate created successfully");
@@ -257,7 +269,6 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
         await editCandidate(candidateId, payload);
         toast.success("Candidate updated successfully");
       }
-
       setActiveTab("skills-info");
     } catch (error) {
       console.error("Error saving candidate basic info:", error);
@@ -265,68 +276,12 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
     }
   };
 
-  const handleSaveSkills = async (data: CandidateFormData) => {
+  const handleSaveSkills = async () => {
     try {
-      if (!candidateId || !job.id) {
-        toast.error("Candidate ID or Job ID is missing");
-        return;
-      }
-
-      const basicInfoData = basicInfoForm.getValues();
-      const updatedFrom = user?.id;
-
-      const payload: CandidateData = {
-        id: candidateId,
-        name: `${basicInfoData.firstName} ${basicInfoData.lastName}`,
-        status: candidate?.status || "Screening",
-        experience: formatExperience(basicInfoData.totalExperience, basicInfoData.totalExperienceMonths),
-        matchScore: candidate?.matchScore || 0,
-        appliedDate: candidate?.appliedDate || new Date().toISOString().split('T')[0],
-        // skills: data.skills.map(skill => JSON.stringify(skill)),
-        email: basicInfoData.email,
-        phone: basicInfoData.phone,
-        currentSalary: basicInfoData.currentSalary ?? null,
-        expectedSalary: basicInfoData.expectedSalary ?? null,
-        location: basicInfoData.currentLocation || "",
-        appliedFrom: candidate?.appliedFrom || "",
-        resumeUrl: basicInfoData.resume,
-        createdBy: candidate?.createdBy || user?.id,
-        updatedBy: updatedFrom,
-        metadata: {
-          currentLocation: basicInfoData.currentLocation,
-          preferredLocations: basicInfoData.preferredLocations,
-          totalExperience: basicInfoData.totalExperience,
-          totalExperienceMonths: basicInfoData.totalExperienceMonths,
-          relevantExperience: basicInfoData.relevantExperience,
-          relevantExperienceMonths: basicInfoData.relevantExperienceMonths,
-          currentSalary: basicInfoData.currentSalary,
-          expectedSalary: basicInfoData.expectedSalary,
-          resume_url: basicInfoData.resume,
-          noticePeriod: basicInfoData.noticePeriod,
-          lastWorkingDay: basicInfoData.lastWorkingDay,
-          linkedInId: data.linkedInId,
-          hasOffers: data.hasOffers,
-          offerDetails: data.offerDetails,
-        },
-        skillRatings: data.skills,
-        progress: candidate?.progress || {
-          screening: false,
-          interview: false,
-          offer: false,
-          hired: false,
-          joined: false
-        }
-      };
-
-      if (isEditMode) {
-        await editCandidate(candidateId, payload);
-        toast.success("Candidate updated successfully");
-      } else {
-        const newCandidate = await createCandidate(job.id, payload);
-        setCandidateId(newCandidate.id);
-        toast.success("Candidate created successfully");
-      }
-
+      if (!candidateId || !job.id) throw new Error("Candidate ID or Job ID is missing");
+      const payload = buildPayload();
+      await editCandidate(candidateId, payload);
+      toast.success("Skills updated successfully");
       setActiveTab("proof-id");
     } catch (error) {
       console.error("Error saving candidate skills:", error);
@@ -334,64 +289,66 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
     }
   };
 
-  const handleSaveProofId = async (data: CandidateFormData) => {
+  const handleSaveProofId = async () => {
+    setIsSaving(true);
     try {
-      if (!candidateId || !job.id) {
-        toast.error("Candidate ID or Job ID is missing");
-        return;
-      }
-
-      const basicInfoData = basicInfoForm.getValues();
-      const skillsData = skillsForm.getValues();
-
-      const payload: Partial<CandidateData> = {
-        id: candidateId,
-        metadata: {
-          ...basicInfoData,
-          ...skillsData,
-          uan: data.uan || undefined,
-          pan: data.pan || undefined,
-          pf: data.pf || undefined,
-          esicNumber: data.esicNumber || undefined,
-        },
-      };
-
-      await updateCandidate(candidateId, payload);
-      toast.success("Proof ID information saved successfully");
+      if (!candidateId || !job.id) throw new Error("Candidate ID or Job ID is missing");
+      const payload = buildPayload();
+      await editCandidate(candidateId, payload);
+      toast.success("Candidate saved successfully!");
       onCandidateAdded();
       handleClose();
     } catch (error) {
       console.error("Error saving candidate proof ID:", error);
-      // toast.error("Failed to save proof ID information");
+      toast.error("Failed to save final details.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
   return (
     <Sheet open={controlledOpen} onOpenChange={controlledOnOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg md:max-w-xl overflow-y-auto">
-        <SheetHeader className="mb-6">
-          <SheetTitle>{isEditMode ? "Edit Candidate" : "Add New Candidate"}</SheetTitle>
+      <SheetContent className="w-full sm:max-w-7xl overflow-y-auto">
+        <SheetHeader className="mb-4 flex flex-row items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+            <UserPlus className="h-6 w-6 text-gray-600" />
+          </div>
+          <SheetTitle className="text-2xl font-bold text-gray-800">{isEditMode ? "Edit Candidate" : "Add New Candidate"}</SheetTitle>
         </SheetHeader>
-        
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="basic-info">Basic Information</TabsTrigger>
-            <TabsTrigger 
-              value="skills-info" 
-              disabled={!candidateId}
-            >
-              Skill Information
-            </TabsTrigger>
-            <TabsTrigger value="proof-id" disabled={!candidateId}>
-              Proof ID
-            </TabsTrigger>
-          </TabsList>
-          
+          {/* STYLING CHANGE: Wrapped TabsList in a centered div */}
+          <div className="flex justify-center mb-6">
+           <TabsList className="inline-flex h-10 items-center justify-center rounded-full bg-gray-100 border p-1">
+              <TabsTrigger 
+                  value="basic-info"
+                    className="rounded-full px-4 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#3e36d9] data-[state=active]:text-white data-[state=active]:shadow-md"
+              >
+                  Basic Information
+              </TabsTrigger>
+              <TabsTrigger 
+                  value="skills-info" 
+                  disabled={!candidateId}
+                   className="rounded-full px-4 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#3e36d9] data-[state=active]:text-white data-[state=active]:shadow-md"
+              >
+                  Skill Information
+              </TabsTrigger>
+              <TabsTrigger 
+                  value="proof-id" 
+                  disabled={!candidateId}
+                    className="rounded-full px-4 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#3e36d9] data-[state=active]:text-white data-[state=active]:shadow-md"
+              >
+                  Proof ID
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        
           <TabsContent value="basic-info">
             <BasicInformationTab 
-              form={basicInfoForm} 
-              onSaveAndNext={(data) => handleSaveBasicInfo(data)}
-              onCancel={handleClose}
+                form={basicInfoForm} 
+                onSaveAndNext={handleSaveBasicInfo}
+                onCancel={handleClose}
+                onParseComplete={handleParseComplete} // FIX: Prop is now passed
             />
           </TabsContent>
           
@@ -399,15 +356,17 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
             <SkillInformationTab 
               form={skillsForm}
               jobSkills={job.skills || []}
-              onSave={(data) => handleSaveSkills(data)}
+              onSave={handleSaveSkills}
               onCancel={handleClose}
             />
           </TabsContent>
+
           <TabsContent value="proof-id">
             <ProofIdTab
               form={proofIdForm}
-              onSave={(data) => handleSaveProofId(data)}
+              onSave={handleSaveProofId}
               onCancel={handleClose}
+              isSaving={isSaving} // Pass saving state
             />
           </TabsContent>
         </Tabs>
@@ -417,5 +376,3 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
 };
 
 export default AddCandidateDrawer;
-
-// 

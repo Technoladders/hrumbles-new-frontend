@@ -363,6 +363,7 @@ export const getCandidatesByJobId = async (jobId: string, statusFilter?: string)
       currentSalary: candidate.current_salary ?? undefined,
       expectedSalary: candidate.expected_salary ?? undefined,
       location: candidate.location ?? undefined,
+      notice_period: candidate.notice_period ?? undefined,
       mainStatusId: candidate.main_status_id || null,
       subStatusId: candidate.sub_status_id || null,
       main_status: candidate.main_status || null,

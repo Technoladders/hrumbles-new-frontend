@@ -1,3 +1,7 @@
+// =========================================================================
+// ====== THIS IS THE COMPLETE AND FINAL CODE FOR ValidateResumeButton.tsx ======
+// =========================================================================
+
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSelector } from "react-redux";
@@ -6,26 +10,36 @@ import rainbowLoader from "@/assets/animations/rainbowloader.json";
 import { FaPersonCircleQuestion } from "react-icons/fa6";
 import { updateCandidateStatus } from "@/services/statusService";
 import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/jobs/ui/tooltip";
 
+// Props interface remains the same
 interface ValidateResumeButtonProps {
   isValidated: boolean;
   candidateId: number;
   onValidate: (candidateId: number, userId?: string) => void;
   isLoading?: boolean;
   overallScore?: number;
-  subStatusId?: string; // Optional: Current sub-status ID for BGV workflow
+  subStatusId?: string;
 }
 
-const isTerminalStatus = (statusId: string | undefined, statuses: any[]): boolean => {
+// Your isTerminalStatus function remains the same
+const isTerminalStatus = (statusId: string | undefined): boolean => {
   if (!statusId) return false;
   const terminalBGVStatusIds = [
-    '922d42b8-5ddf-4aa2-8f9f-dd43d70ebf5a', // All Checks Clear
-    'bf2c0e46-8ae7-4fea-b253-bfc0f2503828', // Minor Discrepancy
-    'a6de2d0b-4b73-439f-9540-d555a1192e24', // Major Discrepancy
-    '49533ca9-8196-4250-abc0-648ebd7725e8', // Verification Not Required
-    '886a545d-16b2-40fe-8e72-6907bb0bc4fa', // Candidate Withdrawn
+    '922d42b8-5ddf-4aa2-8f9f-dd43d70ebf5a',
+    'bf2c0e46-8ae7-4fea-b253-bfc0f2503828',
+    'a6de2d0b-4b73-439f-9540-d555a1192e24',
+    '49533ca9-8196-4250-abc0-648ebd7725e8',
+    '886a545d-16b2-40fe-8e72-6907bb0bc4fa',
   ];
   return terminalBGVStatusIds.includes(statusId);
+};
+
+// NEW: This function creates the "3D" look with gradients and shadows
+const getScoreStyles = (score: number): string => {
+  if (score > 80) return 'bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-lg shadow-teal-500/30 border border-emerald-300';
+  if (score >= 75) return 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-orange-500/30 border border-amber-300';
+  return 'bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-lg shadow-red-500/30 border border-rose-400';
 };
 
 export const ValidateResumeButton = ({
@@ -39,19 +53,12 @@ export const ValidateResumeButton = ({
   const user = useSelector((state: any) => state.auth.user);
   const userId = user?.id || null;
 
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return "bg-green-100 text-green-800";
-    if (score >= 60) return "bg-yellow-100 text-yellow-800";
-    return "bg-red-100 text-red-800";
-  };
-
+  // Your handleValidate function remains exactly the same
   const handleValidate = async () => {
-    if (isValidated || isTerminalStatus(subStatusId, [])) return;
+    if (isValidated || isTerminalStatus(subStatusId)) return;
     try {
-      // Call onValidate (e.g., for AI validation)
       await onValidate(candidateId, userId);
-      // Update status to Documents Submitted or Verification Started
-      const nextStatusId = 'b921b145-1018-4654-a1ac-ff6d83ccf235'; // Documents Submitted
+      const nextStatusId = 'b921b145-1018-4654-a1ac-ff6d83ccf235';
       const success = await updateCandidateStatus(candidateId.toString(), nextStatusId, userId);
       if (success) {
         toast.success("Resume validated and status updated");
@@ -64,66 +71,61 @@ export const ValidateResumeButton = ({
     }
   };
 
-  // Case 1: Show score bar if validated with score
-  if (isValidated && overallScore !== undefined) {
-    return (
-      <div className="w-[100px]">
-        <div
-          className={cn(
-            "h-[20px] rounded-md flex items-center justify-center text-sm font-semibold",
-            getScoreColor(overallScore)
-          )}
-        >
-          {overallScore}/100
-        </div>
-      </div>
-    );
-  }
+  // --- THE UI LOGIC IS NOW CORRECTED BELOW ---
 
-  // Case 2: Show Lottie loader full width when loading
+  // 1. Loading State
   if (isLoading) {
     return (
       <div className="w-[100px] flex items-center justify-center">
         <Lottie
           animationData={rainbowLoader}
           loop
-          style={{
-            height: 20,
-            width: 100,
-            background: "transparent",
-          }}
+          style={{ height: 48, width: 48 }} // Made loader bigger to match score circle
         />
       </div>
     );
   }
 
-  // Case 3: Button (validated with no score OR not validated)
+  // 2. Validated with Score State (This is the 3D Circle)
+  if (isValidated && overallScore !== undefined && overallScore !== null) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>
+            <div
+              className={`flex items-center justify-center h-12 w-12 rounded-full font-bold text-xl transition-transform duration-200 hover:scale-110 ${getScoreStyles(overallScore)}`}
+            >
+              {overallScore}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Validation Score: {overallScore}/100</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  // 3. Default State (Click to Validate Button)
   return (
-    <div className="relative group flex items-center justify-center">
-      <Button
-        variant={isValidated || isTerminalStatus(subStatusId, []) ? "outline" : "default"}
-        size={isValidated ? "sm" : "xs"}
-        onClick={handleValidate}
-        disabled={isValidated || isTerminalStatus(subStatusId, [])}
-        className={cn("relative z-10", isValidated ? "border-gray-300" : "bg-purple-600 text-white")}
-        title={isValidated ? "Resume already validated" : "Click to validate"}
-      >
-        <FaPersonCircleQuestion className="h-4 w-4" />
-      </Button>
-      {!isValidated && !isTerminalStatus(subStatusId, []) && (
-        <div className="absolute left-full ml-2">
-          <span
-            className={cn(
-              "text-[10px] whitespace-nowrap font-medium transition-all duration-300",
-              "text-gray-500 group-hover:text-purple-600",
-              "animate-slideText group-hover:[text-shadow:0_0_6px_rgba(147,51,234,0.6)]"
-            )}
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="default"
+            size="icon"
+            onClick={handleValidate}
+            disabled={isTerminalStatus(subStatusId)}
+            className="h-9 w-9 bg-gray-700 hover:bg-gray-800 text-white"
           >
-            Click to Validate
-          </span>
-        </div>
-      )}
-    </div>
+            <FaPersonCircleQuestion className="h-5 w-5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Click to Validate</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 

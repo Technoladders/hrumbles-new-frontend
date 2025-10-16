@@ -2,7 +2,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown } from "lucide-react";
+import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -21,6 +21,7 @@ import Modal from 'react-modal';
 
 // --- FIX: This import path has been corrected to match your file structure ---
 import AddCandidateModal from '@/components/candidates/talent-pool/AddCandidateModal'; 
+import ResumeUploadModal from '@/components/ui/ResumeUploadModal'; 
 
 const JobView = () => {
   const { id } = useParams<{ id: string }>();
@@ -160,7 +161,7 @@ const JobView = () => {
     );
   }
   
-  return (
+   return (
     <div className="space-y-6 py-4">
       <div className="flex items-center justify-between mb-4">
         {/* Header: Back Button and Job Title */}
@@ -188,17 +189,47 @@ const JobView = () => {
                 <ChevronDown className="ml-2 h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setIsAddCandidateDrawerOpen(true)}>
-                <UserPlus className="mr-2 h-4 w-4" />
-                <span>Add Manually</span>
+            
+            <DropdownMenuContent 
+              align="end" 
+              className="w-64 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-700 shadow-2xl rounded-xl p-2"
+            >
+              <DropdownMenuItem 
+                onSelect={() => setIsAddCandidateDrawerOpen(true)}
+                className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
+              >
+                <UserPlus className="h-5 w-5 mt-1 text-purple-500" />
+                <div>
+                  <p className="font-semibold text-slate-800 dark:text-slate-100">Add Manually</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Enter candidate details one by one.</p>
+                </div>
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setIsAddTalentPoolModalOpen(true)}>
-                Analyse Resume (Paste/Upload)
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setIsHistoryModalOpen(true)}>
-                View Analysis History
+
+              <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700" />
+
+              <DropdownMenuItem 
+  onSelect={() => setIsAddTalentPoolModalOpen(true)}
+  // --- THIS IS THE FIX ---
+  // This disables the button if the job is loading or has no skills
+  disabled={jobLoading || !job?.skills} 
+  className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
+>
+  <FileText className="h-5 w-5 mt-1 text-blue-500" />
+  <div>
+    <p className="font-semibold text-slate-800 dark:text-slate-100">Analyse Resume</p>
+    <p className="text-xs text-slate-500 dark:text-slate-400">Paste or upload resumes for AI parsing.</p>
+  </div>
+</DropdownMenuItem>
+              
+              <DropdownMenuItem 
+                onSelect={() => setIsHistoryModalOpen(true)}
+                className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
+              >
+                <Clock className="h-5 w-5 mt-1 text-green-500" />
+                <div>
+                  <p className="font-semibold text-slate-800 dark:text-slate-100">View Analysis History</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">See past resume analysis scores.</p>
+                </div>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -214,7 +245,6 @@ const JobView = () => {
       
       {/* --- MODALS & DRAWERS --- */}
 
-      {/* 1. Drawer for manually adding a candidate */}
       <AddCandidateDrawer 
         job={job} 
         onCandidateAdded={handleManualCandidateAdded}
@@ -222,16 +252,16 @@ const JobView = () => {
         onOpenChange={setIsAddCandidateDrawerOpen}
       />
       
-      {/* 2. The integrated Modal for parsing/uploading resumes */}
-      {isAddTalentPoolModalOpen && (
-          <AddCandidateModal
-            isOpen={isAddTalentPoolModalOpen}
-            onClose={() => setIsAddTalentPoolModalOpen(false)}
-            onCandidateAdded={handleTalentPoolCandidateAdded}
-          />
-      )}
+       {isAddTalentPoolModalOpen && job && (
+  <ResumeUploadModal
+    isOpen={isAddTalentPoolModalOpen}
+    onClose={() => setIsAddTalentPoolModalOpen(false)}
+    onCandidateAdded={handleTalentPoolCandidateAdded}
+    job={job} // <-- THIS IS THE CRUCIAL FIX
+  />
+)}
+      
 
-      {/* 3. Modal for viewing analysis history */}
       {isHistoryModalOpen && (
         <Modal 
           isOpen={true} 
