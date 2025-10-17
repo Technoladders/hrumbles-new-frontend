@@ -965,7 +965,7 @@ const candidates = useMemo(() => {
       const jobTextId = jobData.job_id;
       const payload = { job_id: jobTextId, candidate_id: candidateId, resume_url: extractedResumeUrl, job_description: jobdescription, organization_id: organizationId, user_id: user.id };
 
-      const backendUrl = 'http://127.0.0.1:5005/api/validate-candidate';
+      const backendUrl = 'https://dev.hrumbles.ai/api/validate-candidate';
       const response = await fetch(backendUrl, { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: JSON.stringify(payload) });
 
       if (!response.ok) {
@@ -2095,7 +2095,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleViewResume(candidate)}>
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleViewResume(candidate.id)}>
             <Eye className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
