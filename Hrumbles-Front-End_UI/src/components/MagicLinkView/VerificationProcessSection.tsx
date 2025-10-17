@@ -11,6 +11,8 @@ import { Candidate, DocumentState } from "@/components/MagicLinkView/types";
 import { supabase } from "@/integrations/supabase/client";
 
 import { generateUanHistoryPdf } from '@/lib/uanPdfGenerator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Shield } from "lucide-react";
 
 // Define the structure of the API response data for clarity
 interface FullHistoryEmploymentEntry {
@@ -426,5 +428,58 @@ export const VerificationProcessSection: React.FC<VerificationProcessSectionProp
         </div>
       </CardContent>
     </Card>
+  );
+};
+
+export const VerificationProcessDialog: React.FC<VerificationProcessSectionProps> = (props) => {
+  const [open, setOpen] = useState(false);
+
+  // Add console.log to debug
+  console.log("Dialog props:", props);
+
+  // Safety check: create default documents if undefined
+  const safeProps = {
+    ...props,
+    documents: props.documents || {
+      uan: { value: '', isEditing: false, isVerifying: false, isVerified: false },
+      pan: { value: '', isEditing: false, isVerifying: false, isVerified: false },
+      pf: { value: '', isEditing: false, isVerifying: false, isVerified: false },
+      esic: { value: '', isEditing: false, isVerifying: false, isVerified: false },
+    },
+    // Add safety checks for functions
+    onToggleEditing: props.onToggleEditing || ((type: string) => console.log("onToggleEditing not provided", type)),
+    onDocumentChange: props.onDocumentChange || ((type: string, value: string) => console.log("onDocumentChange not provided", type, value)),
+    onVerifyDocument: props.onVerifyDocument || (async () => console.log("onVerifyDocument not provided")),
+    onSaveDocuments: props.onSaveDocuments || (async () => console.log("onSaveDocuments not provided")),
+  };
+
+  return (
+    <>
+      <Button 
+        variant="outline" 
+        size="sm"
+    className="flex items-center gap-2 text-gray-600 border-gray-300 hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700 transition-colors"
+        onClick={() => setOpen(true)}
+      >
+        <Shield className="w-4 h-4" />
+        Verification Process
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-indigo-600" />
+              Verification Process
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="mt-4">
+            {/* Pass the safe props */}
+            <VerificationProcessSection {...safeProps} />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };

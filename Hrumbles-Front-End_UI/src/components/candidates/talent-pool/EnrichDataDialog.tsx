@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
-// --- START: Heavily Revised Multi-Format Parsing Logic ---
+// --- START: New and Improved Multi-Format Parsing Logic ---
 const parsePastedText = (text: string) => {
   const data: any = {};
   
@@ -26,22 +26,32 @@ const parsePastedText = (text: string) => {
 
   if (lines.length === 0) return {};
 
+  // A helper function to find a header and get the data from the same line OR the next line
+  const extractDataAfterHeader = (headerRegex: RegExp) => {
+    const headerIndex = lines.findIndex(l => headerRegex.test(l.toLowerCase()));
+    if (headerIndex === -1) return null;
+
+    // Check for data on the same line as the header
+    const sameLineText = lines[headerIndex].replace(headerRegex, '').trim();
+    if (sameLineText.length > 2) {
+      return sameLineText;
+    }
+    
+    // If not found, check the next line
+    if (lines[headerIndex + 1]) {
+      return lines[headerIndex + 1].trim();
+    }
+    
+    return null;
+  };
+
   // --- Universal: Total Experience ---
   const expLine = lines.find(l => l.match(/\d+y(\s\d+m)?/));
   if (expLine) {
     data.total_experience = expLine.match(/\d+y(\s\d+m)?/)?.[0];
   }
 
-  // --- Universal: Current Location ---
-  const expLineIndex = lines.findIndex(l => l.match(/\d+y(\s\d+m)?/));
-  if (expLineIndex !== -1 && lines[expLineIndex + 1]) {
-      const potentialLocation = lines[expLineIndex + 1];
-      if (!potentialLocation.toLowerCase().startsWith('current') && !potentialLocation.toLowerCase().startsWith('previous')) {
-        data.current_location = potentialLocation;
-      }
-  }
-
-  // --- Naukri Format Specific: Salary, Notice Period, Pref. Locations ---
+  // --- Universal: Salary (strong anchor) ---
   const salaryLine = lines.find(l => l.includes('₹'));
   if (salaryLine) {
     const expectedMatch = salaryLine.match(/\(expects:\s*(.*?)\)/i);
@@ -53,75 +63,59 @@ const parsePastedText = (text: string) => {
       if (currentSalary.includes('₹')) data.current_salary = currentSalary;
     }
   }
-  const noticePeriodLine = lines.find(l => l.toLowerCase().includes('days') || l.toLowerCase().includes('serving till') || l.toLowerCase().includes('available to join'));
+
+  // --- Improved: Location (often appears before salary) ---
+  const salaryLineIndex = lines.findIndex(l => l.includes('₹'));
+  if (salaryLineIndex > 0) {
+    const potentialLocation = lines[salaryLineIndex - 1];
+    // Check if the line above salary is not the experience line
+    if (!potentialLocation.match(/\d+y(\s\d+m)?/)) {
+      data.current_location = potentialLocation;
+    }
+  }
+
+  // --- Improved: Notice Period (Handles "2 Months", "15 Days", etc.) ---
+  const noticePeriodLine = lines.find(l => l.toLowerCase().match(/(days|month|serving|available to join)/i));
   if (noticePeriodLine) data.notice_period = noticePeriodLine;
 
-  const prefHeaderIndex = lines.findIndex(l => l.toLowerCase().startsWith('pref. location'));
-  if (prefHeaderIndex !== -1) {
-    let locationsText = lines.slice(prefHeaderIndex).join(' ').replace(/pref\. locations?/i, '').trim();
-    data.preferred_locations = locationsText.split(',').map(s => s.trim()).filter(Boolean);
-  }
-
-  // --- Multi-Format: Role, Designation & Company ---
-  const roleHeaderIndex = lines.findIndex(l => l.toLowerCase().startsWith('current') || l.toLowerCase().startsWith('past'));
+  // --- Improved: Role, Designation & Company (Handles multi-line "Current") ---
+  const roleHeaderIndex = lines.findIndex(l => l.toLowerCase().startsWith('current'));
   if (roleHeaderIndex !== -1) {
-      // Combine the header line and the next line to handle both single-line and multi-line formats
-      const combinedRoleLine = lines.slice(roleHeaderIndex, roleHeaderIndex + 2).join(' ').replace(/current:|past:/i, '').trim();
-      
-      // Find where the date starts (e.g., "Feb 2021...") and slice it off
-      const dateMatch = combinedRoleLine.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/);
-      const roleAndCompany = dateMatch ? combinedRoleLine.substring(0, dateMatch.index).trim() : combinedRoleLine.trim();
-
-      // Try splitting by " at " (for naukri)
-      if (roleAndCompany.includes(' at ')) {
-          const parts = roleAndCompany.split(' at ');
-          data.current_designation = parts[0].trim();
-          data.current_company = parts.slice(1).join(' at ').trim();
-      } else { // Handle foundit format (e.g., "Software Engineer BestPeers...")
-          const titleKeywords = ['Software Engineer Intern', 'Software Engineer', 'Consultant', 'Developer', 'Analyst', 'Intern', 'Manager', 'Lead', 'Architect'];
-          let matchedTitle = '';
-          for (const title of titleKeywords) {
-              if (roleAndCompany.toLowerCase().startsWith(title.toLowerCase()) && title.length > matchedTitle.length) {
-                  matchedTitle = title;
-              }
-          }
-          if (matchedTitle) {
-              data.current_designation = matchedTitle;
-              data.current_company = roleAndCompany.substring(matchedTitle.length).trim();
-          } else {
-              // Fallback if no keyword is found
-              data.current_designation = roleAndCompany;
-          }
-      }
+    let combinedRoleLine = lines[roleHeaderIndex].replace(/current/i, '').trim();
+    // If "Current" was on its own line, the actual data is on the next line
+    if (combinedRoleLine.length === 0 && lines[roleHeaderIndex + 1]) {
+      combinedRoleLine = lines[roleHeaderIndex + 1].trim();
+    }
+    
+    const sinceMatch = combinedRoleLine.match(/\s+since\s+\w{3}\s+'\d{2}/i);
+    const roleAndCompany = sinceMatch ? combinedRoleLine.substring(0, sinceMatch.index).trim() : combinedRoleLine;
+    
+    if (roleAndCompany.includes(' at ')) {
+      const parts = roleAndCompany.split(' at ');
+      data.current_designation = parts[0].trim();
+      data.current_company = parts.slice(1).join(' at ').trim();
+    } else {
+      data.current_designation = roleAndCompany; // Fallback
+    }
   }
 
-  // --- Multi-Format: Highest Education ---
-  const eduHeaderIndex = lines.findIndex(l => l.toLowerCase().startsWith('education:') || l.toLowerCase().startsWith('highest degree'));
-  if (eduHeaderIndex !== -1) {
-      const headerLine = lines[eduHeaderIndex];
-      const educationText = headerLine.replace(/education:|highest degree/i, '').trim();
-      if (educationText.length > 5) { // Data is on the same line
-          data.highest_education = educationText;
-      } else if (lines[eduHeaderIndex + 1]) { // Data is on the next line
-          data.highest_education = lines[eduHeaderIndex + 1].trim();
-      }
+  // --- Using Helper for remaining fields ---
+  data.highest_education = extractDataAfterHeader(/highest degree/i);
+  data.industry = extractDataAfterHeader(/industry:/i);
+  
+  const locationsText = extractDataAfterHeader(/pref\. locations?/i);
+  if (locationsText) {
+      data.preferred_locations = locationsText.split(',').map(s => s.trim()).filter(Boolean);
   }
 
-  // --- Foundit Format: Industry ---
-  const industryHeaderIndex = lines.findIndex(l => l.toLowerCase().startsWith('industry:'));
-  if (industryHeaderIndex !== -1) {
-      const headerLine = lines[industryHeaderIndex];
-      const industryText = headerLine.replace(/industry:/i, '').trim();
-       if (industryText.length > 2) { // Data is on the same line
-          data.industry = industryText;
-      } else if (lines[industryHeaderIndex + 1]) { // Data is on the next line
-          data.industry = lines[industryHeaderIndex + 1].trim();
-      }
-  }
+  // Clean up null values before returning
+  Object.keys(data).forEach(key => {
+    if (data[key] === null) delete data[key];
+  });
 
   return data;
 };
-// --- END: Heavily Revised Multi-Format Parsing Logic ---
+// --- END: New and Improved Multi-Format Parsing Logic ---
 
 
 const EnrichDataDialog = ({ isOpen, onClose, candidate }) => {
@@ -194,14 +188,15 @@ const EnrichDataDialog = ({ isOpen, onClose, candidate }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-3xl">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="p-6 pb-4 flex-shrink-0" >
           <DialogTitle>Enrich Candidate Data</DialogTitle>
           <DialogDescription>
             Paste details from any source to auto-fill the form, then review and save.
           </DialogDescription>
         </DialogHeader>
 
+<div className="flex-grow overflow-y-auto px-6">
         <div className="space-y-4 pt-4">
           <Label htmlFor="paste-area">1. Paste Candidate Details Here</Label>
           <Textarea
@@ -259,6 +254,7 @@ const EnrichDataDialog = ({ isOpen, onClose, candidate }) => {
                 <Label htmlFor="preferred_locations">Preferred Locations (comma-separated)</Label>
                 <Input id="preferred_locations" name="preferred_locations" value={formData.preferred_locations || ''} onChange={handleFormChange} />
               </div>
+            </div>
             </div>
         </div>
 

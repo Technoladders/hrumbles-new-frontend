@@ -13,12 +13,19 @@ import { useSelector } from 'react-redux';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
 
 
-// Highlighter component to wrap matched keywords
+// NEW: Utility function to escape special regex characters
+const escapeRegExp = (string: string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+};
+
 const Highlight: FC<{ text: string; query: string[] }> = ({ text, query }) => {
   if (!query.length || !text) {
     return <span>{text}</span>;
   }
-  const regex = new RegExp(`(${query.join('|')})`, 'gi');
+  // BUG FIX: Escape each query term before joining them into the regex
+  const escapedQuery = query.map(term => escapeRegExp(term));
+  const regex = new RegExp(`(${escapedQuery.join('|')})`, 'gi');
+  
   const parts = text.split(regex);
   return (
     <span>

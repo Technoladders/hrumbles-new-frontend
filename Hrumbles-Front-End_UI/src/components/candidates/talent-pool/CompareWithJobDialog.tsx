@@ -100,8 +100,30 @@ const CompareWithJobDialog = ({ isOpen, onClose, candidateId }: CompareWithJobDi
     );
   }
 
+  const customModalStyles = {
+  overlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)', // A slightly darker, more modern overlay
+    zIndex: 50, // Must be higher than the sticky header's z-index (30)
+  },
+  content: {
+    top: '50%',
+    left: '50%',
+    right: 'auto',
+    bottom: 'auto',
+    transform: 'translate(-50%, -50%)',
+    maxWidth: '500px',
+    width: '90%',
+    border: 'none',
+    borderRadius: '0.75rem', // 12px
+    padding: '1.5rem', // 24px
+    boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.25)',
+    zIndex: 51, // Must be higher than the overlay
+    background: 'white',
+  },
+};
+
   return (
-    <Modal isOpen={isOpen} onRequestClose={onClose} style={{ content: { maxWidth: '500px', margin: 'auto' } }}>
+    <Modal isOpen={isOpen} onRequestClose={onClose} style={customModalStyles} ariaHideApp={false}>
       <div className="p-4 space-y-4">
         <h2 className="text-xl font-semibold">Compare Candidate with Job</h2>
         <p className="text-sm text-gray-600">Select a job to analyse this candidate's resume against the job description.</p>

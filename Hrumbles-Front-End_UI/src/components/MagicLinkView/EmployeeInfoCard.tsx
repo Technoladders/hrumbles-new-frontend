@@ -18,15 +18,23 @@ import {
   Mail,
   Phone,
   Award,
-  MapPinPlus,
   Share2,
   Loader2,
   CheckCircle2,
   XCircle,
+  // ---- ADD THESE NEW ICONS ----
+  Building,
+  Star,
+  UserCheck,
+  ArrowLeft,
+  Link as LinkIcon, 
 } from "lucide-react";
+
 import { FaLinkedin } from "react-icons/fa";
 import { useToast } from "@/components/ui/use-toast";
 import { DataSharingOptions } from "@/components/MagicLinkView/types";
+import { VerificationProcessDialog } from "./VerificationProcessSection";
+import { DocumentState } from "@/components/MagicLinkView/types";
 
 // Updated Interface for Employee Info
 interface EmployeeInfo {
@@ -73,7 +81,7 @@ interface EmployeeInfoCardProps {
   isCopied: boolean;
   onCopyMagicLink: () => void;
   navigateBack: () => void;
-  // Props for UAN Lookup are kept for completeness, though the UI is commented out
+  // Props for UAN Lookup
   isUanLoading: boolean;
   uanError: string | null;
   uanData: any | null;
@@ -88,6 +96,24 @@ interface EmployeeInfoCardProps {
   isConsentLinkCopied: boolean;
   onGenerateConsentLink: () => void;
   onCopyConsentLink: () => void;
+  
+  // ============================================
+  // ADD THESE NEW PROPS (around line 65-75):
+  // ============================================
+  organizationId: string | null;
+  userId: string | null;
+  documents: {
+    uan: DocumentState;
+    pan: DocumentState;
+    pf: DocumentState;
+    esic: DocumentState;
+  };
+  onDocumentChange: (type: string, value: string) => void;
+  onToggleEditing: (type: string) => void;
+  onVerifyDocument: (type: string, candidateId: string, workHistory: any, candidate: any, organizationId: string) => Promise<void>;
+  onSaveDocuments: () => Promise<void>;
+  isSavingDocuments: boolean;
+  isUanQueued: boolean;
 }
 
 const formatINR = (amount: number | string) => {
@@ -101,6 +127,20 @@ const formatINR = (amount: number | string) => {
       }).format(num);
 };
 
+
+const InfoItem = ({ icon, label, value }: { icon: React.ReactNode, label: string, value: string | React.ReactNode }) => (
+  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+    <div className="flex-shrink-0 text-purple-600">{icon}</div>
+    <div className="ml-3">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</p>
+      <p className="text-sm font-medium text-gray-800">{value}</p>
+    </div>
+  </div>
+);
+
+
+
+
 export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
   employee,
   shareMode,
@@ -111,7 +151,7 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
   isCopied,
   onCopyMagicLink,
   navigateBack,
-  // UAN props (unused in this component's UI but kept for prop integrity)
+  // UAN props
   isUanLoading,
   uanError,
   uanData,
@@ -120,26 +160,41 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
   lookupValue,
   setLookupValue,
   onUanLookup,
-  // Destructure new consent link props
+  // Consent props
   isRequestingConsent,
   consentLink,
   isConsentLinkCopied,
   onGenerateConsentLink,
   onCopyConsentLink,
+  
+  // ============================================
+  // ADD THESE NEW DESTRUCTURED PROPS (around line 110):
+  // ============================================
+  organizationId,
+  userId,
+  documents,
+  onDocumentChange,
+  onToggleEditing,
+  onVerifyDocument,
+  onSaveDocuments,
+  isSavingDocuments,
+  isUanQueued,
 }) => {
   const { toast } = useToast();
+ const [hoveredCopy, setHoveredCopy] = React.useState<string | null>(null);
 
+
+// ADD THIS NEW VERSION
   const renderSkills = () => {
     if (shareMode && !sharedDataOptions?.personalInfo) return null;
     return (
-      <div className="mt-4">
-        <h3 className="text-sm font-medium mb-2">Skills & Expertise</h3>
+      <div className="mt-6">
+        <h3 className="text-lg font-bold text-gray-800 mb-3">Skills & Expertise</h3>
         <div className="flex flex-wrap gap-2">
           {employee.skillRatings.map((skill, index) => (
             <Badge
               key={index}
-              variant="outline"
-              className="bg-purple-50 text-purple-700 border-purple-200"
+              className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white border-none text-sm px-4 py-1 shadow-lg"
             >
               {skill.name}
             </Badge>
@@ -164,40 +219,35 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
   };
 
 
-  return (
-    <Card className="bg-white w-full">
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-          <div className="flex-1">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">
-                {employee.name}
+// PASTE THIS ENTIRE BLOCK TO REPLACE YOUR CURRENT 'return' STATEMENT
+
+return (
+    <Card className="bg-white w-full overflow-hidden border-none shadow-2xl rounded-2xl">
+      {/* ======================================================================= */}
+      {/* HEADER SECTION - This is the completely redesigned header */}
+      {/* ======================================================================= */}
+      <div className="p-6 border-b border-gray-200">
+        <div className="flex justify-between items-start">
+          
+          {/* --- LEFT COLUMN: Name & Magic Link --- */}
+          <div className="flex flex-col gap-4">
+            <div>
+              <h2 className="text-3xl font-extrabold tracking-tight text-gray-900">
+                  {employee.name}
               </h2>
-              <div className="flex items-center gap-2">
-                {/* Render the status badge in the header for visibility */}
-                {/* {!shareMode && renderConsentStatusBadge()} */}
-                <Button onClick={navigateBack} variant="outline" size="sm">
-                  Back
-                </Button>
-              </div>
+              <p className="text-sm text-gray-500 mt-1">Applied: {employee.joinDate}</p>
             </div>
-            <div className="flex items-center mt-1 text-sm text-gray-500">
-              <Calendar className="w-4 h-4 mr-1" />
-              <span>Applied: {employee.joinDate}</span>
-            </div>
+
             {!shareMode && (
-              <div className="mt-4 space-y-4">
-                {/* --- SHARE LINK SECTION (EXISTING) --- */}
+              <div>
                 <Button
-                  variant="outline"
-                  className="flex items-center justify-center bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 w-auto"
+                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold w-full md:w-auto"
                   onClick={onShareClick}
-                  disabled={isSharing || employee.id === "emp001"}
+                  disabled={isSharing}
                 >
                   {isSharing ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
-                      Generating Link...
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating...
                     </>
                   ) : (
                     <>
@@ -206,223 +256,141 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
                   )}
                 </Button>
                 {magicLink && (
-                  <div className="p-3 bg-indigo-50 rounded-md border border-indigo-100 relative">
-                    <p className="text-xs text-indigo-700 mb-1 font-medium">
-                      Magic Link (expires in 2 days):
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <Input
-                        value={magicLink}
-                        readOnly
-                        className="text-xs bg-white border-indigo-200 w-full"
-                      />
-                      <Button variant="ghost" size="sm" onClick={onCopyMagicLink}>
-                        {isCopied ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <Copy className="h-4 w-4 text-indigo-500" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                 {/* --- CONSENT LINK SECTION (NEW) --- */}
-                 {/* <Button
-                    variant="outline"
-                    className="flex items-center justify-center bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200 w-full"
-                    onClick={onGenerateConsentLink}
-                    disabled={isRequestingConsent || employee.id === "emp001" || employee.consentStatus === 'granted'}
-                >
-                  {isRequestingConsent ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating...
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="mr-2 h-4 w-4" /> 
-                      {employee.consentStatus === 'pending' || employee.consentStatus === 'denied' ? 'Resend Consent Request' : 'Request Candidate Consent'}
-                    </>
-                  )}
-                </Button> */}
-                {consentLink && (
-                  <div className="p-3 bg-blue-50 rounded-md border border-blue-100 relative">
-                    <p className="text-xs text-blue-700 mb-1 font-medium">
-                      Consent Link (send to candidate):
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <Input value={consentLink} readOnly className="text-xs bg-white border-blue-200 w-full" />
-                      <Button variant="ghost" size="sm" onClick={onCopyConsentLink}>
-                        {isConsentLinkCopied ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <Copy className="h-4 w-4 text-blue-500" />
-                        )}
-                      </Button>
-                    </div>
+                  <div className="mt-3 p-2 bg-gray-100 rounded-md border flex items-center gap-2">
+                    <LinkIcon className="h-5 w-5 text-purple-500 flex-shrink-0" />
+                    <Input value={magicLink} readOnly className="text-sm bg-white border-gray-200 text-gray-700 flex-grow h-8" />
+                    <Button variant="ghost" size="icon" onClick={onCopyMagicLink} className="h-8 w-8">
+                      {isCopied ? <CheckCircle2 className="h-5 w-5 text-green-500" /> : <Copy className="h-5 w-5 text-gray-400" />}
+                    </Button>
                   </div>
                 )}
               </div>
             )}
           </div>
-          <Button
-            variant="resume"
-            size="sm"
-            className="flex items-center space-x-2 px-3 py-1"
-          >
-            <span className="text-sm font-medium">Resume</span>
-            <Separator orientation="vertical" className="h-4 bg-gray-300" />
-            <span
-              onClick={() => window.open(employee.resume, "_blank")}
-              className="cursor-pointer hover:text-gray-800"
-              title="View Resume"
+
+          {/* --- RIGHT COLUMN: Verification & Resume Buttons --- */}
+          <div className="flex items-center gap-3">
+            {!shareMode && (
+                <VerificationProcessDialog 
+                    candidate={{
+                      id: employee.id,
+                      name: employee.name,
+                      email: employee.email,
+                      phone: employee.phone,
+                      metadata: { uan: documents?.uan?.value || null },
+                    } as any}
+                    organizationId={organizationId}
+                    userId={userId}
+                    isUanLoading={isUanLoading}
+                    uanData={uanData}
+                    lookupMethod={lookupMethod}
+                    setLookupMethod={setLookupMethod}
+                    lookupValue={lookupValue}
+                    setLookupValue={setLookupValue}
+                    onUanLookup={onUanLookup}
+                    documents={documents}
+                    shareMode={shareMode}
+                    onDocumentChange={onDocumentChange}
+                    onToggleEditing={onToggleEditing}
+                    onVerifyDocument={onVerifyDocument}
+                    onSaveDocuments={onSaveDocuments}
+                    isSavingDocuments={isSavingDocuments}
+                    isUanQueued={isUanQueued}
+                />
+            )}
+            <Button
+                size="sm"
+                className="flex items-center space-x-2 px-3 h-9 bg-purple-600 text-white shadow-lg hover:bg-purple-700"
             >
-              <Eye className="w-4 h-4" />
-            </span>
-            <span
+                <span className="text-sm font-medium">Resume</span>
+                <Separator orientation="vertical" className="h-4 bg-white/30" />
+                <Eye 
+                    onClick={() => window.open(employee.resume, "_blank")}
+                    className="w-4 h-4 cursor-pointer"
+                    title="View Resume"
+                />
+                <Download 
+                    onClick={() => {
+                        const link = document.createElement("a");
+                        link.href = employee.resume;
+                        link.download = `${employee.name}_Resume.pdf`;
+                        link.click();
+                        toast({ title: "Resume Download Started" });
+                    }}
+                    className="w-4 h-4 cursor-pointer"
+                    title="Download Resume"
+                />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* ======================================================================= */}
+      {/* BODY SECTION - This remains largely the same but with minor style tweaks */}
+      {/* ======================================================================= */}
+      <CardContent className="p-6">
+        {/* Contact Info */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          {/* Email Item */}
+          <div
+              className="relative flex items-center p-3 bg-gray-100 rounded-lg cursor-pointer group transition-all hover:bg-purple-50 hover:shadow-md"
+              onMouseEnter={() => setHoveredCopy('email')}
+              onMouseLeave={() => setHoveredCopy(null)}
               onClick={() => {
-                const link = document.createElement("a");
-                link.href = employee.resume;
-                link.download = `${employee.name}_Resume.pdf`;
-                link.click();
-                toast({
-                  title: "Resume Download Started",
-                  description: "The resume is being downloaded.",
-                });
+                  navigator.clipboard.writeText(employee.email);
+                  toast({ title: "Email Copied!", description: employee.email });
               }}
-              className="cursor-pointer hover:text-gray-800"
-              title="Download Resume"
-            >
-              <Download className="w-4 h-4" />
-            </span>
-          </Button>
+          >
+              <Mail className="w-5 h-5 mr-3 text-purple-600 flex-shrink-0"/>
+              <span className="text-sm text-gray-700 truncate pr-6">{employee.email}</span>
+              {hoveredCopy === 'email' && (
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                      <Copy className="w-4 h-4 text-gray-400 group-hover:text-purple-600 transition-colors" />
+                  </div>
+              )}
+          </div>
+          {/* Phone Item */}
+          <div
+              className="relative flex items-center p-3 bg-gray-100 rounded-lg cursor-pointer group transition-all hover:bg-purple-50 hover:shadow-md"
+              onMouseEnter={() => setHoveredCopy('phone')}
+              onMouseLeave={() => setHoveredCopy(null)}
+              onClick={() => {
+                  navigator.clipboard.writeText(employee.phone);
+                  toast({ title: "Phone Copied!", description: employee.phone });
+              }}
+          >
+              <Phone className="w-5 h-5 mr-3 text-purple-600 flex-shrink-0"/>
+              <span className="text-sm text-gray-700 pr-6">{employee.phone}</span>
+              {hoveredCopy === 'phone' && (
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                      <Copy className="w-4 h-4 text-gray-400 group-hover:text-purple-600 transition-colors" />
+                  </div>
+              )}
+          </div>
+          {/* LinkedIn Item */}
+          <a href={employee.linkedInId} target="_blank" rel="noopener noreferrer" className="flex items-center p-3 bg-gray-100 rounded-lg transition-all hover:bg-purple-50 hover:shadow-md">
+              <FaLinkedin className="w-5 h-5 mr-3 text-purple-600 flex-shrink-0" />
+              <span className="text-sm font-medium text-purple-700">LinkedIn Profile</span>
+          </a>
         </div>
 
-        {(!shareMode || sharedDataOptions?.personalInfo || sharedDataOptions?.contactInfo) && (
-          <div className="mt-6">
-            <Card className="border border-gray-200 bg-white shadow-sm w-full">
-              <CardContent className="p-4">
-                <div className="flex flex-col space-y-4">
-                  {(!shareMode || sharedDataOptions?.contactInfo) && (
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center text-sm space-y-2 sm:space-y-0 sm:space-x-4">
-                      <div className="flex items-center">
-                        <Mail className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="text-gray-600">{employee.email}</span>
-                        <Button
-                          variant="copyicon"
-                          size="xs"
-                          onClick={() => {
-                            navigator.clipboard.writeText(employee.email);
-                            toast({
-                              title: "Email Copied",
-                              description: "Email address copied to clipboard.",
-                            });
-                          }}
-                          className="ml-2 text-indigo-500 hover:text-indigo-700"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      <div className="flex items-center">
-                        <Phone className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="text-gray-600">{employee.phone}</span>
-                        <Button
-                          variant="copyicon"
-                          size="xs"
-                          onClick={() => {
-                            navigator.clipboard.writeText(employee.phone);
-                            toast({
-                              title: "Phone Copied",
-                              description: "Phone number copied to clipboard.",
-                            });
-                          }}
-                          className="ml-2 text-indigo-500 hover:text-indigo-700"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      <div className="flex items-center">
-                        {employee.linkedInId !== "N/A" ? (
-                          <a
-                            href={employee.linkedInId}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-indigo-500 hover:text-indigo-700"
-                          >
-                            <FaLinkedin className="w-6 h-6" />
-                          </a>
-                        ) : (
-                          <FaLinkedin className="w-4 h-4 text-gray-400" />
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {(!shareMode || sharedDataOptions?.personalInfo) && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mt-4">
-                      <div className="flex items-center">
-                        <FileBadge className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">Total Experience</span>
-                        <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">{employee.experience}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <Award className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">Relevant Experience</span>
-                        <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">{employee.relvantExpyears} years and {employee.relvantExpmonths} months</span>
-                      </div>
-                      <div className="flex items-center">
-                        <MapPin className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">Current Location</span>
-                        <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">{employee.location}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <MapPinPlus className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">Preferred Location</span>
-                        <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">{employee.preferedLocation}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <Banknote className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">Current Salary</span>
-                        <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">{formatINR(employee.currentSalary)} LPA</span>
-                      </div>
-                      <div className="flex items-center">
-                        <Banknote className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">Expected Salary</span>
-                        <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">{formatINR(employee.expectedSalary)} LPA</span>
-                      </div>
-                      <div className="flex items-center">
-                        <Calendar className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">Notice Period</span>
-                        <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">{employee.noticePeriod} days</span>
-                      </div>
-                      <div className="flex items-center">
-                        <Briefcase className="w-4 h-4 mr-2 text-indigo-500" />
-                        <span className="font-medium text-gray-700">Has Offers</span>
-                        <span className="mx-2 text-gray-300">•</span>
-                        <span className="text-gray-600">{employee.hasOffers}</span>
-                      </div>
-                      {employee.hasOffers === "Yes" && (
-                        <div className="flex items-center col-span-1 sm:col-span-2">
-                          <FileText className="w-4 h-4 mr-2 text-indigo-500" />
-                          <span className="font-medium text-gray-700">Offer Details</span>
-                          <span className="mx-2 text-gray-300">•</span>
-                          <span className="text-gray-600">{employee.offerDetails}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-            {(!shareMode || sharedDataOptions?.personalInfo) && renderSkills()}
-          </div>
-        )}
-      </CardHeader>
+        <Separator className="my-6"/>
+
+        {/* Professional Details */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+            <InfoItem icon={<Briefcase size={20}/>} label="Total Experience" value={`${employee.experience}`} />
+            <InfoItem icon={<Star size={20}/>} label="Relevant Experience" value="N/A" />
+            <InfoItem icon={<MapPin size={20}/>} label="Current Location" value={employee.location} />
+            <InfoItem icon={<Building size={20}/>} label="Preferred Location" value={employee.preferedLocation} />
+            <InfoItem icon={<Banknote size={20}/>} label="Current Salary" value={`${formatINR(employee.currentSalary)} LPA`} />
+            <InfoItem icon={<Banknote size={20}/>} label="Expected Salary" value={`${formatINR(employee.expectedSalary)} LPA`} />
+            <InfoItem icon={<Calendar size={20}/>} label="Notice Period" value={`${employee.noticePeriod} days`} />
+            <InfoItem icon={<UserCheck size={20}/>} label="Has Offers" value={employee.hasOffers} />
+        </div>
+        
+        {/* Skills Section */}
+        {renderSkills()}
+      </CardContent>
     </Card>
   );
 };

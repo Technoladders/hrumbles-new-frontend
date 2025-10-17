@@ -2,13 +2,14 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, MoreVertical, Eye } from "lucide-react";
+import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { getJobById } from "@/services/jobService";
@@ -16,20 +17,27 @@ import { getCandidatesByJobId } from "@/services/candidateService";
 import JobDetailView from "@/components/jobs/job/JobDetailView";
 import { Candidate } from "@/lib/types";
 import AddCandidateDrawer from "@/components/jobs/job/candidate/AddCandidateDrawer";
-import ResumeAnalysisModal from "@/components/jobs/ResumeAnalysisModal";
 import Modal from 'react-modal';
+
+// --- FIX: This import path has been corrected to match your file structure ---
+import AddCandidateModal from '@/components/candidates/talent-pool/AddCandidateModal'; 
+import ResumeUploadModal from '@/components/ui/ResumeUploadModal'; 
 
 const JobView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [isOpen, setIsOpen] = useState(false);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
+
+  // --- STATE MANAGEMENT ---
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isAddCandidateDrawerOpen, setIsAddCandidateDrawerOpen] = useState(false);
+  
+  // State to control the newly integrated AddCandidateModal
+  const [isAddTalentPoolModalOpen, setIsAddTalentPoolModalOpen] = useState(false);
+  
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch job data
+  // --- DATA FETCHING (tanstack/react-query) ---
+  // Fetch job details
   const { 
     data: job, 
     isLoading: jobLoading, 
@@ -41,7 +49,7 @@ const JobView = () => {
     enabled: !!id,
   });
   
-  // Fetch candidates
+  // Fetch candidates associated with this job
   const { 
     data: candidatesData = [],
     refetch: refetchCandidates
@@ -51,7 +59,7 @@ const JobView = () => {
     enabled: !!id,
   });
 
-  // Fetch history data
+  // Fetch analysis history data for the history modal
   const { 
     data: historyData = [],
     isLoading: historyLoading,
@@ -80,9 +88,7 @@ const JobView = () => {
     enabled: !!id,
   });
 
-  console.log("historydata", historyData)
-
-  // Convert CandidateData to Candidate type
+  // --- DATA TRANSFORMATION ---
   const candidates: Candidate[] = candidatesData.map(candidate => ({
     id: candidate.id,
     name: candidate.name,
@@ -93,108 +99,47 @@ const JobView = () => {
     skills: candidate.skills || []
   }));
 
-  // Listen for real-time changes to job data
+  // --- REAL-TIME SUBSCRIPTIONS (useEffect) ---
   useEffect(() => {
     if (!id) return;
-
-    const channel = supabase
-      .channel('job-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'hr_jobs',
-          filter: `id=eq.${id}`
-        },
-        () => {
-          refetchJob();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const channel = supabase.channel('job-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'hr_jobs', filter: `id=eq.${id}` }, () => { refetchJob(); }).subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [id, refetchJob]);
 
-  // Listen for real-time changes to job candidates
   useEffect(() => {
     if (!id) return;
-
-    const channel = supabase
-      .channel('candidate-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'hr_job_candidates',
-          filter: `job_id=eq.${id}`
-        },
-        () => {
-          refetchCandidates();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const channel = supabase.channel('candidate-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'hr_job_candidates', filter: `job_id=eq.${id}` }, () => { refetchCandidates(); }).subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [id, refetchCandidates]);
 
-  // Listen for real-time changes to resume analysis
   useEffect(() => {
     if (!id) return;
-
-    const channel = supabase
-      .channel('resume-analysis-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'resume_analysis',
-          filter: `job_id=eq.${id}`
-        },
-        () => {
-          refetchHistory();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const channel = supabase.channel('resume-analysis-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'resume_analysis', filter: `job_id=eq.${id}` }, () => { refetchHistory(); }).subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [id, refetchHistory]);
 
-  const handleCandidateAdded = () => {
+  // --- HANDLER FUNCTIONS ---
+  // Handles closing the new modal and refreshing data
+  const handleTalentPoolCandidateAdded = () => {
+    setIsAddTalentPoolModalOpen(false);
+    refetchCandidates();
+    toast.success("Candidate processed and added to Talent Pool!");
+  };
+
+  // Handles closing the manual drawer and refreshing data
+  const handleManualCandidateAdded = () => {
+    setIsAddCandidateDrawerOpen(false);
     refetchCandidates();
     toast.success("Candidate added successfully");
   };
 
-  const handleAnalysisComplete = (result: {
-    job_id: string;
-    candidate_id: string;
-    candidate_name: string;
-    overall_score: number;
-  }) => {
-    refetchCandidates();
-    refetchHistory(); // Refetch history to update the View History modal
-    toast.success("Resume analysis completed");
-    setIsResumeModalOpen(false);
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
   };
   
+  // --- RENDER LOGIC ---
   if (jobLoading) {
     return (
       <div className="flex justify-center items-center h-[70vh]">
@@ -208,19 +153,18 @@ const JobView = () => {
       <div className="flex flex-col items-center justify-center h-[70vh]">
         <h2 className="text-2xl font-bold mb-4">Job not found</h2>
         <p className="text-gray-500 mb-6">The job you're looking for doesn't exist or has been removed.</p>
-       
-          <Button className="flex items-center gap-2" onClick={() => navigate(-1)}>
-            <ArrowLeft size={16} />
-            Back to Jobs
-          </Button>
-       
+        <Button className="flex items-center gap-2" onClick={() => navigate(-1)}>
+          <ArrowLeft size={16} />
+          Back to Jobs
+        </Button>
       </div>
     );
   }
   
-  return (
+   return (
     <div className="space-y-6 py-4">
       <div className="flex items-center justify-between mb-4">
+        {/* Header: Back Button and Job Title */}
         <div className="flex items-center gap-2">
            <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-gray-500 hover:text-gray-700">
             <ArrowLeft size={20} />
@@ -228,48 +172,95 @@ const JobView = () => {
           <h1 className="text-xl font-semibold">{job.title}</h1>
         </div>
         
+        {/* Action Buttons */}
         <div className="flex gap-2">
-          <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button variant="default" >
-                <MoreVertical size={16} /> Analyse Resume
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setIsModalOpen(true)}>
-                Paste Resume
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsHistoryModalOpen(true)}>
-                View History
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
           <Link to={`/jobs/${job.id}/description`}>
             <Button variant="outline" className="flex items-center gap-2">
               <FileText size={16} />
               <span className="hidden sm:inline">Job Description</span>
-              <span className="sm:hidden">JD</span>
             </Button>
           </Link>
-          <AddCandidateDrawer job={job} onCandidateAdded={handleCandidateAdded} />
+
+          {/* Main Dropdown for All Candidate Actions */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="default">
+                Add Candidate
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            
+            <DropdownMenuContent 
+              align="end" 
+              className="w-64 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-700 shadow-2xl rounded-xl p-2"
+            >
+              <DropdownMenuItem 
+                onSelect={() => setIsAddCandidateDrawerOpen(true)}
+                className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
+              >
+                <UserPlus className="h-5 w-5 mt-1 text-purple-500" />
+                <div>
+                  <p className="font-semibold text-slate-800 dark:text-slate-100">Add Manually</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Enter candidate details one by one.</p>
+                </div>
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700" />
+
+              <DropdownMenuItem 
+  onSelect={() => setIsAddTalentPoolModalOpen(true)}
+  // --- THIS IS THE FIX ---
+  // This disables the button if the job is loading or has no skills
+  disabled={jobLoading || !job?.skills} 
+  className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
+>
+  <FileText className="h-5 w-5 mt-1 text-blue-500" />
+  <div>
+    <p className="font-semibold text-slate-800 dark:text-slate-100">Analyse Resume</p>
+    <p className="text-xs text-slate-500 dark:text-slate-400">Paste or upload resumes for AI parsing.</p>
+  </div>
+</DropdownMenuItem>
+              
+              <DropdownMenuItem 
+                onSelect={() => setIsHistoryModalOpen(true)}
+                className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
+              >
+                <Clock className="h-5 w-5 mt-1 text-green-500" />
+                <div>
+                  <p className="font-semibold text-slate-800 dark:text-slate-100">View Analysis History</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">See past resume analysis scores.</p>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
+      {/* Main Content: Job Details and Candidate List */}
       <JobDetailView 
         job={job} 
         candidates={candidates} 
-        onCandidateAdded={handleCandidateAdded} 
+        onCandidateAdded={handleManualCandidateAdded} 
       />
-      {isModalOpen && (
-        <ResumeAnalysisModal
-          jobId={id}
-          onClose={() => setIsModalOpen(false)}
-          setError={setError}
-          onAnalysisComplete={handleAnalysisComplete}
-          initialData={{}}
-        />
-      )}
+      
+      {/* --- MODALS & DRAWERS --- */}
+
+      <AddCandidateDrawer 
+        job={job} 
+        onCandidateAdded={handleManualCandidateAdded}
+        open={isAddCandidateDrawerOpen}
+        onOpenChange={setIsAddCandidateDrawerOpen}
+      />
+      
+       {isAddTalentPoolModalOpen && job && (
+  <ResumeUploadModal
+    isOpen={isAddTalentPoolModalOpen}
+    onClose={() => setIsAddTalentPoolModalOpen(false)}
+    onCandidateAdded={handleTalentPoolCandidateAdded}
+    job={job} // <-- THIS IS THE CRUCIAL FIX
+  />
+)}
+      
 
       {isHistoryModalOpen && (
         <Modal 
@@ -295,7 +286,7 @@ const JobView = () => {
               <p className="text-gray-500 text-center">No analysis history available</p>
             ) : (
               <div className="space-y-6">
-                {historyData.map((item, index) => (
+                {historyData.map((item: any, index: number) => (
                   <div key={item.candidate_id} className="relative">
                     {index !== historyData.length - 1 && (
                       <div className="absolute left-3 top-8 w-0.5 h-full bg-gray-200 -z-10" />

@@ -1,20 +1,16 @@
 import React from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { CardContent } from "@/components/ui/card";
 import { ResumeAnalysis, WorkHistory, Candidate, DataSharingOptions } from "@/components/MagicLinkView/types";
 import { ResumeAnalysisSection } from "./ResumeAnalysisSection";
 import { SkillMatrixSection } from "./SkillMatrixSection";
-import { WorkHistorySection } from "./WorkHistorySection";
 import { ResumePreviewSection } from "./ResumePreviewSection";
 import { BgvVerificationSection } from "@/pages/bg-verification/BgvVerificationSection";
 
-
+// The props interface is simplified as the tab state is now managed internally
 interface ProfileTabsProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
   availableTabs: string[];
   resumeAnalysis: ResumeAnalysis | null;
-  workHistory: WorkHistory[];
   shareMode: boolean;
   sharedDataOptions?: DataSharingOptions;
   employeeSkillRatings: Array<{
@@ -23,89 +19,102 @@ interface ProfileTabsProps {
     experienceYears?: number;
     experienceMonths?: number;
   }>;
-  isVerifyingAllWorkHistory: boolean;
-  onVerifyAllCompanies: () => void;
-  onVerifySingleWorkHistory: (company: WorkHistory) => void;
-  updateWorkHistoryItem: (companyId: number, updates: Partial<WorkHistory>) => void;
   employeeResumeUrl: string;
-  candidateId: string | undefined;
   candidate: Candidate | null;
-  userId: string;
-  organizationId: string;
+  // Note: other props like workHistory can be passed if needed by child components
 }
 
 export const ProfileTabs: React.FC<ProfileTabsProps> = ({
-  activeTab,
-  setActiveTab,
   availableTabs,
   resumeAnalysis,
-  workHistory,
   shareMode,
   sharedDataOptions,
   employeeSkillRatings,
-  isVerifyingAllWorkHistory,
-  onVerifyAllCompanies,
-  onVerifySingleWorkHistory,
-  updateWorkHistoryItem,
   employeeResumeUrl,
-  candidateId,
   candidate,
-  userId,
-  organizationId,
 }) => {
-  return (
-    <CardContent>
-      <Tabs defaultValue="resume-analysis" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex flex-wrap gap-2 mb-6 overflow-x-auto">
-          {availableTabs.map((tab) => (
-            <TabsTrigger
-              key={tab}
-              value={tab}
-              className="flex-1 min-w-[100px] text-xs sm:text-sm sm:min-w-[120px]"
-            >
-              {tab === "resume-analysis" && "Resume Analysis"}
-              {tab === "skill-matrix" && "Skill Matrix"}
-              {tab === "work-history" && "Work History"}
-              {tab === "bg-verification" && "Background Verification"}
-              {tab === "resume" && "Resume"}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+  // Determine which group of tabs to show
+  const showDocumentTabs = availableTabs.includes('resume-analysis') || availableTabs.includes('resume');
+  const showAssessmentTabs = availableTabs.includes('skill-matrix') || availableTabs.includes('bg-verification');
 
-        {resumeAnalysis && (
-          <TabsContent value="resume-analysis">
-            <ResumeAnalysisSection resumeAnalysis={resumeAnalysis} />
-          </TabsContent>
-        )}
+  // Render the Document (Resume) tab group
+  if (showDocumentTabs) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <Tabs defaultValue="resume-analysis" className="w-full">
+            <TabsList className="inline-flex h-10 items-center justify-center rounded-full bg-gray-100 border p-1 mb-4">
+              {availableTabs.includes('resume-analysis') && (
+                <TabsTrigger
+                  value="resume-analysis"
+                    className="rounded-full px-4 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#3e36d9] data-[state=active]:text-white data-[state=active]:shadow-md"
+              >
+                  Resume Analysis
+                </TabsTrigger>
+              )}
+              {availableTabs.includes('resume') && (
+                <TabsTrigger
+                  value="resume"
+                    className="rounded-full px-4 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#3e36d9] data-[state=active]:text-white data-[state=active]:shadow-md"
+              >
+                  Resume
+                </TabsTrigger>
+              )}
+            </TabsList>
+            
+            {resumeAnalysis && (
+              <TabsContent value="resume-analysis">
+                <ResumeAnalysisSection resumeAnalysis={resumeAnalysis} />
+              </TabsContent>
+            )}
+            <TabsContent value="resume">
+              <ResumePreviewSection resumeUrl={employeeResumeUrl} />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    );
+  }
 
-        {(!shareMode || sharedDataOptions?.skillinfo) && (
-          <TabsContent value="skill-matrix">
-            <SkillMatrixSection skillRatings={employeeSkillRatings} />
-          </TabsContent>
-        )}
+  // Render the Assessment (Skill/BGV) tab group
+  if (showAssessmentTabs) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <Tabs defaultValue="skill-matrix" className="w-full">
+            <TabsList className="inline-flex h-10 items-center justify-center rounded-full bg-gray-100 border p-1 mb-4">
+               {availableTabs.includes('skill-matrix') && (
+                <TabsTrigger
+                  value="skill-matrix"
+                    className="rounded-full px-4 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#3e36d9] data-[state=active]:text-white data-[state=active]:shadow-md"
+              >
+                  Skill Matrix
+                </TabsTrigger>
+               )}
+               {availableTabs.includes('bg-verification') && (
+                <TabsTrigger
+                  value="bg-verification"
+                   className="rounded-full px-4 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#3e36d9] data-[state=active]:text-white data-[state=active]:shadow-md"
+              >
+                  Background Verification
+                </TabsTrigger>
+               )}
+            </TabsList>
 
-        {workHistory.length > 0 && (
-          <TabsContent value="work-history">
-            <WorkHistorySection
-              workHistory={workHistory}
-              shareMode={shareMode}
-              isVerifyingAll={isVerifyingAllWorkHistory}
-              onVerifyAllCompanies={onVerifyAllCompanies}
-              onVerifySingleWorkHistory={onVerifySingleWorkHistory}
-              updateWorkHistoryItem={updateWorkHistoryItem}
-              candidate={candidate}
-            />
-          </TabsContent>
-        )}
+            {(!shareMode || sharedDataOptions?.skillinfo) && (
+              <TabsContent value="skill-matrix">
+                <SkillMatrixSection skillRatings={employeeSkillRatings} />
+              </TabsContent>
+            )}
+            <TabsContent value="bg-verification">
+              <BgvVerificationSection candidate={candidate} />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    );
+  }
 
-        <TabsContent value="bg-verification">
-          <BgvVerificationSection candidate={candidate} />
-        </TabsContent>
-
-        <TabsContent value="resume">
-          <ResumePreviewSection resumeUrl={employeeResumeUrl} />
-        </TabsContent>
-      </Tabs>
-    </CardContent>
-  );
+  // Fallback if no matching tabs are provided
+  return null;
 };

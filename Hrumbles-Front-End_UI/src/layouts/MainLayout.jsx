@@ -313,6 +313,7 @@ const MainLayout = () => {
       <Flex 
         direction="column" 
         flex="1" 
+        minW={0}
         ml={{ base: isMobile ? "0" : mainSidebarWidth, md: mainSidebarWidth }}
         transition="margin-left 0.1s ease-in-out"
       >
@@ -438,7 +439,7 @@ const MainLayout = () => {
           </Flex>
         </Flex>
 
-        <Box flex="1" overflowY="auto" p={6} mt="60px" bg={colorMode}>
+        <Box flex="1" overflowY="auto" p={6} mt="60px" bg={colorMode} overflowX="hidden" w="100%" maxW="100%" >
           <Outlet />
         </Box>
       </Flex>

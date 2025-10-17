@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/jobs/ui/table";
 import {
-   Tooltip as ShadTooltip,
+   Tooltip ,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
@@ -26,7 +26,8 @@ import { ItechStatusSelector } from "./ItechStatusSelector";
 import ValidateResumeButton from "./candidate/ValidateResumeButton";
 import StageProgress from "./candidate/StageProgress";
 import EmptyState from "./candidate/EmptyState";
-import { Pencil, Eye, Download, FileText, Phone, Calendar, User, ChevronLeft, ChevronRight, EyeOff, Copy, Check, PhoneOff, MailOpen, Mail, Contact, Clock, MessageSquare, Notebook } from "lucide-react";
+import { Pencil,Bot, UserSearch, Eye, Download, FileText, Phone, Calendar, User, ChevronLeft, ChevronRight, Copy, Check, Mail, MessageSquare, Notebook, Linkedin } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import EditCandidateDrawer from "@/components/jobs/job/candidate/EditCandidateDrawer";
 import { getJobById } from "@/services/jobService";
@@ -68,9 +69,21 @@ import { format, isValid } from 'date-fns';
 import { getRoundNameFromResult } from "@/utils/statusTransitionHelper";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-
+import { Avatar, AvatarFallback } from "@/components/jobs/ui/avatar";
+import { motion } from "framer-motion";
 
 const VALIDATION_QUEUE_KEY = "validationQueue";
+
+
+const getInitials = (name: string = "") => {
+  if (!name) return "NA";
+  const nameParts = name.trim().split(' ');
+  const firstName = nameParts[0] || "";
+  const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+};
+
+
 
 interface CandidatesListProps {
   jobId: string;
@@ -115,6 +128,51 @@ const CandidatesList = forwardRef((props: CandidatesListProps, ref) => {
 ];
   const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
 
+
+   const getInitials = (name: string = "") => {
+    if (!name) return "NA";
+    const nameParts = name.trim().split(' ');
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+  };
+
+const OwnerAvatarCell = ({ ownerName, createdAt }: { ownerName: string, createdAt: string }) => {
+  if (!ownerName) {
+    return <TableCell><span className="text-gray-400 text-sm">N/A</span></TableCell>;
+  }
+
+  const initials = getInitials(ownerName);
+
+  return (
+    <TableCell>
+      <div className="flex items-center gap-2">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Avatar className="h-8 w-8 cursor-pointer transition-transform duration-200 ease-in-out hover:scale-110">
+                <AvatarFallback className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-semibold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{ownerName}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        
+        {/* Display owner name and date in a column layout */}
+        <div className="flex flex-col">
+          <span className="text-sm font-medium text-gray-900">{ownerName}</span>
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {moment(createdAt).format("DD MMM YYYY")} ({moment(createdAt).fromNow()})
+          </span>
+        </div>
+      </div>
+    </TableCell>
+  );
+};
 
     // ADDED: State for dynamic tabs
   const [mainStatuses, setMainStatuses] = useState<MainStatus[]>([]);
@@ -443,12 +501,12 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
 
 useEffect(() => {
   const checkAnalysisData = async () => {
-    // No need to check candidatesData here, as the hook depends on it.
     if (!jobId) return;
     
     const { data, error } = await supabase
       .from("candidate_resume_analysis")
-      .select("candidate_id, summary, overall_score")
+      // 1. Add report_url to the query
+      .select("candidate_id, summary, overall_score, report_url") 
       .eq("job_id", jobId)
       .not("summary", "is", null);
 
@@ -461,13 +519,19 @@ useEffect(() => {
     const analysisDataTemp: { [key: string]: any } = {};
     data.forEach((item) => {
       availableData[item.candidate_id] = true;
-      analysisDataTemp[item.candidate_id] = { overall_score: item.overall_score };
+      // 2. Add the report_url to the data we store
+      analysisDataTemp[item.candidate_id] = { 
+        overall_score: item.overall_score,
+        report_url: item.report_url 
+      };
     });
 
     setAnalysisDataAvailable(availableData);
     setCandidateAnalysisData(prevData => {
       const hasNewData = Object.keys(analysisDataTemp).some(key => 
-        !prevData[key] || prevData[key].overall_score !== analysisDataTemp[key].overall_score
+        !prevData[key] || 
+        prevData[key].overall_score !== analysisDataTemp[key].overall_score ||
+        prevData[key].report_url !== analysisDataTemp[key].report_url
       );
       if (hasNewData) {
         return { ...prevData, ...analysisDataTemp };
@@ -477,7 +541,7 @@ useEffect(() => {
   };
 
   checkAnalysisData();
-}, [candidatesData, jobId]); // <-- CRITICAL CHANGE: Add candidatesData back to the dependency array
+}, [candidatesData, jobId]); 
 
  const fetchAnalysisData = async (candidateId: string) => {
   try {
@@ -632,7 +696,7 @@ const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 0, 
   }).format(amount);
 };
 
@@ -707,6 +771,7 @@ const candidates = useMemo(() => {
           skills: candidate.skillRatings || candidate.skills || [],
           email: candidate.email,
           phone: candidate.phone,
+          linkedin_url: candidate.linkedin_url, 
           resume: candidate.resumeUrl,
           appliedFrom: candidate.appliedFrom,
           currentSalary: candidate.currentSalary,
@@ -718,6 +783,7 @@ const candidates = useMemo(() => {
           currentStage: candidate.main_status?.name || "New Applicants",
           createdAt: candidate.created_at,
           hasValidatedResume: candidate.hasValidatedResume || false,
+          notice_period: candidate.notice_period, 
           main_status: candidate.main_status,
           sub_status: candidate.sub_status,
           main_status_id: candidate.main_status_id,
@@ -898,8 +964,8 @@ const candidates = useMemo(() => {
       
       const jobTextId = jobData.job_id;
       const payload = { job_id: jobTextId, candidate_id: candidateId, resume_url: extractedResumeUrl, job_description: jobdescription, organization_id: organizationId, user_id: user.id };
-      
-      const backendUrl = 'https://dev.hrumbles.ai/api/validate-candidate';
+
+      const backendUrl = 'http://127.0.0.1:5005/api/validate-candidate';
       const response = await fetch(backendUrl, { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: JSON.stringify(payload) });
 
       if (!response.ok) {
@@ -919,6 +985,7 @@ const candidates = useMemo(() => {
 // --- ADDED: Function to handle the batch validation process ---
   // --- ADDED: Function to handle the batch validation process ---
   const handleBatchValidate = async () => {
+   
     const unvalidatedCandidates = paginatedCandidates.filter(c => !c.hasValidatedResume && !validatingIds.includes(c.id));
 
     if (unvalidatedCandidates.length === 0) {
@@ -933,10 +1000,10 @@ const candidates = useMemo(() => {
     setValidatingIds(prev => [...new Set([...prev, ...idsToValidate])]);
 
     // Process validations concurrently without stopping if one fails
-     for (const candidate of unvalidatedCandidates) {
+   for (const candidate of unvalidatedCandidates) {
       await handleValidateResume(candidate.id);
     }
-    toast.info("Batch validation processing.");
+    toast.info("Batch validation process complete.");
   };
 
 
@@ -1315,6 +1382,7 @@ const candidates = useMemo(() => {
     toast.success("Interview feedback saved");
   };
 
+
   const handleJoiningSubmit = async () => {
     if (!currentCandidateId || !currentSubStatusId || !jobId) return;
   
@@ -1682,6 +1750,10 @@ const candidates = useMemo(() => {
     if (!email && !phone) {
       return <TableCell className="text-muted-foreground">N/A</TableCell>;
     }
+
+
+
+
   
     return (
       <TableCell>
@@ -1768,6 +1840,122 @@ const candidates = useMemo(() => {
     );
   };
 
+const getScoreColor = (score: number | null | undefined): string => {
+  if (score == null) return 'bg-gray-200 text-gray-600';
+  if (score > 80) return 'bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-lg shadow-teal-500/30 border border-emerald-300';
+  if (score >= 75) return 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-orange-500/30 border border-amber-300';
+  return 'bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-lg shadow-red-500/30 border border-rose-400';
+};
+
+const ContactIcon = ({ type, value }: { type: 'email' | 'phone'; value: string }) => {
+  const [justCopied, setJustCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent row click
+    navigator.clipboard.writeText(value);
+    setJustCopied(true);
+    toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} copied!`);
+    setTimeout(() => setJustCopied(false), 2000);
+  };
+
+  const icon = type === 'email' 
+    ? <Mail className="h-4 w-4 text-gray-400 group-hover:text-red-500 transition-colors" />
+    : <Phone className="h-4 w-4 text-gray-400 group-hover:text-green-600 transition-colors" />;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
+        <button className="p-1">{icon}</button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2" side="top" align="center">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">{value}</span>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={handleCopy} className="p-1 rounded-md hover:bg-accent">
+                  {justCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent><p>Copy</p></TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, onValidate, onViewSummary, reportUrl }) => {
+  if (isLoading) {
+    return <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>;
+  }
+
+  if (isValidated && score != null) {
+    return (
+      <div className="relative flex items-center justify-center">
+        {/* The 3D Score Circle */}
+        <div className={`flex items-center justify-center h-12 w-12 rounded-full font-bold text-xl transition-transform hover:scale-105 ${getScoreColor(score)}`}>
+          {score}
+        </div>
+
+        {/* --- This is the Hover Box, positioned on the LEFT and with a high z-index --- */}
+        <div className="absolute right-full mr-2 z-30 flex items-center gap-1 rounded-md border bg-white p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div className="flex flex-col gap-1 items-center">
+            <p className="font-semibold text-xs whitespace-nowrap px-1">Validation Score: {score}/100</p>
+            <div className="w-full h-[1px] bg-gray-200" />
+            <div className="flex items-center">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button onClick={() => onViewSummary(candidateId)} className="p-1 rounded-md hover:bg-accent">
+                      <Eye className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>View Summary</p></TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              {reportUrl && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <a href={reportUrl} download target="_blank" rel="noopener noreferrer" className="p-1 rounded-md text-foreground hover:bg-accent" onClick={(e) => e.stopPropagation()}>
+                        <Download className="h-4 w-4" />
+                      </a>
+                    </TooltipTrigger>
+                    <TooltipContent><p>Download Report</p></TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback for "Click to Validate" button
+ return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="default"
+            size="icon"
+            onClick={() => onValidate(candidateId)}
+            className="h-9 w-9 bg-gray-700 hover:bg-gray-800 text-white rounded-lg"
+            title="Click to Validate"
+          >
+            <Bot className="h-5 w-5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Click to Validate</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
   return (
     <>
     {isEmployee && <div className="flex justify-between items-center mb-4">
@@ -1787,41 +1975,46 @@ const candidates = useMemo(() => {
           </Select>
         </div>
       </div> }
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList1 className="grid grid-cols-7 mb-4">
-          <TabsTrigger1 value="All Candidates" className="relative">
-            All Candidates
+      <div className="w-full mb-4 flex justify-center">
+ <div className="p-1 flex items-center gap-2 rounded-xl bg-white border">
+    {/* Combine "All Candidates" with the dynamic statuses into one array */}
+    {[{ id: "all-candidates", name: "All Candidates" }, ...mainStatuses].map((status) => {
+      const isActive = activeTab === status.name || (status.id === 'all-candidates' && activeTab === 'All Candidates');
+
+      return (
+        <button
+          key={status.id}
+          onClick={() => setActiveTab(status.name)}
+          className={`relative px-4 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+            isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-primary"
+          }`}
+        >
+          {/* The sliding, animated background pill */}
+          {isActive && (
+            <motion.div
+              layoutId="active-tab-pill"
+              className="absolute inset-0 bg-primary rounded-lg"
+              style={{ zIndex: 10 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            />
+          )}
+
+          {/* Tab Content (Text and Count) */}
+          <span className="relative flex items-center" style={{ zIndex: 20 }}>
+            {status.name}
             <span
-              className={`absolute top-0 right-1 text-xs rounded-full h-4 w-4 flex items-center justify-center ${
-                activeTab === "All Candidates"
-                  ? "bg-white purple-text-color"
-                  : "bg-purple text-white"
+              className={`ml-2 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
+                isActive ? "bg-white/20 text-white" : "bg-primary/10 text-primary"
               }`}
             >
-              {getTabCount("All Candidates")}
+              {getTabCount(status.name)}
             </span>
-          </TabsTrigger1>
-         
-           {areStatusesLoading ? (
-            Array.from({ length: 5 }).map((_, index) => (
-              <Skeleton key={index} className="h-10 w-full rounded-md" />
-            ))
-          ) : (
-            mainStatuses.map((status) => (
-              <TabsTrigger1 key={status.id} value={status.name} className="relative">
-                {status.name}
-                <span
-                  className={`absolute top-0 right-1 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
-                    activeTab === status.name ? "bg-white purple-text-color" : "bg-purple text-white"
-                  }`}
-                >
-                  {getTabCount(status.name)}
-                </span>
-              </TabsTrigger1>
-            ))
-          )}
-        </TabsList1>
-      </Tabs>
+          </span>
+        </button>
+      );
+    })}
+  </div>
+</div>
       {filteredCandidates.length === 0 ? (
         <EmptyState onAddCandidate={async () => {
           try {
@@ -1850,204 +2043,131 @@ const candidates = useMemo(() => {
           }
         }} />
       ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-              <TableHead className="w-[40px]">
-  <Checkbox
-    checked={paginatedCandidates.length > 0 && selectedCandidates.size === paginatedCandidates.length}
-    onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
+       <div className="w-full overflow-x-auto rounded-md border">
+        <Table className="min-w-max">
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+             <TableHead className="sticky left-0 bg-slate-200 z-20 w-[120px] px-2">Recommended Score</TableHead>
+<TableHead className="sticky left-[120px] bg-slate-200 z-10 w-[250px] px-2">Candidate Name</TableHead>
+              <TableHead className="sticky left-[370px] bg-slate-200 z-10 w-[200px] px-2">Action</TableHead>
+              <TableHead className="w-[220px] px-2">Owner</TableHead>
+              <TableHead className="w-[150px] px-2">Current CTC</TableHead>
+              <TableHead className="w-[150px] px-2">Expected CTC</TableHead>
+              <TableHead className="w-[150px] px-2">Notice Period</TableHead>
+              <TableHead className="w-[150px] px-2">Location</TableHead>
+              <TableHead className="w-[200px] px-2">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+       <TableBody>
+  {paginatedCandidates.map((candidate) => (
+    <TableRow key={candidate.id} className="align-top group hover:bg-slate-50 relative">
+      
+      {/* --- Sticky Cell 1 (BACKGROUND FIXED) --- */}
+  <TableCell className="sticky left-0 z-20 px-2 bg-white group-hover:bg-slate-50">
+  <ScoreDisplay
+    score={candidateAnalysisData[candidate.id]?.overall_score}
+    isValidated={candidate.hasValidatedResume}
+    isLoading={validatingIds.includes(candidate.id)}
+    candidateId={candidate.id}
+    hasSummary={!!candidateAnalysisData[candidate.id]}
+    onValidate={handleValidateResume}
+    onViewSummary={fetchAnalysisData}
+    reportUrl={candidateAnalysisData[candidate.id]?.report_url}
   />
-</TableHead>
-                <TableHead className="w-[150px] sm:w-[200px]">Candidate Name</TableHead>
-                {!isEmployee && <TableHead className="w-[100px] sm:w-[150px]">Owner</TableHead>}
-                <TableHead className="w-[50px] sm:w-[100px]">
-                  Contact Info
-                </TableHead>
-                {/* <TableHead className="w-[150px] sm:w-[200px]">Interview / Feedback</TableHead> */}
-                {ITECH_ORGANIZATION_ID.includes(organizationId) || organizationId !== ASCENDION_ORGANIZATION_ID && !isEmployee && <TableHead className="w-[80px] sm:w-[100px]">Profit</TableHead>}
-                <TableHead className="w-[120px] sm:w-[150px]">Stage Progress</TableHead>
-                <TableHead className="w-[100px] sm:w-[120px]">Status</TableHead>
-                <TableHead className="w-[80px] sm:w-[100px]">Validate</TableHead>
-                {activeTab === "Applied" && <TableHead className="w-[80px] sm:w-[100px]">Action</TableHead>}
-                <TableHead className="w-[50px] sm:w-[60px]">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedCandidates.map((candidate) => (
-                <TableRow key={candidate.id}>
-                   <TableCell>
-    <Checkbox
-      checked={selectedCandidates.has(candidate.id)}
-      onCheckedChange={(checked) => handleSelectCandidate(candidate.id, Boolean(checked))}
-    />
-  </TableCell>
-                  <TableCell className="font-medium">
-  <div
-    className="flex flex-col cursor-pointer"
-    onClick={() => {
-      navigate(`/employee/${candidate.id}/${jobId}`, {
-        state: { candidate, jobId },
-      });
-    }}
-  >
-    <div className="flex items-center gap-2">
-      {candidate.owner || candidate.appliedFrom === `${user.user_metadata.first_name} ${user.user_metadata.last_name}` && (
-        <span className="h-2 w-2 rounded-full bg-green-500 inline-block" title="You added this candidate"></span>
-      )}
-      <span>{candidate.name}</span>
-    </div>
-    <span className="text-xs text-muted-foreground">
-      {moment(candidate.createdAt).format("DD MMM YYYY")} (
-      {moment(candidate.createdAt).fromNow()})
-    </span>
-  </div>
 </TableCell>
 
-{!isEmployee && <TableCell>{candidate.owner || candidate.appliedFrom}</TableCell>}
-                  <HiddenContactCell
-                    email={candidate.email}
-                    phone={candidate.phone}
-                    candidateId={candidate.id}
-                  />
-                  {/* <TableCell>
-                <InterviewDetailsCell candidate={candidate} />
-              </TableCell> */}
-                {ITECH_ORGANIZATION_ID.includes(organizationId)|| organizationId !== ASCENDION_ORGANIZATION_ID && !isEmployee && (
-  <TableCell>
-    <span
-      className={
-        candidate.profit?.profit != null && candidate.profit.profit > 0
-          ? "text-green-600"
-          : "text-red-600"
-      }
-    >
-      {candidate.profit?.profit != null
-        ? `${formatCurrency(candidate.profit.profit)} `
-        : "N/A"}
-    </span>
-  </TableCell>
-)}
-                  <TableCell>
-                    <div className="truncate">
-                      <ProgressColumn
-                        progress={candidate.progress}
-                        mainStatus={candidate.main_status}
-                        subStatus={candidate.sub_status}
-                      />
-                    </div>
-                  </TableCell>
-                 <TableCell>
-                    {/* 3. ADD CONDITIONAL RENDERING LOGIC */}
-                    {ITECH_ORGANIZATION_ID.includes(organizationId) || organizationId === ASCENDION_ORGANIZATION_ID ? (
-                      <ItechStatusSelector
-                        value={candidate.sub_status_id || ""}
-                        onChange={(value) => handleStatusChange(value, candidate)}
-                        className="h-7 text-xs w-full"
-                      />
-                    ) : (
-                      <StatusSelector
-                        value={candidate.sub_status_id || ""}
-                        onChange={(value) => handleStatusChange(value, candidate)}
-                        className="h-7 text-xs w-full"
-                        disableNextStage={candidate.sub_status?.name?.includes('Reject')}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell className="px-2">
-                    <div className="flex items-center gap-2">
-                      <ValidateResumeButton
-                        isValidated={candidate.hasValidatedResume || false}
-                        candidateId={candidate.id}
-                        onValidate={handleValidateResume}
-                         isLoading={validatingIds.includes(candidate.id)}
-    overallScore={candidateAnalysisData[candidate.id]?.overall_score}
-                      />
-                      {analysisDataAvailable[candidate.id] && (
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          onClick={() => fetchAnalysisData(candidate.id)}
-                          title="View Summary Report"
-                          className="p-1"
-                        >
-                          <FileText className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                  {activeTab === "Applied" && (
-                    <TableCell>
-                      <Button size="sm" variant="outline" onClick={() => handleAddToJob(candidate.id)}>
-                        Add to Job
-                      </Button>
-                    </TableCell>
-                  )}
-                  <TableCell className="text-right">
-                    <div className="flex gap-1 justify-start">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleViewResume(candidate.id)}
-                        title="View Resume"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          if (candidate.resume) {
-                            const link = document.createElement('a');
-                            link.href = candidate.resume;
-                            link.download = `${candidate.name}_resume.pdf`;
-                            link.click();
-                          } else {
-                            toast.error("Resume not available for download");
-                          }
-                        }}
-                        title="Download Resume"
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditCandidate(candidate)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                       <Button
-      variant="ghost"
-      size="sm"
-      onClick={() => handleViewTimeline(candidate)}
-      title="View Timeline & Notes"
-    >
-      <MessageSquare className="h-4 w-4" />
-    </Button>
-
-    
-      {candidate.hasValidatedResume && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => openShareModal([candidate], scoreFilter === 'not_shortlisted' ? 'rejection' : 'shortlist')}
-          disabled={isFetchingOwner !== null}
-          title={`Share update with ${candidate.name}`}
-        >
-          <Mail className="h-4 w-4" />
-        </Button>
-      )}
-
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+      {/* --- Sticky Cell 2 (BACKGROUND FIXED) --- */}
+      <TableCell className="sticky left-[120px] z-10 px-2 font-medium bg-white group-hover:bg-slate-50">
+        <div className="flex items-center gap-2">
+          <span className="text-black cursor-pointer" onClick={() => navigate(`/employee/${candidate.id}/${jobId}`)}>{candidate.name}</span>
+          <div className="flex items-center gap-1">
+            {candidate.email && <ContactIcon type="email" value={candidate.email} />}
+            {candidate.phone && <ContactIcon type="phone" value={candidate.phone} />}
+          </div>
         </div>
-      )}
+      </TableCell>
+
+      {/* --- Action Cell --- */}
+     <TableCell className="sticky left-[370px] z-10 px-2 bg-white group-hover:bg-slate-50">
+  <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200 w-fit">
+    {/* ... All your action buttons (Eye, Download, Pencil, etc.) go here ... */}
+    {/* The content inside this div does not need to change. */}
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleViewResume(candidate)}>
+            <Eye className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent><p>View Resume</p></TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => { if (candidate.resumeUrl) { const link = document.createElement('a'); link.href = candidate.resumeUrl; link.download = `${candidate.name}_resume.pdf`; link.click(); } else { toast.error("Resume not available for download"); } }}>
+            <Download className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent><p>Download Resume</p></TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleEditCandidate(candidate)}>
+            <Pencil className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent><p>Edit Candidate</p></TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleViewTimeline(candidate)}>
+            <MessageSquare className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent><p>View Timeline & Notes</p></TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+    {candidate.hasValidatedResume && (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => openShareModal(candidate)}>
+              <Mail className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent><p>Share update with {candidate.name}</p></TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    )}
+  </div>
+</TableCell>
+      {/* --- Other Scrollable Cells --- */}
+      <TableCell className="px-2">
+        <OwnerAvatarCell ownerName={candidate.owner || candidate.appliedFrom} createdAt={candidate.createdAt} />
+      </TableCell>
+      <TableCell className="px-2 text-sm">{candidate.currentSalary ? formatCurrency(parseFloat(String(candidate.currentSalary).replace(/[^0-9.]/g, ''))) : "N/A"}</TableCell>
+      <TableCell className="px-2 text-sm">{candidate.expectedSalary ? formatCurrency(parseFloat(String(candidate.expectedSalary).replace(/[^0-9.]/g, ''))) : "N/A"}</TableCell>
+      <TableCell className="px-2 text-sm">{candidate.notice_period ? `${candidate.notice_period} Days` : "N/A"}</TableCell>
+      <TableCell className="px-2 text-sm">{candidate.location || "N/A"}</TableCell>
+      <TableCell className="px-2">
+         <StatusSelector
+            value={candidate.sub_status_id || ""}
+            onChange={(value) => handleStatusChange(value, candidate)}
+            className="h-8 text-xs w-full"
+          />
+      </TableCell>
+    </TableRow>
+  ))}
+</TableBody>
+        </Table>
+      </div>
+      // --- END OF MAJOR CHANGES ---
+    )}
       {filteredCandidates.length > 0 && renderPagination()}
 
       {selectedCandidate && (

@@ -12,7 +12,7 @@ const TabsList = React.forwardRef<
     <TabsPrimitive.List
       ref={ref}
       className={cn(
-        "-mb-px flex space-x-6 overflow-x-auto",
+        "-mb-px flex space-x-6 ",
         className
       )}
       role="tablist"

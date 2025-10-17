@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSelector } from "react-redux";
 import { UseFormReturn } from "react-hook-form";
+import { motion } from "framer-motion"; // Import framer-motion
 import {
   Form,
   FormControl,
@@ -18,26 +19,54 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch"; // Import Switch
-import { Label } from "@/components/ui/label";   // Import Label
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import MultiLocationSelector from "./MultiLocationSelector";
 import SingleLocationSelector from "./SingleLocationSelector";
 import { CandidateFormData } from "./AddCandidateDrawer";
 import { supabase } from "@/integrations/supabase/client";
-import { FileText, Loader2 } from "lucide-react";
+import { FileText, Loader2, User, Mail, Phone, MapPin, Briefcase, DollarSign, Clock, Link as LinkIcon, Gift } from "lucide-react";
 import PhoneInput from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 import { toast } from "sonner";
+
+// --- Animation Variants for Framer Motion ---
+// Defines the animation for each section card (fade in and slide up)
+const sectionVariants = {
+  hidden: { opacity: 0, y: 25 },
+  visible: { 
+    opacity: 1, 
+    y: 0, 
+    transition: { 
+      duration: 0.5,
+      staggerChildren: 0.1 // Animates children one after another
+    } 
+  },
+};
+
+// Defines the animation for individual form fields (subtle slide up)
+const itemVariants = {
+  hidden: { opacity: 0, y: 15 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+};
+
+// Defines the 3D hover effect for input fields
+const fieldHoverEffect = {
+  hover: { 
+    scale: 1.03,
+    boxShadow: "0px 10px 30px -5px rgba(123, 97, 255, 0.2)",
+    transition: { type: "spring", stiffness: 400, damping: 15 }
+  }
+};
+
 
 interface BasicInformationTabProps {
   form: UseFormReturn<CandidateFormData>;
   onSaveAndNext: (data: CandidateFormData) => void;
   onCancel: () => void;
-  // ADDED: Prop to send the full parsed data back to the parent
-onParseComplete: (parsedData: any, rawText: string) => void;
+  onParseComplete: (parsedData: any, rawText: string) => void;
 }
 
-// --- ADDED: Helper function to calculate experience from work history ---
 const calculateExperienceFromHistory = (workHistory: any[]) => {
   if (!workHistory || workHistory.length === 0) {
     return { years: 0, months: 0 };
@@ -66,7 +95,6 @@ const calculateExperienceFromHistory = (workHistory: any[]) => {
   };
 };
 
-// Revert to hard-coded locations
 const LOCATION_OPTIONS = [
   "Delhi", "Mumbai", "Bangalore", "Chennai", "Kolkata", "Hyderabad", "Pune", 
   "Ahmedabad", "Jaipur", "Surat", "Lucknow", "Kanpur", "Nagpur", "Indore",
@@ -139,7 +167,7 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
       form.setValue("resume", publicUrl);
       toast.success("Resume uploaded. Parsing with AI, please wait...");
 
-          const { data: responseData, error: functionError } = await supabase.functions.invoke('parse-resume-test', {
+      const { data: responseData, error: functionError } = await supabase.functions.invoke('parse-resume-test', {
         body: { 
             fileUrl: publicUrl,
             user_id: user?.id,
@@ -150,12 +178,11 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
 
       const { parsedData, rawText } = responseData;
 
-      // --- MODIFIED: Call the parent callback with both pieces of data ---
       if (parsedData && rawText) {
         onParseComplete(parsedData, rawText);
       }
       
-     if (parsedData) {
+      if (parsedData) {
         if (parsedData.firstName) form.setValue("firstName", parsedData.firstName, { shouldValidate: true });
         if (parsedData.lastName) form.setValue("lastName", parsedData.lastName, { shouldValidate: true });
         if (parsedData.email) form.setValue("email", parsedData.email, { shouldValidate: true });
@@ -204,338 +231,551 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
 
   return (
     <Form {...form}>
-      <form onSubmit={handleSubmit} className="space-y-4 py-4">
-        {/* **Resume field moved to top** */}
-        <div className="mb-6">
-          <FormField
-            control={form.control}
-            name="resume"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  Resume <span className="text-red-500">*</span>
-                </FormLabel>
-                <FormControl>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="file"
-                      accept=".pdf,.docx"
-                      onChange={handleFileChange}
-                      disabled={isParsing}
-                      className="flex-1"
-                    />
-                    {isParsing && <Loader2 className="h-5 w-5 animate-spin text-purple-600" />}
-                  </div>
-                </FormControl>
-                {field.value && !isParsing && (
-                  <div className="flex items-center text-sm mt-1 gap-1">
-                    <FileText size={16} className="purple-text-color" />
-                    <a href={field.value} target="_blank" rel="noopener noreferrer" className="purple-text-color underline">
-                      View Uploaded Resume
-                    </a>
-                  </div>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <hr className="my-6"/>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="firstName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>First Name <span className="text-red-500">*</span></FormLabel>
-                <FormControl>
-                  <Input placeholder="John" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="lastName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Last Name <span className="text-red-500">*</span></FormLabel>
-                <FormControl>
-                  <Input placeholder="Doe" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="email"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Email <span className="text-red-500">*</span></FormLabel>
-                <FormControl>
-                  <Input placeholder="john.doe@example.com" type="email" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="phone"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Phone Number <span className="text-red-500">*</span></FormLabel>
-                <FormControl>
-                  <PhoneInput
-                    international
-                    defaultCountry="IN"
-                    placeholder="Enter phone number"
-                    value={field.value}
-                    onChange={field.onChange}
-                    className="border rounded-md p-2 w-full"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="currentLocation"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Current Location <span className="text-red-500">*</span></FormLabel>
-                <FormControl>
-                  <SingleLocationSelector
-                    locations={LOCATION_OPTIONS}
-                    selectedLocation={field.value}
-                    onChange={field.onChange}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="preferredLocations"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Preferred Locations <span className="text-red-500">*</span></FormLabel>
-                <FormControl>
-                  <MultiLocationSelector
-                    locations={LOCATION_OPTIONS}
-                    selectedLocations={field.value}
-                    onChange={field.onChange}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="totalExperience"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Total Experience (years)</FormLabel>
-                <Select onValueChange={(value) => field.onChange(value ? Number(value) : undefined)} value={field.value?.toString()}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select years" /></SelectTrigger></FormControl>
-                  <SelectContent>{YEARS.map((year) => (<SelectItem key={year} value={year}>{year} years</SelectItem>))}</SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="totalExperienceMonths"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Total Experience (months)</FormLabel>
-                <Select onValueChange={(value) => field.onChange(value ? Number(value) : undefined)} value={field.value?.toString()}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select months" /></SelectTrigger></FormControl>
-                  <SelectContent>{MONTHS.map((month) => (<SelectItem key={month} value={month}>{month} months</SelectItem>))}</SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="relevantExperience"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Relevant Experience (years)</FormLabel>
-                <Select onValueChange={(value) => field.onChange(value ? Number(value) : undefined)} value={field.value?.toString()}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select years" /></SelectTrigger></FormControl>
-                  <SelectContent>{YEARS.map((year) => (<SelectItem key={year} value={year}>{year} years</SelectItem>))}</SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="relevantExperienceMonths"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Relevant Experience (months)</FormLabel>
-                <Select onValueChange={(value) => field.onChange(value ? Number(value) : undefined)} value={field.value?.toString()}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select months" /></SelectTrigger></FormControl>
-                  <SelectContent>{MONTHS.map((month) => (<SelectItem key={month} value={month}>{month} months</SelectItem>))}</SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="currentSalary"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Current Salary</FormLabel>
-                <FormControl><Input type="number" min="0" value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)} placeholder="Enter salary in INR"/></FormControl>
-                {currentSalary !== undefined && (<p className="text-sm text-gray-500 mt-1">₹ {formatINR(currentSalary)}</p>)}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="expectedSalary"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Expected Salary</FormLabel>
-                <FormControl><Input type="number" min="0" value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)} placeholder="Enter salary in INR"/></FormControl>
-                {expectedSalary !== undefined && (<p className="text-sm text-gray-500 mt-1">₹ {formatINR(expectedSalary)}</p>)}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="noticePeriod"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Notice Period</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select notice period" /></SelectTrigger></FormControl>
-                  <SelectContent>{NOTICE_PERIOD_OPTIONS.map((option) => (<SelectItem key={option} value={option}>{option}</SelectItem>))}</SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="lastWorkingDay"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Last Working Day</FormLabel>
-                <FormControl><Input type="date" value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value || undefined)} placeholder="Select date"/></FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        
-        {/* **LinkedIn Field with Toggle** */}
-        <FormField
-          control={form.control}
-          name="linkedInId"
-          render={({ field }) => (
-            <FormItem>
-              <div className="flex items-center justify-between">
-                <FormLabel>
-                  LinkedIn Profile URL 
-                  {isLinkedInRequired && <span className="text-red-500">*</span>}
-                </FormLabel>
-                <FormField
-                  control={form.control}
-                  name="isLinkedInRequired"
-                  render={({ field: switchField }) => (
-                    <FormItem className="flex items-center space-x-2">
-                       <FormControl>
-                         <Switch
-                          checked={switchField.value}
-                          onCheckedChange={switchField.onChange}
-                         />
-                       </FormControl>
-                       <Label htmlFor="isLinkedInRequired" className="text-sm font-medium">Required</Label>
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormControl>
-                <Input
-                  placeholder="https://linkedin.com/in/username"
-                  {...field}
-                  value={field.value ?? ""}
-                  disabled={!isLinkedInRequired}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="hasOffers"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Existing Offers</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select option" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="Yes">Yes</SelectItem>
-                    <SelectItem value="No">No</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          {hasOffers === "Yes" && (
+      <form onSubmit={handleSubmit} className="space-y-8 py-4">
+        {/* --- Section 1: Resume Upload --- */}
+        <motion.div
+          variants={sectionVariants}
+          initial="hidden"
+          animate="visible"
+          className="p-6 bg-white rounded-xl shadow-lg border border-gray-100"
+        >
+          <motion.h3 variants={itemVariants} className="text-xl font-bold mb-4 text-gray-800">Start with the Resume</motion.h3>
+          <motion.div variants={itemVariants}>
             <FormField
               control={form.control}
-              name="offerDetails"
+              name="resume"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Offer Details</FormLabel>
-                  <FormControl><Input placeholder="Enter offer details" {...field} value={field.value ?? ""}/></FormControl>
+                  <FormLabel>
+                    Upload Resume for AI Parsing <span className="text-red-500">*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="file"
+                        accept=".pdf,.docx"
+                        onChange={handleFileChange}
+                        disabled={isParsing}
+                        className="flex-1"
+                      />
+                      {isParsing && <Loader2 className="h-5 w-5 animate-spin text-purple-600" />}
+                    </div>
+                  </FormControl>
+                  {field.value && !isParsing && (
+                    <div className="flex items-center text-sm mt-1 gap-1">
+                      <FileText size={16} className="text-purple-600" />
+                      <a href={field.value} target="_blank" rel="noopener noreferrer" className="text-purple-600 underline">
+                        View Uploaded Resume
+                      </a>
+                    </div>
+                  )}
                   <FormMessage />
-              </FormItem>
+                </FormItem>
               )}
             />
-          )}
-        </div>
+          </motion.div>
+        </motion.div>
+
+        {/* --- Section 2: Personal & Contact Details --- */}
+        <motion.div 
+            variants={sectionVariants}
+            initial="hidden"
+            animate="visible"
+            className="p-6 bg-white rounded-xl shadow-lg border border-gray-100"
+        >
+          <h3 className="text-xl font-bold mb-4 text-gray-800">Candidate Information</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <motion.div variants={itemVariants}>
+              <FormField
+                control={form.control}
+                name="firstName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>First Name <span className="text-red-500">*</span></FormLabel>
+                    <FormControl>
+                      <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input placeholder="John" {...field} className="pl-10" />
+                      </motion.div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </motion.div>
+            <motion.div variants={itemVariants}>
+              <FormField
+                control={form.control}
+                name="lastName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Last Name <span className="text-red-500">*</span></FormLabel>
+                    <FormControl>
+                    <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input placeholder="Doe" {...field} className="pl-10" />
+                      </motion.div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </motion.div>
+            <motion.div variants={itemVariants}>
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email <span className="text-red-500">*</span></FormLabel>
+                    <FormControl>
+                      <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input placeholder="john.doe@example.com" type="email" {...field} className="pl-10" />
+                      </motion.div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </motion.div>
+            <motion.div variants={itemVariants}>
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number <span className="text-red-500">*</span></FormLabel>
+                    <FormControl>
+                      <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                        <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400 z-10" />
+                        <PhoneInput
+                          international
+                          defaultCountry="IN"
+                          placeholder="Enter phone number"
+                          value={field.value}
+                          onChange={field.onChange}
+                          className="border rounded-md p-2 w-full pl-10"
+                        />
+                      </motion.div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </motion.div>
+          </div>
+        </motion.div>
+
+        {/* --- Section 3: Professional Background --- */}
+        <motion.div 
+            variants={sectionVariants}
+            initial="hidden"
+            animate="visible"
+            className="p-6 bg-white rounded-xl shadow-lg border border-gray-100"
+        >
+            <h3 className="text-xl font-bold mb-4 text-gray-800">Professional Background</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Current & Preferred Locations */}
+                <motion.div variants={itemVariants}>
+                    <FormField
+                        control={form.control}
+                        name="currentLocation"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Current Location <span className="text-red-500">*</span></FormLabel>
+                            <FormControl>
+                            <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
+                                <div className="pl-8">
+                                <SingleLocationSelector
+                                    locations={LOCATION_OPTIONS}
+                                    selectedLocation={field.value}
+                                    onChange={field.onChange}
+                                />
+                                </div>
+                            </motion.div>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </motion.div>
+                <motion.div variants={itemVariants}>
+                    <FormField
+                        control={form.control}
+                        name="preferredLocations"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Preferred Locations <span className="text-red-500">*</span></FormLabel>
+                            <FormControl>
+                            <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                                <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
+                                <div className="pl-8">
+                                <MultiLocationSelector
+                                    locations={LOCATION_OPTIONS}
+                                    selectedLocations={field.value}
+                                    onChange={field.onChange}
+                                />
+                                </div>
+                            </motion.div>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </motion.div>
+                {/* Total Experience */}
+                <motion.div variants={itemVariants}>
+                    <FormField
+                        control={form.control}
+                        name="totalExperience"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Total Experience (years)</FormLabel>
+                            <Select onValueChange={(value) => field.onChange(value ? Number(value) : undefined)} value={field.value?.toString()}>
+                            <FormControl>
+                                <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                                <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
+                                <SelectTrigger className="pl-10">
+                                    <SelectValue placeholder="Select years" />
+                                </SelectTrigger>
+                                </motion.div>
+                            </FormControl>
+                            <SelectContent>{YEARS.map((year) => (<SelectItem key={year} value={year}>{year} years</SelectItem>))}</SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </motion.div>
+                <motion.div variants={itemVariants}>
+                    <FormField
+                        control={form.control}
+                        name="totalExperienceMonths"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Total Experience (months)</FormLabel>
+                            <Select onValueChange={(value) => field.onChange(value ? Number(value) : undefined)} value={field.value?.toString()}>
+                            <FormControl>
+                                <motion.div variants={fieldHoverEffect} whileHover="hover">
+                                    <SelectTrigger>
+                                    <SelectValue placeholder="Select months" />
+                                    </SelectTrigger>
+                                </motion.div>
+                            </FormControl>
+                            <SelectContent>{MONTHS.map((month) => (<SelectItem key={month} value={month}>{month} months</SelectItem>))}</SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </motion.div>
+                {/* Relevant Experience */}
+                <motion.div variants={itemVariants}>
+                    <FormField
+                        control={form.control}
+                        name="relevantExperience"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Relevant Experience (years)</FormLabel>
+                            <Select onValueChange={(value) => field.onChange(value ? Number(value) : undefined)} value={field.value?.toString()}>
+                            <FormControl>
+                                <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                                <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
+                                <SelectTrigger className="pl-10">
+                                    <SelectValue placeholder="Select years" />
+                                </SelectTrigger>
+                                </motion.div>
+                            </FormControl>
+                            <SelectContent>{YEARS.map((year) => (<SelectItem key={year} value={year}>{year} years</SelectItem>))}</SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </motion.div>
+                <motion.div variants={itemVariants}>
+                    <FormField
+                        control={form.control}
+                        name="relevantExperienceMonths"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Relevant Experience (months)</FormLabel>
+                            <Select onValueChange={(value) => field.onChange(value ? Number(value) : undefined)} value={field.value?.toString()}>
+                            <FormControl>
+                                <motion.div variants={fieldHoverEffect} whileHover="hover">
+                                    <SelectTrigger>
+                                    <SelectValue placeholder="Select months" />
+                                    </SelectTrigger>
+                                </motion.div>
+                            </FormControl>
+                            <SelectContent>{MONTHS.map((month) => (<SelectItem key={month} value={month}>{month} months</SelectItem>))}</SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </motion.div>
+            </div>
+        </motion.div>
         
+        {/* --- Section 4: Compensation & Logistics --- */}
+        <motion.div 
+            variants={sectionVariants}
+            initial="hidden"
+            animate="visible"
+            className="p-6 bg-white rounded-xl shadow-lg border border-gray-100"
+        >
+            <h3 className="text-xl font-bold mb-4 text-gray-800">Compensation & Logistics</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Salary */}
+                <motion.div variants={itemVariants}>
+                    <FormField
+                        control={form.control}
+                        name="currentSalary"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Current Salary</FormLabel>
+                            <FormControl>
+                            <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Input 
+                                type="number" 
+                                min="0" 
+                                value={field.value ?? ""} 
+                                onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)} 
+                                placeholder="Enter salary in INR"
+                                className="pl-10"
+                                />
+                            </motion.div>
+                            </FormControl>
+                            {currentSalary !== undefined && (<p className="text-sm text-gray-500 mt-1">₹ {formatINR(currentSalary)}</p>)}
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </motion.div>
+                <motion.div variants={itemVariants}>
+                    <FormField
+                        control={form.control}
+                        name="expectedSalary"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Expected Salary</FormLabel>
+                            <FormControl>
+                            <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Input 
+                                type="number" 
+                                min="0" 
+                                value={field.value ?? ""} 
+                                onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)} 
+                                placeholder="Enter salary in INR"
+                                className="pl-10"
+                                />
+                            </motion.div>
+                            </FormControl>
+                            {expectedSalary !== undefined && (<p className="text-sm text-gray-500 mt-1">₹ {formatINR(expectedSalary)}</p>)}
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </motion.div>
+                {/* Notice Period */}
+                <motion.div variants={itemVariants}>
+                    <FormField
+                        control={form.control}
+                        name="noticePeriod"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Notice Period</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                                <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                                <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
+                                <SelectTrigger className="pl-10">
+                                    <SelectValue placeholder="Select notice period" />
+                                </SelectTrigger>
+                                </motion.div>
+                            </FormControl>
+                            <SelectContent>{NOTICE_PERIOD_OPTIONS.map((option) => (<SelectItem key={option} value={option}>{option}</SelectItem>))}</SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </motion.div>
+                <motion.div variants={itemVariants}>
+                    <FormField
+                        control={form.control}
+                        name="lastWorkingDay"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Last Working Day</FormLabel>
+                            <FormControl>
+                            <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                                <Input 
+                                type="date" 
+                                value={field.value ?? ""} 
+                                onChange={(e) => field.onChange(e.target.value || undefined)} 
+                                placeholder="Select date"
+                                className="pl-3"
+                                />
+                            </motion.div>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </motion.div>
+            </div>
+        </motion.div>
+
+{/* --- Section 5: Additional Information --- */}
+<motion.div 
+    variants={sectionVariants}
+    initial="hidden"
+    animate="visible"
+    className="p-6 bg-white rounded-xl shadow-lg border border-gray-100"
+>
+    <h3 className="text-xl font-bold mb-4 text-gray-800">Additional Information</h3>
+    <div className="space-y-6">
+        {/* LinkedIn (unchanged) */}
+        <motion.div variants={itemVariants}>
+            <FormField
+                control={form.control}
+                name="linkedInId"
+                render={({ field }) => (
+                    <FormItem>
+                    <div className="flex items-center justify-between">
+                        <FormLabel>
+                        LinkedIn Profile URL 
+                        {isLinkedInRequired && <span className="text-red-500">*</span>}
+                        </FormLabel>
+                        <FormField
+                        control={form.control}
+                        name="isLinkedInRequired"
+                        render={({ field: switchField }) => (
+                            <FormItem className="flex items-center space-x-2">
+                            <FormControl>
+                                <Switch
+                                checked={switchField.value}
+                                onCheckedChange={switchField.onChange}
+                                />
+                            </FormControl>
+                            <Label htmlFor="isLinkedInRequired" className="text-sm font-medium">Required</Label>
+                            </FormItem>
+                        )}
+                        />
+                    </div>
+                    <FormControl>
+                        <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                        <LinkIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                            placeholder="https://linkedin.com/in/username"
+                            {...field}
+                            value={field.value ?? ""}
+                            disabled={!isLinkedInRequired}
+                            className="pl-10"
+                        />
+                        </motion.div>
+                    </FormControl>
+                    <FormMessage />
+                    </FormItem>
+                )}
+            />
+        </motion.div>
+        
+        {/* Existing Offers with new Button Toggle */}
+        <motion.div variants={itemVariants}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                <FormField
+                    control={form.control}
+                    name="hasOffers"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="font-semibold text-gray-700">Do they have existing offers?</FormLabel>
+                        <FormControl>
+                            <div className="flex items-center gap-3 pt-2">
+                                <motion.button
+                                    type="button"
+                                    onClick={() => field.onChange("Yes")}
+                                    className={`w-full rounded-lg py-2.5 text-sm font-bold transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 ${
+                                    field.value === "Yes"
+                                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30'
+                                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                    }`}
+                                    whileHover={{ scale: field.value === "Yes" ? 1.0 : 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                >
+                                    Yes
+                                </motion.button>
+                                <motion.button
+                                    type="button"
+                                    onClick={() => field.onChange("No")}
+                                    className={`w-full rounded-lg py-2.5 text-sm font-bold transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 ${
+                                    field.value === "No"
+                                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30'
+                                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                    }`}
+                                    whileHover={{ scale: field.value === "No" ? 1.0 : 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                >
+                                    No
+                                </motion.button>
+                            </div>
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+                {/* Offer Details field animates in when "Yes" is selected */}
+                {hasOffers === "Yes" && (
+                    <motion.div 
+                        initial={{ opacity: 0, x: -20 }} 
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                    >
+                        <FormField
+                        control={form.control}
+                        name="offerDetails"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="font-semibold text-gray-700">Offer Details</FormLabel>
+                                <FormControl>
+                                    <motion.div variants={fieldHoverEffect} whileHover="hover">
+                                        <Input placeholder="e.g., Company, Salary, Role" {...field} value={field.value ?? ""}/>
+                                    </motion.div>
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                    </motion.div>
+                )}
+            </div>
+        </motion.div>
+    </div>
+</motion.div>
+        {/* --- Action Buttons --- */}
         <div className="flex justify-end space-x-4 pt-4">
-          <Button type="button" variant="outline" onClick={onCancel} disabled={isParsing}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={isParsing}>
-            {isParsing ? 'Parsing...' : 'Save & Next'}
-          </Button>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button type="button" variant="outline" onClick={onCancel} disabled={isParsing}>
+              Cancel
+            </Button>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button type="submit" disabled={isParsing} className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/50">
+              {isParsing ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="animate-spin h-4 w-4" />
+                  Parsing...
+                </div>
+              ) : 'Save & Next'}
+            </Button>
+          </motion.div>
         </div>
       </form>
     </Form>

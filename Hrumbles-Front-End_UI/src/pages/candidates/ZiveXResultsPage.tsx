@@ -15,7 +15,7 @@ const ZiveXResultsPage: FC = () => {
   const navigate = useNavigate();
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
-const filters: SearchFilters = useMemo(() => {
+  const filters: SearchFilters = useMemo(() => {
     const getTags = (key: string): SearchTag[] => {
       const mandatory = searchParams.get(`mandatory_${key}`)?.split(',') || [];
       const optional = searchParams.get(`optional_${key}`)?.split(',') || [];
@@ -27,18 +27,23 @@ const filters: SearchFilters = useMemo(() => {
     return {
       keywords: getTags('keywords'),
       skills: getTags('skills'),
-      companies: getTags('companies'),
       educations: getTags('educations'),
       locations: getTags('locations'),
-      current_company: getTags('current_company'),
-      current_designation: getTags('current_designation'),
+      industries: getTags('industries'),
+      companies: getTags('companies'),
+      current_company: searchParams.get('current_company') || '',
+      current_designation: searchParams.get('current_designation') || '',
       min_exp: searchParams.get('min_exp') ? parseInt(searchParams.get('min_exp')!) : null,
       max_exp: searchParams.get('max_exp') ? parseInt(searchParams.get('max_exp')!) : null,
+      min_current_salary: searchParams.get('min_current_salary') ? parseFloat(searchParams.get('min_current_salary')!) : null,
+      max_current_salary: searchParams.get('max_current_salary') ? parseFloat(searchParams.get('max_current_salary')!) : null,
+      min_expected_salary: searchParams.get('min_expected_salary') ? parseFloat(searchParams.get('min_expected_salary')!) : null,
+      max_expected_salary: searchParams.get('max_expected_salary') ? parseFloat(searchParams.get('max_expected_salary')!) : null,
+      notice_periods: searchParams.get('notice_periods')?.split(',') || [],
       date_posted: searchParams.get('date_posted') || 'all_time',
     };
   }, [searchParams]);
 
-  // FINAL, CORRECT useQuery to call the backend
   const { data: searchResults = [], isLoading } = useQuery<CandidateSearchResult[]>({
     queryKey: ['candidateSearchResults', organizationId, filters],
     queryFn: async () => {
@@ -52,23 +57,26 @@ const filters: SearchFilters = useMemo(() => {
       const companies = processTagsForRPC(filters.companies);
       const educations = processTagsForRPC(filters.educations);
       const locations = processTagsForRPC(filters.locations);
-      const currentCompany = processTagsForRPC(filters.current_company);
-      const currentDesignation = processTagsForRPC(filters.current_designation);
+      const industries = processTagsForRPC(filters.industries);
 
-      // Correctly combine mandatory/optional for single-string RPC params
-      const p_current_company_text = [...currentCompany.mandatory, ...currentCompany.optional].join(' ') || null;
-      const p_current_designation_text = [...currentDesignation.mandatory, ...currentDesignation.optional].join(' ') || null;
-
-      const { data, error } = await supabase.rpc('search_unified_candidates_v6', {
+      const { data, error } = await supabase.rpc('search_unified_candidates_v8', {
         p_mandatory_keywords: keywords.mandatory, p_optional_keywords: keywords.optional,
         p_mandatory_skills: skills.mandatory, p_optional_skills: skills.optional,
         p_mandatory_companies: companies.mandatory, p_optional_companies: companies.optional,
         p_mandatory_educations: educations.mandatory, p_optional_educations: educations.optional,
         p_mandatory_locations: locations.mandatory, p_optional_locations: locations.optional,
-        p_current_company: p_current_company_text,
-        p_current_designation: p_current_designation_text,
+        p_name: filters.name || null,
+        p_email: filters.email || null,
+        p_current_company: filters.current_company || null,
+        p_current_designation: filters.current_designation || null,
         p_min_exp: filters.min_exp,
         p_max_exp: filters.max_exp,
+        p_min_current_salary: filters.min_current_salary,
+        p_max_current_salary: filters.max_current_salary,
+        p_min_expected_salary: filters.min_expected_salary,
+        p_max_expected_salary: filters.max_expected_salary,
+        p_notice_periods: filters.notice_periods,
+        p_industries: [...industries.mandatory, ...industries.optional],
         p_date_filter: filters.date_posted,
         p_organization_id: organizationId
       });
@@ -76,7 +84,6 @@ const filters: SearchFilters = useMemo(() => {
       return data || [];
     },
   });
-
 
   const handleSearch = (newFilters: SearchFilters) => {
     const params = new URLSearchParams();
@@ -92,11 +99,19 @@ const filters: SearchFilters = useMemo(() => {
     processTags('companies', newFilters.companies);
     processTags('educations', newFilters.educations);
     processTags('locations', newFilters.locations);
-    processTags('current_company', newFilters.current_company);
-    processTags('current_designation', newFilters.current_designation);
+    processTags('industries', newFilters.industries);
 
+    if (newFilters.name) params.append('name', newFilters.name);
+    if (newFilters.email) params.append('email', newFilters.email);
+    if (newFilters.current_company) params.append('current_company', newFilters.current_company);
+    if (newFilters.current_designation) params.append('current_designation', newFilters.current_designation);
     if (newFilters.min_exp) params.append('min_exp', newFilters.min_exp.toString());
     if (newFilters.max_exp) params.append('max_exp', newFilters.max_exp.toString());
+    if (newFilters.min_current_salary) params.append('min_current_salary', newFilters.min_current_salary.toString());
+    if (newFilters.max_current_salary) params.append('max_current_salary', newFilters.max_current_salary.toString());
+    if (newFilters.min_expected_salary) params.append('min_expected_salary', newFilters.min_expected_salary.toString());
+    if (newFilters.max_expected_salary) params.append('max_expected_salary', newFilters.max_expected_salary.toString());
+    if (newFilters.notice_periods?.length) params.append('notice_periods', newFilters.notice_periods.join(','));
     if (newFilters.date_posted && newFilters.date_posted !== 'all_time') {
       params.append('date_posted', newFilters.date_posted);
     }
