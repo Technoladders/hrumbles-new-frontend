@@ -12,10 +12,9 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Users, UserPlus, Search, History, ChevronsRight, Calendar,
-  ChevronLeft, ChevronRight, Briefcase, ScanSearch
+  ChevronLeft, ChevronRight, Briefcase, ScanSearch, Mail, Phone, Copy
 } from 'lucide-react';
 
 // Import your modals
@@ -50,13 +49,25 @@ const TalentPoolPage = () => {
   const [isAddModalOpen, setAddModalOpen] = useState(false);
   const [compareCandidate, setCompareCandidate] = useState<TalentPoolCandidate | null>(null);
   const [historyCandidate, setHistoryCandidate] = useState<TalentPoolCandidate | null>(null);
+  
+  // State to manage "Copied!" feedback tooltip
+  const [copiedValue, setCopiedValue] = useState<string | null>(null);
+  
+  // Handler to copy text to clipboard and provide feedback
+  const handleCopyToClipboard = (text: string, type: 'email' | 'phone') => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedValue(type);
+    setTimeout(() => {
+        setCopiedValue(null);
+    }, 1500); // Reset feedback after 1.5 seconds
+  };
+
 
   // Fetch candidates with creator's name using a join
-const { data: candidates = [], isLoading, refetch } = useQuery({
-    // The queryKey now includes role and user ID to ensure data is refetched for different users
+  const { data: candidates = [], isLoading, refetch } = useQuery({
     queryKey: ['talentPoolCandidates', role, user?.id],
     queryFn: async () => {
-      // Base query selects all necessary columns and joins with hr_employees
       let query = supabase
         .from('hr_talent_pool')
         .select(`
@@ -72,24 +83,18 @@ const { data: candidates = [], isLoading, refetch } = useQuery({
           )
         `);
 
-      // If the user is an 'employee', add a filter to only show their own created candidates
       if (role === 'employee' && user?.id) {
         query = query.eq('created_by', user.id);
       }
       
-      // Execute the final query with ordering
       const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw new Error(error.message);
       return data as TalentPoolCandidate[];
     },
-    // The query will only run if the user object is available
     enabled: !!user,
   });
-  // --- END: MODIFICATION ---
 
-  // --- START: MODIFICATION ---
-  // Memoized filtering logic with phone number
   const filteredCandidates = useMemo(() => {
     return candidates.filter(candidate =>
       (candidate.candidate_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
@@ -97,9 +102,7 @@ const { data: candidates = [], isLoading, refetch } = useQuery({
       (candidate.phone?.toLowerCase() || '').includes(searchTerm.toLowerCase())
     );
   }, [candidates, searchTerm]);
-  // --- END: MODIFICATION ---
 
-  // paginatedCandidates and totalPages logic is unchanged
   const paginatedCandidates = useMemo(() => {
       const startIndex = (currentPage - 1) * itemsPerPage;
       return filteredCandidates.slice(startIndex, startIndex + itemsPerPage);
@@ -107,15 +110,11 @@ const { data: candidates = [], isLoading, refetch } = useQuery({
 
   const totalPages = Math.ceil(filteredCandidates.length / itemsPerPage);
 
-
-  // Stat card and handler functions are unchanged
   const totalCandidates = filteredCandidates.length;
   const addedThisMonth = filteredCandidates.filter(c => moment(c.created_at).isAfter(moment().subtract(30, 'days'))).length;
   const addedThisWeek = filteredCandidates.filter(c => moment(c.created_at).isAfter(moment().subtract(7, 'days'))).length;
   const handleCandidateAdded = () => { refetch(); setAddModalOpen(false); };
   const handleItemsPerPageChange = (value: string) => { setItemsPerPage(Number(value)); setCurrentPage(1); };
-
-
 
   if (isLoading) {
     return (
@@ -125,91 +124,148 @@ const { data: candidates = [], isLoading, refetch } = useQuery({
     );
   }
 
-  const renderTable = () => {
+  const renderCandidateList = () => {
     if (paginatedCandidates.length === 0) {
       return (
-        <div className="text-center p-12 text-gray-500">
+        <div className="text-center p-12 text-gray-500 bg-white rounded-xl border border-gray-200 shadow-sm">
           <p>No candidates found matching your criteria.</p>
         </div>
       );
     }
-
-    console.log("PaginatedCasndd", paginatedCandidates)
+    
+    const actionButtonStyles = "h-9 w-9 rounded-lg bg-white shadow-md hover:shadow-lg text-gray-500 hover:text-primary hover:-translate-y-px transition-all duration-200";
 
     return (
-      <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm animate-scale-in">
-        <div className="overflow-x-auto">
-         <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              {/* --- START: MODIFICATION --- */}
-              <tr>
-                <th scope="col" className="table-header-cell">Candidate</th>
-                <th scope="col" className="table-header-cell">Suggested Title</th>
-                <th scope="col" className="table-header-cell">Date Added</th>
-                <th scope="col" className="table-header-cell">Added By</th>
-                <th scope="col" className="table-header-cell text-right">Actions</th>
-              </tr>
-              {/* --- END: MODIFICATION --- */}
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedCandidates.map((candidate) => (
-                <tr key={candidate.id} className="hover:bg-gray-50 transition">
-                  <td className="table-cell">
-                    <div className="flex flex-col">
-                      <Link to={`/talent-pool/${candidate.id}`} className="font-medium text-primary hover:underline">
-                        {candidate.candidate_name || 'N/A'}
-                      </Link>
-                      <span className="text-xs text-gray-500">{candidate.email || 'No email'}</span>
-                    </div>
-                  </td>
-                  {/* --- START: MODIFICATION --- */}
-                  <td className="table-cell">
-                    {candidate.suggested_title || <span className="text-gray-400">Not specified</span>}
-                  </td>
-                  <td className="table-cell">
-                    {moment(candidate.created_at).format("DD MMM YYYY")}
-                    <span className="block text-xs text-gray-500">
-                      ({moment(candidate.created_at).fromNow()})
-                    </span>
-                  </td>
-                  <td className="table-cell">
-                    {candidate.created_by ? `${candidate.created_by.first_name} ${candidate.created_by.last_name}` : 'System'}
-                  </td>
-                  {/* --- END: MODIFICATION --- */}
-                  <td className="table-cell text-right">
-                    <div className="flex justify-end space-x-1">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setHistoryCandidate(candidate)}>
-                              <History className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>View Analysis History</p></TooltipContent>
-                        </Tooltip>
+      <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
+        {/* Header Row */}
+        <div className="grid grid-cols-8 gap-4 items-center bg-gray-50/70 px-4 py-3 border-b border-gray-200">
+            <div className="col-span-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Candidate</div>
+            <div className="col-span-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</div>
+            <div className="col-span-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Suggested Title</div>
+            <div className="col-span-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Added By</div>
+        </div>
+
+        {/* Candidate Rows */}
+        <div className="divide-y divide-gray-200/80">
+          {paginatedCandidates.map((candidate) => (
+            <div 
+              key={candidate.id} 
+              className="grid grid-cols-8 gap-4 items-center p-4 transition-all duration-300 ease-in-out hover:bg-gray-50"
+            >
+              {/* Column 1: Candidate */}
+              <div className="col-span-8 md:col-span-3">
+                <div className="flex items-center gap-3">
+                  <Link to={`/talent-pool/${candidate.id}`} className="font-semibold text-gray-900 hover:underline text-base truncate">
+                    {candidate.candidate_name || 'N/A'}
+                  </Link>
+                  <div className="flex items-center gap-3">
+                      <TooltipProvider delayDuration={100}>
+                          <Tooltip>
+                              <TooltipTrigger asChild>
+                                  <Mail className="h-4 w-4 text-gray-400 hover:text-red-500 cursor-pointer transition-colors duration-200" />
+                              </TooltipTrigger>
+                              <TooltipContent 
+                                  className="cursor-pointer bg-white p-2 rounded-lg shadow-lg border"
+                                  onClick={() => handleCopyToClipboard(candidate.email, 'email')}
+                              >
+                                  {copiedValue === 'email' ? (
+                                      <p className="text-primary font-semibold">Copied!</p>
+                                  ) : (
+                                      <div className="flex items-center gap-3 text-gray-700">
+                                          <p>{candidate.email}</p>
+                                          <Copy className="h-4 w-4" />
+                                      </div>
+                                  )}
+                              </TooltipContent>
+                          </Tooltip>
                       </TooltipProvider>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCompareCandidate(candidate)}>
-                              <ScanSearch className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>Compare with Job</p></TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+                      {candidate.phone && (
+                          <TooltipProvider delayDuration={100}>
+                              <Tooltip>
+                                  <TooltipTrigger asChild>
+                                      <Phone className="h-4 w-4 text-gray-400 hover:text-green-500 cursor-pointer transition-colors duration-200" />
+                                  </TooltipTrigger>
+                                  <TooltipContent 
+                                      className="cursor-pointer bg-white p-2 rounded-lg shadow-lg border"
+                                      onClick={() => handleCopyToClipboard(candidate.phone, 'phone')}
+                                  >
+                                      {copiedValue === 'phone' ? (
+                                          <p className="text-primary font-semibold">Copied!</p>
+                                      ) : (
+                                          <div className="flex items-center gap-3 text-gray-700">
+                                              <p>{candidate.phone}</p>
+                                              <Copy className="h-4 w-4" />
+                                          </div>
+                                      )}
+                                  </TooltipContent>
+                              </Tooltip>
+                          </TooltipProvider>
+                      )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Column 2: Actions */}
+              <div className="col-span-8 md:col-span-1 flex justify-start items-center space-x-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" size="icon" className={actionButtonStyles} onClick={() => setHistoryCandidate(candidate)}>
+                        <History className="h-5 w-5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent><p>View Analysis History</p></TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" size="icon" className={actionButtonStyles} onClick={() => setCompareCandidate(candidate)}>
+                        <ScanSearch className="h-5 w-5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent><p>Compare with Job</p></TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+
+              {/* Column 3: Suggested Title */}
+              <div className="col-span-8 md:col-span-2">
+                <span className="md:hidden text-xs text-gray-500">Title: </span>
+                {candidate.suggested_title || <span className="text-gray-400">Not specified</span>}
+              </div>
+
+              {/* Column 4: Added By */}
+              <div className="col-span-8 md:col-span-2">
+                  {candidate.created_by ? (
+                      <div className="flex items-center gap-3">
+                          <div className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold text-sm shadow-md">
+                              {`${candidate.created_by.first_name.charAt(0)}${candidate.created_by.last_name.charAt(0)}`.toUpperCase()}
+                          </div>
+                          <div>
+                              <p className="font-semibold text-gray-800">
+                                  {`${candidate.created_by.first_name} ${candidate.created_by.last_name}`}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                  {moment(candidate.created_at).format("DD MMM YYYY")} ({moment(candidate.created_at).fromNow()})
+                              </p>
+                          </div>
+                      </div>
+                  ) : (
+                      <span>System</span>
+                  )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );
   };
 
+
   const renderPagination = () => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
     return (
       <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
         <div className="flex items-center gap-2">
@@ -243,8 +299,6 @@ const { data: candidates = [], isLoading, refetch } = useQuery({
     );
   };
   
-  const startIndex = (currentPage - 1) * itemsPerPage;
-
   return (
     <div className="space-y-8 animate-fade-in p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -307,7 +361,8 @@ const { data: candidates = [], isLoading, refetch } = useQuery({
         />
       </div>
 
-      {renderTable()}
+      {renderCandidateList()}
+      
       {filteredCandidates.length > 0 && renderPagination()}
 
       {isAddModalOpen && (

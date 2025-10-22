@@ -61,15 +61,12 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
 
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
-  // --- MODIFIED SECTION: Construct the config in a guaranteed order ---
   const dynamicVerificationConfig = useMemo(() => {
-    // Start with the first two items
-    const orderedConfig = {
+    const orderedConfig: any = { // Use 'any' for easier dynamic insertion
       fetchUan: baseVerificationConfig.fetchUan,
       fetchLatestUan: baseVerificationConfig.fetchLatestUan,
     };
 
-    // Conditionally insert the third item (fetchHistory)
     if (organizationId === ASCENDION_ORGANIZATION_ID) {
       orderedConfig.fetchHistory = {
         label: 'Fetch Employment History',
@@ -86,7 +83,6 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
       };
     }
 
-    // Add the remaining items to the end
     orderedConfig.fetchLatestMobile = baseVerificationConfig.fetchLatestMobile;
     orderedConfig.fetchLatestPassbook = baseVerificationConfig.fetchLatestPassbook;
     orderedConfig.viewAll = baseVerificationConfig.viewAll;
@@ -103,12 +99,12 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
       return;
     }
 
-    const category = dynamicVerificationConfig[key];
+    const category = (dynamicVerificationConfig as any)[key];
     setActiveCategory({ key, ...category });
 
     if (!category.isDirect) {
       const successfulMethodKey = Object.keys(category.methods).find(methodKey => {
-        const result = state.results[methodKey];
+        const result = state.results[methodKey as keyof typeof state.results];
         return result && isVerificationSuccessful(result.data, methodKey);
       });
 
@@ -134,13 +130,13 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
   };
 
   const handleBack = () => {
-
-        if (view === 'all_results') {
+    if (view === 'all_results') {
         setView('main');
         return;
     }
     if (view === 'form') {
-      if (activeCategory.isDirect || isVerificationSuccessful(state.results[activeMethod.key]?.data, activeMethod.key)) {
+      const currentResult = state.results[activeMethod.key as keyof typeof state.results];
+      if (activeCategory.isDirect || isVerificationSuccessful(currentResult?.data, activeMethod.key)) {
         setView('main');
         setActiveCategory(null);
         setActiveMethod(null);
@@ -159,10 +155,11 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
   if (view === 'form') transformValue = 'translateX(-66.666%)';
 
    return (
-    <Card className="w-full shadow-md border-gray-200">
-      <CardHeader><CardTitle className="text-gray-800">Background Verification</CardTitle></CardHeader>
-     <CardContent className="relative h-[calc(100vh-200px)] overflow-y-auto p-0 sm:p-4 mb-4">
-
+    <div className="w-full h-full flex flex-col bg-white rounded-lg">
+      <CardHeader className="flex-shrink-0 border-b">
+        <CardTitle className="text-black-800">Background Verification</CardTitle>
+      </CardHeader>
+     <CardContent className="relative flex-grow overflow-y-auto p-0 sm:p-4">
        {view === 'all_results' ? (
           <div className="p-6 animate-fade-in">
              <AllResultsDisplay 
@@ -179,7 +176,7 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
           <div className="w-1/3 flex-shrink-0 p-6">
             <VerificationMenuList
               title="Select a Verification"
-              items={Object.entries(dynamicVerificationConfig).map(([key, value]) => ({ key, label: value.label }))}
+              items={Object.entries(dynamicVerificationConfig).map(([key, value]: [string, any]) => ({ key, label: value.label }))}
               onSelect={handleSelectCategory}
               results={state.results}
               config={dynamicVerificationConfig}
@@ -217,6 +214,6 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
         </div>
         )}
       </CardContent>
-    </Card>
+    </div>
   );
 };

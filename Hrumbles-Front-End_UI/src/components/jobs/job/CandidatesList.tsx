@@ -26,7 +26,7 @@ import { ItechStatusSelector } from "./ItechStatusSelector";
 import ValidateResumeButton from "./candidate/ValidateResumeButton";
 import StageProgress from "./candidate/StageProgress";
 import EmptyState from "./candidate/EmptyState";
-import { Pencil,Bot, UserSearch, Eye, Download, FileText, Phone, Calendar, User, ChevronLeft, ChevronRight, Copy, Check, Mail, MessageSquare, Notebook, Linkedin } from "lucide-react";
+import { Pencil,Bot,Sparkles, UserSearch, Eye, Download, FileText, Phone, Calendar, User, ChevronLeft, ChevronRight, Copy, Check, Mail, MessageSquare, Notebook, Linkedin } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import EditCandidateDrawer from "@/components/jobs/job/candidate/EditCandidateDrawer";
@@ -137,12 +137,27 @@ const CandidatesList = forwardRef((props: CandidatesListProps, ref) => {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
   };
 
-const OwnerAvatarCell = ({ ownerName, createdAt }: { ownerName: string, createdAt: string }) => {
+const OwnerAvatarCell = ({ 
+  ownerName, 
+  createdAt, 
+  isEmployee, 
+  currentUserName 
+}: { 
+  ownerName: string, 
+  createdAt: string,
+  isEmployee: boolean,
+  currentUserName: string
+}) => {
   if (!ownerName) {
     return <TableCell><span className="text-gray-400 text-sm">N/A</span></TableCell>;
   }
 
-  const initials = getInitials(ownerName);
+  const displayName = isEmployee 
+    ? (ownerName === currentUserName ? ownerName : "Others") 
+    : ownerName;
+
+  const initials = getInitials(displayName);
+  const isOwnCandidate = isEmployee && ownerName === currentUserName;
 
   return (
     <TableCell>
@@ -157,18 +172,22 @@ const OwnerAvatarCell = ({ ownerName, createdAt }: { ownerName: string, createdA
               </Avatar>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{ownerName}</p>
+              <p>{displayName}</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
         
+        {/* {isOwnCandidate && (
+          <span className="h-2 w-2 rounded-full bg-green-500 inline-block" title="You added this candidate"></span>
+        )} */}
+        
         {/* Display owner name and date in a column layout */}
-        <div className="flex flex-col">
+        {/* <div className="flex flex-col">
           <span className="text-sm font-medium text-gray-900">{ownerName}</span>
           <span className="text-xs text-muted-foreground whitespace-nowrap">
             {moment(createdAt).format("DD MMM YYYY")} ({moment(createdAt).fromNow()})
           </span>
-        </div>
+        </div> */}
       </div>
     </TableCell>
   );
@@ -1847,6 +1866,7 @@ const getScoreColor = (score: number | null | undefined): string => {
   return 'bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-lg shadow-red-500/30 border border-rose-400';
 };
 
+
 const ContactIcon = ({ type, value }: { type: 'email' | 'phone'; value: string }) => {
   const [justCopied, setJustCopied] = useState(false);
 
@@ -1859,13 +1879,15 @@ const ContactIcon = ({ type, value }: { type: 'email' | 'phone'; value: string }
   };
 
   const icon = type === 'email' 
-    ? <Mail className="h-4 w-4 text-gray-400 group-hover:text-red-500 transition-colors" />
-    : <Phone className="h-4 w-4 text-gray-400 group-hover:text-green-600 transition-colors" />;
+    ? <Mail className="h-4 w-4" />
+    : <Phone className="h-4 w-4" />;
 
   return (
     <Popover>
       <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
-        <button className="p-1">{icon}</button>
+        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors">
+          {icon}
+        </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-2" side="top" align="center">
         <div className="flex items-center gap-2">
@@ -1895,7 +1917,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
     return (
       <div className="relative flex items-center justify-center">
         {/* The 3D Score Circle */}
-        <div className={`flex items-center justify-center h-12 w-12 rounded-full font-bold text-xl transition-transform hover:scale-105 ${getScoreColor(score)}`}>
+        <div className={`flex items-center justify-center h-10 w-10 rounded-full font-bold text-lg transition-transform hover:scale-105 ${getScoreColor(score)}`}>
           {score}
         </div>
 
@@ -1936,6 +1958,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
 
   // Fallback for "Click to Validate" button
  return (
+  <div className="relative flex items-center justify-center">
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -1943,10 +1966,10 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
             variant="default"
             size="icon"
             onClick={() => onValidate(candidateId)}
-            className="h-9 w-9 bg-gray-700 hover:bg-gray-800 text-white rounded-lg"
+            className="h-9 w-9 bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 shadow-md border border-purple-400 animate-bounce hover:animate-bounce transition-all rounded-lg"
             title="Click to Validate"
           >
-            <Bot className="h-5 w-5" />
+            <Sparkles className="h-5 w-5 " />
           </Button>
         </TooltipTrigger>
         <TooltipContent>
@@ -1954,6 +1977,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
+    </div>
   );
 };
   return (
@@ -2044,129 +2068,137 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
         }} />
       ) : (
        <div className="w-full overflow-x-auto rounded-md border">
-        <Table className="min-w-max">
-          <TableHeader>
-            <TableRow className="bg-muted/50 hover:bg-muted/50">
-             <TableHead className="sticky left-0 bg-slate-200 z-20 w-[120px] px-2">Recommended Score</TableHead>
-<TableHead className="sticky left-[120px] bg-slate-200 z-10 w-[250px] px-2">Candidate Name</TableHead>
-              <TableHead className="sticky left-[370px] bg-slate-200 z-10 w-[200px] px-2">Action</TableHead>
-              <TableHead className="w-[220px] px-2">Owner</TableHead>
-              <TableHead className="w-[150px] px-2">Current CTC</TableHead>
-              <TableHead className="w-[150px] px-2">Expected CTC</TableHead>
-              <TableHead className="w-[150px] px-2">Notice Period</TableHead>
-              <TableHead className="w-[150px] px-2">Location</TableHead>
-              <TableHead className="w-[200px] px-2">Status</TableHead>
-            </TableRow>
-          </TableHeader>
-       <TableBody>
-  {paginatedCandidates.map((candidate) => (
-    <TableRow key={candidate.id} className="align-top group hover:bg-slate-50 relative">
-      
-      {/* --- Sticky Cell 1 (BACKGROUND FIXED) --- */}
-  <TableCell className="sticky left-0 z-20 px-2 bg-white group-hover:bg-slate-50">
-  <ScoreDisplay
-    score={candidateAnalysisData[candidate.id]?.overall_score}
-    isValidated={candidate.hasValidatedResume}
-    isLoading={validatingIds.includes(candidate.id)}
-    candidateId={candidate.id}
-    hasSummary={!!candidateAnalysisData[candidate.id]}
-    onValidate={handleValidateResume}
-    onViewSummary={fetchAnalysisData}
-    reportUrl={candidateAnalysisData[candidate.id]?.report_url}
-  />
-</TableCell>
+      <Table className="min-w-[800px]">
+  <TableHeader>
+    <TableRow className="bg-purple-600 hover:bg-purple-700 whitespace-nowrap border border-purple-500">
+      <TableHead className="sticky text-center left-0 z-20 w-[120px] px-2 text-white">Score</TableHead>
+      <TableHead className="sticky left-[60px] z-10 w-[200px] px-2 text-white">Candidate Name</TableHead>
+      <TableHead className="w-auto text-center px-2 text-white">Owner</TableHead>
+      <TableHead className="w-[120px] px-2 text-white">Current CTC</TableHead>
+      <TableHead className="w-[120px] px-2 text-white">Expected CTC</TableHead>
+      <TableHead className="w-[120px] px-2 text-white">Notice Period</TableHead>
+      <TableHead className="w-[120px] px-2 text-white">Location</TableHead>
+      <TableHead className="w-[200px] px-2 text-white">Status</TableHead>
+      <TableHead className="sticky right-0 z-20 w-[150px] px-2 text-white">Action</TableHead>
+    </TableRow>
+  </TableHeader>
+  <TableBody>
+    {paginatedCandidates.map((candidate) => (
+      <TableRow key={candidate.id} className="align-top group bg-white hover:bg-slate-50 relative">
+        {/* --- Sticky Cell 1 (BACKGROUND FIXED) --- */}
+        <TableCell className="sticky left-0 z-20 px-2 bg-purple-50 group-hover:bg-slate-50 py-1">
+          <ScoreDisplay
+            score={candidateAnalysisData[candidate.id]?.overall_score}
+            isValidated={candidate.hasValidatedResume}
+            isLoading={validatingIds.includes(candidate.id)}
+            candidateId={candidate.id}
+            hasSummary={!!candidateAnalysisData[candidate.id]}
+            onValidate={handleValidateResume}
+            onViewSummary={fetchAnalysisData}
+            reportUrl={candidateAnalysisData[candidate.id]?.report_url}
+          />
+        </TableCell>
 
-      {/* --- Sticky Cell 2 (BACKGROUND FIXED) --- */}
-      <TableCell className="sticky left-[120px] z-10 px-2 font-medium bg-white group-hover:bg-slate-50">
-        <div className="flex items-center gap-2">
-          <span className="text-black cursor-pointer" onClick={() => navigate(`/employee/${candidate.id}/${jobId}`)}>{candidate.name}</span>
-          <div className="flex items-center gap-1">
-            {candidate.email && <ContactIcon type="email" value={candidate.email} />}
-            {candidate.phone && <ContactIcon type="phone" value={candidate.phone} />}
-          </div>
-        </div>
-      </TableCell>
-
-      {/* --- Action Cell --- */}
-     <TableCell className="sticky left-[370px] z-10 px-2 bg-white group-hover:bg-slate-50">
-  <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200 w-fit">
-    {/* ... All your action buttons (Eye, Download, Pencil, etc.) go here ... */}
-    {/* The content inside this div does not need to change. */}
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleViewResume(candidate.id)}>
-            <Eye className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent><p>View Resume</p></TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => { if (candidate.resumeUrl) { const link = document.createElement('a'); link.href = candidate.resumeUrl; link.download = `${candidate.name}_resume.pdf`; link.click(); } else { toast.error("Resume not available for download"); } }}>
-            <Download className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent><p>Download Resume</p></TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleEditCandidate(candidate)}>
-            <Pencil className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent><p>Edit Candidate</p></TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleViewTimeline(candidate)}>
-            <MessageSquare className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent><p>View Timeline & Notes</p></TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-    {candidate.hasValidatedResume && (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => openShareModal(candidate)}>
-              <Mail className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent><p>Share update with {candidate.name}</p></TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    )}
+        {/* --- Sticky Cell 2 (BACKGROUND FIXED) --- */}
+<TableCell className="sticky left-[60px] z-10 px-2 font-medium bg-purple-50 group-hover:bg-slate-50 py-1">
+  <div className="flex items-start gap-2 h-full">
+    <div className="flex-1 min-w-0">
+      <div className="truncate cursor-pointer text-black" onClick={() => navigate(`/employee/${candidate.id}/${jobId}`)} title={candidate.name}>
+        {candidate.name}
+      </div>
+      <span className="text-xs text-muted-foreground whitespace-nowrap block text-left">
+        {moment(candidate.createdAt).format("DD MMM YYYY")} ({moment(candidate.createdAt).fromNow()})
+      </span>
+    </div>
+    <div className="flex-shrink-0 self-stretch flex items-center justify-center">
+      <div className="flex space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200">
+        {candidate.email && <ContactIcon type="email" value={candidate.email} />}
+        {candidate.phone && <ContactIcon type="phone" value={candidate.phone} />}
+      </div>
+    </div>
   </div>
 </TableCell>
-      {/* --- Other Scrollable Cells --- */}
-      <TableCell className="px-2">
-        <OwnerAvatarCell ownerName={candidate.owner || candidate.appliedFrom} createdAt={candidate.createdAt} />
-      </TableCell>
-      <TableCell className="px-2 text-sm">{candidate.currentSalary ? formatCurrency(parseFloat(String(candidate.currentSalary).replace(/[^0-9.]/g, ''))) : "N/A"}</TableCell>
-      <TableCell className="px-2 text-sm">{candidate.expectedSalary ? formatCurrency(parseFloat(String(candidate.expectedSalary).replace(/[^0-9.]/g, ''))) : "N/A"}</TableCell>
-      <TableCell className="px-2 text-sm">{candidate.notice_period ? `${candidate.notice_period} Days` : "N/A"}</TableCell>
-      <TableCell className="px-2 text-sm">{candidate.location || "N/A"}</TableCell>
-      <TableCell className="px-2">
-         <StatusSelector
+
+        {/* --- Other Scrollable Cells --- */}
+        <TableCell className="px-2 py-1">
+          <OwnerAvatarCell ownerName={candidate.owner || candidate.appliedFrom} createdAt={candidate.createdAt} isEmployee={isEmployee} currentUserName={`${user.user_metadata.first_name} ${user.user_metadata.last_name}`} />
+        </TableCell>
+        <TableCell className="px-2 text-sm py-1">{candidate.currentSalary ? formatCurrency(parseFloat(String(candidate.currentSalary).replace(/[^0-9.]/g, ''))) : "N/A"}</TableCell>
+        <TableCell className="px-2 text-sm py-1">{candidate.expectedSalary ? formatCurrency(parseFloat(String(candidate.expectedSalary).replace(/[^0-9.]/g, ''))) : "N/A"}</TableCell>
+        <TableCell className="px-2 text-sm py-1">{candidate?.metadata?.noticePeriod || "N/A"}</TableCell>
+        <TableCell className="px-2 text-sm py-1">{candidate?.metadata?.currentLocation || "N/A"}</TableCell>
+        <TableCell className="px-2 py-1">
+          <StatusSelector
             value={candidate.sub_status_id || ""}
             onChange={(value) => handleStatusChange(value, candidate)}
             className="h-8 text-xs w-full"
           />
-      </TableCell>
-    </TableRow>
-  ))}
-</TableBody>
-        </Table>
+        </TableCell>
+        {/* --- Action Cell (Right Fixed) --- */}
+        <TableCell className="sticky right-0 z-20 px-2 bg-purple-50 group-hover:bg-slate-50 py-1">
+          <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200 w-fit">
+            {/* ... All your action buttons (Eye, Download, Pencil, etc.) go here ... */}
+            {/* The content inside this div does not need to change. */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleViewResume(candidate.id)}>
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>View Resume</p></TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => { if (candidate.resumeUrl) { const link = document.createElement('a'); link.href = candidate.resumeUrl; link.download = `${candidate.name}_resume.pdf`; link.click(); } else { toast.error("Resume not available for download"); } }}>
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Download Resume</p></TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleEditCandidate(candidate)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Edit Candidate</p></TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleViewTimeline(candidate)}>
+                    <MessageSquare className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>View Timeline & Notes</p></TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            {candidate.hasValidatedResume && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => openShareModal(candidate)}>
+                      <Mail className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Share update with {candidate.name}</p></TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
+    ))}
+  </TableBody>
+</Table>
       </div>
-      // --- END OF MAJOR CHANGES ---
+      
     )}
       {filteredCandidates.length > 0 && renderPagination()}
 

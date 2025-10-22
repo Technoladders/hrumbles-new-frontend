@@ -1,10 +1,14 @@
-// components/EmployeeInfoCard.tsx
 import React from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Calendar,
   Briefcase,
@@ -22,21 +26,21 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
-  // ---- ADD THESE NEW ICONS ----
   Building,
   Star,
   UserCheck,
   ArrowLeft,
-  Link as LinkIcon, 
+  Link as LinkIcon,
+  Fingerprint,
 } from "lucide-react";
-
 import { FaLinkedin } from "react-icons/fa";
 import { useToast } from "@/components/ui/use-toast";
 import { DataSharingOptions } from "@/components/MagicLinkView/types";
 import { VerificationProcessDialog } from "./VerificationProcessSection";
-import { DocumentState } from "@/components/MagicLinkView/types";
-
-// Updated Interface for Employee Info
+import { BgvVerificationSection } from "@/pages/bg-verification/BgvVerificationSection";
+import { DocumentState, Candidate } from "@/components/MagicLinkView/types";
+ 
+// Interface for Employee Info
 interface EmployeeInfo {
   id: string;
   name: string;
@@ -67,10 +71,10 @@ interface EmployeeInfo {
   noticePeriod: string;
   hasOffers: string;
   offerDetails: string;
-  consentStatus: string; // New property
+  consentStatus: string;
 }
-
-// Updated Interface for Component Props
+ 
+// Interface for Component Props
 interface EmployeeInfoCardProps {
   employee: EmployeeInfo;
   shareMode: boolean;
@@ -81,7 +85,6 @@ interface EmployeeInfoCardProps {
   isCopied: boolean;
   onCopyMagicLink: () => void;
   navigateBack: () => void;
-  // Props for UAN Lookup
   isUanLoading: boolean;
   uanError: string | null;
   uanData: any | null;
@@ -90,16 +93,11 @@ interface EmployeeInfoCardProps {
   lookupValue: string;
   setLookupValue: (value: string) => void;
   onUanLookup: () => void;
-  // New props for Consent Link functionality
   isRequestingConsent: boolean;
   consentLink: string | null;
   isConsentLinkCopied: boolean;
   onGenerateConsentLink: () => void;
   onCopyConsentLink: () => void;
-  
-  // ============================================
-  // ADD THESE NEW PROPS (around line 65-75):
-  // ============================================
   organizationId: string | null;
   userId: string | null;
   documents: {
@@ -115,7 +113,8 @@ interface EmployeeInfoCardProps {
   isSavingDocuments: boolean;
   isUanQueued: boolean;
 }
-
+ 
+// Helper to format currency
 const formatINR = (amount: number | string) => {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
   return isNaN(num)
@@ -126,21 +125,7 @@ const formatINR = (amount: number | string) => {
         maximumFractionDigits: 0,
       }).format(num);
 };
-
-
-const InfoItem = ({ icon, label, value }: { icon: React.ReactNode, label: string, value: string | React.ReactNode }) => (
-  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
-    <div className="flex-shrink-0 text-purple-600">{icon}</div>
-    <div className="ml-3">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</p>
-      <p className="text-sm font-medium text-gray-800">{value}</p>
-    </div>
-  </div>
-);
-
-
-
-
+ 
 export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
   employee,
   shareMode,
@@ -151,7 +136,6 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
   isCopied,
   onCopyMagicLink,
   navigateBack,
-  // UAN props
   isUanLoading,
   uanError,
   uanData,
@@ -160,16 +144,11 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
   lookupValue,
   setLookupValue,
   onUanLookup,
-  // Consent props
   isRequestingConsent,
   consentLink,
   isConsentLinkCopied,
   onGenerateConsentLink,
   onCopyConsentLink,
-  
-  // ============================================
-  // ADD THESE NEW DESTRUCTURED PROPS (around line 110):
-  // ============================================
   organizationId,
   userId,
   documents,
@@ -181,10 +160,53 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
   isUanQueued,
 }) => {
   const { toast } = useToast();
- const [hoveredCopy, setHoveredCopy] = React.useState<string | null>(null);
-
-
-// ADD THIS NEW VERSION
+ 
+  // Construct a candidate object required by the verification components
+  const candidateForVerification: Candidate = {
+      id: employee.id,
+      name: employee.name,
+      email: employee.email,
+      phone: employee.phone,
+      metadata: { uan: documents?.uan?.value || null },
+  } as any;
+ 
+  // Helper to get experience text
+  const getExperienceText = (skill: typeof employee.skillRatings[0]) => {
+    const years = skill.experienceYears || 0;
+    const months = skill.experienceMonths || 0;
+         
+    if (years > 0 && months > 0) {
+      return `${years}.${months} years`;
+    } else if (years > 0) {
+      return `${years} year${years > 1 ? 's' : ''}`;
+    } else if (months > 0) {
+      return `${months} month${months > 1 ? 's' : ''}`;
+    }
+    return '0 years';
+  };
+ 
+  // Helper to render stars
+  const renderStars = (rating: number) => {
+    return (
+      <div className="flex items-center gap-0.5">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Star
+            key={star}
+            className={`w-3 h-3 ${
+              star <= rating
+                ? "fill-yellow-400 text-yellow-400"
+                : "fill-gray-300 text-gray-300"
+            }`}
+          />
+        ))}
+        <span className="text-xs font-bold text-white ml-1">
+          {rating}/5
+        </span>
+      </div>
+    );
+  };
+ 
+  // Renders the skills section
   const renderSkills = () => {
     if (shareMode && !sharedDataOptions?.personalInfo) return null;
     return (
@@ -192,19 +214,29 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
         <h3 className="text-lg font-bold text-gray-800 mb-3">Skills & Expertise</h3>
         <div className="flex flex-wrap gap-2">
           {employee.skillRatings.map((skill, index) => (
-            <Badge
-              key={index}
-              className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white border-none text-sm px-4 py-1 shadow-lg"
-            >
-              {skill.name}
-            </Badge>
+            <div key={index} className="relative group">
+              <Badge
+                className="bg-white text-purple-700 border border-purple-300 text-xs font-normal px-3 py-1.5 shadow-sm cursor-pointer transition-all hover:bg-purple-50 hover:border-purple-400 rounded-md"
+              >
+                {skill.name}
+              </Badge>
+              {/* Hover Tooltip */}
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-purple-600 text-white text-xs rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                <div className="flex flex-col gap-1">
+                  <div className="font-semibold">{getExperienceText(skill)}</div>
+                  {renderStars(skill.rating)}
+                </div>
+                {/* Arrow */}
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-purple-600"></div>
+              </div>
+            </div>
           ))}
         </div>
       </div>
     );
   };
-
-  // New helper function to render the consent status badge
+ 
+  // Renders the consent status badge
   const renderConsentStatusBadge = () => {
     switch (employee.consentStatus) {
       case 'granted':
@@ -217,68 +249,23 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
         return <Badge variant="outline">Consent Not Requested</Badge>;
     }
   };
-
-
-// PASTE THIS ENTIRE BLOCK TO REPLACE YOUR CURRENT 'return' STATEMENT
-
-return (
-    <Card className="bg-white w-full overflow-hidden border-none shadow-2xl rounded-2xl">
-      {/* ======================================================================= */}
-      {/* HEADER SECTION - This is the completely redesigned header */}
-      {/* ======================================================================= */}
+ 
+  return (
+    <Card className="bg-white w-full overflow-hidden border-none shadow-xl rounded-2xl">
       <div className="p-6 border-b border-gray-200">
-        <div className="flex justify-between items-start">
-          
-          {/* --- LEFT COLUMN: Name & Magic Link --- */}
-          <div className="flex flex-col gap-4">
-            <div>
-              <h2 className="text-3xl font-extrabold tracking-tight text-gray-900">
-                  {employee.name}
-              </h2>
-              <p className="text-sm text-gray-500 mt-1">Applied: {employee.joinDate}</p>
-            </div>
-
-            {!shareMode && (
-              <div>
-                <Button
-                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold w-full md:w-auto"
-                  onClick={onShareClick}
-                  disabled={isSharing}
-                >
-                  {isSharing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Share2 className="mr-2 h-4 w-4" /> Create Shareable Magic Link
-                    </>
-                  )}
-                </Button>
-                {magicLink && (
-                  <div className="mt-3 p-2 bg-gray-100 rounded-md border flex items-center gap-2">
-                    <LinkIcon className="h-5 w-5 text-purple-500 flex-shrink-0" />
-                    <Input value={magicLink} readOnly className="text-sm bg-white border-gray-200 text-gray-700 flex-grow h-8" />
-                    <Button variant="ghost" size="icon" onClick={onCopyMagicLink} className="h-8 w-8">
-                      {isCopied ? <CheckCircle2 className="h-5 w-5 text-green-500" /> : <Copy className="h-5 w-5 text-gray-400" />}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+         
+          <div>
+            <h2 className="text-3xl font-extrabold tracking-tight text-purple-700">
+                {employee.name}
+            </h2>
+            {/* <p className="text-sm text-gray-500 mt-1">Applied: N/A</p> */}
           </div>
-
-          {/* --- RIGHT COLUMN: Verification & Resume Buttons --- */}
+ 
           <div className="flex items-center gap-3">
             {!shareMode && (
-                <VerificationProcessDialog 
-                    candidate={{
-                      id: employee.id,
-                      name: employee.name,
-                      email: employee.email,
-                      phone: employee.phone,
-                      metadata: { uan: documents?.uan?.value || null },
-                    } as any}
+                <VerificationProcessDialog
+                    candidate={candidateForVerification}
                     organizationId={organizationId}
                     userId={userId}
                     isUanLoading={isUanLoading}
@@ -298,18 +285,37 @@ return (
                     isUanQueued={isUanQueued}
                 />
             )}
+           
+            {!shareMode && (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex items-center space-x-2 px-3 h-9 bg-white text-black-600 border-purple-600 "
+                  >
+                    <Fingerprint className="w-4 h-4" />
+                    <span className="text-sm font-medium">Background Verification</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl w-full h-[80vh] p-0">
+                  <BgvVerificationSection candidate={candidateForVerification} />
+                </DialogContent>
+              </Dialog>
+            )}
+ 
             <Button
                 size="sm"
                 className="flex items-center space-x-2 px-3 h-9 bg-purple-600 text-white shadow-lg hover:bg-purple-700"
             >
                 <span className="text-sm font-medium">Resume</span>
                 <Separator orientation="vertical" className="h-4 bg-white/30" />
-                <Eye 
+                <Eye
                     onClick={() => window.open(employee.resume, "_blank")}
                     className="w-4 h-4 cursor-pointer"
                     title="View Resume"
                 />
-                <Download 
+                <Download
                     onClick={() => {
                         const link = document.createElement("a");
                         link.href = employee.resume;
@@ -324,71 +330,98 @@ return (
           </div>
         </div>
       </div>
-
-      {/* ======================================================================= */}
-      {/* BODY SECTION - This remains largely the same but with minor style tweaks */}
-      {/* ======================================================================= */}
+ 
       <CardContent className="p-6">
-        {/* Contact Info */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          {/* Email Item */}
+        {/* Contact Info - Simple Line by Line */}
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 mb-6">
           <div
-              className="relative flex items-center p-3 bg-gray-100 rounded-lg cursor-pointer group transition-all hover:bg-purple-50 hover:shadow-md"
-              onMouseEnter={() => setHoveredCopy('email')}
-              onMouseLeave={() => setHoveredCopy(null)}
+              className="relative flex items-center cursor-pointer group"
               onClick={() => {
                   navigator.clipboard.writeText(employee.email);
                   toast({ title: "Email Copied!", description: employee.email });
               }}
           >
-              <Mail className="w-5 h-5 mr-3 text-purple-600 flex-shrink-0"/>
-              <span className="text-sm text-gray-700 truncate pr-6">{employee.email}</span>
-              {hoveredCopy === 'email' && (
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                      <Copy className="w-4 h-4 text-gray-400 group-hover:text-purple-600 transition-colors" />
-                  </div>
-              )}
+              <Mail className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0"/>
+              <span className="text-sm text-gray-700">{employee.email}</span>
           </div>
-          {/* Phone Item */}
           <div
-              className="relative flex items-center p-3 bg-gray-100 rounded-lg cursor-pointer group transition-all hover:bg-purple-50 hover:shadow-md"
-              onMouseEnter={() => setHoveredCopy('phone')}
-              onMouseLeave={() => setHoveredCopy(null)}
+              className="relative flex items-center cursor-pointer group"
               onClick={() => {
                   navigator.clipboard.writeText(employee.phone);
                   toast({ title: "Phone Copied!", description: employee.phone });
               }}
           >
-              <Phone className="w-5 h-5 mr-3 text-purple-600 flex-shrink-0"/>
-              <span className="text-sm text-gray-700 pr-6">{employee.phone}</span>
-              {hoveredCopy === 'phone' && (
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                      <Copy className="w-4 h-4 text-gray-400 group-hover:text-purple-600 transition-colors" />
-                  </div>
-              )}
+              <Phone className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0"/>
+              <span className="text-sm text-gray-700">{employee.phone}</span>
           </div>
-          {/* LinkedIn Item */}
-          <a href={employee.linkedInId} target="_blank" rel="noopener noreferrer" className="flex items-center p-3 bg-gray-100 rounded-lg transition-all hover:bg-purple-50 hover:shadow-md">
-              <FaLinkedin className="w-5 h-5 mr-3 text-purple-600 flex-shrink-0" />
-              <span className="text-sm font-medium text-purple-700">LinkedIn Profile</span>
+          <a href={employee.linkedInId} target="_blank" rel="noopener noreferrer" className="flex items-center group">
+              <FaLinkedin className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+              <span className="text-sm text-purple-700 group-hover:underline">LinkedIn Profile</span>
           </a>
         </div>
-
+ 
         <Separator className="my-6"/>
-
-        {/* Professional Details */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-            <InfoItem icon={<Briefcase size={20}/>} label="Total Experience" value={`${employee.experience}`} />
-            <InfoItem icon={<Star size={20}/>} label="Relevant Experience" value="N/A" />
-            <InfoItem icon={<MapPin size={20}/>} label="Current Location" value={employee.location} />
-            <InfoItem icon={<Building size={20}/>} label="Preferred Location" value={employee.preferedLocation} />
-            <InfoItem icon={<Banknote size={20}/>} label="Current Salary" value={`${formatINR(employee.currentSalary)} LPA`} />
-            <InfoItem icon={<Banknote size={20}/>} label="Expected Salary" value={`${formatINR(employee.expectedSalary)} LPA`} />
-            <InfoItem icon={<Calendar size={20}/>} label="Notice Period" value={`${employee.noticePeriod} days`} />
-            <InfoItem icon={<UserCheck size={20}/>} label="Has Offers" value={employee.hasOffers} />
+ 
+        {/* Info Grid - Simple Line by Line */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-4">
+            <div className="flex items-center">
+              <Briefcase className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500 uppercase">Total Experience</p>
+                <p className="text-sm font-medium text-gray-800">{employee.experience}</p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <Star className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500 uppercase">Relevant Experience</p>
+                <p className="text-sm font-medium text-gray-800">N/A</p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <MapPin className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500 uppercase">Current Location</p>
+                <p className="text-sm font-medium text-gray-800">{employee.location}</p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <Building className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500 uppercase">Preferred Location</p>
+                <p className="text-sm font-medium text-gray-800">{employee.preferedLocation}</p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <Banknote className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500 uppercase">Current Salary</p>
+                <p className="text-sm font-medium text-gray-800">{formatINR(employee.currentSalary)} LPA</p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <Banknote className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500 uppercase">Expected Salary</p>
+                <p className="text-sm font-medium text-gray-800">{formatINR(employee.expectedSalary)} LPA</p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <Calendar className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500 uppercase">Notice Period</p>
+                <p className="text-sm font-medium text-gray-800">{employee.noticePeriod} </p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <UserCheck className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500 uppercase">Has Offers</p>
+                <p className="text-sm font-medium text-gray-800">{employee.hasOffers}</p>
+              </div>
+            </div>
         </div>
-        
-        {/* Skills Section */}
+       
         {renderSkills()}
       </CardContent>
     </Card>

@@ -474,14 +474,7 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
   return (
     <Sheet open={controlledOpen} 
     onOpenChange={controlledOnOpenChange} >
-      <SheetTrigger asChild>
-        <Button 
-          id={isEditMode ? "edit-candidate-btn" : "add-candidate-btn"} 
-          onClick={() => controlledOnOpenChange(true)}
-        >
-          {isEditMode ? "Edit Candidate" : "Add Candidate"}
-        </Button>
-      </SheetTrigger>
+      
       <SheetContent className="w-full sm:max-w-lg md:max-w-xl  overflow-y-auto">
         <SheetHeader className="mb-6">
           <SheetTitle>Add New Candidate</SheetTitle>

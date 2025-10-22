@@ -192,7 +192,7 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
           if (!phoneNumber.startsWith('+')) phoneNumber = `+91${phoneNumber}`;
           form.setValue("phone", phoneNumber, { shouldValidate: true });
         }
-        if (parsedData.currentLocation) form.setValue("currentLocation", parsedData.currentLocation, { shouldValidate: true });
+        // if (parsedData.currentLocation) form.setValue("currentLocation", parsedData.currentLocation, { shouldValidate: true });
 
         if (parsedData.work_experience && parsedData.work_experience.length > 0) {
             const exp = calculateExperienceFromHistory(parsedData.work_experience);
