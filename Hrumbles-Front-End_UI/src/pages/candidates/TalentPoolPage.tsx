@@ -94,7 +94,7 @@ const TalentPoolPage = () => {
           )
         `);
 
-      if (role === 'employee' && user?.id) {
+      if (role === '' && user?.id) {
         query = query.eq('created_by', user.id);
       }
       

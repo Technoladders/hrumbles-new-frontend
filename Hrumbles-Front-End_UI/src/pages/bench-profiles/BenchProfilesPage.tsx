@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
-import { useSearchParams } from 'react-router-dom'; // MODIFICATION: Import useSearchParams
+import { useSearchParams, Link } from 'react-router-dom'; // MODIFICATION: Import useSearchParams
 import { supabase } from '@/integrations/supabase/client';
 import moment from 'moment';
 import { toast } from 'sonner';
@@ -100,7 +100,9 @@ const BenchProfilesPage = () => {
           <TableBody>
             {paginatedProfiles.length > 0 ? paginatedProfiles.map((profile) => (
               <TableRow key={profile.id}>
+                <Link to={`/talent-pool/${profile.talent_pool_id}`}>
                 <TableCell className="font-medium"><div>{profile.name}</div><div className="text-xs text-gray-500">{profile.email}</div></TableCell>
+                </Link>
                 <TableCell>{profile.suggested_title || 'N/A'}</TableCell>
                 <TableCell>{profile.notice_period || 'N/A'}</TableCell>
                 <TableCell>
