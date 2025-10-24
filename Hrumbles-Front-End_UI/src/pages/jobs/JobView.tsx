@@ -271,8 +271,12 @@ const JobView = () => {
               maxWidth: '600px', 
               margin: 'auto',
               maxHeight: '80vh',
-              overflowY: 'auto'
-            } 
+              overflowY: 'auto',
+              zIndex: 1000,
+            },
+            overlay: {
+        zIndex: 999, // Overlay just below content
+      } 
           }}
         >
           <div className="p-4">

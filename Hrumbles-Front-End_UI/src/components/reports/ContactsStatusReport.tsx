@@ -320,7 +320,7 @@ const ContactsStatusReport: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-6 md:p-10 animate-fade-in">
-      <main className="w-full max-w-8xl mx-auto space-y-8">
+      <main className="w-full max-w-10xl mx-auto space-y-8">
         {/* Title Section */}
         <div>
           <h1 className="text-xl md:text-2xl font-semibold text-gray-800">Contacts Status Report</h1>

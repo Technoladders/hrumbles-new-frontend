@@ -180,6 +180,9 @@ const mainConfig: Config = {
 				"gradient-main": "linear-gradient(to bottom, #FFFFFF, #FFF9E7)",
 				"login-gradient": "linear-gradient(to right, #40c975, rgba(53, 31, 105, 0.8))",
 			},
+			maxWidth: {
+        '8xl': '96rem', // ~1536px; or use '100%'/'90vw' for fluid, but stick to rem for consistency
+      },
 		},
 	},
 	plugins: [require("tailwindcss-animate")],

@@ -172,7 +172,7 @@ const TalentProfileReport: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-      <main className="max-w-screen-2xl mx-auto space-y-8">
+      <main className="max-w-screen-8xl mx-auto space-y-8">
         {/* === HEADER === */}
         <div>
           <h1 className="text-3xl md:text-4xl font-extrabold text-gray-800">Talent Contribution Report</h1>

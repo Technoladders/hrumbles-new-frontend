@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react'; // MODIFICATION: Added useEffect
 import { useQuery } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
-import { Link } from 'react-router-dom';
+// MODIFICATION: Added useSearchParams
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import moment from 'moment';
 
@@ -39,11 +40,12 @@ export interface TalentPoolCandidate {
 
 const TalentPoolPage = () => {
   const { role, user } = useSelector((state: any) => state.auth);
+  const [searchParams, setSearchParams] = useSearchParams(); // MODIFICATION: Initialize hook
   
-  // State management for UI
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(20);
+  // MODIFICATION: State management now reads from URL search params
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("search") || "");
+  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get("page") || "1", 10));
+  const [itemsPerPage, setItemsPerPage] = useState(parseInt(searchParams.get("limit") || "20", 10));
   
   // State for modals
   const [isAddModalOpen, setAddModalOpen] = useState(false);
@@ -53,6 +55,15 @@ const TalentPoolPage = () => {
   // State to manage "Copied!" feedback tooltip
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
   
+  // MODIFICATION: Add useEffect to sync state with URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (searchTerm) params.set("search", searchTerm);
+    if (currentPage !== 1) params.set("page", currentPage.toString());
+    if (itemsPerPage !== 20) params.set("limit", itemsPerPage.toString());
+    setSearchParams(params, { replace: true });
+  }, [searchTerm, currentPage, itemsPerPage, setSearchParams]);
+
   // Handler to copy text to clipboard and provide feedback
   const handleCopyToClipboard = (text: string, type: 'email' | 'phone') => {
     if (!text) return;
@@ -357,7 +368,11 @@ const TalentPoolPage = () => {
           placeholder="Search by name or email or phone"
           className="pl-10 h-10"
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            // MODIFICATION: Reset page to 1 on new search
+            setSearchTerm(e.target.value);
+            setCurrentPage(1);
+          }}
         />
       </div>
 

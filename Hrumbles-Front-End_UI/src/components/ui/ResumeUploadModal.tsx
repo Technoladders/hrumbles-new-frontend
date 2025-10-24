@@ -17,12 +17,51 @@ import { CandidateComparisonView, ParsedCandidateProfile } from './CandidateComp
 
 // --- DYNAMIC MODAL STYLES ---
 const compactViewStyles = {
-  content: { top: '50%', left: '50%', right: 'auto', bottom: 'auto', marginRight: '-50%', transform: 'translate(-50%, -50%)', width: '50vw', maxWidth: '750px', padding: '0', border: 'none', borderRadius: '12px', boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)' },
-  overlay: { backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)' },
+  content: { 
+    top: '50%', 
+    left: '50%', 
+    right: 'auto', 
+    bottom: 'auto', 
+    marginRight: '-50%', 
+    transform: 'translate(-50%, -50%)', 
+    width: '50vw', 
+    maxWidth: '750px', 
+    padding: '0', 
+    border: 'none', 
+    borderRadius: '12px', 
+    boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
+    zIndex: 1000, // Boost z-index to float above table/tabs (z-20)
+  },
+  overlay: { 
+    backgroundColor: 'rgba(0, 0, 0, 0.4)', 
+    backdropFilter: 'blur(4px)',
+    zIndex: 999, // Overlay just below content
+  },
 };
 const compareViewStyles = {
-  content: { top: '50%', left: '50%', right: 'auto', bottom: 'auto', marginRight: '-50%', transform: 'translate(-50%, -50%)', width: '96vw', maxWidth: '2000px', height: '90vh', padding: '0', border: 'none', borderRadius: '12px', boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)', background: '#F9FAFB', overflow: 'hidden' },
-  overlay: { backgroundColor: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(8px)' },
+  content: { 
+    top: '50%', 
+    left: '50%', 
+    right: 'auto', 
+    bottom: 'auto', 
+    marginRight: '-50%', 
+    transform: 'translate(-50%, -50%)', 
+    width: '96vw', 
+    maxWidth: '2000px', 
+    height: '90vh', 
+    padding: '0', 
+    border: 'none', 
+    borderRadius: '12px', 
+    boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)', 
+    background: '#F9FAFB', 
+    overflow: 'hidden',
+    zIndex: 1000, // Boost z-index to float above table/tabs (z-20)
+  },
+  overlay: { 
+    backgroundColor: 'rgba(0, 0, 0, 0.6)', 
+    backdropFilter: 'blur(8px)',
+    zIndex: 999, // Overlay just below content
+  },
 };
 
 Modal.setAppElement('#root');

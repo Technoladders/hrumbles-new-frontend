@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, ArrowLeft } from "lucide-react";
 import { useSelector } from "react-redux";
 import EmployeeDataSelection, { DataSharingOptions } from "./EmployeeDataSelection";
 import { useEmployeeProfile } from "@/components/MagicLinkView/hooks/useEmployeeProfile";
@@ -305,7 +305,20 @@ const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
  return (
   <>
     <div className="min-h-screen bg-gray-50 py-4 px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-7xl mx-auto">
+      <div className="w-full max-w-10xl mx-auto">
+
+                {!shareMode && (
+          <div className="mb-4">
+            <Button
+              variant="outline"
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft size={16} />
+              <span>Back</span>
+            </Button>
+          </div>
+        )}
         {/* CHANGED: Single column layout - removed flex-row and width constraints */}
         <div className="flex flex-col gap-6">
           

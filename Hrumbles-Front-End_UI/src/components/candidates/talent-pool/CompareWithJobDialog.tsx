@@ -6,12 +6,20 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils"; // Add this import
 import ResumeAnalysisModal from '@/components/jobs/ResumeAnalysisModal'; 
 
 interface CompareWithJobDialogProps {
@@ -27,8 +35,10 @@ interface Job {
 
 const CompareWithJobDialog = ({ isOpen, onClose, candidateId }: CompareWithJobDialogProps) => {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [popoverOpen, setPopoverOpen] = useState(false); // Local state for popover open
   const [isAnalysisModalOpen, setAnalysisModalOpen] = useState(false);
   const [resumeText, setResumeText] = useState('');
+  const [jobSearchQuery, setJobSearchQuery] = useState(""); // For filtering jobs
   const navigate = useNavigate();
 
   // Fetch all jobs for the dropdown
@@ -40,6 +50,11 @@ const CompareWithJobDialog = ({ isOpen, onClose, candidateId }: CompareWithJobDi
       return data;
     },
   });
+
+  // Filter jobs based on search query
+  const filteredJobs = jobs.filter((job) =>
+    job.title.toLowerCase().includes(jobSearchQuery.toLowerCase())
+  );
 
   // Fetch the candidate's full resume text when the dialog opens
   useEffect(() => {
@@ -128,16 +143,58 @@ const CompareWithJobDialog = ({ isOpen, onClose, candidateId }: CompareWithJobDi
         <h2 className="text-xl font-semibold">Compare Candidate with Job</h2>
         <p className="text-sm text-gray-600">Select a job to analyse this candidate's resume against the job description.</p>
         
-        <Select onValueChange={setSelectedJobId}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select a job..." />
-          </SelectTrigger>
-          <SelectContent>
-            {jobs.map((job) => (
-              <SelectItem key={job.id} value={job.id}>{job.title}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Searchable Job Selector */}
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={popoverOpen}
+              className="w-full justify-between"
+              onClick={() => setPopoverOpen(true)} // Force open on click
+            >
+              {selectedJobId
+                ? jobs.find((job) => job.id === selectedJobId)?.title
+                : "Select a job..."}
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+            <Command>
+              <CommandInput
+                placeholder="Search job by title..."
+                value={jobSearchQuery}
+                onValueChange={setJobSearchQuery}
+              />
+              <CommandEmpty>No job found.</CommandEmpty>
+              <CommandList className="max-h-[calc(40vh-4rem)]">
+                <CommandGroup>
+                  {filteredJobs.map((job) => (
+                    <CommandItem
+                      key={job.id}
+                      value={job.title.toLowerCase()}
+                      onSelect={() => {
+                        setSelectedJobId(job.id);
+                        setJobSearchQuery(""); // Clear search on select
+                        setPopoverOpen(false); // Close popover after select
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          selectedJobId === job.id
+                            ? "opacity-100"
+                            : "opacity-0"
+                        )}
+                      />
+                      {job.title}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
 
         <div className="flex justify-end gap-2 mt-4">
           <Button variant="outline" onClick={onClose}>Cancel</Button>

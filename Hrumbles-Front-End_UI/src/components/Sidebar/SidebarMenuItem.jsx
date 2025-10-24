@@ -11,7 +11,7 @@ import { GoOrganization } from "react-icons/go";
 import { VscOrganization } from "react-icons/vsc";
 import { GrDocumentTime } from "react-icons/gr";
 import { LuCalendarPlus, LuUserSearch } from "react-icons/lu";
-import { BsShieldLock, BsShieldCheck } from "react-icons/bs";
+import { BsShieldLock, BsShieldCheck, BsPin } from "react-icons/bs";
 import { FaUserShield, FaProjectDiagram, FaUserTie } from 'react-icons/fa';
 import { RiCustomerService2Fill } from 'react-icons/ri';
 import { TbDatabaseSearch } from "react-icons/tb";
@@ -41,6 +41,7 @@ const orgSuperAdminAllItems = [
   { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
   { icon: LuUserSearch, label: "All Candidates", path: "/all-candidates" },
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+  { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
   { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", beta: true },
   { icon: GoGoal, label: "Goals", path: "/goals" },
   { icon: ImProfile, label: "My Profile", path: "/profile" },
@@ -100,6 +101,8 @@ const demoOrgSuperAdminMenu = [
   { icon: FiUsers, label: "Employees", path: "/employee" },
   { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+  { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
+
   // { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", beta: true },
   { icon: GoGoal, label: "Goals", path: "/goals" },
   { icon: ImProfile, label: "My Profile", path: "/profile" },
@@ -155,6 +158,8 @@ const recruitmentFirmOrgSuperAdminMenu = [
   { icon: FiUsers, label: "Employees", path: "/employee" },
   { icon: FiBriefcase, label: "Jobs", path: "/jobs" }, 
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+  { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
+
   { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", beta: true },
   { icon: GoGoal, label: "Goals", path: "/goals" },
   { icon: ImProfile, label: "My Profile", path: "/profile" },
@@ -275,6 +280,8 @@ const adminAllItems = [
     { icon: FiUsers, label: "Employees", path: "/employee", department: "Human Resource", },
     { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+  { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
+
   { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", department:"Human Resource", beta: true },
     { icon: GoGoal, label: "Goals", path: "/goals" },
     { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
@@ -311,7 +318,7 @@ const adminAllItems = [
 ];
 
 // 2. Define labels for each suite for the Admin role
-const adminHrSuiteLabels = ["Dashboard", "Employees", "Jobs", "Talent Pool", "Zive-X", "Goals", "Reports", "My Profile", "Time Sheet", "Regularization", "Leave", "Attendance", "Calendar", "Settings"];
+const adminHrSuiteLabels = ["Dashboard", "Employees", "Jobs", "Talent Pool", "Bench Pool", "Zive-X", "Goals", "Reports", "My Profile", "Time Sheet", "Regularization", "Leave", "Attendance", "Calendar", "Settings"];
 const adminProjectSuiteLabels = ["Clients", "Projects"];
 const adminSalesSuiteLabels = ["Companies", "People", "Lists", "Kanban"];
 const adminFinanceSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll"];
@@ -419,6 +426,7 @@ employee: (departmentName, designationName, userId) => {
     const hrSpecificItems = [
       { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
       { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
+  { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
       { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", beta: true },
       { icon: GoGoal, label: "Goals", path: "/goalsview" },
       { icon: AiOutlineProfile, label: "Reports", path: "/reports" },

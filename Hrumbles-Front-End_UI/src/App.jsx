@@ -138,6 +138,9 @@ import LeavePolicies from "./pages/TimeManagement/admin/LeavePolicies";
 import Holidays from "./pages/TimeManagement/admin/Holidays";
 import Projects from "./pages/TimeManagement/admin/Projects";
 
+// Bench Profiles
+import BenchProfilesPage from "./pages/bench-profiles/BenchProfilesPage";
+
 
 // --- START: Google Analytics Integration (Step 2) ---
 // This component listens for route changes and sends a pageview to GA.
@@ -359,6 +362,9 @@ function App() {
               <Route path="/admin/leave-policies" element={<LeavePolicies />} />
               <Route path="/admin/holidays" element={<Holidays />} />
               <Route path="/admin/projects" element={<Projects />} />
+
+              {/* Bench Profiles */}
+              <Route path="/bench-pool" element={<BenchProfilesPage />} />
           
           </Route>
         </Route>

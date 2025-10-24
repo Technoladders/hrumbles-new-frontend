@@ -2073,7 +2073,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
     <TableRow className="bg-purple-600 hover:bg-purple-700 whitespace-nowrap border border-purple-500">
       <TableHead className="sticky text-center left-0 z-20 w-[120px] px-2 text-white">Score</TableHead>
       <TableHead className="sticky left-[60px] z-10 w-[200px] px-2 text-white">Candidate Name</TableHead>
-      <TableHead className="w-auto text-center px-2 text-white">Owner</TableHead>
+      <TableHead className="w-[60px] text-center px-2 text-white">Owner</TableHead>
       <TableHead className="w-[120px] px-2 text-white">Current CTC</TableHead>
       <TableHead className="w-[120px] px-2 text-white">Expected CTC</TableHead>
       <TableHead className="w-[120px] px-2 text-white">Notice Period</TableHead>
@@ -2120,7 +2120,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
 </TableCell>
 
         {/* --- Other Scrollable Cells --- */}
-        <TableCell className="px-2 py-1">
+        <TableCell className="px-2 py-1 flex items-center justify-center">
           <OwnerAvatarCell ownerName={candidate.owner || candidate.appliedFrom} createdAt={candidate.createdAt} isEmployee={isEmployee} currentUserName={`${user.user_metadata.first_name} ${user.user_metadata.last_name}`} />
         </TableCell>
         <TableCell className="px-2 text-sm py-1">{candidate.currentSalary ? formatCurrency(parseFloat(String(candidate.currentSalary).replace(/[^0-9.]/g, ''))) : "N/A"}</TableCell>

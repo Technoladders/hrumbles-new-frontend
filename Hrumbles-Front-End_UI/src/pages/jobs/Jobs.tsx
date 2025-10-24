@@ -155,7 +155,6 @@ const Jobs = () => {
   const [selectedJob, setSelectedJob] = useState<JobData | null>(null);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [editJob, setEditJob] = useState<JobData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState<JobData | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -190,11 +189,12 @@ const Jobs = () => {
   } = useQuery({
     queryKey: ["jobs", user?.id, userRole],
     queryFn: async () => {
-      setLoading(true);
+  
       const data = isEmployee && user?.id ? await getJobsAssignedToUser(user.id) : await getAllJobs();
-      setLoading(false);
+  
       return data;
     },
+    refetchOnWindowFocus: false,
   });
 
   const clientList = useMemo(() => {
@@ -338,7 +338,7 @@ const Jobs = () => {
     }
   };
 
-  if (isLoading || loading) {
+if (isLoading) {
     return <div className="flex items-center justify-center h-[80vh]"><Loader size={60} className="border-[6px]" /></div>;
   }
 
@@ -419,7 +419,7 @@ const Jobs = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {jobsToRender.map((job) => (
                 // --- MODIFICATION: Added hover animation and styling to the table row ---
-                <tr key={job.id} className="transition-all duration-200 ease-in-out hover:shadow-lg hover:-translate-y-px hover:bg-gray-50">
+                <tr key={job.id} className="transition-all duration-200 ease-in-out hover:shadow-sm hover:-translate-y-px hover:bg-gray-50">
                   <td className="sticky left-0 z-20 bg-white table-cell">
                     <div className="flex flex-col">
                       <Link to={`/jobs/${job.id}`} className="font-medium text-black-600 hover:underline">{job.title}</Link>

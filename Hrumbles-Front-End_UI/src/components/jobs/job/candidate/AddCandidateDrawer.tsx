@@ -475,7 +475,7 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
     <Sheet open={controlledOpen} 
     onOpenChange={controlledOnOpenChange} >
       
-      <SheetContent className="w-full sm:max-w-lg md:max-w-xl  overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-4xl lg:max-w-6xl xl:max-w-4xl 2xl:max-w-8xl overflow-y-auto">
         <SheetHeader className="mb-6">
           <SheetTitle>Add New Candidate</SheetTitle>
         </SheetHeader>
