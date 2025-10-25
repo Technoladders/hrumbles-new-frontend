@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Input } from '@/components/ui/input';
 import { Badge } from "@/components/ui/badge";
-import { Edit, Mail, Phone, Globe, User, MoreVertical, Activity, Clock, FileText, Home, Eye,Pencil,Users,UserCircle , Building2,BadgeCheck,Cog,MessageCircle, Fingerprint, CreditCard , Download, Copy, Briefcase, ShieldCheck, ShieldAlert, Loader2 } from "lucide-react";
+import { Edit, Mail, Phone, Globe, User, MoreVertical, Activity, Clock, FileText, Home, Eye, Pencil, Users, UserCircle, Building2, BadgeCheck, Cog, MessageCircle, Fingerprint, CreditCard, Download, Copy, Briefcase, ShieldCheck, ShieldAlert, Loader2, CalendarDays, Heart, Droplet, CalendarPlus, IndianRupee, Timer, Hourglass, ClipboardList } from "lucide-react";
 import {useSelector} from "react-redux";
  
 interface PaymentEarning {
@@ -88,6 +88,7 @@ interface EmployeeDetail {
   first_name: string;
   last_name: string;
   email: string;
+  personal_email?: string; // Add this line
   phone: string;
   employee_id: string;
   position?: string;
@@ -96,6 +97,11 @@ interface EmployeeDetail {
   blood_group?: string;
   marital_status?: string;
   employment_status?: string;
+  hire_type?: string; // Make sure this is here
+  internship_duration?: string; // Add this
+  contract_duration?: string;   // Add this
+  payment_basis?: string;       // Add this
+  hours_per_week?: string;      // Add this
   aadhar_number?: string;
   aadhar_url?: string;
   pan_number?: string;
@@ -887,37 +893,156 @@ return (
         {/* --- LEFT COLUMN: Basic Information & Activity Timeline --- */}
         <div className="lg:col-span-1 space-y-8">
          
-          {/* Basic Information Card */}
+{/* Basic Information Card */}
           <Card className="rounded-2xl shadow-lg border-none relative">
             <div className="absolute top-4 right-4">
-              <Button onClick={() => navigate(`/employee/${employee.id}`)} variant="outline" size="icon" className="bg-gray-100 dark:bg-gray-700 rounded-full h-8 w-8 hover:bg-gray-200">
+             <Button onClick={() => navigate(`/employee/${employee.id}`)} variant="outline" size="icon" className="bg-gray-100 dark:bg-gray-700 rounded-full h-8 w-8 hover:bg-gray-200">
                 <Pencil className="h-4 w-4 text-gray-700 dark:text-gray-300" />
               </Button>
             </div>
             <CardContent className="p-6">
-              <div className="flex flex-col items-center text-center">
-                <Avatar className="w-24 h-24 mb-4 border-2 border-gray-200">
+              {/* CORRECTED LAYOUT APPLIED HERE */}
+              <div className="flex items-center gap-4 mb-6">
+                {/* Avatar on the left */}
+                <Avatar className="w-24 h-24 border-2 border-gray-200 flex-shrink-0">
                   <AvatarImage src={employee.profile_picture_url} alt={`${employee.first_name} ${employee.last_name}`} />
                   <AvatarFallback className="text-3xl font-bold bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200">{employee.first_name?.[0]}{employee.last_name?.[0]}</AvatarFallback>
                 </Avatar>
-                <h1 className="text-xl font-bold text-purple-800 dark:text-purple-400">{employee.first_name} {employee.last_name}</h1>
-                <span className="mt-1 inline-block text-sm font-semibold bg-purple-100 text-purple-800 px-3 py-1 rounded-full">{employee.designation_name || "Test account"}</span>
-                <p className="text-xs text-purple-700 dark:text-purple-500 mt-2">{employee.employee_id || "Test001"}</p>
+                
+                {/* User Info and Statuses to the right of Avatar */}
+                <div className="flex flex-col items-start">
+                  <h1 className="text-xl font-bold text-purple-800 dark:text-purple-400 capitalize">
+                    {employee.first_name?.toLowerCase()} {employee.last_name?.toLowerCase()}
+                  </h1>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    {employee.designation_name || "Test account"} ({employee.employee_id || "Test001"})
+                  </p>
+                  
+                  {/* Statuses placed directly below the designation */}
+                  <div className="mt-2 flex items-center gap-3">
+                     <span className={`font-semibold rounded-full px-2 py-1 text-xs flex items-center gap-2 ${employee.employment_status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        <span className={`w-2 h-2 rounded-full ${employee.employment_status === 'Active' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                        {employee.employment_status || "Not provided"}
+                     </span>
+                     <p className="font-medium text-gray-500 dark:text-gray-400 text-xs">{employee.type_of_hire || "Not provided"}</p>
+                  </div>
+                </div>
               </div>
-              <div className="mt-8">
+
+           <div className="mt-8">
                 <h2 className="text-lg font-bold text-gray-800 dark:text-gray-200 mb-6">Basic Information</h2>
                 <div className="space-y-5 text-sm">
-                  <div className="flex items-center gap-4"><Mail className="h-5 w-5 text-gray-400" /><div><p className="font-medium text-gray-800 dark:text-gray-200">{employee.email}</p></div></div>
+                  {/* --- Contact Info --- */}
+                  <div className="flex items-start gap-4">
+                    <Mail className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" />
+                    <div>
+                      <p className="text-xs text-gray-500">Official Email</p>
+                      <p className="font-medium text-gray-800 dark:text-gray-200">{employee.email || 'Not provided'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-4">
+                    <User className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" />
+                    <div>
+                      <p className="text-xs text-gray-500">Personal Email</p>
+                      <p className="font-medium text-gray-800 dark:text-gray-200">{employee.personal_email || 'Not provided'}</p>
+                    </div>
+                  </div>
                   <div className="flex items-center gap-4"><Phone className="h-5 w-5 text-gray-400" /><div><p className="font-medium text-gray-800 dark:text-gray-200">{employee.phone || "Not provided"}</p></div></div>
-                  <div className="flex items-center gap-4"><Globe className="h-5 w-5 text-gray-400" /><div><p className="font-medium text-gray-800 dark:text-gray-200">{employee.address?.country || "Not provided"}</p></div></div>
+
+                  {/* --- Personal Details --- */}
+                  <div className="flex items-center gap-4 pt-2 border-t dark:border-gray-700"><Globe className="h-5 w-5 text-gray-400" /><div><p className="font-medium text-gray-800 dark:text-gray-200">{employee.address?.country || "Not provided"}</p></div></div>
                   <div className="flex items-center gap-4"><Users className="h-5 w-5 text-gray-400" /><div><p className="font-medium text-gray-800 dark:text-gray-200">{employee.gender || "Not provided"}</p></div></div>
-                  <div className="flex items-center gap-4"><UserCircle className="h-5 w-5 text-gray-400" /><div><p className="font-medium text-gray-800 dark:text-gray-200">{getAge(employee.date_of_birth)}</p></div></div>
+                  <div className="flex items-start gap-4"><CalendarDays className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Date of Birth</p><p className="font-medium text-gray-800 dark:text-gray-200">{formatDate(employee.date_of_birth)} (Age: {getAge(employee.date_of_birth)})</p></div></div>
+                  <div className="flex items-start gap-4"><Heart className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Marital Status</p><p className="font-medium text-gray-800 dark:text-gray-200">{employee.marital_status || 'Not provided'}</p></div></div>
+                  <div className="flex items-start gap-4"><Droplet className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Blood Group</p><p className="font-medium text-gray-800 dark:text-gray-200">{employee.blood_group || 'Not provided'}</p></div></div>
+
+                  {/* --- DYNAMIC EMPLOYMENT DETAILS --- */}
+                  <div className="flex items-start gap-4 pt-2 border-t dark:border-gray-700">
+                    <Clock className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" />
+                    <div>
+                      <p className="text-xs text-gray-500">Hire Type</p>
+                      <p className="font-medium text-gray-800 dark:text-gray-200">{employee.hire_type || "Not provided"}</p>
+                    </div>
+                  </div>
+
+                  {/* Fields for Internship */}
+                  {employee.hire_type === 'Internship' && employee.internship_duration && (
+                    <div className="flex items-start gap-4">
+                      <Timer className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" />
+                      <div>
+                        <p className="text-xs text-gray-500">Internship Duration</p>
+                        <p className="font-medium text-gray-800 dark:text-gray-200">{employee.internship_duration}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Fields for Contract */}
+                  {employee.hire_type === 'Contract' && (
+                    <>
+                      {employee.contract_duration && (
+                        <div className="flex items-start gap-4">
+                          <Timer className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" />
+                          <div><p className="text-xs text-gray-500">Contract Duration</p><p className="font-medium text-gray-800 dark:text-gray-200">{employee.contract_duration}</p></div>
+                        </div>
+                      )}
+                      {employee.payment_basis && (
+                        <div className="flex items-start gap-4">
+                          <ClipboardList className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" />
+                          <div><p className="text-xs text-gray-500">Payment Basis</p><p className="font-medium text-gray-800 dark:text-gray-200">{employee.payment_basis}</p></div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Fields for Part Time */}
+                  {employee.hire_type === 'Part Time' && (
+                    <>
+                      {employee.hours_per_week && (
+                        <div className="flex items-start gap-4">
+                          <Hourglass className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" />
+                          <div><p className="text-xs text-gray-500">Hours per Week</p><p className="font-medium text-gray-800 dark:text-gray-200">{employee.hours_per_week}</p></div>
+                        </div>
+                      )}
+                      {employee.payment_basis && (
+                        <div className="flex items-start gap-4">
+                          <ClipboardList className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" />
+                          <div><p className="text-xs text-gray-500">Payment Basis</p><p className="font-medium text-gray-800 dark:text-gray-200">{employee.payment_basis}</p></div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* --- Salary / Stipend --- */}
+                  <div className="flex items-start gap-4">
+                    <IndianRupee className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" />
+                    <div>
+                      <p className="text-xs text-gray-500">{employee.hire_type === 'Internship' ? 'Stipend' : 'Salary'}</p>
+                      <p className="font-medium text-gray-800 dark:text-gray-200">
+                        {(() => {
+                          // Priority 1: Use the latest payment record if it exists.
+                          if (employee.latestPaymentRecord?.payment_amount) {
+                            return formatCurrency(employee.latestPaymentRecord.payment_amount);
+                          }
+                          // Priority 2: Fallback to the base salary/stipend from the employee record.
+                          if (employee.salary) {
+                            const suffix = (employee.hire_type === 'Internship' || employee.salary_type === 'Monthly') ? ' /mo' : '';
+                            return `${formatCurrency(employee.salary)}${suffix}`;
+                          }
+                          // Final Fallback: If neither exists, show "Not provided".
+                          return 'Not provided';
+                        })()}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* --- Static Professional Details --- */}
                   <div className="flex items-start gap-4 pt-2 border-t dark:border-gray-700"><Building2 className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Department</p><p className="font-medium text-gray-800 dark:text-gray-200">{employee.department_name || 'Not provided'}</p></div></div>
                   <div className="flex items-start gap-4"><BadgeCheck className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Designation</p><p className="font-medium text-gray-800 dark:text-gray-200">{employee.designation_name || 'Not provided'}</p></div></div>
-                  <div className="flex items-start gap-4"><Cog className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Hard Skill</p><p className="font-medium text-gray-800 dark:text-gray-200">Technical</p></div></div>
+                  <div className="flex items-start gap-4"><CalendarPlus className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Joining Date</p><p className="font-medium text-gray-800 dark:text-gray-200">{formatDate(employee.joining_date)}</p></div></div>
+                  
+                  {/* --- Skills --- */}
+                  <div className="flex items-start gap-4 pt-2 border-t dark:border-gray-700"><Cog className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Hard Skill</p><p className="font-medium text-gray-800 dark:text-gray-200">Technical</p></div></div>
                   <div className="flex items-start gap-4"><MessageCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Soft Skill</p><p className="font-medium text-gray-800 dark:text-gray-200">Communication</p></div></div>
-                  <div className="flex items-center gap-4 pt-2 border-t dark:border-gray-700"><ShieldAlert className="h-5 w-5 text-gray-400" /><div><span className={`font-semibold rounded-full px-2 py-1 text-xs flex items-center gap-2 ${employee.employment_status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}><span className={`w-2 h-2 rounded-full ${employee.employment_status === 'Active' ? 'bg-green-500' : 'bg-red-500'}`}></span>{employee.employment_status || "Not provided"}</span></div></div>
-                  <div className="flex items-center gap-4"><Clock className="h-5 w-5 text-gray-400" /><div><p className="font-medium text-gray-800 dark:text-gray-200">{employee.type_of_hire || "Not provided"}</p></div></div>
                 </div>
               </div>
             </CardContent>
@@ -927,155 +1052,189 @@ return (
         {/* --- RIGHT COLUMN: Tabbed Content Area --- */}
         <div className="lg:col-span-2">
           <Tabs defaultValue="personal" className="w-full">
-            <TabsList className="bg-transparent p-0 border-b border-gray-200 dark:border-gray-700 justify-start">
-              <TabsTrigger value="personal">Personal Information</TabsTrigger>
-              <TabsTrigger value="professional">Professional Information</TabsTrigger>
-              <TabsTrigger value="salary">Salary Information</TabsTrigger>
-             
-            </TabsList>
- 
+            {/* --- NEW Pill-Style Tabs --- */}
+            <div className="flex justify-start mb-6">
+              <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1.5 shadow-inner">
+                <TabsTrigger 
+                  value="personal" 
+                  className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+                >
+                  Personal
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="professional" 
+                  className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+                >
+                  Professional
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="salary" 
+                  className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+                >
+                  Salary
+                </TabsTrigger>
+              </TabsList>
+            </div>
             {/* --- Personal Information Tab --- */}
+           {/* --- Personal Information Tab --- */}
             <TabsContent value="personal" className="mt-6 space-y-8">
-              {/* Identity Documents Card */}
-                       {/* Identity Documents Card - FINAL CORRECTED LAYOUT */}
-          <Card className="rounded-2xl shadow-lg border-none">
-            <CardContent className="p-6">
-               <h3 className="font-bold text-lg mb-4">Identity Documents</h3>
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                 
-                  {/* Aadhar Card */}
-                  <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                     <div className="flex items-start justify-between">
-                        {/* Left Side: Icon and Text */}
-                        <div className="flex items-center gap-4">
-                           <Fingerprint className="h-6 w-6 text-purple-600 flex-shrink-0"/>
-                           <div>
-                              <h4 className="font-semibold text-sm">Aadhar Card</h4>
-                              <p className="text-xs text-gray-500">Number: {employee.aadhar_number || 'Not provided'}</p>
-                           </div>
+              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
+                <CardContent className="p-8">
+                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Identity Documents</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Aadhar Card */}
+                    <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
+                      <div className="flex items-center gap-3">
+                        <Fingerprint className="h-8 w-8 text-purple-600 flex-shrink-0"/>
+                        <div>
+                          <h4 className="font-semibold">Aadhar Card</h4>
+                          <p className="text-sm text-gray-500">{employee.aadhar_number || 'Not provided'}</p>
                         </div>
-                        {/* Right Side: Action Buttons */}
-                        {employee.aadhar_url && (
-                           <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" className="h-7 w-7" asChild><a href={employee.aadhar_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4"/></a></Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" asChild><a href={employee.aadhar_url} download><Download className="h-4 w-4"/></a></Button>
-                           </div>
-                        )}
-                     </div>
-                  </div>
- 
-                  {/* PAN Card */}
-                   <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                     <div className="flex items-start justify-between">
-                        {/* Left Side: Icon and Text */}
-                        <div className="flex items-center gap-4">
-                           <CreditCard className="h-6 w-6 text-purple-600 flex-shrink-0"/>
-                           <div>
-                              <h4 className="font-semibold text-sm">PAN Card</h4>
-                              <p className="text-xs text-gray-500">Number: {employee.pan_number || 'Not provided'}</p>
-                           </div>
+                      </div>
+                      {employee.aadhar_url && (
+                        <div className="flex items-center gap-1 mt-3">
+                          <Button variant="ghost" size="sm" className="w-full justify-center" asChild><a href={employee.aadhar_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4 mr-2"/>View</a></Button>
+                          <Button variant="ghost" size="sm" className="w-full justify-center" asChild><a href={employee.aadhar_url} download><Download className="h-4 w-4 mr-2"/>Download</a></Button>
                         </div>
-                        {/* Right Side: Action Buttons */}
-                        {employee.pan_url && (
-                           <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" className="h-7 w-7" asChild><a href={employee.pan_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4"/></a></Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" asChild><a href={employee.pan_url} download><Download className="h-4 w-4"/></a></Button>
-                           </div>
-                        )}
-                     </div>
-                  </div>
- 
-                  {/* ESIC Card */}
-                   <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                     <div className="flex items-start justify-between">
-                        {/* Left Side: Icon and Text */}
-                        <div className="flex items-center gap-4">
-                           <CreditCard className="h-6 w-6 text-purple-600 flex-shrink-0"/>
-                           <div>
-                              <h4 className="font-semibold text-sm">ESIC</h4>
-                              <p className="text-xs text-gray-500">Number: {employee.esic_number || 'Not provided'}</p>
-                           </div>
-                        </div>
-                        {/* Right Side: Action Buttons */}
-                        {employee.esic_url && (
-                           <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" className="h-7 w-7" asChild><a href={employee.esic_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4"/></a></Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" asChild><a href={employee.esic_url} download><Download className="h-4 w-4"/></a></Button>
-                           </div>
-                        )}
-                     </div>
-                  </div>
-               </div>
-            </CardContent>
-          </Card>
-              {/* Addresses Card */}
-              <Card className="rounded-2xl shadow-lg border-none">
-                <CardContent className="p-6">
-                  <h3 className="font-bold text-lg mb-4">Addresses</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center"><h4 className="font-semibold text-gray-600 dark:text-gray-400 text-sm">Current Address</h4>{employee.address?.address_line1 && (<Copy className="h-4 w-4 text-gray-400 cursor-pointer hover:text-purple-500" onClick={() => copyToClipboard(`${employee.address.address_line1}, ${employee.address.city}, ${employee.address.zip_code}`,'Current Address')}/>)}</div>
-                      <div className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-3 text-sm"><span className="text-gray-500">Address</span><span className="font-medium text-right">{employee.address?.address_line1 || 'Not provided'}</span><span className="text-gray-500">Address (cont.)</span><span className="font-medium text-right">-</span><span className="text-gray-500">City</span><span className="font-medium text-right">{employee.address?.city || 'Not provided'}</span><span className="text-gray-500">Postal Code</span><span className="font-medium text-right">{employee.address?.zip_code || 'Not provided'}</span></div>
+                      )}
                     </div>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center"><h4 className="font-semibold text-gray-600 dark:text-gray-400 text-sm">Home Address</h4>{employee.address?.address_line1 && (<Copy className="h-4 w-4 text-gray-400 cursor-pointer hover:text-purple-500" onClick={() => copyToClipboard(`${employee.address.address_line1}, ${employee.address.city}, ${employee.address.zip_code}`,'Home Address')}/>)}</div>
-                      <div className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-3 text-sm"><span className="text-gray-500">Address</span><span className="font-medium text-right">{employee.address?.address_line1 || 'Not provided'}</span><span className="text-gray-500">Address (cont.)</span><span className="font-medium text-right">-</span><span className="text-gray-500">City</span><span className="font-medium text-right">{employee.address?.city || 'Not provided'}</span><span className="text-gray-500">Postal Code</span><span className="font-medium text-right">{employee.address?.zip_code || 'Not provided'}</span></div>
+                    {/* PAN Card */}
+                    <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
+                       <div className="flex items-center gap-3">
+                         <CreditCard className="h-8 w-8 text-purple-600 flex-shrink-0"/>
+                         <div>
+                           <h4 className="font-semibold">PAN Card</h4>
+                           <p className="text-sm text-gray-500">{employee.pan_number || 'Not provided'}</p>
+                         </div>
+                       </div>
+                       {employee.pan_url && (
+                         <div className="flex items-center gap-1 mt-3">
+                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild><a href={employee.pan_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4 mr-2"/>View</a></Button>
+                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild><a href={employee.pan_url} download><Download className="h-4 w-4 mr-2"/>Download</a></Button>
+                         </div>
+                       )}
+                    </div>
+                    {/* ESIC Card */}
+                    <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
+                       <div className="flex items-center gap-3">
+                         <Briefcase className="h-8 w-8 text-purple-600 flex-shrink-0"/>
+                         <div>
+                           <h4 className="font-semibold">ESIC</h4>
+                           <p className="text-sm text-gray-500">{employee.esic_number || 'Not provided'}</p>
+                         </div>
+                       </div>
+                       {employee.esic_url && (
+                         <div className="flex items-center gap-1 mt-3">
+                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild><a href={employee.esic_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4 mr-2"/>View</a></Button>
+                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild><a href={employee.esic_url} download><Download className="h-4 w-4 mr-2"/>Download</a></Button>
+                         </div>
+                       )}
                     </div>
                   </div>
                 </CardContent>
               </Card>
-              {/* Education Card */}
-              <Card className="rounded-2xl shadow-lg border-none">
-                <CardContent className="p-6">
-                  <h3 className="font-bold text-lg mb-4">Education</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg"><div className="text-center mb-2"><h4 className="font-semibold text-gray-600 dark:text-gray-400 text-sm">SSC</h4><p className="font-bold mt-1 break-words">{employee.education?.find(e => e.type === 'SSC')?.institute || 'N/A'}</p><p className="text-xs text-gray-500">{formatDate(employee.education?.find(e => e.type === 'SSC')?.year_completed)}</p></div>{employee.education?.find(e => e.type === 'SSC')?.document_url && (<div className="flex items-center justify-center gap-1 border-t dark:border-gray-700 pt-2"><Button variant="ghost" size="icon" className="h-7 w-7" asChild><a href={employee.education.find(e => e.type === 'SSC').document_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4"/></a></Button><Button variant="ghost" size="icon" className="h-7 w-7" asChild><a href={employee.education.find(e => e.type === 'SSC').document_url} download><Download className="h-4 w-4"/></a></Button></div>)}</div>
-                    <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg"><div className="text-center mb-2"><h4 className="font-semibold text-gray-600 dark:text-gray-400 text-sm">HSC/Diploma</h4><p className="font-bold mt-1 break-words">{employee.education?.find(e => e.type === 'HSC/Diploma')?.institute || 'N/A'}</p><p className="text-xs text-gray-500">{formatDate(employee.education?.find(e => e.type === 'HSC/Diploma')?.year_completed)}</p></div>{employee.education?.find(e => e.type === 'HSC/Diploma')?.document_url && (<div className="flex items-center justify-center gap-1 border-t dark:border-gray-700 pt-2"><Button variant="ghost" size="icon" className="h-7 w-7" asChild><a href={employee.education.find(e => e.type === 'HSC/Diploma').document_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4"/></a></Button><Button variant="ghost" size="icon" className="h-7 w-7" asChild><a href={employee.education.find(e => e.type === 'HSC/Diploma').document_url} download><Download className="h-4 w-4"/></a></Button></div>)}</div>
-                    <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg"><div className="text-center mb-2"><h4 className="font-semibold text-gray-600 dark:text-gray-400 text-sm">Degree</h4><p className="font-bold mt-1 break-words">{employee.education?.find(e => e.type === 'Degree')?.institute || 'N/A'}</p><p className="text-xs text-gray-500">{formatDate(employee.education?.find(e => e.type === 'Degree')?.year_completed)}</p></div>{employee.education?.find(e => e.type === 'Degree')?.document_url && (<div className="flex items-center justify-center gap-1 border-t dark:border-gray-700 pt-2"><Button variant="ghost" size="icon" className="h-7 w-7" asChild><a href={employee.education.find(e => e.type === 'Degree').document_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4"/></a></Button><Button variant="ghost" size="icon" className="h-7 w-7" asChild><a href={employee.education.find(e => e.type === 'Degree').document_url} download><Download className="h-4 w-4"/></a></Button></div>)}</div>
+
+              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
+                <CardContent className="p-8">
+                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Addresses</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Current Address */}
+                    <div>
+                      <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-4">Current Address</h4>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between items-center"><span className="text-gray-500">Address</span><span className="font-medium text-right">{employee.address?.address_line1 || 'Not provided'}</span></div>
+                        <div className="flex justify-between items-center"><span className="text-gray-500">City</span><span className="font-medium text-right">{employee.address?.city || 'Not provided'}</span></div>
+                        <div className="flex justify-between items-center"><span className="text-gray-500">State</span><span className="font-medium text-right">{employee.address?.state || 'Not provided'}</span></div>
+                        <div className="flex justify-between items-center"><span className="text-gray-500">Postal Code</span><span className="font-medium text-right">{employee.address?.zip_code || 'Not provided'}</span></div>
+                      </div>
+                    </div>
+                    {/* Permanent Address */}
+                    <div>
+                      <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-4">Permanent Address</h4>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between items-center"><span className="text-gray-500">Address</span><span className="font-medium text-right">{employee.permanent_address?.address_line1 || 'Not provided'}</span></div>
+                        <div className="flex justify-between items-center"><span className="text-gray-500">City</span><span className="font-medium text-right">{employee.permanent_address?.city || 'Not provided'}</span></div>
+                        <div className="flex justify-between items-center"><span className="text-gray-500">State</span><span className="font-medium text-right">{employee.permanent_address?.state || 'Not provided'}</span></div>
+                        <div className="flex justify-between items-center"><span className="text-gray-500">Postal Code</span><span className="font-medium text-right">{employee.permanent_address?.zip_code || 'Not provided'}</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
+                <CardContent className="p-8">
+                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Education</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {['SSC', 'HSC/Diploma', 'Degree'].map(type => {
+                      const edu = employee.education?.find(e => e.type === type);
+                      return (
+                        <div key={type} className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg text-center flex flex-col">
+                          <div className="flex-grow">
+                            <h4 className="font-semibold text-gray-600 dark:text-gray-400">{type}</h4>
+                            <p className="font-bold mt-1 break-words text-gray-800 dark:text-gray-200">{edu?.institute || 'N/A'}</p>
+                            <p className="text-xs text-gray-500">{edu?.year_completed || 'N/A'}</p>
+                          </div>
+                          {edu?.document_url && (
+                            <div className="flex items-center justify-center gap-1 border-t dark:border-gray-600 pt-2 mt-2">
+                              <Button variant="ghost" size="sm" asChild><a href={edu.document_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4 mr-2"/>View</a></Button>
+                              <Button variant="ghost" size="sm" asChild><a href={edu.document_url} download><Download className="h-4 w-4 mr-2"/>Download</a></Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
             </TabsContent>
            
-            {/* --- Professional Information Tab --- */}
             <TabsContent value="professional" className="mt-6 space-y-8">
-              {/* Professional Information & Work Experience Card */}
-              <Card className="rounded-2xl shadow-lg border-none">
-                <CardContent className="p-6">
-                  {/* <h3 className="font-bold text-lg mb-4">Professional Information</h3> */}
-                 
-                  <hr className="dark:border-gray-700"/>
-                  <h3 className="font-bold text-lg mt-6 mb-4">Work Experience</h3>
-                  <div className="space-y-4">
-                    {employee.experiences && employee.experiences.length > 0 ? (employee.experiences.map(exp => (<div key={exp.id}><p className="font-semibold text-gray-800 dark:text-gray-200">{exp.position} at {exp.company}</p><p className="text-sm text-gray-500 dark:text-gray-400">{formatDate(exp.start_date)} - {exp.end_date ? formatDate(exp.end_date) : 'Present'}</p></div>))) : (<p className="text-sm text-gray-500 dark:text-gray-400">No work experience available</p>)}
+              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
+                <CardContent className="p-8">
+                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Work Experience</h3>
+                  <div className="space-y-6">
+                    {employee.experiences && employee.experiences.length > 0 ? (
+                      employee.experiences.map(exp => (
+                        <div key={exp.id} className="p-4 rounded-lg border dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+                          <h4 className="font-semibold text-gray-800 dark:text-gray-200">{exp.position}</h4>
+                          <p className="text-sm text-purple-600 dark:text-purple-400 font-medium">{exp.company}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{formatDate(exp.start_date)} - {exp.end_date ? formatDate(exp.end_date) : 'Present'}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-center text-gray-500 dark:text-gray-400 py-4">No work experience available.</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
             </TabsContent>
  
-            {/* --- Salary Information Tab --- */}
             <TabsContent value="salary" className="mt-6 space-y-8">
-              <Card className="rounded-2xl shadow-lg border-none">
-                <CardContent className="p-6">
-                  <h3 className="font-bold text-lg mb-6">Salary Information</h3>
-                  <div className="space-y-8">
-                    {employee.latestPaymentRecord ? (<div>{renderCurrentSalarySummary(employee.latestPaymentRecord)}</div>) : (<p className="text-sm text-gray-500">No current salary information available.</p>)}
-                    {employee.appraisalHistory && employee.appraisalHistory.length > 0 ? (<div className="mt-6"><h4 className="font-bold text-lg mb-4">Appraisal History</h4>{employee.appraisalHistory.map((record) => (<div key={record.id} className="mb-6">{renderAppraisalSummary(record)}</div>))}</div>) : (<div className="pt-4 mt-4 border-t dark:border-gray-700"><p className="text-sm text-gray-500">No appraisal history available.</p></div>)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="rounded-2xl shadow-lg border-none">
-                <CardContent className="p-6">
-                  <h3 className="font-bold text-lg mb-4">Bank Details</h3>
-                  {employee.bankDetails ? (<div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 text-sm"><div><h4 className="text-gray-500 mb-1">Account Holder</h4><p className="font-medium">{employee.bankDetails.account_holder_name}</p></div><div><h4 className="text-gray-500 mb-1">Bank Name</h4><p className="font-medium">{employee.bankDetails.bank_name}</p></div><div><h4 className="text-gray-500 mb-1">Account Number</h4><div className="flex items-center"><p className="font-medium mr-2">{showFullAccountNumber ? employee.bankDetails.account_number : `**** **** ${employee.bankDetails.account_number.slice(-4)}`}</p><span onClick={() => setShowFullAccountNumber(!showFullAccountNumber)} className="text-purple-600 cursor-pointer hover:underline text-xs">View</span></div></div><div><h4 className="text-gray-500 mb-1">IFSC Code</h4><p className="font-medium">{employee.bankDetails.ifsc_code}</p></div><div><h4 className="text-gray-500 mb-1">Branch</h4><p className="font-medium">{employee.bankDetails.branch_name}</p></div><div><h4 className="text-gray-500 mb-1">City</h4><p className="font-medium">{employee.bankDetails.city || 'N/A'}</p></div></div>) : (<p className="text-sm text-gray-500 dark:text-gray-400">No bank details available.</p>)}
+               <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
+                <CardContent className="p-8">
+                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Bank Details</h3>
+                  {employee.bankDetails ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 text-sm">
+                      <div><h4 className="text-gray-500 mb-1">Account Holder</h4><p className="font-medium text-gray-800 dark:text-gray-200">{employee.bankDetails.account_holder_name}</p></div>
+                      <div><h4 className="text-gray-500 mb-1">Bank Name</h4><p className="font-medium text-gray-800 dark:text-gray-200">{employee.bankDetails.bank_name}</p></div>
+                      <div>
+                        <h4 className="text-gray-500 mb-1">Account Number</h4>
+                        <div className="flex items-center">
+                          <p className="font-medium mr-2 text-gray-800 dark:text-gray-200">{showFullAccountNumber ? employee.bankDetails.account_number : `**** **** ${employee.bankDetails.account_number.slice(-4)}`}</p>
+                          <Eye className="h-4 w-4 text-gray-400 cursor-pointer hover:text-purple-500" onClick={() => setShowFullAccountNumber(!showFullAccountNumber)} />
+                        </div>
+                      </div>
+                      <div><h4 className="text-gray-500 mb-1">IFSC Code</h4><p className="font-medium text-gray-800 dark:text-gray-200">{employee.bankDetails.ifsc_code}</p></div>
+                      <div><h4 className="text-gray-500 mb-1">Branch Name</h4><p className="font-medium text-gray-800 dark:text-gray-200">{employee.bankDetails.branch_name}</p></div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-center text-gray-500 dark:text-gray-400 py-4">No bank details have been provided.</p>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
- 
-            {/* --- Documents Tab --- */}
-            <TabsContent value="documents" className="mt-6 space-y-8">
-         
-            </TabsContent>
+
           </Tabs>
         </div>
       </div>

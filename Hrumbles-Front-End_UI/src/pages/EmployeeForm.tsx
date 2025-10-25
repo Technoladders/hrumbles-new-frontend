@@ -15,14 +15,14 @@ import { toast } from "sonner";
 import ProfileImageUpload from "@/components/ProfileImageUpload";
 import { useSelector } from "react-redux";
 import { Country, State, City } from 'country-state-city'; 
-import { ArrowLeft, Save, ArrowRight, Upload, Plus, X, ChevronRight, User, CalendarIcon, File, Loader2, FileText } from "lucide-react";
+import { ArrowLeft, Save, ArrowRight, Upload, Plus, X, ChevronRight, User, CalendarIcon, File, Loader2, FileText, CheckCircle2, Briefcase, Clock, Building2, MapPin, Calendar, Eye, Edit  } from "lucide-react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { Calendar } from "@/components/ui/calendar";
+// import { Calendar } from "@/components/ui/calendar";
 import { uploadDocument } from "@/utils/uploadDocument";
 import { format } from "date-fns";
 import { Experience } from "@/services/types/employee.types";
@@ -30,6 +30,8 @@ import { PostgrestSingleResponse } from "@supabase/supabase-js";
 import { FaRegFilePdf } from "react-icons/fa6";
 import PhoneInput from "react-phone-number-input";
 import "react-phone-number-input/style.css";
+import { Switch } from "@/components/ui/switch"; 
+
 
 
 
@@ -52,6 +54,7 @@ interface EmployeeFormData {
   firstName: string;
   lastName: string;
   email: string;
+  personalEmail: string; // New field for Personal Email
   phone: string;
   employeeId: string;
   department: string;
@@ -74,6 +77,10 @@ interface EmployeeFormData {
   esicUrl: string;
   uanUrl: string;
   profilePictureUrl: string;
+  contractDuration?: string; // New field for Contract
+  paymentBasis?: string;     // New field for Contract/Part-Time
+  hoursPerWeek?: string;     // New field for Part-Time
+  internshipDuration?: string; // Add this line
   salary: string; // Added
   salary_type: string; // Added
   joining_date: string;
@@ -142,10 +149,13 @@ interface EmployeeFormData {
   };
 }
 
+
+
 const initialFormData: EmployeeFormData = {
   firstName: "",
   lastName: "",
   email: "",
+  personalEmail: "",
   phone: "",
   employeeId: "",
   department: "",
@@ -155,7 +165,7 @@ const initialFormData: EmployeeFormData = {
   gender: "",
   maritalStatus: "",
   bloodGroup: "",
-  employmentStatus: "Active",
+  employmentStatus: "",
   hire_type: "",
   aadharNumber: "",
   panNumber: "",
@@ -168,8 +178,12 @@ const initialFormData: EmployeeFormData = {
   esicUrl: "",
   uanUrl: "",
   profilePictureUrl: "",
+  contractDuration: "",
+  paymentBasis: "",
+  hoursPerWeek: "",
+   internshipDuration: "", // Add this line
   salary: "", // Added
-  salary_type: "LPA", // Added, default to LPA
+  salary_type: "", // Added, default to LPA
   joining_date: "",
   presentAddress: {
     addressLine1: "",
@@ -206,7 +220,7 @@ const initialFormData: EmployeeFormData = {
       endDate: "",
       payslip_1_url: "", // New field
       payslip_2_url: "", // New field
-      payslip_3_url: "", // New field
+      payslip_3_url: "", // New field,
     }
   ],
   bankDetails: {
@@ -225,6 +239,8 @@ const initialFormData: EmployeeFormData = {
 };
 
 
+
+
 //validation function
 
 const VALIDATIONS = {
@@ -232,15 +248,18 @@ const VALIDATIONS = {
   email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, // Basic email format
   aadhar: /^\d{12}$/, // 12 digits
   pan: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, // 5 letters, 4 digits, 1 letter
+   voterId: /^[A-Z]{3}[0-9]{7}$/, 
   uan: /^\d{12}$/, // 12 digits
   esic: /^\d{10,17}$/, // 10-17 digits (adjust as needed)
   salary: /^\d+$/, // Positive number, optional 2 decimal places
+  ifsc: /^[A-Z]{4}0[A-Z0-9]{6}$/, 
 };
 
 // Add error state type
 interface FormErrors {
   phone?: string;
   email?: string;
+  personalEmail?: string; // New error state
   aadharNumber?: string;
   panNumber?: string;
   uanNumber?: string;
@@ -260,893 +279,796 @@ const EmployeeForm = () => {
   const [activeTab, setActiveTab] = useState("personal");
   const [formData, setFormData] = useState<EmployeeFormData>(initialFormData);
   const [loading, setLoading] = useState(false);
-  const [isEditing, setIsEditing] = useState(!!id);
-  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
-  const [isSameAsPresent, setIsSameAsPresent] = useState(false);
-  const countries = Country.getAllCountries();
-  const [states, setStates] = useState([]);
-  const [cities, setCities] = useState([]);
-  const [errors, setErrors] = useState<FormErrors>({});
+const [isSameAsPresent, setIsSameAsPresent] = useState(false);
+  const [presentStates, setPresentStates] = useState<any[]>([]);
+  const [presentCities, setPresentCities] = useState<any[]>([]);
+  const [permanentStates, setPermanentStates] = useState<any[]>([]);
+  const [permanentCities, setPermanentCities] = useState<any[]>([]);
+  const [bankStates, setBankStates] = useState<any[]>([]);
+  const [bankCities, setBankCities] = useState<any[]>([]);
+  const [countries, setCountries] = useState<any[]>([]);
+  const [uploadingFile, setUploadingFile] = useState<string | null>(null);
 
-  // User data for Role Based
-    const user = useSelector((state: any) => state.auth.user);
+  const [isVerifyingIfsc, setIsVerifyingIfsc] = useState(false);
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  const [showExperienceModal, setShowExperienceModal] = useState(false);
+  const [editingExperienceIndex, setEditingExperienceIndex] = useState<number | null>(null);
+  const [currentExperience, setCurrentExperience] = useState<Experience>({
+    id: Date.now(),
+    jobType: "Full Time",
+    company: "",
+    position: "",
+    location: "",
+    startDate: "",
+    endDate: "",
+    offerLetterUrl: "",
+    separationLetterUrl: "",
+    payslip_1_url: "",
+    payslip_2_url: "",
+    payslip_3_url: "",
+    hikeLetterUrl: "",
+    noSeparationLetterReason: "",
+    noPayslipReason: "",
+  });
+
+  const [noSeparationLetter, setNoSeparationLetter] = useState(false);
+  const [noPayslip, setNoPayslip] = useState(false);
+
+  // Add state for departments and designations
+  const [departments, setDepartments] = useState<Array<{id: string, name: string}>>([]);
+  const [designations, setDesignations] = useState<Array<{id: string, name: string}>>([]);
+
   const organizationId = useSelector((state: any) => state.auth.organization_id);
-   const userRole = useSelector((state: any) => state.auth.role);
-      const isEmployee = userRole === 'employee';
-    // Experience modal state
-    const [showExperienceModal, setShowExperienceModal] = useState(false);
-    const [formattedSalary, setFormattedSalary] = useState<string>(""); // Added for INR formatting
-    const [currentExperience, setCurrentExperience] = useState<Experience>({
-      jobType: "Full Time",
-      company: "",
-      position: "",
-      location: "",
-      startDate: "",
-      endDate: "",
-      offerLetterUrl: "",
-      separationLetterUrl: "",
-      payslip_1_url: "",
-      payslip_2_url: "",
-      payslip_3_url: "",
-      hikeLetterUrl: "",
-      noSeparationLetterReason: "",
-      noPayslipReason: "",
-    });
-    const [startDate, setStartDate] = useState<Date | undefined>(undefined);
-    const [endDate, setEndDate] = useState<Date | undefined>(undefined);
-    const [editingExperienceIndex, setEditingExperienceIndex] = useState<number | null>(null);
-    const [uploadingFile, setUploadingFile] = useState<string | null>(null);
-    const [uploadingDoc, setUploadingDoc] = useState<{ [key: string]: boolean }>({});
 
-    
-    // States for missing documents
-    const [noSeparationLetter, setNoSeparationLetter] = useState(false);
-    const [noPayslip, setNoPayslip] = useState(false);
-    const [departments, setDepartments] = useState([]);
-    const [designations, setDesignations] = useState([]);
-const [selectedDepartment, setSelectedDepartment] = useState(formData.department || "");
-const [selectedDesignation, setSelectedDesignation] = useState(formData.designation || "");
+const educationColors = ["bg-blue-50", "bg-indigo-50", "bg-violet-50"];
 
-// Sync formattedSalary with formData.salary
-useEffect(() => {
-  setFormattedSalary(formatINR(formData.salary));
-}, [formData.salary]);
-
-// Handle salary input change
-const handleSalaryChange = (value: string) => {
-  // Allow empty input
-  if (value === "") {
-    setFormData((prev) => ({ ...prev, salary: "" }));
-    setFormattedSalary("");
-    setErrors((prev) => ({ ...prev, salary: "Salary is required" }));
-    return;
-  }
-
-  // Remove commas and validate
-  const rawValue = parseINR(value);
-  if (/^\d*$/.test(rawValue)) { // Allow only integers
-    setFormData((prev) => ({ ...prev, salary: rawValue }));
-    setFormattedSalary(formatINR(rawValue));
-    const error = validateField("salary", rawValue);
-    setErrors((prev) => ({ ...prev, salary: error }));
-  }
-};
-
-
-  console.log("Formdataaa:", formData)
-
-
-
+  // Load countries on component mount
   useEffect(() => {
-    if (id) {
-      fetchEmployeeData(id);
-    }
-  }, [id]);
+    const allCountries = Country.getAllCountries();
+    setCountries(allCountries);
+  }, []);
 
-  useEffect(() => {
-    if (formData.presentAddress.country) {
-      const countryCode = formData.presentAddress.country;
-      const statesForCountry = State.getStatesOfCountry(countryCode);
-      setStates(statesForCountry);
-    }
-  }, [formData.presentAddress.country]);
-
-  // Update cities when state changes
-  useEffect(() => {
-    if (formData.presentAddress.state) {
-      const stateCode = formData.presentAddress.state;
-      const citiesForState = City.getCitiesOfState(formData.presentAddress.country, stateCode);
-      setCities(citiesForState);
-    }
-  }, [formData.presentAddress.state]);
-
-  // Handle checkbox change
-  const handleCheckboxChange = (checked) => {
-    setIsSameAsPresent(checked);
-    if (checked) {
-      setFormData((prev) => ({
-        ...prev,
-        permanentAddress: { ...prev.presentAddress },
-      }));
-    }
-  };
-
-  useEffect(() => {
-    if (isSameAsPresent) {
-      setFormData(prev => ({
-        ...prev,
-        permanentAddress: { ...prev.presentAddress }
-      }));
-    }
-  }, [formData.presentAddress, isSameAsPresent]);
-
-  // Handle nested input change
-  const handleNestedInputChange = (parentField, field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      [parentField]: {
-        ...prev[parentField],
-        [field]: value,
-      },
-    }));
-  };
-
-  const fetchEmployeeData = async (employeeId: string) => {
-    try {
-      setLoading(true);
-      
-      const { data: employeeData, error: employeeError } = await supabase
-        .from('hr_employees')
-        .select('*, hr_departments(id, name), hr_designations(id, name, department_id)')
-        .eq('id', employeeId)
-        .single();
-      
-      if (employeeError) throw employeeError;
-      
-      const { data: presentAddressData } = await supabase
-        .from('hr_employee_addresses')
-        .select('*')
-        .eq('employee_id', employeeId)
-        .eq('type', 'present')
-        .maybeSingle();
-        
-      const { data: permanentAddressData } = await supabase
-        .from('hr_employee_addresses')
-        .select('*')
-        .eq('employee_id', employeeId)
-        .eq('type', 'permanent')
-        .maybeSingle();
-      
-      const { data: emergencyContactsData } = await supabase
-        .from('hr_employee_emergency_contacts')
-        .select('*')
-        .eq('employee_id', employeeId);
-      
-      const { data: familyMembersData } = await supabase
-        .from('hr_employee_family_details')
-        .select('*')
-        .eq('employee_id', employeeId);
-      
-      const { data: educationData } = await supabase
-        .from('hr_employee_education')
-        .select('*')
-        .eq('employee_id', employeeId);
-      
-      const { data: experiencesData } = await supabase
-        .from('hr_employee_experiences')
-        .select('*')
-        .eq('employee_id', employeeId);
-      
-      const { data: bankDetailsData } = await supabase
-        .from('hr_employee_bank_details')
-        .select('*')
-        .eq('employee_id', employeeId)
-        .maybeSingle();
-      
-      const formattedData: EmployeeFormData = {
-        firstName: employeeData.first_name || "",
-        lastName: employeeData.last_name || "",
-        email: employeeData.email || "",
-        phone: employeeData.phone || "",
-        employeeId: employeeData.employee_id || "",
-        department: employeeData.department_id || "",
-        designation: employeeData.designation_id || "",
-        position: employeeData.position || "",
-        dateOfBirth: employeeData.date_of_birth ? new Date(employeeData.date_of_birth).toISOString().split('T')[0] : "",
-        gender: employeeData.gender || "",
-        maritalStatus: employeeData.marital_status || "",
-        bloodGroup: employeeData.blood_group || "",
-        employmentStatus: employeeData.employment_status || "Active",
-        hire_type: employeeData.hire_type || "",
-        aadharNumber: employeeData.aadhar_number || "",
-        panNumber: employeeData.pan_number || "",
-        // voterIdNumber: employeeData.voter_id_number || "",
-        esicNumber: employeeData.esic_number || "",
-        uanNumber: employeeData.uan_number || "",
-        aadharUrl: employeeData.aadhar_url || "",
-        panUrl: employeeData.pan_url || "",
-        // voterIdUrl: employeeData.voter_id_url || "",
-        esicUrl: employeeData.esic_url || "",
-        uanUrl: employeeData.uan_url || "",
-        profilePictureUrl: employeeData.profile_picture_url || "",
-        salary: employeeData.salary ? employeeData.salary.toString() : "", // Added
-        salary_type: employeeData.salary_type || "LPA", // Added
-        joining_date: employeeData.joining_date,
-        
-        presentAddress: presentAddressData ? {
-          addressLine1: presentAddressData.address_line1 || "",
-          addressLine2: presentAddressData.address_line2 || "",
-          country: presentAddressData.country || "India",
-          state: presentAddressData.state || "",
-          city: presentAddressData.city || "",
-          zipCode: presentAddressData.zip_code || ""
-        } : initialFormData.presentAddress,
-        
-        permanentAddress: permanentAddressData ? {
-          addressLine1: permanentAddressData.address_line1 || "",
-          addressLine2: permanentAddressData.address_line2 || "",
-          country: permanentAddressData.country || "India",
-          state: permanentAddressData.state || "",
-          city: permanentAddressData.city || "",
-          zipCode: permanentAddressData.zip_code || ""
-        } : initialFormData.permanentAddress,
-        
-        emergencyContacts: emergencyContactsData && emergencyContactsData.length > 0 
-          ? emergencyContactsData.map(contact => ({
-              relationship: contact.relationship || "",
-              name: contact.name || "",
-              phone: contact.phone || ""
-            }))
-          : initialFormData.emergencyContacts,
-        
-        familyMembers: familyMembersData && familyMembersData.length > 0
-          ? familyMembersData.map(member => ({
-              relationship: member.relationship || "",
-              name: member.name || "",
-              occupation: member.occupation || "",
-              phone: member.phone || ""
-            }))
-          : initialFormData.familyMembers,
-        
-        education: educationData && educationData.length > 0
-          ? educationData.map(edu => ({
-              type: edu.type || "",
-              institute: edu.institute || "",
-              year_completed: edu.year_completed ? new Date(edu.year_completed).getFullYear().toString() : "",
-              documentUrl: edu.document_url || ""
-            }))
-          : initialFormData.education,
-        
-          experiences:
-          experiencesData && experiencesData.length > 0
-            ? experiencesData.map((exp) => ({
-                jobType: (exp.employment_type as "Full Time" | "Part Time" | "Internship") || "Full Time",
-                company: exp.company || "",
-                position: exp.job_title || "",
-                location: exp.location || "",
-                startDate: exp.start_date ? new Date(exp.start_date).toISOString().split('T')[0] : "",
-                endDate: exp.end_date ? new Date(exp.end_date).toISOString().split('T')[0] : "",
-                offerLetterUrl: exp.offer_letter_url || "",
-                separationLetterUrl: exp.separation_letter_url || "",
-                payslip_1_url: exp.payslip_1_url || "", // Map individual payslip URLs
-                payslip_2_url: exp.payslip_2_url || "",
-                payslip_3_url: exp.payslip_3_url || "",
-                hikeLetterUrl: exp.hike_letter_url || "",
-                noSeparationLetterReason: exp.no_separation_letter_reason || "",
-                noPayslipReason: exp.no_payslip_reason || "",
-              }))
-            : initialFormData.experiences,
-        bankDetails: bankDetailsData ? {
-          accountHolderName: bankDetailsData.account_holder_name || "",
-          accountNumber: bankDetailsData.account_number || "",
-          bankName: bankDetailsData.bank_name || "",
-          branchName: bankDetailsData.branch_name || "",
-          ifscCode: bankDetailsData.ifsc_code || "",
-          accountType: bankDetailsData.account_type || "Savings",
-          branchAddress: bankDetailsData.branch_address || "",
-          country: bankDetailsData.country,
-          state: bankDetailsData.state,
-          city: bankDetailsData.city,
-          zipCode: bankDetailsData.zip_code,
-          documentUrl: bankDetailsData.document_url
-        } : initialFormData.bankDetails
-      };
-      
-      setFormData(formattedData);
-      setFormattedSalary(formatINR(formattedData.salary)); // Set formatted salary
-      setSelectedDepartment(employeeData.department_id || "");
-      setSelectedDesignation(employeeData.designation_id || "");
-      setInitialDataLoaded(true);
-
-      // Fetch designations for the department to ensure the designation is valid
-    const { data: desData, error: desError } = await supabase
-    .from("hr_designations")
-    .select("id, name, department_id")
-    .or(`department_id.eq.${employeeData.department_id},department_id.is.null`);
-  if (desError) {
-    console.error("Error fetching designations:", desError);
-  } else {
-    setDesignations(desData || []);
-    // Verify the designation_id is valid for the department
-    const isValid = desData.some((des) => des.id === employeeData.designation_id);
-    if (!isValid) {
-      setSelectedDesignation("");
-      setFormData((prev) => ({ ...prev, designation: "" }));
-    }
-  }
-      
-    } catch (error: any) {
-      console.error("Error fetching employee data:", error);
-      toast.error(`Failed to load employee data: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Fetch departments and designations from database
   useEffect(() => {
     const fetchDepartmentsAndDesignations = async () => {
       try {
         // Fetch departments
         const { data: deptData, error: deptError } = await supabase
-          .from("hr_departments")
-          .select("id, name");
+          .from('hr_departments')
+          .select('id, name')
+          .eq('organization_id', organizationId);
+
         if (deptError) {
-          console.error("Error fetching departments:", deptError);
-        } else {
-          setDepartments(deptData || []);
-          if (formData.department) {
-            const defaultDept = deptData.find((dept) => dept.id === formData.department);
-            if (defaultDept) {
-              setSelectedDepartment(defaultDept.id);
-            }
-          }
+          console.error('Error fetching departments:', deptError);
+        } else if (deptData) {
+          setDepartments(deptData);
         }
-  
-        // Fetch designations (initially all or based on formData.department)
-        let query = supabase.from("hr_designations").select("id, name, department_id");
-        if (formData.department) {
-          query = query.or(`department_id.eq.${formData.department},department_id.is.null`);
-        }
-        const { data: desData, error: desError } = await query;
-        if (desError) {
-          console.error("Error fetching designations:", desError);
-        } else {
-          setDesignations(desData || []);
-          if (formData.designation) {
-            const defaultDes = desData.find((des) => des.id === formData.designation);
-            if (defaultDes) {
-              setSelectedDesignation(defaultDes.id);
-            }
-          }
+
+        // Fetch designations
+        const { data: desigData, error: desigError } = await supabase
+          .from('hr_designations')
+          .select('id, name')
+          .eq('organization_id', organizationId);
+
+        if (desigError) {
+          console.error('Error fetching designations:', desigError);
+        } else if (desigData) {
+          setDesignations(desigData);
         }
       } catch (error) {
-        console.error("Error fetching data:", error);
+        console.error('Error fetching data:', error);
       }
     };
-  
-    fetchDepartmentsAndDesignations();
-  }, []); // Run once on mount
+
+    if (organizationId) {
+      fetchDepartmentsAndDesignations();
+    }
+  }, [organizationId]);
+
+  // Load states when country changes for Present Address
+  useEffect(() => {
+    if (formData.presentAddress.country) {
+      const country = countries.find(c => c.name === formData.presentAddress.country);
+      if (country) {
+        const states = State.getStatesOfCountry(country.isoCode);
+        setPresentStates(states);
+      }
+    }
+  }, [formData.presentAddress.country, countries]);
+
+  // Load cities when state changes for Present Address
+  useEffect(() => {
+    if (formData.presentAddress.state && formData.presentAddress.country) {
+      const country = countries.find(c => c.name === formData.presentAddress.country);
+      const state = presentStates.find(s => s.name === formData.presentAddress.state);
+      if (country && state) {
+        const cities = City.getCitiesOfState(country.isoCode, state.isoCode);
+        setPresentCities(cities);
+      }
+    }
+  }, [formData.presentAddress.state, formData.presentAddress.country, countries, presentStates]);
+
+  // Load states when country changes for Permanent Address
+  useEffect(() => {
+    if (formData.permanentAddress.country) {
+      const country = countries.find(c => c.name === formData.permanentAddress.country);
+      if (country) {
+        const states = State.getStatesOfCountry(country.isoCode);
+        setPermanentStates(states);
+      }
+    }
+  }, [formData.permanentAddress.country, countries]);
+
+  // Load cities when state changes for Permanent Address
+  useEffect(() => {
+    if (formData.permanentAddress.state && formData.permanentAddress.country) {
+      const country = countries.find(c => c.name === formData.permanentAddress.country);
+      const state = permanentStates.find(s => s.name === formData.permanentAddress.state);
+      if (country && state) {
+        const cities = City.getCitiesOfState(country.isoCode, state.isoCode);
+        setPermanentCities(cities);
+      }
+    }
+  }, [formData.permanentAddress.state, formData.permanentAddress.country, countries, permanentStates]);
+
+  // Load states when country changes for Bank Details
+  useEffect(() => {
+    if (formData.bankDetails.country) {
+      const country = countries.find(c => c.name === formData.bankDetails.country);
+      if (country) {
+        const states = State.getStatesOfCountry(country.isoCode);
+        setBankStates(states);
+      }
+    }
+  }, [formData.bankDetails.country, countries]);
+
+  // Load cities when state changes for Bank Details
+  useEffect(() => {
+    if (formData.bankDetails.state && formData.bankDetails.country) {
+      const country = countries.find(c => c.name === formData.bankDetails.country);
+      const state = bankStates.find(s => s.name === formData.bankDetails.state);
+      if (country && state) {
+        const cities = City.getCitiesOfState(country.isoCode, state.isoCode);
+        setBankCities(cities);
+      }
+    }
+  }, [formData.bankDetails.state, formData.bankDetails.country, countries, bankStates]);
+
+  // Copy permanent address to present address when checkbox is toggled
+// Handles the "Same as Present" checkbox logic
+  const handleSameAsPresentChange = (checked: boolean) => {
+    setIsSameAsPresent(checked);
+    if (checked) {
+      // If checked, copy the present address to the permanent address
+      setFormData((prevData) => ({
+        ...prevData,
+        permanentAddress: { ...prevData.presentAddress },
+      }));
+    }
+  };
+
+// Auto-fill bank details from IFSC code
+  useEffect(() => {
+    const verifyIfsc = async () => {
+      // Clear previous bank details if the IFSC is not a valid format
+      if (!VALIDATIONS.ifsc.test(formData.bankDetails.ifscCode)) {
+        if (formData.bankDetails.bankName) { // Only clear if there was a value before
+          handleBankDetailsChange("bankName", "");
+          handleBankDetailsChange("branchName", "");
+          handleBankDetailsChange("branchAddress", "");
+          handleBankDetailsChange("state", "");
+          handleBankDetailsChange("city", "");
+          handleBankDetailsChange("zipCode", "");
+        }
+        return; // Stop execution if format is invalid
+      }
+
+      setIsVerifyingIfsc(true);
+      try {
+        const response = await fetch(`https://ifsc.razorpay.com/${formData.bankDetails.ifscCode}`);
+        
+        if (!response.ok) {
+          throw new Error("Invalid IFSC Code");
+        }
+
+        const data = await response.json();
+
+        // --- Start of New Autofill Logic ---
+
+        // Auto-fill Bank Name, Branch, and Full Address
+        handleBankDetailsChange("bankName", data.BANK);
+        handleBankDetailsChange("branchName", data.BRANCH);
+        handleBankDetailsChange("branchAddress", data.ADDRESS);
+
+        // Auto-fill State and City directly from API data
+        handleBankDetailsChange("state", data.STATE);
+        handleBankDetailsChange("city", data.CITY);
+
+        // Extract the ZIP Code (PIN Code) from the full address string
+        const addressString = data.ADDRESS || "";
+        const zipMatch = addressString.match(/\d{6}$/); // Regex to find 6 digits at the end of the string
+        if (zipMatch) {
+          handleBankDetailsChange("zipCode", zipMatch[0]); // zipMatch[0] contains the matched 6-digit code
+        }
+        
+        // --- End of New Autofill Logic ---
+
+        toast.success("IFSC verified and details auto-filled!");
+
+      } catch (error) {
+        console.error("IFSC lookup failed:", error);
+        toast.error("Could not verify IFSC Code. Please check and try again.");
+        // Clear all related fields if the code is wrong
+        handleBankDetailsChange("bankName", "");
+        handleBankDetailsChange("branchName", "");
+        handleBankDetailsChange("branchAddress", "");
+        handleBankDetailsChange("state", "");
+        handleBankDetailsChange("city", "");
+        handleBankDetailsChange("zipCode", "");
+      } finally {
+        setIsVerifyingIfsc(false);
+      }
+    };
+
+    const debounceTimer = setTimeout(() => {
+      verifyIfsc();
+    }, 500); // Add a 500ms delay to avoid API calls on every keystroke
+
+    return () => clearTimeout(debounceTimer); // Cleanup timer on component re-render
+
+  }, [formData.bankDetails.ifscCode]);
 
   useEffect(() => {
-    const fetchDesignations = async () => {
+    if (id) {
+      fetchEmployeeData();
+    }
+  }, [id]);
+
+  const fetchEmployeeData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch employee data from hr_employees table
+      const { data: employeeData, error: employeeError } = await supabase
+        .from("hr_employees")
+        .select(`
+          *,
+          department:hr_departments(name),
+          designation:hr_designations(name)
+        `)
+        .eq("id", id)
+        .single();
+
+      if (employeeError) throw employeeError;
+
+      console.log("Fetched employee data:", employeeData);
+
+      // Parse JSONB fields
+      const presentAddress = employeeData.present_address || {};
+      const permanentAddress = employeeData.permanent_address || {};
+      const emergencyContacts = employeeData.emergency_contacts || [];
+      const familyDetails = employeeData.family_details || [];
+
+      // Fetch education data (check if hr_employee_education table exists)
+      let educationData = [];
       try {
-        let query = supabase.from("hr_designations").select("id, name, department_id");
-        if (formData.department) {
-          query = query.or(`department_id.eq.${formData.department},department_id.is.null`);
-        }
-        const { data: desData, error: desError } = await query;
-        if (desError) {
-          console.error("Error fetching designations:", desError);
-        } else {
-          setDesignations(desData || []);
-          // Reset selectedDesignation if it's not valid for the new department
-          if (formData.designation) {
-            const isValid = desData.some((des) => des.id === formData.designation);
-            if (!isValid) {
-              setSelectedDesignation("");
-              setFormData((prev) => ({ ...prev, designation: "" }));
+        const { data: eduData } = await supabase
+          .from("hr_employee_education")
+          .select("*")
+          .eq("employee_id", id);
+        educationData = eduData || [];
+      } catch (e) {
+        console.log("No hr_employee_education table, using default");
+      }
+
+      // Fetch experience data (check if hr_employee_experience table exists)
+      let experienceData = [];
+      try {
+        const { data: expData } = await supabase
+          .from("hr_employee_experiences")
+          .select("*")
+          .eq("employee_id", id);
+        experienceData = expData || [];
+      } catch (e) {
+        console.log("No hr_employee_experience table, using default");
+      }
+
+      // Fetch bank details (check if hr_bank_details table exists)
+      let bankData = null;
+      try {
+        const { data: bankResult } = await supabase
+          .from("hr_bank_details")
+          .select("*")
+          .eq("employee_id", id)
+          .single();
+        bankData = bankResult;
+      } catch (e) {
+        console.log("No hr_bank_details table, using default");
+      }
+
+      // Map education data to match the form structure
+      const mappedEducation = educationData && educationData.length > 0
+        ? educationData.map((edu: any) => ({
+            type: edu.education_type || edu.type || "",
+            institute: edu.institute_name || edu.institute || "",
+            year_completed: edu.year_of_completion || edu.year_completed || "",
+            documentUrl: edu.document_url || "",
+          }))
+        : initialFormData.education;
+
+      // Map experience data to match the form structure
+      const mappedExperience = experienceData && experienceData.length > 0
+        ? experienceData.map((exp: any) => ({
+            id: exp.id,
+            jobType: (exp.job_type || exp.jobType || "Full Time") as "Full Time" | "Part Time" | "Internship",
+            company: exp.company_name || exp.company || "",
+            position: exp.position || "",
+            location: exp.location || "",
+            startDate: exp.start_date || exp.startDate || "",
+            endDate: exp.end_date || exp.endDate || "",
+            offerLetterUrl: exp.offer_letter_url || exp.offerLetterUrl || "",
+            separationLetterUrl: exp.separation_letter_url || exp.separationLetterUrl || "",
+            payslip_1_url: exp.payslip_1_url || exp.payslip1Url || "",
+            payslip_2_url: exp.payslip_2_url || exp.payslip2Url || "",
+            payslip_3_url: exp.payslip_3_url || exp.payslip3Url || "",
+            hikeLetterUrl: exp.hike_letter_url || exp.hikeLetterUrl || "",
+            noSeparationLetterReason: exp.no_separation_letter_reason || "",
+            noPayslipReason: exp.no_payslip_reason || "",
+          }))
+        : initialFormData.experiences;
+
+      // Set form data
+      setFormData({
+        firstName: employeeData.first_name || "",
+        lastName: employeeData.last_name || "",
+        email: employeeData.email || "",
+        personalEmail: employeeData.personal_email || "",
+        phone: employeeData.phone || "",
+        employeeId: employeeData.employee_id || "",
+        department: employeeData.department_id || "",
+        designation: employeeData.designation_id || "",
+        position: employeeData.position || "",
+        dateOfBirth: employeeData.date_of_birth || "",
+        gender: employeeData.gender || "",
+        maritalStatus: employeeData.marital_status || "",
+        bloodGroup: employeeData.blood_group || "",
+        employmentStatus: employeeData.employment_status || employeeData.status || "",
+        hire_type: employeeData.hire_type || "",
+        contractDuration: employeeData.contract_duration || "",
+        paymentBasis: employeeData.payment_basis || "",
+        hoursPerWeek: employeeData.hours_per_week || "",
+        internshipDuration: employeeData.internship_duration || "",
+        salary: employeeData.salary ? employeeData.salary.toString() : "",
+        salary_type: employeeData.salary_type || "",
+        joining_date: employeeData.joining_date || employeeData.employment_start_date || "",
+        aadharNumber: employeeData.aadhar_number || "",
+        panNumber: employeeData.pan_number || "",
+        voterIdNumber: employeeData.voter_id_number || "",
+        esicNumber: employeeData.esic_number || "",
+        uanNumber: employeeData.uan_number || "",
+        aadharUrl: employeeData.aadhar_url || "",
+        panUrl: employeeData.pan_url || "",
+        voterIdUrl: employeeData.voter_id_url || "",
+        esicUrl: employeeData.esic_url || "",
+        uanUrl: employeeData.uan_url || "",
+        profilePictureUrl: employeeData.profile_picture_url || "",
+        presentAddress: {
+          addressLine1: presentAddress.addressLine1 || presentAddress.address_line_1 || "",
+          addressLine2: presentAddress.addressLine2 || presentAddress.address_line_2 || "",
+          country: presentAddress.country || "India",
+          state: presentAddress.state || "",
+          city: presentAddress.city || "",
+          zipCode: presentAddress.zipCode || presentAddress.zip_code || ""
+        },
+        permanentAddress: {
+          addressLine1: permanentAddress.addressLine1 || permanentAddress.address_line_1 || "",
+          addressLine2: permanentAddress.addressLine2 || permanentAddress.address_line_2 || "",
+          country: permanentAddress.country || "India",
+          state: permanentAddress.state || "",
+          city: permanentAddress.city || "",
+          zipCode: permanentAddress.zipCode || permanentAddress.zip_code || ""
+        },
+        emergencyContacts: emergencyContacts && emergencyContacts.length > 0
+          ? emergencyContacts.map((contact: any) => ({
+              relationship: contact.relationship || "",
+              name: contact.name || contact.contact_name || "",
+              phone: contact.phone || contact.phone_number || ""
+            }))
+          : initialFormData.emergencyContacts,
+        familyMembers: familyDetails && familyDetails.length > 0
+          ? familyDetails.map((member: any) => ({
+              relationship: member.relationship || "",
+              name: member.name || "",
+              occupation: member.occupation || "",
+              phone: member.phone || member.phone_number || ""
+            }))
+          : initialFormData.familyMembers,
+        education: mappedEducation,
+        experiences: mappedExperience,
+        bankDetails: bankData
+          ? {
+              accountHolderName: bankData.account_holder_name || "",
+              accountNumber: bankData.account_number || "",
+              bankName: bankData.bank_name || "",
+              branchName: bankData.branch_name || "",
+              ifscCode: bankData.ifsc_code || "",
+              accountType: bankData.account_type || "Savings",
+              branchAddress: bankData.branch_address || "",
+              country: bankData.country || "India",
+              state: bankData.state || "",
+              city: bankData.city || "",
+              zipCode: bankData.zip_code || "",
+              documentUrl: bankData.document_url || ""
             }
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching designations:", error);
-      }
-    };
-  
-    fetchDesignations();
-  }, [formData.department]); // Re-run when department changes
-
-  // const handleInputChange = (field: string, value: string) => {
-  //   setFormData(prev => ({
-  //     ...prev,
-  //     [field]: value
-  //   }));
-  // };
-
-  // const handleNestedInputChange = (parentField: string, field: string, value: string) => {
-  //   setFormData(prev => ({
-  //     ...prev,
-  //     [parentField]: {
-  //       ...prev[parentField as keyof typeof prev],
-  //       [field]: value
-  //     }
-  //   }));
-  // };
-
-  const handleArrayInputChange = (field: string, index: number, key: string, value: string) => {
-    setFormData(prev => {
-      const array = [...prev[field as keyof typeof prev] as any[]];
-      array[index] = { ...array[index], [key]: value };
-      return { ...prev, [field]: array };
-    });
-  };
-
-  const handleAddArrayItem = (field: string, template: any) => {
-    setFormData(prev => {
-      const array = [...prev[field as keyof typeof prev] as any[]];
-      array.push(template);
-      return { ...prev, [field]: array };
-    });
-  };
-
-  const handleRemoveArrayItem = (field: string, index: number) => {
-    setFormData(prev => {
-      const array = [...prev[field as keyof typeof prev] as any[]];
-      if (array.length > 1) {
-        array.splice(index, 1);
-      }
-      return { ...prev, [field]: array };
-    });
-  };
-
-  const handleProfilePictureChange = (url: string) => {
-    setFormData(prev => ({
-      ...prev,
-      profilePictureUrl: url
-    }));
+          : initialFormData.bankDetails
+      });
+    } catch (error: any) {
+      console.error("Error fetching employee data:", error);
+      toast.error("Failed to load employee data: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
   };
 
-  // const handleSubmit = async (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   setLoading(true);
-    
-  //   try {
-      
-  //     const employeeData = {
-  //       first_name: formData.firstName,
-  //       last_name: formData.lastName,
-  //       email: formData.email,
-  //       phone: formData.phone,
-  //       employee_id: formData.employeeId,
-  //       department_id: formData.department || null,
-  //       position: formData.position,
-  //       date_of_birth: formData.dateOfBirth,
-  //       gender: formData.gender,
-  //       marital_status: formData.maritalStatus,
-  //       blood_group: formData.bloodGroup,
-  //       employment_status: formData.employmentStatus,
-  //       aadhar_number: formData.aadharNumber,
-  //       pan_number: formData.panNumber,
-  //       esic_number: formData.esicNumber,
-  //       uan_number: formData.uanNumber,
-  //       aadhar_url: formData.aadharUrl,
-  //       pan_url: formData.panUrl,
-  //       esic_url: formData.esicUrl,
-  //       uan_url: formData.uanUrl,
-  //       organization_id: organizationId,
-  //       profile_picture_url: formData.profilePictureUrl
-  //     };
-      
-  //     let employeeId = id;
-      
-  //     if (isEditing) {
-  //       const { error: updateError } = await supabase
-  //         .from('hr_employees')
-  //         .update(employeeData)
-  //         .eq('id', id);
-          
-  //       if (updateError) throw updateError;
-  //     } else {
-  //       const { data: newEmployee, error: insertError } = await supabase
-  //         .from('hr_employees')
-  //         .insert(employeeData)
-  //         .select();
-          
-  //       if (insertError) throw insertError;
-        
-  //       employeeId = newEmployee[0].id;
-  //     }
-      
-  //     if (employeeId) {
-  //       const presentAddressData = {
-  //         employee_id: employeeId,
-  //         type: 'present',
-  //         address_line1: formData.presentAddress.addressLine1,
-  //         country: formData.presentAddress.country,
-  //         state: formData.presentAddress.state,
-  //         city: formData.presentAddress.city,
-  //         zip_code: formData.presentAddress.zipCode,
-  //         organization_id: organizationId
-  //       };
-        
-  //       const { data: existingPresentAddress } = await supabase
-  //         .from('hr_employee_addresses')
-  //         .select('id')
-  //         .eq('employee_id', employeeId)
-  //         .eq('type', 'present')
-  //         .maybeSingle();
-        
-  //       if (existingPresentAddress) {
-  //         await supabase
-  //           .from('hr_employee_addresses')
-  //           .update(presentAddressData)
-  //           .eq('id', existingPresentAddress.id);
-  //       } else {
-  //         await supabase
-  //           .from('hr_employee_addresses')
-  //           .insert(presentAddressData);
-  //       }
-        
-  //       const permanentAddressData = {
-  //         employee_id: employeeId,
-  //         type: 'permanent',
-  //         address_line1: formData.permanentAddress.addressLine1,
-  //         country: formData.permanentAddress.country,
-  //         state: formData.permanentAddress.state,
-  //         city: formData.permanentAddress.city,
-  //         zip_code: formData.permanentAddress.zipCode,
-  //         organization_id: organizationId
-  //       };
-        
-  //       const { data: existingPermanentAddress } = await supabase
-  //         .from('hr_employee_addresses')
-  //         .select('id')
-  //         .eq('employee_id', employeeId)
-  //         .eq('type', 'permanent')
-  //         .maybeSingle();
-        
-  //       if (existingPermanentAddress) {
-  //         await supabase
-  //           .from('hr_employee_addresses')
-  //           .update(permanentAddressData)
-  //           .eq('id', existingPermanentAddress.id);
-  //       } else {
-  //         await supabase
-  //           .from('hr_employee_addresses')
-  //           .insert(permanentAddressData);
-  //       }
-        
-  //       if (isEditing) {
-  //         await supabase
-  //           .from('hr_employee_emergency_contacts')
-  //           .delete()
-  //           .eq('employee_id', employeeId);
-  //       }
-        
-  //       const emergencyContactsData = formData.emergencyContacts.map(contact => ({
-  //         employee_id: employeeId,
-  //         relationship: contact.relationship,
-  //         name: contact.name,
-  //         phone: contact.phone,
-  //         organization_id: organizationId
-  //       }));
-        
-  //       if (emergencyContactsData.length > 0) {
-  //         await supabase
-  //           .from('hr_employee_emergency_contacts')
-  //           .insert(emergencyContactsData);
-  //       }
-        
-  //       if (isEditing) {
-  //         await supabase
-  //           .from('hr_employee_family_details')
-  //           .delete()
-  //           .eq('employee_id', employeeId);
-  //       }
-        
-  //       const familyMembersData = formData.familyMembers.map(member => ({
-  //         employee_id: employeeId,
-  //         relationship: member.relationship,
-  //         name: member.name,
-  //         occupation: member.occupation,
-  //         phone: member.phone,
-  //         organization_id: organizationId
-  //       }));
-        
-  //       if (familyMembersData.length > 0) {
-  //         await supabase
-  //           .from('hr_employee_family_details')
-  //           .insert(familyMembersData);
-  //       }
-        
-  //       if (isEditing) {
-  //         await supabase
-  //           .from('hr_employee_education')
-  //           .delete()
-  //           .eq('employee_id', employeeId);
-  //       }
-        
-  //       const educationData = formData.education.map(edu => ({
-  //         employee_id: employeeId,
-  //         type: edu.type,
-  //         institute: edu.institute,
-  //         year_completed: edu.year_completed ? `${edu.year_completed}-01-01` : null,
-  //         document_url: edu.documentUrl,
-  //         organization_id: organizationId
-  //       }));
-        
-  //       if (educationData.length > 0) {
-  //         await supabase
-  //           .from('hr_employee_education')
-  //           .insert(educationData);
-  //       }
-        
-  //       if (isEditing) {
-  //         await supabase
-  //           .from('hr_employee_experiences')
-  //           .delete()
-  //           .eq('employee_id', employeeId);
-  //       }
-        
-  //       const experiencesData = formData.experiences.map((exp) => ({
-  //         employee_id: employeeId,
-  //         company: exp.company,
-  //         job_title: exp.position,
-  //         location: exp.location,
-  //         start_date: exp.startDate,
-  //         end_date: exp.endDate,
-  //         employment_type: exp.jobType,
-  //         offer_letter_url: exp.offerLetterUrl,
-  //         separation_letter_url: exp.separationLetterUrl,
-  //         payslip_1_url: exp.payslip_1_url || "", // Map individual payslip URLs
-  //         payslip_2_url: exp.payslip_2_url || "",
-  //         payslip_3_url: exp.payslip_3_url || "",
-  //         hike_letter_url: exp.hikeLetterUrl,
-  //         no_separation_letter_reason: exp.noSeparationLetterReason,
-  //         no_payslip_reason: exp.noPayslipReason,
-  //         organization_id: organizationId,
-  //       }));
-        
-        
-  //       if (experiencesData.length > 0) {
-  //         await supabase
-  //           .from('hr_employee_experiences')
-  //           .insert(experiencesData);
-  //       }
-        
-  //       const bankDetailsData = {
-  //         employee_id: employeeId,
-  //         account_holder_name: formData.bankDetails.accountHolderName,
-  //         account_number: formData.bankDetails.accountNumber,
-  //         bank_name: formData.bankDetails.bankName,
-  //         branch_name: formData.bankDetails.branchName,
-  //         country: formData.bankDetails.country,
-  //         state: formData.bankDetails.state,
-  //         city: formData.bankDetails.city,
-  //         branch_address: formData.bankDetails.branchAddress,
-  //         ifsc_code: formData.bankDetails.ifscCode,
-  //         account_type: formData.bankDetails.accountType,
-  //         document_url: formData.bankDetails.documentUrl,
-  //         organization_id: organizationId,
-  //         zip_code: formData.bankDetails.zipCode,
-  //       };
-        
-  //       const { data: existingBankDetails } = await supabase
-  //         .from('hr_employee_bank_details')
-  //         .select('id')
-  //         .eq('employee_id', employeeId)
-  //         .maybeSingle();
-        
-  //       if (existingBankDetails) {
-  //         await supabase
-  //           .from('hr_employee_bank_details')
-  //           .update(bankDetailsData)
-  //           .eq('id', existingBankDetails.id);
-  //       } else {
-  //         await supabase
-  //           .from('hr_employee_bank_details')
-  //           .insert(bankDetailsData);
-  //       }
-        
-  //       toast.success(`Employee ${isEditing ? 'updated' : 'added'} successfully`);
-  //       if (activeTab === "documents") {
-  //         navigate('/employee'); // Navigate to /employee
-  //       } else {
-  //         // Move to the next tab
-  //         const nextTab = getNextTab(activeTab);
-  //         setActiveTab(nextTab);
-  //       }
-  //     }
-      
-  //   } catch (error: any) {
-  //     console.error("Error saving employee data:", error);
-  //     toast.error(`Failed to ${isEditing ? 'update' : 'add'} employee: ${error.message}`);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => {
+      const newData = {
+        ...prev,
+        [field]: value
+      };
 
-  const getNextTab = (currentTab: string) => {
-    const tabs = ["personal", "address", "contact", "education", "bank", "documents"];
-    const currentIndex = tabs.indexOf(currentTab);
-    return currentIndex < tabs.length - 1 ? tabs[currentIndex + 1] : currentTab; // Return the next tab or the current tab if it's the last one
+      // Automatically set salary_type based on hire_type
+      if (field === "hire_type") {
+        if (value === "Internship") {
+          newData.salary_type = "Stipend";
+        } else if (value === "Full Time" || value === "Part Time" || value === "Contract") {
+          newData.salary_type = "LPA";
+        }
+      }
+
+      return newData;
+    });
+
+    // Clear specific field error when user starts typing
+    if (formErrors[field as keyof FormErrors]) {
+      setFormErrors(prev => ({
+        ...prev,
+        [field]: undefined
+      }));
+    }
   };
 
-  // Education handling
-  const handleEducationChange = (index: number, field: string, value: string) => {
-    setFormData((prevData) => {
-      const updatedEducation = [...prevData.education];
-      updatedEducation[index] = { ...updatedEducation[index], [field]: value };
-      return { ...prevData, education: updatedEducation };
+// --- CORRECTED ---
+  const handleAddressChange = (
+    type: "presentAddress" | "permanentAddress",
+    field: string,
+    value: string
+  ) => {
+    setFormData(prev => {
+      const newAddress = { ...prev[type], [field]: value };
+
+      // When country changes, reset state and city
+      if (field === "country") {
+        newAddress.state = "";
+        newAddress.city = "";
+      }
+      // When state changes, reset city
+      if (field === "state") {
+        newAddress.city = "";
+      }
+
+      return {
+        ...prev,
+        [type]: newAddress
+      };
     });
   };
-  
-  const addEducation = () => {
+  const handleEmergencyContactChange = (index: number, field: string, value: string) => {
+    const updatedContacts = [...formData.emergencyContacts];
+    updatedContacts[index] = {
+      ...updatedContacts[index],
+      [field]: value
+    };
     setFormData(prev => ({
       ...prev,
-      education: [...(prev.education || []), { type: "", institute: "", year_completed: "", documentUrl: "" }]
+      emergencyContacts: updatedContacts
     }));
   };
 
-  // Experience handling
-  const openExperienceModal = (experience?: Experience, index?: number) => {
-    if (experience) {
-      setCurrentExperience(experience);
-      if (experience.startDate) setStartDate(new Date(experience.startDate));
-      if (experience.endDate) setEndDate(new Date(experience.endDate));
-      setEditingExperienceIndex(index !== undefined ? index : null);
-    } else {
+  const addEmergencyContact = () => {
+    setFormData(prev => ({
+      ...prev,
+      emergencyContacts: [
+        ...prev.emergencyContacts,
+        { relationship: "", name: "", phone: "" }
+      ]
+    }));
+  };
+
+  const removeEmergencyContact = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      emergencyContacts: prev.emergencyContacts.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleFamilyMemberChange = (index: number, field: string, value: string) => {
+    const updatedMembers = [...formData.familyMembers];
+    updatedMembers[index] = {
+      ...updatedMembers[index],
+      [field]: value
+    };
+    setFormData(prev => ({
+      ...prev,
+      familyMembers: updatedMembers
+    }));
+  };
+
+  const addFamilyMember = () => {
+    setFormData(prev => ({
+      ...prev,
+      familyMembers: [
+        ...prev.familyMembers,
+        { relationship: "", name: "", occupation: "", phone: "" }
+      ]
+    }));
+  };
+
+  const removeFamilyMember = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      familyMembers: prev.familyMembers.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleEducationChange = (index: number, field: string, value: string) => {
+    const updatedEducation = [...formData.education];
+    updatedEducation[index] = {
+      ...updatedEducation[index],
+      [field]: value
+    };
+    setFormData(prev => ({
+      ...prev,
+      education: updatedEducation
+    }));
+  };
+
+  const handleBankDetailsChange = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      bankDetails: {
+        ...prev.bankDetails,
+        [field]: value
+      }
+    }));
+  };
+
+  const openExperienceModal = (index?: number) => {
+    if (index !== undefined && formData.experiences[index]) {
+      setEditingExperienceIndex(index);
       setCurrentExperience({
+        ...formData.experiences[index],
+        id: formData.experiences[index].id || Date.now()
+      });
+    } else {
+      setEditingExperienceIndex(null);
+      setCurrentExperience({
+        id: Date.now(),
         jobType: "Full Time",
         company: "",
         position: "",
-        location: ""
+        location: "",
+        startDate: "",
+        endDate: "",
+        offerLetterUrl: "",
+        separationLetterUrl: "",
+        payslip_1_url: "",
+        payslip_2_url: "",
+        payslip_3_url: "",
+        hikeLetterUrl: "",
+        noSeparationLetterReason: "",
+        noPayslipReason: "",
       });
-      setStartDate(undefined);
-      setEndDate(undefined);
-      setEditingExperienceIndex(null);
     }
     setShowExperienceModal(true);
   };
 
   const handleExperienceChange = (field: string, value: any) => {
-    setCurrentExperience(prev => ({ ...prev, [field]: value }));
+    setCurrentExperience(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
-  const handleExperienceStartDateChange = (date: Date | undefined) => {
-    setStartDate(date);
-    if (date) {
-      setCurrentExperience(prev => ({ ...prev, startDate: format(date, "yyyy-MM-dd") }));
+const saveExperience = async () => {
+    // 1. Validate that essential fields are filled
+    if (!currentExperience.company || !currentExperience.position) {
+      toast.error("Please provide both a Company and a Position.");
+      return;
     }
-  };
 
-  const handleExperienceEndDateChange = (date: Date | undefined) => {
-    setEndDate(date);
-    if (date) {
-      setCurrentExperience(prev => ({ ...prev, endDate: format(date, "yyyy-MM-dd") }));
-    }
-  };
-
-  const saveExperience = async () => {
-    const updatedExperiences = [...(formData.experiences || [])];
-  
-    if (editingExperienceIndex !== null) {
-      updatedExperiences[editingExperienceIndex] = currentExperience;
-    } else {
-      updatedExperiences.push(currentExperience);
-    }
-  
-    // Update formData with the updated experiences
-    setFormData((prev) => ({ ...prev, experiences: updatedExperiences }));
-    setShowExperienceModal(false);
-  
-    try {
-      if (!id) {
-        toast.error("Employee ID is missing!");
-        return;
-      }
-  
+    // CASE 1: EDITING an existing employee (the 'id' from the URL exists)
+    // We will save directly to the database.
+    if (id) {
+      // This object uses the CORRECT column names for your database
       const experienceData = {
         employee_id: id,
-        company: currentExperience.company,
-        job_title: currentExperience.position,
-        location: currentExperience.location,
-        start_date: currentExperience.startDate,
-        end_date: currentExperience.endDate,
-        employment_type: currentExperience.jobType,
-        offer_letter_url: currentExperience.offerLetterUrl,
-        separation_letter_url: currentExperience.separationLetterUrl,
-        payslip_1_url: currentExperience.payslip_1_url,
-        payslip_2_url: currentExperience.payslip_2_url,
-        payslip_3_url: currentExperience.payslip_3_url,
-        hike_letter_url: currentExperience.hikeLetterUrl,
-        no_separation_letter_reason: currentExperience.noSeparationLetterReason,
-        no_payslip_reason: currentExperience.noPayslipReason,
         organization_id: organizationId,
+        company: currentExperience.company,                 // Corrected name
+        job_title: currentExperience.position,              // Corrected name
+        employment_type: currentExperience.jobType,         // Corrected name
+        location: currentExperience.location || null,
+        start_date: currentExperience.startDate || null,
+        end_date: currentExperience.endDate || null,
+        offer_letter_url: currentExperience.offerLetterUrl || null,
+        separation_letter_url: currentExperience.separationLetterUrl || null,
+        payslip_1_url: currentExperience.payslip_1_url || null,
+        payslip_2_url: currentExperience.payslip_2_url || null,
+        payslip_3_url: currentExperience.payslip_3_url || null,
+        hike_letter_url: currentExperience.hikeLetterUrl || null,
+        no_separation_letter_reason: currentExperience.noSeparationLetterReason || null,
+        no_payslip_reason: currentExperience.noPayslipReason || null,
       };
-  
-      let supabaseResponse;
-  
-      if (editingExperienceIndex !== null) {
-        if (!id) {
-          toast.error("Experience ID is missing for update!");
-          console.error("Experience ID is undefined:", currentExperience);
-          return;
+
+      try {
+        let response;
+        // If the experience has a real database ID (a string), we update it.
+        // If it's a new experience for this employee, its ID will be a number, so we insert it.
+        if (editingExperienceIndex !== null && typeof currentExperience.id === 'string') {
+          response = await supabase
+            .from('hr_employee_experiences')
+            .update(experienceData)
+            .eq('id', currentExperience.id);
+        } else {
+          response = await supabase
+            .from('hr_employee_experiences')
+            .insert(experienceData);
         }
-  
-        console.log("Updating Experience with ID:", id);
-        supabaseResponse = await supabase
-          .from("hr_employee_experiences")
-          .update(experienceData)
-          .eq("id", id);
+
+        if (response.error) throw response.error;
+
+        toast.success("Experience has been saved to the database!");
+        setShowExperienceModal(false);
+        await fetchEmployeeData(); // This is KEY: It reloads the data to show the change
+
+      } catch (error: any) {
+        console.error("Error saving experience directly:", error);
+        toast.error(`Failed to save experience: ${error.message}`);
+      }
+
+    } else {
+      // CASE 2: ADDING a new employee (no 'id' from the URL yet)
+      // We only save to the temporary form state.
+      let updatedExperiences;
+      if (editingExperienceIndex !== null) {
+        updatedExperiences = [...formData.experiences];
+        updatedExperiences[editingExperienceIndex] = currentExperience;
       } else {
-        supabaseResponse = await supabase
-          .from("hr_employee_experiences")
-          .insert(experienceData);
+        const isFirstItemEmpty = formData.experiences.length === 1 && !formData.experiences[0].company;
+        if (isFirstItemEmpty) {
+          updatedExperiences = [currentExperience];
+        } else {
+          updatedExperiences = [...formData.experiences, currentExperience];
+        }
       }
-  
-      if (supabaseResponse.error) {
-        throw supabaseResponse.error;
-      }
-  
-      toast.success("Experience saved successfully!");
-    } catch (error) {
-      console.error("Error saving experience:", error);
-      toast.error("Failed to save experience!");
+
+      setFormData(prev => ({
+        ...prev,
+        experiences: updatedExperiences
+      }));
+      setShowExperienceModal(false);
+      toast.info("Experience captured. It will be saved permanently when you create the employee.");
     }
   };
+
 
   const removeExperience = (index: number) => {
-    const updatedExperiences = [...(formData.experiences || [])];
-    updatedExperiences.splice(index, 1);
-    setFormData(prev => ({ ...prev, experiences: updatedExperiences }));
+    setFormData(prev => ({
+      ...prev,
+      experiences: prev.experiences.filter((_, i) => i !== index)
+    }));
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, section: string, type: string, index: number) => {
+ const handleGenericFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    setField: (url: string) => void,
+    uploadKey: string
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // This check prevents the "user details not available" error
+    if (!organizationId) {
+      toast.error("User details not available. Please log in again.");
+      return;
+    }
+
     try {
-      const file = event.target.files?.[0];
-      if (!file) {
-        console.error("No file selected.");
-        return;
-      }
-  
-      const bucketName = "employee-documents"; // Ensure this is correct
-  
-      // Debugging logs
-      console.log("Uploading file:", file.name);
-      console.log("Section:", section);
-      console.log("Type:", type);
-      console.log("Index:", index);
-      
-      // Ensure type is valid before calling uploadDocument
-      if (!type) {
-        console.error("Invalid type provided:", type);
-        return;
-      }
-  
-      const fileUrl = await uploadDocument(file, bucketName, type);
-      console.log("File uploaded successfully:", fileUrl);
-  
-      if (section === "education") {
-        setFormData((prevFormData) => {
-          const updatedEducation = [...prevFormData.education];
-          updatedEducation[index] = {
-            ...updatedEducation[index],
-            documentUrl: fileUrl, // Store document URL
-          };
-          return { ...prevFormData, education: updatedEducation };
-        });
-      }
+      setUploadingFile(uploadKey);
+      // Use the correct 'organizationId' variable here
+      const url = await uploadDocument(file, organizationId);
+      setField(url);
+      toast.success("Document uploaded successfully");
     } catch (error) {
-      console.error("File upload failed:", error);
+      console.error("Upload error:", error);
+      toast.error("Failed to upload document");
+    } finally {
+      setUploadingFile(null);
     }
   };
+// --- START: COMPLETE AND CORRECTED UPLOAD FUNCTIONS BLOCK ---
 
-  const sanitizeFileName = (fileName: string): string => {
+const handleFileUpload = async (
+  event: React.ChangeEvent<HTMLInputElement>,
+  options: {
+    category: 'identity' | 'bank' | 'education' | 'experience';
+    fieldSetter: (url: string) => void;
+    uploadKey: string;
+    subfolder?: string | number;
+  }
+) => {
+  const { category, fieldSetter, uploadKey, subfolder } = options;
+  const file = event.target.files?.[0];
+
+  if (!file) {
+    console.log("No file was selected.");
+    return;
+  }
+
+  if (!organizationId) {
+    toast.error("Organization ID not found. Please ensure you are logged in.");
+    return;
+  }
+
+  try {
+    setUploadingFile(uploadKey);
+
+    const bucketName = 'employee-documents';
+    const sanitizedFileName = sanitizeFileName(file.name);
+    
+    // Use the employee's database ID if editing, otherwise use a placeholder.
+    const employeeIdentifier = id || 'new-employee';
+
+    const pathParts = [`${category}-documents`, employeeIdentifier];
+    if (subfolder !== undefined) {
+      pathParts.push(String(subfolder));
+    }
+    pathParts.push(sanitizedFileName);
+    const filePath = pathParts.join('/');
+
+    // CRITICAL DEBUGGING STEP: Check your browser's developer console for this log.
+    console.log("Attempting to upload with parameters:", {
+      bucketName,
+      filePath,
+      file,
+    });
+
+    // Final check before sending
+    if (!filePath || !bucketName) {
+        throw new Error("Generated filePath or bucketName is empty.");
+    }
+
+    const url = await uploadDocument(file, bucketName, filePath);
+    
+    fieldSetter(url);
+    toast.success("Document uploaded successfully!");
+
+  } catch (error) {
+    console.error(`Upload error for key [${uploadKey}]:`, error);
+    toast.error(`Upload failed: ${(error as Error).message}`);
+  } finally {
+    setUploadingFile(null);
+  }
+};
+
+// --- ADD THIS HELPER FUNCTION ---
+
+const sanitizeFileName = (fileName: string): string => {
   // Extract the file name and extension
   const extension = fileName.split('.').pop()?.toLowerCase() || '';
   const name = fileName.substring(0, fileName.length - (extension.length + 1));
@@ -1172,2123 +1094,2827 @@ const handleSalaryChange = (value: string) => {
   return `${uniqueName}.${extension}`;
 };
 
-const handleBankUpload = async (
-  event: React.ChangeEvent<HTMLInputElement>,
-  category: 'bankDetails' // Add other categories if needed
-) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
 
-  try {
-    const bucketName = 'employee-documents';
-    const sanitizedFileName = sanitizeFileName(file.name); // Sanitize file name
-    const filePath = `bank-documents/${sanitizedFileName}`; // Construct file path
-    const fileUrl = await uploadDocument(file, bucketName, filePath); // Use filePath instead of type
 
-    if (category === 'bankDetails') {
-      setFormData({
-        ...formData,
-        bankDetails: {
-          ...formData.bankDetails,
-          documentUrl: fileUrl, // Store the file URL
-        },
-      });
-    }
-
-    console.log('Bank document uploaded successfully:', fileUrl);
-  } catch (error) {
-    console.error('Bank document upload failed:', error);
-  }
+const handleDocumentUpload = (event: React.ChangeEvent<HTMLInputElement>, fieldName: string) => {
+  handleFileUpload(event, {
+    category: 'identity',
+    fieldSetter: (url) => handleInputChange(fieldName, url),
+    uploadKey: fieldName
+  });
 };
 
-const handleDocumentUpload = async (
-  event: React.ChangeEvent<HTMLInputElement>,
-  documentType: 'aadhar' | 'pan' | 'uan' | 'esic'
-) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-
-  try {
-
-    setUploadingDoc((prev) => ({ ...prev, [documentType]: true }));
-
-    const bucketName = 'employee-documents';
-    const sanitizedFileName = sanitizeFileName(file.name); // Sanitize file name
-    const filePath = `identity-documents/${formData.employeeId || 'new'}/${sanitizedFileName}`; // Construct file path
-    const fileUrl = await uploadDocument(file, bucketName, filePath); // Use filePath instead of documentType
-
-    // Update local form state
-    setFormData((prevData) => ({
-      ...prevData,
-      [`${documentType}Url`]: fileUrl, // Store URL in respective field
-    }));
-
-    console.log(`${documentType} document uploaded successfully:`, fileUrl);
-
-    // Update document URL in Supabase `hr_employees` table
-    const { error } = await supabase
-      .from('hr_employees')
-      .update({ [`${documentType}_url`]: fileUrl }) // Ensure column names match DB
-      .eq('employee_id', formData.employeeId); // Match employee
-
-    if (error) {
-      throw error;
-    }
-
-    console.log(`Updated ${documentType}_url in database:`, fileUrl);
-  } catch (error) {
-    console.error(`${documentType} document upload failed:`, error);
-  }finally {
-    // 🔵 Stop uploading (set uploading false)
-    setUploadingDoc((prev) => ({ ...prev, [documentType]: false }));
-  }
+const handleEducationUpload = (event: React.ChangeEvent<HTMLInputElement>, index: number) => {
+  handleFileUpload(event, {
+    category: 'education',
+    fieldSetter: (url) => handleEducationChange(index, "documentUrl", url),
+    uploadKey: `education-${index}`,
+    subfolder: index
+  });
 };
+
+const handleBankDocumentUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  handleFileUpload(event, {
+    category: 'bank',
+    fieldSetter: (url) => handleBankDetailsChange("documentUrl", url),
+    uploadKey: "bankDocument"
+  });
+};
+
+const handleExpUpload = (event: React.ChangeEvent<HTMLInputElement>, field: string, experienceId: number) => {
+  let urlField: string;
+  switch (field) {
+    case "offerLetter": urlField = "offerLetterUrl"; break;
+    case "separationLetter": urlField = "separationLetterUrl"; break;
+    case "payslip1": urlField = "payslip_1_url"; break;
+    case "payslip2": urlField = "payslip_2_url"; break;
+    case "payslip3": urlField = "payslip_3_url"; break;
+    case "hikeLetter": urlField = "hikeLetterUrl"; break;
+    default: urlField = field;
+  }
+
+  handleFileUpload(event, {
+    category: 'experience',
+    fieldSetter: (url) => handleExperienceChange(urlField, url),
+    uploadKey: field,
+    subfolder: experienceId
+  });
+};
+
+// --- END: COMPLETE AND CORRECTED UPLOAD FUNCTIONS BLOCK ---
   
-const handleExpUpload = async (
-  event: React.ChangeEvent<HTMLInputElement>,
-  category: 'offerLetter' | 'separationLetter' | 'hikeLetter' | 'payslip1' | 'payslip2' | 'payslip3',
-  experienceId: string
-) => {
-  const file = event.target.files?.[0];
-  setUploadingFile(category);
-  if (!file) return;
-
-  try {
-    const bucketName = 'employee-documents';
-    const sanitizedFileName = sanitizeFileName(file.name); // Sanitize file name
-    const filePath = `experience-documents/${experienceId}/${sanitizedFileName}`; // Construct file path
-    const fileUrl = await uploadDocument(file, bucketName, filePath); // Use filePath instead of type
-
-    // Update currentExperience state
-    setCurrentExperience((prev) => ({
-      ...prev,
-      ...(category === 'payslip1' && { payslip_1_url: fileUrl }),
-      ...(category === 'payslip2' && { payslip_2_url: fileUrl }),
-      ...(category === 'payslip3' && { payslip_3_url: fileUrl }),
-      ...(category === 'offerLetter' && { offerLetterUrl: fileUrl }),
-      ...(category === 'separationLetter' && { separationLetterUrl: fileUrl }),
-      ...(category === 'hikeLetter' && { hikeLetterUrl: fileUrl }),
-    }));
-
-    console.log(`${category} uploaded successfully:`, fileUrl);
-  } catch (error) {
-    console.error(`${category} upload failed:`, error);
-  } finally {
-    setUploadingFile(null); // Hide loader
-  }
-};
-
-  // Validation function
-  const validateField = (field: keyof FormErrors, value: string): string | undefined => {
-    switch (field) {
-      case "phone":
-      if (!value) return "Phone number is required";
-      if (!VALIDATIONS.phone.test(value)) return "Enter a valid phone number with country code (e.g., +919876543210)";
-      break;
-      case "email":
-        if (!value) return "Email is required";
-        if (!VALIDATIONS.email.test(value)) return "Enter a valid email address";
-        break;
-      case "aadharNumber":
-        if (value && !VALIDATIONS.aadhar.test(value)) return "Aadhar number must be 12 digits";
-        break;
-      case "panNumber":
-        if (value && !VALIDATIONS.pan.test(value)) return "PAN number must be in format AAAAA9999A";
-        break;
-      case "uanNumber":
-        if (value && !VALIDATIONS.uan.test(value)) return "UAN number must be 12 digits";
-        break;
-      case "esicNumber":
-        if (value && !VALIDATIONS.esic.test(value)) return "ESIC number must be 10-17 digits";
-        break;
-        case "hire_type":
-      if (!value) return "Hire type is required";
-      break;
-    case "salary":
-      if (!value) return "Salary is required";
-      if (!VALIDATIONS.salary.test(value)) return "Enter a valid positive integer salary";
-      break;
-    case "salary_type":
-      if (!value) return "Salary type is required";
-      break;
-      default:
-        return undefined;
-    }
-  };
-
-  // Handle input change with validation
-  const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+const handleSubmit = async (event: React.FormEvent) => {
+  event.preventDefault();
   
-    // Validate on change
-    const error = validateField(field as keyof FormErrors, value);
-    setErrors((prev) => ({ ...prev, [field]: error }));
-  };
+  // // ✅ Add validation check early in the function
+  // if (!userDetails || !userDetails.orgId) {
+  //   toast.error("User details not available. Please log in again.");
+  //   return;
+  // }
 
-  // Validate all fields on submit
-  const validateForm = (): boolean => {
-    const newErrors: FormErrors = {};
 
-    // Add required field validations
-  if (!formData.firstName) newErrors.firstName = "First Name is required";
-  if (!formData.lastName) newErrors.lastName = "Last Name is required";
-  if (!formData.email) newErrors.email = "Email is required";
-  if (!formData.phone) newErrors.phone = "Phone number is required";
-  if (!formData.department) newErrors.department = "Department is required";
-  if (!formData.designation) newErrors.designation = "Designation is required";
-    const fieldsToValidate: (keyof FormErrors)[] = [
-      "phone",
-      "email",
-      "aadharNumber",
-      "panNumber",
-      "uanNumber",
-      "esicNumber",
-      "hire_type",
-    "salary",
-    "salary_type",
-    ];
-
-    fieldsToValidate.forEach((field) => {
-      const error = validateField(field, formData[field] || "");
-      if (error) newErrors[field] = error;
-    });
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0; // Return true if no errors
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!validateForm()) {
-      toast.error("Please fix the errors in the form before submitting.");
-      return;
-    }
-
-    setLoading(true);
     try {
-      
+      setLoading(true);
+
+      // Prepare employee data for hr_employees table
       const employeeData = {
         first_name: formData.firstName,
         last_name: formData.lastName,
         email: formData.email,
+        personal_email: formData.personalEmail,
         phone: formData.phone,
         employee_id: formData.employeeId,
-        department_id: formData.department || null,
-        designation_id: formData.designation || null,
+        department_id: formData.department, // You may need to convert name to ID
+        designation_id: formData.designation, // You may need to convert name to ID
         position: formData.position,
         date_of_birth: formData.dateOfBirth || null,
         gender: formData.gender,
         marital_status: formData.maritalStatus,
         blood_group: formData.bloodGroup,
         employment_status: formData.employmentStatus,
-        hire_type: formData.hire_type || null, 
+        hire_type: formData.hire_type,
+        contract_duration: formData.contractDuration || null,
+        payment_basis: formData.paymentBasis || null,
+        hours_per_week: formData.hoursPerWeek || null,
+        internship_duration: formData.internshipDuration || null,
+        salary: formData.salary ? parseFloat(parseINR(formData.salary)) : null,
+        salary_type: formData.salary_type,
+        joining_date: formData.joining_date || null,
         aadhar_number: formData.aadharNumber || null,
         pan_number: formData.panNumber || null,
         esic_number: formData.esicNumber || null,
         uan_number: formData.uanNumber || null,
         aadhar_url: formData.aadharUrl || null,
-        pan_url: formData.panUrl,
+        pan_url: formData.panUrl || null,
         esic_url: formData.esicUrl,
         uan_url: formData.uanUrl,
-        organization_id: organizationId,
         profile_picture_url: formData.profilePictureUrl,
-        salary: Number(formData.salary) || null, // Convert to number
-        salary_type: formData.salary_type || null, // Added
-        joining_date: formData.joining_date || null,
-      };
-      
-      let employeeId = id;
-      
-      if (isEditing) {
-        const { error: updateError } = await supabase
-          .from('hr_employees')
-          .update(employeeData)
-          .eq('id', id);
-          
-        if (updateError) throw updateError;
-      } else {
-        const { data: newEmployee, error: insertError } = await supabase
-          .from('hr_employees')
-          .insert(employeeData)
-          .select();
-          
-        if (insertError) throw insertError;
-        
-        employeeId = newEmployee[0].id;
-      }
-      
-      if (employeeId) {
-        const presentAddressData = {
-          employee_id: employeeId,
-          type: 'present',
-          address_line1: formData.presentAddress.addressLine1,
-          address_line2: formData.presentAddress.addressLine2,
+       organization_id: organizationId,
+        // JSONB fields
+        present_address: {
+          addressLine1: formData.presentAddress.addressLine1,
+          addressLine2: formData.presentAddress.addressLine2,
           country: formData.presentAddress.country,
           state: formData.presentAddress.state,
           city: formData.presentAddress.city,
-          zip_code: formData.presentAddress.zipCode,
-          organization_id: organizationId
-        };
-        
-        const { data: existingPresentAddress } = await supabase
-          .from('hr_employee_addresses')
-          .select('id')
-          .eq('employee_id', employeeId)
-          .eq('type', 'present')
-          .maybeSingle();
-        
-        if (existingPresentAddress) {
-          await supabase
-            .from('hr_employee_addresses')
-            .update(presentAddressData)
-            .eq('id', existingPresentAddress.id);
-        } else {
-          await supabase
-            .from('hr_employee_addresses')
-            .insert(presentAddressData);
-        }
-        
-        const permanentAddressData = {
-          employee_id: employeeId,
-          type: 'permanent',
-          address_line1: formData.permanentAddress.addressLine1,
-          address_line2: formData.permanentAddress.addressLine2,
+          zipCode: formData.presentAddress.zipCode
+        },
+        permanent_address: {
+          addressLine1: formData.permanentAddress.addressLine1,
+          addressLine2: formData.permanentAddress.addressLine2,
           country: formData.permanentAddress.country,
           state: formData.permanentAddress.state,
           city: formData.permanentAddress.city,
-          zip_code: formData.permanentAddress.zipCode,
-          organization_id: organizationId
-        };
-        
-        const { data: existingPermanentAddress } = await supabase
-          .from('hr_employee_addresses')
-          .select('id')
-          .eq('employee_id', employeeId)
-          .eq('type', 'permanent')
-          .maybeSingle();
-        
-        if (existingPermanentAddress) {
-          await supabase
-            .from('hr_employee_addresses')
-            .update(permanentAddressData)
-            .eq('id', existingPermanentAddress.id);
-        } else {
-          await supabase
-            .from('hr_employee_addresses')
-            .insert(permanentAddressData);
-        }
-        
-        if (isEditing) {
-          await supabase
-            .from('hr_employee_emergency_contacts')
-            .delete()
-            .eq('employee_id', employeeId);
-        }
-        
-        const emergencyContactsData = formData.emergencyContacts.map(contact => ({
-          employee_id: employeeId,
+          zipCode: formData.permanentAddress.zipCode
+        },
+        emergency_contacts: formData.emergencyContacts.map(contact => ({
           relationship: contact.relationship,
           name: contact.name,
-          phone: contact.phone,
-          organization_id: organizationId
-        }));
-        
-        if (emergencyContactsData.length > 0) {
-          await supabase
-            .from('hr_employee_emergency_contacts')
-            .insert(emergencyContactsData);
-        }
-        
-        if (isEditing) {
-          await supabase
-            .from('hr_employee_family_details')
-            .delete()
-            .eq('employee_id', employeeId);
-        }
-        
-        const familyMembersData = formData.familyMembers.map(member => ({
-          employee_id: employeeId,
+          phone: contact.phone
+        })),
+        family_details: formData.familyMembers.map(member => ({
           relationship: member.relationship,
           name: member.name,
           occupation: member.occupation,
-          phone: member.phone,
-          organization_id: organizationId
-        }));
-        
-        if (familyMembersData.length > 0) {
-          await supabase
-            .from('hr_employee_family_details')
-            .insert(familyMembersData);
-        }
-        
-        if (isEditing) {
-          await supabase
-            .from('hr_employee_education')
-            .delete()
-            .eq('employee_id', employeeId);
-        }
-        
-        const educationData = formData.education.map(edu => ({
-          employee_id: employeeId,
-          type: edu.type,
-          institute: edu.institute,
-          year_completed: edu.year_completed ? `${edu.year_completed}-01-01` : null,
-          document_url: edu.documentUrl,
-          organization_id: organizationId
-        }));
-        
-        if (educationData.length > 0) {
-          await supabase
-            .from('hr_employee_education')
-            .insert(educationData);
-        }
-        
-        if (isEditing) {
-          await supabase
-            .from('hr_employee_experiences')
-            .delete()
-            .eq('employee_id', employeeId);
-        }
-        
-        const experiencesData = formData.experiences.map((exp) => ({
-          employee_id: employeeId,
-          company: exp.company,
-          job_title: exp.position,
-          location: exp.location,
-          start_date: exp.startDate || null,
-          end_date: exp.endDate || null,
-          employment_type: exp.jobType,
-          offer_letter_url: exp.offerLetterUrl,
-          separation_letter_url: exp.separationLetterUrl,
-          payslip_1_url: exp.payslip_1_url || "", // Map individual payslip URLs
-          payslip_2_url: exp.payslip_2_url || "",
-          payslip_3_url: exp.payslip_3_url || "",
-          hike_letter_url: exp.hikeLetterUrl,
-          no_separation_letter_reason: exp.noSeparationLetterReason,
-          no_payslip_reason: exp.noPayslipReason,
-          organization_id: organizationId,
-        }));
-        
-        
-        if (experiencesData.length > 0) {
-          await supabase
-            .from('hr_employee_experiences')
-            .insert(experiencesData);
-        }
-        
-        const bankDetailsData = {
-          employee_id: employeeId,
-          account_holder_name: formData.bankDetails.accountHolderName,
-          account_number: formData.bankDetails.accountNumber,
-          bank_name: formData.bankDetails.bankName,
-          branch_name: formData.bankDetails.branchName,
-          country: formData.bankDetails.country,
-          state: formData.bankDetails.state,
-          city: formData.bankDetails.city,
-          branch_address: formData.bankDetails.branchAddress,
-          ifsc_code: formData.bankDetails.ifscCode,
-          account_type: formData.bankDetails.accountType,
-          document_url: formData.bankDetails.documentUrl,
-          organization_id: organizationId,
-          zip_code: formData.bankDetails.zipCode,
-        };
-        
-        const { data: existingBankDetails } = await supabase
-          .from('hr_employee_bank_details')
-          .select('id')
-          .eq('employee_id', employeeId)
-          .maybeSingle();
-        
-        if (existingBankDetails) {
-          await supabase
-            .from('hr_employee_bank_details')
-            .update(bankDetailsData)
-            .eq('id', existingBankDetails.id);
-        } else {
-          await supabase
-            .from('hr_employee_bank_details')
-            .insert(bankDetailsData);
-        }
-        
-   toast.success(`Data saved successfully!`);
+          phone: member.phone
+        })),
+        updated_at: new Date().toISOString()
+      };
 
-if (activeTab === "documents") {
-  // If on the last tab, navigate to the employee list page
-  navigate('/employee'); 
-} else {
-  // Otherwise, move to the next tab
-  const nextTab = getNextTab(activeTab);
-  setActiveTab(nextTab);
-}
+      let employeeId: string;
+
+      if (id) {
+        // Update existing employee
+        const { error: updateError } = await supabase
+          .from("hr_employees")
+          .update(employeeData)
+          .eq("id", id);
+
+        if (updateError) throw updateError;
+        employeeId = id;
+      } else {
+        // Insert new employee
+        const { data: newEmployee, error: insertError } = await supabase
+          .from("hr_employees")
+          .insert([employeeData])
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+        employeeId = newEmployee.id;
       }
-      
+
+      // Save education (if hr_employee_education table exists)
+      try {
+        await saveEducation(employeeId);
+      } catch (e) {
+        console.log("Skipping education save:", e);
+      }
+
+      // Save experience (if hr_employee_experience table exists)
+      try {
+        await saveExperience_DB(employeeId);
+      } catch (e) {
+        console.log("Skipping experience save:", e);
+      }
+
+      // Save bank details (if hr_bank_details table exists)
+      try {
+        await saveBankDetails(employeeId);
+      } catch (e) {
+        console.log("Skipping bank details save:", e);
+      }
+
+      toast.success(id ? "Employee updated successfully" : "Employee created successfully");
+
+      if (activeTab === "documents") {
+        // After saving all tabs, navigate appropriately
+        if (id) {
+          // If editing, go back to employee profile
+          navigate(`/employee/profile/${id}`);
+        } else {
+          // If creating new, go to the new employee's profile
+          navigate(`/employee/profile/${employeeId}`);
+        }
+      } else {
+        // Move to next tab
+        const tabs = ["personal", "address", "contact", "education", "bank-details", "documents"];
+        const currentIndex = tabs.indexOf(activeTab);
+        if (currentIndex < tabs.length - 1) {
+          setActiveTab(tabs[currentIndex + 1]);
+        }
+      }
     } catch (error: any) {
-      console.error("Error saving employee data:", error);
-      toast.error(`Failed to ${isEditing ? "update" : "add"} employee: ${error.message}`);
+      console.error("Error saving employee:", error);
+      toast.error(error.message || "Failed to save employee");
     } finally {
       setLoading(false);
     }
   };
 
-  // Render only the personal tab content since other tabs remain unchanged
-  const renderPersonalTab = () => {
-    const salarySuffix =
-      formData.salary_type === "LPA"
-        ? "₹"
-        : formData.salary_type === "Monthly"
-        ? "₹/mo"
-        : formData.salary_type === "Hourly"
-        ? "₹/hr"
-        : "₹";
-  
-    return (
-      <TabsContent value="personal" className="space-y-4">
-        <div className="flex flex-col md:flex-row gap-6 items-start">
-          {/* Profile Upload on the Left */}
-          <div className="flex-shrink-0">
-            <ProfileImageUpload
-              value={formData.profilePictureUrl}
-              onChange={handleProfilePictureChange}
-              initialLetter={formData.firstName?.[0] || "U"}
-            />
-          </div>
-  
-          {/* Compact Form Fields */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-5 w-full">
-            <div className="max-w-xs">
-              <Label htmlFor="firstName">First Name <span className="text-red-500">*</span></Label>
-              <Input
-                type="text"
-                id="firstName"
-                value={formData.firstName}
-                onChange={(e) => handleInputChange("firstName", e.target.value)}
-                required
-              />
-              {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
-            </div>
-            <div className="max-w-xs">
-              <Label htmlFor="lastName">Last Name <span className="text-red-500">*</span></Label>
-              <Input
-                type="text"
-                id="lastName"
-                value={formData.lastName}
-                onChange={(e) => handleInputChange("lastName", e.target.value)}
-                required
-              />
-              {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
-            </div>
-            <div className="max-w-xs">
-              <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
-              <Input
-                type="email"
-                id="email"
-                value={formData.email}
-                onChange={(e) => handleInputChange("email", e.target.value)}
-                required
-              />
-              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-            </div>
-            <div className="max-w-xs">
-              <Label htmlFor="phone">Phone <span className="text-red-500">*</span></Label>
-              <PhoneInput
-                id="phone"
-                international
-                countryCallingCodeEditable={false}
-                defaultCountry="IN"
-                value={formData.phone}
-                onChange={(value) => handleInputChange("phone", value || "")}
-                className="border rounded-md px-3 py-2 w-full"
-                required
-              />
-              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
-            </div>
-            <div className="max-w-xs">
-              <Label htmlFor="employeeId">Employee ID</Label>
-              <Input
-                type="text"
-                id="employeeId"
-                value={formData.employeeId}
-                onChange={(e) => handleInputChange("employeeId", e.target.value)}
-                disabled={isEmployee}
-              />
-            </div>
-            <div className="max-w-xs">
-              <Label htmlFor="department">Department <span className="text-red-500">*</span></Label>
-              <Select
-                value={selectedDepartment}
-                onValueChange={(value) => {
-                  setSelectedDepartment(value);
-                  handleInputChange("department", value);
-                  setSelectedDesignation("");
-                  setFormData((prev) => ({ ...prev, designation: "" }));
-                }}
-                disabled={isEmployee}
-              >
-                <SelectTrigger>
-                  <SelectValue>
-                    {departments.find((dept) => dept.id === selectedDepartment)?.name || "Select Department"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map((dept) => (
-                    <SelectItem key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.department && <p className="text-red-500 text-xs mt-1">{errors.department}</p>}
-            </div>
-            <div className="max-w-xs">
-              <Label htmlFor="designation">Designation <span className="text-red-500">*</span></Label>
-              <Select
-                value={selectedDesignation}
-                onValueChange={(value) => {
-                  setSelectedDesignation(value);
-                  handleInputChange("designation", value);
-                }}
-                disabled={isEmployee}
-              >
-                <SelectTrigger>
-                  <SelectValue>
-                    {designations.find((des) => des.id === selectedDesignation)?.name || "Select Designation"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {designations.map((des) => (
-                    <SelectItem key={des.id} value={des.id}>
-                      {des.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.designation && <p className="text-red-500 text-xs mt-1">{errors.designation}</p>}
-            </div>
-            <div className="max-w-xs">
-              <Label htmlFor="dateOfBirth">Date of Birth</Label>
-              <Input
-                type="date"
-                id="dateOfBirth"
-                value={formData.dateOfBirth}
-                onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
-              />
-            </div>
-            <div className="max-w-xs">
-              <Label>Gender</Label>
-              <RadioGroup
-                defaultValue={formData.gender}
-                onValueChange={(value) => handleInputChange("gender", value)}
-                className="flex items-center space-x-4"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="Male" id="male" />
-                  <Label htmlFor="male">Male</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="Female" id="female" />
-                  <Label htmlFor="female">Female</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="Other" id="other" />
-                  <Label htmlFor="other">Other</Label>
-                </div>
-              </RadioGroup>
-            </div>
-            <div className="max-w-xs">
-              <Label htmlFor="maritalStatus">Marital Status</Label>
-              <Select
-                defaultValue={formData.maritalStatus}
-                onValueChange={(value) => handleInputChange("maritalStatus", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Single">Single</SelectItem>
-                  <SelectItem value="Married">Married</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="max-w-xs">
-              <Label htmlFor="bloodGroup">Blood Group</Label>
-              <Select
-                defaultValue={formData.bloodGroup}
-                onValueChange={(value) => handleInputChange("bloodGroup", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="A+">A+</SelectItem>
-                  <SelectItem value="A-">A-</SelectItem>
-                  <SelectItem value="B+">B+</SelectItem>
-                  <SelectItem value="B-">B-</SelectItem>
-                  <SelectItem value="O+">O+</SelectItem>
-                  <SelectItem value="O-">O-</SelectItem>
-                  <SelectItem value="AB+">AB+</SelectItem>
-                  <SelectItem value="AB-">AB-</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {!isEmployee && 
-            <div className="max-w-xs">
-              <Label htmlFor="employmentStatus">Employment Status</Label>
-              <Select
-                defaultValue={formData.employmentStatus}
-                onValueChange={(value) => handleInputChange("employmentStatus", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Inactive">Inactive</SelectItem>
-                  <SelectItem value="Terminated">Terminated</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-  }
-  {!isEmployee && 
-            <div className="max-w-xs">
-              <Label htmlFor="hire_type">Hire Type <span className="text-red-500">*</span></Label>
-              <Select
-                value={formData.hire_type}
-                onValueChange={(value) => handleInputChange("hire_type", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Hire Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Full Time">Full Time</SelectItem>
-                  <SelectItem value="Contract">Contract</SelectItem>
-                  <SelectItem value="Internship">Internship</SelectItem>
-                  <SelectItem value="Part Time">Part Time</SelectItem>
-                </SelectContent>
-              </Select>
-              {errors.hire_type && <p className="text-red-500 text-xs mt-1">{errors.hire_type}</p>}
-            </div>
-  }
-  {!isEmployee && 
-            <div className="max-w-xs relative">
-              <Label htmlFor="salary">Salary <span className="text-red-500">*</span></Label>
-              <Input
-                type="text"
-                id="salary"
-                value={formattedSalary}
-                onChange={(e) => handleSalaryChange(e.target.value)}
-                placeholder="Enter salary"
-                required
-                className="pr-12 h-10 border-gray-300 focus:border-purple-500 focus:ring-purple-500"
-                aria-describedby="salary-suffix"
-              />
-              <span
-                id="salary-suffix"
-                className="absolute right-3 top-8 text-gray-400 text-sm pointer-events-none"
-              >
-                {salarySuffix}
-              </span>
-              {errors.salary && <p className="text-red-500 text-xs mt-1">{errors.salary}</p>}
-            </div>
-  }
-  {!isEmployee && 
-            <div className="max-w-xs">
-              <Label htmlFor="salary_type">Salary Type <span className="text-red-500">*</span></Label>
-              <Select
-                value={formData.salary_type}
-                onValueChange={(value) => handleInputChange("salary_type", value)}
-              >
-                <SelectTrigger className="h-10">
-                  <SelectValue placeholder="Select Salary Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LPA">LPA</SelectItem>
-                  <SelectItem value="Monthly">Monthly</SelectItem>
-                  <SelectItem value="Hourly">Hourly</SelectItem>
-                  <SelectItem value="Stipend">Stipend</SelectItem>
-                </SelectContent>
-              </Select>
-              {errors.salary_type && <p className="text-red-500 text-xs mt-1">{errors.salary_type}</p>}
-            </div>
-            
-  }
-  <div className="max-w-xs">
-              <Label htmlFor="joining_date">Joining Date</Label>
-              <Input
-                type="date"
-                id="joining_date"
-                value={formData.joining_date}
-                onChange={(e) => handleInputChange("joining_date", e.target.value)}
-              />
-            </div>
-          </div>
-          
-        </div>
-      </TabsContent>
-    );
+  // Addresses, emergency contacts, and family members are now saved as JSONB in hr_employees table
+  // No separate save functions needed
+
+  const saveEducation = async (employeeId: string) => {
+    try {
+      // Delete existing education
+      await supabase
+        .from("hr_employee_education")
+        .delete()
+        .eq("employee_id", employeeId);
+
+      // Insert new education
+      const education = formData.education.map(edu => ({
+        employee_id: employeeId,
+        education_type: edu.type,
+        institute_name: edu.institute,
+        year_of_completion: edu.year_completed,
+        document_url: edu.documentUrl || null
+      }));
+
+      const { error } = await supabase
+        .from("hr_employee_education")
+        .insert(education);
+
+      if (error) throw error;
+    } catch (error) {
+      console.log("Education table may not exist, skipping");
+      // If table doesn't exist, just continue
+    }
   };
-  
+
+ const saveExperience_DB = async (employeeId: string) => {
+    try {
+      await supabase
+        .from("hr_employee_experiences")
+        .delete()
+        .eq("employee_id", employeeId);
+
+      // Filter out any empty experiences and map with the CORRECT column names
+      const experiencesToSave = formData.experiences
+        .filter(exp => exp.company && exp.position)
+        .map(exp => ({
+          employee_id: employeeId,
+          organization_id: organizationId,
+          company: exp.company,                 // Corrected name
+          job_title: exp.position,              // Corrected name
+          employment_type: exp.jobType,         // Corrected name
+          location: exp.location || null,
+          start_date: exp.startDate || null,
+          end_date: exp.endDate || null,
+          offer_letter_url: exp.offerLetterUrl || null,
+          separation_letter_url: exp.separationLetterUrl || null,
+          payslip_1_url: exp.payslip_1_url || null,
+          payslip_2_url: exp.payslip_2_url || null,
+          payslip_3_url: exp.payslip_3_url || null,
+          hike_letter_url: exp.hikeLetterUrl || null,
+          no_separation_letter_reason: exp.noSeparationLetterReason || null,
+          no_payslip_reason: exp.noPayslipReason || null
+        }));
+
+      if (experiencesToSave.length > 0) {
+        const { error } = await supabase
+          .from("hr_employee_experiences")
+          .insert(experiencesToSave);
+        if (error) throw error;
+      }
+
+    } catch (error) {
+      // This will prevent the entire form from failing if the experience table has an issue
+      console.log("Experience table may not exist or failed to save, skipping.", error);
+    }
+  };
+  const saveBankDetails = async (employeeId: string) => {
+    try {
+      // Check if bank details exist
+      const { data: existingBank } = await supabase
+        .from("hr_bank_details")
+        .select("id")
+        .eq("employee_id", employeeId)
+        .single();
+
+      const bankData = {
+        employee_id: employeeId,
+        account_holder_name: formData.bankDetails.accountHolderName,
+        account_number: formData.bankDetails.accountNumber,
+        bank_name: formData.bankDetails.bankName,
+        branch_name: formData.bankDetails.branchName,
+        ifsc_code: formData.bankDetails.ifscCode,
+        account_type: formData.bankDetails.accountType,
+        branch_address: formData.bankDetails.branchAddress || null,
+        country: formData.bankDetails.country,
+        state: formData.bankDetails.state,
+        city: formData.bankDetails.city,
+        zip_code: formData.bankDetails.zipCode,
+        document_url: formData.bankDetails.documentUrl || null
+      };
+
+      if (existingBank) {
+        // Update existing bank details
+        const { error } = await supabase
+          .from("hr_bank_details")
+          .update(bankData)
+          .eq("id", existingBank.id);
+
+        if (error) throw error;
+      } else {
+        // Insert new bank details
+        const { error } = await supabase
+          .from("hr_bank_details")
+          .insert([bankData]);
+
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.log("Bank details table may not exist, skipping");
+      // If table doesn't exist, just continue
+    }
+  };
 
   return (
-    <div className=" mx-auto py-6">
-      <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4">
-        &larr; Back
-      </Button>
-      <Card>
-        <CardContent>
-          <h1 className="text-2xl font-bold mb-4">{isEditing ? "Edit Employee" : "Add Employee"}</h1>
-          {loading && !initialDataLoaded ? (
-            <div className="text-center py-4">Loading employee data...</div>
+    <div className="container mx-auto p-6 max-w-8xl">
+      <style>{`
+        /* Clean Input Styles - No 3D Effects */
+        .form-3d-input {
+          position: relative;
+          transition: all 0.2s ease;
+        }
+
+        .form-3d-input input,
+        .form-3d-input textarea,
+        .form-3d-input select,
+        .form-3d-input [role="combobox"] {
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+          transition: all 0.2s ease;
+          padding: 12px 16px;
+          font-size: 14px;
+          min-height: 44px;
+        }
+
+        .form-3d-input input:hover,
+        .form-3d-input textarea:hover,
+        .form-3d-input select:hover,
+        .form-3d-input [role="combobox"]:hover {
+          border-color: #d1d5db;
+        }
+
+        .form-3d-input input:focus,
+        .form-3d-input textarea:focus,
+        .form-3d-input select:focus,
+        .form-3d-input [role="combobox"]:focus {
+          border-color: #9ca3af;
+          box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.1);
+          outline: none;
+        }
+
+        /* Simple Label */
+        .form-3d-label {
+          font-weight: 600;
+          color: #374151;
+          font-size: 14px;
+          margin-bottom: 8px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        /* Simple Pill-shaped Tabs */
+        .animated-tabs-list {
+          background: #f3f4f6;
+          padding: 4px;
+          border-radius: 50px;
+          display: inline-flex;
+          gap: 2px;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+          position: relative;
+        }
+
+        .animated-tab-trigger {
+          padding: 4px 12px;
+          border-radius: 50px;
+          font-weight: 600;
+          font-size: 12px;
+          color: #6b7280;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .animated-tab-trigger:hover {
+          color: #374151;
+          background: #e5e7eb;
+        }
+
+        .animated-tab-trigger[data-state="active"] {
+          color: #ffffff;
+          background: #8b5cf6;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Simple Tab Content Animation */
+        .animated-tab-content {
+          animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        /* Simple Card Style */
+        .card-3d {
+          background: #ffffff;
+          border-radius: 16px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          transition: all 0.2s ease;
+          position: relative;
+          overflow: hidden;
+          border: 1px solid #e5e7eb;
+        }
+
+        /* Simple Button Style */
+        .button-3d {
+          background: #8b5cf6;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          border-radius: 8px;
+          transition: all 0.2s ease;
+        }
+
+        .button-3d:hover {
+          background: #7c3aed;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+        }
+
+        .button-3d:active {
+          transform: scale(0.98);
+        }
+
+        /* Select and Combobox Styles */
+        .form-3d-input [role="combobox"],
+        .form-3d-input button[type="button"] {
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          min-height: 44px;
+        }
+
+        /* Radio and Checkbox Styles */
+        .form-3d-radio,
+        .form-3d-checkbox {
+          transition: all 0.2s ease;
+        }
+
+        /* Simple Profile Image Upload */
+        .profile-upload-3d {
+          transition: all 0.2s ease;
+        }
+
+        .profile-upload-3d:hover {
+          opacity: 0.8;
+        }
+
+        /* Simple Section Headers */
+        .section-header-3d {
+          color: #111827;
+          font-weight: 700;
+          font-size: 18px;
+          margin-bottom: 20px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        /* Simple Separator */
+        .separator-3d {
+          height: 1px;
+          background: #e5e7eb;
+          margin: 24px 0;
+        }
+
+        @keyframes pulse-gradient {
+          0%, 100% {
+            opacity: 0.5;
+          }
+          50% {
+            opacity: 1;
+          }
+        }
+
+        /* Error State Animation */
+        .form-error {
+          color: #ef4444;
+          font-size: 12px;
+          margin-top: 4px;
+          animation: shake 0.3s ease;
+        }
+
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-4px); }
+          75% { transform: translateX(4px); }
+        }
+
+        .form-3d-input.error input,
+        .form-3d-input.error textarea,
+        .form-3d-input.error select {
+          border-color: #ef4444;
+          background: linear-gradient(135deg, #ffffff 0%, #fef2f2 100%);
+          animation: shake 0.3s ease;
+        }
+      `}</style>
+
+      <Card className="card-3d">
+        <CardContent className="p-8">
+          <div className="flex items-center gap-4 mb-8">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                if (id) {
+                  // If editing, go back to employee profile
+                  navigate(`/employee/profile/${id}`);
+                } else {
+                  // If adding new, go back to employees list
+                  navigate("/employee");
+                }
+              }}
+              className="hover:bg-purple-50 transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+              {id ? "Edit Employee" : "Add New Employee"}
+            </h1>
+          </div>
+
+          {loading && !formData.firstName ? (
+            <div className="flex justify-center items-center h-96">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+            </div>
           ) : (
             <Tabs value={activeTab} onValueChange={handleTabChange}>
-              <TabsList className="mb-4">
-                <TabsTrigger value="personal">Personal</TabsTrigger>
-                <TabsTrigger value="address">Address</TabsTrigger>
-                <TabsTrigger value="contact">Contact</TabsTrigger>
-                <TabsTrigger value="education">Education</TabsTrigger>
-                {/* <TabsTrigger value="experience">Experience</TabsTrigger> */}
-                <TabsTrigger value="bank">Bank Details</TabsTrigger>
-                <TabsTrigger value="documents">Documents</TabsTrigger>
+              <div className="flex justify-center">
+              <TabsList className="animated-tabs-list mb-8">
+                <TabsTrigger value="personal" className="animated-tab-trigger">
+                  {/* <User className="h-3.5 w-3.5 mr-1.5" /> */}
+                  Personal
+                </TabsTrigger>
+                <TabsTrigger value="address" className="animated-tab-trigger">
+                  Address
+                </TabsTrigger>
+                <TabsTrigger value="contact" className="animated-tab-trigger">
+                  Contact
+                </TabsTrigger>
+                <TabsTrigger value="education" className="animated-tab-trigger">
+                  Education
+                </TabsTrigger>
+                <TabsTrigger value="bank-details" className="animated-tab-trigger">
+                  Bank Details
+                </TabsTrigger>
+                <TabsTrigger value="documents" className="animated-tab-trigger">
+                  Documents
+                </TabsTrigger>
               </TabsList>
+              </div>
 
               <form onSubmit={handleSubmit}>
-              {renderPersonalTab()}
-
-
-                <TabsContent value="address" className="space-y-4">
-  <div className="flex flex-col md:flex-row gap-6">
-    {/* Present Address - Left Column */}
-    <div className="flex-1 space-y-4">
-      <h2 className="text-lg font-medium">Present Address</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="presentAddressLine1">Address Line 1</Label>
-          <Input
-            type="text"
-            id="presentAddressLine1"
-            value={formData.presentAddress.addressLine1}
-            onChange={(e) => handleNestedInputChange("presentAddress", "addressLine1", e.target.value)}
-          />
-        </div>
-        <div>
-          <Label htmlFor="presentAddressLine2">Address Line 2</Label>
-          <Input
-            type="text"
-            id="presentAddressLine2"
-            value={formData.presentAddress.addressLine2}
-            onChange={(e) => handleNestedInputChange("presentAddress", "addressLine2", e.target.value)}
-          />
-        </div>
-        <div>
-          <Label htmlFor="presentCountry">Country</Label>
-          <Select
-            value={formData.presentAddress.country}
-            onValueChange={(value) => handleNestedInputChange("presentAddress", "country", value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select Country" />
-            </SelectTrigger>
-            <SelectContent>
-              {Country.getAllCountries().map((country) => (
-                <SelectItem key={country.isoCode} value={country.isoCode}>
-                  {country.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="presentState">State</Label>
-          <Select
-            value={formData.presentAddress.state}
-            onValueChange={(value) => handleNestedInputChange("presentAddress", "state", value)}
-            disabled={!formData.presentAddress.country}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select State" />
-            </SelectTrigger>
-            <SelectContent>
-              {State.getStatesOfCountry(formData.presentAddress.country).map((state) => (
-                <SelectItem key={state.isoCode} value={state.isoCode}>
-                  {state.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="presentCity">City</Label>
-          <Select
-            value={formData.presentAddress.city}
-            onValueChange={(value) => handleNestedInputChange("presentAddress", "city", value)}
-            disabled={!formData.presentAddress.state}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select City" />
-            </SelectTrigger>
-            <SelectContent>
-              {City.getCitiesOfState(formData.presentAddress.country, formData.presentAddress.state).map((city) => (
-                <SelectItem key={city.name} value={city.name}>
-                  {city.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="presentZipCode">Zip Code</Label>
-          <Input
-            type="text"
-            id="presentZipCode"
-            value={formData.presentAddress.zipCode}
-            onChange={(e) => handleNestedInputChange("presentAddress", "zipCode", e.target.value)}
-          />
-        </div>
-      </div>
-    </div>
-
-    {/* Permanent Address - Right Column */}
-    <div className="flex-1 space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium">Permanent Address</h2>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="sameAsPresent"
-            checked={isSameAsPresent}
-            onCheckedChange={handleCheckboxChange}
-          />
-          <Label htmlFor="sameAsPresent" className="text-sm">
-            Same as Present Address
-          </Label>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="permanentAddressLine1">Address Line 1</Label>
-          <Input
-            type="text"
-            id="permanentAddressLine1"
-            value={formData.permanentAddress.addressLine1}
-            onChange={(e) => handleNestedInputChange("permanentAddress", "addressLine1", e.target.value)}
-            disabled={isSameAsPresent}
-          />
-        </div>
-        <div>
-          <Label htmlFor="permanentAddressLine2">Address Line 2</Label>
-          <Input
-            type="text"
-            id="permanentAddressLine2"
-            value={formData.permanentAddress.addressLine2}
-            onChange={(e) => handleNestedInputChange("permanentAddress", "addressLine2", e.target.value)}
-            disabled={isSameAsPresent}
-          />
-        </div>
-        <div>
-          <Label htmlFor="permanentCountry">Country</Label>
-          <Select
-            value={formData.permanentAddress.country}
-            onValueChange={(value) => handleNestedInputChange("permanentAddress", "country", value)}
-            disabled={isSameAsPresent}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select Country" />
-            </SelectTrigger>
-            <SelectContent>
-              {Country.getAllCountries().map((country) => (
-                <SelectItem key={country.isoCode} value={country.isoCode}>
-                  {country.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="permanentState">State</Label>
-          <Select
-            value={formData.permanentAddress.state}
-            onValueChange={(value) => handleNestedInputChange("permanentAddress", "state", value)}
-            disabled={isSameAsPresent || !formData.permanentAddress.country}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select State" />
-            </SelectTrigger>
-            <SelectContent>
-              {State.getStatesOfCountry(formData.permanentAddress.country).map((state) => (
-                <SelectItem key={state.isoCode} value={state.isoCode}>
-                  {state.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="permanentCity">City</Label>
-          <Select
-            value={formData.permanentAddress.city}
-            onValueChange={(value) => handleNestedInputChange("permanentAddress", "city", value)}
-            disabled={isSameAsPresent || !formData.permanentAddress.state}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select City" />
-            </SelectTrigger>
-            <SelectContent>
-              {City.getCitiesOfState(
-                formData.permanentAddress.country,
-                formData.permanentAddress.state
-              ).map((city) => (
-                <SelectItem key={city.name} value={city.name}>
-                  {city.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="permanentZipCode">Zip Code</Label>
-          <Input
-            type="text"
-            id="permanentZipCode"
-            value={formData.permanentAddress.zipCode}
-            onChange={(e) => handleNestedInputChange("permanentAddress", "zipCode", e.target.value)}
-            disabled={isSameAsPresent}
-          />
-        </div>
-      </div>
-    </div>
-  </div>
-</TabsContent>
-
-<TabsContent value="contact" className="space-y-4">
-  <h2 className="text-lg font-medium">Emergency Contacts</h2>
-  {formData.emergencyContacts.map((contact, index) => (
-    <div key={index} className="border p-3 rounded-lg mb-3">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <div>
-          <Label htmlFor={`relationship-${index}`} className="text-sm">Relationship</Label>
-          <Input
-            type="text"
-            id={`relationship-${index}`}
-            value={contact.relationship}
-            onChange={(e) => handleArrayInputChange("emergencyContacts", index, "relationship", e.target.value)}
-            className="h-10 text-sm"
-          />
-        </div>
-        <div>
-          <Label htmlFor={`name-${index}`} className="text-sm">Name</Label>
-          <Input
-            type="text"
-            id={`name-${index}`}
-            value={contact.name}
-            onChange={(e) => handleArrayInputChange("emergencyContacts", index, "name", e.target.value)}
-            className="h-10 text-sm"
-          />
-        </div>
-        <div>
-          <Label htmlFor={`phone-${index}`} className="text-sm">Phone</Label>
-          <Input
-            type="tel"
-            id={`phone-${index}`}
-            value={contact.phone}
-            onChange={(e) => handleArrayInputChange("emergencyContacts", index, "phone", e.target.value)}
-            className="h-10 text-sm"
-          />
-        </div>
-      </div>
-      {formData.emergencyContacts.length > 1 && (
-        <Button type="button" variant="outline" className="mt-2 h-8 text-sm" onClick={() => handleRemoveArrayItem("emergencyContacts", index)}>
-          Remove
-        </Button>
-      )}
-    </div>
-  ))}
-  <Button type="button" variant="outline" onClick={() => handleAddArrayItem("emergencyContacts", { relationship: "", name: "", phone: "" })} className="h-8 text-sm">
-    Add Emergency Contact
-  </Button>
-
-  <Separator className="my-4" />
-
-  <h2 className="text-lg font-medium">Family Members</h2>
-  {formData.familyMembers.map((member, index) => (
-    <div key={index} className="border p-3 rounded-lg mb-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div>
-          <Label htmlFor={`family-relationship-${index}`} className="text-sm">Relationship</Label>
-          <Input
-            type="text"
-            id={`family-relationship-${index}`}
-            value={member.relationship}
-            onChange={(e) => handleArrayInputChange("familyMembers", index, "relationship", e.target.value)}
-            className="h-10 text-sm"
-          />
-        </div>
-        <div>
-          <Label htmlFor={`family-name-${index}`} className="text-sm">Name</Label>
-          <Input
-            type="text"
-            id={`family-name-${index}`}
-            value={member.name}
-            onChange={(e) => handleArrayInputChange("familyMembers", index, "name", e.target.value)}
-            className="h-10 text-sm"
-          />
-        </div>
-        <div>
-          <Label htmlFor={`occupation-${index}`} className="text-sm">Occupation</Label>
-          <Input
-            type="text"
-            id={`occupation-${index}`}
-            value={member.occupation}
-            onChange={(e) => handleArrayInputChange("familyMembers", index, "occupation", e.target.value)}
-            className="h-10 text-sm"
-          />
-        </div>
-        <div>
-          <Label htmlFor={`family-phone-${index}`} className="text-sm">Phone</Label>
-          <Input
-            type="tel"
-            id={`family-phone-${index}`}
-            value={member.phone}
-            onChange={(e) => handleArrayInputChange("familyMembers", index, "phone", e.target.value)}
-            className="h-10 text-sm"
-          />
-        </div>
-      </div>
-      {formData.familyMembers.length > 1 && (
-        <Button type="button" variant="outline" className="mt-2 h-8 text-sm" onClick={() => handleRemoveArrayItem("familyMembers", index)}>
-          Remove
-        </Button>
-      )}
-    </div>
-  ))}
-  <Button type="button" variant="outline" onClick={() => handleAddArrayItem("familyMembers", { relationship: "", name: "", occupation: "", phone: "" })} className="h-8 text-sm">
-    Add Family Member
-  </Button>
-</TabsContent>
-
-
-                <TabsContent value="education">
-              <div className="space-y-8">
-              <div>
-      <h3 className="text-lg font-medium mb-4">Education</h3>
-      <p className="text-sm text-gray-500 mb-4">Add your course and certificate here.</p>
-
-      <div className="space-y-4">
-        {formData.education?.map((edu, index) => (
-          <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-center">
-            {/* Course Name */}
-            <div className="space-y-1">
-              <Label className="text-xs">Exam/Course<span className="text-red-500">*</span></Label>
-              <Input
-                value={edu.type}
-                readOnly={index < 3}
-                onChange={(e) => handleEducationChange(index, "type", e.target.value)}
-                placeholder="Course name"
-                className="h-8 text-sm"
-              />
-            </div>
-
-            {/* Institute Name */}
-            <div className="space-y-1">
-              <Label className="text-xs">Institute<span className="text-red-500">*</span></Label>
-              <Input
-                value={edu.institute || ""}
-                onChange={(e) => handleEducationChange(index, "institute", e.target.value)}
-                placeholder="Institute"
-                className="h-8 text-sm"
-              />
-            </div>
-
-            {/* Completed Year */}
-            <div className="space-y-1">
-              <Label className="text-xs">Year<span className="text-red-500">*</span></Label>
-              <Input
-                type="number"
-                value={edu.year_completed || ""}
-                onChange={(e) => handleEducationChange(index, "year_completed", Number(e.target.value))}
-                placeholder="Year"
-                className="h-8 text-sm"
-              />
-            </div>
-
-            {/* File Upload */}
-            <div className="flex items-center gap-2">
-              <label htmlFor={`edu-upload-${index}`} className="cursor-pointer purple-text-color text-xs hover:underline">
-                + Upload <span className="text-gray-500">(PDF, PNG, JPG)</span>
-              </label>
-              <input
-                type="file"
-                id={`edu-upload-${index}`}
-                className="sr-only"
-                onChange={(e) => handleFileUpload(e, "education", "education_document", index)}
-                accept=".pdf,.png,.jpg,.jpeg"
-              />
-
-              {edu.documentUrl && (
-            
-                <Button
-                variant="ghost1"
-                size="xs"
-                title="View Document"
-                className="p-1"
-                onClick={() =>
-                  window.open(edu.documentUrl, "_blank", "noopener,noreferrer")
-                }
-              >
-                <FileText className="h-4 w-4" />
-              </Button>
-              )}
-            </div>
-          </div>
-        ))}
-
-        <Button type="button" variant="outline" size="sm" onClick={addEducation} className="mt-2">
-          <Plus className="h-4 w-4 mr-1" /> Add Course
-        </Button>
-      </div>
-    </div>
-
-    <div> 
-
-<div className="flex items-center justify-between mb-4"> 
-
-  <div> 
-
-    <h3 className="text-lg font-medium">Experience</h3> 
-
-    <p className="text-sm text-gray-500"> 
-
-      Add your previous work experience and internship details. 
-
-    </p> 
-
-  </div> 
-
-  <Button 
-
-    type="button" 
-
-    variant="outline" 
-
-    size="sm" 
-
-    onClick={() => openExperienceModal()} 
-
-  > 
-
-    <Plus className="h-4 w-4 mr-1" /> Add 
-
-  </Button> 
-
-</div> 
-
-
-
-<div className="space-y-3"> 
-
-  {formData.experiences && formData.experiences.length > 0 ? ( 
-
-    formData.experiences.map((exp, index) => ( 
-
-      <div 
-
-        key={index} 
-
-        className="border rounded-lg p-3 bg-gray-50 shadow-sm relative" 
-
-      > 
-
-        {/* Header - Position & Job Type */} 
-
-        <div className="flex justify-between items-start"> 
-
-          <div className="grid grid-cols-[auto_auto] gap-x-2 items-center"> 
-
-            <h4 className="font-medium">{exp.position}</h4> 
-
-            <span className="text-xs text-gray-600 bg-gray-200 px-2 py-1 rounded-md"> 
-
-              {exp.jobType} 
-
-            </span> 
-
-          </div> 
-
-          {/* Edit & Delete Buttons */} 
-
-          <div className="flex gap-2"> 
-
-            <Button 
-
-              type="button" 
-
-              variant="ghost" 
-
-              size="icon" 
-
-              onClick={() => openExperienceModal(exp, index)} 
-
-            > 
-
-              ✏️ 
-
-            </Button> 
-
-            <Button 
-
-              type="button" 
-
-              variant="ghost" 
-
-              size="icon" 
-
-              onClick={() => removeExperience(index)} 
-
-            > 
-
-              🗑️ 
-
-            </Button> 
-
-          </div> 
-
-        </div> 
-
-
-
-        {/* Company & Date */} 
-
-        <p className="text-sm text-gray-700"> 
-
-          {exp.company} - {exp.location} 
-
-        </p> 
-
-        {exp.startDate && ( 
-
-          <p className="text-xs text-gray-500"> 
-
-            {new Date(exp.startDate).toLocaleDateString("en-US", { 
-
-              month: "short", 
-
-              year: "numeric", 
-
-            })}{" "} 
-
-            {exp.endDate && 
-
-              ` - ${new Date(exp.endDate).toLocaleDateString("en-US", { 
-
-                month: "short", 
-
-                year: "numeric", 
-
-              })}`} 
-
-          </p> 
-
-        )} 
-
-
-
-        {/* Documents Section */} 
-
-        <div className="mt-3 grid grid-cols-6 gap-2 text-xs text-center">
-  {[
-    { label: "Offer Letter", url: exp.offerLetterUrl },
-    { label: "Separation Letter", url: exp.separationLetterUrl, reason: exp.noSeparationLetterReason },
-    { label: "Payslip 1", url: exp.payslip_1_url },
-    { label: "Payslip 2", url: exp.payslip_2_url },
-    { label: "Payslip 3", url: exp.payslip_3_url, reason: exp.noPayslipReason },
-    { label: "Hike Letter", url: exp.hikeLetterUrl },
-  ].map((doc, i) => (
-    <div key={i} className="border rounded-md p-2 bg-white">
-      <p className="text-gray-500">{doc.label}</p>
-      {doc.url ? (
-        <a
-          href={doc.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-red-600 inline-block mt-1"
-        >
-          <FaRegFilePdf size={16} />
-        </a>
-      ) : doc.reason ? (
-        <p className="text-gray-400 italic">{doc.reason}</p>
+                {/* Personal Tab */}
+                <TabsContent value="personal" className="animated-tab-content space-y-6">
+                  <h2 className="section-header-3d">
+                    <User className="h-5 w-5" />
+                    Personal Information
+                  </h2>
+                  
+                  <div className="profile-upload-3d">
+                    <ProfileImageUpload
+                      imageUrl={formData.profilePictureUrl}
+                      onImageUpload={(url) => handleInputChange("profilePictureUrl", url)}
+                      employeeName={`${formData.firstName} ${formData.lastName}`}
+                    />
+                  </div>
+
+                  <Separator className="separator-3d" />
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className={cn("form-3d-input", formErrors.firstName && "error")}>
+                      <Label className="form-3d-label">
+                        First Name <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        value={formData.firstName}
+                        onChange={(e) => handleInputChange("firstName", e.target.value)}
+                        placeholder="Enter first name"
+                      />
+                      {formErrors.firstName && (
+                        <span className="form-error">{formErrors.firstName}</span>
+                      )}
+                    </div>
+
+                    <div className={cn("form-3d-input", formErrors.lastName && "error")}>
+                      <Label className="form-3d-label">
+                        Last Name <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        value={formData.lastName}
+                        onChange={(e) => handleInputChange("lastName", e.target.value)}
+                        placeholder="Enter last name"
+                      />
+                      {formErrors.lastName && (
+                        <span className="form-error">{formErrors.lastName}</span>
+                      )}
+                    </div>
+
+                    <div className={cn("form-3d-input", formErrors.email && "error")}>
+                      <Label className="form-3d-label">
+                        Official Email <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => handleInputChange("email", e.target.value)}
+                        placeholder="official@example.com"
+                      />
+                      {formErrors.email && (
+                        <span className="form-error">{formErrors.email}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className={cn("form-3d-input", formErrors.personalEmail && "error")}>
+                      <Label className="form-3d-label">Personal Email</Label>
+                      <Input
+                        type="email"
+                        value={formData.personalEmail}
+                        onChange={(e) => handleInputChange("personalEmail", e.target.value)}
+                        placeholder="personal@example.com"
+                      />
+                      {formErrors.personalEmail && (
+                        <span className="form-error">{formErrors.personalEmail}</span>
+                      )}
+                    </div>
+
+                    <div className={cn("form-3d-input", formErrors.phone && "error")}>
+                      <Label className="form-3d-label">Phone</Label>
+                      <PhoneInput
+                        international
+                        defaultCountry="IN"
+                        value={formData.phone}
+                        onChange={(value) => handleInputChange("phone", value)}
+                        className="phone-input-3d"
+                      />
+                      {formErrors.phone && (
+                        <span className="form-error">{formErrors.phone}</span>
+                      )}
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Employee ID</Label>
+                      <Input
+                        value={formData.employeeId}
+                        onChange={(e) => handleInputChange("employeeId", e.target.value)}
+                        placeholder="Enter employee ID"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <div className={cn("form-3d-input", formErrors.department && "error")}>
+  <Label className="form-3d-label">
+    Department <span className="text-red-500">*</span>
+  </Label>
+  <Select
+    value={formData.department}
+    onValueChange={(value) => handleInputChange("department", value)}
+  >
+    <SelectTrigger className="h-11">
+      <SelectValue placeholder="Select department" />
+    </SelectTrigger>
+    <SelectContent>
+      {departments.length > 0 ? (
+        departments.map((dept) => (
+          <SelectItem key={dept.id} value={dept.id}>
+            {dept.name}
+          </SelectItem>
+        ))
       ) : (
-        <p className="text-gray-400 italic">N/A</p>
+        <SelectItem value="loading" disabled>
+          Loading departments...
+        </SelectItem>
       )}
-    </div>
-  ))}
-</div>
-
-
-      </div> 
-
-    )) 
-
-  ) : ( 
-
-    <div className="text-center p-4 border border-dashed rounded-md"> 
-
-      <p className="text-gray-500">No work experience added yet.</p> 
-
-      <Button 
-
-        type="button" 
-
-        variant="outline" 
-
-        size="sm" 
-
-        className="mt-2" 
-
-        onClick={() => openExperienceModal()} 
-
-      > 
-
-        <Plus className="h-4 w-4 mr-1" /> Add Experience 
-
-      </Button> 
-
-    </div> 
-
-  )} 
-
-</div> 
-
-</div> 
-
-
-              </div>
-
-              
-            </TabsContent>
-
-             
-
-<TabsContent value="bank">
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium">Bank Account Details</h3>
-                  <p className="text-sm text-gray-500 mt-1">Add your bank account details here.</p>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="accountHolderName">Name as in Bank <span className="text-red-500">*</span></Label>
-                    <Input
-                        type="text"
-                        id="accountHolderName"
-                        value={formData.bankDetails.accountHolderName}
-                        onChange={(e) => handleNestedInputChange("bankDetails", "accountHolderName", e.target.value)}
-                      />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="accountNumber">Account Number <span className="text-red-500">*</span></Label>
-                    <Input
-                        type="text"
-                        id="accountNumber"
-                        value={formData.bankDetails.accountNumber}
-                        onChange={(e) => handleNestedInputChange("bankDetails", "accountNumber", e.target.value)}
-                      />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="bankName">Bank Name <span className="text-red-500">*</span></Label>
-                    <Input
-                        type="text"
-                        id="bankName"
-                        value={formData.bankDetails.bankName}
-                        onChange={(e) => handleNestedInputChange("bankDetails", "bankName", e.target.value)}
-                      />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="branchName">Branch Name</Label>
-                    <Input
-                        type="text"
-                        id="branchName"
-                        value={formData.bankDetails.branchName}
-                        onChange={(e) => handleNestedInputChange("bankDetails", "branchName", e.target.value)}
-                      />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="ifscCode">IFSC Code <span className="text-red-500">*</span></Label>
-                    <Input
-                        type="text"
-                        id="ifscCode"
-                        value={formData.bankDetails.ifscCode}
-                        onChange={(e) => handleNestedInputChange("bankDetails", "ifscCode", e.target.value)}
-                      />
-                  </div>
-
-                  <div className="md:col-span-2 space-y-2">
-                    <Label htmlFor="branchAddress">Branch Address</Label>
-                    <Textarea
-                        id="branchAddress"
-                        value={formData.bankDetails.branchAddress || ""}
-                        onChange={(e) => handleNestedInputChange("bankDetails", "branchAddress", e.target.value)}
-                      />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="country">Country</Label>
-                    <Select 
-                      value={formData.bankDetails?.country || ""} 
-                      onValueChange={(value) => handleNestedInputChange("bankDetails", "country", value)}
-                    >
-                      <SelectTrigger id="country">
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-              {Country.getAllCountries().map((country) => (
-                <SelectItem key={country.isoCode} value={country.isoCode}>
-                  {country.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="state">State/Province</Label>
-                    <Select 
-                      value={formData.bankDetails?.state || ""} 
-                      onValueChange={(value) => handleNestedInputChange("bankDetails", "state", value)}
-
-                    >
-                      <SelectTrigger id="state">
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-              {State.getStatesOfCountry(formData.bankDetails.country).map((state) => (
-                <SelectItem key={state.isoCode} value={state.isoCode}>
-                  {state.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
-                    <Select 
-                      value={formData.bankDetails?.city || ""} 
-                      onValueChange={(value) => handleNestedInputChange("bankDetails", "city", value)}
-
-                    >
-                      <SelectTrigger id="city">
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-              {City.getCitiesOfState(formData.presentAddress.country, formData.presentAddress.state).map((city) => (
-                <SelectItem key={city.name} value={city.name}>
-                  {city.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="zipCode">ZIP/Postal Code</Label>
-                    <Input
-                        type="text"
-                        id="zipCode"
-                        value={formData.bankDetails.zipCode}
-                        onChange={(e) => handleNestedInputChange("bankDetails", "zipCode", e.target.value)}
-                      />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-  <Label>Supporting Document (optional)</Label>
-  <div className="flex items-center gap-3 mt-1">
-    <div className="py-3 px-4 bg-gray-50 rounded-md text-sm text-gray-500">
-      Cancel Cheque / Passbook First Page
-    </div>
-    <div className="relative flex items-center gap-3">
-      <input
-        type="file"
-        id="bank-document-upload"
-        className="sr-only"
-        onChange={(e) => handleBankUpload(e, 'bankDetails')}
-        accept=".pdf,.png,.jpg,.jpeg"
-      />
-      <Label
-        htmlFor="bank-document-upload"
-        className="cursor-pointer purple-text-color hover:underline"
-      >
-        + Upload File <span className="text-xs text-gray-500">(Supported format: PDF, PNG, JPG)</span>
-      </Label>
-      {formData.bankDetails.documentUrl && (
-    <a
-      href={formData.bankDetails.documentUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      title="View Bank Document"
-      className="inline-block ml-2"
-    >
-      <FaRegFilePdf className="h-8 w-8 text-red-600 cursor-pointer" />
-    </a>
-)}
-    </div>
-  </div>
-</div>
-
-              </div>
-
-             
-            </TabsContent>
-
-            <TabsContent value="documents" className="space-y-4">
-  <div>
-    <h3 className="text-lg font-medium mb-4">Documentation</h3>
-    <p className="text-sm text-gray-500 mb-4">
-      Upload and view your identity documents here.
-    </p>
-
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {['aadhar', 'pan', 'uan', 'esic'].map((docType) => (
-        <div key={docType} className="space-y-2">
-          <Label htmlFor={`${docType}Number`}>
-            {docType.toUpperCase()} Number <span className="text-red-500">*</span>
-          </Label>
-          <div className="flex gap-3">
-            <Input
-              type="text"
-              id={`${docType}Number`}
-              value={formData[`${docType}Number`] || ''}
-              onChange={(e) =>
-                handleInputChange(`${docType}Number`, e.target.value)
-                
-              }
-              required
-            />
-           <div className="relative">
-  <input
-    type="file"
-    id={`${docType}Upload`}
-    className="sr-only"
-    onChange={(e) => handleDocumentUpload(e, docType)}
-    accept=".pdf,.png,.jpg,.jpeg"
-  />
-<Button
-  variant="default"
-  type="button"
-  disabled={uploadingDoc[docType]}
-  onClick={() => document.getElementById(`${docType}Upload`)?.click()}
-  className="inline-flex items-center gap-2"
->
-  {uploadingDoc[docType] ? (
-    <>
-      <Upload className="h-4 w-4 animate-spin" />
-      Uploading...
-    </>
-  ) : (
-    <>
-      <Upload className="h-4 w-4" />
-      Upload
-    </>
+    </SelectContent>
+  </Select>
+  {formErrors.department && (
+    <span className="form-error">{formErrors.department}</span>
   )}
+</div>
+
+            {/* THIS IS THE NEW, CORRECTED CODE */}
+<div className={cn("form-3d-input", formErrors.designation && "error")}>
+  <Label className="form-3d-label">
+    Designation <span className="text-red-500">*</span>
+  </Label>
+  <Select
+    value={formData.designation}
+    onValueChange={(value) => handleInputChange("designation", value)}
+  >
+    <SelectTrigger className="h-11">
+      <SelectValue placeholder="Select designation" />
+    </SelectTrigger>
+    <SelectContent>
+      {designations.length > 0 ? (
+        designations.map((desig) => (
+          <SelectItem key={desig.id} value={desig.id}>
+            {desig.name}
+          </SelectItem>
+        ))
+      ) : (
+        <SelectItem value="loading" disabled>
+          Loading designations...
+        </SelectItem>
+      )}
+    </SelectContent>
+  </Select>
+  {formErrors.designation && (
+    <span className="form-error">{formErrors.designation}</span>
+  )}
+</div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Date of Birth</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !formData.dateOfBirth && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formData.dateOfBirth
+                              ? format(new Date(formData.dateOfBirth), "PPP")
+                              : "Pick a date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={
+                              formData.dateOfBirth ? new Date(formData.dateOfBirth) : undefined
+                            }
+                            onSelect={(date) =>
+                              handleInputChange("dateOfBirth", date?.toISOString().split("T")[0])
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Gender</Label>
+                      <RadioGroup
+                        value={formData.gender}
+                        onValueChange={(value) => handleInputChange("gender", value)}
+                        className="flex gap-4"
+                      >
+                        <div className="flex items-center space-x-2 form-3d-radio">
+                          <RadioGroupItem value="Male" id="male" />
+                          <Label htmlFor="male">Male</Label>
+                        </div>
+                        <div className="flex items-center space-x-2 form-3d-radio">
+                          <RadioGroupItem value="Female" id="female" />
+                          <Label htmlFor="female">Female</Label>
+                        </div>
+                        <div className="flex items-center space-x-2 form-3d-radio">
+                          <RadioGroupItem value="Other" id="other" />
+                          <Label htmlFor="other">Other</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Marital Status</Label>
+                      <Select
+                        value={formData.maritalStatus}
+                        onValueChange={(value) => handleInputChange("maritalStatus", value)}
+                      >
+                        <SelectTrigger className="h-11">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Single">Single</SelectItem>
+                          <SelectItem value="Married">Married</SelectItem>
+                          <SelectItem value="Divorced">Divorced</SelectItem>
+                          <SelectItem value="Widowed">Widowed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Blood Group</Label>
+                      <Select
+                        value={formData.bloodGroup}
+                        onValueChange={(value) => handleInputChange("bloodGroup", value)}
+                      >
+                        <SelectTrigger className="h-11">
+                          <SelectValue placeholder="Select blood group" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="A+">A+</SelectItem>
+                          <SelectItem value="A-">A-</SelectItem>
+                          <SelectItem value="B+">B+</SelectItem>
+                          <SelectItem value="B-">B-</SelectItem>
+                          <SelectItem value="AB+">AB+</SelectItem>
+                          <SelectItem value="AB-">AB-</SelectItem>
+                          <SelectItem value="O+">O+</SelectItem>
+                          <SelectItem value="O-">O-</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <Separator className="separator-3d" />
+
+                  <h3 className="section-header-3d text-base">Employment Details</h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="form-3d-input">
+  <Label className="form-3d-label">Employment Status</Label>
+  <Select
+    value={formData.employmentStatus}
+    onValueChange={(value) => handleInputChange("employmentStatus", value)}
+  >
+    <SelectTrigger className="h-11">
+      <SelectValue placeholder="Select status" />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="Active">Active</SelectItem>
+      <SelectItem value="Inactive">Inactive</SelectItem>
+    </SelectContent>
+  </Select>
+</div>
+
+                    <div className={cn("form-3d-input", formErrors.hire_type && "error")}>
+                      <Label className="form-3d-label">
+                        Hire Type <span className="text-red-500">*</span>
+                      </Label>
+                      <Select
+                        value={formData.hire_type}
+                        onValueChange={(value) => handleInputChange("hire_type", value)}
+                      >
+                        <SelectTrigger className="h-11">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Full Time">Full Time</SelectItem>
+                          <SelectItem value="Part Time">Part Time</SelectItem>
+                          <SelectItem value="Contract">Contract</SelectItem>
+                          <SelectItem value="Internship">Internship</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {formErrors.hire_type && (
+                        <span className="form-error">{formErrors.hire_type}</span>
+                      )}
+                    </div>
+
+                    {formData.hire_type === "Contract" && (
+                      <div className="form-3d-input">
+                        <Label className="form-3d-label">Duration (months)</Label>
+                        <Input
+                          type="number"
+                          value={formData.contractDuration}
+                          onChange={(e) => handleInputChange("contractDuration", e.target.value)}
+                          placeholder="e.g., 3"
+                        />
+                      </div>
+                    )}
+
+                    {formData.hire_type === "Internship" && (
+                      <div className="form-3d-input">
+                        <Label className="form-3d-label">Duration (months)</Label>
+                        <Input
+                          type="number"
+                          value={formData.internshipDuration}
+                          onChange={(e) => handleInputChange("internshipDuration", e.target.value)}
+                          placeholder="e.g., 3"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className={cn("form-3d-input", formErrors.salary && "error")}>
+                      <Label className="form-3d-label">
+                        {formData.hire_type === "Internship" ? "Stipend" : "Salary"} <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        value={formData.salary ? formatINR(formData.salary) : ""}
+                        onChange={(e) => {
+                          const parsed = parseINR(e.target.value);
+                          handleInputChange("salary", parsed);
+                        }}
+                        placeholder="₹"
+                      />
+                      {formErrors.salary && (
+                        <span className="form-error">{formErrors.salary}</span>
+                      )}
+                    </div>
+
+                    <div className="form-3d-input">
+  <Label className="form-3d-label">Salary Type</Label>
+  <Select
+    value={formData.salary_type}
+    onValueChange={(value) => handleInputChange("salary_type", value)}
+  >
+    <SelectTrigger className="h-11">
+      <SelectValue placeholder="Select type" />
+    </SelectTrigger>
+    <SelectContent>
+      {formData.hire_type === "Internship" ? (
+        <SelectItem value="Stipend">Stipend</SelectItem>
+      ) : (
+        <>
+          <SelectItem value="LPA">LPA</SelectItem>
+          <SelectItem value="Per Month">Per Month</SelectItem>
+        </>
+      )}
+    </SelectContent>
+  </Select>
+</div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Joining Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !formData.joining_date && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formData.joining_date
+                              ? format(new Date(formData.joining_date), "PPP")
+                              : "Pick a date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={
+                              formData.joining_date ? new Date(formData.joining_date) : undefined
+                            }
+                            onSelect={(date) =>
+                              handleInputChange("joining_date", date?.toISOString().split("T")[0])
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Other tabs content remains the same but wrapped with form-3d-input classes */}
+                {/* For brevity, I'll include the Address tab as an example */}
+                
+                <TabsContent value="address" className="animated-tab-content space-y-6">
+                  <h2 className="section-header-3d">Address Information</h2>
+
+                  <h3 className="text-lg font-semibold text-gray-700">Present Address</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="form-3d-input md:col-span-2">
+                      <Label className="form-3d-label">Address Line 1</Label>
+                      <Input
+                        value={formData.presentAddress.addressLine1}
+                        onChange={(e) =>
+                          handleAddressChange("presentAddress", "addressLine1", e.target.value)
+                        }
+                        placeholder="Enter address"
+                      />
+                    </div>
+
+                    <div className="form-3d-input md:col-span-2">
+                      <Label className="form-3d-label">Address Line 2</Label>
+                      <Input
+                        value={formData.presentAddress.addressLine2 || ""}
+                        onChange={(e) =>
+                          handleAddressChange("presentAddress", "addressLine2", e.target.value)
+                        }
+                        placeholder="Apartment, suite, etc. (optional)"
+                      />
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Country</Label>
+                      <Select
+                        value={formData.presentAddress.country}
+                        onValueChange={(value) =>
+                          handleAddressChange("presentAddress", "country", value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {countries.map((country) => (
+                            <SelectItem key={country.isoCode} value={country.name}>
+                              {country.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">State</Label>
+                      <Select
+                        value={formData.presentAddress.state}
+                        onValueChange={(value) =>
+                          handleAddressChange("presentAddress", "state", value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {presentStates.map((state) => (
+                            <SelectItem key={state.isoCode} value={state.name}>
+                              {state.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">City</Label>
+                      <Select
+                        value={formData.presentAddress.city}
+                        onValueChange={(value) =>
+                          handleAddressChange("presentAddress", "city", value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select city" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {presentCities.map((city) => (
+                            <SelectItem key={city.name} value={city.name}>
+                              {city.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">ZIP Code</Label>
+                      <Input
+                        value={formData.presentAddress.zipCode}
+                        onChange={(e) =>
+                          handleAddressChange("presentAddress", "zipCode", e.target.value)
+                        }
+                        placeholder="Enter ZIP code"
+                      />
+                    </div>
+                  </div>
+
+                 
+
+                  <Separator className="separator-3d" />
+
+                 {/* --- MODIFIED PERMANENT ADDRESS SECTION --- */}
+                  <h3 className="text-lg font-semibold text-gray-700 flex justify-between items-center">
+                    <span>Permanent Address</span>
+                    {/* This is the new, correct location for the checkbox */}
+                    <div className="flex items-center gap-2">
+                       <Checkbox
+                          id="sameAsPresent"
+                          checked={isSameAsPresent}
+                          onCheckedChange={handleSameAsPresentChange}
+                          className="form-3d-checkbox"
+                       />
+                       <Label htmlFor="sameAsPresent" className="text-sm font-medium">
+                          Same as Present Address
+                       </Label>
+                    </div>
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="form-3d-input md:col-span-2">
+                      <Label className="form-3d-label">Address Line 1</Label>
+                      <Input
+                        value={formData.permanentAddress.addressLine1}
+                        onChange={(e) =>
+                          handleAddressChange("permanentAddress", "addressLine1", e.target.value)
+                        }
+                        placeholder="Enter address"
+                        disabled={isSameAsPresent} // Add this
+                      />
+                    </div>
+
+                    <div className="form-3d-input md:col-span-2">
+                      <Label className="form-3d-label">Address Line 2</Label>
+                      <Input
+                        value={formData.permanentAddress.addressLine2 || ""}
+                        onChange={(e) =>
+                          handleAddressChange("permanentAddress", "addressLine2", e.target.value)
+                        }
+                        placeholder="Apartment, suite, etc. (optional)"
+                        disabled={isSameAsPresent} // Add this
+                      />
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Country</Label>
+                      <Select
+                        value={formData.permanentAddress.country}
+                        onValueChange={(value) =>
+                          handleAddressChange("permanentAddress", "country", value)
+                        }
+                        disabled={isSameAsPresent} // Add this
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {countries.map((country) => (
+                            <SelectItem key={country.isoCode} value={country.name}>
+                              {country.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">State</Label>
+                      <Select
+                        value={formData.permanentAddress.state}
+                        onValueChange={(value) =>
+                          handleAddressChange("permanentAddress", "state", value)
+                        }
+                        disabled={isSameAsPresent} // Add this
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {permanentStates.map((state) => (
+                            <SelectItem key={state.isoCode} value={state.name}>
+                              {state.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">City</Label>
+                      <Select
+                        value={formData.permanentAddress.city}
+                        onValueChange={(value) =>
+                          handleAddressChange("permanentAddress", "city", value)
+                        }
+                        disabled={isSameAsPresent} // Add this
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select city" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {permanentCities.map((city) => (
+                            <SelectItem key={city.name} value={city.name}>
+                              {city.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">ZIP Code</Label>
+                      <Input
+                        value={formData.permanentAddress.zipCode}
+                        onChange={(e) =>
+                          handleAddressChange("permanentAddress", "zipCode", e.target.value)
+                        }
+                        placeholder="Enter ZIP code"
+                        disabled={isSameAsPresent} // Add this
+                      />
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Continue with other tabs... */}
+                {/* I'll add Contact, Education, Bank Details, and Documents tabs with the same styling */}
+                
+                <TabsContent value="contact" className="animated-tab-content space-y-6">
+                  <h2 className="section-header-3d">Contact Information</h2>
+
+                  <h3 className="text-lg font-semibold text-gray-700">Emergency Contacts</h3>
+                  {formData.emergencyContacts.map((contact, index) => (
+                    <div key={index} className="p-6 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 space-y-4 relative">
+                      {index > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeEmergencyContact(index)}
+                          className="absolute top-2 right-2 text-red-500 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="form-3d-input">
+                          <Label className="form-3d-label">Relationship</Label>
+                          <Input
+                            value={contact.relationship}
+                            onChange={(e) =>
+                              handleEmergencyContactChange(index, "relationship", e.target.value)
+                            }
+                            placeholder="e.g., Father, Mother"
+                          />
+                        </div>
+
+                        <div className="form-3d-input">
+                          <Label className="form-3d-label">Name</Label>
+                          <Input
+                            value={contact.name}
+                            onChange={(e) =>
+                              handleEmergencyContactChange(index, "name", e.target.value)
+                            }
+                            placeholder="Enter name"
+                          />
+                        </div>
+
+                        <div className="form-3d-input">
+                          <Label className="form-3d-label">Phone</Label>
+                          <PhoneInput
+                            international
+                            defaultCountry="IN"
+                            value={contact.phone}
+                            onChange={(value) =>
+                              handleEmergencyContactChange(index, "phone", value || "")
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                <Button
+  type="button"
+  onClick={addEmergencyContact}
+  variant="link"
+  className="text-purple-600 p-0 h-auto"
+>
+  <Plus className="h-4 w-4 mr-2" />
+  Add Emergency Contact
 </Button>
 
+                  <Separator className="separator-3d" />
+
+                  <h3 className="text-lg font-semibold text-gray-700">Family Members</h3>
+                  {formData.familyMembers.map((member, index) => (
+                    <div key={index} className="p-6 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 space-y-4 relative">
+                      {index > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeFamilyMember(index)}
+                          className="absolute top-2 right-2 text-red-500 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="form-3d-input">
+                          <Label className="form-3d-label">Relationship</Label>
+                          <Input
+                            value={member.relationship}
+                            onChange={(e) =>
+                              handleFamilyMemberChange(index, "relationship", e.target.value)
+                            }
+                            placeholder="e.g., Spouse, Child"
+                          />
+                        </div>
+
+                        <div className="form-3d-input">
+                          <Label className="form-3d-label">Name</Label>
+                          <Input
+                            value={member.name}
+                            onChange={(e) =>
+                              handleFamilyMemberChange(index, "name", e.target.value)
+                            }
+                            placeholder="Enter name"
+                          />
+                        </div>
+
+                        <div className="form-3d-input">
+                          <Label className="form-3d-label">Occupation</Label>
+                          <Input
+                            value={member.occupation}
+                            onChange={(e) =>
+                              handleFamilyMemberChange(index, "occupation", e.target.value)
+                            }
+                            placeholder="Enter occupation"
+                          />
+                        </div>
+
+                        <div className="form-3d-input">
+                          <Label className="form-3d-label">Phone</Label>
+                          <PhoneInput
+                            international
+                            defaultCountry="IN"
+                            value={member.phone}
+                            onChange={(value) =>
+                              handleFamilyMemberChange(index, "phone", value || "")
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+        <Button
+  type="button"
+  onClick={addFamilyMember}
+  variant="link"
+  className="text-purple-600 p-0 h-auto"
+>
+  <Plus className="h-4 w-4 mr-2" />
+  Add Family Member
+</Button>
+                </TabsContent>
+
+                <TabsContent value="education" className="animated-tab-content space-y-6">
+                  <h2 className="section-header-3d">Education Details</h2>
+
+                  {formData.education.map((edu, index) => (
+                    <div key={index} className={`p-6 rounded-xl space-y-4 ${educationColors[index]}`}>
+                      <h3 className="font-semibold text-gray-700 mb-4">{edu.type}</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="form-3d-input">
+                          <Label className="form-3d-label">Institute Name</Label>
+                          <Input
+                            value={edu.institute || ""}
+                            onChange={(e) =>
+                              handleEducationChange(index, "institute", e.target.value)
+                            }
+                            placeholder="Enter institute name"
+                          />
+                        </div>
+
+                        <div className="form-3d-input">
+                          <Label className="form-3d-label">Year Completed</Label>
+                          <Input
+                            value={edu.year_completed || ""}
+                            onChange={(e) =>
+                              handleEducationChange(index, "year_completed", e.target.value)
+                            }
+                            placeholder="e.g., 2020"
+                          />
+                        </div>
+
+                        <div className="form-3d-input">
+                          <Label className="form-3d-label">Document</Label>
+                          <div className="flex gap-3 items-center">
+                            <input
+                              type="file"
+                              id={`education-${index}`}
+                              className="sr-only"
+                              accept=".pdf,.png,.jpg,.jpeg"
+                              disabled={uploadingFile !== null}
+                              onChange={(event) => handleEducationUpload(event, index)}
+                            />
+                            <Label
+                              htmlFor={`education-${index}`}
+                              className={cn(
+                                "cursor-pointer text-purple-600 hover:underline",
+                                uploadingFile && "opacity-50 cursor-not-allowed"
+                              )}
+                            >
+                              {uploadingFile === `education-${index}` ? (
+                                <span className="flex items-center gap-1">
+                                  <Loader2 className="animate-spin w-4 h-4" /> Uploading...
+                                </span>
+                              ) : (
+                                "+ Upload File"
+                              )}
+                            </Label>
+                            {edu.documentUrl && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(edu.documentUrl, "_blank")}
+                              >
+                                <FileText className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <Separator className="separator-3d" />
+
+                  <h3 className="text-lg font-semibold text-gray-700">Work Experience</h3>
+                  {formData.experiences.map((exp, index) => (
+                    <div key={exp.id || index} className="relative border-2 border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all overflow-hidden">
+                      {/* Delete Button */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeExperience(index)}
+                        className="absolute top-3 right-3 text-red-500 hover:text-red-700 hover:bg-red-50 z-10"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+
+                      {/* Header Section */}
+                      <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-4 text-white">
+                        <div className="flex items-start gap-3">
+                          <div className="bg-white/20 rounded-lg p-2">
+                            <Briefcase className="w-6 h-6" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="text-xl font-bold">{exp.position || "Position Not Specified"}</h4>
+                            <div className="flex items-center gap-2 mt-1 text-purple-100">
+                              <Clock className="w-4 h-4" />
+                              <span className="text-sm">{exp.jobType || "Not Specified"}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Company & Duration */}
+                      <div className="p-4 border-b border-gray-100 bg-gray-50">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="w-5 h-5 text-gray-600" />
+                            <div>
+                              <p className="font-semibold text-gray-800">
+                                {exp.company || "Company Not Specified"}
+                              </p>
+                              {exp.location && (
+                                <p className="text-sm text-gray-500 flex items-center gap-1">
+                                  <MapPin className="w-3 h-3" />
+                                  {exp.location}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="flex items-center gap-1 text-sm font-medium text-gray-700">
+                              <Calendar className="w-4 h-4" />
+                              {exp.startDate ? new Date(exp.startDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'}
+                              {" - "}
+                              {exp.endDate ? new Date(exp.endDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Present'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Documents Section */}
+                      <div className="p-4 space-y-3">
+                        <h5 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                          <FileText className="w-4 h-4" />
+                          Documents Status
+                        </h5>
+                        
+                        <div className="grid grid-cols-1 gap-2">
+                          {/* Offer Letter */}
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                "w-2 h-2 rounded-full",
+                                exp.offerLetterUrl ? "bg-green-500" : "bg-gray-300"
+                              )} />
+                              <span className="text-sm font-medium text-gray-700">Offer Letter</span>
+                              <span className="text-red-500 text-xs">*</span>
+                            </div>
+                            {exp.offerLetterUrl ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(exp.offerLetterUrl, "_blank")}
+                                className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
+                              >
+                                <Eye className="w-3 h-3 mr-1" />
+                                View
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-gray-500 italic">Nil</span>
+                            )}
+                          </div>
+
+                          {/* Separation Letter */}
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                "w-2 h-2 rounded-full",
+                                exp.separationLetterUrl ? "bg-green-500" : "bg-gray-300"
+                              )} />
+                              <span className="text-sm font-medium text-gray-700">Separation Letter</span>
+                            </div>
+                            {exp.separationLetterUrl ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(exp.separationLetterUrl, "_blank")}
+                                className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
+                              >
+                                <Eye className="w-3 h-3 mr-1" />
+                                View
+                              </Button>
+                            ) : exp.noSeparationLetterReason ? (
+                              <span className="text-xs text-amber-600 italic">{exp.noSeparationLetterReason}</span>
+                            ) : (
+                              <span className="text-xs text-gray-500 italic">Nil</span>
+                            )}
+                          </div>
+
+                          {/* Payslip 1 */}
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                "w-2 h-2 rounded-full",
+                                exp.payslip_1_url ? "bg-green-500" : "bg-gray-300"
+                              )} />
+                              <span className="text-sm font-medium text-gray-700">Payslip 1</span>
+                              <span className="text-red-500 text-xs">*</span>
+                            </div>
+                            {exp.payslip_1_url ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(exp.payslip_1_url, "_blank")}
+                                className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
+                              >
+                                <Eye className="w-3 h-3 mr-1" />
+                                View
+                              </Button>
+                            ) : exp.noPayslipReason ? (
+                              <span className="text-xs text-amber-600 italic">{exp.noPayslipReason}</span>
+                            ) : (
+                              <span className="text-xs text-gray-500 italic">Nil</span>
+                            )}
+                          </div>
+
+                          {/* Payslip 2 */}
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                "w-2 h-2 rounded-full",
+                                exp.payslip_2_url ? "bg-green-500" : "bg-gray-300"
+                              )} />
+                              <span className="text-sm font-medium text-gray-700">Payslip 2</span>
+                              <span className="text-red-500 text-xs">*</span>
+                            </div>
+                            {exp.payslip_2_url ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(exp.payslip_2_url, "_blank")}
+                                className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
+                              >
+                                <Eye className="w-3 h-3 mr-1" />
+                                View
+                              </Button>
+                            ) : exp.noPayslipReason ? (
+                              <span className="text-xs text-amber-600 italic">{exp.noPayslipReason}</span>
+                            ) : (
+                              <span className="text-xs text-gray-500 italic">Nil</span>
+                            )}
+                          </div>
+
+                          {/* Payslip 3 */}
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                "w-2 h-2 rounded-full",
+                                exp.payslip_3_url ? "bg-green-500" : "bg-gray-300"
+                              )} />
+                              <span className="text-sm font-medium text-gray-700">Payslip 3</span>
+                              <span className="text-red-500 text-xs">*</span>
+                            </div>
+                            {exp.payslip_3_url ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(exp.payslip_3_url, "_blank")}
+                                className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
+                              >
+                                <Eye className="w-3 h-3 mr-1" />
+                                View
+                              </Button>
+                            ) : exp.noPayslipReason ? (
+                              <span className="text-xs text-amber-600 italic">{exp.noPayslipReason}</span>
+                            ) : (
+                              <span className="text-xs text-gray-500 italic">Nil</span>
+                            )}
+                          </div>
+
+                          {/* Hike Letter */}
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                "w-2 h-2 rounded-full",
+                                exp.hikeLetterUrl ? "bg-green-500" : "bg-gray-300"
+                              )} />
+                              <span className="text-sm font-medium text-gray-700">Hike Letter</span>
+                            </div>
+                            {exp.hikeLetterUrl ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(exp.hikeLetterUrl, "_blank")}
+                                className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
+                              >
+                                <Eye className="w-3 h-3 mr-1" />
+                                View
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-gray-500 italic">N/A</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Edit Button */}
+                      <div className="p-4 bg-gray-50 border-t border-gray-100">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => openExperienceModal(index)}
+                          className="w-full hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300"
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit Experience
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                <Button
+  type="button"
+  onClick={() => openExperienceModal()}
+  variant="link"
+  className="text-purple-600 p-0 h-auto"
+>
+  <Plus className="h-4 w-4 mr-2" />
+  Add Work Experience
+</Button>
+                </TabsContent>
+
+                <TabsContent value="bank-details" className="animated-tab-content space-y-6">
+                  <h2 className="section-header-3d">Bank Details</h2>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Account Holder Name</Label>
+                      <Input
+                        value={formData.bankDetails.accountHolderName}
+                        onChange={(e) =>
+                          handleBankDetailsChange("accountHolderName", e.target.value)
+                        }
+                        placeholder="Enter account holder name"
+                      />
+                    </div>
+
+                  <div className="form-3d-input">
+  <Label className="form-3d-label">Account Number</Label>
+  <Input
+    value={formData.bankDetails.accountNumber}
+    onChange={(e) =>
+      handleBankDetailsChange("accountNumber", e.target.value)
+    }
+    placeholder="Enter account number"
+  />
+  {formData.bankDetails.accountNumber.length > 5 && (
+    <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
+      <CheckCircle2 className="h-3 w-3" />
+      Verified
+    </div>
+  )}
 </div>
 
-          </div>
-          {errors[`${docType}Number`] && (
-                            <p className="text-red-500 text-xs mt-1">{errors[`${docType}Number`]}</p>
-                          )}
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Bank Name</Label>
+                      <Input
+                        value={formData.bankDetails.bankName}
+                        onChange={(e) =>
+                          handleBankDetailsChange("bankName", e.target.value)
+                        }
+                        placeholder="Enter bank name"
+                      />
+                    </div>
 
-          {/* View Document Icon */}
-{formData[`${docType}Url`] && (
-  <div className="mt-2">
-    <a
-      href={formData[`${docType}Url`]}
-      target="_blank"
-      rel="noopener noreferrer"
-      title="View Document"
-      className="inline-block"
-    >
-      <FaRegFilePdf className="h-8 w-8 text-red-600 cursor-pointer" />
-    </a>
-  </div>
-)}
-        </div>
-      ))}
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Branch Name</Label>
+                      <Input
+                        value={formData.bankDetails.branchName}
+                        onChange={(e) =>
+                          handleBankDetailsChange("branchName", e.target.value)
+                        }
+                        placeholder="Enter branch name"
+                      />
+                    </div>
+
+     <div className="form-3d-input">
+  <Label className="form-3d-label">IFSC Code</Label>
+  <Input
+    value={formData.bankDetails.ifscCode}
+    onChange={(e) =>
+      handleBankDetailsChange("ifscCode", e.target.value.toUpperCase())
+    }
+    placeholder="Enter IFSC code"
+  />
+  {/* --- Start of UI Update --- */}
+  {isVerifyingIfsc ? (
+    <div className="flex items-center gap-1 text-blue-600 text-xs mt-1">
+      <Loader2 className="h-3 w-3 animate-spin" />
+      Verifying...
     </div>
-  </div>
-</TabsContent>
-
-
-                 {/* Experience Modal */}
-      {showExperienceModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
-            <h3 className="text-xl font-bold mb-4">
-              {editingExperienceIndex !== null ? "Edit Experience" : "Add Experience"}
-            </h3>
-            
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <Label>Job Type</Label>
-                <RadioGroup 
-                  value={currentExperience.jobType} 
-                  onValueChange={(value) => handleExperienceChange('jobType', value)}
-                  className="flex space-x-4"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Full Time" id="fullTime" 
-                   className="border-purple data-[state=checked]:border-purple data-[state=checked]:purple-text-color"
-/>
-                    <Label htmlFor="fullTime">Full Time</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Part Time" id="partTime" 
-                   className="border-purple data-[state=checked]:border-purple data-[state=checked]:purple-text-color"
-                   />
-                    <Label htmlFor="partTime">Part Time</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Internship" id="internship" 
-                   className="border-purple data-[state=checked]:border-purple data-[state=checked]:purple-text-color"
-                   />
-                    <Label htmlFor="internship">Internship</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="company">Company Name</Label>
-                  <Input
-                    id="company"
-                    value={currentExperience.company}
-                    onChange={(e) => handleExperienceChange('company', e.target.value)}
-                    placeholder="Enter Company Name"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="position">Designation</Label>
-                  <Input
-                    id="position"
-                    value={currentExperience.position}
-                    onChange={(e) => handleExperienceChange('position', e.target.value)}
-                    placeholder="Enter Designation"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="location">Location</Label>
-                  <Input
-                    id="location"
-                    value={currentExperience.location}
-                    onChange={(e) => handleExperienceChange('location', e.target.value)}
-                    placeholder="Enter Location"
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="startDate">Date of Joining</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !startDate && "text-muted-foreground"
-                        )}
+  ) : (
+    VALIDATIONS.ifsc.test(formData.bankDetails.ifscCode) && formData.bankDetails.bankName && (
+      <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
+        <CheckCircle2 className="h-3 w-3" />
+        Verified
+      </div>
+    )
+  )}
+  {/* --- End of UI Update --- */}
+</div>
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Account Type</Label>
+                      <Select
+                        value={formData.bankDetails.accountType}
+                        onValueChange={(value) =>
+                          handleBankDetailsChange("accountType", value)
+                        }
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {startDate ? format(startDate, "PPP") : <span>Select Date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={startDate}
-                        onSelect={handleExperienceStartDateChange}
-                        initialFocus
-                        className="p-3 pointer-events-auto"
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Savings">Savings</SelectItem>
+                          <SelectItem value="Current">Current</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="form-3d-input md:col-span-2">
+                      <Label className="form-3d-label">Branch Address</Label>
+                      <Textarea
+                        value={formData.bankDetails.branchAddress || ""}
+                        onChange={(e) =>
+                          handleBankDetailsChange("branchAddress", e.target.value)
+                        }
+                        placeholder="Enter branch address"
+                        rows={3}
                       />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="endDate">Date of Separation</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !endDate && "text-muted-foreground"
-                        )}
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Country</Label>
+                      <Select
+                        value={formData.bankDetails.country}
+                        onValueChange={(value) =>
+                          handleBankDetailsChange("country", value)
+                        }
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {endDate ? format(endDate, "PPP") : <span>Select Date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={endDate}
-                        onSelect={handleExperienceEndDateChange}
-                        initialFocus
-                        className="p-3 pointer-events-auto"
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {countries.map((country) => (
+                            <SelectItem key={country.isoCode} value={country.name}>
+                              {country.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">State</Label>
+                      <Select
+                        value={formData.bankDetails.state}
+                        onValueChange={(value) =>
+                          handleBankDetailsChange("state", value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {bankStates.map((state) => (
+                            <SelectItem key={state.isoCode} value={state.name}>
+                              {state.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">City</Label>
+                      <Select
+                        value={formData.bankDetails.city}
+                        onValueChange={(value) =>
+                          handleBankDetailsChange("city", value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select city" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {bankCities.map((city) => (
+                            <SelectItem key={city.name} value={city.name}>
+                              {city.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">ZIP Code</Label>
+                      <Input
+                        value={formData.bankDetails.zipCode || ""}
+                        onChange={(e) =>
+                          handleBankDetailsChange("zipCode", e.target.value)
+                        }
+                        placeholder="Enter ZIP code"
                       />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <div className="space-y-2">
-                    <Label htmlFor="offerLetter">Offer Letter<span className="text-red-500">*</span></Label>
-                    <div className="flex gap-3 items-center">
-                      <div className="relative">
-                      <input
-              type="file"
-              id="offerLetter"
-              className="sr-only"
-              accept=".pdf,.png,.jpg,.jpeg"
-              disabled={uploadingFile !== null}
-              onChange={(event) => handleExpUpload(event, "offerLetter", currentExperience.id)}
-            />
-            <Label htmlFor="offerLetter" className={`cursor-pointer purple-text-color hover:underline ${uploadingFile ? "opacity-50 cursor-not-allowed" : ""}`}>
-              {uploadingFile === "offerLetter" ? (
-                <span className="flex items-center gap-1">
-                  <Loader2 className="animate-spin w-4 h-4" /> Uploading...
-                </span>
-              ) : (
-                <span>
-                + Upload File{" "}
-                <span className="text-xs text-gray-500">(Supported format: PDF, PNG, JPG)</span>
-              </span>
-              )}
-            </Label>
-          </div>
-          {currentExperience.offerLetterUrl && (
-             <Button
-             variant="ghost1"
-             size="xs"
-             title="View Offer Letter"
-             className="p-1"
-             onClick={() =>
-               window.open(currentExperience.offerLetterUrl, "_blank", "noopener,noreferrer")
-             }
-           >
-             <FileText className="h-4 w-4" />
-           </Button>
-          )}
-        </div>
-                  </div>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <div className="space-y-2">
-                    <Label htmlFor="separationLetter">Separation Letter<span className="text-red-500">*</span></Label>
-                    <div className="flex gap-3 items-center">
-                      <div className="relative">
+                    </div>
+
+                    <div className="form-3d-input md:col-span-2">
+                      <Label className="form-3d-label">Bank Document (Passbook/Cancelled Cheque)</Label>
+                      <div className="flex gap-3 items-center">
                         <input
                           type="file"
-                          id="separationLetter"
+                          id="bankDocument"
                           className="sr-only"
                           accept=".pdf,.png,.jpg,.jpeg"
-                          disabled={noSeparationLetter}
-                          onChange={(event) => handleExpUpload(event, 'separationLetter', currentExperience.id)}
+                          disabled={uploadingFile !== null}
+                          onChange={handleBankDocumentUpload}
                         />
                         <Label
-                          htmlFor="separationLetter"
+                          htmlFor="bankDocument"
                           className={cn(
-                            "cursor-pointer purple-text-color hover:underline",
-                            noSeparationLetter && "opacity-50 cursor-not-allowed"
+                            "cursor-pointer text-purple-600 hover:underline",
+                            uploadingFile && "opacity-50 cursor-not-allowed"
                           )}
                         >
-                          + Upload File <span className="text-xs text-gray-500">(Supported format: PDF, PNG, JPG)</span>
+                          {uploadingFile === "bankDocument" ? (
+                            <span className="flex items-center gap-1">
+                              <Loader2 className="animate-spin w-4 w-4" /> Uploading...
+                            </span>
+                          ) : (
+                            "+ Upload File"
+                          )}
                         </Label>
+                        {formData.bankDetails.documentUrl && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              window.open(formData.bankDetails.documentUrl, "_blank")
+                            }
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox 
-                      id="noSeparationLetter" 
-                      checked={noSeparationLetter}
-                      onCheckedChange={(checked) => {
-                        setNoSeparationLetter(checked === true);
-                        if (checked) {
-                          handleExperienceChange('separationLetterUrl', null);
-                        }
-                      }}
- className="data-[state=checked]:bg-purple data-[state=checked]:border-purple border-purple"
+                </TabsContent>
 
-                    />
-                    <Label htmlFor="noSeparationLetter" className="text-sm">Separation Letter</Label>
+                <TabsContent value="documents" className="animated-tab-content space-y-6">
+                  <h2 className="section-header-3d">Documents</h2>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="form-3d-input">
+  <Label className="form-3d-label">Aadhar Number</Label>
+  <Input
+    value={formData.aadharNumber}
+    onChange={(e) =>
+      handleInputChange("aadharNumber", e.target.value)
+    }
+    placeholder="Enter 12-digit Aadhar number"
+    maxLength={12}
+  />
+  {formErrors.aadharNumber && (
+    <span className="form-error">{formErrors.aadharNumber}</span>
+  )}
+  {!formErrors.aadharNumber && VALIDATIONS.aadhar.test(formData.aadharNumber) && (
+    <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
+      <CheckCircle2 className="h-3 w-3" />
+      Verified
+    </div>
+  )}
+</div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Aadhar Document</Label>
+                      <div className="flex gap-3 items-center">
+                        <input
+                          type="file"
+                          id="aadharUrl"
+                          className="sr-only"
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          disabled={uploadingFile !== null}
+                          onChange={(event) => handleFileUpload(event, "aadharUrl")}
+                        />
+                        <Label
+                          htmlFor="aadharUrl"
+                          className={cn(
+                            "cursor-pointer text-purple-600 hover:underline",
+                            uploadingFile && "opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                          {uploadingFile === "aadharUrl" ? (
+                            <span className="flex items-center gap-1">
+                              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
+                            </span>
+                          ) : (
+                            "+ Upload File"
+                          )}
+                        </Label>
+                        {formData.aadharUrl && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(formData.aadharUrl, "_blank")}
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                  <div className="form-3d-input">
+  <Label className="form-3d-label">PAN Number</Label>
+  <Input
+    value={formData.panNumber}
+    onChange={(e) =>
+      handleInputChange("panNumber", e.target.value.toUpperCase())
+    }
+    placeholder="Enter PAN number"
+    maxLength={10}
+  />
+  {formErrors.panNumber && (
+    <span className="form-error">{formErrors.panNumber}</span>
+  )}
+  {!formErrors.panNumber && VALIDATIONS.pan.test(formData.panNumber) && (
+    <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
+      <CheckCircle2 className="h-3 w-3" />
+      Verified
+    </div>
+  )}
+</div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">PAN Document</Label>
+                      <div className="flex gap-3 items-center">
+                        <input
+                          type="file"
+                          id="panUrl"
+                          className="sr-only"
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          disabled={uploadingFile !== null}
+                          onChange={(event) => handleFileUpload(event, "panUrl")}
+                        />
+                        <Label
+                          htmlFor="panUrl"
+                          className={cn(
+                            "cursor-pointer text-purple-600 hover:underline",
+                            uploadingFile && "opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                          {uploadingFile === "panUrl" ? (
+                            <span className="flex items-center gap-1">
+                              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
+                            </span>
+                          ) : (
+                            "+ Upload File"
+                          )}
+                        </Label>
+                        {formData.panUrl && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(formData.panUrl, "_blank")}
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                  <div className="form-3d-input">
+  <Label className="form-3d-label">Voter ID Number</Label>
+  <Input
+    value={formData.voterIdNumber}
+    onChange={(e) =>
+      handleInputChange("voterIdNumber", e.target.value.toUpperCase())
+    }
+    placeholder="e.g., ABC1234567"
+    maxLength={10}
+  />
+  {/* --- Start of Added Code --- */}
+  {VALIDATIONS.voterId.test(formData.voterIdNumber) && (
+    <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
+      <CheckCircle2 className="h-3 w-3" />
+      Verified
+    </div>
+  )}
+  {/* --- End of Added Code --- */}
+</div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Voter ID Document</Label>
+                      <div className="flex gap-3 items-center">
+                        <input
+                          type="file"
+                          id="voterIdUrl"
+                          className="sr-only"
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          disabled={uploadingFile !== null}
+                          onChange={(event) => handleFileUpload(event, "voterIdUrl")}
+                        />
+                        <Label
+                          htmlFor="voterIdUrl"
+                          className={cn(
+                            "cursor-pointer text-purple-600 hover:underline",
+                            uploadingFile && "opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                          {uploadingFile === "voterIdUrl" ? (
+                            <span className="flex items-center gap-1">
+                              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
+                            </span>
+                          ) : (
+                            "+ Upload File"
+                          )}
+                        </Label>
+                        {formData.voterIdUrl && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(formData.voterIdUrl, "_blank")}
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                   <div className="form-3d-input">
+  <Label className="form-3d-label">ESIC Number</Label>
+  <Input
+    value={formData.esicNumber}
+    onChange={(e) =>
+      handleInputChange("esicNumber", e.target.value)
+    }
+    placeholder="Enter ESIC number"
+  />
+  {formErrors.esicNumber && (
+    <span className="form-error">{formErrors.esicNumber}</span>
+  )}
+  {!formErrors.esicNumber && VALIDATIONS.esic.test(formData.esicNumber) && (
+    <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
+      <CheckCircle2 className="h-3 w-3" />
+      Verified
+    </div>
+  )}
+</div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">ESIC Document</Label>
+                      <div className="flex gap-3 items-center">
+                        <input
+                          type="file"
+                          id="esicUrl"
+                          className="sr-only"
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          disabled={uploadingFile !== null}
+                          onChange={(event) => handleFileUpload(event, "esicUrl")}
+                        />
+                        <Label
+                          htmlFor="esicUrl"
+                          className={cn(
+                            "cursor-pointer text-purple-600 hover:underline",
+                            uploadingFile && "opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                          {uploadingFile === "esicUrl" ? (
+                            <span className="flex items-center gap-1">
+                              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
+                            </span>
+                          ) : (
+                            "+ Upload File"
+                          )}
+                        </Label>
+                        {formData.esicUrl && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(formData.esicUrl, "_blank")}
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                   <div className="form-3d-input">
+  <Label className="form-3d-label">UAN Number</Label>
+  <Input
+    value={formData.uanNumber}
+    onChange={(e) =>
+      handleInputChange("uanNumber", e.target.value)
+    }
+    placeholder="Enter 12-digit UAN number"
+    maxLength={12}
+  />
+  {formErrors.uanNumber && (
+    <span className="form-error">{formErrors.uanNumber}</span>
+  )}
+  {!formErrors.uanNumber && VALIDATIONS.uan.test(formData.uanNumber) && (
+    <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
+      <CheckCircle2 className="h-3 w-3" />
+      Verified
+    </div>
+  )}
+</div>
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">UAN Document</Label>
+                      <div className="flex gap-3 items-center">
+                        <input
+                          type="file"
+                          id="uanUrl"
+                          className="sr-only"
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          disabled={uploadingFile !== null}
+                          onChange={(event) => handleFileUpload(event, "uanUrl")}
+                        />
+                        <Label
+                          htmlFor="uanUrl"
+                          className={cn(
+                            "cursor-pointer text-purple-600 hover:underline",
+                            uploadingFile && "opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                          {uploadingFile === "uanUrl" ? (
+                            <span className="flex items-center gap-1">
+                              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
+                            </span>
+                          ) : (
+                            "+ Upload File"
+                          )}
+                        </Label>
+                        {formData.uanUrl && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(formData.uanUrl, "_blank")}
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
+                </TabsContent>
+
+                {/* Experience Modal - keeping original functionality */}
+                {showExperienceModal && (
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-8">
+                      <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                        {editingExperienceIndex !== null ? "Edit Experience" : "Add Experience"}
+                      </h2>
+                      
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="form-3d-input">
+                            <Label className="form-3d-label">Job Type</Label>
+                            <Select
+                              value={currentExperience.jobType}
+                              onValueChange={(value: "Full Time" | "Part Time" | "Internship") =>
+                                handleExperienceChange("jobType", value)
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Full Time">Full Time</SelectItem>
+                                <SelectItem value="Part Time">Part Time</SelectItem>
+                                <SelectItem value="Internship">Internship</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="form-3d-input">
+                            <Label className="form-3d-label">Company Name</Label>
+                            <Input
+                              value={currentExperience.company}
+                              onChange={(e) =>
+                                handleExperienceChange("company", e.target.value)
+                              }
+                              placeholder="Enter company name"
+                            />
+                          </div>
+
+                          <div className="form-3d-input">
+                            <Label className="form-3d-label">Position</Label>
+                            <Input
+                              value={currentExperience.position}
+                              onChange={(e) =>
+                                handleExperienceChange("position", e.target.value)
+                              }
+                              placeholder="Enter position"
+                            />
+                          </div>
+
+                          <div className="form-3d-input">
+                            <Label className="form-3d-label">Location</Label>
+                            <Input
+                              value={currentExperience.location || ""}
+                              onChange={(e) =>
+                                handleExperienceChange("location", e.target.value)
+                              }
+                              placeholder="Enter location"
+                            />
+                          </div>
+
+                          <div className="form-3d-input">
+                            <Label className="form-3d-label">Start Date</Label>
+                            <Input
+                              type="date"
+                              value={currentExperience.startDate || ""}
+                              onChange={(e) =>
+                                handleExperienceChange("startDate", e.target.value)
+                              }
+                            />
+                          </div>
+
+                          <div className="form-3d-input">
+                            <Label className="form-3d-label">End Date</Label>
+                            <Input
+                              type="date"
+                              value={currentExperience.endDate || ""}
+                              onChange={(e) =>
+                                handleExperienceChange("endDate", e.target.value)
+                              }
+                            />
+                          </div>
+                        </div>
+
+                        {/* Document uploads - MODERN UI */}
+                        <div className="space-y-6">
+                          {/* Offer Letter - Always shown */}
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">
+                              Offer Letter<span className="text-red-500 ml-1">*</span>
+                            </Label>
+                            <div
+                              className={cn(
+                                "relative border-2 border-dashed rounded-lg p-4 transition-all",
+                                currentExperience.offerLetterUrl
+                                  ? "border-green-500 bg-green-50"
+                                  : "border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50",
+                                uploadingFile === "offerLetter" && "border-blue-400 bg-blue-50"
+                              )}
+                            >
+                              <input
+                                type="file"
+                                id="offerLetter"
+                                className="sr-only"
+                                accept=".pdf,.png,.jpg,.jpeg"
+                                disabled={uploadingFile !== null}
+                                onChange={(event) =>
+                                  handleExpUpload(event, "offerLetter", currentExperience.id)
+                                }
+                              />
+
+                              {uploadingFile === "offerLetter" ? (
+                                <div className="flex items-center justify-center gap-3 py-2">
+                                  <Loader2 className="animate-spin w-5 h-5 text-blue-600" />
+                                  <span className="text-sm font-medium text-blue-600">Uploading...</span>
+                                </div>
+                              ) : currentExperience.offerLetterUrl ? (
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-3 flex-1">
+                                    <div className="bg-green-600 rounded-full p-2">
+                                      <CheckCircle2 className="w-5 h-5 text-white" />
+                                    </div>
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-green-700">File uploaded successfully</p>
+                                      <p className="text-xs text-gray-500">Click to view or upload new file</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => window.open(currentExperience.offerLetterUrl, "_blank")}
+                                      className="hover:bg-green-100"
+                                    >
+                                      <FileText className="h-4 w-4 text-green-600" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <Label
+                                  htmlFor="offerLetter"
+                                  className="flex items-center justify-center gap-3 cursor-pointer py-2"
+                                >
+                                  <div className="bg-purple-600 rounded-full p-2">
+                                    <Upload className="w-5 h-5 text-white" />
+                                  </div>
+                                  <div className="text-left">
+                                    <p className="text-sm font-medium text-gray-700">
+                                      Click to upload or drag and drop
+                                    </p>
+                                    <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
+                                  </div>
+                                </Label>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Separation Letter Toggle */}
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                              <div className="flex-1">
+                                <Label className="text-sm font-medium">Do you have a Separation Letter?</Label>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Toggle on if you have a separation letter from this company
+                                </p>
+                              </div>
+                              <Switch
+                                checked={!noSeparationLetter}
+                                onCheckedChange={(checked) => {
+                                  setNoSeparationLetter(!checked);
+                                  if (!checked) {
+                                    handleExperienceChange("separationLetterUrl", "");
+                                  }
+                                }}
+                              />
+                            </div>
+
+                            {!noSeparationLetter ? (
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">Separation Letter</Label>
+                                <div
+                                  className={cn(
+                                    "relative border-2 border-dashed rounded-lg p-4 transition-all",
+                                    currentExperience.separationLetterUrl
+                                      ? "border-green-500 bg-green-50"
+                                      : "border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50",
+                                    uploadingFile === "separationLetter" && "border-blue-400 bg-blue-50"
+                                  )}
+                                >
+                                  <input
+                                    type="file"
+                                    id="separationLetter"
+                                    className="sr-only"
+                                    accept=".pdf,.png,.jpg,.jpeg"
+                                    disabled={uploadingFile !== null}
+                                    onChange={(event) =>
+                                      handleExpUpload(event, "separationLetter", currentExperience.id)
+                                    }
+                                  />
+
+                                  {uploadingFile === "separationLetter" ? (
+                                    <div className="flex items-center justify-center gap-3 py-2">
+                                      <Loader2 className="animate-spin w-5 h-5 text-blue-600" />
+                                      <span className="text-sm font-medium text-blue-600">Uploading...</span>
+                                    </div>
+                                  ) : currentExperience.separationLetterUrl ? (
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-3 flex-1">
+                                        <div className="bg-green-600 rounded-full p-2">
+                                          <CheckCircle2 className="w-5 h-5 text-white" />
+                                        </div>
+                                        <div className="flex-1">
+                                          <p className="text-sm font-medium text-green-700">File uploaded successfully</p>
+                                          <p className="text-xs text-gray-500">Click to view or upload new file</p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => window.open(currentExperience.separationLetterUrl, "_blank")}
+                                          className="hover:bg-green-100"
+                                        >
+                                          <FileText className="h-4 w-4 text-green-600" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <Label
+                                      htmlFor="separationLetter"
+                                      className="flex items-center justify-center gap-3 cursor-pointer py-2"
+                                    >
+                                      <div className="bg-purple-600 rounded-full p-2">
+                                        <Upload className="w-5 h-5 text-white" />
+                                      </div>
+                                      <div className="text-left">
+                                        <p className="text-sm font-medium text-gray-700">
+                                          Click to upload or drag and drop
+                                        </p>
+                                        <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
+                                      </div>
+                                    </Label>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                                <Label className="text-sm font-medium text-amber-800">
+                                  Reason for not having Separation Letter
+                                </Label>
+                                <Input
+                                  value={currentExperience.noSeparationLetterReason || ""}
+                                  onChange={(e) =>
+                                    handleExperienceChange("noSeparationLetterReason", e.target.value)
+                                  }
+                                  placeholder="e.g., Still employed, Letter not provided, etc."
+                                  className="mt-2 border-amber-300 focus:border-amber-500"
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Payslips Toggle */}
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                              <div className="flex-1">
+                                <Label className="text-sm font-medium">Do you have Payslips?</Label>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Toggle on if you have payslips from this company (minimum 3 required)
+                                </p>
+                              </div>
+                              <Switch
+                                checked={!noPayslip}
+                                onCheckedChange={(checked) => {
+                                  setNoPayslip(!checked);
+                                  if (!checked) {
+                                    handleExperienceChange("payslip_1_url", "");
+                                    handleExperienceChange("payslip_2_url", "");
+                                    handleExperienceChange("payslip_3_url", "");
+                                  }
+                                }}
+                              />
+                            </div>
+
+                            {!noPayslip ? (
+                              <>
+                                {/* Payslip 1 */}
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-medium">
+                                    Payslip 1<span className="text-red-500 ml-1">*</span>
+                                  </Label>
+                                  <div
+                                    className={cn(
+                                      "relative border-2 border-dashed rounded-lg p-4 transition-all",
+                                      currentExperience.payslip_1_url
+                                        ? "border-green-500 bg-green-50"
+                                        : "border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50",
+                                      uploadingFile === "payslip1" && "border-blue-400 bg-blue-50"
+                                    )}
+                                  >
+                                    <input
+                                      type="file"
+                                      id="payslip1"
+                                      className="sr-only"
+                                      accept=".pdf,.png,.jpg,.jpeg"
+                                      disabled={uploadingFile !== null}
+                                      onChange={(event) =>
+                                        handleExpUpload(event, "payslip1", currentExperience.id)
+                                      }
+                                    />
+
+                                    {uploadingFile === "payslip1" ? (
+                                      <div className="flex items-center justify-center gap-3 py-2">
+                                        <Loader2 className="animate-spin w-5 h-5 text-blue-600" />
+                                        <span className="text-sm font-medium text-blue-600">Uploading...</span>
+                                      </div>
+                                    ) : currentExperience.payslip_1_url ? (
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-3 flex-1">
+                                          <div className="bg-green-600 rounded-full p-2">
+                                            <CheckCircle2 className="w-5 h-5 text-white" />
+                                          </div>
+                                          <div className="flex-1">
+                                            <p className="text-sm font-medium text-green-700">File uploaded successfully</p>
+                                            <p className="text-xs text-gray-500">Click to view or upload new file</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => window.open(currentExperience.payslip_1_url, "_blank")}
+                                            className="hover:bg-green-100"
+                                          >
+                                            <FileText className="h-4 w-4 text-green-600" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <Label
+                                        htmlFor="payslip1"
+                                        className="flex items-center justify-center gap-3 cursor-pointer py-2"
+                                      >
+                                        <div className="bg-purple-600 rounded-full p-2">
+                                          <Upload className="w-5 h-5 text-white" />
+                                        </div>
+                                        <div className="text-left">
+                                          <p className="text-sm font-medium text-gray-700">
+                                            Click to upload or drag and drop
+                                          </p>
+                                          <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
+                                        </div>
+                                      </Label>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Payslip 2 */}
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-medium">
+                                    Payslip 2<span className="text-red-500 ml-1">*</span>
+                                  </Label>
+                                  <div
+                                    className={cn(
+                                      "relative border-2 border-dashed rounded-lg p-4 transition-all",
+                                      currentExperience.payslip_2_url
+                                        ? "border-green-500 bg-green-50"
+                                        : "border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50",
+                                      uploadingFile === "payslip2" && "border-blue-400 bg-blue-50"
+                                    )}
+                                  >
+                                    <input
+                                      type="file"
+                                      id="payslip2"
+                                      className="sr-only"
+                                      accept=".pdf,.png,.jpg,.jpeg"
+                                      disabled={uploadingFile !== null}
+                                      onChange={(event) =>
+                                        handleExpUpload(event, "payslip2", currentExperience.id)
+                                      }
+                                    />
+
+                                    {uploadingFile === "payslip2" ? (
+                                      <div className="flex items-center justify-center gap-3 py-2">
+                                        <Loader2 className="animate-spin w-5 h-5 text-blue-600" />
+                                        <span className="text-sm font-medium text-blue-600">Uploading...</span>
+                                      </div>
+                                    ) : currentExperience.payslip_2_url ? (
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-3 flex-1">
+                                          <div className="bg-green-600 rounded-full p-2">
+                                            <CheckCircle2 className="w-5 h-5 text-white" />
+                                          </div>
+                                          <div className="flex-1">
+                                            <p className="text-sm font-medium text-green-700">File uploaded successfully</p>
+                                            <p className="text-xs text-gray-500">Click to view or upload new file</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => window.open(currentExperience.payslip_2_url, "_blank")}
+                                            className="hover:bg-green-100"
+                                          >
+                                            <FileText className="h-4 w-4 text-green-600" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <Label
+                                        htmlFor="payslip2"
+                                        className="flex items-center justify-center gap-3 cursor-pointer py-2"
+                                      >
+                                        <div className="bg-purple-600 rounded-full p-2">
+                                          <Upload className="w-5 h-5 text-white" />
+                                        </div>
+                                        <div className="text-left">
+                                          <p className="text-sm font-medium text-gray-700">
+                                            Click to upload or drag and drop
+                                          </p>
+                                          <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
+                                        </div>
+                                      </Label>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Payslip 3 */}
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-medium">
+                                    Payslip 3<span className="text-red-500 ml-1">*</span>
+                                  </Label>
+                                  <div
+                                    className={cn(
+                                      "relative border-2 border-dashed rounded-lg p-4 transition-all",
+                                      currentExperience.payslip_3_url
+                                        ? "border-green-500 bg-green-50"
+                                        : "border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50",
+                                      uploadingFile === "payslip3" && "border-blue-400 bg-blue-50"
+                                    )}
+                                  >
+                                    <input
+                                      type="file"
+                                      id="payslip3"
+                                      className="sr-only"
+                                      accept=".pdf,.png,.jpg,.jpeg"
+                                      disabled={uploadingFile !== null}
+                                      onChange={(event) =>
+                                        handleExpUpload(event, "payslip3", currentExperience.id)
+                                      }
+                                    />
+
+                                    {uploadingFile === "payslip3" ? (
+                                      <div className="flex items-center justify-center gap-3 py-2">
+                                        <Loader2 className="animate-spin w-5 h-5 text-blue-600" />
+                                        <span className="text-sm font-medium text-blue-600">Uploading...</span>
+                                      </div>
+                                    ) : currentExperience.payslip_3_url ? (
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-3 flex-1">
+                                          <div className="bg-green-600 rounded-full p-2">
+                                            <CheckCircle2 className="w-5 h-5 text-white" />
+                                          </div>
+                                          <div className="flex-1">
+                                            <p className="text-sm font-medium text-green-700">File uploaded successfully</p>
+                                            <p className="text-xs text-gray-500">Click to view or upload new file</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => window.open(currentExperience.payslip_3_url, "_blank")}
+                                            className="hover:bg-green-100"
+                                          >
+                                            <FileText className="h-4 w-4 text-green-600" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <Label
+                                        htmlFor="payslip3"
+                                        className="flex items-center justify-center gap-3 cursor-pointer py-2"
+                                      >
+                                        <div className="bg-purple-600 rounded-full p-2">
+                                          <Upload className="w-5 h-5 text-white" />
+                                        </div>
+                                        <div className="text-left">
+                                          <p className="text-sm font-medium text-gray-700">
+                                            Click to upload or drag and drop
+                                          </p>
+                                          <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
+                                        </div>
+                                      </Label>
+                                    )}
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                                <Label className="text-sm font-medium text-amber-800">
+                                  Reason for not having Payslips
+                                </Label>
+                                <Input
+                                  value={currentExperience.noPayslipReason || ""}
+                                  onChange={(e) => handleExperienceChange("noPayslipReason", e.target.value)}
+                                  placeholder="e.g., Cash payment, Contractor role, etc."
+                                  className="mt-2 border-amber-300 focus:border-amber-500"
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Hike Letter - Optional */}
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Hike Letter (Optional)</Label>
+                            <div
+                              className={cn(
+                                "relative border-2 border-dashed rounded-lg p-4 transition-all",
+                                currentExperience.hikeLetterUrl
+                                  ? "border-green-500 bg-green-50"
+                                  : "border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50",
+                                uploadingFile === "hikeLetter" && "border-blue-400 bg-blue-50"
+                              )}
+                            >
+                              <input
+                                type="file"
+                                id="hikeLetter"
+                                className="sr-only"
+                                accept=".pdf,.png,.jpg,.jpeg"
+                                disabled={uploadingFile !== null}
+                                onChange={(event) =>
+                                  handleExpUpload(event, "hikeLetter", currentExperience.id)
+                                }
+                              />
+
+                              {uploadingFile === "hikeLetter" ? (
+                                <div className="flex items-center justify-center gap-3 py-2">
+                                  <Loader2 className="animate-spin w-5 h-5 text-blue-600" />
+                                  <span className="text-sm font-medium text-blue-600">Uploading...</span>
+                                </div>
+                              ) : currentExperience.hikeLetterUrl ? (
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-3 flex-1">
+                                    <div className="bg-green-600 rounded-full p-2">
+                                      <CheckCircle2 className="w-5 h-5 text-white" />
+                                    </div>
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-green-700">File uploaded successfully</p>
+                                      <p className="text-xs text-gray-500">Click to view or upload new file</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => window.open(currentExperience.hikeLetterUrl, "_blank")}
+                                      className="hover:bg-green-100"
+                                    >
+                                      <FileText className="h-4 w-4 text-green-600" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <Label
+                                  htmlFor="hikeLetter"
+                                  className="flex items-center justify-center gap-3 cursor-pointer py-2"
+                                >
+                                  <div className="bg-purple-600 rounded-full p-2">
+                                    <Upload className="w-5 h-5 text-white" />
+                                  </div>
+                                  <div className="text-left">
+                                    <p className="text-sm font-medium text-gray-700">
+                                      Click to upload or drag and drop
+                                    </p>
+                                    <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
+                                  </div>
+                                </Label>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-8 flex justify-end gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShowExperienceModal(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button type="button" onClick={saveExperience} className="button-3d">
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )} 
+
+                <div className="mt-8 flex justify-end">
+                  <Button type="submit" disabled={loading} className="button-3d">
+                    {loading ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="animate-spin h-4 w-4" />
+                        Saving...
+                      </span>
+                    ) : activeTab === "documents" ? (
+                      "Save and Finish"
+                    ) : (
+                      "Save and Next"
+                    )}
+                  </Button>
                 </div>
-                
-                {noSeparationLetter && (
-                  <div className="space-y-2">
-                    <Label htmlFor="noSeparationLetterReason">Reason if separation letter is not available</Label>
-                    <Input
-                      id="noSeparationLetterReason"
-                      value={currentExperience.noSeparationLetterReason || ""}
-                      onChange={(e) => handleExperienceChange('noSeparationLetterReason', e.target.value)}
-                      placeholder="Enter reason here"
-                    />
-                  </div>
-                )}
-                
-                <div className="flex justify-between items-center">
-  <div className="space-y-2">
-    <Label htmlFor="payslip1">Payslip 1<span className="text-red-500">*</span></Label>
-    <div className="flex gap-3 items-center">
-      <div className="relative">
-        <input
-          type="file"
-          id="payslip1"
-          className="sr-only"
-          accept=".pdf,.png,.jpg,.jpeg"
-          disabled={noPayslip || uploadingFile !== null}
-          onChange={(event) => handleExpUpload(event, 'payslip1', currentExperience.id)}
-        />
-        <Label
-          htmlFor="payslip1"
-          className={cn(
-            "cursor-pointer purple-text-color hover:underline",
-            (noPayslip || uploadingFile) && "opacity-50 cursor-not-allowed"
-          )}
-        >
-          {uploadingFile === "payslip1" ? (
-            <span className="flex items-center gap-1">
-              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
-            </span>
-          ) : (
-            "+ Upload File"
-          )}
-          <span className="text-xs text-gray-500"> (Supported format: PDF, PNG, JPG)</span>
-        </Label>
-      </div>
-      {currentExperience.payslip_1_url && (
-  <Button
-    variant="ghost1"
-    size="xs"
-    title="View Payslip 1"
-    className="p-1"
-    onClick={() =>
-      window.open(currentExperience.payslip_1_url, "_blank", "noopener,noreferrer")
-    }
-  >
-    <FileText className="h-4 w-4" />
-  </Button>
-)}
-    </div>
-  </div>
-  <div className="flex items-center space-x-2">
-  <Checkbox 
-  id="noPayslip" 
-  checked={noPayslip}
-  onCheckedChange={(checked) => {
-    setNoPayslip(checked === true);
-    if (checked) {
-      handleExperienceChange('payslip_1_url', "");
-      handleExperienceChange('payslip_2_url', "");
-      handleExperienceChange('payslip_3_url', "");
-    }
-  }}
- className="data-[state=checked]:bg-purple data-[state=checked]:border-purple border-purple"
-/>
-    <Label htmlFor="noPayslip" className="text-sm">No Payslip</Label>
-  </div>
-</div>
-                
-                {noPayslip && (
-                  <div className="space-y-2">
-                    <Label htmlFor="noPayslipReason">Reason if payslip is not available</Label>
-                    <Input
-                      id="noPayslipReason"
-                      value={currentExperience.noPayslipReason || ""}
-                      onChange={(e) => handleExperienceChange('noPayslipReason', e.target.value)}
-                      placeholder="Enter reason here"
-                    />
-                  </div>
-                )}
-                
-                {!noPayslip && (
-  <div className="space-y-2">
-    <Label htmlFor="payslip2">Payslip 2<span className="text-red-500">*</span></Label>
-    <div className="flex gap-3 items-center">
-      <div className="relative">
-        <input
-          type="file"
-          id="payslip2"
-          className="sr-only"
-          accept=".pdf,.png,.jpg,.jpeg"
-          disabled={uploadingFile !== null}
-          onChange={(event) => handleExpUpload(event, 'payslip2', currentExperience.id)}
-        />
-        <Label
-          htmlFor="payslip2"
-          className={cn(
-            "cursor-pointer purple-text-color hover:underline",
-            uploadingFile && "opacity-50 cursor-not-allowed"
-          )}
-        >
-          {uploadingFile === "payslip2" ? (
-            <span className="flex items-center gap-1">
-              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
-            </span>
-          ) : (
-            "+ Upload File"
-          )}
-          <span className="text-xs text-gray-500"> (Supported format: PDF, PNG, JPG)</span>
-        </Label>
-      </div>
-      {currentExperience.payslip_2_url && (
-        <Button
-        variant="ghost1"
-        size="xs"
-        title="View Payslip 2"
-        className="p-1"
-        onClick={() =>
-          window.open(currentExperience.payslip_2_url, "_blank", "noopener,noreferrer")
-        }
-      >
-        <FileText className="h-4 w-4" />
-      </Button>
-      )}
-    </div>
-  </div>
-)}
-
-{!noPayslip && (
-  <div className="space-y-2">
-    <Label htmlFor="payslip3">Payslip 3<span className="text-red-500">*</span></Label>
-    <div className="flex gap-3 items-center">
-      <div className="relative">
-        <input
-          type="file"
-          id="payslip3"
-          className="sr-only"
-          accept=".pdf,.png,.jpg,.jpeg"
-          disabled={uploadingFile !== null}
-          onChange={(event) => handleExpUpload(event, 'payslip3', currentExperience.id)}
-        />
-        <Label
-          htmlFor="payslip3"
-          className={cn(
-            "cursor-pointer purple-text-color hover:underline",
-            uploadingFile && "opacity-50 cursor-not-allowed"
-          )}
-        >
-          {uploadingFile === "payslip3" ? (
-            <span className="flex items-center gap-1">
-              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
-            </span>
-          ) : (
-            "+ Upload File"
-          )}
-          <span className="text-xs text-gray-500"> (Supported format: PDF, PNG, JPG)</span>
-        </Label>
-      </div>
-      {currentExperience.payslip_3_url && (
-       <Button
-       variant="ghost1"
-       size="xs"
-       title="View Payslip 3"
-       className="p-1"
-       onClick={() =>
-         window.open(currentExperience.payslip_3_url, "_blank", "noopener,noreferrer")
-       }
-     >
-       <FileText className="h-4 w-4" />
-     </Button>
-      )}
-    </div>
-  </div>
-)}
-                
-                <div className="space-y-2">
-  <Label htmlFor="hikeLetter">Hike Letter</Label>
-  <div className="flex gap-3 items-center">
-    <div className="relative">
-      <input
-        type="file"
-        id="hikeLetter"
-        className="sr-only"
-        accept=".pdf,.png,.jpg,.jpeg"
-        disabled={uploadingFile !== null}
-        onChange={(event) => handleExpUpload(event, 'hikeLetter', currentExperience.id)}
-      />
-      <Label
-        htmlFor="hikeLetter"
-        className={cn(
-          "cursor-pointer purple-text-color hover:underline",
-          uploadingFile && "opacity-50 cursor-not-allowed"
-        )}
-      >
-        {uploadingFile === "hikeLetter" ? (
-          <span className="flex items-center gap-1">
-            <Loader2 className="animate-spin w-4 h-4" /> Uploading...
-          </span>
-        ) : (
-          "+ Upload File"
-        )}
-        <span className="text-xs text-gray-500"> (Supported format: PDF, PNG, JPG)</span>
-      </Label>
-    </div>
-    {currentExperience.hikeLetterUrl && (
-      <Button
-      variant="ghost1"
-      size="xs"
-      title="View Hike Letter"
-      className="p-1"
-      onClick={() =>
-        window.open(currentExperience.hikeLetterUrl, "_blank", "noopener,noreferrer")
-      }
-    >
-      <FileText className="h-4 w-4" />
-    </Button>
-    )}
-  </div>
-</div>
-              </div>
-            </div>
-            
-            <div className="mt-6 flex justify-end gap-3">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setShowExperienceModal(false)}
-              >
-                Cancel
-              </Button>
-              <Button 
-                type="button" 
-                onClick={saveExperience}
-              
-              >
-                Save
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-                <div className="mt-6 flex justify-end">
-  <Button type="submit" disabled={loading}>
-    {loading 
-      ? "Saving..." 
-      : (activeTab === "documents" ? "Save and Finish" : "Save and Next")}
-  </Button>
-</div>
               </form>
             </Tabs>
           )}

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -13,29 +14,36 @@ import {
   Download,
   Info,
   Lightbulb,
-  History,     
+  History,
   ScanSearch,
-  Sparkles,   
+  Sparkles,
+  Building,
+  Factory,
+  MapPin,
+  Calendar,
+  Wallet,
+  Clock,
+  ChevronRight,
+  TrendingUp,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"; 
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import CompareWithJobDialog from '@/components/candidates/talent-pool/CompareWithJobDialog';
-import AnalysisHistoryDialog from '@/components/candidates/AnalysisHistoryDialog';
+import CompareWithJobDialog from "@/components/candidates/talent-pool/CompareWithJobDialog";
+import AnalysisHistoryDialog from "@/components/candidates/AnalysisHistoryDialog";
 import EnrichDataDialog from "@/components/candidates/talent-pool/EnrichDataDialog";
-import { generateDocx, generatePdf } from "@/utils/cvGenerator"; // Import the new functions
+import { generateDocx, generatePdf } from "@/utils/cvGenerator";
 
- 
 // Helper to safely parse JSON arrays from the database
 const parseJsonArray = (data: any) => {
   if (Array.isArray(data)) return data;
-  if (typeof data === 'string') {
+  if (typeof data === "string") {
     try {
       const parsed = JSON.parse(data);
       return Array.isArray(parsed) ? parsed : [];
@@ -45,14 +53,16 @@ const parseJsonArray = (data: any) => {
   }
   return [];
 };
- 
- 
+
 const CandidateProfilePage = () => {
   const { candidateId } = useParams<{ candidateId: string }>();
-    const [isCompareModalOpen, setCompareModalOpen] = useState(false);
+  const [isCompareModalOpen, setCompareModalOpen] = useState(false);
   const [isHistoryModalOpen, setHistoryModalOpen] = useState(false);
   const [isEnrichModalOpen, setEnrichModalOpen] = useState(false);
- 
+  const organizationId = useSelector(
+    (state: any) => state.auth.organization_id
+  );
+
   const { data: candidate, isLoading } = useQuery({
     queryKey: ["talentPoolCandidate", candidateId],
     queryFn: async () => {
@@ -66,350 +76,821 @@ const CandidateProfilePage = () => {
     },
     enabled: !!candidateId,
   });
- 
-  if (isLoading) {
-    return <div className="flex justify-center items-center h-screen">Loading...</div>;
-  }
- 
-  if (!candidate) {
-    return <div className="text-center mt-10">Candidate not found.</div>;
-  }
- 
-  const professionalSummaryPoints = candidate.professional_summary; // Keep raw data
-  const workExperience = parseJsonArray(candidate.work_experience);
-  // --- START: Add this sorting logic ---
-const getEndYear = (duration) => {
-  if (!duration || typeof duration !== 'string') return 0;
 
-  // Prioritize "Present" or "Current" jobs by giving them a future year
-  if (duration.toLowerCase().includes('present') || duration.toLowerCase().includes('current')) {
-    return new Date().getFullYear() + 1;
-  }
+  const topSkills = useMemo(
+    () => parseJsonArray(candidate?.top_skills),
+    [candidate]
+  );
 
-  // Find all 4-digit numbers (years) in the string
-  const years = duration.match(/\d{4}/g);
-  if (!years) return 0;
-  
-  // Return the highest year found (handles "2021-2023" correctly)
-  return Math.max(...years.map(year => parseInt(year, 10)));
-};
-
-// Create a new sorted array to avoid modifying the original data directly
-const sortedWorkExperience = [...workExperience].sort((a, b) => {
-    const yearB = getEndYear(b.duration);
-    const yearA = getEndYear(a.duration);
-    return yearB - yearA; // Sorts in descending order (most recent first)
-});
-// --- END: Sorting Logic ---
-  const education = parseJsonArray(candidate.education);
-  const certifications = parseJsonArray(candidate.certifications);
-  const topSkills = parseJsonArray(candidate.top_skills);
-  const projects = parseJsonArray(candidate.projects);
-  const resumeFileName = candidate.candidate_name ? `${candidate.candidate_name.replace(/\s+/g, '_')}_Resume.pdf` : 'resume.pdf';
- 
-  const renderAboutContent = () => {
-    const summaryArray = parseJsonArray(professionalSummaryPoints);
-    if (summaryArray.length > 0) {
-      return summaryArray.map((point, index) => <p key={index}>{point}</p>);
+  const { data: enrichedSkills, isLoading: isLoadingEnrichedSkills } = useQuery(
+    {
+      queryKey: ["enrichedSkills", topSkills],
+      queryFn: async () => {
+        if (!topSkills || topSkills.length === 0) return [];
+        const { data, error } = await supabase.rpc("get_enriched_skills", {
+          p_skill_names: topSkills,
+        });
+        if (error)
+          throw new Error(`Error fetching enriched skills: ${error.message}`);
+        return data;
+      },
+      enabled: !!topSkills && topSkills.length > 0,
     }
-    if (typeof professionalSummaryPoints === 'string' && professionalSummaryPoints.trim() !== '') {
-      return <p>{professionalSummaryPoints}</p>;
+  );
+
+  const { data: relatedCandidates, isLoading: isLoadingRelated } = useQuery({
+    queryKey: ["relatedCandidates", candidateId, organizationId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_related_candidates", {
+        p_candidate_id: candidateId,
+        p_organization_id: organizationId,
+        p_limit: 10,
+      });
+      if (error) {
+        console.error("Error fetching related candidates:", error);
+        return [];
+      }
+      return data;
+    },
+    enabled: !!candidateId && !!organizationId,
+  });
+
+  interface TimelineEvent {
+    id: string;
+    event_type: string;
+    changed_at: string;
+    talent_pool_id: string;
+    changed_by_user: {
+      first_name: string;
+      last_name: string;
+    } | null;
+  }
+
+  interface SupabaseResponse {
+    data: TimelineEvent[] | null;
+    error: Error | null;
+  }
+
+  const { data: timelineEvents, isLoading: isLoadingTimeline } = useQuery<TimelineEvent[]>({
+    queryKey: ["candidateTimeline", candidateId],
+    queryFn: async () => {
+      console.log("Fetching timeline for candidateId:", candidateId);
+
+      const { data, error } = await supabase
+        .from("hr_talent_pool_timeline")
+        .select("*, changed_by_user:hr_employees(first_name, last_name)") 
+        .eq("talent_pool_id", candidateId)
+        .order("changed_at", { ascending: false });
+
+      console.log("Data returned from Supabase:", data);
+
+      if (error) {
+        console.error("Error fetching timeline:", error);
+        return [];
+      }
+      return data ?? [];
+    },
+    enabled: !!candidateId,
+  });
+
+  const groupedSkills = useMemo(() => {
+    if (!enrichedSkills || !topSkills) return {};
+    const enrichedSkillMap = new Map(
+      enrichedSkills.map((skill) => [
+        skill.skill_name.trim().toLowerCase(),
+        skill,
+      ])
+    );
+
+    const groups = topSkills.reduce((acc, rawSkill) => {
+      const skillKey = rawSkill.trim().toLowerCase();
+      const enriched = enrichedSkillMap.get(skillKey);
+
+      if (enriched) {
+        const groupKey = `${enriched.category || "Other"}`;
+        if (!acc[groupKey]) acc[groupKey] = [];
+        if (!acc[groupKey].some((s) => s.name === enriched.normalized_name)) {
+          acc[groupKey].push({
+            name: enriched.normalized_name,
+            description: enriched.description,
+          });
+        }
+      } else {
+        const groupKey = "Other Skills (General)";
+        if (!acc[groupKey]) acc[groupKey] = [];
+        if (!acc[groupKey].some((s) => s.name === rawSkill)) {
+          acc[groupKey].push({
+            name: rawSkill,
+            description: "No description available.",
+          });
+        }
+      }
+      return acc;
+    }, {} as Record<string, { name: string; description: string }[]>);
+
+    return groups;
+  }, [enrichedSkills, topSkills]);
+
+  // Helper function to sort work experience by end date
+  const getEndYear = (duration: string) => {
+    if (!duration || typeof duration !== "string") return 0;
+    if (
+      duration.toLowerCase().includes("present") ||
+      duration.toLowerCase().includes("current")
+    ) {
+      return new Date().getFullYear() + 1;
     }
-    return <p className="text-gray-500">No summary available for this candidate.</p>;
+    const years = duration.match(/\d{4}/g);
+    if (!years) return 0;
+    return Math.max(...years.map((year) => parseInt(year, 10)));
   };
- 
+
+  const sortedWorkExperience = useMemo(() => {
+    const workExp = parseJsonArray(candidate?.work_experience);
+    return [...workExp].sort((a, b) => {
+      const yearB = getEndYear(b.duration || b.end_date || "");
+      const yearA = getEndYear(a.duration || a.end_date || "");
+      return yearB - yearA;
+    });
+  }, [candidate]);
+
+  const keyDetails = useMemo(() => {
+    if (!candidate) return [];
+
+    const details = [
+      {
+        icon: Briefcase,
+        label: "Experience",
+        value: candidate.total_experience,
+      },
+      {
+        icon: Calendar,
+        label: "Notice Period",
+        value: candidate.notice_period,
+      },
+      {
+        icon: Factory,
+        label: "Current Company",
+        value: candidate.current_company,
+      },
+      {
+        icon: Briefcase,
+        label: "Current Role",
+        value: candidate.current_designation,
+      },
+      {
+        icon: MapPin,
+        label: "Current Location",
+        value: candidate.current_location,
+      },
+      {
+        icon: MapPin,
+        label: "Preferred Locations",
+        value: candidate.preferred_locations,
+      },
+      {
+        icon: Wallet,
+        label: "Current Salary",
+        value: candidate.current_salary,
+      },
+      {
+        icon: Wallet,
+        label: "Expected Salary",
+        value: candidate.expected_salary,
+      },
+      {
+        icon: GraduationCap,
+        label: "Highest Education",
+        value: candidate.education_summary,
+      },
+    ];
+
+    return details.filter((detail) => detail.value);
+  }, [candidate]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
+      </div>
+    );
+  }
+
+  if (!candidate) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-slate-500">Candidate not found</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white min-h-screen">
-      <div className="container mx-auto p-4 md:p-8">
-   
-          <Button variant="outline" className="border-gray-300 mb-6" onClick={() => window.history.back()}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back
-          </Button>
-       
- 
-        {/* --- Header Section --- */}
-        <Card className="mb-8 overflow-hidden border rounded-lg">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      <div className="mx-auto max-w-screen-8xl px-4 py-6 sm:px-6 lg:px-8">
+        {/* Header - STICKY */}
+        <div className="sticky top-0 z-20 bg-white border-b border-slate-200 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 mb-6 flex items-center justify-between shadow-sm">
+          <Link
+            to="/talent-pool"
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Talent Pool
+          </Link>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCompareModalOpen(true)}
+              className="gap-2"
+            >
+              <ScanSearch className="h-4 w-4" />
+              Compare
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setHistoryModalOpen(true)}
+              className="gap-2"
+            >
+              <History className="h-4 w-4" />
+              History
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEnrichModalOpen(true)}
+              className="gap-2"
+            >
+              <Sparkles className="h-4 w-4" />
+              Enrich
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="default" size="sm" className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => generatePdf(candidate)}>
+                  Download as PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => generateDocx(candidate)}>
+                  Download as DOCX
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* Candidate Card */}
+        <Card className="border-slate-200 bg-white shadow-md mb-8">
           <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row md:items-start gap-6">
-              <div className="w-24 h-24 rounded-full bg-purple-100 flex items-center justify-center text-purple-500 text-4xl font-bold flex-shrink-0">
+            <div className="flex gap-6">
+              <div className="grid h-20 w-20 flex-shrink-0 place-items-center rounded-full bg-gradient-to-br from-purple-500 to-purple-600 text-3xl font-bold text-white shadow-lg">
                 {candidate.candidate_name?.charAt(0)}
               </div>
-              <div className="flex-grow space-y-2">
-                <h1 className="text-3xl font-bold text-gray-900">{candidate.candidate_name}</h1>
-                <p className="text-lg text-gray-600">{candidate.suggested_title}</p>
-                {candidate.linkedin_url && (
-  <a
-    href={
-      candidate.linkedin_url.startsWith("http")
-        ? candidate.linkedin_url
-        : `https://${candidate.linkedin_url}`
-    }
-    target="_blank"
-    rel="noreferrer"
-    className="text-blue-600 hover:underline text-sm flex items-center gap-2"
-  >
-    <Linkedin size={16} /> LinkedIn Profile
-  </a>
-)}
-
-                <div className="pt-2 space-y-2 text-sm text-gray-700">
-                    <div className="flex items-center gap-3">
-                        <Mail size={16} className="text-gray-500"/>
-                       <a href={`mailto:${candidate.email}`} className="hover:underline hover:text-purple-700 break-all">
-                {candidate.email}
-                      </a>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <Phone size={16} className="text-gray-500" />
-                        <span>{candidate.phone}</span>
-                    </div>
+              <div className="flex-grow">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h1 className="text-2xl font-bold text-slate-900">
+                      {candidate.candidate_name}
+                    </h1>
+                    <p className="mt-1 text-base text-slate-600">
+                      {candidate.suggested_title}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600">
+                  {candidate.email && (
+                    <a
+                      href={`mailto:${candidate.email}`}
+                      className="flex items-center gap-1.5 hover:text-purple-600 transition-colors"
+                    >
+                      <Mail className="h-4 w-4" />
+                      {candidate.email}
+                    </a>
+                  )}
+                  {candidate.phone_number && (
+                    <a
+                      href={`tel:${candidate.phone_number}`}
+                      className="flex items-center gap-1.5 hover:text-purple-600 transition-colors"
+                    >
+                      <Phone className="h-4 w-4" />
+                      {candidate.phone_number}
+                    </a>
+                  )}
+                  {candidate.linkedin_url && (
+                    <a
+                      href={candidate.linkedin_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 hover:text-purple-600 transition-colors"
+                    >
+                      <Linkedin className="h-4 w-4" />
+                      LinkedIn Profile
+                    </a>
+                  )}
                 </div>
               </div>
-  <div className="flex flex-col gap-4 flex-shrink-0 w-50">
-  <Button
-    size="sm"
-    variant="outline"
-    className="w-full flex items-center justify-center gap-2"
-    onClick={() => setCompareModalOpen(true)}
-  >
-    <ScanSearch size={16} />
-    <span>Compare with Job</span>
-  </Button>
+            </div>
 
-  <DropdownMenu>
-    <DropdownMenuTrigger asChild>
-      <Button
-        size="sm"
-        variant="datepicker"
-        className="w-full flex items-center justify-center gap-2"
-      >
-        <Download size={16} />
-        <span>Download Formatted CV</span>
-      </Button>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent>
-      <DropdownMenuItem onClick={() => generateDocx(candidate)}>
-        Download as DOCX
-      </DropdownMenuItem>
-      <DropdownMenuItem onClick={() => generatePdf(candidate)}>
-        Download as PDF
-      </DropdownMenuItem>
-    </DropdownMenuContent>
-  </DropdownMenu>
-
-  {candidate.resume_path && (
-    <a href={candidate.resume_path} download={resumeFileName} title="Download original uploaded resume">
-      <Button
-        size="sm"
-        variant="secondary"
-        className="w-full flex items-center justify-center gap-2"
-      >
-        <Download size={16} />
-        <span>Original CV</span>
-      </Button>
-    </a>
-  )}
-   <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full flex items-center justify-center gap-2"
-                  onClick={() => setEnrichModalOpen(true)}
-                >
-                  <Sparkles size={16} />
-                  <span>Enrich Data</span>
-                </Button>
-</div>
-
+            {/* Details in single long box */}
+            <div className="mt-6 border border-slate-200 rounded-lg bg-slate-50/30 p-4">
+              <div className="flex flex-wrap gap-x-8 gap-y-3">
+                {keyDetails.map((detail, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-2"
+                  >
+                    <div className="rounded-md bg-white p-1.5 text-slate-600 shadow-sm">
+                      <detail.icon className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-slate-500">
+                        {detail.label}
+                      </p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {detail.value}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>
 
-         {/* --- START: Added for Enrich Data --- */}
-        {/* This new card provides a quick overview of the enriched data */}
-       {/* <Card className="mb-8">
-            <CardContent className="p-4">
-               
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 text-center">
-             
-                    {candidate.total_experience && (
-                        <div>
-                            <p className="text-sm text-gray-500">Experience</p>
-                            <p className="font-semibold text-gray-800">{candidate.total_experience}</p>
+        {/* IMPROVED SECTIONS START HERE */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Left Column - Main Content (2/3 width) */}
+          <div className="space-y-6 lg:col-span-2">
+            {/* Top Skills Section - TABLE LAYOUT WITH PURPLE BACKGROUNDS */}
+            <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+              <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                  <div className="rounded-lg bg-purple-100 p-2">
+                    <TrendingUp className="h-5 w-5 text-purple-600" />
+                  </div>
+                  Top Skills
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5">
+                {isLoadingEnrichedSkills ? (
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="space-y-2">
+                        <div className="h-4 w-32 rounded bg-slate-100 animate-pulse"></div>
+                        <div className="flex flex-wrap gap-2">
+                          {[...Array(4)].map((_, j) => (
+                            <div
+                              key={j}
+                              className="h-8 w-20 rounded-full bg-slate-100 animate-pulse"
+                            ></div>
+                          ))}
                         </div>
-                    )}
-                    {candidate.notice_period && (
-                        <div>
-                            <p className="text-sm text-gray-500">Notice Period</p>
-                            <p className="font-semibold text-gray-800">{candidate.notice_period}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {Object.entries(groupedSkills).map(([category, skills], idx) => (
+                      <div key={idx}>
+                        <h3 className="text-sm font text-slate-900 uppercase tracking-wide mb-3">
+                          {category}
+                        </h3>
+                        <div className="flex flex-wrap gap-2">
+                          {skills.map((skill, skillIdx) => (
+                            <div
+                              key={skillIdx}
+                              className="group/skill relative"
+                            >
+                              <Badge
+                                variant="secondary"
+                                className="cursor-help px-3 py-1.5 text-xs font bg-purple-500 hover:bg-purple-700 text-white border-0 transition-all duration-200 shadow-sm hover:shadow"
+                              >
+                                {skill.name}
+                              </Badge>
+                              {skill.description && 
+                                skill.description !== "No description available." && (
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 rounded-lg bg-slate-900 text-white text-xs shadow-xl opacity-0 group-hover/skill:opacity-100 transition-opacity duration-200 z-20 pointer-events-none">
+                                  <p className="leading-relaxed">{skill.description}</p>
+                                  <div className="absolute left-1/2 -translate-x-1/2 bottom-[-4px] h-2 w-2 bg-slate-900 rotate-45"></div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                    )}
-                    {candidate.current_salary && (
-                         <div>
-                            <p className="text-sm text-gray-500">Current Salary</p>
-                            <p className="font-semibold text-gray-800">{candidate.current_salary}</p>
-                        </div>
-                    )}
-                    {candidate.current_location && (
-                        <div>
-                            <p className="text-sm text-gray-500">Location</p>
-                            <p className="font-semibold text-gray-800">{candidate.current_location}</p>
-                        </div>
-                    )}
-                    
-                    {candidate.highest_education && (
-                        <div>
-                            <p className="text-sm text-gray-500">Highest Education</p>
-                            <p className="font-semibold text-gray-800">{candidate.highest_education}</p>
-                        </div>
-                    )}
-                  
-                </div>
-            </CardContent>
-        </Card> */}
- 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* --- Main Content (Left) --- */}
-          <div className="lg:col-span-2 space-y-8">
-            <Card className="border rounded-lg">
-              <CardHeader><CardTitle className="text-xl font-bold">About</CardTitle></CardHeader>
-              <CardContent className="text-gray-600 space-y-4">
-                 {renderAboutContent()}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
- 
-             {workExperience && workExperience.length > 0 && (
-                <Card className="border rounded-lg">
-                    <CardHeader><CardTitle className="text-xl font-bold">Work Experience</CardTitle></CardHeader>
-                    <CardContent>
-                        <div className="relative pl-8 pt-4 space-y-10 border-l-2 border-gray-100">
-                            {sortedWorkExperience.map((exp, index) => (
-                                <div key={index} className="relative">
-                                    <div className="absolute -left-[50px] top-1 w-12 h-12 rounded-md bg-purple-50 flex items-center justify-center text-sm font-bold text-purple-600 ring-4 ring-white">{exp.company?.charAt(0) || 'W'}</div>
-                                    <p className="font-bold text-md text-gray-800 uppercase tracking-wide">{exp.designation} <span className="ml-2 font-normal text-sm text-purple-600 normal-case">{exp.duration}</span></p>
-                                    <p className="text-md text-gray-700">{exp.company}</p>
-                                    <ul className="mt-2 list-disc pl-5 space-y-1 text-sm text-gray-600">
-                                      {exp.responsibilities.map((resp, respIndex) => (<li key={respIndex}>{resp}</li>))}
-                                    </ul>
-                                </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-             )}
- 
-            {projects && projects.length > 0 && (
-                <Card className="border rounded-lg">
-                    <CardHeader><CardTitle className="text-xl font-bold flex items-center gap-2"><Lightbulb size={22}/> Projects</CardTitle></CardHeader>
-                    <CardContent className="space-y-6">
-                        {projects.map((proj, index) => (
-                            <div key={index} className="pt-2">
-                                <h3 className="font-semibold text-gray-800">{proj.name}</h3>
-                                <p className="text-sm text-gray-600 mt-1">{proj.description}</p>
-                            </div>
-                        ))}
-                    </CardContent>
-                </Card>
-            )}
- 
-            {candidate.other_details && Object.keys(candidate.other_details).length > 0 && (
-              <Card className="border rounded-lg">
-                <CardHeader><CardTitle className="text-xl font-bold flex items-center gap-2"><Info size={22}/> Other Details</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  {Object.entries(candidate.other_details).map(([key, value]) => (
-                    <div key={key}>
-                      <h3 className="font-semibold text-lg text-gray-800 mb-2">{key}</h3>
-                      <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600">
-                        {Array.isArray(value) && value.map((item, index) => (<li key={index}>{item}</li>))}
-                      </ul>
+
+            {/* About Section - IMPROVED */}
+            {candidate.about && (
+              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                  <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                    <div className="rounded-lg bg-blue-100 p-2">
+                      <Info className="h-5 w-5 text-blue-600" />
                     </div>
-                  ))}
+                    About
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-5">
+                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                    {candidate.about}
+                  </p>
                 </CardContent>
               </Card>
             )}
-          </div>
- 
-          {/* --- Information Sidebar (Right) --- */}
-          <div className="lg:col-span-1 space-y-6">
-             {topSkills && topSkills.length > 0 && (
-                <Card className="border rounded-lg">
-                    <CardHeader><CardTitle className="text-xl font-bold">Top Skills</CardTitle></CardHeader>
-                    <CardContent className="flex flex-wrap gap-2">
-                        {topSkills.map((skill: string) => (<Badge key={skill} variant="secondary" className="bg-purple-100 text-purple-700">{skill}</Badge>))}
-                    </CardContent>
-                </Card>
-             )}
 
-
-             
-             {education && education.length > 0 && (
-                <Card className="border rounded-lg">
-                    <CardHeader><CardTitle className="text-xl font-bold">Education</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                        {education.map((edu: any, index: number) => (
-                            <div key={index} className="pt-2 border-b last:border-b-0 pb-2">
-                                <p className="font-semibold text-gray-800">{edu.degree}</p>
-                                <p className="text-sm text-gray-600">{edu.institution}</p>
-                                {edu.year && <p className="text-xs text-gray-500 mt-1">{edu.year}</p>}
+            {/* Work Experience - IMPROVED */}
+            {sortedWorkExperience.length > 0 && (
+                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                      <div className="rounded-lg bg-green-100 p-2">
+                        <Briefcase className="h-5 w-5 text-green-600" />
+                      </div>
+                      Work Experience
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <div className="relative pl-8">
+                      {/* Timeline line */}
+                      <div className="absolute left-4 top-3 h-[calc(100%-24px)] w-0.5 bg-gradient-to-b from-slate-300 via-slate-200 to-transparent" />
+                      
+                      <div className="space-y-6">
+                        {sortedWorkExperience.map((exp: any, index: number) => {
+                          const title = exp.designation || exp.title;
+                          const company = exp.company;
+                          const duration = exp.duration || 
+                            (exp.start_date && exp.end_date 
+                              ? `${exp.start_date} - ${exp.end_date}`
+                              : exp.start_date || exp.end_date || "");
+                          const responsibilities = parseJsonArray(exp.responsibilities);
+                          const description = exp.description;
+                          
+                          return (
+                            <div key={index} className="relative group/exp">
+                              {/* Timeline dot */}
+                              <div className="absolute -left-8 top-1.5 h-4 w-4 rounded-full bg-white border-2 border-purple-500 shadow-sm group-hover/exp:border-purple-600 group-hover/exp:shadow-md transition-all duration-200"></div>
+                              
+                              <div className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-4 hover:border-purple-200 hover:shadow-sm transition-all duration-200">
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="flex-grow">
+                                    <h3 className="text-base font-bold text-slate-900">
+                                      {title}
+                                    </h3>
+                                    <p className="mt-1 text-sm font-medium text-purple-600 flex items-center gap-1">
+                                      <Building className="h-3.5 w-3.5" />
+                                      {company}
+                                    </p>
+                                  </div>
+                                  {duration && (
+                                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
+                                      <Calendar className="h-3.5 w-3.5" />
+                                      <span>{duration}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Show responsibilities as bullet points if available */}
+                                {responsibilities.length > 0 && (
+                                  <ul className="mt-3 list-disc pl-5 text-sm text-slate-600 space-y-1.5 leading-relaxed">
+                                    {responsibilities.map((resp: string, i: number) => (
+                                      <li key={i}>{resp}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                                
+                                {/* Show description as paragraph if available and no responsibilities */}
+                                {!responsibilities.length && description && (
+                                  <p className="mt-3 text-sm text-slate-600 leading-relaxed">
+                                    {description}
+                                  </p>
+                                )}
+                              </div>
                             </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+            {/* Education - IMPROVED */}
+            {candidate.education &&
+              parseJsonArray(candidate.education).length > 0 && (
+                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                      <div className="rounded-lg bg-indigo-100 p-2">
+                        <GraduationCap className="h-5 w-5 text-indigo-600" />
+                      </div>
+                      Education
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <div className="space-y-4">
+                      {parseJsonArray(candidate.education).map(
+                        (edu: any, index: number) => (
+                          <div
+                            key={index}
+                            className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-4 hover:border-indigo-200 hover:shadow-sm transition-all duration-200"
+                          >
+                            <h3 className="text-base font-bold text-slate-900">
+                              {edu.degree}
+                            </h3>
+                            <p className="mt-1 text-sm font-medium text-indigo-600">
+                              {edu.institution}
+                            </p>
+                            {edu.year && (
+                              <p className="mt-1 text-xs text-slate-500 flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {edu.year}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+            {/* Certifications - IMPROVED */}
+            {candidate.certifications &&
+              parseJsonArray(candidate.certifications).length > 0 && (
+                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                      <div className="rounded-lg bg-amber-100 p-2">
+                        <Award className="h-5 w-5 text-amber-600" />
+                      </div>
+                      Certifications
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {parseJsonArray(candidate.certifications).map(
+                        (cert: string, index: number) => (
+                          <div
+                            key={index}
+                            className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-amber-50/30 p-3 hover:border-amber-200 hover:shadow-sm transition-all duration-200"
+                          >
+                            <div className="flex items-start gap-2">
+                              <Award className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                              <p className="text-sm font-medium text-slate-800 leading-relaxed">
+                                {cert}
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+            {/* Projects - IMPROVED */}
+            {candidate.projects &&
+              parseJsonArray(candidate.projects).length > 0 && (
+                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                      <div className="rounded-lg bg-teal-100 p-2">
+                        <Lightbulb className="h-5 w-5 text-teal-600" />
+                      </div>
+                      Projects
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <div className="space-y-4">
+                      {parseJsonArray(candidate.projects).map(
+                        (proj: any, index: number) => (
+                          <div
+                            key={index}
+                            className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-4 hover:border-teal-200 hover:shadow-sm transition-all duration-200"
+                          >
+                            <h3 className="text-base font-bold text-slate-900">
+                              {proj.name}
+                            </h3>
+                            <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+                              {proj.description}
+                            </p>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+            {/* Other Details - IMPROVED */}
+            {candidate.other_details &&
+              Object.keys(candidate.other_details).length > 0 && (
+                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                      <div className="rounded-lg bg-cyan-100 p-2">
+                        <Info className="h-5 w-5 text-cyan-600" />
+                      </div>
+                      Other Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <div className="space-y-4">
+                      {Object.entries(candidate.other_details).map(
+                        ([key, value]) =>
+                          Array.isArray(value) &&
+                          value.length > 0 && (
+                            <div key={key} className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-4">
+                              <h3 className="text-sm font-bold text-slate-800 mb-2 uppercase tracking-wide">
+                                {key}
+                              </h3>
+                              <ul className="space-y-1.5">
+                                {value.map((item, index) => (
+                                  <li key={index} className="flex items-start gap-2 text-sm text-slate-600">
+                                    <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0 mt-0.5" />
+                                    <span>{item}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+          </div>
+
+          {/* Right Column - Sidebar (1/3 width) */}
+          <div className="space-y-6">
+                         {/* Candidate Timeline - IMPROVED */}
+            {(isLoadingTimeline ||
+              (timelineEvents && timelineEvents.length > 0)) && (
+              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                  <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                    <div className="rounded-lg bg-orange-100 p-2">
+                      <History className="h-5 w-5 text-orange-600" />
+                    </div>
+                    Candidate Timeline
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-5">
+                  {isLoadingTimeline ? (
+                    <div className="space-y-4">
+                      {[...Array(2)].map((_, i) => (
+                        <div key={i} className="flex gap-3">
+                          <div className="h-10 w-10 rounded-full bg-slate-100 animate-pulse flex-shrink-0"></div>
+                          <div className="flex-grow space-y-2">
+                            <div className="h-3 w-3/4 rounded bg-slate-100 animate-pulse"></div>
+                            <div className="h-2.5 w-1/2 rounded bg-slate-100 animate-pulse"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <div className="absolute left-5 top-5 h-[calc(100%-40px)] w-0.5 bg-gradient-to-b from-orange-200 via-orange-100 to-transparent" />
+                      <div className="space-y-5">
+                        {timelineEvents.map((event, index) => (
+                          <div key={event.id} className="relative pl-12">
+                            <div className="absolute left-0 top-0.5 grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-orange-100 to-orange-50 text-orange-600 ring-4 ring-white shadow-sm">
+                              <Clock className="h-4 w-4" />
+                            </div>
+                            <div className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-3 hover:border-orange-200 hover:shadow-sm transition-all duration-200">
+                              <p className="font-semibold text-sm text-slate-900">
+                                {event.event_type}
+                              </p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                by{" "}
+                                <span className="font-medium text-slate-700">
+                                  {event.changed_by_user
+                                    ? `${event.changed_by_user.first_name} ${event.changed_by_user.last_name}`
+                                    : "System"}
+                                </span>
+                              </p>
+                              <p className="text-xs text-slate-400 mt-1.5 flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {new Date(event.changed_at).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
                         ))}
-                    </CardContent>
-                </Card>
-             )}
- 
-            {certifications && certifications.length > 0 && (
-                <Card className="border rounded-lg">
-                    <CardHeader><CardTitle className="text-xl font-bold">Certifications</CardTitle></CardHeader>
-                    <CardContent>
-                        <ul className="space-y-2">
-                            {certifications.map((cert: string, index: number) => (
-                                <li key={index} className="flex items-center gap-2 text-sm">
-                                    <Award size={16} className="text-yellow-600" />
-                                    <span>{cert}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    </CardContent>
-                </Card>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
 
-                          {/* --- START: Added for Enrich Data --- */}
-             {/* This card displays the preferred locations from the enriched data */}
-             {candidate.preferred_locations && candidate.preferred_locations.length > 0 && (
-                <Card className="border rounded-lg">
-                    <CardHeader><CardTitle className="text-xl font-bold">Preferred Locations</CardTitle></CardHeader>
-                    <CardContent className="flex flex-wrap gap-2">
-                      {parseJsonArray(candidate.preferred_locations).map((loc: string) => (<Badge key={loc} className="bg-blue-200 text-blue-800" >{loc}</Badge>))}
-                    </CardContent>
-                </Card>
-             )}
+            {/* Related Candidates - IMPROVED */}
+            {(isLoadingRelated ||
+              (relatedCandidates && relatedCandidates.length > 0)) && (
+              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200 sticky top-6">
+                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                  <CardTitle className="text-lg font-bold text-slate-900">
+                    Related Candidates
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-3">
+                  {isLoadingRelated ? (
+                    <div className="space-y-3">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="flex items-center gap-3 p-3">
+                          <div className="h-10 w-10 rounded-full bg-slate-100 animate-pulse"></div>
+                          <div className="flex-grow space-y-2">
+                            <div className="h-3 w-3/4 rounded bg-slate-100 animate-pulse"></div>
+                            <div className="h-2.5 w-1/2 rounded bg-slate-100 animate-pulse"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {relatedCandidates.map((rel_candidate) => (
+                        <div key={rel_candidate.id} className="relative group/candidate">
+                          <Link
+                            to={`/talent-pool/${rel_candidate.id}`}
+                            className="flex items-center gap-3 rounded-lg p-3 transition-all hover:bg-gradient-to-r hover:from-purple-50 hover:to-transparent border border-transparent hover:border-purple-100"
+                          >
+                            <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-full bg-gradient-to-br from-purple-100 to-purple-50 text-sm font-bold text-purple-700 shadow-sm">
+                              {rel_candidate.candidate_name?.charAt(0)}
+                            </div>
+                            <div className="flex-grow overflow-hidden">
+                              <p className="truncate text-sm font-semibold text-slate-900 group-hover/candidate:text-purple-700 transition-colors">
+                                {rel_candidate.candidate_name}
+                              </p>
+                              <p className="truncate text-xs text-slate-500 mt-0.5">
+                                {rel_candidate.suggested_title}
+                              </p>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className="bg-purple-100 text-purple-700 text-[10px] h-5 px-2 font-semibold shrink-0"
+                            >
+                              {rel_candidate.matching_skill_count}
+                            </Badge>
+                          </Link>
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs p-3 rounded-lg bg-slate-900 text-white text-xs shadow-xl opacity-0 group-hover/candidate:opacity-100 transition-opacity duration-200 z-30 pointer-events-none">
+                            <p className="font-semibold mb-2 border-b border-slate-700 pb-1.5 text-center">
+                              Matched Skills
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {rel_candidate.matching_skills?.map((skill) => (
+                                <span
+                                  key={skill}
+                                  className="bg-slate-700 px-2 py-1 rounded text-[10px] font-medium"
+                                >
+                                  {skill}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="absolute left-1/2 -translate-x-1/2 bottom-[-4px] h-2 w-2 bg-slate-900 rotate-45"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+
           </div>
         </div>
 
-        {/* Render modals needed for the buttons */}
         {candidateId && (
-            <>
-                <CompareWithJobDialog
-                  isOpen={isCompareModalOpen}
-                  onClose={() => setCompareModalOpen(false)}
-                  candidateId={candidateId}
-                />
-                <AnalysisHistoryDialog
-                  isOpen={isHistoryModalOpen}
-                  onClose={() => setHistoryModalOpen(false)}
-                  candidateId={candidateId}
-                  candidateName={candidate.candidate_name}
-                />
-                <EnrichDataDialog
-                  isOpen={isEnrichModalOpen}
-                  onClose={() => setEnrichModalOpen(false)}
-                  candidate={candidate}
-                />
-            </>
+          <>
+            <CompareWithJobDialog
+              isOpen={isCompareModalOpen}
+              onClose={() => setCompareModalOpen(false)}
+              candidateId={candidateId}
+            />
+            <AnalysisHistoryDialog
+              isOpen={isHistoryModalOpen}
+              onClose={() => setHistoryModalOpen(false)}
+              candidateId={candidateId}
+              candidateName={candidate.candidate_name}
+            />
+            <EnrichDataDialog
+              isOpen={isEnrichModalOpen}
+              onClose={() => setEnrichModalOpen(false)}
+              candidate={candidate}
+            />
+          </>
         )}
       </div>
     </div>
   );
 };
- 
+
 export default CandidateProfilePage;
- 
