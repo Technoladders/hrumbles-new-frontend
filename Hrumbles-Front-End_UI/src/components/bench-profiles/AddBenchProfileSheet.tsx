@@ -66,6 +66,8 @@ import { cn } from "@/lib/utils";
 // --- Constants & Helpers ---
 const NOTICE_PERIOD_OPTIONS = ["Immediate", "15 days", "30 days", "45 days", "60 days", "90 days"];
 const SALARY_TYPES = ["LPA", "Monthly", "Hourly"] as const;
+const YEARS = Array.from({ length: 31 }, (_, i) => i.toString());
+const MONTHS = Array.from({ length: 12 }, (_, i) => i.toString());
 
 const formatINR = (value: number | null | undefined, type: typeof SALARY_TYPES[number]): string => {
   if (value == null || isNaN(value)) return "";
@@ -78,6 +80,40 @@ const formatINR = (value: number | null | undefined, type: typeof SALARY_TYPES[n
 const sanitizePhoneNumber = (phone: string | undefined): string | undefined => {
   if (!phone) return undefined;
   return phone.replace(/[^+\d]/g, "");
+};
+
+const parseExperience = (experience: string | null | undefined): { years: number; months: number } => {
+  if (!experience) return { years: 0, months: 0 };
+
+  const cleaned = experience.trim().toLowerCase().replace(/\s+/g, " ");
+  const yMatch = cleaned.match(/(\d+\.?\d*)\s*(y|years|year)?/i);
+  const mMatch = cleaned.match(/(\d+)\s*(m|months|month)/i);
+
+  let years = 0;
+  let months = 0;
+
+  if (yMatch) {
+    const yearValue = parseFloat(yMatch[1]);
+    years = Math.floor(yearValue);
+    if (yearValue % 1 !== 0) {
+      months = Math.round((yearValue % 1) * 12);
+    }
+  }
+  if (mMatch) {
+    months = parseInt(mMatch[1], 10) || 0;
+  }
+
+  if (months >= 12) {
+    years += Math.floor(months / 12);
+    months = months % 12;
+  }
+
+  return { years, months };
+};
+
+const formatExperience = (years: number, months: number): string => {
+  if (years === 0 && months === 0) return "0y 0m";
+  return `${years}y ${months}m`;
 };
 
 // --- Animation Variants ---
@@ -112,7 +148,14 @@ export const AddBenchProfileSheet = ({ isOpen, onClose, onSuccess, existingProfi
       .string()
       .min(1, "Phone is required")
       .regex(/^\+\d{10,15}$/, "Phone number must be with country (e.g., +918019056622)"),
-    experience: z.string().min(1, "Experience is required"),
+    experience: z.object({
+      years: z.number().min(0, "Years must be non-negative").max(30, "Years cannot exceed 30"),
+      months: z.number().min(0, "Months must be non-negative").max(11, "Months cannot exceed 11"),
+    }),
+    relevantExperience: z.object({
+      years: z.number().min(0, "Years must be non-negative").max(30, "Years cannot exceed 30"),
+      months: z.number().min(0, "Months must be non-negative").max(11, "Months cannot exceed 11"),
+    }).optional(),
     current_location: z
       .string()
       .min(1, "Current Location is required")
@@ -129,7 +172,7 @@ export const AddBenchProfileSheet = ({ isOpen, onClose, onSuccess, existingProfi
         type: z.enum(SALARY_TYPES),
       })
       .refine((data) => data.amount > 0, { message: "Expected Salary is required" }),
-    skills: z.array(z.string()).min(1, "At least one skill is required"),
+    skills: z.array(z.string()).min(1, "At least one skill is required").optional(),
     notice_period: z.enum(NOTICE_PERIOD_OPTIONS, { required_error: "Notice Period is required" }),
     worked_as_freelancer: z.boolean().default(false),
     is_remote_worker: z.boolean().default(false),
@@ -146,27 +189,36 @@ export const AddBenchProfileSheet = ({ isOpen, onClose, onSuccess, existingProfi
       current_salary: { amount: 0, type: "LPA" },
       expected_salary: { amount: 0, type: "LPA" },
       notice_period: "Immediate",
+      experience: { years: 0, months: 0 },
+      relevantExperience: { years: 0, months: 0 },
     },
   });
 
   useEffect(() => {
     if (isOpen) {
       if (existingProfile) {
+        const { years: expYears, months: expMonths } = parseExperience(existingProfile.experience);
+        const { years: relYears, months: relMonths } = parseExperience(existingProfile.relevant_experience);
+        const parseSalary = (salaryStr: string | null | undefined) => {
+          if (!salaryStr) return { amount: 0, type: "LPA" as const };
+          const amountMatch = salaryStr.match(/[\d,]+/);
+          const typeMatch = salaryStr.toUpperCase().includes("LPA")
+            ? "LPA"
+            : salaryStr.toUpperCase().includes("MONTHLY")
+            ? "Monthly"
+            : "Hourly";
+          return {
+            amount: amountMatch ? parseFloat(amountMatch[0].replace(/,/g, "")) : 0,
+            type: typeMatch,
+          };
+        };
         const profileData = {
           ...existingProfile,
           phone: sanitizePhoneNumber(existingProfile.phone),
-          current_salary: existingProfile.current_salary
-            ? {
-                amount: Number(String(existingProfile.current_salary).replace(/[^0-9.]/g, "")),
-                type: "LPA" as const,
-              }
-            : { amount: 0, type: "LPA" as const },
-          expected_salary: existingProfile.expected_salary
-            ? {
-                amount: Number(String(existingProfile.expected_salary).replace(/[^0-9.]/g, "")),
-                type: "LPA" as const,
-              }
-            : { amount: 0, type: "LPA" as const },
+          experience: { years: expYears, months: expMonths },
+          relevantExperience: { years: relYears, months: relMonths },
+          current_salary: parseSalary(existingProfile.current_salary),
+          expected_salary: parseSalary(existingProfile.expected_salary),
           skills: existingProfile.skills || [],
         };
         form.reset(profileData);
@@ -179,6 +231,8 @@ export const AddBenchProfileSheet = ({ isOpen, onClose, onSuccess, existingProfi
           current_salary: { amount: 0, type: "LPA" },
           expected_salary: { amount: 0, type: "LPA" },
           notice_period: "Immediate",
+          experience: { years: 0, months: 0 },
+          relevantExperience: { years: 0, months: 0 },
         });
         setStep(1);
         setSearchQuery("");
@@ -238,11 +292,13 @@ export const AddBenchProfileSheet = ({ isOpen, onClose, onSuccess, existingProfi
 
   const handleSelectCandidate = (candidate: any) => {
     form.reset();
+    const { years: expYears, months: expMonths } = parseExperience(candidate.total_experience);
     form.setValue("talent_pool_id", candidate.id);
     form.setValue("name", candidate.candidate_name);
     form.setValue("email", candidate.email);
     form.setValue("phone", sanitizePhoneNumber(candidate.phone));
-    form.setValue("experience", candidate.total_experience || "");
+    form.setValue("experience", { years: expYears, months: expMonths });
+    form.setValue("relevantExperience", { years: 0, months: 0 }); // Default for new candidates
     form.setValue("suggested_title", candidate.suggested_title || "");
     form.setValue("current_location", candidate.current_location || "");
     form.setValue("notice_period", candidate.notice_period || "Immediate");
@@ -254,55 +310,63 @@ export const AddBenchProfileSheet = ({ isOpen, onClose, onSuccess, existingProfi
 
   const parseSalaryString = (salaryStr: string) => {
     if (!salaryStr) return { amount: 0, type: "LPA" as const };
-    const amountMatch = salaryStr.match(/[\d.]+/);
-    const typeMatch = salaryStr.toUpperCase().includes("LACS") || salaryStr.toUpperCase().includes("LPA")
+    const amountMatch = salaryStr.match(/[\d,]+/);
+    const typeMatch = salaryStr.toUpperCase().includes("LPA")
       ? "LPA"
       : salaryStr.toUpperCase().includes("MONTHLY")
       ? "Monthly"
       : "Hourly";
-    return { amount: amountMatch ? parseFloat(amountMatch[0]) * (typeMatch === "LPA" ? 100000 : 1) : 0, type: typeMatch };
+    return {
+      amount: amountMatch ? parseFloat(amountMatch[0].replace(/,/g, "")) : 0,
+      type: typeMatch,
+    };
   };
 
-  const onSubmit = async (values: BenchProfileFormData) => {
-    console.log("Form submitted with values:", values);
-    console.log("Form errors:", form.formState.errors);
+const onSubmit = async (values: BenchProfileFormData) => {
+  console.log("Form submitted with values:", values);
+  console.log("Form errors:", form.formState.errors);
 
-    if (Object.keys(form.formState.errors).length > 0) {
-      toast.error("Please fix form errors before submitting.");
-      return;
+  if (Object.keys(form.formState.errors).length > 0) {
+    toast.error("Please fix form errors before submitting.");
+    return;
+  }
+
+  setIsSaving(true);
+  try {
+    const { relevantExperience, ...restValues } = values; // Destructure to exclude relevantExperience
+    const dataToUpsert = {
+      ...restValues,
+      experience: formatExperience(values.experience.years, values.experience.months),
+      relevant_experience: values.relevantExperience
+        ? formatExperience(values.relevantExperience.years, values.relevantExperience.months)
+        : null,
+      current_salary: values.current_salary ? formatINR(values.current_salary.amount, values.current_salary.type) : null,
+      expected_salary: values.expected_salary ? formatINR(values.expected_salary.amount, values.current_salary.type) : null,
+      organization_id,
+      updated_at: new Date().toISOString(),
+    };
+    if (!existingProfile) dataToUpsert.created_by = user.id;
+
+    console.log("Submitting to Supabase:", dataToUpsert);
+
+    const { error } = existingProfile
+      ? await supabase.from("hr_bench_profiles").update(dataToUpsert).eq("id", existingProfile.id)
+      : await supabase.from("hr_bench_profiles").insert(dataToUpsert);
+
+    if (error) {
+      console.error("Supabase error:", error);
+      toast.error(`Failed: ${error.message}`);
+    } else {
+      toast.success(`Profile ${existingProfile ? "updated" : "added"}!`);
+      onSuccess();
     }
-
-    setIsSaving(true);
-    try {
-      const dataToUpsert = {
-        ...values,
-        current_salary: values.current_salary ? formatINR(values.current_salary.amount, values.current_salary.type) : null,
-        expected_salary: values.expected_salary ? formatINR(values.expected_salary.amount, values.expected_salary.type) : null,
-        organization_id,
-        updated_at: new Date().toISOString(),
-      };
-      if (!existingProfile) dataToUpsert.created_by = user.id;
-
-      console.log("Submitting to Supabase:", dataToUpsert);
-
-      const { error } = existingProfile
-        ? await supabase.from("hr_bench_profiles").update(dataToUpsert).eq("id", existingProfile.id)
-        : await supabase.from("hr_bench_profiles").insert(dataToUpsert);
-
-      if (error) {
-        console.error("Supabase error:", error);
-        toast.error(`Failed: ${error.message}`);
-      } else {
-        toast.success(`Profile ${existingProfile ? "updated" : "added"}!`);
-        onSuccess();
-      }
-    } catch (err) {
-      console.error("Unexpected error during submission:", err);
-      toast.error("An unexpected error occurred while saving the profile.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  } catch (err) {
+    console.error("Unexpected error during submission:", err);
+    toast.error("An unexpected error occurred while saving the profile.");
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   const renderSearchLoader = () => (
     <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -408,6 +472,18 @@ export const AddBenchProfileSheet = ({ isOpen, onClose, onSuccess, existingProfi
             </SheetHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="flex-grow overflow-y-auto space-y-6 p-4">
+                {Object.keys(form.formState.errors).length > 0 && (
+                  <div className="bg-red-100 text-red-700 p-4 rounded-md mb-4">
+                    <p>Please fix the following errors:</p>
+                    <ul className="list-disc pl-5">
+                      {Object.entries(form.formState.errors).map(([field, error]) => (
+                        <li key={field}>
+                          {field}: {error.message || JSON.stringify(error)}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <motion.div
                   variants={sectionVariants}
                   initial="hidden"
@@ -415,19 +491,6 @@ export const AddBenchProfileSheet = ({ isOpen, onClose, onSuccess, existingProfi
                   className="p-4 bg-white rounded-lg shadow-sm border space-y-4"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* <FormField
-                      name="talent_pool_id"
-                      control={form.control}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Talent Pool ID <span className="text-red-500">*</span></FormLabel>
-                          <FormControl>
-                            <Input {...field} disabled />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    /> */}
                     <FormField
                       name="name"
                       control={form.control}
@@ -487,14 +550,119 @@ export const AddBenchProfileSheet = ({ isOpen, onClose, onSuccess, existingProfi
                       )}
                     />
                     <FormField
-                      name="experience"
                       control={form.control}
+                      name="experience.years"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Experience <span className="text-red-500">*</span></FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g 5y 6m" {...field} value={field.value || ""} />
-                          </FormControl>
+                          <FormLabel>Total Experience (years) <span className="text-red-500">*</span></FormLabel>
+                          <Select
+                            onValueChange={(value) => field.onChange(value ? Number(value) : 0)}
+                            value={field.value?.toString() || "0"}
+                          >
+                            <FormControl>
+                              <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                                <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
+                                <SelectTrigger className="pl-10">
+                                  <SelectValue placeholder="Select years" />
+                                </SelectTrigger>
+                              </motion.div>
+                            </FormControl>
+                            <SelectContent>
+                              {YEARS.map((year) => (
+                                <SelectItem key={year} value={year}>
+                                  {year} years
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="experience.months"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Total Experience (months) <span className="text-red-500">*</span></FormLabel>
+                          <Select
+                            onValueChange={(value) => field.onChange(value ? Number(value) : 0)}
+                            value={field.value?.toString() || "0"}
+                          >
+                            <FormControl>
+                              <motion.div variants={fieldHoverEffect} whileHover="hover">
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select months" />
+                                </SelectTrigger>
+                              </motion.div>
+                            </FormControl>
+                            <SelectContent>
+                              {MONTHS.map((month) => (
+                                <SelectItem key={month} value={month}>
+                                  {month} months
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="relevantExperience.years"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Relevant Experience (years)</FormLabel>
+                          <Select
+                            onValueChange={(value) => field.onChange(value ? Number(value) : 0)}
+                            value={field.value?.toString() || "0"}
+                          >
+                            <FormControl>
+                              <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                                <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
+                                <SelectTrigger className="pl-10">
+                                  <SelectValue placeholder="Select years" />
+                                </SelectTrigger>
+                              </motion.div>
+                            </FormControl>
+                            <SelectContent>
+                              {YEARS.map((year) => (
+                                <SelectItem key={year} value={year}>
+                                  {year} years
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="relevantExperience.months"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Relevant Experience (months)</FormLabel>
+                          <Select
+                            onValueChange={(value) => field.onChange(value ? Number(value) : 0)}
+                            value={field.value?.toString() || "0"}
+                          >
+                            <FormControl>
+                              <motion.div variants={fieldHoverEffect} whileHover="hover">
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select months" />
+                                </SelectTrigger>
+                              </motion.div>
+                            </FormControl>
+                            <SelectContent>
+                              {MONTHS.map((month) => (
+                                <SelectItem key={month} value={month}>
+                                  {month} months
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -699,34 +867,6 @@ export const AddBenchProfileSheet = ({ isOpen, onClose, onSuccess, existingProfi
                     />
                   </div>
                 </motion.div>
-                {/* <motion.div
-                  variants={sectionVariants}
-                  initial="hidden"
-                  animate="visible"
-                  className="p-4 bg-white rounded-lg shadow-sm border"
-                >
-                  <h3 className="font-semibold text-lg mb-3">
-                    Skills <span className="text-red-500">*</span>
-                  </h3>
-                  <FormField
-                    name="skills"
-                    control={form.control}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input
-                            placeholder="Enter skills (comma-separated)"
-                            value={Array.isArray(field.value) ? field.value.join(", ") : field.value || ""}
-                            onChange={(e) =>
-                              field.onChange(e.target.value.split(",").map((s) => s.trim()).filter(Boolean))
-                            }
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </motion.div> */}
                 <motion.div
                   variants={sectionVariants}
                   initial="hidden"

@@ -22,6 +22,7 @@ import {
   TooltipTrigger,
 } from "@/components/jobs/ui/tooltip";
 import { StatusSelector } from "./StatusSelector";
+import { TaskupStatusSelector } from "./TaskupStatusSelector";
 import { ItechStatusSelector } from "./ItechStatusSelector";
 import ValidateResumeButton from "./candidate/ValidateResumeButton";
 import StageProgress from "./candidate/StageProgress";
@@ -71,6 +72,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback } from "@/components/jobs/ui/avatar";
 import { motion } from "framer-motion";
+import { TaskupActionModal, TaskupModalConfig } from './TaskupActionModal';
 
 const VALIDATION_QUEUE_KEY = "validationQueue";
 
@@ -121,12 +123,16 @@ const CandidatesList = forwardRef((props: CandidatesListProps, ref) => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const userRole = useSelector((state: any) => state.auth.role);
   const isEmployee = userRole === 'employee';
+    // ADD NEW STATE FOR THE TASKUP MODAL
+  const [isTaskupActionModalOpen, setIsTaskupActionModalOpen] = useState(false);
+  const [taskupModalConfig, setTaskupModalConfig] = useState<TaskupModalConfig | null>(null);
 
   const ITECH_ORGANIZATION_ID = [
   "1961d419-1272-4371-8dc7-63a4ec71be83",
   "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
 ];
   const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
+  const TASKUP_ORGANIZATION_ID = "0e4318d8-b1a5-4606-b311-c56d7eec47ce";
 
 
    const getInitials = (name: string = "") => {
@@ -849,13 +855,16 @@ const candidates = useMemo(() => {
   }, [validatingIds, jobId]);
 
 
+// --- UPDATED handleStatusChange Function ---
+
   const handleStatusChange = async (value: string, candidate: Candidate) => {
     try {
       if (!value) {
         toast.error("Invalid status selected");
         return;
       }
-  
+
+      // This part is common: fetch statuses and set current state
       const statuses = await fetchAllStatuses();
       const subStatuses = statuses.flatMap(s => s.subStatuses || []);
       const newSubStatus = subStatuses.find(s => s.id === value);
@@ -865,7 +874,6 @@ const candidates = useMemo(() => {
         return;
       }
       
-      const newMainStatus = statuses.find(s => s.id === newSubStatus.parent_id);
       const oldSubStatusName = candidate.sub_status?.name;
       
       setCurrentCandidateId(candidate.id);
@@ -875,73 +883,111 @@ const candidates = useMemo(() => {
         name: newSubStatus.name,
         parentId: newSubStatus.parent_id,
       });
-  
-      const { getRequiredInteractionType, getInterviewRoundName } = await import('@/utils/statusTransitionHelper');
-      const interactionType = getRequiredInteractionType(oldSubStatusName, newSubStatus.name);
-      
-      if (interactionType === 'interview-schedule' || interactionType === 'reschedule') {
-        const roundName = getInterviewRoundName(newSubStatus.name);
-        setCurrentRound(roundName);
-        setNeedsReschedule(interactionType === 'reschedule');
-  
-        const { data: interviews, error } = await supabase
-          .from('hr_candidate_interviews')
-          .select('*')
-          .eq('candidate_id', candidate.id)
-          .eq('interview_round', roundName)
-          .order('created_at', { ascending: false })
-          .limit(1);
-          
-        if (error) {
-          console.error("Error fetching interview:", error);
-          toast.error("Failed to load interview details");
-          return;
+
+      const TASKUP_ORGANIZATION_ID = "0e4318d8-b1a5-4606-b311-c56d7eec47ce";
+
+      // DYNAMICALLY HANDLE LOGIC BASED ON ORGANIZATION
+    if (organizationId === TASKUP_ORGANIZATION_ID) {
+        const { getRequiredInteractionType } = await import('@/utils/taskupStatusTransitionHelper');
+        const interactionType = getRequiredInteractionType(oldSubStatusName, newSubStatus.name);
+
+        let config: TaskupModalConfig | null = null;
+        
+        switch(interactionType) {
+            case 'rejection-with-date':
+                config = { title: newSubStatus.name, description: 'Please provide the date and a reason for this status change.', fields: ['date', 'reason'] };
+                break;
+            case 'date-only':
+                config = { title: newSubStatus.name, description: 'Please provide the date for this action.', fields: ['date'] };
+                break;
+            case 'reason-only':
+            case 'feedback-only':
+                config = { title: newSubStatus.name, description: 'Please provide a reason or feedback.', fields: [interactionType === 'reason-only' ? 'reason' : 'feedback'] };
+                break;
+            case 'interview-schedule':
+                 config = { title: `Schedule: ${newSubStatus.name}`, description: 'Please provide the interview date and time.', fields: ['datetime'] };
+                 break;
+            case 'billing':
+                config = { title: newSubStatus.name, description: 'Please provide the date and reason for the pending status.', fields: ['date', 'billing_reason'] };
+                break;
         }
-  
-        if (interviews && interviews.length > 0) {
-          const interview = interviews[0];
-          setInterviewDate(interview.interview_date || '');
-          setInterviewTime(interview.interview_time || '');
-          setInterviewLocation(interview.location || 'Virtual');
-          setInterviewType(interview.interview_type || 'Technical');
-          setInterviewerName(interview.interviewers?.[0]?.name || '');
-        } else {
-          setInterviewDate('');
-          setInterviewTime('');
-          setInterviewLocation('Virtual');
-          setInterviewType('Technical');
-          setInterviewerName('');
+
+        if (config) {
+          setTaskupModalConfig(config);
+          setIsTaskupActionModalOpen(true);
+          return; // Stop execution to wait for modal submission
         }
-  
-        setShowInterviewModal(true);
-        return;
-      }
-      
-      if (interactionType === 'interview-feedback') {
-        const roundName = getRoundNameFromResult(newSubStatus.name);
-        if (roundName) {
+
+      } else {
+        // --- ORIGINAL LOGIC FOR ALL OTHER ORGANIZATIONS (Unaffected) ---
+        const { getRequiredInteractionType, getInterviewRoundName, getRoundNameFromResult } = await import('@/utils/statusTransitionHelper');
+        const interactionType = getRequiredInteractionType(oldSubStatusName, newSubStatus.name);
+        
+        if (interactionType === 'interview-schedule' || interactionType === 'reschedule') {
+          const roundName = getInterviewRoundName(newSubStatus.name);
           setCurrentRound(roundName);
-          setInterviewResult(newSubStatus.name.includes('Selected') ? 'selected' : 'rejected');
-          setShowInterviewFeedbackModal(true);
+          setNeedsReschedule(interactionType === 'reschedule');
+    
+          const { data: interviews, error } = await supabase
+            .from('hr_candidate_interviews')
+            .select('*')
+            .eq('candidate_id', candidate.id)
+            .eq('interview_round', roundName)
+            .order('created_at', { ascending: false })
+            .limit(1);
+            
+          if (error) {
+            console.error("Error fetching interview:", error);
+            toast.error("Failed to load interview details");
+            return;
+          }
+    
+          if (interviews && interviews.length > 0) {
+            const interview = interviews[0];
+            setInterviewDate(interview.interview_date || '');
+            setInterviewTime(interview.interview_time || '');
+            setInterviewLocation(interview.location || 'Virtual');
+            setInterviewType(interview.interview_type || 'Technical');
+            setInterviewerName(interview.interviewers?.[0]?.name || '');
+          } else {
+            setInterviewDate('');
+            setInterviewTime('');
+            setInterviewLocation('Virtual');
+            setInterviewType('Technical');
+            setInterviewerName('');
+          }
+    
+          setShowInterviewModal(true);
+          return;
+        }
+        
+        if (interactionType === 'interview-feedback') {
+          const roundName = getRoundNameFromResult(newSubStatus.name);
+          if (roundName) {
+            setCurrentRound(roundName);
+            setInterviewResult(newSubStatus.name.includes('Selected') ? 'selected' : 'rejected');
+            setShowInterviewFeedbackModal(true);
+            return;
+          }
+        }
+        
+        if (interactionType === 'joining') {
+          setShowJoiningModal(true);
+          return;
+        }
+    
+        if (interactionType === 'actual-ctc') {
+          setShowActualCtcModal(true);
+          return;
+        }
+        
+        if (interactionType === 'reject') {
+          setShowRejectModal(true);
           return;
         }
       }
-      
-      if (interactionType === 'joining') {
-        setShowJoiningModal(true);
-        return;
-      }
-  
-      if (interactionType === 'actual-ctc') {
-        setShowActualCtcModal(true);
-        return;
-      }
-      
-      if (interactionType === 'reject') {
-        setShowRejectModal(true);
-        return;
-      }
-      
+
+      // This is the default action if no modal is triggered. It works for both workflows.
       updateCandidateStatus(candidate.id, value, user?.id)
         .then(success => {
           if (success) {
@@ -955,9 +1001,55 @@ const candidates = useMemo(() => {
           console.error("Error updating status:", error);
           toast.error("Failed to update status");
         });
+
     } catch (error) {
       console.error("Error in handleStatusChange:", error);
-      toast.error("Failed to update status");
+      toast.error("An unexpected error occurred while changing status.");
+    }
+  };
+
+ const handleTaskupActionSubmit = async (data: Record<string, any>) => {
+    if (!currentCandidateId || !currentSubStatusId || !currentSubStatus) return;
+
+    // Create a mutable object for additional data
+    const additionalData = { ...data };
+
+    // --- SPECIAL DATA MAPPING LOGIC ---
+    // 1. If the new status is 'Submitted to Client', map the selected date to the 'submission_date' column.
+    if (currentSubStatus.name === 'Submitted to Client') {
+      additionalData.submission_date = data.action_date;
+    }
+
+    // 2. If the new status is 'Joined', map the selected date to the 'joining_date' column.
+    if (currentSubStatus.name === 'Joined') {
+      additionalData.joining_date = data.action_date;
+    }
+    
+    // 3. For interviews, map date & time correctly
+    if (data.interview_date || data.interview_time) {
+        additionalData.interview_date = data.interview_date;
+        additionalData.interview_time = data.interview_time;
+        // Also add other relevant interview fields for consistency if needed
+        additionalData.round = currentSubStatus.name;
+    }
+    // --- END OF SPECIAL LOGIC ---
+
+    try {
+      // Pass the enhanced 'additionalData' object to the update function
+      const success = await updateCandidateStatus(currentCandidateId, currentSubStatusId, user.id, additionalData);
+      
+      if (success) {
+        toast.success("Status updated successfully with details.");
+        onRefresh();
+      } else {
+        toast.error("Failed to update status.");
+      }
+    } catch (error) {
+      console.error("Error submitting Taskup action:", error);
+      toast.error("Failed to save details.");
+    } finally {
+      setIsTaskupActionModalOpen(false);
+      setTaskupModalConfig(null);
     }
   };
 
@@ -2128,12 +2220,20 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
         <TableCell className="px-2 text-sm py-1">{candidate?.metadata?.noticePeriod || "N/A"}</TableCell>
         <TableCell className="px-2 text-sm py-1">{candidate?.metadata?.currentLocation || "N/A"}</TableCell>
         <TableCell className="px-2 py-1">
-          <StatusSelector
+    {organizationId === TASKUP_ORGANIZATION_ID ? (
+        <TaskupStatusSelector
             value={candidate.sub_status_id || ""}
             onChange={(value) => handleStatusChange(value, candidate)}
             className="h-8 text-xs w-full"
-          />
-        </TableCell>
+        />
+    ) : (
+        <StatusSelector
+            value={candidate.sub_status_id || ""}
+            onChange={(value) => handleStatusChange(value, candidate)}
+            className="h-8 text-xs w-full"
+        />
+    )}
+ </TableCell>
         {/* --- Action Cell (Right Fixed) --- */}
         <TableCell className="sticky right-0 z-20 px-2 bg-purple-50 group-hover:bg-slate-50 py-1">
           <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200 w-fit">
@@ -2213,6 +2313,16 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
           candidate={selectedCandidate}
           open={isEditDrawerOpen}
           onOpenChange={setIsEditDrawerOpen}
+        />
+      )}
+
+      {isTaskupActionModalOpen && (
+        <TaskupActionModal
+          isOpen={isTaskupActionModalOpen}
+          onClose={() => setIsTaskupActionModalOpen(false)}
+          onSubmit={handleTaskupActionSubmit}
+          config={taskupModalConfig}
+          candidateName={candidates.find(c => c.id === currentCandidateId)?.name || ''}
         />
       )}
 

@@ -1183,7 +1183,7 @@ export const sendStatusUpdateNotification = async (
       APP_BASE_URL: window.location.origin, // Dynamically get the base URL, e.g., https://technoladders.hrumbles.ai
     };
     
-    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-status-update-email`, {
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-status-update-`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

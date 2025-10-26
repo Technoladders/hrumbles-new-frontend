@@ -389,23 +389,22 @@ const authData = getAuthDataFromLocalStorage();
     }
     const { organization_id, userId } = authData;
 
-     // --- START OF MODIFICATION ---
+    // --- START OF MODIFICATION ---
 
-    // Define the organization IDs that require the special "first status" logic
     const ITECH_ORGANIZATION_ID = [
       "1961d419-1272-4371-8dc7-63a4ec71be83",
       "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
     ];
+    // NEW: Define the Taskup Organization ID
+    const TASKUP_ORGANIZATION_ID = "0e4318d8-b1a5-4606-b311-c56d7eec47ce";
 
     let mainStatus;
     let subStatus;
 
-    // Check if the current organization is one of the Itech organizations
     if (ITECH_ORGANIZATION_ID.includes(organization_id)) {
       // Logic for Itech Orgs: Fetch the very first status in the pipeline
       console.log("Itech organization detected. Fetching the first available status.");
 
-      // 1. Fetch the first main status (ordered by display_order)
       const { data: firstMainStatus, error: firstMainStatusError } = await supabase
         .from("job_statuses")
         .select("id, name")
@@ -421,7 +420,6 @@ const authData = getAuthDataFromLocalStorage();
       }
       mainStatus = firstMainStatus;
 
-      // 2. Fetch the first sub-status belonging to that main status
       const { data: firstSubStatus, error: firstSubStatusError } = await supabase
         .from("job_statuses")
         .select("id, name")
@@ -437,59 +435,90 @@ const authData = getAuthDataFromLocalStorage();
       }
       subStatus = firstSubStatus;
 
+    } else if (organization_id === TASKUP_ORGANIZATION_ID) {
+      // NEW: Handle Taskup Organization specific logic
+      console.log("Taskup organization detected. Setting default status to 'New Applicants'.");
+
+      const { data: applicantsMainStatus, error: mainStatusError } = await supabase
+        .from("job_statuses")
+        .select("id, name")
+        .eq("type", "main")
+        .eq("name", "Applicants")
+        .eq("organization_id", organization_id)
+        .single();
+
+      if (mainStatusError || !applicantsMainStatus) {
+        console.error("Error fetching 'Applicants' main status:", mainStatusError);
+        throw new Error("Could not find the 'Applicants' main status for the Taskup organization. Please verify the status setup.");
+      }
+      mainStatus = applicantsMainStatus;
+
+      const { data: newApplicantsSubStatus, error: subStatusError } = await supabase
+        .from("job_statuses")
+        .select("id, name")
+        .eq("type", "sub")
+        .eq("name", "New Applicants")
+        .eq("parent_id", mainStatus.id)
+        .eq("organization_id", organization_id)
+        .single();
+
+      if (subStatusError || !newApplicantsSubStatus) {
+        console.error("Error fetching 'New Applicants' sub-status:", subStatusError);
+        throw new Error("Could not find the 'New Applicants' sub-status for the Taskup organization.");
+      }
+      subStatus = newApplicantsSubStatus;
+
     } else {
-      // Original Logic for all other organizations
+      // Original Logic for all other organizations (Unaffected)
       console.log("Default organization detected. Setting status to 'Processed (Internal)'.");
       
-      // Fetch the main status "Processed"
       const { data: processedMainStatus, error: mainStatusError } = await supabase
-    .from("job_statuses")
-    .select("id, name")
-    .eq("type", "main")
-    .eq("name", "Processed")
-    .eq("organization_id", organization_id)
-    .single();
+        .from("job_statuses")
+        .select("id, name")
+        .eq("type", "main")
+        .eq("name", "Processed")
+        .eq("organization_id", organization_id)
+        .single();
 
-  if (mainStatusError || !processedMainStatus) {
-    console.error("Error fetching Processed main status:", mainStatusError);
-    
-    // Fallback: Fetch the first main status
-    const { data: fallbackMainStatus, error: fallbackError } = await supabase
-      .from("job_statuses")
-      .select("id, name")
-      .eq("type", "main")
-      .eq("organization_id", organization_id)
-      .order("display_order", { ascending: true })
-      .limit(1)
-      .single();
+      if (mainStatusError || !processedMainStatus) {
+        console.error("Error fetching Processed main status:", mainStatusError);
+        // Fallback for safety
+        const { data: fallbackMainStatus, error: fallbackError } = await supabase
+          .from("job_statuses")
+          .select("id, name")
+          .eq("type", "main")
+          .eq("organization_id", organization_id)
+          .order("display_order", { ascending: true })
+          .limit(1)
+          .single();
 
-    if (fallbackError || !fallbackMainStatus) {
-      console.error("Error fetching fallback main status:", fallbackError);
-      throw new Error("No valid main status found for this organization");
+        if (fallbackError || !fallbackMainStatus) {
+          console.error("Error fetching fallback main status:", fallbackError);
+          throw new Error("No valid main status found for this organization");
+        }
+        mainStatus = fallbackMainStatus;
+      } else {
+        mainStatus = processedMainStatus;
+      }
+
+      const { data: processedSubStatus, error: subStatusError } = await supabase
+        .from("job_statuses")
+        .select("id, name")
+        .eq("type", "sub")
+        .eq("name", "Processed (Internal)")
+        .eq("parent_id", mainStatus.id)
+        .eq("organization_id", organization_id)
+        .single();
+
+      if (subStatusError || !processedSubStatus) {
+        console.error("Error fetching Processed (Internal) sub-status:", subStatusError);
+        throw new Error("Could not find Processed (Internal) sub-status for this organization");
+      }
+      subStatus = processedSubStatus;
     }
-    mainStatus = fallbackMainStatus;
-  } else {
-    mainStatus = processedMainStatus;
-  }
-
-  // Fetch the sub-status "Processed (Internal)"
-  const { data: processedSubStatus, error: subStatusError } = await supabase
-    .from("job_statuses")
-    .select("id, name")
-    .eq("type", "sub")
-    .eq("name", "Processed (Internal)")
-    .eq("parent_id", mainStatus.id)
-    .eq("organization_id", organization_id)
-    .single();
-
-  if (subStatusError || !processedSubStatus) {
-    console.error("Error fetching Processed (Internal) sub-status:", subStatusError);
-    throw new Error("Could not find Processed (Internal) sub-status for this organization");
-  }
-  subStatus = processedSubStatus;
-}
     
     // --- END OF MODIFICATION ---
+
     console.log("Payload for createCandidate:", {
       ...dbCandidate,
       job_id: jobId,
