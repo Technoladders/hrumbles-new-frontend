@@ -47,6 +47,14 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
     setCandidate,
   } = useEmployeeProfile(shareMode, shareId, initialSharedDataOptions);
 
+useEffect(() => {
+  if (candidate) {
+    console.log("CANDIDATE STATE IN COMPONENT:", candidate);
+  }
+}, [candidate]);
+
+
+
   const {
     documents: verifiedDocuments,
     handleDocumentChange,
@@ -191,8 +199,8 @@ const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
           ? candidate.metadata.preferredLocations.join(", ")
           : "N/A",
         resume: candidate.resume || candidate.metadata?.resume_url || "#",
-        currentSalary: candidate.currentSalary || "N/A",
-        expectedSalary: candidate.expectedSalary || "N/A",
+       currentSalary: candidate.current_salary || "N/A",  // Use snake_case here
+      expectedSalary: candidate.expected_salary || "N/A", // Use snake_case here
         linkedInId: candidate.metadata?.linkedInId || "N/A",
         noticePeriod: candidate.metadata?.noticePeriod || "N/A",
         hasOffers: candidate.metadata?.hasOffers || "N/A",
@@ -223,6 +231,9 @@ const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
         offerDetails: "N/A",
         consentStatus: 'not_requested',
       } as Candidate & { consentStatus: string });
+
+
+     console.log("FORMATTED EMPLOYEE OBJECT:", employeeFormatted);  
 
   const employee = shareMode
     ? {

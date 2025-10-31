@@ -2,8 +2,9 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CompanyDetail as CompanyDetailType } from '@/types/company';
-import { DollarSign, TrendingUp, Users, Puzzle, Lightbulb, ListChecks, Layers, Cpu } from 'lucide-react';
+import { DollarSign, TrendingUp, Users, Puzzle, ListChecks, Layers, Cpu, ExternalLink } from 'lucide-react';
 
+// Helper function remains unchanged
 const formatCurrency = (value: any): string => {
   if (value === null || value === undefined) return "N/A";
   if (typeof value === 'number') {
@@ -11,39 +12,49 @@ const formatCurrency = (value: any): string => {
     if (Math.abs(value) >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
     return `$${value.toLocaleString()}`;
   }
-  if (typeof value === 'string') return value; // Already formatted like "$200 billion"
+  if (typeof value === 'string') return value;
   return "N/A";
 };
 
-const MetricCard: React.FC<{ title: string; value: string; icon: React.ElementType }> = ({ title, value, icon: Icon }) => (
-    <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{title}</CardTitle>
-            <Icon className="h-4 w-4 text-muted-foreground" />
+// Refactored MetricCard for better visual impact
+const MetricCard: React.FC<{ title: string; value: string; icon: React.ElementType, link?: string }> = ({ title, value, icon: Icon, link }) => (
+    <Card className="shadow-sm rounded-xl border border-gray-200/80">
+        <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-500 flex justify-between items-center">
+                {title}
+                {link && <a href={link} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 text-gray-400 hover:text-purple-600"/></a>}
+            </CardTitle>
         </CardHeader>
         <CardContent>
-            <div className="text-2xl font-bold">{value}</div>
-            <p className="text-xs text-muted-foreground">Based on available data</p>
+            <p className="text-3xl font-bold text-gray-800">{value}</p>
+            <p className="text-xs text-gray-400 mt-1">Based on available data</p>
         </CardContent>
     </Card>
 );
 
-const InfoCard: React.FC<{ title: string; data: any; icon: React.ElementType; renderItem?: (item: any, index: number) => React.ReactNode }> = ({ title, data, icon: Icon, renderItem }) => (
-     <Card>
+// Refactored InfoCard with styled header
+const InfoCard: React.FC<{ title: string; data: any; icon: React.ElementType; children?: React.ReactNode }> = ({ title, data, icon: Icon, children }) => (
+     <Card className="shadow-sm rounded-xl border border-gray-200/80">
         <CardHeader>
-            <CardTitle className="flex items-center text-base"><Icon className="h-4 w-4 mr-2 text-purple-600" />{title}</CardTitle>
+            <CardTitle className="flex items-center text-md font-bold text-gray-700">
+                <Icon className="h-5 w-5 mr-3 text-purple-500" />
+                {title}
+            </CardTitle>
         </CardHeader>
         <CardContent>
-            {data && Array.isArray(data) && data.length > 0 ? (
-                <div className="flex flex-col space-y-2">
-                    {data.map((item, index) => renderItem ? renderItem(item, index) : <Badge key={index} variant="secondary">{String(item)}</Badge>)}
-                </div>
-            ) : <p className="text-sm text-gray-500">No data available.</p>}
+            {children ? children : (
+                (data && Array.isArray(data) && data.length > 0) ? (
+                    <div className="flex flex-wrap gap-2">
+                        {data.map((item, index) => <Badge key={index} variant="secondary" className="text-sm font-medium">{String(item)}</Badge>)}
+                    </div>
+                ) : <p className="text-sm text-gray-500">No data available.</p>
+            )}
         </CardContent>
     </Card>
 );
 
 const CompanyFinancials: React.FC<{ company: CompanyDetailType }> = ({ company }) => {
+    // Helper function remains unchanged
     const get = (jsonKey: (c: any) => any, rootKey: keyof CompanyDetailType) => {
         try {
             const jsonValue = jsonKey(company.company_data);
@@ -66,30 +77,48 @@ const CompanyFinancials: React.FC<{ company: CompanyDetailType }> = ({ company }
                 <MetricCard title="Est. Cash Flow" value={formatCurrency(company.cashflow)} icon={TrendingUp} />
             </div>
           
-            <InfoCard title="Leadership" data={leadership} icon={Users} renderItem={(person: any, index: number) => (
-                <div key={index} className="text-sm">
-                    <span className="font-medium text-gray-800">{person.name}</span>
-                    <span className="text-gray-500"> - {person.title || person.position}</span>
-                </div>
-            )} />
+            <InfoCard title="Leadership" data={leadership} icon={Users}>
+                {leadership && Array.isArray(leadership) && leadership.length > 0 ? (
+                    <div className="space-y-3">
+                        {leadership.map((person: any, index: number) => (
+                            <div key={index} className="text-sm">
+                                <p className="font-semibold text-gray-800">{person.name}</p>
+                                <p className="text-gray-500">{person.title || person.position}</p>
+                            </div>
+                        ))}
+                    </div>
+                ) : <p className="text-sm text-gray-500">No data available.</p>}
+            </InfoCard>
 
-            <InfoCard title="Services Offered" data={services} icon={ListChecks} renderItem={(item, index) => <Badge key={index} variant="outline" className="font-normal">{item}</Badge>} />
+            <InfoCard title="Services Offered" data={services} icon={ListChecks} />
             
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <InfoCard title="Known Competitors" data={competitors} icon={Puzzle} renderItem={(item, index) => <Badge key={index} variant="secondary">{item}</Badge>} />
-                <InfoCard title="Subsidiaries" data={subsidiaries} icon={Layers} renderItem={(item: any, index: number) => (
-                     <div key={index} className="text-sm font-medium">{item.name} <span className="text-xs text-gray-500 font-normal">({item.industry})</span></div>
-                )} />
+                <InfoCard title="Known Competitors" data={competitors} icon={Puzzle} />
+                <InfoCard title="Subsidiaries" data={subsidiaries} icon={Layers}>
+                    {subsidiaries && Array.isArray(subsidiaries) && subsidiaries.length > 0 ? (
+                        <div className="space-y-2">
+                             {subsidiaries.map((item: any, index: number) => (
+                                <p key={index} className="text-sm font-semibold">{item.name} <span className="text-xs text-gray-500 font-normal">({item.industry})</span></p>
+                            ))}
+                        </div>
+                    ) : <p className="text-sm text-gray-500">No data available.</p>}
+                </InfoCard>
             </div>
 
-            <InfoCard title="Technology Stack" data={techStack} icon={Cpu} renderItem={(stack: any, index: number) => (
-                <div key={index} className="border-t pt-2 first:border-t-0 first:pt-0">
-                    <p className="font-semibold text-sm mb-1">{stack.category}</p>
-                    <div className="flex flex-wrap gap-1">
-                        {stack.tools.map((tool: string, i: number) => <Badge key={i} variant="outline" className="bg-blue-50 border-blue-200 text-blue-800">{tool}</Badge>)}
+            <InfoCard title="Technology Stack" data={techStack} icon={Cpu}>
+                 {techStack && Array.isArray(techStack) && techStack.length > 0 ? (
+                    <div className="space-y-4">
+                        {techStack.map((stack: any, index: number) => (
+                            <div key={index}>
+                                <p className="font-semibold text-sm mb-2 text-gray-600">{stack.category}</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {stack.tools.map((tool: string, i: number) => <Badge key={i} variant="outline" className="bg-blue-50 border-blue-200 text-blue-800 font-medium">{tool}</Badge>)}
+                                </div>
+                            </div>
+                        ))}
                     </div>
-                </div>
-            )} />
+                 ) : <p className="text-sm text-gray-500">No data available.</p>}
+            </InfoCard>
         </div>
     );
 };

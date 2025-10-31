@@ -18,8 +18,10 @@ export interface Candidate {
     experienceMonths?: number;
   }>;
   resume?: string;
-  currentSalary?: string;
-  expectedSalary?: string;
+// ...
+current_salary?: number | string;
+expected_salary?: number | string;
+// ...
   status?: string;
   metadata?: {
     uan?: string;

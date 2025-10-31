@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useState, useEffect, useRef  } from "react";
+import { Form, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,29 +10,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // Corrected import
 import { toast } from "sonner";
 import ProfileImageUpload from "@/components/ProfileImageUpload";
 import { useSelector } from "react-redux";
 import { Country, State, City } from 'country-state-city'; 
-import { ArrowLeft, Save, ArrowRight, Upload, Plus, X, ChevronRight, User, CalendarIcon, File, Loader2, FileText, CheckCircle2, Briefcase, Clock, Building2, MapPin, Calendar, Eye, Edit  } from "lucide-react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { ArrowLeft, Save, ArrowRight, Upload, Plus, X, ChevronRight, User, CalendarIcon, File, Loader2, FileText, CheckCircle2, Briefcase, Clock, Building2, MapPin, Eye, Edit  } from "lucide-react";
+// Add this line near the top of EmployeeOnboard.tsx
+import { Calendar } from "@/components/ui/calendar"; // Make sure this path is correct
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-// import { Calendar } from "@/components/ui/calendar";
 import { uploadDocument } from "@/utils/uploadDocument";
 import { format } from "date-fns";
 import { Experience } from "@/services/types/employee.types";
-import { PostgrestSingleResponse } from "@supabase/supabase-js";
-import { FaRegFilePdf } from "react-icons/fa6";
 import PhoneInput from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 import { Switch } from "@/components/ui/switch"; 
-
-
+import { calculateProfileCompletion } from "@/utils/profileCompletion";
 
 
 // Utility functions for INR formatting
@@ -46,6 +40,15 @@ const formatINR = (value: string): string => {
   });
 };
 
+// Add this helper function inside your EmployeeOnboard component
+
+const getInitials = (firstName: string, lastName: string): string => {
+  if (!firstName && !lastName) return "U";
+  const first = firstName ? firstName[0] : '';
+  const last = lastName ? lastName[0] : '';
+  return `${first}${last}`.toUpperCase();
+};
+
 const parseINR = (value: string): string => {
   return value.replace(/,/g, "");
 };
@@ -54,7 +57,7 @@ interface EmployeeFormData {
   firstName: string;
   lastName: string;
   email: string;
-  personalEmail: string; // New field for Personal Email
+  personalEmail: string;
   phone: string;
   employeeId: string;
   department: string;
@@ -65,25 +68,37 @@ interface EmployeeFormData {
   maritalStatus: string;
   bloodGroup: string;
   employmentStatus: string;
-  hire_type: string; 
+  hire_type: string;
+  // Identity Documents
   aadharNumber: string;
   panNumber: string;
   voterIdNumber: string;
+  drivingLicenseNumber: string;
+  passportNumber: string;
+  otherIdName: string; // New field for "Other" document name
+  otherIdNumber: string; // New field for "Other" document number
+  // Statutory Documents
   esicNumber: string;
   uanNumber: string;
+  // Document URLs
   aadharUrl: string;
   panUrl: string;
   voterIdUrl: string;
+  drivingLicenseUrl: string;
+  passportUrl: string;
+  otherIdUrl: string; // New field for "Other" document URL
   esicUrl: string;
   uanUrl: string;
   profilePictureUrl: string;
-  contractDuration?: string; // New field for Contract
-  paymentBasis?: string;     // New field for Contract/Part-Time
-  hoursPerWeek?: string;     // New field for Part-Time
-  internshipDuration?: string; // Add this line
-  salary: string; // Added
-  salary_type: string; // Added
+  // Employment Details
+  contractDuration?: string;
+  paymentBasis?: string;
+  hoursPerWeek?: string;
+  internshipDuration?: string;
+  salary: string;
+  salary_type: string;
   joining_date: string;
+  // Addresses and Contacts
   presentAddress: {
     addressLine1: string;
     addressLine2?: string;
@@ -111,6 +126,7 @@ interface EmployeeFormData {
     occupation: string;
     phone: string;
   }>;
+  // Education, Experience, Bank
   education: Array<{
     type: string;
     institute?: string;
@@ -126,9 +142,9 @@ interface EmployeeFormData {
     endDate?: string;
     offerLetterUrl?: string;
     separationLetterUrl?: string;
-    payslip_1_url?: string; // New field
-    payslip_2_url?: string; // New field
-    payslip_3_url?: string; // New field
+    payslip_1_url?: string;
+    payslip_2_url?: string;
+    payslip_3_url?: string;
     hikeLetterUrl?: string;
     noSeparationLetterReason?: string;
     noPayslipReason?: string;
@@ -159,7 +175,7 @@ const initialFormData: EmployeeFormData = {
   phone: "",
   employeeId: "",
   department: "",
-  designation:"",
+  designation: "",
   position: "",
   dateOfBirth: "",
   gender: "",
@@ -167,23 +183,34 @@ const initialFormData: EmployeeFormData = {
   bloodGroup: "",
   employmentStatus: "",
   hire_type: "",
+  // Identity Documents
   aadharNumber: "",
   panNumber: "",
   voterIdNumber: "",
+  drivingLicenseNumber: "",
+  passportNumber: "",
+  otherIdName: "", // New
+  otherIdNumber: "", // New
+  // Statutory Documents
   esicNumber: "",
   uanNumber: "",
+  // Document URLs
   aadharUrl: "",
   panUrl: "",
   voterIdUrl: "",
+  drivingLicenseUrl: "",
+  passportUrl: "",
+  otherIdUrl: "", // New
   esicUrl: "",
   uanUrl: "",
   profilePictureUrl: "",
+  // ... (rest of the initialFormData object remains the same)
   contractDuration: "",
   paymentBasis: "",
   hoursPerWeek: "",
-   internshipDuration: "", // Add this line
-  salary: "", // Added
-  salary_type: "", // Added, default to LPA
+  internshipDuration: "",
+  salary: "",
+  salary_type: "",
   joining_date: "",
   presentAddress: {
     addressLine1: "",
@@ -218,9 +245,9 @@ const initialFormData: EmployeeFormData = {
       location: "",
       startDate: "",
       endDate: "",
-      payslip_1_url: "", // New field
-      payslip_2_url: "", // New field
-      payslip_3_url: "", // New field,
+      payslip_1_url: "",
+      payslip_2_url: "",
+      payslip_3_url: "",
     }
   ],
   bankDetails: {
@@ -238,21 +265,22 @@ const initialFormData: EmployeeFormData = {
   }
 };
 
-
-
-
 //validation function
 
 const VALIDATIONS = {
-  phone: /^\+\d{10,15}$/, // Starts with 6-9, 10 digits, optional +91
+  phone: /^\+\d{10,15}$/, // Starts with +, followed by 10-15 digits
   email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, // Basic email format
-  aadhar: /^\d{12}$/, // 12 digits
-  pan: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, // 5 letters, 4 digits, 1 letter
-   voterId: /^[A-Z]{3}[0-9]{7}$/, 
-  uan: /^\d{12}$/, // 12 digits
-  esic: /^\d{10,17}$/, // 10-17 digits (adjust as needed)
-  salary: /^\d+$/, // Positive number, optional 2 decimal places
-  ifsc: /^[A-Z]{4}0[A-Z0-9]{6}$/, 
+  aadhar: /^\d{12}$/, // Exactly 12 digits
+  pan: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, // Standard PAN format (e.g., ABCDE1234F)
+  voterId: /^[A-Z]{3}[0-9]{7}$/, // Standard Voter ID (e.g., ABC1234567)
+  // Simplified Driving License to accept 10-20 alphanumeric characters, allowing for state variations
+  drivingLicense: /^[A-Z0-9\s-]{10,20}$/, 
+  // Standard Indian Passport: 1 Uppercase Letter followed by 7 Digits (e.g., A1234567)
+  passport: /^[A-Z][0-9]{7}$/, 
+  uan: /^\d{12}$/, // Exactly 12 digits
+  esic: /^\d{10,17}$/, // 10 to 17 digits
+  salary: /^\d+$/, // Digits only
+  ifsc: /^[A-Z]{4}0[A-Z0-9]{6}$/, // Standard IFSC format
 };
 
 // Add error state type
@@ -273,7 +301,7 @@ interface FormErrors {
   salary_type?: string;
 }
 
-const EmployeeForm = () => {
+const EmployeeOnboard = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState("personal");
@@ -286,11 +314,30 @@ const [isSameAsPresent, setIsSameAsPresent] = useState(false);
   const [permanentCities, setPermanentCities] = useState<any[]>([]);
   const [bankStates, setBankStates] = useState<any[]>([]);
   const [bankCities, setBankCities] = useState<any[]>([]);
+
   const [countries, setCountries] = useState<any[]>([]);
   const [uploadingFile, setUploadingFile] = useState<string | null>(null);
-
+    const isInitialMount = useRef(true);
+    const isLoadingBankData = useRef(false);
   const [isVerifyingIfsc, setIsVerifyingIfsc] = useState(false);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  const [noAadhar, setNoAadhar] = useState(false); // ✅ ADD THIS
+
+
+ const isAlternativeDocValid = (type: string, number: string): boolean => {
+    if (!type || !number) return false;
+    switch (type) {
+      case "Voter ID":
+        return VALIDATIONS.voterId.test(number);
+      case "Driving License":
+        return VALIDATIONS.drivingLicense.test(number);
+      case "Passport":
+        return VALIDATIONS.passport.test(number);
+      default:
+        return false;
+    }
+  };
 
   const [showExperienceModal, setShowExperienceModal] = useState(false);
   const [editingExperienceIndex, setEditingExperienceIndex] = useState<number | null>(null);
@@ -311,6 +358,7 @@ const [isSameAsPresent, setIsSameAsPresent] = useState(false);
     noSeparationLetterReason: "",
     noPayslipReason: "",
   });
+
 
   const [noSeparationLetter, setNoSeparationLetter] = useState(false);
   const [noPayslip, setNoPayslip] = useState(false);
@@ -413,27 +461,49 @@ const educationColors = ["bg-blue-50", "bg-indigo-50", "bg-violet-50"];
   }, [formData.permanentAddress.state, formData.permanentAddress.country, countries, permanentStates]);
 
   // Load states when country changes for Bank Details
-  useEffect(() => {
-    if (formData.bankDetails.country) {
-      const country = countries.find(c => c.name === formData.bankDetails.country);
-      if (country) {
-        const states = State.getStatesOfCountry(country.isoCode);
-        setBankStates(states);
+useEffect(() => {
+  if (isInitialMount.current) return;
+
+    if (isLoadingBankData.current) return;
+  if (formData.bankDetails.country) {
+    const country = countries.find(c => c.name === formData.bankDetails.country);
+    if (country) {
+      const states = State.getStatesOfCountry(country.isoCode);
+      setBankStates(states);
+      
+      // ✅ FIX: Only reset state/city if they don't already have values
+      // This prevents clearing them when data is first loaded
+      if (!formData.bankDetails.state) {
+        handleBankDetailsChange("state", "");
+      }
+      if (!formData.bankDetails.city) {
+        handleBankDetailsChange("city", "");
       }
     }
-  }, [formData.bankDetails.country, countries]);
+  }
+}, [formData.bankDetails.country, countries]);
 
   // Load cities when state changes for Bank Details
-  useEffect(() => {
-    if (formData.bankDetails.state && formData.bankDetails.country) {
-      const country = countries.find(c => c.name === formData.bankDetails.country);
-      const state = bankStates.find(s => s.name === formData.bankDetails.state);
-      if (country && state) {
-        const cities = City.getCitiesOfState(country.isoCode, state.isoCode);
-        setBankCities(cities);
+useEffect(() => {
+  if (isInitialMount.current) return;
+  
+   if (isLoadingBankData.current) return;
+
+  if (formData.bankDetails.state && formData.bankDetails.country) {
+    const country = countries.find(c => c.name === formData.bankDetails.country);
+    const state = bankStates.find(s => s.name === formData.bankDetails.state);
+    if (country && state) {
+      const cities = City.getCitiesOfState(country.isoCode, state.isoCode);
+      setBankCities(cities);
+      
+      // ✅ FIX: Only reset city if it doesn't already have a value
+      if (!formData.bankDetails.city) {
+        handleBankDetailsChange("city", "");
       }
     }
-  }, [formData.bankDetails.state, formData.bankDetails.country, countries, bankStates]);
+  }
+}, [formData.bankDetails.state]);
+
 
   // Copy permanent address to present address when checkbox is toggled
 // Handles the "Same as Present" checkbox logic
@@ -482,8 +552,8 @@ const educationColors = ["bg-blue-50", "bg-indigo-50", "bg-violet-50"];
         handleBankDetailsChange("branchAddress", data.ADDRESS);
 
         // Auto-fill State and City directly from API data
-        handleBankDetailsChange("state", data.STATE);
-        handleBankDetailsChange("city", data.CITY);
+        // handleBankDetailsChange("state", data.STATE);
+        // handleBankDetailsChange("city", data.CITY);
 
         // Extract the ZIP Code (PIN Code) from the full address string
         const addressString = data.ADDRESS || "";
@@ -498,7 +568,7 @@ const educationColors = ["bg-blue-50", "bg-indigo-50", "bg-violet-50"];
 
       } catch (error) {
         console.error("IFSC lookup failed:", error);
-        toast.error("Could not verify IFSC Code. Please check and try again.");
+        toast.error("Could not re-verify IFSC Code. Please check the code or your network connection.");
         // Clear all related fields if the code is wrong
         handleBankDetailsChange("bankName", "");
         handleBankDetailsChange("branchName", "");
@@ -522,12 +592,20 @@ const educationColors = ["bg-blue-50", "bg-indigo-50", "bg-violet-50"];
   useEffect(() => {
     if (id) {
       fetchEmployeeData();
-    }
-  }, [id]);
+    } 
+
+  else {
+    // ✅ For new employees, set to false after a short delay
+    setTimeout(() => {
+      isInitialMount.current = false;
+    }, 100);
+  }
+}, [id]);
 
   const fetchEmployeeData = async () => {
     try {
       setLoading(true);
+       isLoadingBankData.current = true; 
       
       // Fetch employee data from hr_employees table
       const { data: employeeData, error: employeeError } = await supabase
@@ -587,16 +665,37 @@ const educationColors = ["bg-blue-50", "bg-indigo-50", "bg-violet-50"];
         console.log("No hr_employee_bank_details table, using default");
       }
 
+       
+       // Proactively populate the bank state and city lists to prevent a race condition.
+      if (bankData?.country && bankData?.state) {
+        const allCountries = Country.getAllCountries();
+        const selectedCountry = allCountries.find(c => c.name === bankData.country);
+        
+        if (selectedCountry) {
+          const statesOfCountry = State.getStatesOfCountry(selectedCountry.isoCode);
+          setBankStates(statesOfCountry); // Set the list of states immediately
+
+          const selectedState = statesOfCountry.find(s => s.name === bankData.state);
+          if (selectedState) {
+            const citiesOfState = City.getCitiesOfState(selectedCountry.isoCode, selectedState.isoCode);
+            setBankCities(citiesOfState); // Set the list of cities immediately
+          }
+        }
+      }
+      // *** END OF THE FIX ***
+
       // Map education data to match the form structure
-      const mappedEducation = educationData && educationData.length > 0
+    const mappedEducation = educationData && educationData.length > 0
         ? educationData.map((edu: any) => ({
-            type: edu.education_type || edu.type || "",
-            institute: edu.institute_name || edu.institute || "",
-            year_completed: edu.year_of_completion || edu.year_completed || "",
+            type: edu.type || "",
+            institute: edu.institute || "",
+            // *** START OF THE FIX ***
+            // Extract only the year from the full date string
+            year_completed: edu.year_completed ? new Date(edu.year_completed).getFullYear().toString() : "",
+            // *** END OF THE FIX ***
             documentUrl: edu.document_url || "",
           }))
         : initialFormData.education;
-
       // Map experience data to match the form structure
      const mappedExperience = experienceData && experienceData.length > 0
         ? experienceData.map((exp: any) => ({
@@ -656,11 +755,15 @@ const educationColors = ["bg-blue-50", "bg-indigo-50", "bg-violet-50"];
         aadharNumber: employeeData.aadhar_number || "",
         panNumber: employeeData.pan_number || "",
         voterIdNumber: employeeData.voter_id_number || "",
+         drivingLicenseNumber: employeeData.driving_license_number || "", // New
+        passportNumber: employeeData.passport_number || "",             // New
         esicNumber: employeeData.esic_number || "",
         uanNumber: employeeData.uan_number || "",
         aadharUrl: employeeData.aadhar_url || "",
         panUrl: employeeData.pan_url || "",
         voterIdUrl: employeeData.voter_id_url || "",
+        drivingLicenseUrl: employeeData.driving_license_url || "",      // New
+        passportUrl: employeeData.passport_url || "",                   // New
         esicUrl: employeeData.esic_url || "",
         uanUrl: employeeData.uan_url || "",
         profilePictureUrl: employeeData.profile_picture_url || "",
@@ -719,6 +822,8 @@ const educationColors = ["bg-blue-50", "bg-indigo-50", "bg-violet-50"];
       toast.error("Failed to load employee data: " + error.message);
     } finally {
       setLoading(false);
+      isInitialMount.current = false;
+       isLoadingBankData.current = false; 
     }
   };
 
@@ -1154,20 +1259,202 @@ const handleExpUpload = (event: React.ChangeEvent<HTMLInputElement>, field: stri
 
 // --- END: COMPLETE AND CORRECTED UPLOAD FUNCTIONS BLOCK ---
   
+const validateTab = (tab: string): boolean => {
+    const newErrors: FormErrors = {};
+    
+    switch (tab) {
+        case 'personal':
+            if (!formData.firstName.trim()) newErrors.firstName = "First name is required.";
+            if (!formData.lastName.trim()) newErrors.lastName = "Last name is required.";
+            if (!formData.email.trim() || !VALIDATIONS.email.test(formData.email)) newErrors.email = "A valid official email is required.";
+            if (formData.personalEmail && !VALIDATIONS.email.test(formData.personalEmail)) newErrors.personalEmail = "Please enter a valid personal email.";
+            if (!formData.phone || !VALIDATIONS.phone.test(formData.phone)) newErrors.phone = "A valid phone number (e.g., +919876543210) is required.";
+            // Note: Department, Designation, etc. are admin fields and not validated for the employee here.
+            break;
+            
+        case 'address':
+            if (!formData.presentAddress.addressLine1.trim()) { toast.error("Present Address: Address Line 1 is required."); return false; }
+            if (!formData.presentAddress.country.trim()) { toast.error("Present Address: Country is required."); return false; }
+            if (!formData.presentAddress.state.trim()) { toast.error("Present Address: State is required."); return false; }
+            if (!formData.presentAddress.city.trim()) { toast.error("Present Address: City is required."); return false; }
+            if (!formData.presentAddress.zipCode.trim()) { toast.error("Present Address: ZIP Code is required."); return false; }
+            
+            if (!isSameAsPresent) {
+                if (!formData.permanentAddress.addressLine1.trim()) { toast.error("Permanent Address: Address Line 1 is required."); return false; }
+                if (!formData.permanentAddress.country.trim()) { toast.error("Permanent Address: Country is required."); return false; }
+                if (!formData.permanentAddress.state.trim()) { toast.error("Permanent Address: State is required."); return false; }
+                if (!formData.permanentAddress.city.trim()) { toast.error("Permanent Address: City is required."); return false; }
+                if (!formData.permanentAddress.zipCode.trim()) { toast.error("Permanent Address: ZIP Code is required."); return false; }
+            }
+            break;
+// Inside your validateTab function, REPLACE the 'contact' case block with this new "AND" logic
+
+case 'contact':
+    // Helper function to check if an emergency contact is fully filled
+    const isEmergencyContactComplete = (c: any) => 
+        c.name && c.name.trim() !== '' && 
+        c.relationship && c.relationship.trim() !== '' && 
+        c.phone && c.phone.trim() !== '';
+
+    // Helper function to check if a family member is fully filled (occupation is optional)
+    const isFamilyMemberComplete = (m: any) =>
+        m.name && m.name.trim() !== '' && 
+        m.relationship && m.relationship.trim() !== '' && 
+        m.phone && m.phone.trim() !== '';
+
+    // Check if at least one entry in each array is complete
+    const hasValidEmergencyContact = formData.emergencyContacts.some(isEmergencyContactComplete);
+    const hasValidFamilyMember = formData.familyMembers.some(isFamilyMemberComplete);
+
+    // ✅ FIX: The logic is changed here.
+    // If EITHER section is incomplete, show an error and stop.
+    if (!hasValidEmergencyContact || !hasValidFamilyMember) {
+        toast.error("Please add at least one complete Emergency Contact AND at least one complete Family Member.");
+        return false;
+    }
+    break;
+        
+        // Inside your validateTab function, REPLACE the 'education' case block
+
+case 'education':
+    // A helper function to check if a single education entry is complete and valid
+    const isEducationEntryComplete = (edu: any) => {
+        const isInstituteFilled = edu.institute && edu.institute.trim() !== '';
+        const isYearValid = edu.year_completed && /^\d{4}$/.test(edu.year_completed.trim());
+        return isInstituteFilled && isYearValid;
+    };
+
+    // Check if at least one of the education entries is fully completed.
+    // If it is, the validation passes immediately.
+    if (formData.education.some(isEducationEntryComplete)) {
+        break; // Validation successful, proceed to the next step.
+    }
+
+    // If we reach here, it means NO entries are complete.
+    // Now, we check if the user has started typing in any of the fields.
+    const hasAnyInput = formData.education.some(edu => 
+        (edu.institute && edu.institute.trim() !== '') || 
+        (edu.year_completed && edu.year_completed.trim() !== '')
+    );
+
+    // If the user started filling out a row but didn't complete it, give a more specific error.
+    if (hasAnyInput) {
+        toast.error("Please complete at least one entry. Both Institute Name and a valid 4-digit Year are required.");
+        return false;
+    }
+
+    // If all fields are completely empty, give the primary error message.
+    toast.error("Please fill out at least one complete education entry (e.g., SSC, HSC, or Degree).");
+    return false;
+
+case 'bank-details':
+    // All fields in this section are now mandatory.
+    if (!formData.bankDetails.accountHolderName.trim()) {
+        toast.error("Bank Details: Account holder name is required.");
+        return false;
+    }
+    if (!formData.bankDetails.accountNumber.trim()) {
+        toast.error("Bank Details: Account number is required.");
+        return false;
+    }
+    if (!formData.bankDetails.bankName.trim()) {
+        toast.error("Bank Details: Bank name is required.");
+        return false;
+    }
+    if (!formData.bankDetails.branchName.trim()) {
+        toast.error("Bank Details: Branch name is required.");
+        return false;
+    }
+    if (!formData.bankDetails.ifscCode.trim() || !VALIDATIONS.ifsc.test(formData.bankDetails.ifscCode)) {
+        toast.error("Bank Details: A valid IFSC code is required.");
+        return false;
+    }
+    if (!formData.bankDetails.branchAddress?.trim()) {
+        toast.error("Bank Details: Branch address is required.");
+        return false;
+    }
+    if (!formData.bankDetails.country?.trim()) {
+        toast.error("Bank Details: Country is required.");
+        return false;
+    }
+    if (!formData.bankDetails.state?.trim()) {
+        toast.error("Bank Details: State is required.");
+        return false;
+    }
+    if (!formData.bankDetails.city?.trim()) {
+        toast.error("Bank Details: City is required.");
+        return false;
+    }
+    if (!formData.bankDetails.zipCode?.trim()) {
+        toast.error("Bank Details: ZIP code is required.");
+        return false;
+    }
+    if (!formData.bankDetails.documentUrl?.trim()) {
+        toast.error("Bank Details: Please upload a bank document (Passbook/Cancelled Cheque).");
+        return false;
+    }
+    break;
+
+// Find the `validateTab` function and REPLACE the `case 'documents':` block with this
+
+case 'documents':
+    // --- VALIDATE AADHAR ONLY IF THE TOGGLE IS OFF ---
+    if (!noAadhar) {
+        if (!formData.aadharNumber.trim() || !VALIDATIONS.aadhar.test(formData.aadharNumber)) {
+            newErrors.aadharNumber = "A valid 12-digit Aadhar number is required.";
+        }
+        if (!formData.aadharUrl.trim()) {
+            toast.error("Please upload your Aadhar document.");
+        }
+    }
+    // If noAadhar is true, we simply skip the validation for Aadhar and alternatives.
+
+    // --- ALWAYS VALIDATE PAN (MANDATORY) ---
+    if (!formData.panNumber.trim() || !VALIDATIONS.pan.test(formData.panNumber)) {
+        newErrors.panNumber = "A valid PAN number is required.";
+    }
+    if (!formData.panUrl.trim()) {
+        toast.error("Please upload your PAN document.");
+    }
+    
+    // Validate optional statutory docs only if user has entered text
+    if (formData.esicNumber.trim() && !VALIDATIONS.esic.test(formData.esicNumber)) {
+        newErrors.esicNumber = "The ESIC number format is incorrect.";
+    }
+    if (formData.uanNumber.trim() && !VALIDATIONS.uan.test(formData.uanNumber)) {
+        newErrors.uanNumber = "A valid 12-digit UAN number is required.";
+    }
+    
+    break;
+    }
+    
+    setFormErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) {
+        toast.error("Please fix the errors on the page.");
+        return false;
+    }
+    
+    return true;
+};
+
+
+
 const handleSubmit = async (event: React.FormEvent) => {
   event.preventDefault();
   
-  // // ✅ Add validation check early in the function
-  // if (!userDetails || !userDetails.orgId) {
-  //   toast.error("User details not available. Please log in again.");
-  //   return;
-  // }
-
+if (!validateTab(activeTab)) {
+    return;
+  }
+  if (!id) {
+    toast.error("Cannot save profile. User ID is missing.");
+    return;
+  }
 
     try {
       setLoading(true);
 
       // Prepare employee data for hr_employees table
+// Prepare employee data for hr_employees table
       const employeeData = {
         first_name: formData.firstName,
         last_name: formData.lastName,
@@ -1175,8 +1462,8 @@ const handleSubmit = async (event: React.FormEvent) => {
         personal_email: formData.personalEmail,
         phone: formData.phone,
         employee_id: formData.employeeId,
-        department_id: formData.department, // You may need to convert name to ID
-        designation_id: formData.designation, // You may need to convert name to ID
+        department_id: formData.department,
+        designation_id: formData.designation,
         position: formData.position,
         date_of_birth: formData.dateOfBirth || null,
         gender: formData.gender,
@@ -1191,16 +1478,45 @@ const handleSubmit = async (event: React.FormEvent) => {
         salary: formData.salary ? parseFloat(parseINR(formData.salary)) : null,
         salary_type: formData.salary_type,
         joining_date: formData.joining_date || null,
-        aadhar_number: formData.aadharNumber || null,
+        
+        // =============================================
+        // START: CORRECTED DOCUMENT FIELDS
+        // =============================================
+        
+        // Aadhar fields are saved only if the "I don't have this" toggle is OFF
+        aadhar_number: !noAadhar ? formData.aadharNumber || null : null,
+        aadhar_url: !noAadhar ? formData.aadharUrl || null : null,
+
+        // PAN is always saved
         pan_number: formData.panNumber || null,
+        pan_url: formData.panUrl || null,
+        
+        // Save alternative documents directly to their specific database columns
+        voter_id_number: formData.voterIdNumber || null,
+        voter_id_url: formData.voterIdUrl || null,
+        driving_license_number: formData.drivingLicenseNumber || null,
+        driving_license_url: formData.drivingLicenseUrl || null,
+        passport_number: formData.passportNumber || null,
+        passport_url: formData.passportUrl || null,
+        
+        // Use the database's 'aadhar_alternative_*' fields to store the "Other" document details
+        aadhar_alternative_type: formData.otherIdName || null,
+        aadhar_alternative_number: formData.otherIdNumber || null,
+        aadhar_alternative_url: formData.otherIdUrl || null,
+
+        // Statutory documents
         esic_number: formData.esicNumber || null,
         uan_number: formData.uanNumber || null,
-        aadhar_url: formData.aadharUrl || null,
-        pan_url: formData.panUrl || null,
-        esic_url: formData.esicUrl,
-        uan_url: formData.uanUrl,
+        esic_url: formData.esicUrl || null,
+        uan_url: formData.uanUrl || null,
+        
+        // =============================================
+        // END: CORRECTED DOCUMENT FIELDS
+        // =============================================
+
         profile_picture_url: formData.profilePictureUrl,
-       organization_id: organizationId,
+        organization_id: organizationId,
+
         // JSONB fields
         present_address: {
           addressLine1: formData.presentAddress.addressLine1,
@@ -1229,6 +1545,7 @@ const handleSubmit = async (event: React.FormEvent) => {
           occupation: member.occupation,
           phone: member.phone
         })),
+        
         updated_at: new Date().toISOString()
       };
 
@@ -1278,23 +1595,19 @@ const handleSubmit = async (event: React.FormEvent) => {
 
       toast.success(id ? "Employee updated successfully" : "Employee created successfully");
 
-      if (activeTab === "documents") {
-        // After saving all tabs, navigate appropriately
-        if (id) {
-          // If editing, go back to employee profile
-          navigate(`/employee/profile/${id}`);
-        } else {
-          // If creating new, go to the new employee's profile
-          navigate(`/employee/profile/${employeeId}`);
-        }
-      } else {
-        // Move to next tab
         const tabs = ["personal", "address", "contact", "education", "bank-details", "documents"];
-        const currentIndex = tabs.indexOf(activeTab);
-        if (currentIndex < tabs.length - 1) {
+      const currentIndex = tabs.indexOf(activeTab);
+
+      if (currentIndex < tabs.length - 1) {
+          // If we are NOT on the last tab, simply move to the next one.
           setActiveTab(tabs[currentIndex + 1]);
-        }
+      } else {
+          // If we ARE on the last tab ("documents"), the flow is complete.
+          // Navigate back to the overview page to see the updated percentage.
+          toast.success("Profile updated! Returning to overview.");
+          navigate('/complete-profile');
       }
+      
     } catch (error: any) {
       console.error("Error saving employee:", error);
       toast.error(error.message || "Failed to save employee");
@@ -1308,39 +1621,33 @@ const handleSubmit = async (event: React.FormEvent) => {
 
   const saveEducation = async (employeeId: string) => {
     try {
-      // Delete existing education
+      // Delete existing education to prevent duplicates
       await supabase
         .from("hr_employee_education")
         .delete()
         .eq("employee_id", employeeId);
 
-      // ✅ FIX: Filter out empty records AND format the year correctly for the database
+      // Filter out any empty education records
       const educationToSave = formData.education
         .filter(edu => edu.institute && edu.institute.trim() !== '')
         .map(edu => {
-          // =================================================================
-          // START: CRITICAL FIX FOR DATE FORMATTING
-          // =================================================================
           // Convert the year string (e.g., "2020") to a valid date format ("2020-01-01")
-          // If the year is invalid or empty, set it to null.
           const yearCompletedDate = edu.year_completed && /^\d{4}$/.test(edu.year_completed)
             ? `${edu.year_completed}-01-01`
             : null;
-          // =================================================================
-          // END: CRITICAL FIX FOR DATE FORMATTING
-          // =================================================================
           
+          // *** CORRECTION: Use the exact column names from your schema ***
           return {
             employee_id: employeeId,
             organization_id: organizationId,
             type: edu.type,
             institute: edu.institute,
-            year_completed: yearCompletedDate, // ✅ Use the formatted date here
+            year_completed: yearCompletedDate, // This now correctly maps to your 'date' column
             document_url: edu.documentUrl || null
           };
         });
 
-      // Only insert if there are records to save
+      // Only insert if there are valid records to save
       if (educationToSave.length > 0) {
         const { error } = await supabase
           .from("hr_employee_education")
@@ -1354,6 +1661,32 @@ const handleSubmit = async (event: React.FormEvent) => {
     } catch (error) {
       console.error("Failed to save education:", error);
       throw error;
+    }
+  };
+
+
+  // Add this new function inside your EmployeeOnboard component
+ const handleProfilePictureUpdate = async (url: string) => {
+    // 1. Update the form's state immediately so the UI shows the new image
+    handleInputChange("profilePictureUrl", url);
+
+    try {
+      // 2. Save the new URL directly to the database for this employee
+      const { error } = await supabase
+        .from("hr_employees")
+        .update({ profile_picture_url: url })
+        .eq("id", id); // 'id' is the employee's ID from the URL params
+
+      if (error) {
+        throw error; // If there's an error, jump to the catch block
+      }
+
+      // 3. Only show the success message AFTER the database has been updated
+      toast.success("Profile image updated successfully!");
+
+    } catch (error: any) {
+      console.error("Error saving profile picture URL:", error);
+      toast.error("Failed to save profile picture. Please try again.");
     }
   };
 
@@ -1461,6 +1794,15 @@ const handleSubmit = async (event: React.FormEvent) => {
       // Don't throw, just log - bank details are optional
     }
   };
+
+// ADD this constant inside your EmployeeOnboard component, before the 'return' statement
+
+// Update this constant at the top of your component if you are using the "Other" input logic
+const bloodGroupOptions = [
+  "A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-",
+  "A1+", "A1-", "A2+", "A2-", "A1B+", "A1B-", "A2B+", "A2B-",
+  "Bombay (hh)", "Unknown", ""
+];
 
   return (
     <div className="container mx-auto p-6 max-w-8xl">
@@ -1665,23 +2007,16 @@ const handleSubmit = async (event: React.FormEvent) => {
       <Card className="card-3d">
         <CardContent className="p-8">
           <div className="flex items-center gap-4 mb-8">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                if (id) {
-                  // If editing, go back to employee profile
-                  navigate(`/employee/profile/${id}`);
-                } else {
-                  // If adding new, go back to employees list
-                  navigate("/employee");
-                }
-              }}
-              className="hover:bg-purple-50 transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
+        <Button
+  variant="ghost"
+  // ✅ FIX: Always navigate back to the completion overview page
+  onClick={() => navigate('/complete-profile')}
+  className="hover:bg-purple-50 transition-colors"
+>
+  <ArrowLeft className="h-5 w-5" />
+</Button>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-              {id ? "Edit Employee" : "Add New Employee"}
+              {id ? "Complete Your Profile" : "Add New Employee"}
             </h1>
           </div>
 
@@ -1723,13 +2058,20 @@ const handleSubmit = async (event: React.FormEvent) => {
                     Personal Information
                   </h2>
                   
-                  <div className="profile-upload-3d">
-                    <ProfileImageUpload
-                      imageUrl={formData.profilePictureUrl}
-                      onImageUpload={(url) => handleInputChange("profilePictureUrl", url)}
-                      employeeName={`${formData.firstName} ${formData.lastName}`}
-                    />
-                  </div>
+             
+
+                <div className="profile-upload-3d">
+  <ProfileImageUpload
+    // ✅ FIX #1: Change 'imageUrl' prop to 'value'
+    value={formData.profilePictureUrl}
+    
+    // This prop is already correct from our previous fix
+    onChange={handleProfilePictureUpdate}
+    
+    // ✅ FIX #2: Change 'employeeName' prop to 'initialLetter' and use the new helper
+    initialLetter={getInitials(formData.firstName, formData.lastName)}
+  />
+</div>
 
                   <Separator className="separator-3d" />
 
@@ -1792,19 +2134,21 @@ const handleSubmit = async (event: React.FormEvent) => {
                       )}
                     </div>
 
-                    <div className={cn("form-3d-input", formErrors.phone && "error")}>
-                      <Label className="form-3d-label">Phone</Label>
-                      <PhoneInput
-                        international
-                        defaultCountry="IN"
-                        value={formData.phone}
-                        onChange={(value) => handleInputChange("phone", value)}
-                        className="phone-input-3d"
-                      />
-                      {formErrors.phone && (
-                        <span className="form-error">{formErrors.phone}</span>
-                      )}
-                    </div>
+                  <div className={cn("form-3d-input", formErrors.phone && "error")}>
+  <Label className="form-3d-label">
+    Phone <span className="text-red-500">*</span>
+  </Label>
+  <PhoneInput
+    international
+    defaultCountry="IN"
+    value={formData.phone}
+    onChange={(value) => handleInputChange("phone", value)}
+    className="phone-input-3d"
+  />
+  {formErrors.phone && (
+    <span className="form-error">{formErrors.phone}</span>
+  )}
+</div>
 
                     <div className="form-3d-input">
                       <Label className="form-3d-label">Employee ID</Label>
@@ -1879,60 +2223,59 @@ const handleSubmit = async (event: React.FormEvent) => {
 </div>
 
                     <div className="form-3d-input">
-                      <Label className="form-3d-label">Date of Birth</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full justify-start text-left font-normal",
-                              !formData.dateOfBirth && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {formData.dateOfBirth
-                              ? format(new Date(formData.dateOfBirth), "PPP")
-                              : "Pick a date"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={
-                              formData.dateOfBirth ? new Date(formData.dateOfBirth) : undefined
-                            }
-                            onSelect={(date) =>
-                              handleInputChange("dateOfBirth", date?.toISOString().split("T")[0])
-                            }
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+  <Label className="form-3d-label">Date of Birth</Label>
+  <Popover>
+    <PopoverTrigger asChild>
+      <Button
+        variant="outline"
+        className={cn(
+          "w-full justify-start text-left font-normal",
+          !formData.dateOfBirth && "text-muted-foreground"
+        )}
+      >
+        <CalendarIcon className="mr-2 h-4 w-4" />
+        {formData.dateOfBirth
+          // This fix prevents timezone bugs and "Invalid Date" errors
+          ? format(new Date(formData.dateOfBirth + 'T00:00:00'), "PPP")
+          : <span>Pick a date</span>}
+      </Button>
+    </PopoverTrigger>
+    <PopoverContent className="w-auto p-0">
+      <Calendar
+        mode="single"
+        selected={
+          formData.dateOfBirth ? new Date(formData.dateOfBirth + 'T00:00:00') : undefined
+        }
+        onSelect={(date) =>
+          handleInputChange("dateOfBirth", date?.toISOString().split("T")[0])
+        }
+        initialFocus
+      />
+    </PopoverContent>
+  </Popover>
+</div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="form-3d-input">
-                      <Label className="form-3d-label">Gender</Label>
-                      <RadioGroup
-                        value={formData.gender}
-                        onValueChange={(value) => handleInputChange("gender", value)}
-                        className="flex gap-4"
-                      >
-                        <div className="flex items-center space-x-2 form-3d-radio">
-                          <RadioGroupItem value="Male" id="male" />
-                          <Label htmlFor="male">Male</Label>
-                        </div>
-                        <div className="flex items-center space-x-2 form-3d-radio">
-                          <RadioGroupItem value="Female" id="female" />
-                          <Label htmlFor="female">Female</Label>
-                        </div>
-                        <div className="flex items-center space-x-2 form-3d-radio">
-                          <RadioGroupItem value="Other" id="other" />
-                          <Label htmlFor="other">Other</Label>
-                        </div>
-                      </RadioGroup>
-                    </div>
+  <Label className="form-3d-label">Gender</Label>
+  <div className="flex gap-2">
+    {['Male', 'Female', 'Prefer not to say'].map((genderOption) => (
+      <Button
+        key={genderOption}
+        type="button"
+        variant={formData.gender === genderOption ? "default" : "outline"}
+        onClick={() => handleInputChange("gender", genderOption)}
+        className={cn(
+          "flex-1 justify-center",
+          formData.gender === genderOption && "bg-purple-600 text-green-500 hover:bg-purple-700"
+        )}
+      >
+        {genderOption}
+      </Button>
+    ))}
+  </div>
+</div>
 
                     <div className="form-3d-input">
                       <Label className="form-3d-label">Marital Status</Label>
@@ -1948,31 +2291,60 @@ const handleSubmit = async (event: React.FormEvent) => {
                           <SelectItem value="Married">Married</SelectItem>
                           <SelectItem value="Divorced">Divorced</SelectItem>
                           <SelectItem value="Widowed">Widowed</SelectItem>
+                          <SelectItem value="Prefer not to say">Prefer not to say</SelectItem> 
                         </SelectContent>
                       </Select>
                     </div>
 
-                    <div className="form-3d-input">
-                      <Label className="form-3d-label">Blood Group</Label>
-                      <Select
-                        value={formData.bloodGroup}
-                        onValueChange={(value) => handleInputChange("bloodGroup", value)}
-                      >
-                        <SelectTrigger className="h-11">
-                          <SelectValue placeholder="Select blood group" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="A+">A+</SelectItem>
-                          <SelectItem value="A-">A-</SelectItem>
-                          <SelectItem value="B+">B+</SelectItem>
-                          <SelectItem value="B-">B-</SelectItem>
-                          <SelectItem value="AB+">AB+</SelectItem>
-                          <SelectItem value="AB-">AB-</SelectItem>
-                          <SelectItem value="O+">O+</SelectItem>
-                          <SelectItem value="O-">O-</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+<div className="form-3d-input">
+  <Label className="form-3d-label">Blood Group</Label>
+  <Select
+    value={!bloodGroupOptions.includes(formData.bloodGroup) ? "Other" : formData.bloodGroup}
+    onValueChange={(value) => {
+      if (value === "Other") {
+        // Set to a temporary value to trigger the input field
+        handleInputChange("bloodGroup", "Other");
+      } else {
+        handleInputChange("bloodGroup", value);
+      }
+    }}
+  >
+    <SelectTrigger className="h-11">
+      <SelectValue placeholder="Select blood group" />
+    </SelectTrigger>
+<SelectContent>
+  <SelectItem value="A+">A+</SelectItem>
+  <SelectItem value="A-">A-</SelectItem>
+  <SelectItem value="B+">B+</SelectItem>
+  <SelectItem value="B-">B-</SelectItem>
+  <SelectItem value="O+">O+</SelectItem>
+  <SelectItem value="O-">O-</SelectItem>
+  <SelectItem value="AB+">AB+</SelectItem>
+  <SelectItem value="AB-">AB-</SelectItem>
+  <SelectItem value="A1+">A1+</SelectItem>
+  <SelectItem value="A1-">A1-</SelectItem>
+  <SelectItem value="A2+">A2+</SelectItem>
+  <SelectItem value="A2-">A2-</SelectItem>
+  <SelectItem value="A1B+">A1B+</SelectItem>
+  <SelectItem value="A1B-">A1B-</SelectItem>
+  <SelectItem value="A2B+">A2B+</SelectItem>
+  <SelectItem value="A2B-">A2B-</SelectItem>
+  <SelectItem value="Bombay (hh)">Bombay Blood Group (hh)</SelectItem>
+  <SelectItem value="Unknown">Unknown / Not Sure</SelectItem>
+</SelectContent>
+  </Select>
+  
+  {/* Conditionally render Input field for "Other" */}
+  {(!bloodGroupOptions.includes(formData.bloodGroup) || formData.bloodGroup === 'Other') && (
+    <Input
+      className="mt-2"
+      placeholder="Please specify your blood group"
+      value={formData.bloodGroup === 'Other' ? '' : formData.bloodGroup}
+      onChange={(e) => handleInputChange('bloodGroup', e.target.value)}
+      autoFocus
+    />
+  )}
+</div>
                   </div>
 
                   <Separator className="separator-3d" />
@@ -1981,8 +2353,40 @@ const handleSubmit = async (event: React.FormEvent) => {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="form-3d-input">
-  <Label className="form-3d-label">Employment Status</Label>
-  <Select
+
+                    <div className="form-3d-input">
+                      <Label className="form-3d-label">Joining Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !formData.joining_date && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formData.joining_date
+                              ? format(new Date(formData.joining_date), "PPP")
+                              : "Pick a date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={
+                              formData.joining_date ? new Date(formData.joining_date) : undefined
+                            }
+                            onSelect={(date) =>
+                              handleInputChange("joining_date", date?.toISOString().split("T")[0])
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+  {/* <Label className="form-3d-label">Employment Status</Label> */}
+  {/* <Select
     value={formData.employmentStatus}
     onValueChange={(value) => handleInputChange("employmentStatus", value)}
   >
@@ -1993,10 +2397,10 @@ const handleSubmit = async (event: React.FormEvent) => {
       <SelectItem value="Active">Active</SelectItem>
       <SelectItem value="Inactive">Inactive</SelectItem>
     </SelectContent>
-  </Select>
+  </Select> */}
 </div>
 
-                    <div className={cn("form-3d-input", formErrors.hire_type && "error")}>
+                    {/* <div className={cn("form-3d-input", formErrors.hire_type && "error")}>
                       <Label className="form-3d-label">
                         Hire Type <span className="text-red-500">*</span>
                       </Label>
@@ -2082,39 +2486,8 @@ const handleSubmit = async (event: React.FormEvent) => {
       )}
     </SelectContent>
   </Select>
-</div>
+</div> */}
 
-                    <div className="form-3d-input">
-                      <Label className="form-3d-label">Joining Date</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full justify-start text-left font-normal",
-                              !formData.joining_date && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {formData.joining_date
-                              ? format(new Date(formData.joining_date), "PPP")
-                              : "Pick a date"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={
-                              formData.joining_date ? new Date(formData.joining_date) : undefined
-                            }
-                            onSelect={(date) =>
-                              handleInputChange("joining_date", date?.toISOString().split("T")[0])
-                            }
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
                   </div>
                 </TabsContent>
 
@@ -2613,7 +2986,7 @@ const handleSubmit = async (event: React.FormEvent) => {
                           </div>
                           <div className="text-right">
                             <div className="flex items-center gap-1 text-sm font-medium text-gray-700">
-                              <Calendar className="w-4 h-4" />
+                             <CalendarIcon className="w-4 h-4" />
                               {exp.startDate ? new Date(exp.startDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'}
                               {" - "}
                               {exp.endDate ? new Date(exp.endDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Present'}
@@ -3045,318 +3418,204 @@ const handleSubmit = async (event: React.FormEvent) => {
                   </div>
                 </TabsContent>
 
-              <TabsContent value="documents" className="animated-tab-content space-y-6">
-                  <h2 className="section-header-3d">Documents</h2>
+ <TabsContent value="documents" className="animated-tab-content space-y-6">
+  <h2 className="section-header-3d">Identity Documents</h2>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="form-3d-input">
-                      <Label className="form-3d-label">Aadhar Number</Label>
-                      <Input
-                        value={formData.aadharNumber}
-                        onChange={(e) =>
-                          handleInputChange("aadharNumber", e.target.value)
-                        }
-                        placeholder="Enter 12-digit Aadhar number"
-                        maxLength={12}
-                      />
-                      {formErrors.aadharNumber && (
-                        <span className="form-error">{formErrors.aadharNumber}</span>
-                      )}
-                      {!formErrors.aadharNumber && VALIDATIONS.aadhar.test(formData.aadharNumber) && (
-                        <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Verified
-                        </div>
-                      )}
-                    </div>
+  {/* ==================== AADHAR SECTION ==================== */}
+  <div className="p-4 border rounded-lg bg-gray-50">
+    <div className="flex items-center justify-between mb-4">
+      <Label className="font-semibold text-lg text-gray-800">Aadhar Details</Label>
+      <div className="flex items-center gap-2">
+        <Label htmlFor="noAadharSwitch" className="text-sm">I don't have this</Label>
+        <Switch id="noAadharSwitch" checked={noAadhar} onCheckedChange={setNoAadhar} />
+      </div>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="form-3d-input">
+        <Label className="form-3d-label">
+          Aadhar Number
+          {/* Mandatory star appears only if the toggle is OFF */}
+          {!noAadhar && <span className="text-red-500">*</span>}
+        </Label>
+        <Input
+          value={formData.aadharNumber}
+          onChange={(e) => handleInputChange("aadharNumber", e.target.value)}
+          placeholder="Enter 12-digit Aadhar number"
+          maxLength={12}
+          disabled={noAadhar} // Field is disabled when toggle is ON
+        />
+        {formErrors.aadharNumber && !noAadhar && <span className="form-error">{formErrors.aadharNumber}</span>}
+        {VALIDATIONS.aadhar.test(formData.aadharNumber) && !noAadhar && <div className="flex items-center gap-1 text-green-600 text-xs mt-1"><CheckCircle2 className="h-3 w-3" />Verified</div>}
+      </div>
+      <div className="form-3d-input">
+        <Label className="form-3d-label">
+          Aadhar Document
+          {!noAadhar && <span className="text-red-500">*</span>}
+        </Label>
+        <div className="flex gap-3 items-center">
+          <input type="file" id="aadharUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "aadharUrl")} disabled={noAadhar} />
+          <Label htmlFor="aadharUrl" className={cn("cursor-pointer text-purple-600 hover:underline", noAadhar && "opacity-50 cursor-not-allowed")}>
+            {uploadingFile === "aadharUrl" ? "Uploading..." : "+ Upload File"}
+          </Label>
+          {formData.aadharUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.aadharUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
+        </div>
+      </div>
+    </div>
+  </div>
 
-                    <div className="form-3d-input">
-                      <Label className="form-3d-label">Aadhar Document</Label>
-                      <div className="flex gap-3 items-center">
-                        <input
-                          type="file"
-                          id="aadharUrl"
-                          className="sr-only"
-                          accept=".pdf,.png,.jpg,.jpeg"
-                          disabled={uploadingFile !== null}
-                          // =================================================================
-                          // ✅ FIX: Use the correct helper function
-                          // =================================================================
-                          onChange={(event) => handleDocumentUpload(event, "aadharUrl")}
-                        />
-                        <Label
-                          htmlFor="aadharUrl"
-                          className={cn(
-                            "cursor-pointer text-purple-600 hover:underline",
-                            uploadingFile && "opacity-50 cursor-not-allowed"
-                          )}
-                        >
-                          {uploadingFile === "aadharUrl" ? (
-                            <span className="flex items-center gap-1">
-                              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
-                            </span>
-                          ) : (
-                            "+ Upload File"
-                          )}
-                        </Label>
-                        {formData.aadharUrl && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => window.open(formData.aadharUrl, "_blank")}
-                          >
-                            <FileText className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="form-3d-input">
-                      <Label className="form-3d-label">PAN Number</Label>
-                      <Input
-                        value={formData.panNumber}
-                        onChange={(e) =>
-                          handleInputChange("panNumber", e.target.value.toUpperCase())
-                        }
-                        placeholder="Enter PAN number"
-                        maxLength={10}
-                      />
-                      {formErrors.panNumber && (
-                        <span className="form-error">{formErrors.panNumber}</span>
-                      )}
-                      {!formErrors.panNumber && VALIDATIONS.pan.test(formData.panNumber) && (
-                        <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Verified
-                        </div>
-                      )}
-                    </div>
+  {/* ==================== ALTERNATIVE DOCUMENTS (Appear if no Aadhar) ==================== */}
+  {noAadhar && (
+    <div className="space-y-4">
+      <p className="text-sm font-semibold text-center text-gray-600 p-2 bg-blue-50 rounded-md">You can provide any of the following documents as an alternative.</p>
+      
+      {/* --- Voter ID --- */}
+      <div className="p-4 border rounded-lg">
+        <Label className="font-semibold text-gray-800 mb-4 block">Voter ID Card</Label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="form-3d-input">
+            <Label className="form-3d-label">Voter ID Number</Label>
+            <Input value={formData.voterIdNumber} onChange={(e) => handleInputChange("voterIdNumber", e.target.value.toUpperCase())} />
+          </div>
+          <div className="form-3d-input">
+            <Label className="form-3d-label">Voter ID Document</Label>
+            <div className="flex gap-3 items-center">
+              <input type="file" id="voterIdUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "voterIdUrl")} />
+              <Label htmlFor="voterIdUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "voterIdUrl" ? "Uploading..." : "+ Upload File"}</Label>
+              {formData.voterIdUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.voterIdUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
+            </div>
+          </div>
+        </div>
+      </div>
 
-                    <div className="form-3d-input">
-                      <Label className="form-3d-label">PAN Document</Label>
-                      <div className="flex gap-3 items-center">
-                        <input
-                          type="file"
-                          id="panUrl"
-                          className="sr-only"
-                          accept=".pdf,.png,.jpg,.jpeg"
-                          disabled={uploadingFile !== null}
-                          // =================================================================
-                          // ✅ FIX: Use the correct helper function
-                          // =================================================================
-                          onChange={(event) => handleDocumentUpload(event, "panUrl")}
-                        />
-                        <Label
-                          htmlFor="panUrl"
-                          className={cn(
-                            "cursor-pointer text-purple-600 hover:underline",
-                            uploadingFile && "opacity-50 cursor-not-allowed"
-                          )}
-                        >
-                          {uploadingFile === "panUrl" ? (
-                            <span className="flex items-center gap-1">
-                              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
-                            </span>
-                          ) : (
-                            "+ Upload File"
-                          )}
-                        </Label>
-                        {formData.panUrl && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => window.open(formData.panUrl, "_blank")}
-                          >
-                            <FileText className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+      {/* --- Driving License --- */}
+      <div className="p-4 border rounded-lg">
+        <Label className="font-semibold text-gray-800 mb-4 block">Driving License</Label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="form-3d-input">
+            <Label className="form-3d-label">Driving License Number</Label>
+            <Input value={formData.drivingLicenseNumber} onChange={(e) => handleInputChange("drivingLicenseNumber", e.target.value.toUpperCase())} />
+          </div>
+          <div className="form-3d-input">
+            <Label className="form-3d-label">Driving License Document</Label>
+            <div className="flex gap-3 items-center">
+              <input type="file" id="drivingLicenseUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "drivingLicenseUrl")} />
+              <Label htmlFor="drivingLicenseUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "drivingLicenseUrl" ? "Uploading..." : "+ Upload File"}</Label>
+              {formData.drivingLicenseUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.drivingLicenseUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
+            </div>
+          </div>
+        </div>
+      </div>
 
-                    <div className="form-3d-input">
-                      <Label className="form-3d-label">Voter ID Number</Label>
-                      <Input
-                        value={formData.voterIdNumber}
-                        onChange={(e) =>
-                          handleInputChange("voterIdNumber", e.target.value.toUpperCase())
-                        }
-                        placeholder="e.g., ABC1234567"
-                        maxLength={10}
-                      />
-                      {VALIDATIONS.voterId.test(formData.voterIdNumber) && (
-                        <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Verified
-                        </div>
-                      )}
-                    </div>
+      {/* --- Passport --- */}
+      <div className="p-4 border rounded-lg">
+        <Label className="font-semibold text-gray-800 mb-4 block">Passport</Label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="form-3d-input">
+            <Label className="form-3d-label">Passport Number</Label>
+            <Input value={formData.passportNumber} onChange={(e) => handleInputChange("passportNumber", e.target.value.toUpperCase())} />
+          </div>
+          <div className="form-3d-input">
+            <Label className="form-3d-label">Passport Document</Label>
+            <div className="flex gap-3 items-center">
+              <input type="file" id="passportUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "passportUrl")} />
+              <Label htmlFor="passportUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "passportUrl" ? "Uploading..." : "+ Upload File"}</Label>
+              {formData.passportUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.passportUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
+            </div>
+          </div>
+        </div>
+      </div>
 
-                    <div className="form-3d-input">
-                      <Label className="form-3d-label">Voter ID Document</Label>
-                      <div className="flex gap-3 items-center">
-                        <input
-                          type="file"
-                          id="voterIdUrl"
-                          className="sr-only"
-                          accept=".pdf,.png,.jpg,.jpeg"
-                          disabled={uploadingFile !== null}
-                          // =================================================================
-                          // ✅ FIX: Use the correct helper function
-                          // =================================================================
-                          onChange={(event) => handleDocumentUpload(event, "voterIdUrl")}
-                        />
-                        <Label
-                          htmlFor="voterIdUrl"
-                          className={cn(
-                            "cursor-pointer text-purple-600 hover:underline",
-                            uploadingFile && "opacity-50 cursor-not-allowed"
-                          )}
-                        >
-                          {uploadingFile === "voterIdUrl" ? (
-                            <span className="flex items-center gap-1">
-                              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
-                            </span>
-                          ) : (
-                            "+ Upload File"
-                          )}
-                        </Label>
-                        {formData.voterIdUrl && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => window.open(formData.voterIdUrl, "_blank")}
-                          >
-                            <FileText className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+       {/* --- Other Document --- */}
+       <div className="p-4 border rounded-lg">
+        <Label className="font-semibold text-gray-800 mb-4 block">Other Document</Label>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="form-3d-input">
+            <Label className="form-3d-label">Document Name</Label>
+            <Input value={formData.otherIdName} onChange={(e) => handleInputChange("otherIdName", e.target.value)} placeholder="e.g., Ration Card" />
+          </div>
+          <div className="form-3d-input">
+            <Label className="form-3d-label">Document Number</Label>
+            <Input value={formData.otherIdNumber} onChange={(e) => handleInputChange("otherIdNumber", e.target.value.toUpperCase())} />
+          </div>
+          <div className="form-3d-input">
+            <Label className="form-3d-label">Upload Document</Label>
+            <div className="flex gap-3 items-center">
+              <input type="file" id="otherIdUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "otherIdUrl")} />
+              <Label htmlFor="otherIdUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "otherIdUrl" ? "Uploading..." : "+ Upload File"}</Label>
+              {formData.otherIdUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.otherIdUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
+            </div>
+          </div>
+        </div>
+      </div>
+    
 
-                    <div className="form-3d-input">
-                      <Label className="form-3d-label">ESIC Number</Label>
-                      <Input
-                        value={formData.esicNumber}
-                        onChange={(e) =>
-                          handleInputChange("esicNumber", e.target.value)
-                        }
-                        placeholder="Enter ESIC number"
-                      />
-                      {formErrors.esicNumber && (
-                        <span className="form-error">{formErrors.esicNumber}</span>
-                      )}
-                      {!formErrors.esicNumber && VALIDATIONS.esic.test(formData.esicNumber) && (
-                        <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Verified
-                        </div>
-                      )}
-                    </div>
+      {/* ==================== PAN SECTION (Always Mandatory) ==================== */}
+  <div className="p-4 border rounded-lg bg-gray-50">
+    <Label className="font-semibold text-lg text-gray-800 mb-4 block">PAN Details</Label>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="form-3d-input">
+        <Label className="form-3d-label">PAN Number <span className="text-red-500">*</span></Label>
+        <Input value={formData.panNumber} onChange={(e) => handleInputChange("panNumber", e.target.value.toUpperCase())} placeholder="Enter PAN number" maxLength={10} />
+        {formErrors.panNumber ? <span className="form-error">{formErrors.panNumber}</span> : (formData.panNumber && VALIDATIONS.pan.test(formData.panNumber)) && <div className="flex items-center gap-1 text-green-600 text-xs mt-1"><CheckCircle2 className="h-3 w-3" />Verified</div>}
+      </div>
+      <div className="form-3d-input">
+        <Label className="form-3d-label">PAN Document <span className="text-red-500">*</span></Label>
+        <div className="flex gap-3 items-center">
+          <input type="file" id="panUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "panUrl")} />
+          <Label htmlFor="panUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "panUrl" ? "Uploading..." : "+ Upload File"}</Label>
+          {formData.panUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.panUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
+        </div>
+      </div>
+    </div>
+  </div>
 
-                    <div className="form-3d-input">
-                      <Label className="form-3d-label">ESIC Document</Label>
-                      <div className="flex gap-3 items-center">
-                        <input
-                          type="file"
-                          id="esicUrl"
-                          className="sr-only"
-                          accept=".pdf,.png,.jpg,.jpeg"
-                          disabled={uploadingFile !== null}
-                          // =================================================================
-                          // ✅ FIX: Use the correct helper function
-                          // =================================================================
-                          onChange={(event) => handleDocumentUpload(event, "esicUrl")}
-                        />
-                        <Label
-                          htmlFor="esicUrl"
-                          className={cn(
-                            "cursor-pointer text-purple-600 hover:underline",
-                            uploadingFile && "opacity-50 cursor-not-allowed"
-                          )}
-                        >
-                          {uploadingFile === "esicUrl" ? (
-                            <span className="flex items-center gap-1">
-                              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
-                            </span>
-                          ) : (
-                            "+ Upload File"
-                          )}
-                        </Label>
-                        {formData.esicUrl && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => window.open(formData.esicUrl, "_blank")}
-                          >
-                            <FileText className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+</div>
+  )}
 
-                    <div className="form-3d-input">
-                      <Label className="form-3d-label">UAN Number</Label>
-                      <Input
-                        value={formData.uanNumber}
-                        onChange={(e) =>
-                          handleInputChange("uanNumber", e.target.value)
-                        }
-                        placeholder="Enter 12-digit UAN number"
-                        maxLength={12}
-                      />
-                      {formErrors.uanNumber && (
-                        <span className="form-error">{formErrors.uanNumber}</span>
-                      )}
-                      {!formErrors.uanNumber && VALIDATIONS.uan.test(formData.uanNumber) && (
-                        <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Verified
-                        </div>
-                      )}
-                    </div>
+  {/* ==================== STATUTORY SECTION (Optional) ==================== */}
+  <Separator className="my-6" />
+  <h2 className="section-header-3d">Statutory Documents (Optional)</h2>
 
-                    <div className="form-3d-input">
-                      <Label className="form-3d-label">UAN Document</Label>
-                      <div className="flex gap-3 items-center">
-                        <input
-                          type="file"
-                          id="uanUrl"
-                          className="sr-only"
-                          accept=".pdf,.png,.jpg,.jpeg"
-                          disabled={uploadingFile !== null}
-                          // =================================================================
-                          // ✅ FIX: Use the correct helper function
-                          // =================================================================
-                          onChange={(event) => handleDocumentUpload(event, "uanUrl")}
-                        />
-                        <Label
-                          htmlFor="uanUrl"
-                          className={cn(
-                            "cursor-pointer text-purple-600 hover:underline",
-                            uploadingFile && "opacity-50 cursor-not-allowed"
-                          )}
-                        >
-                          {uploadingFile === "uanUrl" ? (
-                            <span className="flex items-center gap-1">
-                              <Loader2 className="animate-spin w-4 h-4" /> Uploading...
-                            </span>
-                          ) : (
-                            "+ Upload File"
-                          )}
-                        </Label>
-                        {formData.uanUrl && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => window.open(formData.uanUrl, "_blank")}
-                          >
-                            <FileText className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
+  {/* --- ESIC & UAN remain the same --- */}
+  {/* --- ESIC --- */}
+    <div className="p-4 border rounded-lg">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="form-3d-input">
+                <Label className="form-3d-label">ESIC Number</Label>
+                <Input value={formData.esicNumber} onChange={(e) => handleInputChange("esicNumber", e.target.value)} placeholder="Enter ESIC number" />
+                {formErrors.esicNumber ? <span className="form-error">{formErrors.esicNumber}</span> : (formData.esicNumber && VALIDATIONS.esic.test(formData.esicNumber)) && <div className="flex items-center gap-1 text-green-600 text-xs mt-1"><CheckCircle2 className="h-3 w-3" />Verified</div>}
+            </div>
+            <div className="form-3d-input">
+                <Label className="form-3d-label">ESIC Document</Label>
+                <div className="flex gap-3 items-center">
+                    <input type="file" id="esicUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "esicUrl")} />
+                    <Label htmlFor="esicUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "esicUrl" ? "Uploading..." : "+ Upload File"}</Label>
+                    {formData.esicUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.esicUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
+                </div>
+            </div>
+        </div>
+    </div>
 
+    {/* --- UAN --- */}
+    <div className="p-4 border rounded-lg">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="form-3d-input">
+                <Label className="form-3d-label">UAN Number</Label>
+                <Input value={formData.uanNumber} onChange={(e) => handleInputChange("uanNumber", e.target.value)} placeholder="Enter 12-digit UAN number" maxLength={12} />
+                {formErrors.uanNumber ? <span className="form-error">{formErrors.uanNumber}</span> : (formData.uanNumber && VALIDATIONS.uan.test(formData.uanNumber)) && <div className="flex items-center gap-1 text-green-600 text-xs mt-1"><CheckCircle2 className="h-3 w-3" />Verified</div>}
+            </div>
+            <div className="form-3d-input">
+                <Label className="form-3d-label">UAN Document</Label>
+                <div className="flex gap-3 items-center">
+                    <input type="file" id="uanUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "uanUrl")} />
+                    <Label htmlFor="uanUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "uanUrl" ? "Uploading..." : "+ Upload File"}</Label>
+                    {formData.uanUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.uanUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
+                </div>
+            </div>
+        </div>
+    </div>
+</TabsContent>
                 {/* Experience Modal - keeping original functionality */}
                 {showExperienceModal && (
                   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -3988,4 +4247,4 @@ const handleSubmit = async (event: React.FormEvent) => {
   );
 };
 
-export default EmployeeForm;
+export default EmployeeOnboard;

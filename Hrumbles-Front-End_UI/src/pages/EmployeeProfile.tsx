@@ -218,49 +218,99 @@ const EmployeeProfile = () => {
  
       if (employeeError) throw employeeError;
  
-      const { data: contactsData, error: contactsError } = await supabase
-        .from('hr_employee_emergency_contacts')
-        .select('*')
-        .eq('employee_id', employeeId);
+      // FIXED: Get emergency contacts from JSONB field first, fallback to table
+      let contactsData = employeeData.emergency_contacts || [];
+      if (contactsData.length === 0) {
+        const { data: tableContacts } = await supabase
+          .from('hr_employee_emergency_contacts')
+          .select('*')
+          .eq('employee_id', employeeId);
+        if (tableContacts) contactsData = tableContacts;
+      }
  
-      if (contactsError) throw contactsError;
+      // ============================================
+      // CRITICAL FIX: Read addresses from JSONB fields FIRST
+      // This fixes the issue where edits don't show on profile
+      // ============================================
+      let presentAddressData = employeeData.present_address || null;
+      let permanentAddressData = employeeData.permanent_address || null;
+      
+      // Only query the addresses table if JSONB fields are empty (fallback)
+      if (!presentAddressData || Object.keys(presentAddressData).length === 0) {
+        const { data } = await supabase
+          .from('hr_employee_addresses')
+          .select('*')
+          .eq('employee_id', employeeId)
+          .eq('type', 'present')
+          .maybeSingle();
+        presentAddressData = data;
+      }
+      
+      if (!permanentAddressData || Object.keys(permanentAddressData).length === 0) {
+        const { data } = await supabase
+          .from('hr_employee_addresses')
+          .select('*')
+          .eq('employee_id', employeeId)
+          .eq('type', 'permanent')
+          .maybeSingle();
+        permanentAddressData = data;
+      }
+      // ============================================
+      // END OF CRITICAL FIX
+      // ============================================
  
-      const { data: addressData, error: addressError } = await supabase
-        .from('hr_employee_addresses')
-        .select('*')
-        .eq('employee_id', employeeId)
-        .eq('type', 'present')
-        .maybeSingle();
+      // Get education data (handle if table doesn't exist)
+      let educationData = [];
+      try {
+        const { data, error } = await supabase
+          .from('hr_employee_education')
+          .select('*')
+          .eq('employee_id', employeeId);
+        if (error) throw error;
+        educationData = data || [];
+      } catch (error) {
+        console.log('Education table may not exist or query failed:', error);
+      }
  
-      const { data: permanentAddressData, error: permanentAddressError } = await supabase
-        .from('hr_employee_addresses')
-        .select('*')
-        .eq('employee_id', employeeId)
-        .eq('type', 'permanent')
-        .maybeSingle();
+         // Get experiences data (handle if table doesn't exist)
+      let experiencesData = [];
+      try {
+        const { data, error } = await supabase
+          .from('hr_employee_experiences')
+          .select('*')
+          .eq('employee_id', employeeId);
+          
+        // =================================================================
+        // START: ADD THIS DEBUGGING LOG
+        // =================================================================
+        console.log("RAW Experience Data from Supabase:", data);
+        // =================================================================
+        // END: ADD THIS DEBUGGING LOG
+        // =================================================================
+
+        if (error) throw error;
+        experiencesData = data || [];
+      } catch (error) {
+        console.log('Experiences table may not exist or query failed:', error);
+      }
+
  
-      const { data: educationData, error: educationError } = await supabase
-        .from('hr_employee_education')
-        .select('*')
-        .eq('employee_id', employeeId);
+      // Get bank details (handle if table doesn't exist)
+      let bankData = null;
+      try {
+        const { data, error } = await supabase
+          .from('hr_employee_bank_details')  // ✅ Correct table name!
+          .select('*')
+          .eq('employee_id', employeeId)
+          .maybeSingle();
+        if (error) throw error;
+        bankData = data;
+      } catch (error) {
+        console.log('Bank details table may not exist or query failed:', error);
+      }
  
-      if (educationError) throw educationError;
- 
-      const { data: experiencesData, error: experiencesError } = await supabase
-        .from('hr_employee_experiences')
-        .select('*')
-        .eq('employee_id', employeeId);
- 
-      if (experiencesError) throw experiencesError;
- 
-      const { data: bankData, error: bankError } = await supabase
-        .from('hr_employee_bank_details')
-        .select('*')
-        .eq('employee_id', employeeId)
-        .maybeSingle();
- 
-      if (bankError) throw bankError;
- 
+
+      
       // Fetch the latest payment record for the employee
       const { data: paymentRecordsData, error: paymentRecordsError } = await supabase
         .from('payment_records')
@@ -391,15 +441,18 @@ const EmployeeProfile = () => {
           });
         }
       }
- 
-      const mappedExperiences = experiencesData
+     const mappedExperiences = experiencesData
         ? experiencesData.map((exp: any) => ({
             id: exp.id,
             company: exp.company,
-            position: exp.job_title,
+            // ✅ MAP: database 'job_title' -> component 'position'
+            position: exp.job_title, 
             location: exp.location,
+            // ✅ MAP: database 'start_date' -> component 'start_date' (already correct)
             start_date: exp.start_date,
+            // ✅ MAP: database 'end_date' -> component 'end_date' (already correct)
             end_date: exp.end_date,
+            // ✅ MAP: database 'employment_type' -> component 'employment_type' (already correct)
             employment_type: exp.employment_type,
             offerLetter: exp.offer_letter_url,
             seperationLetter: exp.separation_letter_url,
@@ -409,27 +462,42 @@ const EmployeeProfile = () => {
             payslip3: exp.payslip_3_url,
           }))
         : [];
- 
       const mappedEducation = educationData
         ? educationData.map((edu: any) => ({
             id: edu.id,
-            type: edu.type,
-            institute: edu.institute,
-            year_completed: edu.year_completed,
+            type: edu.type,                    // ✅ Correct: database has "type"
+            institute: edu.institute,          // ✅ Correct: database has "institute"
+            year_completed: edu.year_completed, // ✅ Correct: database has "year_completed"
             document_url: edu.document_url,
           }))
         : [];
  
-      const departmentName = employeeData?.hr_departments?.name || 'N/A';
+   const departmentName = employeeData?.hr_departments?.name || 'N/A';
       const designationName = employeeData?.hr_designations?.name || 'N/A';
+ 
+      // FIXED: Normalize address field names (handle both camelCase from JSONB and snake_case from table)
+      const normalizeAddress = (addr: any) => {
+        if (!addr) return {};
+        return {
+          address_line1: addr.address_line1 || addr.addressLine1 || addr.address || '',
+          address_line2: addr.address_line2 || addr.addressLine2 || '',
+          city: addr.city || '',
+          state: addr.state || '',
+          country: addr.country || '',
+          zip_code: addr.zip_code || addr.zipCode || '',
+        };
+      };
+
+      const normalizedPresentAddress = normalizeAddress(presentAddressData);
+      const normalizedPermanentAddress = normalizeAddress(permanentAddressData);
  
       const completeEmployeeData: EmployeeDetail = {
         ...employeeData,
         department_name: departmentName,
         designation_name: designationName,
         emergencyContacts: contactsData || [],
-        address: addressData || {},
-        permanent_address: permanentAddressData || {},
+        address: normalizedPresentAddress,
+        permanent_address: normalizedPermanentAddress,
         experiences: mappedExperiences,
         education: mappedEducation,
         bankDetails: bankData || undefined,
@@ -1078,10 +1146,11 @@ return (
             {/* --- Personal Information Tab --- */}
            {/* --- Personal Information Tab --- */}
             <TabsContent value="personal" className="mt-6 space-y-8">
-              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
+           <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
                 <CardContent className="p-8">
                   <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Identity Documents</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
                     {/* Aadhar Card */}
                     <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
                       <div className="flex items-center gap-3">
@@ -1093,11 +1162,23 @@ return (
                       </div>
                       {employee.aadhar_url && (
                         <div className="flex items-center gap-1 mt-3">
-                          <Button variant="ghost" size="sm" className="w-full justify-center" asChild><a href={employee.aadhar_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4 mr-2"/>View</a></Button>
-                          <Button variant="ghost" size="sm" className="w-full justify-center" asChild><a href={employee.aadhar_url} download><Download className="h-4 w-4 mr-2"/>Download</a></Button>
+                          <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
+                            <a href={employee.aadhar_url} target="_blank" rel="noopener noreferrer">
+                              <Eye className="h-4 w-4 mr-2"/>View
+                            </a>
+                          </Button>
+                          <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
+                            {/* ================================================================= */}
+                            {/* ✅ FIX APPLIED HERE                                              */}
+                            {/* ================================================================= */}
+                            <a href={`${employee.aadhar_url}?download=`} download>
+                              <Download className="h-4 w-4 mr-2"/>Download
+                            </a>
+                          </Button>
                         </div>
                       )}
                     </div>
+
                     {/* PAN Card */}
                     <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
                        <div className="flex items-center gap-3">
@@ -1109,11 +1190,23 @@ return (
                        </div>
                        {employee.pan_url && (
                          <div className="flex items-center gap-1 mt-3">
-                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild><a href={employee.pan_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4 mr-2"/>View</a></Button>
-                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild><a href={employee.pan_url} download><Download className="h-4 w-4 mr-2"/>Download</a></Button>
+                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
+                             <a href={employee.pan_url} target="_blank" rel="noopener noreferrer">
+                               <Eye className="h-4 w-4 mr-2"/>View
+                             </a>
+                           </Button>
+                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
+                            {/* ================================================================= */}
+                            {/* ✅ FIX APPLIED HERE                                              */}
+                            {/* ================================================================= */}
+                             <a href={`${employee.pan_url}?download=`} download>
+                               <Download className="h-4 w-4 mr-2"/>Download
+                             </a>
+                           </Button>
                          </div>
                        )}
                     </div>
+
                     {/* ESIC Card */}
                     <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
                        <div className="flex items-center gap-3">
@@ -1125,11 +1218,23 @@ return (
                        </div>
                        {employee.esic_url && (
                          <div className="flex items-center gap-1 mt-3">
-                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild><a href={employee.esic_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4 mr-2"/>View</a></Button>
-                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild><a href={employee.esic_url} download><Download className="h-4 w-4 mr-2"/>Download</a></Button>
+                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
+                             <a href={employee.esic_url} target="_blank" rel="noopener noreferrer">
+                               <Eye className="h-4 w-4 mr-2"/>View
+                             </a>
+                           </Button>
+                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
+                            {/* ================================================================= */}
+                            {/* ✅ FIX APPLIED HERE                                              */}
+                            {/* ================================================================= */}
+                             <a href={`${employee.esic_url}?download=`} download>
+                               <Download className="h-4 w-4 mr-2"/>Download
+                             </a>
+                           </Button>
                          </div>
                        )}
                     </div>
+
                   </div>
                 </CardContent>
               </Card>
@@ -1162,23 +1267,52 @@ return (
                 </CardContent>
               </Card>
               
-              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
+  <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
                 <CardContent className="p-8">
                   <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Education</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {['SSC', 'HSC/Diploma', 'Degree'].map(type => {
                       const edu = employee.education?.find(e => e.type === type);
+                      
+                      // Extract filename for the download attribute
+                      const fileName = edu?.document_url ? edu.document_url.split('/').pop().split('?')[0] : '';
+
                       return (
                         <div key={type} className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg text-center flex flex-col">
                           <div className="flex-grow">
                             <h4 className="font-semibold text-gray-600 dark:text-gray-400">{type}</h4>
                             <p className="font-bold mt-1 break-words text-gray-800 dark:text-gray-200">{edu?.institute || 'N/A'}</p>
-                            <p className="text-xs text-gray-500">{edu?.year_completed || 'N/A'}</p>
+                            <p className="text-xs text-gray-500">
+                              {edu?.year_completed 
+                                ? new Date(edu.year_completed).getFullYear() 
+                                : 'N/A'}
+                            </p>
                           </div>
+
+                          {/* This is the section with the fix */}
                           {edu?.document_url && (
                             <div className="flex items-center justify-center gap-1 border-t dark:border-gray-600 pt-2 mt-2">
-                              <Button variant="ghost" size="sm" asChild><a href={edu.document_url} target="_blank" rel="noopener noreferrer"><Eye className="h-4 w-4 mr-2"/>View</a></Button>
-                              <Button variant="ghost" size="sm" asChild><a href={edu.document_url} download><Download className="h-4 w-4 mr-2"/>Download</a></Button>
+                              {/* View Button (no change) */}
+                              <Button variant="ghost" size="sm" asChild>
+                                <a href={edu.document_url} target="_blank" rel="noopener noreferrer">
+                                  <Eye className="h-4 w-4 mr-2"/>View
+                                </a>
+                              </Button>
+
+                              {/* ================================================================= */}
+                              {/* START: CRITICAL FIX FOR DIRECT DOWNLOAD                     */}
+                              {/* ================================================================= */}
+                              <Button variant="ghost" size="sm" asChild>
+                                <a 
+                                  href={`${edu.document_url}?download=`} // <-- The Fix is here
+                                  download={fileName}
+                                >
+                                  <Download className="h-4 w-4 mr-2"/>Download
+                                </a>
+                              </Button>
+                              {/* ================================================================= */}
+                              {/* END: CRITICAL FIX FOR DIRECT DOWNLOAD                       */}
+                              {/* ================================================================= */}
                             </div>
                           )}
                         </div>
@@ -1187,31 +1321,8 @@ return (
                   </div>
                 </CardContent>
               </Card>
-            </TabsContent>
-           
-            <TabsContent value="professional" className="mt-6 space-y-8">
+
               <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
-                <CardContent className="p-8">
-                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Work Experience</h3>
-                  <div className="space-y-6">
-                    {employee.experiences && employee.experiences.length > 0 ? (
-                      employee.experiences.map(exp => (
-                        <div key={exp.id} className="p-4 rounded-lg border dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
-                          <h4 className="font-semibold text-gray-800 dark:text-gray-200">{exp.position}</h4>
-                          <p className="text-sm text-purple-600 dark:text-purple-400 font-medium">{exp.company}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{formatDate(exp.start_date)} - {exp.end_date ? formatDate(exp.end_date) : 'Present'}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-center text-gray-500 dark:text-gray-400 py-4">No work experience available.</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
- 
-            <TabsContent value="salary" className="mt-6 space-y-8">
-               <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
                 <CardContent className="p-8">
                   <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Bank Details</h3>
                   {employee.bankDetails ? (
@@ -1234,11 +1345,161 @@ return (
                 </CardContent>
               </Card>
             </TabsContent>
+           
+           <TabsContent value="professional" className="mt-6 space-y-8">
+              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
+                <CardContent className="p-8">
+                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Work Experience</h3>
+                  <div className="space-y-6">
+                    {employee.experiences && employee.experiences.length > 0 ? (
+                      employee.experiences.map(exp => {
+                        const documents = [
+                          { label: 'Offer Letter', url: exp.offerLetter },
+                          { label: 'Separation Letter', url: exp.seperationLetter },
+                          { label: 'Hike Letter', url: exp.hikeLetter },
+                          { label: 'Payslip 1', url: exp.payslip1 },
+                          { label: 'Payslip 2', url: exp.payslip2 },
+                          { label: 'Payslip 3', url: exp.payslip3 },
+                        ];
+                        const availableDocuments = documents.filter(doc => doc.url);
 
+                        return (
+                          <div key={exp.id} className="p-4 rounded-lg border dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+                            {/* --- Basic Experience Info --- */}
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">{exp.position}</h4>
+                            <p className="text-sm text-purple-600 dark:text-purple-400 font-medium">{exp.company}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              {formatDate(exp.start_date)} - {exp.end_date ? formatDate(exp.end_date) : 'Present'}
+                            </p>
+
+                            {/* --- Conditionally Rendered Documents Section --- */}
+                            {availableDocuments.length > 0 && (
+                              <div className="mt-4 border-t dark:border-gray-600 pt-3">
+                                <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                                  <FileText className="h-4 w-4" />
+                                  Attached Documents
+                                </h5>
+                                <div className="space-y-1">
+                                  {availableDocuments.map(doc => {
+                                    // Get the original filename from the URL for a better user experience
+                                    const fileName = doc.url.split('/').pop().split('?')[0];
+
+                                    return (
+                                      <div key={doc.label} className="flex items-center justify-between p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
+                                        <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                                          {doc.label}
+                                        </p>
+                                        <div className="flex items-center gap-1">
+                                          {/* View Button (no change) */}
+                                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild>
+                                            <a href={doc.url} target="_blank" rel="noopener noreferrer" title="View">
+                                              <Eye className="h-4 w-4" />
+                                            </a>
+                                          </Button>
+
+                                          {/* ================================================================= */}
+                                          {/* START: CRITICAL FIX FOR DIRECT DOWNLOAD                     */}
+                                          {/* ================================================================= */}
+                                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild>
+                                            <a
+                                              href={`${doc.url}?download=`} // <-- The Fix: Append '?download='
+                                              download={fileName}           // <-- Suggest the original filename
+                                              title="Download"
+                                            >
+                                              <Download className="h-4 w-4" />
+                                            </a>
+                                          </Button>
+                                          {/* ================================================================= */}
+                                          {/* END: CRITICAL FIX FOR DIRECT DOWNLOAD                       */}
+                                          {/* ================================================================= */}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-sm text-center text-gray-500 dark:text-gray-400 py-4">No work experience available.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+<TabsContent value="salary" className="mt-6 space-y-8">
+              {/* --- Salary Information Card --- */}
+              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
+                <CardContent className="p-8">
+                  {employee.latestPaymentRecord ? (
+                    <>
+                      {/* --- Header Section --- */}
+                      <div className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b dark:border-gray-700">
+                        <h3 className="font-bold text-xl text-gray-800 dark:text-gray-200">
+                          Salary Details - {formatDate(employee.latestPaymentRecord.payment_date)}
+                        </h3>
+                        <div className="flex items-center space-x-4 mt-2 sm:mt-0">
+                          <div className="flex items-center">
+                            <span className="text-sm text-gray-500 dark:text-gray-400 mr-2">Status:</span>
+                            <span
+                              className={`w-2 h-2 rounded-full mr-2 ${
+                                employee.latestPaymentRecord.status === 'Success' ? 'bg-green-500' : employee.latestPaymentRecord.status === 'Pending' ? 'bg-yellow-500' : 'bg-red-500'
+                              }`}
+                            ></span>
+                            <span className="font-medium text-gray-800 dark:text-gray-200">{employee.latestPaymentRecord.status}</span>
+                          </div>
+                          <div>
+                            <span className="text-sm text-gray-500 dark:text-gray-400 mr-2">Net Pay:</span>
+                            <span className="font-medium text-green-600 dark:text-green-400">{formatCurrency(employee.latestPaymentRecord.payment_amount)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* --- Detailed Breakdown Grid --- */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Earnings */}
+                        <div>
+                          <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">Earnings</h5>
+                          <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 space-y-2">
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Basic Salary</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.earnings?.basic_salary || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">House Rent Allowance</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.earnings?.house_rent_allowance || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Conveyance Allowance</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.earnings?.conveyance_allowance || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Fixed Allowance</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.earnings?.fixed_allowance || 0)}</span></div>
+                            <div className="border-t pt-2 mt-2 flex justify-between"><span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Earnings</span><span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.earnings?.total_earnings || 0)}</span></div>
+                          </div>
+                        </div>
+                        {/* Deductions */}
+                        <div>
+                          <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">Deductions</h5>
+                          <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 space-y-2">
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Provident Fund</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.deductions?.provident_fund || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Professional Tax</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.deductions?.professional_tax || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Income Tax</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.deductions?.income_tax || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Loan Deduction</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.deductions?.loan_deduction || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Paid Days</span><span className="font-medium text-gray-800 dark:text-gray-200">{employee.latestPaymentRecord.deductions?.paid_days || 0}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">LOP Days</span><span className="font-medium text-gray-800 dark:text-gray-200">{employee.latestPaymentRecord.deductions?.lop_days || 0}</span></div>
+                            <div className="border-t pt-2 mt-2 flex justify-between"><span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Deductions</span><span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.deductions?.total_deductions || 0)}</span></div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-center text-gray-500 py-4">
+                      No salary information available.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </div>
       </div>
  
+
+
       {/* --- Dialog for the Payslip Viewer --- */}
       <Dialog open={isPayslipOpen} onOpenChange={setIsPayslipOpen}>
         <DialogContent className="max-w-3xl p-0">
@@ -1247,7 +1508,7 @@ return (
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </div> 
   );
 };
  

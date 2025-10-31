@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useContactStages } from '@/hooks/sales/useContactStages';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronRight, GripVertical, Link as LinkIcon, Trash2, Lock, Linkedin, MessageSquare, Phone, Mail, UserPlus, Globe, MessageCircle, MoreHorizontal, PhoneIncoming } from 'lucide-react';
+import { ChevronDown, ChevronRight, GripVertical, Link as LinkIcon, Trash2, AtSign, Lock, Linkedin, MessageSquare, Phone, Mail, UserPlus, Globe, MessageCircle, MoreHorizontal,Copy, Check, PhoneIncoming } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from './data-table-column-header';
@@ -217,6 +217,172 @@ const DisplayDateCell: React.FC<any> = ({ getValue }) => {
     );
 };
 
+const CopyableEditableCell: React.FC<any> = (props) => {
+    const { getValue } = props;
+    const { toast } = useToast();
+    const [isCopied, setIsCopied] = React.useState(false);
+    const valueToCopy = getValue() || "";
+
+    const handleCopy = async (e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent any other cell/row events
+        if (!valueToCopy) return;
+
+        // Use the browser's clipboard API to copy the text
+        await navigator.clipboard.writeText(valueToCopy);
+        setIsCopied(true);
+        toast({ title: "Copied!", description: "Email copied to clipboard." });
+
+        // Reset the icon back to 'copy' after 2 seconds
+        setTimeout(() => {
+            setIsCopied(false);
+        }, 2000);
+    };
+
+    return (
+        // The 'group' class allows us to show the copy button on hover
+        <div className="group relative flex items-center w-full">
+            {/* This renders the editable input field as before */}
+            <EditableCell {...props} />
+
+            {/* This is the copy button that appears only on hover */}
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 bg-white pl-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={handleCopy}
+                            >
+                                {isCopied ? (
+                                    <Check className="h-3.5 w-3.5 text-green-500" />
+                                ) : (
+                                    <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                                )}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Copy email</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            </div>
+        </div>
+    );
+};
+
+// Add this new component inside src/components/sales/contacts-table/columns.tsx
+// Add this new component inside src/components/sales/contacts-table/columns.tsx
+
+const CopyableLinkedInCell: React.FC<any> = (props) => {
+    const { getValue } = props;
+    const { toast } = useToast();
+    const [isCopied, setIsCopied] = React.useState(false);
+    const valueToCopy = getValue() || "";
+
+    const handleCopy = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!valueToCopy) return;
+
+        await navigator.clipboard.writeText(valueToCopy);
+        setIsCopied(true);
+        toast({ title: "Copied!", description: "LinkedIn URL copied to clipboard." });
+
+        setTimeout(() => {
+            setIsCopied(false);
+        }, 2000);
+    };
+
+    return (
+        // The 'group' class allows us to show the copy button on hover
+        <div className="group relative flex items-center w-full">
+            {/* This renders the editable LinkedIn input field */}
+            <LinkedInCell {...props} />
+
+            {/* This is the copy button that appears only on hover */}
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 bg-white pl-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+
+                                onClick={handleCopy}
+                            >
+                                {isCopied ? (
+                                    <Check className="h-3.5 w-3.5 text-green-500" />
+                                ) : (
+                                    <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                                )}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Copy URL</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            </div>
+        </div>
+    );
+};
+
+
+
+const CopyablePhoneCell: React.FC<any> = (props) => {
+    const { getValue } = props;
+    const { toast } = useToast();
+    const [isCopied, setIsCopied] = React.useState(false);
+    const valueToCopy = getValue() || "";
+
+    const handleCopy = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!valueToCopy) return;
+
+        await navigator.clipboard.writeText(valueToCopy);
+        setIsCopied(true);
+        toast({ title: "Copied!", description: "Phone number copied to clipboard." });
+
+        setTimeout(() => {
+            setIsCopied(false);
+        }, 2000);
+    };
+
+    return (
+        <div className="group relative flex items-center w-full">
+            {/* Renders the editable phone number input */}
+            <PhoneCell {...props} />
+
+            {/* The copy button that appears on hover */}
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 bg-white pl-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={handleCopy}
+                            >
+                                {isCopied ? (
+                                    <Check className="h-3.5 w-3.5 text-green-500" />
+                                ) : (
+                                    <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                                )}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Copy number</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            </div>
+        </div>
+    );
+};
+
 const StageSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
     if (row.getIsGrouped()) return null;
     const initialValue = getValue();
@@ -345,7 +511,7 @@ export const ActionColumn: ColumnDef<SimpleContact> = {
   minSize: 60,
   enableSorting: false,
   enableHiding: false,
-  header: '',
+header: () => <div className="text-white font-semibold uppercase tracking-wider opacity-90 text-[11px] text-center">Actions</div>,
   cell: ({ row }) => {
     const [isOpen, setIsOpen] = useState(false);
     const deleteContactMutation = useDeleteContact();
@@ -365,9 +531,13 @@ export const ActionColumn: ColumnDef<SimpleContact> = {
 
     return (
       <>
-        <Button variant="copyicon" size="icon" onClick={() => setIsOpen(true)}>
-         <Trash2 className="h-3.5 w-3.5 mr-2 text-red-500" />
-        </Button>
+        <div className="flex justify-center">
+          {/* We remove the default text color from the button */}
+          <Button variant="ghost" size="icon" onClick={() => setIsOpen(true)} className="group h-8 w-8 rounded-full hover:bg-red-100">
+           {/* --- THIS IS THE MODIFIED LINE --- */}
+           <Trash2 className="h-4 w-4 text-red-500 transition-colors group-hover:text-red-700" />
+          </Button>
+        </div>
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogContent>
             <DialogHeader>
@@ -390,7 +560,6 @@ export const ActionColumn: ColumnDef<SimpleContact> = {
     );
   },
 };
-
 export const columns: ColumnDef<SimpleContact>[] = [
    {
     id: 'select',
@@ -441,63 +610,78 @@ export const columns: ColumnDef<SimpleContact>[] = [
      return (<div className="whitespace-nowrap" style={{ paddingLeft: `${row.depth * 1.5}rem` }}><EditableCell row={row} {...props} /></div>);
     },
   },
-  {
+
+  // This is the final, updated code for your email column.
+
+// This is the updated code for the 'email' column
+// This is the updated code for the 'email' column
+{
     accessorKey: 'email',
     header: ReorderableHeader,
     size: 180,
     minSize: 120,
     maxSize: 250,
-    // UPDATED: Wrap the original cell in our new AccessCell component
     cell: (props) => {
       const initialValue = props.getValue();
       const [isRevealed, setIsRevealed] = useState(!initialValue);
       useEffect(() => { setIsRevealed(!initialValue); }, [initialValue]);
 
       if (isRevealed) {
-        return <EditableCell {...props} />;
+        return <CopyableEditableCell {...props} />;
       }
+      
       return (
         <Button
             variant="outline"
             size="sm"
-            className="h-8 text-xs font-normal"
+            // --- THIS IS THE LINE TO CHANGE ---
+            className="h-8 text-xs font-normal group transition-all duration-300 ease-in-out bg-purple-50 text-purple-700 border-purple-200 hover:text-white hover:border-transparent hover:bg-gradient-to-r from-purple-500 to-indigo-600"
             onClick={(e) => { e.stopPropagation(); setIsRevealed(true); }}
         >
-            <Mail className="h-3.5 w-3.5 mr-2" />
+            {/* --- ALSO CHANGE THE ICON'S CLASSNAME --- */}
+            <AtSign className="h-3.5 w-3.5 mr-2 text-purple-700 transition-colors group-hover:text-white" />
             Access email
         </Button>
       );
     }
-  },
-  {
+},
+// This is the updated code for the 'mobile' column
+// This is the updated code for the 'mobile' column
+// This is the updated code for the 'mobile' column
+{
     accessorKey: 'mobile',
     header: ReorderableHeader,
     size: 160,
     minSize: 120,
     maxSize: 200,
-    // UPDATED: Wrap the original cell in our new AccessCell component
     cell: (props) => {
       const initialValue = props.getValue();
       const [isRevealed, setIsRevealed] = useState(!initialValue);
       useEffect(() => { setIsRevealed(!initialValue); }, [initialValue]);
 
       if (isRevealed) {
-        return <PhoneCell {...props} />;
+        return <CopyablePhoneCell {...props} />;
       }
+
       return (
         <Button
             variant="outline"
             size="sm"
-            className="h-8 text-xs font-normal"
+            // --- THIS IS THE LINE TO CHANGE ---
+            className="h-8 text-xs font-normal group transition-all duration-300 ease-in-out bg-purple-50 text-purple-700 border-purple-200 hover:text-white hover:border-transparent hover:bg-gradient-to-r from-purple-500 to-indigo-600"
             onClick={(e) => { e.stopPropagation(); setIsRevealed(true); }}
         >
-            <PhoneIncoming className="h-3.5 w-3.5 mr-2" />
+            {/* --- ALSO CHANGE THE ICON'S CLASSNAME --- */}
+            <Phone className="h-3.5 w-3.5 mr-2 text-purple-700 transition-colors group-hover:text-white" />
             Access Mobile
         </Button>
       );
     }
-  },
-  {
+},
+  // This is the updated code for the 'alt_mobile' column
+// This is the updated code for the 'alt_mobile' column
+// This is the updated code for the 'alt_mobile' column
+{
     accessorKey: 'alt_mobile',
     header: ReorderableHeader,
     size: 160,
@@ -509,24 +693,27 @@ export const columns: ColumnDef<SimpleContact>[] = [
       useEffect(() => { setIsRevealed(!initialValue); }, [initialValue]);
 
       if (isRevealed) {
-        return <PhoneCell {...props} />;
+        return <CopyablePhoneCell {...props} />;
       }
+      
       return (
         <Button
             variant="outline"
             size="sm"
-            className="h-8 text-xs font-normal"
+            // --- THIS IS THE LINE TO CHANGE ---
+            className="h-8 text-xs font-normal group transition-all duration-300 ease-in-out bg-purple-50 text-purple-700 border-purple-200 hover:text-white hover:border-transparent hover:bg-gradient-to-r from-purple-500 to-indigo-600"
             onClick={(e) => { e.stopPropagation(); setIsRevealed(true); }}
         >
-            <PhoneIncoming className="h-3.5 w-3.5 mr-2" />
+            {/* --- ALSO CHANGE THE ICON'S CLASSNAME --- */}
+            <Phone className="h-3.5 w-3.5 mr-2 text-purple-700 transition-colors group-hover:text-white" />
             Access Alt. Mobile
         </Button>
       );
     }
-  },
+},
     {
     id: 'location', // A unique ID for the virtual column
-    header: "Location",
+       header: () => <div className="text-white font-semibold uppercase tracking-wider opacity-90 text-[11px]">Location</div>,
     // Create a display value from the underlying data
     accessorFn: row => {
         const parts = [row.city, row.state, row.country].filter(Boolean); // Filter out null/empty values
@@ -547,19 +734,39 @@ export const columns: ColumnDef<SimpleContact>[] = [
     minSize: 100,
     maxSize: 200,
   },
-  {
+// This is the updated code for the 'linkedin_url' column
+// This is the updated code for the 'linkedin_url' column
+// This is the updated code for the 'linkedin_url' column
+{
     accessorKey: 'linkedin_url',
     header: ReorderableHeader,
     size: 180,
     minSize: 150,
     maxSize: 250,
-    // UPDATED: Wrap the original cell in our new AccessCell component
-    cell: (props) => (
-      <AccessCell getValue={props.getValue}>
-        <LinkedInCell {...props} />
-      </AccessCell>
-    )
-  },
+    cell: (props) => {
+      const initialValue = props.getValue();
+      const [isRevealed, setIsRevealed] = useState(!initialValue);
+      useEffect(() => { setIsRevealed(!initialValue); }, [initialValue]);
+
+      if (isRevealed) {
+        return <CopyableLinkedInCell {...props} />;
+      }
+      
+      return (
+        <Button
+            variant="outline"
+            size="sm"
+            // --- THIS IS THE LINE TO CHANGE ---
+            className="h-8 text-xs font-normal group transition-all duration-300 ease-in-out bg-purple-50 text-purple-700 border-purple-200 hover:text-white hover:border-transparent hover:bg-gradient-to-r from-purple-500 to-indigo-600"
+            onClick={(e) => { e.stopPropagation(); setIsRevealed(true); }}
+        >
+            {/* --- ALSO CHANGE THE ICON'S CLASSNAME --- */}
+            <Linkedin className="h-3.5 w-3.5 mr-2 text-purple-700 transition-colors group-hover:text-white" />
+            Access Link
+        </Button>
+      );
+    }
+},
   { accessorKey: 'company_name', header: ReorderableHeader, size: 180, minSize: 150, maxSize: 250, cell: CompanyCell },
   { accessorKey: 'job_title', header: ReorderableHeader, cell: EditableCell, size: 200, minSize: 150, maxSize: 300 },
   { accessorKey: 'contact_stage', header: ReorderableHeader, size: 150, minSize: 120, maxSize: 200, cell: StageSelectCell },
@@ -576,7 +783,7 @@ export const columns: ColumnDef<SimpleContact>[] = [
   {
     accessorFn: (row) => row.created_by ?? null,
     id: 'created_by_employee',
-    header: "Created By",
+    header: () => <div className="text-white font-semibold uppercase tracking-wider opacity-90 text-[11px]">Created By</div>,
     cell: ({ row }) => {
       const employee = row.original.created_by_employee;
       if (!employee) return <span className="text-muted-foreground">-</span>;
@@ -585,9 +792,10 @@ export const columns: ColumnDef<SimpleContact>[] = [
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger>
-              <Avatar className="h-6 w-6">
+              <Avatar className="h-6 w-6 cursor-pointer transition-all duration-300 ease-in-out hover:scale-125 hover:-translate-y-1 hover:shadow-lg hover:ring-2 hover:ring-purple-500 hover:ring-offset-2">
                 <AvatarImage src={employee.profile_picture_url} />
-                <AvatarFallback className="text-[10px]">{fallback}</AvatarFallback>
+                {/* --- THIS IS THE MODIFIED LINE --- */}
+                <AvatarFallback className="text-[10px] bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold">{fallback}</AvatarFallback>
               </Avatar>
             </TooltipTrigger>
             <TooltipContent>{employee.first_name} {employee.last_name}</TooltipContent>
@@ -602,10 +810,12 @@ export const columns: ColumnDef<SimpleContact>[] = [
     maxSize: 120,
     filterFn: 'arrIncludesSome',
   },
-  { accessorKey: 'created_at', header: "Created At", cell: DisplayDateCell, enableSorting: true, size: 100, minSize: 60, maxSize: 120 },
+
+  { accessorKey: 'created_at', header: () => <div className="text-white font-semibold uppercase tracking-wider opacity-90 text-[11px]">Created At</div>, cell: DisplayDateCell, enableSorting: true, size: 100, minSize: 60, maxSize: 120 },
+
   {
-    accessorKey: 'updated_by_employee',
-    header: "Updated By",
+    accessorKey: 'updated_by_employee', 
+      header: () => <div className="text-white font-semibold uppercase tracking-wider opacity-90 text-[11px]">Updated By</div>,
     cell: ({ row }) => {
       const employee = row.original.updated_by_employee;
       if (!employee) return <span className="text-muted-foreground">-</span>;
@@ -614,9 +824,10 @@ export const columns: ColumnDef<SimpleContact>[] = [
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger>
-              <Avatar className="h-6 w-6">
+              <Avatar className="h-6 w-6 cursor-pointer transition-all duration-300 ease-in-out hover:scale-125 hover:-translate-y-1 hover:shadow-lg hover:ring-2 hover:ring-purple-500 hover:ring-offset-2">
                 <AvatarImage src={employee.profile_picture_url} />
-                <AvatarFallback className="text-[10px]">{fallback}</AvatarFallback>
+                {/* --- THIS IS THE MODIFIED LINE --- */}
+                <AvatarFallback className="text-[10px] bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold">{fallback}</AvatarFallback>
               </Avatar>
             </TooltipTrigger>
             <TooltipContent>{employee.first_name} {employee.last_name}</TooltipContent>
@@ -629,5 +840,6 @@ export const columns: ColumnDef<SimpleContact>[] = [
     minSize: 60,
     maxSize: 120,
   },
-  { accessorKey: 'updated_at', header: "Updated At", cell: DisplayDateCell, enableSorting: true, size: 100, minSize: 60, maxSize: 120 },
+
+  { accessorKey: 'updated_at',  header: () => <div className="text-white font-semibold uppercase tracking-wider opacity-90 text-[11px]">Updated At</div>, cell: DisplayDateCell, enableSorting: true, size: 100, minSize: 60, maxSize: 120 },
 ];

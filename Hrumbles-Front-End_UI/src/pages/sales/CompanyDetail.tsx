@@ -23,7 +23,7 @@ import LocationsTab from "@/components/sales/LocationsTab";
 import CompanyEditForm from "@/components/sales/CompanyEditForm";
 import EmployeeAssociationEditForm from "@/components/sales/EmployeeAssociationEditForm";
 import CandidateCompanyEditForm from "@/components/sales/CandidateCompanyEditForm";
-import { CandidateDetail } from "@/types/company";
+import { CandidateDetail, CompanyDetail as CompanyDetailType } from "@/types/company";
 
 const CompanyDetail = () => {
   const { toast } = useToast();
@@ -32,7 +32,7 @@ const CompanyDetail = () => {
   const queryClient = useQueryClient(); 
   const companyId = parseInt(id || "0");
 
-   const fetchCompanyDetailsAI = useFetchCompanyDetails();
+  const fetchCompanyDetailsAI = useFetchCompanyDetails();
   const user = useSelector((state: any) => state.auth.user);
   const currentUserId = user?.id || null;
   const [isFetchingAIDetails, setIsFetchingAIDetails] = useState(false);
@@ -55,7 +55,7 @@ const CompanyDetail = () => {
     refetchEmployees();
   };
 
-    const handleRefreshAIData = async () => {
+  const handleRefreshAIData = async () => {
     if (!company?.name) {
       toast({ title: "Error", description: "Company name is required for AI fetch.", variant: "destructive" });
       return;
@@ -65,7 +65,6 @@ const CompanyDetail = () => {
       const detailsFromAI = await fetchCompanyDetailsAI(company.name);
       const updatesToApply: Partial<CompanyDetailType> = {};
 
-      // This logic carefully checks for new data before adding it to the update object
       if (detailsFromAI.name && detailsFromAI.name !== company.name) updatesToApply.name = detailsFromAI.name;
       if (detailsFromAI.start_date) updatesToApply.start_date = detailsFromAI.start_date;
       if (detailsFromAI.founded_as) updatesToApply.founded_as = detailsFromAI.founded_as;
@@ -98,8 +97,8 @@ const CompanyDetail = () => {
         const { error: updateError } = await supabase.from('companies').update(updatesToApply).eq('id', companyId);
         if (updateError) throw updateError;
         
-        refetchCompany(); // Use the refetch from your hook
-        queryClient.invalidateQueries({ queryKey: ['companies'] }); // Invalidate the main list
+        refetchCompany();
+        queryClient.invalidateQueries({ queryKey: ['companies'] });
         toast({ title: "Success", description: "Company details refreshed from AI." });
       } else {
         toast({ title: "No New Data", description: "AI did not provide new or different details to update." });
@@ -148,7 +147,7 @@ const CompanyDetail = () => {
       <div className="bg-white border-b sticky top-0 z-20">
         <header className="max-w-screen-2xl mx-auto p-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/companies")} className="h-9 w-9 text-gray-600 hover:text-black">
+            <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="h-9 w-9 text-gray-600 hover:text-black">
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="flex items-center gap-3">
@@ -169,31 +168,52 @@ const CompanyDetail = () => {
               <RefreshCw className={`h-4 w-4 ${isFetchingAIDetails ? 'animate-spin' : ''}`} />
               {isFetchingAIDetails ? 'Refreshing...' : 'Refresh AI Data'}
             </Button>
-            <Button variant="outline" onClick={() => setIsCompanyEditDialogOpen(true)}>
+            <Button variant="default" onClick={() => setIsCompanyEditDialogOpen(true)}>
               <Edit className="h-4 w-4 mr-2" />Edit Company
             </Button>
           </div>
         </header>
       </div>
 
-      <main className="max-w-screen-8xl mx-auto p-4 md:p-6 space-y-6">
-        {/* --- TABS UI --- */}
-        <div className="border-b border-gray-200 bg-white/50 backdrop-blur-sm rounded-t-lg p-2 sticky top-[73px] z-10">
-          <nav className="-mb-px flex space-x-6" aria-label="Tabs">
-            <button onClick={() => setActiveTab('overview')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'overview' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-              Overview
-            </button>
-            <button onClick={() => setActiveTab('employees')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'employees' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-              Associate Employees ({employees.length})
-            </button>
-            <button onClick={() => setActiveTab('contacts')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'contacts' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-              Contacts ({contacts.length})
-            </button>
-            <button onClick={() => setActiveTab('locations')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'locations' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-              Locations
-            </button>
-          </nav>
+      <main className="max-w-screen-2xl mx-auto p-4 md:p-6 space-y-6">
+        
+        {/* --- TABS UI (Pill Format) --- */}
+        <div className="flex justify-center">
+            <div className="bg-white rounded-full p-1.5 shadow-sm inline-flex items-center space-x-1 border">
+                {[
+                { id: 'overview', label: 'Overview' },
+                { id: 'employees', label: 'Associate Employees', count: employees.length },
+                { id: 'contacts', label: 'Contacts', count: contacts.length },
+                { id: 'locations', label: 'Locations' },
+                ].map(tab => (
+                <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`
+                    px-4 py-1.5 rounded-full text-sm font-semibold flex items-center gap-2 transition-all duration-300 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-purple-500
+                    ${activeTab === tab.id
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'bg-transparent text-gray-600 hover:bg-purple-50'
+                    }
+                    `}
+                >
+                    {tab.label}
+                    {typeof tab.count === 'number' && (
+                    <span className={`
+                        w-5 h-5 flex items-center justify-center rounded-full text-xs font-bold
+                        ${activeTab === tab.id
+                            ? 'bg-white/25 text-white'
+                            : 'bg-gray-200 text-purple-700'
+                        }
+                    `}>
+                        {tab.count}
+                    </span>
+                    )}
+                </button>
+                ))}
+            </div>
         </div>
+
 
         {/* --- TWO-COLUMN LAYOUT --- */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">

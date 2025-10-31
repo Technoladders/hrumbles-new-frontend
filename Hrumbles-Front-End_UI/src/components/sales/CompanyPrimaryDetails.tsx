@@ -3,61 +3,62 @@ import { CompanyDetail as CompanyDetailType } from '@/types/company';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Calendar, Users, Globe, Linkedin, MapPin, Briefcase } from 'lucide-react';
 
+// A cleaner, reusable component for each detail row in the card
 const DetailRow: React.FC<{ icon: React.ElementType, label: string; value: React.ReactNode }> = ({ icon: Icon, label, value }) => (
-    <div className="flex items-start py-2.5">
-        <Icon className="h-4 w-4 mt-1 mr-4 text-gray-500 flex-shrink-0" />
-        <div className="flex-1">
-            <span className="text-sm text-gray-500">{label}</span>
-            <div className="text-sm font-medium text-gray-800 break-words">{value || 'N/A'}</div>
+    <div className="flex items-start">
+        <Icon className="h-5 w-5 mt-0.5 text-gray-400 flex-shrink-0" />
+        <div className="ml-4 flex-1">
+            <p className="text-xs text-gray-500">{label}</p>
+            <div className="text-sm font-semibold text-gray-800 break-words">{value || 'N/A'}</div>
         </div>
     </div>
 );
 
 const CompanyPrimaryDetails: React.FC<{ company: CompanyDetailType }> = ({ company }) => {
-    // Helper function to get data with fallback from company_data JSONB to root-level columns
+    // This helper function remains unchanged to preserve all data-fetching logic
     const get = (jsonKey: (c: any) => any, rootKey: keyof CompanyDetailType) => {
         try {
             const jsonValue = jsonKey(company.company_data);
             if (jsonValue !== undefined && jsonValue !== null && jsonValue !== '') return jsonValue;
-        } catch (e) { /* Ignore errors if company_data is null */ }
+        } catch (e) { /* Ignore errors */ }
         return company[rootKey];
     };
 
-    const aboutText = get(c => c.about, 'about');
-    const industryText = get(c => c.industry, 'industry');
-    const foundedYear = get(c => c.founded_year, 'start_date');
-    const employeeCount = get(c => c.employee_range, 'employee_count');
-    const hqAddress = get(c => c.headquarters?.address, 'address') || company.location;
-    const websiteUrl = get(c => c.website, 'website');
-    const linkedinUrl = get(c => c.socials?.linkedin, 'linkedin');
+    // Configuration array for all the details to display
+    const details = [
+        { icon: Building2, label: "Industry", value: get(c => c.industry, 'industry') },
+        { icon: Calendar, label: "Founded", value: get(c => c.founded_year, 'start_date') },
+        { icon: Users, label: "Company Size", value: get(c => c.employee_range, 'employee_count')?.toLocaleString() ?? 'N/A' },
+        { icon: MapPin, label: "Headquarters", value: get(c => c.headquarters?.address, 'address') || company.location },
+        { 
+            icon: Globe, 
+            label: "Website", 
+            value: get(c => c.website, 'website') ? 
+                <a href={get(c => c.website, 'website')} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">{get(c => c.website, 'website')}</a> 
+                : 'N/A' 
+        },
+        { 
+            icon: Linkedin, 
+            label: "LinkedIn", 
+            value: get(c => c.socials?.linkedin, 'linkedin') ? 
+                <a href={get(c => c.socials?.linkedin, 'linkedin')} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">View Profile</a> 
+                : 'N/A'
+        },
+    ];
 
     return (
-        <Card className="sticky top-[150px]">
+        <Card className="shadow-sm rounded-xl border border-gray-200/80 sticky top-[150px]">
             <CardHeader>
-                <CardTitle className="flex items-center text-lg"><Briefcase className="h-5 w-5 mr-2 text-purple-600"/> About Company</CardTitle>
+                <CardTitle className="flex items-center text-md font-bold text-gray-700">
+                    <Briefcase className="h-5 w-5 mr-3 text-purple-500" />
+                    About Company
+                </CardTitle>
             </CardHeader>
             <CardContent>
-                {aboutText && (
-                    <div className="pb-4 border-b">
-                        <p className="text-sm text-gray-700 whitespace-pre-line">{aboutText}</p>
-                    </div>
-                )}
-                
-                <div className="pt-4 divide-y">
-                    <DetailRow icon={Building2} label="Industry" value={industryText} />
-                    <DetailRow icon={Calendar} label="Founded" value={foundedYear} />
-                    <DetailRow icon={Users} label="Company Size" value={employeeCount?.toLocaleString() ?? 'N/A'} />
-                    <DetailRow icon={MapPin} label="Headquarters" value={hqAddress} />
-                    <DetailRow 
-                        icon={Globe} 
-                        label="Website" 
-                        value={websiteUrl ? <a href={websiteUrl} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">{websiteUrl}</a> : 'N/A'} 
-                    />
-                    <DetailRow 
-                        icon={Linkedin} 
-                        label="LinkedIn" 
-                        value={linkedinUrl ? <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">View Profile</a> : 'N/A'}
-                    />
+                <div className="space-y-5">
+                    {details.map((detail, index) => (
+                        <DetailRow key={index} icon={detail.icon} label={detail.label} value={detail.value} />
+                    ))}
                 </div>
             </CardContent>
         </Card>
