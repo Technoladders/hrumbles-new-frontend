@@ -191,8 +191,8 @@ const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
           ? candidate.metadata.preferredLocations.join(", ")
           : "N/A",
         resume: candidate.resume || candidate.metadata?.resume_url || "#",
-        currentSalary: candidate.currentSalary || "N/A",
-        expectedSalary: candidate.expectedSalary || "N/A",
+        currentSalary: candidate.current_salary  || "N/A",
+        expectedSalary: candidate.expected_salary || "N/A",
         linkedInId: candidate.metadata?.linkedInId || "N/A",
         noticePeriod: candidate.metadata?.noticePeriod || "N/A",
         hasOffers: candidate.metadata?.hasOffers || "N/A",

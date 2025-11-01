@@ -5,7 +5,7 @@ import { Outlet, useNavigate } from "react-router-dom";
 import NewSidebar from "../components/Sidebar/NewSidebar"; 
 import { signOut } from "../utils/api";
 import { useSelector, useDispatch } from "react-redux"; 
-import { logout } from "../Redux/authSlice";
+import { logout, setLoggingOut } from "../Redux/authSlice";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isSameDay } from "date-fns";
@@ -252,14 +252,15 @@ const MainLayout = () => {
 };
 
  const handleLogout = async () => {
+  dispatch(setLoggingOut(true));
     try {
       if (user?.id && organizationId) {
         await logUserActivity(user.id, organizationId, 'logout', {
           device_info: navigator.userAgent
         });
       }
-      dispatch(logout());
       await signOut();
+      dispatch(logout());
       localStorage.clear();
       sessionStorage.clear();
     } catch (error) {

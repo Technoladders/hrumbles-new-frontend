@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Edit, Trash2, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { format, isBefore, isAfter, startOfToday, startOfDay, endOfDay } from "date-fns";
 import { getGoalInstances, updateGoalInstance, deleteGoalInstance } from "@/lib/goalService";
 import { GoalInstance } from "@/types/goal";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -28,8 +28,6 @@ interface GoalInstancesDialogProps {
   metricUnit: string;
   onUpdate?: () => void;
 }
-
-
 
 const GoalInstancesDialog: React.FC<GoalInstancesDialogProps> = ({
   open,
@@ -46,6 +44,9 @@ const GoalInstancesDialog: React.FC<GoalInstancesDialogProps> = ({
   const [editTargetValue, setEditTargetValue] = useState<number>(0);
   const [editCurrentValue, setEditCurrentValue] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(false);
+
+  // --- UPDATED: State for filtering ---
+  const [filter, setFilter] = useState<'past' | 'current' | 'upcoming'>('current');
 
   useEffect(() => {
     if (open && goalType) {
@@ -140,17 +141,60 @@ const GoalInstancesDialog: React.FC<GoalInstancesDialogProps> = ({
     }
   };
 
+  // --- UPDATED: Memoized filtering logic with full day boundaries ---
+  const filteredInstances = useMemo(() => {
+    const todayStart = startOfToday();
+    const todayEnd = endOfDay(todayStart);
+    return instances.filter(inst => {
+      const periodStart = startOfDay(new Date(inst.period_start));
+      const periodEnd = endOfDay(new Date(inst.period_end));
+      switch (filter) {
+        case 'past':
+          return isBefore(periodEnd, todayStart);
+        case 'upcoming':
+          return isAfter(periodStart, todayEnd);
+        case 'current':
+          return !isAfter(periodStart, todayEnd) && !isBefore(periodEnd, todayStart);
+        default:
+          return true;
+      }
+    });
+  }, [instances, filter]);
+
+  const filterLabels: Record<'past' | 'current' | 'upcoming', string> = {
+    past: 'Past',
+    current: 'Current',
+    upcoming: 'Upcoming'
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
-          <DialogTitle>{goalName} - {goalType} Instances</DialogTitle>
-          <DialogDescription>
-            View and manage all {goalType?.toLowerCase()} goal instances for {goalName}.
-            {goalName === "Submission" || goalName === "Onboarding"
-              ? " Current values are automatically updated from status change counts."
-              : ""}
-          </DialogDescription>
+          <div className="flex justify-between items-center">
+            <div>
+              <DialogTitle>{goalName} - {goalType} Instances</DialogTitle>
+              <DialogDescription>
+                View and manage all {goalType?.toLowerCase()} goal instances for {goalName}.
+                {goalName === "Submission" || goalName === "Onboarding"
+                  ? " Current values are automatically updated from status change counts."
+                  : ""}
+              </DialogDescription>
+            </div>
+            {/* --- UPDATED: Three Filter Buttons --- */}
+            <div className="flex items-center gap-2">
+              {(['past', 'current', 'upcoming'] as const).map(f => (
+                <Button
+                  key={f}
+                  size="sm"
+                  variant={filter === f ? 'default' : 'outline'}
+                  onClick={() => setFilter(f)}
+                >
+                  {filterLabels[f]}
+                </Button>
+              ))}
+            </div>
+          </div>
         </DialogHeader>
 
         {isLoading ? (
@@ -158,9 +202,9 @@ const GoalInstancesDialog: React.FC<GoalInstancesDialogProps> = ({
             <div className="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
             <p className="mt-2 text-gray-500">Loading instances...</p>
           </div>
-        ) : instances.length === 0 ? (
+        ) : filteredInstances.length === 0 ? (
           <div className="text-center py-4">
-            <p className="text-gray-500">No valid instances found for {goalType?.toLowerCase()} {goalName}.</p>
+            <p className="text-gray-500">No {filterLabels[filter].toLowerCase()} instances found.</p>
           </div>
         ) : (
           <ScrollArea className="max-h-[60vh]">
@@ -175,7 +219,8 @@ const GoalInstancesDialog: React.FC<GoalInstancesDialogProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {instances.map(instance => (
+                {/* --- UPDATE: Map over filteredInstances --- */}
+                {filteredInstances.map(instance => (
                   <TableRow key={instance.id}>
                     <TableCell>
                       {instance.employee ? (

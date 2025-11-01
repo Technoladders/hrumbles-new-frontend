@@ -46,9 +46,11 @@ const CreateGoalForm: React.FC<CreateGoalFormProps> = ({ onClose }) => {
 
     // --- 2. REPLACE old technical state with user-friendly state ---
   const [isAutomated, setIsAutomated] = useState(false);
+   const [selectedStatusId, setSelectedStatusId] = useState<string>("");
   const [selectedAutomationSource, setSelectedAutomationSource] = useState<string>("");
   const [selectedStatus, setSelectedStatus] = useState<string>("");
   const [dynamicStatuses, setDynamicStatuses] = useState<{ label: string; value: string }[]>([]);
+  const [jobSubStatuses, setJobSubStatuses] = useState<JobStatus[]>([]);
   const [isLoadingStatuses, setIsLoadingStatuses] = useState(false);
 const [sourceTable, setSourceTable] = useState("");
 const [sourceValueColumn, setSourceValueColumn] = useState("");
@@ -62,6 +64,32 @@ const [filters, setFilters] = useState<{ key: string; value: string }[]>([
   const currentSourceConfig = useMemo(() => {
     return AUTOMATION_SOURCES.find(source => source.value === selectedAutomationSource);
   }, [selectedAutomationSource]);
+
+    useEffect(() => {
+    const fetchJobSubStatuses = async () => {
+      if (sector === 'Human Resource' && isAutomated) {
+        setIsLoadingStatuses(true);
+        try {
+          const { data, error } = await supabase
+            .from('job_statuses')
+            .select('id, name')
+            .eq('organization_id', organizationId)
+            .eq('type', 'sub')
+            .order('name');
+
+          if (error) throw error;
+          setJobSubStatuses(data || []);
+        } catch (error) {
+          toast.error("Failed to load hiring statuses.");
+          console.error("Error fetching job statuses:", error);
+        } finally {
+          setIsLoadingStatuses(false);
+        }
+      }
+    };
+
+    fetchJobSubStatuses();
+  }, [sector, isAutomated, organizationId]);
 
   useEffect(() => {
     const fetchDynamicStatuses = async () => {
@@ -192,25 +220,40 @@ const handleFilterChange = (index: number, field: 'key' | 'value', val: string) 
 
     // --- NEW: Prepare automation data ---
  let automationConfig = {};
-    if (isAutomated) {
-      if (!currentSourceConfig || !selectedStatus) {
-        toast.error("Please select an automation source and a status to track.");
-        setLoading(false);
-        return;
-      }
-      
-      automationConfig = {
-        is_automated: true,
-        source_table: currentSourceConfig.sourceTable,
-        source_value_column: currentSourceConfig.valueColumn,
-        source_employee_column: currentSourceConfig.employeeColumn,
-        source_date_column: currentSourceConfig.dateColumn,
-        source_filter_conditions: {
-          [currentSourceConfig.filterColumn]: selectedStatus,
-        },
-      };
+    if (isAutomated && sector === 'Human Resource') {
+        const selectedStatus = jobSubStatuses.find(s => s.id === selectedStatusId);
+        if (!selectedStatus) {
+            toast.error("Please select a hiring status to track.");
+            setLoading(false);
+            return;
+        }
+
+        // --- DYNAMIC DATE LOGIC ---
+        let dateTable = 'hr_status_change_counts';
+        let dateColumn = 'created_at';
+
+        // Check for special cases based on status name
+        if (selectedStatus.name.toLowerCase().includes('submission') || selectedStatus.name.toLowerCase().includes('processed (client)')) {
+            dateTable = 'hr_job_candidates';
+            dateColumn = 'submission_date';
+        } else if (selectedStatus.name.toLowerCase().includes('joined') || selectedStatus.name.toLowerCase().includes('onboarding')) {
+            dateTable = 'hr_job_candidates';
+            dateColumn = 'joining_date';
+        }
+
+        automationConfig = {
+            is_automated: true,
+            source_table: 'hr_status_change_counts',
+            source_value_column: 'count',
+            source_employee_column: 'candidate_owner',
+            source_filter_conditions: {
+                sub_status_id: selectedStatus.id,
+            },
+            source_date_table: dateTable,
+            source_date_column: dateColumn,
+        };
     }
-    
+
     try {
       const newGoalPayload = {
         name,
@@ -218,10 +261,10 @@ const handleFilterChange = (index: number, field: 'key' | 'value', val: string) 
         sector,
         metricType,
         metricUnit: getMetricUnitValue(),
-        ...automationConfig, // Spread the correctly built config
+        ...automationConfig,
       };
 
-      const newGoal = await createGoal(newGoalPayload);
+      const newGoal = await createGoal(newGoalPayload as any); // Cast as any to bypass strict type check for new fields
       
       if (!newGoal) throw new Error("Failed to create goal");
       
@@ -259,36 +302,27 @@ const handleFilterChange = (index: number, field: 'key' | 'value', val: string) 
   Enable this to automatically track goal progress from a source data table.
 </p>
 
- {isAutomated && (
-          <div className="space-y-4 pt-4 border-t mt-4">
-            <h4 className="text-md font-semibold">Automation Configuration</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>Automation Source</Label>
-                <Select value={selectedAutomationSource} onValueChange={setSelectedAutomationSource}>
-                  <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select a source..." /></SelectTrigger>
-                  <SelectContent>
-                    {AUTOMATION_SOURCES.map(source => (
-                      <SelectItem key={source.value} value={source.value}>{source.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Track When Status Is...</Label>
-                <Select value={selectedStatus} onValueChange={setSelectedStatus} disabled={!currentSourceConfig}>
-                  <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select a status..." /></SelectTrigger>
-                  <SelectContent>
-                    {(currentSourceConfig?.isDynamic ? dynamicStatuses : currentSourceConfig?.statuses || []).map(status => (
-                    <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>
-                  ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-        )}
+{isAutomated && sector === 'Human Resource' && (
+                <div className="space-y-2 pt-2 border-t mt-2">
+                    <h4 className="text-md font-semibold">Recruitment Automation</h4>
+                    <div>
+                        <Label>Track Candidate Status</Label>
+                        <Select value={selectedStatusId} onValueChange={setSelectedStatusId} disabled={isLoadingStatuses}>
+                        <SelectTrigger className="mt-1.5">
+                            <SelectValue placeholder={isLoadingStatuses ? "Loading statuses..." : "Select a status to track..."} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {jobSubStatuses.map(status => (
+                            <SelectItem key={status.id} value={status.id}>{status.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                        </Select>
+                        <p className="text-xs text-gray-500 mt-1">
+                            The goal's progress will be the count of candidates reaching this status.
+                        </p>
+                    </div>
+                </div>
+            )}
           <div>
             <Label htmlFor="name" className="text-sm font-medium">
               Goal Name

@@ -1,14 +1,15 @@
-import { useState, FC, ChangeEvent, KeyboardEvent, MouseEvent } from 'react';
+import { useState, FC, ChangeEvent, KeyboardEvent, MouseEvent, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { ThunkDispatch } from '@reduxjs/toolkit';
 import { AnyAction } from 'redux';
-
+import { toast } from "sonner";
 import { signIn } from "../utils/api"; // Assuming types are defined in this file
 import { fetchUserSession } from "../Redux/authSlice"; // Assuming this is a standard Redux Thunk
 import supabase from "../config/supabaseClient";
 import { getOrganizationSubdomain } from "../utils/subdomain"; 
 import { Eye, EyeOff } from 'lucide-react';
+import { calculateProfileCompletion } from "../utils/profileCompletion";
 
 // --- Constants ---
 const ITECH_ORGANIZATION_ID = [
@@ -30,6 +31,8 @@ interface UserDetails {
   departmentName: string | null;
   organizationId: string | null;
   status: string | null;
+  first_name?: string;  // ✅ CHANGE #2: ADD THIS LINE
+  last_name?: string;   // ✅ CHANGE #2: ADD THIS LINE
 }
 
 /*
@@ -69,7 +72,7 @@ const WarningTwoIcon: FC = () => (
 
 const CaretLeftIcon: FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 256 256">
-        <path d="M165.66,202.34a8,8,0,0,1-11.32,0L88.68,136.68a8,8,0,0,1,0-11.32l65.66-65.66a8,8,0,0,1,11.32,11.32L105.32,128l60.34,63.02A8,8,0,0,1,165.66,202.34Z"></path>
+        <path d="M165.66,202.34a8,8,0 0,1-11.32,0L88.68,136.68a8,8,0 0,1,0-11.32l65.66-65.66a8,8,0 0,1,11.32,11.32L105.32,128l60.34,63.02A8,8,0 0,1,165.66,202.34Z"></path>
     </svg>
 );
 
@@ -195,7 +198,7 @@ const LoginPage: FC = () => {
 
     } catch (error: any) {
       console.error("Error in fetchUserDetails:", error.message);
-       return { role: null, departmentName: null, organizationId: null,  organizationId: null, status: null };
+       return { role: null, departmentName: null, organizationId: null, status: null };
     }
   };
 
@@ -275,7 +278,7 @@ const LoginPage: FC = () => {
       }
       const data = await response.json();
       return data.ip;
-    } catch (error) {
+    } catch (error: any) {
       console.warn("Could not fetch IPv6 address:", error.message);
       // If the fetch fails, it means the user doesn't have a public IPv6 connection.
       return 'Not available';
@@ -291,7 +294,7 @@ const LoginPage: FC = () => {
       if (!response.ok) throw new Error('No IPv4 connection.');
       const data = await response.json();
       return data.ip;
-    } catch (error) {
+    } catch (error: any) {
       console.warn("Could not fetch IPv4 address:", error.message);
       return 'Not available';
     }
@@ -341,7 +344,7 @@ const LoginPage: FC = () => {
     try {
       // ... (IP and location fetching logic remains the same) ...
       const ipv4 = await getIPv4Address();
-      const ipv6 = await getIPv6Address();
+      const ipv6 = await getIPv6Address(); 
       const approxLocation = await getApproximateLocation(ipv4);
       let deviceLocation = { latitude: "Not available", longitude: "Not available" };
       try {
@@ -396,88 +399,106 @@ const LoginPage: FC = () => {
     }
   };
 
+// PASTE THIS ENTIRE FUNCTION INTO YOUR LoginPage.tsx FILE
+
 const handleLogin = async (): Promise<void> => {
     setError(null);
     setIsLoading(true);
     console.log("--- LOGIN PROCESS STARTED ---");
 
-    // New variables to hold user/org IDs for logging failed attempts
     let userId: string | null = null;
     let userOrgId: string | null = null;
 
     try {
-      // --- CRITICAL PATH START ---
-      const subdomainOrgId = await getOrganizationIdBySubdomain(organizationSubdomain);
-      if (!subdomainOrgId) throw new Error("Invalid organization domain.");
-      userOrgId = subdomainOrgId; // Store orgId
+        const subdomainOrgId = await getOrganizationIdBySubdomain(organizationSubdomain);
+        if (!subdomainOrgId) throw new Error("Invalid organization domain.");
+        userOrgId = subdomainOrgId;
 
-      const { user } = await signIn(email, password);
-      console.log("✅ User authenticated successfully");
-      userId = user.id; // Store userId
+        const { user } = await signIn(email, password);
+        console.log("✅ User authenticated successfully");
+        userId = user.id;
 
-      const {
-        role,
-        departmentName,
-        organizationId: fetchedOrgIdFromUserDetails,
-        status,
-        first_name,
-        last_name
-      } = await fetchUserDetails(user.id);
+        const {
+            role,
+            departmentName,
+            organizationId: fetchedOrgIdFromUserDetails,
+            status,
+            first_name,
+            last_name
+        } = await fetchUserDetails(user.id);
 
-      userOrgId = fetchedOrgIdFromUserDetails;
+        userOrgId = fetchedOrgIdFromUserDetails;
+        if (!userOrgId) {
+            throw new Error("User's organization ID could not be determined.");
+        }
+        
+        if (status !== 'active') {
+            if (userId && userOrgId) {
+                await logUserActivity(userId, userOrgId, 'failed_login', { errorMessage: "Account not active" });
+            }
+            throw new Error("Your account is not active.");
+        }
+        if (userOrgId !== subdomainOrgId) {
+            if (userId && userOrgId) {
+                await logUserActivity(userId, userOrgId, 'failed_login', { errorMessage: "Organization domain mismatch" });
+            }
+            throw new Error("Access Denied. Please log in from your organization's domain.");
+        }
 
-      if (!userOrgId) {
-          throw new Error("User's organization ID could not be determined.");
-      }
-      
-      // New blocks to log specific failure reasons
-      if (status !== 'active') {
-          if (userId && userOrgId) {
-            await logUserActivity(userId, userOrgId, 'failed_login', { errorMessage: "Account not active" });
-          }
-          throw new Error("Your account is not active.");
-      }
-      if (userOrgId !== subdomainOrgId) {
-          if (userId && userOrgId) {
-            await logUserActivity(userId, userOrgId, 'failed_login', { errorMessage: "Organization domain mismatch" });
-          }
-          throw new Error("Access Denied. Please log in from your organization's domain.");
-      }
+        // Run this in the background to not slow down the login
+        sendLoginNotificationInBackground({
+            userEmail: email,
+            organizationId: userOrgId,
+            userId: userId,
+            firstName: first_name || "",
+            lastName: last_name || "",
+        });
 
-      // --- PERFORMANCE BOTTLENECK ---
-      // This 'await' forces the login to wait for all background tasks (IP, location, logging, email)
-      // to finish before navigating, making the login feel slow.
-      await sendLoginNotificationInBackground({
-        userEmail: email,
-        organizationId: userOrgId,
-        userId: userId,
-        firstName: first_name,
-        lastName: last_name,
-      });
+        await dispatch(fetchUserSession()).unwrap();
 
-      // Continue with login and navigation
-      await dispatch(fetchUserSession()).unwrap();
+        // --- PROFILE COMPLETION CHECK ---
+        console.log("Checking profile completion for user:", userId);
+        const { completionPercentage } = await calculateProfileCompletion(userId);
+        console.log("Profile completion result:", { percentage: completionPercentage });
 
-      let navigateTo = "/dashboard";
-      if (role === "employee" && departmentName === "Finance") {
-        navigateTo = "/finance";
-      }
+        sessionStorage.setItem("profileCompletion", JSON.stringify({
+            percentage: completionPercentage,
+            canAccess: completionPercentage >= 40,
+        }));
 
-      console.log("--- LOGIN PROCESS COMPLETED ---");
-      navigate(navigateTo);
+        if (completionPercentage < 40) {
+            console.log("❌ Profile < 40% - Redirecting to complete profile");
+            toast.error("Please complete your profile to access the dashboard.");
+            navigate("/complete-profile", { state: { from: "/dashboard" } });
+            return; // Stop execution here
+        }
+
+        // --- NAVIGATION LOGIC ---
+        let navigateTo = "/dashboard"; 
+        if (role === "employee" && departmentName === "Finance") {
+            navigateTo = "/finance";
+        }
+
+        console.log("--- LOGIN PROCESS COMPLETED ---");
+        navigate(navigateTo);
+
+        if (completionPercentage < 80) {
+            toast.info(`Your profile is ${completionPercentage}% complete. Finish it to unlock all features.`);
+        }
 
     } catch (error: any) {
-      console.error("🔴 LOGIN FAILED:", error.message);
-      setError(error.message);
-      
-      // Generic catch block to log any other failed login reason
-      if (userId && userOrgId) {
-          await logUserActivity(userId, userOrgId, 'failed_login', { errorMessage: error.message });
-      }
+        console.error("🔴 LOGIN FAILED:", error.message);
+        setError(error.message);
+        
+        if (userId && userOrgId) {
+            await logUserActivity(userId, userOrgId, 'failed_login', { errorMessage: error.message });
+        }
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
-  };
+};
+
+// ... your handleKeyDown function and return statement will be below this
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === "Enter") {

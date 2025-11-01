@@ -16,6 +16,7 @@ import { Bar } from "react-chartjs-2";
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from "chart.js";
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, isWithinInterval, isSameDay } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import CreateAndAssignGoalWizard from '@/components/goals/wizard/CreateAndAssignGoalWizard';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -23,6 +24,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 const GoalsIndex = () => {
   const navigate = useNavigate();
   const [goals, setGoals] = useState<GoalWithDetails[]>([]);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [selectedSector, setSelectedSector] = useState<string>("");
   const [selectedTimeframe, setSelectedTimeframe] = useState<"all" | GoalType>("all");
   const [loading, setLoading] = useState(true);
@@ -34,6 +36,11 @@ const GoalsIndex = () => {
   useEffect(() => {
     fetchData();
   }, [createGoalDialogOpen, assignGoalDialogOpen]);
+
+   useEffect(() => {
+    // Modify the useEffect to refetch when the wizard closes
+    fetchData();
+  }, [isWizardOpen]);
 
   const fetchData = async () => {
     try {
@@ -224,7 +231,18 @@ const GoalsIndex = () => {
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-              <Dialog open={createGoalDialogOpen} onOpenChange={setCreateGoalDialogOpen}>
+              <Dialog open={isWizardOpen} onOpenChange={setIsWizardOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    className="flex items-center gap-2 text-sm sm:text-base px-3 sm:px-4 py-1 sm:py-2"
+                  >
+                    <Target className="h-4 w-4" />
+                    <span>New Goal Assignment</span>
+                  </Button>
+                </DialogTrigger>
+                <CreateAndAssignGoalWizard onClose={() => setIsWizardOpen(false)} />
+              </Dialog>
+              {/* <Dialog open={createGoalDialogOpen} onOpenChange={setCreateGoalDialogOpen}>
                 <DialogTrigger asChild>
                   <Button
                     variant="outline"
@@ -246,7 +264,7 @@ const GoalsIndex = () => {
                   </Button>
                 </DialogTrigger>
                 <AssignGoalsForm onClose={() => setAssignGoalDialogOpen(false)} />
-              </Dialog>
+              </Dialog> */}
               <Button
                 variant="secondary"
                 onClick={() => navigate("/goalsview")}
@@ -261,7 +279,7 @@ const GoalsIndex = () => {
       </header>
 
       <main className=" mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {loading ? (
+        {/* {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-10">
             {[1, 2, 3, 4, 5].map((i) => (
               <Card key={i} className="p-6">
@@ -359,7 +377,7 @@ const GoalsIndex = () => {
               </div>
             </AnimatedCard>
           </div>
-        )}
+        )} */}
 
         {/* Department Chart with Timeframe Filters */}
         <Card className="mb-8">

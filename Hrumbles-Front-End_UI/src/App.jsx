@@ -1,15 +1,21 @@
+// App.jsx (Corrected Structure)
 
-// App.jsx (Modified for Redux)
-
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
 import ReactGA from 'react-ga4';
+import store from "./Redux/store";
 import { useDispatch, useSelector } from "react-redux";
+import supabase from "./config/supabaseClient"
 
 // Import the Redux action and the utility
 import { setOrganization } from "./Redux/organizationSlice";
 import { getOrganizationSubdomain } from "./utils/subdomain";
 import { fetchFirmOrganizationDetails } from "./Redux/firmOrganizationSlice";
+
+// Import the SessionExpiredModal   
+import SessionExpiredModal from "./components/SessionExpiredModal";
+import { showSessionExpiredModal } from "./Redux/uiSlice";
+import { logout } from './Redux/authSlice';
 
 // Import your pages
 import DomainVerificationPage from "./pages/DomainVerificationPage";
@@ -17,6 +23,10 @@ import DomainVerificationPage from "./pages/DomainVerificationPage";
 import Login from "./pages/LoginPage";
 import SignUp from "./pages/GlobalSuperAdmin";
 import PrivateRoutes from "./utils/PrivateRoutes";
+
+// 🎯 NEW: Profile Completion Components
+import CompleteYourProfile from "./components/CompleteYourProfile"; // ✅ CORRECT
+import ProtectedRoute from "./components/ProtectedRoute"; // ✅ CORRECT
 
 // Global Superadmin
 import GlobalSuperadminDashboard from "./pages/Global_Dashboard";
@@ -49,12 +59,14 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ProfilePageEmployee from "./pages/ProfilePageEmployee";
 import EmployeeList from "./pages/EmployeeList";
 import EmployeeForm from "./pages/EmployeeForm";
+import EmployeeOnboard from "./pages/EmployeeOnboard";
 import EmployeeProfile from "./pages/EmployeeProfile";
 import GoalPage from "./pages/goals/Index";
 import GoalView from "./pages/goals/EmployeeView";
 import GoalDetail from "./pages/goals/GoalDetail";
 import EmployeeGoalView from "./components/goals/employee/EmployeeGoalDashboard"
 import GoalDetailView from "./components/goals/dashboard/GoalDetailView";
+import EmployeeGoalDetail from "./pages/goals/EmployeeGoalDetail";
 
 // New CLients
 import ClientNew from "./pages/ClientNew/page";
@@ -141,87 +153,125 @@ import Projects from "./pages/TimeManagement/admin/Projects";
 // Bench Profiles
 import BenchProfilesPage from "./pages/bench-profiles/BenchProfilesPage";
 
-
-// --- START: Google Analytics Integration (Step 2) ---
-// This component listens for route changes and sends a pageview to GA.
+// --- Google Analytics Tracker ---
 const RouteChangeTracker = () => {
   const location = useLocation();
-
   useEffect(() => {
-    // The line below sends a pageview event to Google Analytics
     ReactGA.send({ hitType: "pageview", page: location.pathname + location.search });
-  }, [location]); // The effect re-runs every time the location changes
-
-  return null; // This component does not render anything.
+  }, [location]);
+  return null;
 };
-// --- END: Google Analytics Integration (Step 2) ---
 
-function App() {
 
+// 1. All logic, hooks, and rendering are moved into this new component.
+function AppContent() {
+  const location = useLocation(); // This now works perfectly!
+  const dispatch = useDispatch();
   const organizationSubdomain = getOrganizationSubdomain();
   const organizationId = useSelector((state) => state.auth.organization_id);
   const firmOrgStatus = useSelector((state) => state.firmOrganization.status);
-  const dispatch = useDispatch();
+  const reduxUser = useSelector((state) => state.auth.user);
+  const isLoggingOut = useSelector((state) => state.auth.isLoggingOut);
+  
+  // --- Define Public Routes ---
+  const publicPaths = [
+    '/login', '/signup', '/set-password', '/forgot-password',
+    '/careers', '/job/', '/share/', '/consent/'
+  ];
 
-   useEffect(() => {
-    // This condition is key:
-    // - We must have an organizationId to fetch.
-    // - We only fetch if the status is 'idle' (meaning we haven't tried yet).
-    // This prevents re-fetching on every page navigation.
+  // --- Session Validation Logic ---
+  const validateCurrentSession = useCallback(async () => {
+   if (isLoggingOut || !reduxUser) return;
+    const isPublicRoute = publicPaths.some(path => location.pathname.startsWith(path));
+    if (isPublicRoute) {
+      console.log('[Session Validator] On public route. Suppressing modal.');
+      return;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      console.warn('[Session Validator] MISMATCH on protected route. Triggering modal.');
+      dispatch(showSessionExpiredModal());
+    }
+  }, [reduxUser, dispatch, location.pathname, isLoggingOut]);
+
+  useEffect(() => {
+    validateCurrentSession(); // Initial check
+    
+    // Listeners
+    const handleStorageChange = (e) => (e.key.startsWith('sb-') && e.key.endsWith('-auth-token')) && validateCurrentSession();
+    const handleVisibilityChange = () => (document.visibilityState === 'visible') && validateCurrentSession();
+    
+    window.addEventListener('storage', handleStorageChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+
+            const loggingOut = store.getState().auth.isLoggingOut; // Directly check store state here
+      if (loggingOut) return;
+
+      if (event === 'SIGNED_OUT') {
+        const isPublicRoute = publicPaths.some(path => window.location.pathname.startsWith(path));
+        if (!isPublicRoute) {
+          dispatch(showSessionExpiredModal());
+        }
+      }
+    });
+
+    // Cleanup
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('storage', handleStorageChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [validateCurrentSession, dispatch]);
+
+  // --- Firm Organization Fetch Logic ---
+  useEffect(() => {
     if (organizationId && firmOrgStatus === 'idle') {
       dispatch(fetchFirmOrganizationDetails(organizationId));
     }
-  }, [organizationId, firmOrgStatus, dispatch]); // Dependencies for the effect
-  // --- END: New logic ---
-
+  }, [organizationId, firmOrgStatus, dispatch]);
+  
+  // --- Your existing subdomain logic ---
   useEffect(() => {
-    // If a subdomain is found, dispatch it to the Redux store.
-    // This makes it available globally to any component connected to Redux.
     if (organizationSubdomain) {
       dispatch(setOrganization(organizationSubdomain));
     }
   }, [organizationSubdomain, dispatch]);
 
-    // If no subdomain is detected, show ONLY the verification page.
+  // --- The rest of your app's rendering logic ---
   if (!organizationSubdomain) {
+    // 3. The <Router> is REMOVED from here, as the parent now provides it.
     return (
-      <Router>
-          {/* --- START: Google Analytics Integration (Step 3) --- */}
+      <>
         <RouteChangeTracker />
-        {/* --- END: Google Analytics Integration (Step 3) --- */}
         <Routes>
           <Route path="*" element={<DomainVerificationPage />} />
         </Routes>
-      </Router>
-    ); 
+      </>
+    );
   }
 
   return (
-    <Router>
-      {/* --- START: Google Analytics Integration (Step 3) --- */}
+    <>
+      <SessionExpiredModal />
       <RouteChangeTracker />
-      {/* --- END: Google Analytics Integration (Step 3) --- */}
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
-                 <Route path="/set-password" element={<SetPassword />} />
-                  <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-
-               
-
+        <Route path="/set-password" element={<SetPassword />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
         {/* career page */}
         <Route path="/careers" element={<Career />} />
-          <Route path="/job/:jobId" element={<CareerJobDetail />} />
-          <Route path="/job/:jobId/apply" element={<CareerJobApplication />} />
+        <Route path="/job/:jobId" element={<CareerJobDetail />} />
+        <Route path="/job/:jobId/apply" element={<CareerJobApplication />} />
 
-          {/* Candidate Profile Magic Link */}
-          <Route path="/share/:shareId" element={<SharedProfile />} />
-            <Route path="/consent/:consentId" element={<CandidateConsentPage />} />
-
-
+        {/* Candidate Profile Magic Link */}
+        <Route path="/share/:shareId" element={<SharedProfile />} />
+        <Route path="/consent/:consentId" element={<CandidateConsentPage />} />
 
         {/* Protected Routes */}
         <Route
@@ -236,115 +286,117 @@ function App() {
             />
           }
         >
-          <Route element={<MainLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
+          {/* ========================================
+              🎯 NEW: Profile Completion Route
+              ======================================== */}
+          {/* This route requires authentication but doesn't require profile completion */}
+          <Route path="/complete-profile" element={<CompleteYourProfile />} /> {/* ✅ CORRECT */}
+          <Route path="employee/:id" element={<EmployeeOnboard />} />
 
-            {/* Password Change */}
-            <Route path="/password" element={<PasswordChange />} />
+          <Route element={<ProtectedRoute />}>
+            <Route element={<MainLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+
+              {/* Password Change */}
+              <Route path="/password" element={<PasswordChange />} />
 
               {/* Global Super Admin */}
-            <Route path="/organization" element={<GlobalSuperadminDashboard />} />
-            <Route path="/organization/:organizationId" element={<SingleOrganizationDashboard />} />
-            <Route path="/verifications" element={<VerificationHubPage />} />
-            <Route path="/verifications/:verificationType" element={<VerificationTypeDashboardPage />} />
-            <Route path="/verifications/:verificationType/:organizationId" element={<OrganizationVerificationReportPage />} />
-            <Route path="/organization/:organizationId/users" element={<DetailedResourceView resourceType="users" />} />
-            <Route path="/organization/:organizationId/talent" element={<DetailedResourceView resourceType="talent" />} /> 
-            <Route path="/organization/:organizationId/roles" element={<DetailedResourceView resourceType="roles" />} />
-            <Route path="/organization/:organizationId/jobs" element={<DetailedResourceView resourceType="jobs" />} />
-            <Route path="/organization/:organizationId/clients" element={<DetailedResourceView resourceType="clients" />} />
-             <Route path="/reports/organization-talent-trends" element={<OrganizationTalentTrendsReport />} />
-            
-            {/* <Route path="/employees" element={<Employee/>} /> */}
-            <Route path="/projects" element={<ProjectManagement />} />
-            <Route path="/client/:id" element={<ClientDashboard />} />
-            <Route path="/project/:id" element={<ProjectDashboard />} />
-            <Route
-  path="/project/:projectId/employee/:employeeId/details"
-  element={<EmployeeProjectLogDetails />}
-/>
+              <Route path="/organization" element={<GlobalSuperadminDashboard />} />
+              <Route path="/organization/:organizationId" element={<SingleOrganizationDashboard />} />
+              <Route path="/verifications" element={<VerificationHubPage />} />
+              <Route path="/verifications/:verificationType" element={<VerificationTypeDashboardPage />} />
+              <Route path="/verifications/:verificationType/:organizationId" element={<OrganizationVerificationReportPage />} />
+              <Route path="/organization/:organizationId/users" element={<DetailedResourceView resourceType="users" />} />
+              <Route path="/organization/:organizationId/talent" element={<DetailedResourceView resourceType="talent" />} /> 
+              <Route path="/organization/:organizationId/roles" element={<DetailedResourceView resourceType="roles" />} />
+              <Route path="/organization/:organizationId/jobs" element={<DetailedResourceView resourceType="jobs" />} />
+              <Route path="/organization/:organizationId/clients" element={<DetailedResourceView resourceType="clients" />} />
+              <Route path="/reports/organization-talent-trends" element={<OrganizationTalentTrendsReport />} />
+              
+              <Route path="/projects" element={<ProjectManagement />} />
+              <Route path="/client/:id" element={<ClientDashboard />} />
+              <Route path="/project/:id" element={<ProjectDashboard />} />
+              <Route
+                path="/project/:projectId/employee/:employeeId/details"
+                element={<EmployeeProjectLogDetails />}
+              />
 
-{/* User management */}
+              {/* User management */}
+              <Route path="/user-management" element={<UserManagement />} />
+             
+              {/* Employee */}
+              <Route path="employee" element={<EmployeeList />} />
+              <Route path="employee/new" element={<EmployeeForm />} />
+              <Route path="employee/profile/:id" element={<EmployeeProfile />} />
 
-            <Route path="/user-management" element={<UserManagement />} />
-           
+              {/* Employee Dashboard Routes */}
+              <Route path="/profile" element={<ProfilePageEmployee />} />
 
-            {/* Employee */}
+              {/* Clients */}
+              {/* Client Dashboard (New) */}
+              <Route path="/clients" element={<ClientManagementDashboard />} />
+              <Route path="/client-dashboard/:clientName/candidates" element={<ClientNew />} />
+              <Route path="/client-metrics" element={<ClientMetricsDashboard />} />
 
-            <Route path="employee" element={<EmployeeList />} />
-            <Route path="employee/new" element={<EmployeeForm />} />
-            <Route path="employee/:id" element={<EmployeeForm />} />
-            <Route path="employee/profile/:id" element={<EmployeeProfile />} />
+              {/* Goals */}
+              <Route path="/goals" element={<GoalPage />} />
+              <Route path="/goals/:goalId" element={<GoalDetail />} />
+              <Route path="/my-goals/:id" element={<EmployeeGoalDetail />} />
+              <Route path="/goalsview" element={<GoalView />} />
+              <Route path="goalview" element={<EmployeeGoalView/>} />
+              <Route path="/goals/:goalId/:goalType?" element={<GoalDetailView />} />
 
-            {/* Employee Dashboard Routes */}
-            <Route path="/profile" element={<ProfilePageEmployee />} />
+              {/* Jobs */}
+              <Route path="/jobs" element={<JobRouteHandler />} />
+              <Route path="/jobs/:id" element={<JobViewRouteHandler />} />
+              <Route path="/resume-analysis/:jobId/:candidateId" element={<ResumeAnalysisDetailView />} />
+              <Route path="/jobs/:id/description" element={<JobDescription />} />
+              <Route path="/jobs/edit/:id" element={<JobDescription />} />
+              <Route path="/jobstatuses" element={<StatusSettings />} />
+              <Route path="/employee/:candidateId/:jobId" element={<EmployeeProfilePage />} />
 
-            {/* Clients */}
-            {/* <Route path="/clients" element={<ClientPage />} /> */}
+              <Route path="/jobs/:jobId/candidate/:candidateId/bgv" element={<CandidateBgvProfilePage />} />
+              <Route path="/all-candidates" element={<AllCandidatesPage />} /> 
 
-                        {/* Client Dashboard (New) */}
-                        <Route path="/clients" element={<ClientManagementDashboard />} />
-            <Route path="/client-dashboard/:clientName/candidates" element={<ClientNew />} />
-            <Route path="/client-metrics" element={<ClientMetricsDashboard />} />
+              {/* Candidates */}
+              <Route path="/talent-pool" element={<TalentPoolPage />} />
+              <Route path="/talent-pool/:candidateId" element={<CandidateProfilePage />} />
 
-            {/* Goals */}
-            <Route path="/goals" element={<GoalPage />} />
-            <Route path="/goals/:goalId" element={<GoalDetail />} />
-            <Route path="/goalsview" element={<GoalView />} />
-            <Route path="goalview" element={<EmployeeGoalView/>} />
-            <Route path="/goals/:goalId/:goalType?" element={<GoalDetailView />} />
+              <Route path="/migrated-talent-pool" element={<MigratedTalentPoolPage />} />
+              <Route path="/migrated-talent-pool/:candidateId" element={<MigratedCandidateProfilePage />} />
 
-            {/* Jobs */}
-            <Route path="/jobs" element={<JobRouteHandler />} />
-            <Route path="/jobs/:id" element={<JobViewRouteHandler />} />
-           <Route path="/resume-analysis/:jobId/:candidateId" element={<ResumeAnalysisDetailView />} />
-            <Route path="/jobs/:id/description" element={<JobDescription />} />
-            <Route path="/jobs/edit/:id" element={<JobDescription />} />
-            <Route path="/jobstatuses" element={<StatusSettings />} />
-            <Route path="/employee/:candidateId/:jobId" element={<EmployeeProfilePage />} />
+              {/* Zive-X */}
+              <Route path="/zive-x" element={<ZiveXSearchPage />} />
+              <Route path="/zive-x-search/results" element={<ZiveXResultsPage />} />
 
-            <Route path="/jobs/:jobId/candidate/:candidateId/bgv" element={<CandidateBgvProfilePage />} />
-            <Route path="/all-candidates" element={<AllCandidatesPage />} /> 
+              {/* Reports */}
+              <Route path="/reports" element={<ReportsPage />} />
 
-            {/* Candidates */}
-            <Route path="/talent-pool" element={<TalentPoolPage />} />
-            <Route path="/talent-pool/:candidateId" element={<CandidateProfilePage />} />
-
-             <Route path="/migrated-talent-pool" element={<MigratedTalentPoolPage />} />
-          <Route path="/migrated-talent-pool/:candidateId" element={<MigratedCandidateProfilePage />} />
-
-{/* Zive-X */}
-<Route path="/zive-x" element={<ZiveXSearchPage />} />
-<Route path="/zive-x-search/results" element={<ZiveXResultsPage />} />
-
-                        {/* Reports */}
-        <Route path="/reports" element={<ReportsPage />} />
-
-        {/* Finance & Accounts */}
-        <Route path="/finance" element={<FinanceIndex />} />
-          <Route path="/payroll/:id/edit" element={<PayrollEdit />} />
-          <Route path="/accounts/invoices" element={<InvoicesPage />} />
-          <Route path="/accounts/expenses" element={<ExpensesPage />} />
-          <Route path="/payroll" element={<Payroll />} />
-          <Route path="/accounts/overall" element={<AccountsOverview />} />
-          <Route path="/payrollrun" element={<PayrollRun />} />
-          <Route path="/payroll/:year/:month" element={<PayrollDetails />} />
-          <Route path="/payroll/history/:year/:month" element={<PayrollHistoryDetails />} />
-          <Route path="/payroll/terminated/:year/:month/:employeeId" element={<TerminatedEmployeesPayroll />} />
+              {/* Finance & Accounts */}
+              <Route path="/finance" element={<FinanceIndex />} />
+              <Route path="/payroll/:id/edit" element={<PayrollEdit />} />
+              <Route path="/accounts/invoices" element={<InvoicesPage />} />
+              <Route path="/accounts/expenses" element={<ExpensesPage />} />
+              <Route path="/payroll" element={<Payroll />} />
+              <Route path="/accounts/overall" element={<AccountsOverview />} />
+              <Route path="/payrollrun" element={<PayrollRun />} />
+              <Route path="/payroll/:year/:month" element={<PayrollDetails />} />
+              <Route path="/payroll/history/:year/:month" element={<PayrollHistoryDetails />} />
+              <Route path="/payroll/terminated/:year/:month/:employeeId" element={<TerminatedEmployeesPayroll />} />
 
 
-          {/* Sales Companies and Contacts */}
-          <Route path="/companies" element={<CompaniesPage />} />
-           <Route path="/companies/file/:fileId" element={<CompaniesPage />} />
-          <Route path="/contacts" element={<TanstackContactsPage />} />
-          <Route path="/contacts/kanban" element={<KanbanView />} />
-          <Route path="/companies/:id" element={<CompanyDetail />} />
-          <Route path="/companies/:id/edit" element={<CompanyEdit />} />
-          <Route path="/lists" element={<ListsPage />} />
-          <Route path="/contacts/file/:fileId" element={<TanstackContactsPage />} />
+              {/* Sales Companies and Contacts */}
+              <Route path="/companies" element={<CompaniesPage />} />
+              <Route path="/companies/file/:fileId" element={<CompaniesPage />} />
+              <Route path="/contacts" element={<TanstackContactsPage />} />
+              <Route path="/contacts/kanban" element={<KanbanView />} />
+              <Route path="/companies/:id" element={<CompanyDetail />} />
+              <Route path="/companies/:id/edit" element={<CompanyEdit />} />
+              <Route path="/lists" element={<ListsPage />} />
+              <Route path="/contacts/file/:fileId" element={<TanstackContactsPage />} />
 
-          {/* TimeTracker, Timesheet, Attendance and Leave */}
-            {/* Employee routes */}
+              {/* TimeTracker, Timesheet, Attendance and Leave */}
+              {/* Employee routes */}
               <Route path="/employee/time-tracker" element={<TimeTracker />} />
               <Route path="/employee/timesheet" element={<Timesheet />} />
               <Route path="/employee/regularization" element={<EmployeeRegularization />} />
@@ -365,10 +417,20 @@ function App() {
 
               {/* Bench Profiles */}
               <Route path="/bench-pool" element={<BenchProfilesPage />} />
-          
+            </Route>
           </Route>
         </Route>
       </Routes>
+    </>
+  );
+}
+
+
+// 2. The main App component now ONLY sets up the Router context.
+function App() {
+  return (
+    <Router>
+      <AppContent />
     </Router>
   );
 }

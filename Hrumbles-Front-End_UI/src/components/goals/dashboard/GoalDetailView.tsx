@@ -1,604 +1,783 @@
-import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Bar } from "react-chartjs-2";
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from "chart.js";
-import { format } from "date-fns";
-import { useToast } from "@/hooks/use-toast";
-import { getGoalsWithDetails, getGoalInstances } from "@/lib/goalService";
-import { GoalWithDetails, GoalInstance, Employee } from "@/types/goal";
+"use client"
 
-// Register Chart.js components
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+import type React from "react"
+import { useState, useEffect, useMemo } from "react"
+import { useParams, useNavigate, useSearchParams } from "react-router-dom"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Progress } from "@/components/ui/progress"
+import { ChevronLeft, Target, Calendar, Users, Clock, BarChart3, CheckCircle, Edit, Trash2, Save, ChevronRight } from "lucide-react"
+import { format, isBefore, isAfter, startOfToday, startOfDay, endOfDay } from "date-fns"
+import { useToast } from "@/hooks/use-toast"
+import { getGoalsWithDetails, updateGoalInstance, deleteGoalInstance } from "@/lib/goalService"
+import type { GoalWithDetails, AssignedGoal, GoalInstance, Employee } from "@/types/goal"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Line, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer, ComposedChart, Area, Tooltip } from "recharts"
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import Loader from "@/components/ui/Loader"
 
 const GoalDetailView: React.FC = () => {
-  const { goalId, goalType } = useParams<{ goalId: string; goalType?: string }>();
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const [goal, setGoal] = useState<GoalWithDetails | null>(null);
-  const [instances, setInstances] = useState<GoalInstance[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [filterError, setFilterError] = useState<string | null>(null);
+  const { goalId, goalType: paramGoalType } = useParams<{ goalId: string; goalType?: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { toast } = useToast()
+  const [goal, setGoal] = useState<GoalWithDetails | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [selectedGoalType, setSelectedGoalType] = useState<string>(paramGoalType || "Daily")
+  const initialFilter = searchParams.get("instanceFilter") || "current"
+  const [instanceFilter, setInstanceFilter] = useState<"current" | "past" | "upcoming">(initialFilter as "current" | "past" | "upcoming")
+  const [currentPage, setCurrentPage] = useState<number>(parseInt(searchParams.get("page") || "1", 10))
+  const [itemsPerPage, setItemsPerPage] = useState<number>(parseInt(searchParams.get("limit") || "10", 10))
+  const [editingInstanceId, setEditingInstanceId] = useState<string | null>(null)
+  const [editTargetValue, setEditTargetValue] = useState<number>(0)
+  const [editCurrentValue, setEditCurrentValue] = useState<number>(0)
+  const [chartView, setChartView] = useState<'topCurrent' | 'topProgress' | 'all'>('topCurrent')
+  const [currentChartPage, setCurrentChartPage] = useState(0)
 
-  const fetchInstances = async () => {
-    try {
-      setIsLoading(true);
-      let data: GoalInstance[] = [];
-
-      if (!goalType || goalType === "All") {
-        // Fetch all goal types for this goal
-        const goalTypes = ["Daily", "Weekly", "Monthly"];
-        for (const type of goalTypes) {
-          const typeData = await getGoalInstances(goalId!, type);
-          data = [...data, ...typeData];
-        }
-      } else {
-        data = await getGoalInstances(goalId!, goalType);
-      }
-
-      // Log raw data for debugging
-      console.log("Raw instances:", JSON.stringify(data, null, 2));
-
-      // Filter instances with strict requirements
-      const validInstances = data.filter((instance) => {
-        const hasValidId = !!instance.id;
-        const hasAssignedGoal = !!instance.assigned_goal;
-        const hasValidGoalType =
-          hasAssignedGoal &&
-          typeof instance.assigned_goal.goal_type === "string" &&
-          instance.assigned_goal.goal_type.trim() !== "" &&
-          (!goalType || goalType === "All" || instance.assigned_goal.goal_type === goalType);
-        const hasEmployee = !!instance.employee;
-        const hasValidEmployeeName =
-          hasEmployee &&
-          (typeof instance.employee.first_name === "string" ||
-            typeof instance.employee.last_name === "string") &&
-          (instance.employee.first_name?.trim() || instance.employee.last_name?.trim());
-
-        if (!hasValidId) console.warn(`Instance filtered out: missing id`);
-        if (!hasAssignedGoal) console.warn(`Instance ${instance.id} filtered out: missing assigned_goal`);
-        if (hasAssignedGoal && !hasValidGoalType)
-          console.warn(
-            `Instance ${instance.id} filtered out: invalid goal_type "${
-              instance.assigned_goal?.goal_type ?? "undefined"
-            }" for goalType "${goalType || "All"}"`
-          );
-        if (!hasEmployee) console.warn(`Instance ${instance.id} filtered out: missing employee data`);
-        if (hasEmployee && !hasValidEmployeeName)
-          console.warn(`Instance ${instance.id} filtered out: missing or invalid employee first_name and last_name`);
-
-        return hasValidId && hasAssignedGoal && hasValidGoalType && hasEmployee && hasValidEmployeeName;
-      });
-
-      // Sort by period_end (newest first)
-      const sortedInstances = validInstances.sort(
-        (a, b) => new Date(b.period_end).getTime() - new Date(a.period_end).getTime()
-      );
-
-      console.log(`Fetched ${data.length} instances, filtered to ${sortedInstances.length}`);
-      setInstances(sortedInstances);
-
-      if (sortedInstances.length === 0 && data.length > 0) {
-        setFilterError(
-          `No valid instances found for goal type "${goalType || "All"}". Data may be missing valid employee or goal information.`
-        );
-      } else {
-        setFilterError(null);
-      }
-    } catch (error) {
-      console.error("Error fetching goal instances:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load goal instances.",
-        variant: "destructive",
-      });
-      setFilterError("Failed to load instances. Please try again later.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const ITEMS_PER_PAGE = 10
 
   useEffect(() => {
-    const fetchGoalData = async () => {
-      setIsLoading(true);
-      try {
-        const goals = await getGoalsWithDetails();
-        const selectedGoal = goals.find((g) => g.id === goalId);
-        if (!selectedGoal) {
-          toast({
-            title: "Error",
-            description: "Goal not found.",
-            variant: "destructive",
-          });
-          navigate("/goals");
-          return;
-        }
-        setGoal(selectedGoal);
-        console.log("Raw assignments:", JSON.stringify(selectedGoal.assignments, null, 2));
-        await fetchInstances();
-      } catch (error) {
-        console.error("Error fetching goal details:", error);
+    if (chartView === 'all') {
+      setCurrentChartPage(0)
+    }
+  }, [chartView])
+
+  const fetchGoalData = async () => {
+    setIsLoading(true)
+    try {
+      const goals = await getGoalsWithDetails()
+      const selectedGoal = goals.find((g) => g.id === goalId)
+      if (!selectedGoal) {
         toast({
           title: "Error",
-          description: "Failed to load goal details.",
+          description: "Goal not found.",
           variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
+        })
+        navigate("/goals")
+        return
       }
-    };
-
-    if (goalId) {
-      fetchGoalData();
+      setGoal(selectedGoal)
+    } catch (error) {
+      console.error("Error fetching goal details:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load goal details.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
-  }, [goalId, goalType, navigate, toast]);
+  }
+
+  useEffect(() => {
+    if (goalId) {
+      fetchGoalData()
+    }
+  }, [goalId, navigate, toast])
+
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (instanceFilter !== "current") params.set("instanceFilter", instanceFilter)
+    if (currentPage !== 1) params.set("page", currentPage.toString())
+    if (itemsPerPage !== 10) params.set("limit", itemsPerPage.toString())
+    setSearchParams(params, { replace: true })
+  }, [instanceFilter, currentPage, itemsPerPage, setSearchParams])
+
+  const handleGoalTypeChange = (value: string) => {
+    setSelectedGoalType(value)
+    navigate(`/goals/${goalId}/${value}`)
+  }
+
+  const handleInstanceFilterChange = (value: "current" | "past" | "upcoming") => {
+    setInstanceFilter(value)
+    setCurrentPage(1)
+  }
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(parseInt(value, 10))
+    setCurrentPage(1)
+  }
 
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return "N/A";
+    if (!dateStr) return "N/A"
     try {
-      return format(new Date(dateStr), "MMM d, yyyy");
+      return format(new Date(dateStr), "MMM d, yyyy")
     } catch (e) {
-      console.error("Invalid date:", dateStr);
-      return "Invalid date";
+      console.error("Invalid date:", dateStr)
+      return "Invalid date"
     }
-  };
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "completed":
-        return "bg-green-100 text-green-800";
+        return "bg-green-100 text-green-800"
       case "in-progress":
-        return "bg-blue-100 text-blue-800";
+        return "bg-blue-100 text-blue-800"
       case "overdue":
-        return "bg-red-100 text-red-800";
+        return "bg-red-100 text-red-800"
       case "pending":
-        return "bg-amber-100 text-amber-800";
+        return "bg-amber-100 text-amber-800"
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-gray-100 text-gray-800"
     }
-  };
+  }
 
-  // Filter assignments by selected goal type with strict validation
-  const filteredAssignments = (goalType
-    ? goal?.assignments.filter((a) => {
-        const hasValidGoalType = typeof a.goal_type === "string" && a.goal_type.trim() !== "" && a.goal_type === goalType;
-        const hasValidEmployee = !!a.employee && (a.employee.first_name?.trim() || a.employee.last_name?.trim());
-        if (!hasValidGoalType) {
-          console.warn(`Assignment ${a.id} filtered out: invalid goal_type "${a.goal_type ?? "undefined"}" for goalType "${goalType}"`);
-        }
-        if (!hasValidEmployee) {
-          console.warn(`Assignment ${a.id} filtered out: missing or invalid employee data`);
-        }
-        return hasValidGoalType && hasValidEmployee;
-      }) || []
-    : goal?.assignments.filter((a) => {
-        const hasValidGoalType = typeof a.goal_type === "string" && a.goal_type.trim() !== "";
-        const hasValidEmployee = !!a.employee && (a.employee.first_name?.trim() || a.employee.last_name?.trim());
-        if (!hasValidGoalType) {
-          console.warn(`Assignment ${a.id} filtered out: invalid goal_type "${a.goal_type ?? "undefined"}"`);
-        }
-        if (!hasValidEmployee) {
-          console.warn(`Assignment ${a.id} filtered out: missing or invalid employee data`);
-        }
-        return hasValidGoalType && hasValidEmployee;
-      }) || []
-  );
+  const availableGoalTypes = useMemo(() => {
+    if (!goal?.assignments) return []
+    const types = new Set(goal.assignments.map((a: AssignedGoal) => a.goal_type))
+    return Array.from(types).sort((a, b) => {
+      const order = ["Daily", "Weekly", "Monthly", "Yearly"]
+      return order.indexOf(a) - order.indexOf(b)
+    })
+  }, [goal?.assignments])
 
-  // Calculate progress and totals for the selected goal type
-  const typeProgress = filteredAssignments.length > 0
-    ? Math.min(
-        Math.round(
-          (filteredAssignments.reduce((sum, a) => sum + (a.current_value || 0), 0) /
-            filteredAssignments.reduce((sum, a) => sum + (a.target_value || 1), 0)) * 100
-        ),
-        100
-      )
-    : 0;
+  const allAssignments = useMemo(() => goal?.assignments || [], [goal?.assignments])
 
-  const totalCurrentValue = filteredAssignments.reduce((sum, a) => sum + (a.current_value || 0), 0);
-  const totalTargetValue = filteredAssignments.reduce((sum, a) => sum + (a.target_value || 0), 0);
+  const filteredAssignments = useMemo(() => {
+    return goal?.assignments?.filter((a: AssignedGoal) => a.goal_type === selectedGoalType) || []
+  }, [goal?.assignments, selectedGoalType])
 
-  // Prepare data for current performance comparison chart
-  const chartData = {
-    labels: filteredAssignments.map((a) => `${a.employee?.first_name || ""} ${a.employee?.last_name || ""}`.trim()) || [],
-    datasets: [
-      {
-        label: "Progress (%)",
-        data: filteredAssignments.map((a) => a.progress || 0) || [],
-        backgroundColor: "rgba(59, 130, 246, 0.5)",
-        borderColor: "rgba(59, 130, 246, 1)",
-        borderWidth: 1,
-      },
-    ],
-  };
+  const totalAssignments = allAssignments.length
+  const completedAssignments = allAssignments.filter((a: AssignedGoal) => a.status === "completed").length
+  const overdueAssignments = allAssignments.filter((a: AssignedGoal) => a.status === "overdue").length
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "top" as const,
-        labels: {
-          font: {
-            size: 12,
-          },
-        },
-      },
-      title: {
-        display: true,
-        text: `Current Employee Progress (${goalType || "All Types"})`,
-        font: {
-          size: 16,
-        },
-      },
-      tooltip: {
-        bodyFont: {
-          size: 12,
-        },
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        max: 100,
-        title: {
-          display: true,
-          text: "Progress (%)",
-          font: {
-            size: 12,
-          },
-        },
-        ticks: {
-          font: {
-            size: 10,
-          },
-        },
-      },
-      x: {
-        ticks: {
-          font: {
-            size: 10,
-          },
-          maxRotation: 0,
-          minRotation: 0,
-        },
-      },
-    },
-  };
+  const overallProgress = useMemo(() => {
+    if (totalAssignments === 0) return 0
+    const totalCurrent = allAssignments.reduce((sum, a) => sum + (a.current_value || 0), 0)
+    const totalTarget = allAssignments.reduce((sum, a) => sum + (a.target_value || 1), 0)
+    return Math.min(Math.round((totalCurrent / totalTarget) * 100), 100)
+  }, [allAssignments])
 
-  // Prepare data for historical performance comparison chart
-  const historicalChartData = (() => {
-    const employeeProgress: Record<string, { totalProgress: number; count: number }> = {};
+  const employeeMap = useMemo(() => {
+    const map = new Map<string, Employee>()
+    goal?.assignedTo?.forEach((employee: Employee) => {
+      map.set(employee.id, employee)
+    })
+    return map
+  }, [goal?.assignedTo])
 
-    instances.forEach((instance) => {
-      if (!instance.employee) {
-        console.warn(`Instance ${instance.id} skipped in chart: employee is undefined`);
-        return;
+  const allInstances = useMemo(() => {
+    const instances: (GoalInstance & { employee_id: string; assignment_id: string })[] = []
+    filteredAssignments.forEach((assignment: AssignedGoal) => {
+      ;(assignment.instances || []).forEach((instance: GoalInstance) => {
+        instances.push({
+          ...instance,
+          employee_id: assignment.employee_id,
+          assignment_id: assignment.id,
+        })
+      })
+    })
+    return instances
+  }, [filteredAssignments])
+
+  const filteredInstances = useMemo(() => {
+    const todayStart = startOfToday()
+    const todayEnd = endOfDay(todayStart)
+    return allInstances.filter((inst) => {
+      const periodStart = startOfDay(new Date(inst.period_start))
+      const periodEnd = endOfDay(new Date(inst.period_end))
+      switch (instanceFilter) {
+        case "past":
+          return isBefore(periodEnd, todayStart)
+        case "upcoming":
+          return isAfter(periodStart, todayEnd)
+        case "current":
+          return !isAfter(periodStart, todayEnd) && !isBefore(periodEnd, todayStart)
+        default:
+          return true
       }
-      const employeeName = `${instance.employee.first_name || ""} ${instance.employee.last_name || ""}`.trim();
-      if (!employeeName) {
-        console.warn(`Instance ${instance.id} skipped in chart: employee name is empty`);
-        return;
-      }
+    })
+  }, [allInstances, instanceFilter])
 
-      if (!employeeProgress[employeeName]) {
-        employeeProgress[employeeName] = { totalProgress: 0, count: 0 };
-      }
-      employeeProgress[employeeName].totalProgress += instance.progress || 0;
-      employeeProgress[employeeName].count += 1;
-    });
+  const totalPages = Math.ceil(filteredInstances.length / itemsPerPage)
+  const paginatedInstances = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    return filteredInstances.slice(startIndex, startIndex + itemsPerPage)
+  }, [filteredInstances, currentPage, itemsPerPage])
 
-    const labels = Object.keys(employeeProgress);
-    const data = labels.map(
-      (label) =>
-        employeeProgress[label].count > 0
-          ? Math.round(employeeProgress[label].totalProgress / employeeProgress[label].count)
-          : 0
-    );
+  const comparisonMetrics = useMemo(() => {
+    const totalCurrent = filteredInstances.reduce((sum, i) => sum + (i.current_value || 0), 0)
+    const totalTarget = filteredInstances.reduce((sum, i) => sum + (i.target_value || 0), 0)
+    const avgProgress =
+      filteredInstances.length > 0
+        ? Math.round(filteredInstances.reduce((sum, i) => sum + (i.progress || 0), 0) / filteredInstances.length)
+        : 0
 
     return {
-      labels,
-      datasets: [
-        {
-          label: "Average Progress (%)",
-          data,
-          backgroundColor: "rgba(34, 197, 94, 0.5)",
-          borderColor: "rgba(34, 197, 94, 1)",
-          borderWidth: 1,
-        },
-      ],
-    };
-  })();
+      totalCurrent,
+      totalTarget,
+      avgProgress,
+      variance: totalTarget > 0 ? Math.round(((totalCurrent - totalTarget) / totalTarget) * 100) : 0,
+    }
+  }, [filteredInstances])
 
-  const historicalChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "top" as const,
-        labels: {
-          font: {
-            size: 12,
-          },
-        },
-      },
-      title: {
-        display: true,
-        text: `Historical Employee Progress (${goalType || "All Types"})`,
-        font: {
-          size: 16,
-        },
-      },
-      tooltip: {
-        bodyFont: {
-          size: 12,
-        },
-        callbacks: {
-          label: (context: any) => {
-            const value = context.raw;
-            return `Average Progress: ${value}%`;
-          },
-        },
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        max: 100,
-        title: {
-          display: true,
-          text: "Average Progress (%)",
-          font: {
-            size: 12,
-          },
-        },
-        ticks: {
-          font: {
-            size: 10,
-          },
-        },
-      },
-      x: {
-        ticks: {
-          font: {
-            size: 10,
-          },
-          maxRotation: 0,
-          minRotation: 0,
-        },
-      },
-    },
-  };
+  const baseChartData = useMemo(() => {
+    return filteredInstances.map((inst) => {
+      const employee = employeeMap.get(inst.employee_id)
+      const fullName = employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown'
+      const name = fullName.length > 15 ? `${fullName.slice(0, 15)}...` : fullName
+      return {
+        name,
+        fullName,
+        current: inst.current_value || 0,
+        target: inst.target_value || 0,
+        progress: inst.progress || 0,
+      }
+    })
+  }, [filteredInstances, employeeMap])
+
+  const getSortedData = useMemo(() => {
+    const topCurrent = [...baseChartData].sort((a, b) => b.current - a.current).slice(0, 10)
+    const topProgress = [...baseChartData].sort((a, b) => b.progress - a.progress).slice(0, 10)
+    const allData = [...baseChartData].sort((a, b) => a.fullName.localeCompare(b.fullName))
+    return { topCurrent, topProgress, all: allData }
+  }, [baseChartData])
+
+  const chartDataForView = useMemo(() => {
+    switch (chartView) {
+      case 'topCurrent':
+        return getSortedData.topCurrent
+      case 'topProgress':
+        return getSortedData.topProgress
+      case 'all':
+        return getSortedData.all
+      default:
+        return []
+    }
+  }, [chartView, getSortedData])
+
+  const displayData = useMemo(() => {
+    if (chartView === 'all') {
+      const start = currentChartPage * ITEMS_PER_PAGE
+      return chartDataForView.slice(start, start + ITEMS_PER_PAGE)
+    }
+    return chartDataForView
+  }, [chartDataForView, chartView, currentChartPage])
+
+  const handleEditInstance = (instance: GoalInstance) => {
+    setEditingInstanceId(instance.id)
+    setEditTargetValue(instance.target_value)
+    setEditCurrentValue(instance.current_value)
+  }
+
+  const handleSaveInstance = async (instanceId: string) => {
+    const updated = await updateGoalInstance(instanceId, {
+      target_value: editTargetValue,
+      current_value: editCurrentValue,
+      status: editCurrentValue >= editTargetValue ? "completed" : "in-progress",
+    })
+
+    if (updated) {
+      setEditingInstanceId(null)
+      await fetchGoalData()
+      toast({
+        title: "Instance Updated",
+        description: "Goal instance has been successfully updated.",
+      })
+    } else {
+      toast({
+        title: "Error",
+        description: "Failed to update goal instance.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleDeleteInstance = async (instanceId: string) => {
+    const success = await deleteGoalInstance(instanceId)
+    if (success) {
+      await fetchGoalData()
+      toast({
+        title: "Instance Deleted",
+        description: "Goal instance has been successfully deleted.",
+      })
+    } else {
+      toast({
+        title: "Error",
+        description: "Failed to delete goal instance.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const renderPagination = () => {
+    if (totalPages <= 1) return null
+    const startIndex = (currentPage - 1) * itemsPerPage
+    return (
+      <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">Show</span>
+          <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+            <SelectTrigger className="w-[70px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="5">5</SelectItem>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-sm text-gray-600">per page</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-medium">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+        <span className="text-sm text-gray-600">
+          Showing {Math.min(startIndex + 1, filteredInstances.length)} to {Math.min(startIndex + itemsPerPage, filteredInstances.length)} of {filteredInstances.length} instances
+        </span>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-        <p className="ml-2 text-gray-500 text-sm sm:text-base">Loading goal details...</p>
+        <p className="ml-2 text-gray-500">Loading goal details...</p>
       </div>
-    );
+    )
   }
 
   if (!goal) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <p className="text-gray-500 text-sm sm:text-base">Goal not found.</p>
+        <p className="text-gray-500">Goal not found.</p>
       </div>
-    );
+    )
   }
 
   return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-full">
-      <Button
-        variant="outline"
-        onClick={() => navigate("/goals")}
-        className="mb-6 text-sm sm:text-base px-3 sm:px-4 py-1 sm:py-2"
-      >
-        ← Back to Goals
-      </Button>
-
-      {/* Goal Overview */}
-      <Card className="mb-6 w-full">
-        <CardHeader>
-          <CardTitle className="text-lg sm:text-xl">
-            {goal.name} {goalType ? `- ${goalType}` : ""}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm sm:text-base">
+    <div className="space-y-8 p-4 md:p-6 animate-fade-in">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={() => navigate("/goals")} className="h-9 w-9 p-0">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
             <div>
-              <p className="text-xs sm:text-sm text-gray-500">Description</p>
-              <p>{goal.description || "No description available"}</p>
-            </div>
-            <div>
-              <p className="text-xs sm:text-sm text-gray-500">Sector</p>
-              <p>{goal.sector || "N/A"}</p>
-            </div>
-            <div>
-              <p className="text-xs sm:text-sm text-gray-500">Date Range</p>
-              <p>
-                {formatDate(goal.start_date)} - {formatDate(goal.end_date)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs sm:text-sm text-gray-500">Metric Unit</p>
-              <p>{goal.metric_unit || "N/A"}</p>
-            </div>
-            <div>
-              <p className="text-xs sm:text-sm text-gray-500">Overall Progress</p>
-              <p>{typeProgress}%</p>
-            </div>
-            <div>
-              <p className="text-xs sm:text-sm text-gray-500">Total Value</p>
-              <p>
-                {totalCurrentValue} / {totalTargetValue} {goal.metric_unit}
-              </p>
+              <h1 className="text-3xl font-bold">{goal.name}</h1>
+              <p className="text-gray-500 text-sm">{goal.sector || "General"} Sector</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Current Performance Comparison */}
-      <Card className="mb-6 w-full">
-        <CardHeader>
-          <CardTitle className="text-lg sm:text-xl">
-            Current Performance Comparison {goalType ? `(${goalType})` : ""}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[200px] sm:h-[300px]">
-            <Bar
-              data={chartData}
-              options={chartOptions}
-              aria-label={`Current performance comparison chart for ${goalType || "all"} goal types`}
-            />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card className="p-4 flex justify-between items-start border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="space-y-1 flex-1">
+            <p className="text-sm font-medium text-gray-500">Overall Progress</p>
+            <h3 className="text-3xl font-bold">{overallProgress}%</h3>
+            <Progress value={overallProgress} className="w-full mt-2 h-2" />
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Assigned Employees */}
-      <Card className="mb-6 w-full">
-        <CardHeader>
-          <CardTitle className="text-lg sm:text-xl">
-            Assigned Employees {goalType ? `(${goalType})` : ""}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <ScrollArea className="h-[300px] w-full">
-              <Table className="w-full min-w-[600px]">
-                <TableHeader className="sticky top-0 bg-white z-10">
-                  <TableRow>
-                    <TableHead className="min-w-[120px] text-xs sm:text-sm">Employee</TableHead>
-                    <TableHead className="min-w-[80px] text-xs sm:text-sm">Goal Type</TableHead>
-                    <TableHead className="min-w-[80px] text-xs sm:text-sm">Progress</TableHead>
-                    <TableHead className="min-w-[120px] text-xs sm:text-sm">Current / Target</TableHead>
-                    <TableHead className="min-w-[80px] text-xs sm:text-sm">Status</TableHead>
-                    <TableHead className="min-w-[120px] text-xs sm:text-sm">Period</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAssignments.map((assignment) => (
-                    <TableRow key={assignment.id}>
-                      <TableCell className="text-xs sm:text-sm truncate max-w-[120px]">
-                        {`${assignment.employee?.first_name || ""} ${assignment.employee?.last_name || ""}`.trim()}
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm">{assignment.goal_type}</TableCell>
-                      <TableCell className="text-xs sm:text-sm">
-                        {assignment.progress !== undefined ? `${assignment.progress}%` : "N/A"}
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm">
-                        {assignment.current_value !== undefined && assignment.target_value !== undefined
-                          ? `${assignment.current_value} / ${assignment.target_value} ${goal.metric_unit || ""}`
-                          : "N/A"}
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm">
-                        <Badge className={getStatusColor(assignment.status || "unknown")}>
-                          {assignment.status || "Unknown"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm">
-                        {formatDate(assignment.period_start)} - {formatDate(assignment.period_end)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </ScrollArea>
+          <div className="p-2 bg-blue-100 rounded-lg ml-4">
+            <Target className="text-blue-600" size={22} />
           </div>
-          {filteredAssignments.length === 0 && (
-            <p className="text-center text-gray-500 mt-4 text-sm sm:text-base">
-              No valid assignments found for {goalType || "this goal"}.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+        </Card>
 
-      {/* Historical Performance Comparison */}
-      <Card className="mb-6 w-full">
-        <CardHeader>
-          <CardTitle className="text-lg sm:text-xl">
-            Historical Performance Comparison {goalType ? `(${goalType})` : ""}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[200px] sm:h-[300px]">
-            <Bar
-              data={historicalChartData}
-              options={historicalChartOptions}
-              aria-label={`Historical performance comparison chart for ${goalType || "all"} goal types`}
-            />
+        <Card className="p-4 flex justify-between items-start border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="space-y-1 flex-1">
+            <p className="text-sm font-medium text-gray-500">Total Assignments</p>
+            <h3 className="text-3xl font-bold">{totalAssignments}</h3>
           </div>
-        </CardContent>
-      </Card>
+          <div className="p-2 bg-green-100 rounded-lg ml-4">
+            <Users className="text-green-600" size={22} />
+          </div>
+        </Card>
 
-      {/* Historical Instances */}
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="text-lg sm:text-xl">
-            Historical Instances {goalType ? `(${goalType})` : ""}
-          </CardTitle>
+        <Card className="p-4 flex justify-between items-start border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="space-y-1 flex-1">
+            <p className="text-sm font-medium text-gray-500">Completed</p>
+            <h3 className="text-3xl font-bold">{completedAssignments}</h3>
+          </div>
+          <div className="p-2 bg-yellow-100 rounded-lg ml-4">
+            <CheckCircle className="text-yellow-600" size={22} />
+          </div>
+        </Card>
+
+        <Card className="p-4 flex justify-between items-start border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="space-y-1 flex-1">
+            <p className="text-sm font-medium text-gray-500">Overdue</p>
+            <h3 className="text-3xl font-bold">{overdueAssignments}</h3>
+          </div>
+          <div className="p-2 bg-red-100 rounded-lg ml-4">
+            <Clock className="text-red-600" size={22} />
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="border border-gray-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base">Current vs Target</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Current Value</span>
+                <span className="text-2xl font-bold text-blue-600">{comparisonMetrics.totalCurrent}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Target Value</span>
+                <span className="text-2xl font-bold text-gray-900">{comparisonMetrics.totalTarget}</span>
+              </div>
+              <div className="pt-2 border-t">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium">Variance</span>
+                  <Badge variant={comparisonMetrics.variance >= 0 ? "default" : "destructive"}>
+                    {comparisonMetrics.variance > 0 ? "+" : ""}
+                    {comparisonMetrics.variance}%
+                  </Badge>
+                </div>
+                <Progress value={Math.min(Math.abs(comparisonMetrics.variance), 100)} className="h-2" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-gray-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base">Average Progress</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-center">
+                <div className="relative w-32 h-32">
+                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="54" fill="none" stroke="#e5e7eb" strokeWidth="8" />
+                    <circle
+                      cx="60"
+                      cy="60"
+                      r="54"
+                      fill="none"
+                      stroke="#3b82f6"
+                      strokeWidth="8"
+                      strokeDasharray={`${(comparisonMetrics.avgProgress / 100) * 339.29} 339.29}`}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-3xl font-bold">{comparisonMetrics.avgProgress}%</span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-center text-sm text-gray-600">{filteredInstances.length} instances tracked</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6">
+          <h2 className="text-xl md:text-xl font-semibold text-gray-800">
+            Performance Trend Analysis
+          </h2>
+          <div className="flex items-center gap-2">
+            <Button variant={chartView === 'topCurrent' ? 'default' : 'outline'} size="sm" onClick={() => setChartView('topCurrent')}>Top 10 Current</Button>
+            <Button variant={chartView === 'topProgress' ? 'default' : 'outline'} size="sm" onClick={() => setChartView('topProgress')}>Top 10 Progress</Button>
+            <Button variant={chartView === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setChartView('all')}>Show All</Button>
+          </div>
         </CardHeader>
-        <CardContent>
-          {filterError ? (
-            <p className="text-center text-red-500 mt-4 text-sm sm:text-base">{filterError}</p>
+        <CardContent className="p-6 pt-0">
+          {displayData.length > 0 ? (
+            <div className="h-[250px]">
+              <div className="overflow-x-auto h-full">
+                <div style={{ minWidth: `${displayData.length * 80}px`, height: '100%' }}>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <ComposedChart
+                      data={displayData}
+                      margin={{ top: 20, right: 40, left: 40, bottom: 20 }}
+                    >
+                      <defs>
+                        <linearGradient id="currentGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
+                          <stop offset="100%" stopColor="#3b82f6" stopOpacity={1} />
+                        </linearGradient>
+                        <linearGradient id="progressGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                          <stop offset="50%" stopColor="#10b981" stopOpacity={0.4} />
+                          <stop offset="100%" stopColor="#10b981" stopOpacity={0.1} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="name"
+                        angle={0}
+                        textAnchor="middle"
+                        interval={0}
+                        height={50}
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        yAxisId="left"
+                        orientation="left"
+                        tickCount={5}
+                        tick={{ fontSize: 11, fill: '#3b82f6', fontWeight: '600' }}
+                        axisLine={false}
+                        tickLine={false}
+                        label={{ value: `Current ${goal.metric_unit || 'Value'}`, angle: -90, position: "insideLeft", style: { textAnchor: 'middle', fill: '#3b82f6' } }}
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        tickCount={5}
+                        tick={{ fontSize: 11, fill: '#10b981', fontWeight: '600' }}
+                        axisLine={false}
+                        tickLine={false}
+                        label={{ value: "Progress %", angle: 90, position: "insideRight", style: { textAnchor: 'middle', fill: '#10b981' } }}
+                      />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(10px)", border: "none", borderRadius: "12px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)" }}
+                        formatter={(value, name) => {
+                          if (name === 'current') {
+                            return [`${Number(value).toLocaleString()} ${goal.metric_unit || 'units'}`, name]
+                          }
+                          return [`${Number(value)}%`, name]
+                        }}
+                        labelStyle={{ fontWeight: 'bold', color: '#374151' }}
+                      />
+                      <Legend verticalAlign="top" height={46} wrapperStyle={{ fontSize: "14px", color: "#4b5563", paddingBottom: "20px" }} iconType="rect" />
+                      <Area yAxisId="right" type="monotone" dataKey="progress" name="Progress" stroke="#10b981" strokeWidth={3} fill="url(#progressGradient)" fillOpacity={1} />
+                      <Bar yAxisId="left" dataKey="current" name="Current" fill="url(#currentGradient)" radius={[10, 10, 0, 0]} maxBarSize={60} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              {chartView === 'all' && baseChartData.length > ITEMS_PER_PAGE && (
+                <div className="flex items-center justify-center gap-4 mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentChartPage(prev => Math.max(prev - 1, 0))}
+                    disabled={currentChartPage === 0}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm font-medium text-gray-600">
+                    Page {currentChartPage + 1} of {Math.ceil(baseChartData.length / ITEMS_PER_PAGE)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentChartPage(prev => Math.min(prev + 1, Math.ceil(baseChartData.length / ITEMS_PER_PAGE) - 1))}
+                    disabled={currentChartPage >= Math.ceil(baseChartData.length / ITEMS_PER_PAGE) - 1}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
           ) : (
-            <div className="overflow-x-auto">
-              <ScrollArea className="h-[300px] w-full">
-                <Table className="w-full min-w-[600px]">
-                  <TableHeader className="sticky top-0 bg-white z-10">
-                    <TableRow>
-                      <TableHead className="min-w-[120px] text-xs sm:text-sm">Employee</TableHead>
-                      <TableHead className="min-w-[80px] text-xs sm:text-sm">Goal Type</TableHead>
-                      <TableHead className="min-w-[120px] text-xs sm:text-sm">Period</TableHead>
-                      <TableHead className="min-w-[80px] text-xs sm:text-sm">Progress</TableHead>
-                      <TableHead className="min-w-[120px] text-xs sm:text-sm">Current / Target</TableHead>
-                      <TableHead className="min-w-[80px] text-xs sm:text-sm">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {instances.map((instance) => (
-                      <TableRow key={instance.id}>
-                        <TableCell className="text-xs sm:text-sm truncate max-w-[120px]">
-                          {`${instance.employee?.first_name || ""} ${instance.employee?.last_name || ""}`.trim()}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm">{instance.assigned_goal?.goal_type || "N/A"}</TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          {formatDate(instance.period_start)} - {formatDate(instance.period_end)}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          {instance.progress !== undefined ? `${instance.progress}%` : "N/A"}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          {instance.current_value !== undefined && instance.target_value !== undefined
-                            ? `${instance.current_value} / ${instance.target_value} ${goal.metric_unit || ""}`
-                            : "N/A"}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          <Badge className={getStatusColor(instance.status || "unknown")}>
-                            {instance.status || "Unknown"}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
+            <div className="flex items-center justify-center h-[400px] text-gray-500 bg-gray-50 rounded-lg">
+              <p>No data to display for the selected filters.</p>
             </div>
           )}
-          {instances.length === 0 && !filterError && (
-            <p className="text-center text-gray-500 mt-4 text-sm sm:text-base">
-              No historical instances found for {goalType || "this goal"}.
-            </p>
+        </CardContent>
+      </Card>
+
+      <Card className="w-full border border-gray-200 shadow-sm">
+        <CardHeader>
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Goal Instances ({selectedGoalType})
+              </CardTitle>
+              <p className="text-sm text-gray-500">
+                Start: {formatDate(goal.start_date)} - End: {formatDate(goal.end_date)}
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
+              <Tabs value={selectedGoalType} onValueChange={handleGoalTypeChange}>
+                <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full sm:w-auto">
+                  {availableGoalTypes.map((type) => (
+                    <TabsTrigger key={type} value={type}>
+                      {type}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+              <div className="flex items-center gap-2">
+                {(["current", "past", "upcoming"] as const).map((f) => (
+                  <Button
+                    key={f}
+                    size="sm"
+                    variant={instanceFilter === f ? "default" : "outline"}
+                    onClick={() => handleInstanceFilterChange(f)}
+                  >
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredInstances.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-500">
+                No {instanceFilter} instances found for {selectedGoalType}.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left"
+                      >
+                        Employee
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center"
+                      >
+                        Progress
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                      >
+                        Current / Target
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                      >
+                        Status
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                      >
+                        Period
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                      >
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {paginatedInstances.map((instance) => {
+                      const employee = employeeMap.get(instance.employee_id)
+                      if (!employee) return null
+                      const instanceProgress = instance.progress || 0
+
+                      return (
+                        <tr
+                          key={instance.id}
+                          className="transition-all duration-200 ease-in-out hover:shadow-sm hover:bg-gray-50"
+                        >
+                          <td className="px-4 py-4">
+                            <p className="font-medium text-sm text-gray-900">
+                              {employee.first_name} {employee.last_name}
+                            </p>
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <div className="flex flex-col items-center">
+                              <span className="text-sm font-medium">{instanceProgress}%</span>
+                              <Progress value={instanceProgress} className="h-2 w-24 mt-1" />
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-700">
+                            {editingInstanceId === instance.id ? (
+                              <div className="flex gap-2">
+                                <Input
+                                  type="number"
+                                  value={editCurrentValue}
+                                  onChange={(e) => setEditCurrentValue(Number(e.target.value))}
+                                  className="w-16"
+                                />
+                                <span>/</span>
+                                <Input
+                                  type="number"
+                                  value={editTargetValue}
+                                  onChange={(e) => setEditTargetValue(Number(e.target.value))}
+                                  className="w-16"
+                                />
+                                <span>{goal.metric_unit || "units"}</span>
+                              </div>
+                            ) : (
+                              `${instance.current_value || 0} / ${instance.target_value || 0} ${goal.metric_unit || "units"}`
+                            )}
+                          </td>
+                          <td className="px-4 py-4">
+                            <Badge className={getStatusColor(instance.status || "pending")}>
+                              {instance.status || "Pending"}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-500">
+                            {formatDate(instance.period_start)} - {formatDate(instance.period_end)}
+                          </td>
+                          <td className="px-4 py-4">
+                            {editingInstanceId === instance.id ? (
+                              <div className="flex gap-2">
+                                <Button variant="ghost" size="sm" onClick={() => handleSaveInstance(instance.id)}>
+                                  <Save className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => setEditingInstanceId(null)}>
+                                  Cancel
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-2">
+                                <Button variant="ghost" size="sm" onClick={() => handleEditInstance(instance)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-600"
+                                  onClick={() => handleDeleteInstance(instance.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
+          {renderPagination()}
         </CardContent>
       </Card>
     </div>
-  );
-};
+  )
+}
 
-export default GoalDetailView;
+export default GoalDetailView

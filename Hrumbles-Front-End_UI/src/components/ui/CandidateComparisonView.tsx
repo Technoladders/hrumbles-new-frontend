@@ -6,18 +6,20 @@ import { motion } from 'framer-motion';
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
-// This interface must include the resume_url for the button to work
+// --- NEW: Updated Interface to match the detailed structure ---
 export interface ParsedCandidateProfile {
   fileName: string;
-  candidate_name?: string;
+  candidate_name: string;
   location?: string;
   summary?: string;
   education_summary?: string;
-  validation_score?: number;
-  matched_skills?: string[];
-  unmatched_skills?: string[];
   experience_years?: string;
-  resume_url?: string; // This is the temporary URL
+  overall_match_score?: number;
+  matched_skills?: { requirement: string; matched: string; details: string }[];
+  missing_or_weak_areas?: string[];
+  top_skills?: string[];
+  resume_url?: string;
+  // Add other fields from the Edge Function if you want to display them
 }
 
 // Props for the main component
@@ -121,7 +123,7 @@ export const CandidateComparisonView: React.FC<CandidateComparisonViewProps> = (
                 <div className="px-4 pb-4 flex justify-between items-center border-b border-gray-200">
                   <div>
                     <p className="text-xs text-gray-500">Recommended Score</p>
-                    <p className="text-4xl font-bold text-purple-600">{candidate.validation_score || 'N/A'}<span className="text-2xl">%</span></p>
+                    <p className="text-4xl font-bold text-purple-600">{candidate.overall_match_score || 'N/A'}<span className="text-2xl">%</span></p>
                   </div>
                   <div className="flex items-center gap-1">
                     <Button onClick={() => handleViewResume(candidate)} variant="ghost" size="icon" className="h-9 w-9 text-gray-500 hover:text-purple-600" title="View Resume">
@@ -141,13 +143,25 @@ export const CandidateComparisonView: React.FC<CandidateComparisonViewProps> = (
                   <CardSection icon={<FileText size={14} className="text-gray-400"/>} title="Profile Summary"><p className="text-xs">{candidate.summary}</p></CardSection>
                   <CardSection icon={<Grip size={14} className="text-gray-400"/>} title="Experience"><p className="text-sm font-medium">{candidate.experience_years}</p></CardSection>
                   <CardSection icon={<BookOpen size={14} className="text-gray-400"/>} title="Education"><p className="text-sm font-medium">{candidate.education_summary}</p></CardSection>
-                  <CardSection icon={<Check size={14} className="text-gray-400"/>} title="Matched Skills"><div className="flex flex-wrap gap-1.5">{candidate.matched_skills?.map(skill => <Badge key={skill} className="bg-green-100 text-green-800 font-medium">{skill}</Badge>)}</div></CardSection>
-                    <CardSection icon={<X size={14} className="text-gray-400"/>} title="Missed Skills for this Role">
+                  <CardSection icon={<Check size={14} className="text-gray-400"/>} title="Matched Skills">
                     <div className="flex flex-wrap gap-1.5">
-                      {candidate.missed_skills?.map(skill => <Badge key={skill} variant="destructive" className="bg-red-100 text-red-800">{skill}</Badge>)}
+                      {candidate.matched_skills?.map(skill => (
+                        <Badge key={skill.requirement} className="bg-green-100 text-green-800 font-medium" title={skill.details}>
+                          {skill.requirement}
+                        </Badge>
+                      ))}
                     </div>
                   </CardSection>
-                  <CardSection icon={<BrainCircuit size={14} className="text-gray-400"/>} title="Non-Matched Skills"><div className="flex flex-wrap gap-1.5">{candidate.unmatched_skills?.map(skill => <Badge key={skill} variant="secondary">{skill}</Badge>)}</div></CardSection>
+                  <CardSection icon={<X size={14} className="text-gray-400"/>} title="Missing Skills for this Role">
+                    <div className="flex flex-wrap gap-1.5">
+                      {candidate.missing_or_weak_areas?.map(skill => <Badge key={skill} variant="destructive" className="bg-red-100 text-red-800">{skill}</Badge>)}
+                    </div>
+                  </CardSection>
+                  <CardSection icon={<BrainCircuit size={14} className="text-gray-400"/>} title="Additional Skills">
+                    <div className="flex flex-wrap gap-1.5">
+                      {candidate.top_skills?.map(skill => <Badge key={skill} variant="secondary">{skill}</Badge>)}
+                    </div>
+                  </CardSection>
                 </div>
               </motion.div>
             )

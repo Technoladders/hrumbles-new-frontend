@@ -415,6 +415,7 @@ export const createGoal = async (
     source_table?: string;
     source_value_column?: string;
     source_employee_column?: string;
+    source_date_table?: string;
     source_date_column?: string;
     source_filter_conditions?: Record<string, string>;
   }
@@ -447,6 +448,7 @@ const authData = getAuthDataFromLocalStorage();
         source_table: goal.source_table,
         source_value_column: goal.source_value_column,
         source_employee_column: goal.source_employee_column,
+        source_date_table: goal.source_date_table,
         source_date_column: goal.source_date_column,
         source_filter_conditions: goal.source_filter_conditions,
       })
@@ -493,7 +495,9 @@ export const assignGoalToEmployees = async (
   goalId: string,
   employeeIds: string[],
   goalType: GoalType,
-  employeeTargets: EmployeeGoalTarget[]
+  employeeTargets: EmployeeGoalTarget[],
+  startDate: string,
+  endDate: string
 ) => {
   const { data: goal } = await supabase
     .from('hr_goals')
@@ -522,7 +526,9 @@ const authData = getAuthDataFromLocalStorage();
         current_value: 0,
         progress: 0,
         status: 'pending',
-        organization_id: organization_id
+        organization_id: organization_id,
+        start_date: startDate,
+        end_date: endDate,
       })
       .select()
       .single();

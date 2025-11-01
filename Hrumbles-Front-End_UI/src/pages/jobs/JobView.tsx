@@ -211,7 +211,7 @@ const JobView = () => {
   onSelect={() => setIsAddTalentPoolModalOpen(true)}
   // --- THIS IS THE FIX ---
   // This disables the button if the job is loading or has no skills
-  disabled={jobLoading || !job?.skills} 
+  disabled={jobLoading || !job} 
   className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
 >
   <FileText className="h-5 w-5 mt-1 text-blue-500" />

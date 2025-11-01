@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { Link } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { MoreHorizontal, Target, Trash2, List, UserMinus, Edit } from 'lucide-react';
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,13 +17,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import EditGoalForm from "@/components/goals/goals/EditGoalForm";
 import GoalInstancesDialog from '@/components/goals/common/GoalInstancesDialog';
 import { useGoalManagement } from '@/hooks/useGoalManagement';
 import { useToast } from '@/hooks/use-toast';
-import { extendEmployeeGoalTarget, removeEmployeeFromGoal } from '@/lib/goalService';
-import { GoalWithDetails, AssignedGoal, Employee } from '@/types/goal';
+import { removeEmployeeFromGoal } from '@/lib/goalService';
+import { GoalWithDetails, AssignedGoal, Employee, GoalInstance } from '@/types/goal';
 import { cn } from '@/lib/utils';
+// ADD: Import your new wizard for editing
+import CreateAndAssignGoalWizard from '@/components/goals/wizard/CreateAndAssignGoalWizard';
+import EditGoalFlow from "@/components/goals/goals/EditGoalFlow";
+
 
 interface GoalCardProps {
   goal: GoalWithDetails;
@@ -37,10 +40,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isInstancesDialogOpen, setIsInstancesDialogOpen] = useState(false);
-  const [selectedAssignedGoal, setSelectedAssignedGoal] = useState<AssignedGoal | null>(null);
-  const [isExtendDialogOpen, setIsExtendDialogOpen] = useState(false);
-  const [additionalTargetValue, setAdditionalTargetValue] = useState(0);
-    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
   const goalTypes = ["Daily", "Weekly", "Monthly", "Yearly"];
   const defaultTab = useMemo(() => goalTypes.find(type => goal.assignments?.some(a => a.goal_type === type)) || "Daily", [goal.assignments]);
@@ -59,7 +59,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
   const activeGoalTypes = useMemo(() => {
     return goalTypes.filter(type => assignmentsByType[type].length > 0);
   }, [assignmentsByType]);
-
+  
   const employeeMap = useMemo(() => {
     const map = new Map<string, Employee>();
     goal.assignedTo?.forEach(employee => {
@@ -72,28 +72,31 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
     return map;
   }, [goal.assignedTo]);
 
-  const currentPeriodAssignments = useMemo(() => {
-    const assignments = assignmentsByType[selectedGoalType] || [];
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    return assignments.filter(assignment => {
-      if (!assignment.period_end) return false;
-      const parts = assignment.period_end.split('-').map(p => parseInt(p, 10));
-      const periodEndDate = new Date(parts[0], parts[1] - 1, parts[2]);
-      return periodEndDate >= today;
-    });
+  // --- MAJOR LOGIC REFACTOR ---
+  // Find the single active instance for today for each assignment of the selected type.
+  const activePeriodData = useMemo(() => {
+    const today = new Date();
+    const assignmentsForType = assignmentsByType[selectedGoalType] || [];
+
+    return assignmentsForType.map(assignment => {
+      const activeInstance = (assignment.instances || []).find(inst => 
+        isWithinInterval(today, {
+          start: startOfDay(new Date(inst.period_start)),
+          end: endOfDay(new Date(inst.period_end))
+        })
+      );
+      return { assignment, activeInstance };
+    }).filter(item => item.activeInstance); // Filter out assignments with no active instance for today
   }, [assignmentsByType, selectedGoalType]);
-  
+
   const overallProgress = useMemo(() => {
-    if (currentPeriodAssignments.length === 0) return 0;
-    const totalTarget = currentPeriodAssignments.reduce((sum, a) => sum + (a.target_value || 0), 0);
-    const totalCurrent = currentPeriodAssignments.reduce((sum, a) => sum + (a.current_value || 0), 0);
+    if (activePeriodData.length === 0) return 0;
+    const totalTarget = activePeriodData.reduce((sum, data) => sum + (data.activeInstance?.target_value || 0), 0);
+    const totalCurrent = activePeriodData.reduce((sum, data) => sum + (data.activeInstance?.current_value || 0), 0);
     if (totalTarget === 0) return 0;
     return Math.min(Math.round((totalCurrent / totalTarget) * 100), 100);
-  }, [currentPeriodAssignments]);
+  }, [activePeriodData]);
 
-
-  
   const handleRemoveEmployeeFromGoal = async (assignedGoalId: string) => {
     const success = await removeEmployeeFromGoal(assignedGoalId);
     if (success) {
@@ -101,18 +104,6 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
       onUpdate?.();
     } else {
       toast({ title: "Error", description: "Failed to remove employee.", variant: "destructive" });
-    }
-  };
-
-  const handleExtendTarget = async () => {
-    if (!selectedAssignedGoal) return;
-    const result = await extendEmployeeGoalTarget(selectedAssignedGoal.id, additionalTargetValue);
-    if (result) {
-      toast({ title: "Target Extended" });
-      setIsExtendDialogOpen(false);
-      onUpdate?.();
-    } else {
-      toast({ title: "Error", description: "Failed to extend target.", variant: "destructive" });
     }
   };
 
@@ -153,12 +144,6 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
     }
   };
 
- 
-
-
-
- 
-
   return (
     <>
       <Card className="flex flex-col h-full hover:shadow-lg transition-shadow duration-300">
@@ -171,7 +156,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => setIsEditDialogOpen(true)}>
-                  <Edit className="h-4 w-4 mr-2" />Edit Goal
+                  <Edit className="h-4 w-4 mr-2" />Edit / Assign
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setIsInstancesDialogOpen(true)}>
                   <List className="h-4 w-4 mr-2" />View All Instances
@@ -185,9 +170,8 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
           </div>
           <div className="flex items-center gap-2 pt-1">
             <Badge variant="secondary">{goal.sector || 'General'}</Badge>
-            {/* <Badge variant="outline">{currentPeriodAssignments.length} Assigned</Badge> */}
+            <Badge variant="outline">{activePeriodData.length} Active Today</Badge>
           </div>
-           {/* <div className="text-sm text-gray-500">{goal.description || 'No description'}</div> */}
         </CardHeader>
 
         <CardContent className="flex-grow">
@@ -199,7 +183,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
             </TabsList>
 
             <TabsContent value={selectedGoalType} className="mt-4 space-y-4">
-              {currentPeriodAssignments.length > 0 ? (
+              {activePeriodData.length > 0 ? (
                 <>
                   <div>
                     <div className="flex justify-between items-center text-xs text-gray-500 mb-1">
@@ -212,51 +196,42 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
                     <div className="flex items-center text-gray-600">
                       <Target className="h-4 w-4 mr-2 text-gray-400" />
                       <span className="font-medium">
-                        {currentPeriodAssignments.reduce((sum, a) => sum + a.current_value, 0)} / {currentPeriodAssignments.reduce((sum, a) => sum + a.target_value, 0)}
+                        {activePeriodData.reduce((sum, data) => sum + (data.activeInstance?.current_value || 0), 0)} / {activePeriodData.reduce((sum, data) => sum + (data.activeInstance?.target_value || 0), 0)}
                       </span>
                       <span className="ml-1 text-gray-500">{goal.metric_unit || 'units'}</span>
                     </div>
-                    <div className="text-xs text-gray-500">{formatDate(currentPeriodAssignments[0]?.period_end)}</div>
+                    <div className="text-xs text-gray-500">{formatDate(activePeriodData[0]?.activeInstance?.period_end)}</div>
                   </div>
                   
-                  {/* <Button variant="outline" className="w-full" onClick={() => setIsInstancesDialogOpen(true)}>
-                    <List className="h-4 w-4 mr-2" /> View All Instances
-                  </Button> */}
-
-                  <Accordion type="single" collapsible className="w-full">
+                  <Accordion type="single" collapsible defaultValue="employees" className="w-full">
                     <AccordionItem value="employees">
                       <AccordionTrigger className="text-sm font-medium">
-                        <div className="flex items-center">Assigned Employees<Badge variant="outline" className="ml-2">{currentPeriodAssignments.length}</Badge></div>
+                        <div className="flex items-center">Assigned Employees<Badge variant="outline" className="ml-2">{activePeriodData.length}</Badge></div>
                       </AccordionTrigger>
                       <AccordionContent>
                         <ScrollArea className="max-h-48 pr-3">
                           <div className="space-y-4">
-                            {currentPeriodAssignments.map((assignment) => {
+                            {activePeriodData.map(({ assignment, activeInstance }) => {
+                              if (!activeInstance) return null;
                               const employee = employeeMap.get(assignment.employee_id);
                               if (!employee) return null;
-                              const employeeProgress = (assignment.target_value || 0) > 0 ? Math.min(Math.round(((assignment.current_value || 0) / (assignment.target_value || 1)) * 100), 100) : 0;
+                              
                               return (
                                 <div key={assignment.id} className="flex items-center gap-2">
                                   <div className="flex-grow">
                                     <div className="flex justify-between items-center text-sm mb-1">
                                       <span className="font-medium text-gray-800 truncate pr-2">{employee.first_name} {employee.last_name}</span>
-                                      <Badge variant="outline" className={`${getStatusColor(assignment.status)} text-xs`}>{assignment.status}</Badge>
+                                      <Badge variant="outline" className={`${getStatusColor(activeInstance.status)} text-xs`}>{activeInstance.status}</Badge>
                                     </div>
-                                    <Progress value={employeeProgress} className="h-1.5 mb-1" />
+                                    <Progress value={activeInstance.progress || 0} className="h-1.5 mb-1" />
                                     <div className="text-xs text-gray-500 text-right">
-                                      {assignment.current_value || 0} / {assignment.target_value || 0}
+                                      {activeInstance.current_value || 0} / {activeInstance.target_value || 0}
                                     </div>
                                   </div>
                                   <DropdownMenu>
+                                    {/* Simplified Dropdown - We can add more actions later if needed */}
                                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onClick={() => {
-                                        setSelectedAssignedGoal({ ...assignment, employee });
-                                        setAdditionalTargetValue(Math.round((assignment.target_value || 0) * 0.1));
-                                        setIsExtendDialogOpen(true);
-                                      }}>
-                                        <Target className="h-4 w-4 mr-2" />Extend Target
-                                      </DropdownMenuItem>
                                       <DropdownMenuItem onClick={() => handleRemoveEmployeeFromGoal(assignment.id)} className="text-red-600">
                                         <UserMinus className="h-4 w-4 mr-2" />Remove Employee
                                       </DropdownMenuItem>
@@ -272,7 +247,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
                   </Accordion>
                 </>
               ) : (
-                <p className="text-sm text-gray-500 text-center py-4">No active assignments for this period.</p>
+                <p className="text-sm text-gray-500 text-center py-4">No assignments are active for today's period.</p>
               )}
             </TabsContent>
           </Tabs>
@@ -280,7 +255,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
       </Card>
       
       <GoalInstancesDialog open={isInstancesDialogOpen} onOpenChange={setIsInstancesDialogOpen} goalId={goal.id} goalName={goal.name} goalType={selectedGoalType} metricUnit={goal.metric_unit || 'units'} onUpdate={onUpdate} />
-          <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -295,30 +270,12 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
         </AlertDialogContent>
       </AlertDialog>
       
-      <Dialog open={isExtendDialogOpen} onOpenChange={setIsExtendDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Extend Target Value</DialogTitle>
-            <DialogDescription>Extend the target for {selectedAssignedGoal?.employee.first_name}'s goal.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="additional-target" className="text-right">Additional</Label>
-              <Input id="additional-target" type="number" value={additionalTargetValue} onChange={(e) => setAdditionalTargetValue(Number(e.target.value))} className="col-span-3" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsExtendDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleExtendTarget}>Extend Target</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* --- NEW DIALOG FOR EDITING --- */}
+      {/* --- REPLACED EDIT FORM WITH THE WIZARD --- */}
+      {/* NOTE: We're reusing the wizard for a unified "Edit / Assign" experience */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <EditGoalForm goal={goal} onClose={() => {
+       <EditGoalFlow goal={goal} onClose={() => {
           setIsEditDialogOpen(false);
-          onUpdate?.(); // Refresh the main page data when the form closes
+          onUpdate?.(); // This onUpdate prop is now critical to refresh the card
         }} />
       </Dialog>
     </>

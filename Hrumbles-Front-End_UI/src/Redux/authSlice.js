@@ -107,6 +107,7 @@ const storedAuth = JSON.parse(localStorage.getItem("authState")) || {
   organization_id: null,
   loading: false,
   error: null,
+  isLoggingOut: false,
 };
 
 // ✅ Fetch user session, role, and permissions
@@ -174,11 +175,15 @@ const authSlice = createSlice({
   name: "auth",
   initialState: storedAuth, // ✅ Load from localStorage
   reducers: {
+    setLoggingOut: (state, action) => {
+      state.isLoggingOut = action.payload;
+    },
     logout: (state) => {
       state.user = null;
       state.role = null;
       state.permissions = [];
       state.organization_id = null;
+      state.isLoggingOut = false;
       localStorage.removeItem("authState"); // ✅ Clear session on logout
     },
   },
@@ -199,6 +204,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout } = authSlice.actions;
+export const { logout, setLoggingOut } = authSlice.actions;
 export default authSlice.reducer;
 

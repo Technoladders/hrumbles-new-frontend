@@ -44,7 +44,7 @@ export const generateUanHistoryPdfGridlines = (candidate: Candidate, result: any
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('Employment History (Verified by Gridlines)', 14, 25);
+  doc.text('Employment History Verified', 14, 25);
 
   const tableHead = [
     [

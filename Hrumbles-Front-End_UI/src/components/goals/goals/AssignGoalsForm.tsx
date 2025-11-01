@@ -18,6 +18,7 @@ import { X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getGoals, getEmployees, assignGoalToEmployees } from "@/lib/supabaseData";
 import { Employee, EmployeeGoalTarget, Goal, GoalType } from "@/types/goal";
+import { format } from "date-fns";
 
 interface AssignGoalsFormProps {
   onClose: () => void;
@@ -39,6 +40,8 @@ const AssignGoalsForm: React.FC<AssignGoalsFormProps> = ({ onClose, preselectedG
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [selectedEmployees, setSelectedEmployees] = useState<Employee[]>([]);
   const [goalType, setGoalType] = useState<GoalType>("Monthly");
+  const [startDate, setStartDate] = useState<Date | undefined>();
+  const [endDate, setEndDate] = useState<Date | undefined>();
   const [employeeTargets, setEmployeeTargets] = useState<Map<string, number | undefined>>(new Map());
   
   const queryClient = useQueryClient();
@@ -132,6 +135,9 @@ const AssignGoalsForm: React.FC<AssignGoalsFormProps> = ({ onClose, preselectedG
       if (!selectedGoalId || selectedEmployees.length === 0) {
         throw new Error("Please select a goal and at least one employee");
       }
+       if (endDate < startDate) {
+                throw new Error("End date cannot be before the start date.");
+            }
 
       const employeeGoalTargets: EmployeeGoalTarget[] = selectedEmployees.map(
         (employee) => ({
@@ -139,8 +145,10 @@ const AssignGoalsForm: React.FC<AssignGoalsFormProps> = ({ onClose, preselectedG
           targetValue: employeeTargets.get(employee.id) ?? (selectedGoal?.targetValue || 0),
         })
       );
+      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+            const formattedEndDate = format(endDate, 'yyyy-MM-dd');
 
-      return await assignGoalToEmployees(selectedGoalId, selectedEmployees.map((e) => e.id), goalType, employeeGoalTargets);
+      return await assignGoalToEmployees(selectedGoalId, selectedEmployees.map((e) => e.id), goalType, employeeGoalTargets, formattedStartDate, formattedEndDate);
     },
     onSuccess: () => {
       toast.success("Goals assigned successfully!");
@@ -163,6 +171,20 @@ const AssignGoalsForm: React.FC<AssignGoalsFormProps> = ({ onClose, preselectedG
       ) : (
         <form onSubmit={(e) => { e.preventDefault(); assignGoalsMutation.mutate(); }} className="space-y-6">
           {/* Department Selection (exact match to reference) */}
+
+           {/* --- NEW: Date pickers for assignment period --- */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <Label htmlFor="start-date" className="text-sm font-medium">Start Date</Label>
+                        {/* Replace with your actual DatePicker component */}
+                        <Input type="date" value={startDate ? format(startDate, 'yyyy-MM-dd') : ''} onChange={(e) => setStartDate(new Date(e.target.value))} />
+                    </div>
+                    <div>
+                        <Label htmlFor="end-date" className="text-sm font-medium">End Date</Label>
+                        {/* Replace with your actual DatePicker component */}
+                        <Input type="date" value={endDate ? format(endDate, 'yyyy-MM-dd') : ''} onChange={(e) => setEndDate(new Date(e.target.value))} />
+                    </div>
+                </div>
           {isContextualMode ? (
             <div className="space-y-4 rounded-md border p-4 bg-gray-50/50">
               <div>
@@ -281,6 +303,7 @@ const AssignGoalsForm: React.FC<AssignGoalsFormProps> = ({ onClose, preselectedG
               disabled={
                 !selectedGoalId ||
                 selectedEmployees.length === 0 ||
+                !startDate || !endDate ||
                 assignGoalsMutation.isPending
               }
             >

@@ -34,7 +34,7 @@ export function DataTable<TData, TValue>({
   return (
     <div className="absolute inset-0 overflow-auto">
       <Table className="min-w-full table-fixed">
-        <TableHeader className="bg-gray-50/95 sticky top-0 z-10 backdrop-blur-sm">
+         <TableHeader className="bg-purple-600 sticky top-0 z-10">
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => {
@@ -44,7 +44,7 @@ export function DataTable<TData, TValue>({
                   position: isSticky ? 'sticky' : 'relative',
                   left: header.column.id === 'select' ? 0 : header.column.id === 'name' ? 40 : undefined, // 40px is the width of the select column
                   zIndex: isSticky ? 20 : 10, // Higher z-index for sticky columns
-                  backgroundColor: isSticky ? '#f9fafb' : undefined, // Match TableHeader bg
+                   backgroundColor: isSticky ? '#5e39e5ff' : undefined, // Match TableHeader bg
                 };
 
                 return (

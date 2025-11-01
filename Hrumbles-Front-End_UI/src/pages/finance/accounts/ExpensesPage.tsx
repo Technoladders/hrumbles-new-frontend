@@ -86,6 +86,22 @@ const ExpensesPage: React.FC = () => {
 
   const navigate = useNavigate();
 
+
+const [newExpenseData, setNewExpenseData] = useState({
+  category: 'Office Supplies',
+  description: '',
+  date: new Date().toISOString().split('T')[0],
+  amount: '',
+  displayAmount: '',
+  paymentMethod: 'Cash',
+  vendor: '',
+  notes: '',
+  receiptUrl: '',
+  fileToUpload: null,
+});
+
+const [editExpenseData, setEditExpenseData] = useState<any>(null);
+
   const selectedExpense = selectedExpenseId
     ? expenses.find(exp => exp.id === selectedExpenseId)
     : null;
@@ -1002,9 +1018,9 @@ const ExpensesPage: React.FC = () => {
             <Button onClick={() => setIsAddDialogOpen(true)}>
               Add Expense
             </Button>
-          </div>
+          </div>     
         </div>
-
+                              
         <div className="w-full">
           <div className="flex justify-start gap-2 overflow-x-auto pb-2 mb-4 border-b">
             <Button
@@ -1213,16 +1229,22 @@ const ExpensesPage: React.FC = () => {
         </div>
       </div>
 
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Add New Expense</DialogTitle>
-          </DialogHeader>
-          <ExpenseForm 
-            onClose={() => setIsAddDialogOpen(false)} 
-          />
-        </DialogContent>
-      </Dialog>
+  <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+  <DialogContent className="max-w-2xl">
+    <DialogHeader>
+      <DialogTitle>Add New Expense</DialogTitle>
+    </DialogHeader>
+    {/* MODIFIED: We are now passing new props to the ExpenseForm */}
+    <ExpenseForm 
+      onClose={() => setIsAddDialogOpen(false)}
+      // NEW PROP: Pass the form data down
+      expenseData={newExpenseData}
+      // NEW PROP: Pass a function to update the form data
+      setExpenseData={setNewExpenseData}
+    />
+  </DialogContent>
+</Dialog>
+
 
       <Dialog open={isViewDialogOpen} onOpenChange={handleViewDialogClose}>
         <DialogContent className="max-w-4xl">
