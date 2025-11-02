@@ -34,6 +34,28 @@ const ProtectedRoute = () => {
         return;
       }
 
+      const FEATURE_LIVE_DATE = '2025-11-02'; 
+      // ------------------------------------------------
+
+      // Make sure your Redux 'user' object includes 'created_at' from the database
+      if (user.created_at) {
+        const userCreationDate = new Date(user.created_at);
+        const featureLiveDate = new Date(FEATURE_LIVE_DATE);
+
+        // If the user was created before the feature went live, they are exempt.
+        if (userCreationDate < featureLiveDate) {
+          setAuthStatus({
+            isAuthenticated: true,
+            canProceed: true, // Grant access immediately
+            redirectPath: null,
+          });
+          setLoading(false);
+          return; // <-- Important: Stop further checks for existing users
+        }
+      } else {
+          console.warn("ProtectedRoute: `user.created_at` is missing. Cannot determine if user is new or existing. Proceeding with completion check for all users.");
+      }
+
       // 2. Check if the current route should be exempt from profile checks
       const profileRelatedPaths = ["/complete-profile", "/employee/"];
       const isProfilePage = profileRelatedPaths.some((path) =>

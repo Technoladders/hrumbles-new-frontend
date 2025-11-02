@@ -456,22 +456,7 @@ const handleLogin = async (): Promise<void> => {
 
         await dispatch(fetchUserSession()).unwrap();
 
-        // --- PROFILE COMPLETION CHECK ---
-        console.log("Checking profile completion for user:", userId);
-        const { completionPercentage } = await calculateProfileCompletion(userId);
-        console.log("Profile completion result:", { percentage: completionPercentage });
-
-        sessionStorage.setItem("profileCompletion", JSON.stringify({
-            percentage: completionPercentage,
-            canAccess: completionPercentage >= 40,
-        }));
-
-        if (completionPercentage < 40) {
-            console.log("❌ Profile < 40% - Redirecting to complete profile");
-            toast.error("Please complete your profile to access the dashboard.");
-            navigate("/complete-profile", { state: { from: "/dashboard" } });
-            return; // Stop execution here
-        }
+       
 
         // --- NAVIGATION LOGIC ---
         let navigateTo = "/dashboard"; 
@@ -482,10 +467,7 @@ const handleLogin = async (): Promise<void> => {
         console.log("--- LOGIN PROCESS COMPLETED ---");
         navigate(navigateTo);
 
-        if (completionPercentage < 80) {
-            toast.info(`Your profile is ${completionPercentage}% complete. Finish it to unlock all features.`);
-        }
-
+    
     } catch (error: any) {
         console.error("🔴 LOGIN FAILED:", error.message);
         setError(error.message);
