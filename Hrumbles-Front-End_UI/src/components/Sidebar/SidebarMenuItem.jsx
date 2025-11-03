@@ -425,6 +425,7 @@ employee: (departmentName, designationName, userId) => {
 
     const hrSpecificItems = [
       { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
+      { icon: AiOutlineProfile, label: "My Submission", path: "/my-submission" },
       { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
   { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
       { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", beta: true },

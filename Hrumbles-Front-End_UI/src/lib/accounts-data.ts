@@ -61,6 +61,13 @@ export interface Expense {
   receiptUrl?: string;
   notes?: string;
   vendor?: string;
+   vendorAddress?: string;
+  invoiceNumber?: string;
+  taxableAmount?: number;
+  cgst?: number;
+  sgst?: number;
+  hsn?: string;
+  sac?: string;
   organizationId?: string;
   createdBy?: string;
   status?: string;
@@ -747,22 +754,37 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         return;
       }
 
+   // --- THIS MAPPING IS THE PROBLEM - REPLACE IT ---
       const expenses: Expense[] = expensesData.map((expense: any) => ({
         id: expense.id,
         category: expense.category as ExpenseCategory,
         description: expense.description,
-        date: formatDate(expense.date),
+        date: expense.date, // Correct: No formatting here
         amount: expense.amount,
         paymentMethod: expense.payment_method as PaymentMethod,
         receiptUrl: expense.receipt_url || undefined,
         notes: expense.notes || undefined,
         vendor: expense.vendor || undefined,
+        
+        // --- ADD THIS MAPPING FOR ALL MISSING FIELDS ---
+        vendorAddress: expense.vendor_address || undefined,
+        invoiceNumber: expense.invoice_number || undefined,
+        taxableAmount: expense.taxable_amount, // Keep as number or null
+        cgst: expense.cgst, // Keep as number or null
+        sgst: expense.sgst, // Keep as number or null
+        hsn: expense.hsn || undefined,
+        sac: expense.sac || undefined,
+        // --- END OF FIX ---
+        
         organizationId: expense.organization_id || undefined,
         createdBy: expense.created_by || undefined,
         status: expense.status || undefined,
         createdAt: expense.created_at || undefined,
         updatedAt: expense.updated_at || undefined,
       }));
+      // --- END OF REPLACEMENT ---
+
+
 
       set({
         expenses,

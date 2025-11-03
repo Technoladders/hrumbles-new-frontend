@@ -68,6 +68,8 @@ import EmployeeGoalView from "./components/goals/employee/EmployeeGoalDashboard"
 import GoalDetailView from "./components/goals/dashboard/GoalDetailView";
 import EmployeeGoalDetail from "./pages/goals/EmployeeGoalDetail";
 
+import MySubmissionsReport from "./pages/reports/MySubmissionsReport";
+
 // New CLients
 import ClientNew from "./pages/ClientNew/page";
 
@@ -357,6 +359,8 @@ function AppContent() {
 
               <Route path="/jobs/:jobId/candidate/:candidateId/bgv" element={<CandidateBgvProfilePage />} />
               <Route path="/all-candidates" element={<AllCandidatesPage />} /> 
+
+              <Route path="/my-submission" element={<MySubmissionsReport />} />
 
               {/* Candidates */}
               <Route path="/talent-pool" element={<TalentPoolPage />} />

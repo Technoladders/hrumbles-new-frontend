@@ -4,21 +4,23 @@ import { useSelector } from 'react-redux';
 import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import moment from 'moment';
+import { useDebounce } from 'use-debounce'; // NEW: For debouncing search input
 
-// Import UI components and icons
+// Import UI components and icons (These remain the same)
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Users, UserPlus, Search, History, ChevronsRight, Calendar,
   ChevronLeft, ChevronRight, Briefcase, ScanSearch, Mail, Phone, Copy, Sparkles,
   CheckCircle
 } from 'lucide-react';
 
-// Import your modals and custom components
+// Import your modals and custom components (These remain the same)
 import AddCandidateModal from '@/components/candidates/talent-pool/AddCandidateModal';
 import CompareWithJobDialog from '@/components/candidates/talent-pool/CompareWithJobDialog';
 import AnalysisHistoryDialog from '@/components/candidates/AnalysisHistoryDialog';
@@ -26,7 +28,7 @@ import Loader from '@/components/ui/Loader';
 import EnrichDataDialog from '@/components/candidates/talent-pool/EnrichDataDialog';
 import CircularProgress from '@/components/jobs/ui/CircularProgress';
 
-// Define the main interface for a candidate
+// Define the main interface for a candidate (This remains the same)
 export interface TalentPoolCandidate {
   id: string;
   candidate_name: string;
@@ -41,7 +43,7 @@ export interface TalentPoolCandidate {
   [key: string]: any; // Allows for other dynamic properties
 }
 
-// Define the shape of the Redux state for useSelector
+// Define the shape of the Redux state for useSelector (This remains the same)
 interface RootState {
   auth: {
     role: string;
@@ -49,7 +51,7 @@ interface RootState {
   };
 }
 
-// Profile Completion Calculator Logic
+// Profile Completion Calculator Logic (This function remains unchanged)
 const calculateProfileCompletion = (candidate: TalentPoolCandidate) => {
     const fieldsToCheck = [
       { key: 'phone', label: 'Phone Number' },
@@ -97,6 +99,10 @@ const TalentPoolPage: FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(parseInt(searchParams.get("page") || "1", 10));
   const [itemsPerPage, setItemsPerPage] = useState<number>(parseInt(searchParams.get("limit") || "20", 10));
 
+  // NEW: Debounce the search term to avoid firing queries on every keystroke.
+  // The query will only run 500ms after the user stops typing.
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
+
   const [isAddModalOpen, setAddModalOpen] = useState<boolean>(false);
   const [compareCandidate, setCompareCandidate] = useState<TalentPoolCandidate | null>(null);
   const [historyCandidate, setHistoryCandidate] = useState<TalentPoolCandidate | null>(null);
@@ -104,6 +110,7 @@ const TalentPoolPage: FC = () => {
 
   const [copiedValue, setCopiedValue] = useState<'email' | 'phone' | null>(null);
 
+  // This useEffect for managing URL search params remains the same and is good practice.
   useEffect(() => {
     const params = new URLSearchParams();
     if (searchTerm) params.set("search", searchTerm);
@@ -119,79 +126,189 @@ const TalentPoolPage: FC = () => {
     setTimeout(() => { setCopiedValue(null); }, 1500);
   };
 
- const { data: candidates = [], isLoading, refetch } = useQuery({
-    queryKey: ['talentPoolCandidates', role, user?.id],
+ // --- REFACTORED: Main data fetching logic ---
+ const { data, isLoading, refetch } = useQuery({
+    // CHANGED: The queryKey now includes all server-side dependencies.
+    // react-query will automatically refetch when any of these change.
+    queryKey: ['talentPoolCandidates', role, user?.id, currentPage, itemsPerPage, debouncedSearchTerm],
     queryFn: async () => {
+      // Calculate the range for pagination
+      const from = (currentPage - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
+
       let query = supabase
         .from('hr_talent_pool')
+        // CHANGED: Request the total count of matching records from the server.
         .select(`
-          id,
-          candidate_name,
-          email,
-          phone,
-          suggested_title,
-          created_at,
-          current_salary,
-          current_location,
-          total_experience,
-          current_company,
-          current_designation,
-          notice_period,
-          highest_education,
-          work_experience,
-          created_by:hr_employees!hr_talent_pool_created_by_fkey (
-            first_name,
-            last_name
-          )
-        `);
+          id, candidate_name, email, phone, suggested_title, created_at, current_salary,
+          current_location, total_experience, current_company, current_designation,
+          notice_period, highest_education, work_experience,
+          created_by:hr_employees!hr_talent_pool_created_by_fkey (first_name, last_name)
+        `, { count: 'exact' });
 
       if (role === '' && user?.id) {
         query = query.eq('created_by', user.id);
       }
+
+      // CHANGED: Apply search filter on the server using the debounced term.
+      if (debouncedSearchTerm) {
+        const searchTermForQuery = `%${debouncedSearchTerm}%`;
+        query = query.or(
+          `candidate_name.ilike.${searchTermForQuery},email.ilike.${searchTermForQuery},phone.ilike.${searchTermForQuery}`
+        );
+      }
       
-      const { data, error } = await query.order('created_at', { ascending: false });
+      // CHANGED: Apply server-side pagination.
+      query = query.range(from, to).order('created_at', { ascending: false });
+
+      const { data: queryData, error, count } = await query;
 
       if (error) throw new Error(error.message);
-      return data as TalentPoolCandidate[];
+      
+      // CHANGED: Return both the data for the current page and the total count.
+      return { candidates: queryData as TalentPoolCandidate[], totalCount: count ?? 0 };
     },
     enabled: !!user,
   });
 
-  const totalCandidates = candidates.length;
-  const addedThisMonth = useMemo(() => candidates.filter(c => moment(c.created_at).isSame(moment(), 'month')).length, [candidates]);
-  const addedThisWeek = useMemo(() => candidates.filter(c => moment(c.created_at).isSame(moment(), 'week')).length, [candidates]);
+  // CHANGED: Get paginated data and total count from the query result.
+  const paginatedCandidates = data?.candidates ?? [];
+  const totalCandidates = data?.totalCount ?? 0;
+  const totalPages = Math.ceil(totalCandidates / itemsPerPage);
 
-  const filteredCandidates = useMemo(() => {
-    if (!searchTerm) return candidates;
-    return candidates.filter((c) => {
-      const term = searchTerm.toLowerCase();
-      return (
-        c.candidate_name?.toLowerCase().includes(term) ||
-        c.email?.toLowerCase().includes(term) ||
-        c.phone?.toLowerCase().includes(term)
-      );
-    });
-  }, [candidates, searchTerm]);
 
-  const totalPages = Math.ceil(filteredCandidates.length / itemsPerPage);
-  const paginatedCandidates = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredCandidates.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredCandidates, currentPage, itemsPerPage]);
+  // --- NEW: Separate, efficient query for dashboard statistics ---
+  const { data: statsData, isLoading: isStatsLoading } = useQuery({
+      queryKey: ['talentPoolStats', role, user?.id],
+      queryFn: async () => {
+        const thisMonthStart = moment().startOf('month').toISOString();
+        const thisWeekStart = moment().startOf('week').toISOString();
+
+        let monthQuery = supabase
+            .from('hr_talent_pool')
+            .select('*', { count: 'exact', head: true })
+            .gte('created_at', thisMonthStart);
+
+        let weekQuery = supabase
+            .from('hr_talent_pool')
+            .select('*', { count: 'exact', head: true })
+            .gte('created_at', thisWeekStart);
+
+        if (role === '' && user?.id) {
+          monthQuery = monthQuery.eq('created_by', user.id);
+          weekQuery = weekQuery.eq('created_by', user.id);
+        }
+
+        const { count: monthCount, error: monthError } = await monthQuery;
+        const { count: weekCount, error: weekError } = await weekQuery;
+        
+        if (monthError || weekError) console.error("Error fetching stats:", monthError || weekError);
+        
+        return {
+            addedThisMonth: monthCount ?? 0,
+            addedThisWeek: weekCount ?? 0
+        };
+      },
+      enabled: !!user,
+  });
+
+  const addedThisMonth = statsData?.addedThisMonth ?? 0;
+  const addedThisWeek = statsData?.addedThisWeek ?? 0;
+
+  // REMOVED: Client-side filtering and memoization are no longer needed.
+  // const addedThisMonth = useMemo(...);
+  // const addedThisWeek = useMemo(...);
+  // const filteredCandidates = useMemo(...);
 
   const handleCandidateAdded = () => {
-    refetch();
+    refetch(); // Refetch the current page and stats
     setAddModalOpen(false);
   };
 
   const handleItemsPerPageChange = (value: string) => {
     setItemsPerPage(parseInt(value, 10));
-    setCurrentPage(1);
+    setCurrentPage(1); // Reset to page 1 when changing page size
   };
 
   const renderCandidateList = () => {
-    if (isLoading) return <Loader />;
-    if (filteredCandidates.length === 0) {
+    if (isLoading) {
+      return (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          {/* FIXED HEADER */}
+          <div className="grid grid-cols-12 gap-3 px-4 py-3 bg-gray-50/80 border-b border-gray-200">
+            <div className="col-span-3">
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <div className="col-span-2 text-center">
+              <Skeleton className="h-4 w-12 mx-auto" />
+            </div>
+            <div className="col-span-1">
+              <Skeleton className="h-4 w-10" />
+            </div>
+            <div className="col-span-1">
+              <Skeleton className="h-4 w-12" />
+            </div>
+            <div className="col-span-2">
+              <Skeleton className="h-4 w-20" />
+            </div>
+            <div className="col-span-3">
+              <Skeleton className="h-4 w-16" />
+            </div>
+          </div>
+
+          <div className="divide-y divide-gray-200/80">
+            {Array.from({ length: 10 }).map((_, index) => (
+              <div key={index} className="grid grid-cols-12 gap-3 items-center px-4 py-4">
+                {/* CANDIDATE NAME & PROFILE STATUS - 3 columns */}
+                <div className="col-span-3">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-6 w-6 rounded-full" />
+                  </div>
+                </div>
+                
+                {/* ACTIONS - 2 columns */}
+                <div className="col-span-2 flex justify-center items-center">
+                  <div className="flex items-center space-x-1 rounded-full bg-slate-50 p-1 shadow-sm border border-slate-200">
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <Skeleton key={j} className="h-7 w-7 rounded-full" />
+                    ))}
+                  </div>
+                </div>
+
+                {/* SALARY - 1 column */}
+                <div className="col-span-1">
+                  <Skeleton className="h-4 w-12" />
+                </div>
+                
+                {/* LOCATION - 1 column */}
+                <div className="col-span-1">
+                  <Skeleton className="h-4 w-16" />
+                </div>
+
+                {/* SUGGESTED TITLE - 2 columns */}
+                <div className="col-span-2">
+                  <Skeleton className="h-4 w-24" />
+                </div>
+
+                {/* ADDED BY - 3 columns */}
+                <div className="col-span-3">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <div className="min-w-0 flex-1">
+                      <Skeleton className="h-3 w-20" />
+                      <Skeleton className="h-3 w-16 mt-1" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    // CHANGED: Check against the data from the server
+    if (paginatedCandidates.length === 0) {
       return (
         <Card className="p-12 text-center">
           <p className="text-gray-500 mb-2">No candidates found.</p>
@@ -202,7 +319,7 @@ const TalentPoolPage: FC = () => {
 
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        {/* FIXED HEADER */}
+        {/* FIXED HEADER (This JSX remains the same) */}
         <div className="grid grid-cols-12 gap-3 px-4 py-3 bg-gray-50/80 border-b border-gray-200">
             <div className="col-span-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Candidate</div>
             <div className="col-span-2 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Actions</div>
@@ -213,6 +330,7 @@ const TalentPoolPage: FC = () => {
         </div>
 
         <div className="divide-y divide-gray-200/80">
+          {/* CHANGED: We now map directly over `paginatedCandidates` */}
           {paginatedCandidates.map((candidate) => {
             const profileStatus = calculateProfileCompletion(candidate);
             return (
@@ -410,6 +528,7 @@ const TalentPoolPage: FC = () => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return (
       <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
+        {/* Items per page selector (This JSX remains the same) */}
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-600">Show</span>
           <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
@@ -425,10 +544,11 @@ const TalentPoolPage: FC = () => {
           </Select>
           <span className="text-sm text-gray-600">per page</span>
         </div>
+        
+        {/* Pagination controls (This JSX remains the same, but the state is now server-driven) */}
         <div className="flex items-center gap-2">
           <Button 
-            variant="outline" 
-            size="sm" 
+            variant="outline" size="sm"
             onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
             disabled={currentPage === 1}
           >
@@ -438,14 +558,15 @@ const TalentPoolPage: FC = () => {
             Page {currentPage} of {totalPages}
           </span>
           <Button 
-            variant="outline" 
-            size="sm" 
+            variant="outline" size="sm"
             onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
             disabled={currentPage === totalPages}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
+        
+        {/* Showing results text (This JSX remains the same, but uses server-driven counts) */}
         <span className="text-sm text-gray-600">
           Showing {Math.min(startIndex + 1, totalCandidates)} to {Math.min(startIndex + itemsPerPage, totalCandidates)} of {totalCandidates} candidates
         </span>
@@ -455,6 +576,7 @@ const TalentPoolPage: FC = () => {
 
   return (
     <div className="space-y-8 animate-fade-in p-6">
+      {/* Header section (This JSX remains the same) */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold mb-1">Talent Pool</h1>
@@ -466,38 +588,75 @@ const TalentPoolPage: FC = () => {
         </Button>
       </div>
 
+      {/* Stats cards (This JSX remains the same but now uses the efficient stats query) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="stat-card animate-slide-up" style={{ animationDelay: "0ms" }}>
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">Total Candidates</p>
-              <h3 className="text-3xl font-bold">{totalCandidates}</h3>
-            </div>
-            <div className="stat-icon stat-icon-blue">
-              <Users size={22} />
-            </div>
+            {isLoading ? (
+              <>
+                <div>
+                  <Skeleton className="h-4 w-32 mb-2" />
+                  <Skeleton className="h-8 w-16" />
+                </div>
+                <Skeleton className="h-8 w-8 rounded-full stat-icon stat-icon-blue" />
+              </>
+            ) : (
+              <>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 mb-1">Total Candidates</p>
+                  <h3 className="text-3xl font-bold">{totalCandidates}</h3>
+                </div>
+                <div className="stat-icon stat-icon-blue">
+                  <Users size={22} />
+                </div>
+              </>
+            )}
           </div>
         </Card>
         <Card className="stat-card animate-slide-up" style={{ animationDelay: "100ms" }}>
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">Added this Month</p>
-              <h3 className="text-3xl font-bold">{addedThisMonth}</h3>
-            </div>
-            <div className="stat-icon stat-icon-green">
-              <Calendar size={22} />
-            </div>
+            {isStatsLoading ? (
+              <>
+                <div>
+                  <Skeleton className="h-4 w-32 mb-2" />
+                  <Skeleton className="h-8 w-16" />
+                </div>
+                <Skeleton className="h-8 w-8 rounded-full stat-icon stat-icon-green" />
+              </>
+            ) : (
+              <>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 mb-1">Added this Month</p>
+                  <h3 className="text-3xl font-bold">{addedThisMonth}</h3>
+                </div>
+                <div className="stat-icon stat-icon-green">
+                  <Calendar size={22} />
+                </div>
+              </>
+            )}
           </div>
         </Card>
         <Card className="stat-card animate-slide-up" style={{ animationDelay: "200ms" }}>
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">Added this Week</p>
-              <h3 className="text-3xl font-bold">{addedThisWeek}</h3>
-            </div>
-            <div className="stat-icon stat-icon-yellow">
-              <Briefcase size={22} />
-            </div>
+            {isStatsLoading ? (
+              <>
+                <div>
+                  <Skeleton className="h-4 w-32 mb-2" />
+                  <Skeleton className="h-8 w-16" />
+                </div>
+                <Skeleton className="h-8 w-8 rounded-full stat-icon stat-icon-yellow" />
+              </>
+            ) : (
+              <>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 mb-1">Added this Week</p>
+                  <h3 className="text-3xl font-bold">{addedThisWeek}</h3>
+                </div>
+                <div className="stat-icon stat-icon-yellow">
+                  <Briefcase size={22} />
+                </div>
+              </>
+            )}
           </div>
         </Card>
         <Card className="stat-card animate-slide-up" style={{ animationDelay: "300ms" }}>
@@ -513,6 +672,7 @@ const TalentPoolPage: FC = () => {
         </Card>
       </div>
 
+      {/* Search Input */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
         <Input 
@@ -521,14 +681,16 @@ const TalentPoolPage: FC = () => {
           value={searchTerm} 
           onChange={(e) => {
             setSearchTerm(e.target.value);
-            setCurrentPage(1);
+            setCurrentPage(1); // CHANGED: Reset to page 1 on every new search.
           }}
         />
       </div>
 
       {renderCandidateList()}
-      {filteredCandidates.length > 0 && renderPagination()}
+      {/* CHANGED: Conditionally render pagination only if there are candidates */}
+      {totalCandidates > 0 && renderPagination()}
 
+      {/* All modals remain exactly the same */}
       {isAddModalOpen && (
         <AddCandidateModal 
           isOpen={isAddModalOpen} 

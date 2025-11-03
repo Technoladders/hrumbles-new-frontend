@@ -12,6 +12,7 @@ export const fetchPendingTimesheets = async (): Promise<TimeLog[]> => {
         *,
         time_logs:time_log_id(
           *,
+          break_logs(*),
           employee:hr_employees!time_logs_employee_id_fkey(
         id,
         first_name,

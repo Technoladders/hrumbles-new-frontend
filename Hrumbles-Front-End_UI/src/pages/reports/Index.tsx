@@ -20,6 +20,7 @@ import CompaniesTrendsReport from '@/components/reports/CompaniesTrendsReport';
 import AttendanceReportsPage from '@/components/reports/attendance/AttendanceReportsPage';
 import ContactStatusReport from '@/components/reports/ContactsStatusReport';
 import CompaniesStatusReport from '@/components/reports/CompaniesStatusReport';
+import UserActivityReportPage from '@/components/reports/UserActivityReportPage';
 import { LoadingSpinner } from '@/components/ui/loading-spinner'; // NEW: Import a loading spinner
 
 const ITECH_ORGANIZATION_ID = [
@@ -122,6 +123,7 @@ const ReportIndex: React.FC = () => {
       case 'talent_trends': return <TalentTrendsReport />;
       case 'verification': return <VerificationReportPage />;
       case 'consolidated_status': return <ConsolidatedStatusReport />;
+      case 'user_activity': return <UserActivityReportPage />;
       case 'contacts': return <ContactsReport />;
       case 'companies': return <CompaniesReport />;
       case 'contacts_trends': return <ContactsTrendsReport />;
@@ -185,6 +187,18 @@ const ReportIndex: React.FC = () => {
                 <CardHeader className="bg-green-50"><CardTitle className="flex items-center text-green-700"><Clock className="mr-2 h-6 w-6" /> Attendance Report</CardTitle></CardHeader>
                 <CardContent className="p-4 text-gray-600">View attendance records and details.</CardContent>
               </Card>
+
+                <Card onClick={() => handleSelectReport('user_activity')} className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up">
+    <CardHeader className="bg-blue-50">
+        <CardTitle className="flex items-center text-blue-700">
+            <UserCheck className="mr-2 h-6 w-6" /> User Activity Report
+        </CardTitle>
+    </CardHeader>
+    <CardContent className="p-4 text-gray-600">
+        Analyze user active, inactive, and away time.
+    </CardContent>
+  </Card>
+
             </>
           ) : (
             // MODIFIED: View for all other users
@@ -243,6 +257,17 @@ const ReportIndex: React.FC = () => {
                  <CardHeader className="bg-red-50"><CardTitle className="flex items-center text-red-700"><Building className="mr-2 h-6 w-6" /> Companies Status Report</CardTitle></CardHeader>
                  <CardContent className="p-4 text-gray-600">View current status of companies.</CardContent>
               </Card>
+
+              <Card onClick={() => handleSelectReport('user_activity')} className="cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 animate-scale-up">
+    <CardHeader className="bg-blue-50">
+        <CardTitle className="flex items-center text-blue-700">
+            <UserCheck className="mr-2 h-6 w-6" /> User Activity Report
+        </CardTitle>
+    </CardHeader>
+    <CardContent className="p-4 text-gray-600">
+        Analyze user active, inactive, and away time.
+    </CardContent>
+  </Card>
             </>
           )}
         </div>

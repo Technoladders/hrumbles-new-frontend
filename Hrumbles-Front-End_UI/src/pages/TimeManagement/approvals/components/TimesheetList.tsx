@@ -256,6 +256,7 @@ const TimesheetList = ({
                 <th className="px-4 py-2 text-left text-sm">Login</th>
                 <th className="px-4 py-2 text-left text-sm">Logout</th>
                 <th className="px-4 py-2 text-right text-sm">Hours</th>
+                <th className="px-4 py-2 text-right text-sm">Break</th>
                 <th className="px-4 py-2 text-left text-sm">Status</th>
                 <th className="px-4 py-2 text-left text-sm">Notes</th>
                 <th className="px-4 py-2 text-left text-sm">
@@ -281,6 +282,9 @@ const TimesheetList = ({
                 const loginDisplay = getLoginDisplay(timesheet.clock_in_time);
                 const logoutDisplay = getLogoutDisplay(timesheet.clock_out_time, timesheet.duration_minutes);
                 const statusDisplay = getTimeBasedStatus(timesheet.duration_minutes);
+                const totalBreakMinutes = timesheet.break_logs?.reduce(
+              (sum, breakLog) => sum + (breakLog.duration_minutes || 0), 0
+            ) || 0;
                 return (
                   <tr key={timesheet.id} className="hover:bg-gray-50 transition">
                     {type === 'pending' && (
@@ -305,6 +309,9 @@ const TimesheetList = ({
                       {logoutDisplay.display}
                     </td>
                     <td className="px-4 py-2 text-right">{formatDuration(timesheet.duration_minutes)}</td>
+                     <td className="px-4 py-2 text-right text-orange-600">
+                  {formatDuration(totalBreakMinutes)}
+                </td>
                     <td className="px-4 py-2 flex gap-1 flex-wrap">
                       {statusDisplay.components.length > 0 ? statusDisplay.components : '-'}
                     </td>

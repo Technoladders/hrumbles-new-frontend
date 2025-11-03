@@ -6,6 +6,7 @@ import NewSidebar from "../components/Sidebar/NewSidebar";
 import { signOut } from "../utils/api";
 import { useSelector, useDispatch } from "react-redux"; 
 import { logout, setLoggingOut } from "../Redux/authSlice";
+import { useActivityTracker } from "../hooks/useActivityTracker";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isSameDay } from "date-fns";
@@ -27,6 +28,8 @@ const MainLayout = () => {
     // MODIFICATION: State to hold organization credit details
   const [orgCredits, setOrgCredits] = useState(null);
   const [isLoadingCredits, setIsLoadingCredits] = useState(true);
+
+   useActivityTracker({ inactivityThreshold: 300000 }); 
 
   console.log("userrrrrrrr", user);
 
