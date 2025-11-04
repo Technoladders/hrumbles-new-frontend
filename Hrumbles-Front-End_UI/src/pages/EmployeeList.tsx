@@ -426,7 +426,7 @@ const EmployeeList = () => {
                         </TableCell>
           
                         <TableCell className="text-right">
-                          {/* <Button
+                          <Button
                             variant="ghost"
                             size="icon"
                             onClick={(e) => {
@@ -435,7 +435,7 @@ const EmployeeList = () => {
                             }}
                           >
                             <HandCoins className="h-4 w-4" />
-                          </Button> */}
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"

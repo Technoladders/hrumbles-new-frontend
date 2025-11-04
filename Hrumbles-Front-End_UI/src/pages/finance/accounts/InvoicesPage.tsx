@@ -231,11 +231,11 @@ const InvoicesPage: React.FC = () => {
     </div>
   );
 
-  return (
+ return (
     <AccountsLayout title="Invoices">
-      <div className="space-y-6">
+      <div className="space-y-6 animate-fade-in">
+        {/* Stats Cards and Filters (No changes needed here) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Stats Cards */}
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -293,7 +293,6 @@ const InvoicesPage: React.FC = () => {
             </CardContent>
           </Card>
         </div>
-
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -317,83 +316,117 @@ const InvoicesPage: React.FC = () => {
           </div>
         </div>
 
-        <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid grid-cols-5 w-full max-w-md">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="draft">Draft</TabsTrigger>
-            <TabsTrigger value="paid">Paid</TabsTrigger>
-            <TabsTrigger value="unpaid">Unpaid</TabsTrigger>
-            <TabsTrigger value="overdue">Overdue</TabsTrigger>
-          </TabsList>
+    <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
+  {/* The container for the pill-shaped buttons */}
+  <TabsList className="inline-flex h-auto items-center justify-center rounded-full bg-gray-100 p-1.5 text-muted-foreground">
+    
+    {/* All Tab */}
+    <TabsTrigger value="all" className="inline-flex items-center justify-center whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition-all data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+      All
+      <span className="ml-2 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold data-[state=inactive]:bg-purple-200 data-[state=inactive]:text-purple-800 data-[state=active]:bg-white data-[state=active]:text-purple-800">
+        {stats.invoiceCount.all}
+      </span>
+    </TabsTrigger>
+
+    {/* Draft Tab */}
+    <TabsTrigger value="draft" className="inline-flex items-center justify-center whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition-all data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+      Draft
+      <span className="ml-2 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold data-[state=inactive]:bg-gray-300 data-[state=inactive]:text-gray-800 data-[state=active]:bg-white data-[state=active]:text-purple-800">
+        {stats.invoiceCount.draft}
+      </span>
+    </TabsTrigger>
+
+    {/* Paid Tab */}
+    <TabsTrigger value="paid" className="inline-flex items-center justify-center whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition-all data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+      Paid
+      <span className="ml-2 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold data-[state=inactive]:bg-green-200 data-[state=inactive]:text-green-800 data-[state=active]:bg-white data-[state=active]:text-purple-800">
+        {stats.invoiceCount.paid}
+      </span>
+    </TabsTrigger>
+
+    {/* Unpaid Tab */}
+    <TabsTrigger value="unpaid" className="inline-flex items-center justify-center whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition-all data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+      Unpaid
+      <span className="ml-2 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold data-[state=inactive]:bg-yellow-200 data-[state=inactive]:text-yellow-800 data-[state=active]:bg-white data-[state=active]:text-purple-800">
+        {stats.invoiceCount.unpaid}
+      </span>
+    </TabsTrigger>
+
+    {/* Overdue Tab */}
+    <TabsTrigger value="overdue" className="inline-flex items-center justify-center whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition-all data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+      Overdue
+      <span className="ml-2 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold data-[state=inactive]:bg-red-200 data-[state=inactive]:text-red-800 data-[state=active]:bg-white data-[state=active]:text-purple-800">
+        {stats.invoiceCount.overdue}
+      </span>
+    </TabsTrigger>
+
+  </TabsList>
           <TabsContent value={currentTab} className="mt-6">
-            <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-              <div className="overflow-x-auto">
-                <Table className="min-w-full divide-y divide-gray-200">
-                  <TableHeader className="bg-gray-50">
-                    <TableRow>
-                      <TableHead>Invoice No</TableHead>
-                      <TableHead>Invoice Date</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Billed</TableHead>
-                      <TableHead>Paid</TableHead>
-                      <TableHead>Due Date</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody className="bg-white divide-y divide-gray-200">
-                    {paginatedInvoices.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
-                          No invoices found for this category.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      paginatedInvoices.map((invoice) => (
-                        <TableRow key={invoice.id} className="hover:bg-gray-50 transition">
-                          <TableCell>{invoice.invoiceNumber}</TableCell>
-                          <TableCell>{invoice.invoiceDate}</TableCell>
-                          <TableCell>{invoice.clientName}</TableCell>
-                          <TableCell>{formatAmountWithTooltip(invoice.totalAmount, invoice.currency)}</TableCell>
-                          <TableCell>{invoice.status === 'Paid' ? formatAmountWithTooltip(invoice.paidAmount || invoice.totalAmount, invoice.currency) : '-'}</TableCell>
-                          <TableCell>{invoice.dueDate}</TableCell>
-                          <TableCell>
-                            <Select value={invoice.status} onValueChange={(value) => handleStatusChange(invoice.id, value as 'Paid' | 'Unpaid' | 'Overdue' | 'Draft')}>
-                              <SelectTrigger className={`w-[120px] text-sm border-none ${
-                                invoice.status.toLowerCase() === 'paid' ? 'bg-success-light text-success-dark' :
-                                invoice.status.toLowerCase() === 'unpaid' ? 'bg-warning-light text-warning-dark' :
-                                invoice.status.toLowerCase() === 'overdue' ? 'bg-danger-light text-danger-dark' : 'bg-gray-100 text-gray-700'
-                              }`}>
-                                <SelectValue>
-                                  <div className="flex items-center">
-                                    {getStatusIcon(invoice.status)}
-                                    <span className="ml-1">{invoice.status}</span>
-                                  </div>
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Paid"><div className="flex items-center"><CheckCircle className="h-4 w-4 text-success-dark mr-2" />Paid</div></SelectItem>
-                                <SelectItem value="Unpaid"><div className="flex items-center"><Clock className="h-4 w-4 text-warning-dark mr-2" />Unpaid</div></SelectItem>
-                                <SelectItem value="Overdue"><div className="flex items-center"><AlertTriangle className="h-4 w-4 text-danger-dark mr-2" />Overdue</div></SelectItem>
-                                <SelectItem value="Draft"><div className="flex items-center"><FileText className="h-4 w-4 text-gray-500 mr-2" />Draft</div></SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-1">
-                              <Button variant="ghost" size="icon" onClick={() => handleViewInvoice(invoice.id)}><Eye className="h-4 w-4" /></Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleEditInvoice(invoice.id)}><Edit className="h-4 w-4" /></Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleExportInvoice(invoice.id, 'pdf')} disabled={exportingInvoiceIds.includes(invoice.id)}>
-                                {exportingInvoiceIds.includes(invoice.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                              </Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleDeleteInvoice(invoice.id)} className="text-red-500 hover:text-red-700"><Trash2 className="h-4 w-4" /></Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+            <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm animate-scale-in">
+              {/* DESKTOP HEADER */}
+              <div className="hidden lg:grid grid-cols-12 gap-x-4 px-6 py-3 bg-purple-600 border-b border-purple-700">
+                <div className="col-span-2 text-xs font-bold text-white uppercase tracking-wider">Invoice No</div>
+                <div className="col-span-3 text-xs font-bold text-white uppercase tracking-wider">Customer</div>
+                <div className="col-span-2 text-xs font-bold text-white uppercase tracking-wider">Billed</div>
+                <div className="col-span-2 text-xs font-bold text-white uppercase tracking-wider">Due Date</div>
+                <div className="col-span-1 text-xs font-bold text-white uppercase tracking-wider">Status</div>
+                <div className="col-span-2 text-center text-xs font-bold text-white uppercase tracking-wider">Actions</div>
+              </div>
+
+              {/* LIST OF INVOICE CARDS */}
+              <div className="divide-y divide-gray-200">
+                {paginatedInvoices.length === 0 ? (
+                   <div className="text-center py-10 text-muted-foreground">
+                    No invoices found for this category.
+                  </div>
+                ) : (
+                  paginatedInvoices.map((invoice) => (
+                    <div key={invoice.id} className="grid grid-cols-1 lg:grid-cols-12 gap-x-4 gap-y-3 px-6 py-4 items-center transition-all duration-200 ease-in-out hover:shadow-lg hover:-translate-y-px hover:bg-gray-50/50">
+                      
+                      <div className="col-span-full lg:col-span-2 font-semibold text-gray-800">{invoice.invoiceNumber}</div>
+                      
+                      <div className="col-span-full lg:col-span-3 text-sm text-gray-700">{invoice.clientName}</div>
+
+                      <div className="col-span-full lg:col-span-2 text-sm font-semibold">{formatAmountWithTooltip(invoice.totalAmount, invoice.currency)}</div>
+
+                      <div className="col-span-full lg:col-span-2 text-sm text-gray-700">{invoice.dueDate}</div>
+
+                      <div className="col-span-full lg:col-span-1">
+                        <Select value={invoice.status} onValueChange={(value) => handleStatusChange(invoice.id, value as 'Paid' | 'Unpaid' | 'Overdue' | 'Draft')}>
+                          <SelectTrigger className={`w-[120px] h-auto text-xs font-semibold border-none rounded-full px-3 py-1 ${
+                            invoice.status.toLowerCase() === 'paid' ? 'bg-green-100 text-green-800' :
+                            invoice.status.toLowerCase() === 'unpaid' ? 'bg-yellow-100 text-yellow-800' :
+                            invoice.status.toLowerCase() === 'overdue' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            <SelectValue>
+                              <div className="flex items-center gap-1.5">
+                                {getStatusIcon(invoice.status)}
+                                <span>{invoice.status}</span>
+                              </div>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                              <SelectItem value="Paid"><div className="flex items-center"><CheckCircle className="h-4 w-4 text-success-dark mr-2" />Paid</div></SelectItem>
+                              <SelectItem value="Unpaid"><div className="flex items-center"><Clock className="h-4 w-4 text-warning-dark mr-2" />Unpaid</div></SelectItem>
+                              <SelectItem value="Overdue"><div className="flex items-center"><AlertTriangle className="h-4 w-4 text-danger-dark mr-2" />Overdue</div></SelectItem>
+                              <SelectItem value="Draft"><div className="flex items-center"><FileText className="h-4 w-4 text-gray-500 mr-2" />Draft</div></SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="col-span-full lg:col-span-2 flex lg:justify-center">
+                        <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleViewInvoice(invoice.id)}><Eye className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleEditInvoice(invoice.id)}><Edit className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleExportInvoice(invoice.id, 'pdf')} disabled={exportingInvoiceIds.includes(invoice.id)}>
+                            {exportingInvoiceIds.includes(invoice.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-red-600 hover:text-white transition-colors" onClick={() => handleDeleteInvoice(invoice.id)}><Trash2 className="h-4 w-4" /></Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
               {filteredInvoices.length > 0 && renderPagination()}
             </div>
@@ -401,13 +434,13 @@ const InvoicesPage: React.FC = () => {
         </Tabs>
       </div>
 
+      {/* Dialogs */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add New Invoice</DialogTitle></DialogHeader>
           <InvoiceForm onClose={() => setIsAddDialogOpen(false)} />
         </DialogContent>
       </Dialog>
-
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Invoice Details</DialogTitle></DialogHeader>
@@ -420,20 +453,20 @@ const InvoicesPage: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
-
-<Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-    <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-      <DialogHeader><DialogTitle>Edit Invoice</DialogTitle></DialogHeader>
-      {selectedInvoice && (
-        <InvoiceForm
-          invoice={selectedInvoice} // This line is now active
-          onClose={() => setIsEditDialogOpen(false)}
-        />
-      )}
-    </DialogContent>
-  </Dialog>
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Edit Invoice</DialogTitle></DialogHeader>
+            {selectedInvoice && (
+              <InvoiceForm
+                invoice={selectedInvoice}
+                onClose={() => setIsEditDialogOpen(false)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
     </AccountsLayout>
   );
+   
 };
 
 export default InvoicesPage;

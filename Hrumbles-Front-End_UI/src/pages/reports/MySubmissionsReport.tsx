@@ -45,7 +45,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { DateRangePickerField } from '@/components/ui/DateRangePickerField';
-import { format, isValid } from 'date-fns';
+import { format, isValid, formatDistanceToNow } from 'date-fns';
 import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, Calendar, ChevronLeft, ChevronRight, Sigma, ArrowUp, Activity, TrendingUp, CheckCircle, Tag, Building, User } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -61,6 +61,7 @@ import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Candidate as OriginalCandidate } from '@/lib/types';
+
 
 // --- Type Definitions ---
 interface Candidate {
@@ -79,6 +80,8 @@ interface Candidate {
   notice_period: string | null;
   overall_score: number | null;
    job_id: string; // Made non-nullable for Link
+   job_type: string | null; 
+  display_job_id: string | null; 
   // --- ADDED FIELDS ---
   schedule_date_time?: string;
   rejection_reason?: string;
@@ -304,13 +307,13 @@ const [recruiterFilter, setRecruiterFilter] = useState<string[]>([]);
       setIsLoading(true);
       setError(null);
      try {
-        const selectFields = `
-            id, name, created_at, updated_at, main_status_id, sub_status_id, 
-            current_salary, expected_salary, location, notice_period, overall_score, 
-            job_id, interview_date, interview_time, interview_feedback, metadata,
-            job:hr_jobs!hr_job_candidates_job_id_fkey(title, client_details), 
-            recruiter:hr_employees!hr_job_candidates_created_by_fkey(first_name, last_name)
-        `;
+   const selectFields = `
+    id, name, created_at, updated_at, main_status_id, sub_status_id, 
+    current_salary, expected_salary, location, notice_period, overall_score, 
+    job_id, interview_date, interview_time, interview_feedback, metadata,
+    job:hr_jobs!hr_job_candidates_job_id_fkey(title, client_details, job_type, job_id),
+    recruiter:hr_employees!hr_job_candidates_created_by_fkey(first_name, last_name)
+`;
         let candidatesQuery = supabase
           .from('hr_job_candidates')
           .select(selectFields)
@@ -351,13 +354,15 @@ const formattedCandidates: Candidate[] = candidatesResponse.data.map((c: any) =>
         main_status_id: c.main_status_id,
         sub_status_id: c.sub_status_id,
         job_title: c.job?.title || 'N/A',
+          job_type: c.job?.job_type || 'N/A',
+           display_job_id: c.job?.job_id || 'N/A',
         recruiter_name: c.recruiter ? `${c.recruiter.first_name} ${c.recruiter.last_name}`.trim() : 'N/A',
         client_name: c.job?.client_details?.clientName || 'N/A',
         current_salary: c.current_salary ?? metadata.currentSalary,
         expected_salary: c.expected_salary ?? metadata.expectedSalary,
         location: c.location ?? metadata.currentLocation,
         notice_period: c.notice_period ?? metadata.noticePeriod,
-        overall_score: c.overall_score,
+        overall_score: c.overall_score ?? c.metadata?.overall_score, // <-- FIX APPLIED HERE
         schedule_date_time: scheduleDateTime,
         rejection_reason: c.interview_feedback,
     };
@@ -516,7 +521,18 @@ const filteredCandidates = useMemo(() => {
   const paginatedData = tableRows.slice(startIndex, startIndex + itemsPerPage);
 
   const exportToCSV = () => {
-    const dataForExport = filteredCandidates.map(c => ({ 'Candidate Name': c.name, 'Status': statusNameMap[c.sub_status_id || ''] || 'New Applicant', 'AI Score': formatValue(c.overall_score), 'Job Title': formatValue(c.job_title), 'Client': formatValue(c.client_name), 'Applied': formatDate(c.created_at), 'CCTC (INR)': formatCurrency(c.current_salary), 'ECTC (INR)': formatCurrency(c.expected_salary), 'Notice Period': formatValue(c.notice_period), 'Location': formatValue(c.location) }));
+    const dataForExport = filteredCandidates.map(c => ({
+        'AI Score': formatValue(c.overall_score),
+        'Candidate Name': c.name,
+        'Status': statusNameMap[c.sub_status_id || ''] || 'New Applicant',
+        'Job Title': formatValue(c.job_title),
+        'Client': formatValue(c.client_name),
+        'Applied': formatDate(c.created_at),
+        'CCTC (INR)': formatCurrency(c.current_salary),
+        'ECTC (INR)': formatCurrency(c.expected_salary),
+        'Notice Period': formatValue(c.notice_period),
+        'Location': formatValue(c.location)
+    }));
     const csv = Papa.unparse(dataForExport, { header: true });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -528,8 +544,26 @@ const filteredCandidates = useMemo(() => {
   const exportToPDF = () => {
     const doc = new jsPDF({ orientation: 'landscape' });
     doc.text('My Submissions Report', 14, 20);
-    const tableData = filteredCandidates.map(c => [ c.name, statusNameMap[c.sub_status_id || ''] || 'New Applicant', formatValue(c.overall_score), formatValue(c.job_title), formatValue(c.client_name), formatDate(c.created_at), formatCurrency(c.current_salary), formatCurrency(c.expected_salary), formatValue(c.notice_period), formatValue(c.location) ]);
-    (doc as any).autoTable({ head: [['Candidate Name', 'Status', 'AI Score', 'Job Title', 'Client', 'Applied', 'CCTC (INR)', 'ECTC (INR)', 'Notice Period', 'Location']], body: tableData, startY: 30, theme: 'grid', styles: { fontSize: 7, cellPadding: 2 }, headStyles: { fillColor: [123, 67, 241] } });
+    const tableData = filteredCandidates.map(c => [
+        formatValue(c.overall_score),
+        c.name,
+        statusNameMap[c.sub_status_id || ''] || 'New Applicant',
+        formatValue(c.job_title),
+        formatValue(c.client_name),
+        formatDate(c.created_at),
+        formatCurrency(c.current_salary),
+        formatCurrency(c.expected_salary),
+        formatValue(c.notice_period),
+        formatValue(c.location)
+    ]);
+    (doc as any).autoTable({
+        head: [['AI Score', 'Candidate Name', 'Status', 'Job Title', 'Client', 'Applied', 'CCTC (INR)', 'ECTC (INR)', 'Notice Period', 'Location']],
+        body: tableData,
+        startY: 30,
+        theme: 'grid',
+        styles: { fontSize: 7, cellPadding: 2 },
+        headStyles: { fillColor: [123, 67, 241] }
+    });
     doc.save(`my_submissions_report_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
@@ -608,348 +642,238 @@ const getStatusBadgeClass = (statusName: string | null | undefined): string => {
   return colorToClassMap[hexColor] || 'bg-gray-100 text-gray-800';
 };
 
-console.log("return data", paginatedData)
-
-  return (
+return (
       <TooltipProvider>
-<div className="w-full h-full animate-fade-in overflow-x-hidden">
-      <main className="w-full space-y-8">
-        <div>
-          <h1 className="text-xl md:text-2xl font-semibold text-gray-800">My Submissions</h1>
-          <p className="text-sm text-gray-500 mt-2">Track the status and progress of all candidates you have submitted.</p>
-        </div>
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl"> <CardContent className="p-6 flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-2">Total Candidates</p> <h3 className="text-2xl font-bold text-gray-800">{totalCandidates}</h3> <p className="text-xs text-gray-500 mt-1">in selected period</p> </div> <div className="bg-gradient-to-br from-purple-400 to-purple-600 p-3 rounded-full"> <Sigma size={24} className="text-white" /> </div> </CardContent> </Card>
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl"> <CardContent className="p-6 flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-2">Peak Status</p> <h3 className="text-2xl font-bold text-gray-800 truncate" title={peakStatus.name}>{peakStatus.name}</h3> <p className="text-xs text-gray-500.mount mt-1">{peakStatus.value} candidates</p> </div> <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full"> <ArrowUp size={24} className="text-white" /> </div> </CardContent> </Card>
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl"> <CardContent className="p-6 flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-2">Average Candidates</p> <h3 className="text-2xl font-bold text-gray-800">{averageCandidates}</h3> <p className="text-xs text-gray-500 mt-1">per status</p> </div> <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-full"> <Activity size={24} className="text-white" /> </div> </CardContent> </Card>
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl"> <CardContent className="p-6 flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-2">Top Status</p> <h3 className="text-2xl font-bold text-gray-800 truncate" title={topStatus.name}>{topStatus.name}</h3> <p className="text-xs text-gray-500 mt-1">{topStatus.value} candidates</p> </div> <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full"> <TrendingUp size={24} className="text-white" /> </div> </CardContent> </Card>
-        </div>
+        <div className="w-full h-full animate-fade-in overflow-x-hidden bg-gray-50/50 p-4 sm:p-6">
+          <main className="w-full space-y-6">
+            {/* Header and KPI Cards - No changes needed here */}
+            <div>
+              <h1 className="text-xl md:text-2xl font-semibold text-gray-800">My Submissions</h1>
+              <p className="text-sm text-gray-500 mt-1">Track the status and progress of all candidates you have submitted.</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card className="shadow-lg border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-xl"> <CardContent className="p-5"> <div className="flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-1">Total Candidates</p> <h3 className="text-2xl font-bold text-gray-800">{totalCandidates}</h3> </div> <div className="bg-purple-100 p-3 rounded-full"> <Sigma size={20} className="text-purple-600" /> </div> </div> </CardContent> </Card>
+              <Card className="shadow-lg border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-xl"> <CardContent className="p-5"> <div className="flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-1">Peak Status</p> <h3 className="text-2xl font-bold text-gray-800 truncate" title={peakStatus.name}>{peakStatus.name}</h3> </div> <div className="bg-green-100 p-3 rounded-full"> <ArrowUp size={20} className="text-green-600" /> </div> </div> </CardContent> </Card>
+              <Card className="shadow-lg border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-xl"> <CardContent className="p-5"> <div className="flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-1">Average / Status</p> <h3 className="text-2xl font-bold text-gray-800">{averageCandidates}</h3> </div> <div className="bg-blue-100 p-3 rounded-full"> <Activity size={20} className="text-blue-600" /> </div> </div> </CardContent> </Card>
+              <Card className="shadow-lg border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-xl"> <CardContent className="p-5"> <div className="flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-1">Top Status</p> <h3 className="text-2xl font-bold text-gray-800 truncate" title={topStatus.name}>{topStatus.name}</h3> </div> <div className="bg-teal-100 p-3 rounded-full"> <TrendingUp size={20} className="text-teal-600" /> </div> </div> </CardContent> </Card>
+            </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-         <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl lg:col-span-2">
-            <CardHeader className="bg-gray-50 border-b p-4"> <CardTitle className="text-lg text-gray-800">Candidate per Status</CardTitle> </CardHeader>
-            <CardContent className="p-6">
-                <div className="h-[450px] w-full animate-fade-in">
-                {isLoading ? ( <div className="flex h-full w-full items-center justify-center"> <LoadingSpinner size={60} /> </div>
-                ) : dynamicChartConfig.funnelData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dynamicChartConfig.funnelData} layout="vertical" margin={{ top: 20, right: 50, left: 20, bottom: 20 }} >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" horizontal={false} />
-                        <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12, fill: '#6b7280' }} domain={axisDomain} ticks={axisTicks} />
-                        <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12, fill: '#374151', fontWeight: 'bold' }} interval={0} />
-                       <RechartsTooltip 
-    cursor={{ fill: 'rgba(239, 246, 255, 0.7)' }} 
-    content={<CustomFunnelTooltip barDefinitions={dynamicChartConfig.barDefinitions} />} 
-/>
-                         {dynamicChartConfig.barDefinitions.map(bar => (
-      <Bar 
-        key={bar.key} 
-        dataKey={bar.key} 
-        stackId="a" 
-        name={bar.name} 
-        fill={bar.color} 
-        stroke="#fff" 
-        strokeWidth={2} 
-        radius={[0, 8, 8, 0]} 
-      >
-                            <LabelList dataKey={bar.key} position="center" fill="#fff" fontSize={12} fontWeight="bold" formatter={(value: number) => (value > 0 ? value : '')} />
-                            
-                            <LabelList dataKey="total" content={(props) => {
-                                const { x, y, width, height, index, value } = props;
-                                const currentRow = dynamicChartConfig.funnelData[index];
-                                if (currentRow && currentRow.lastKey === bar.key && value > 0) {
-                                    return ( <text x={Number(x) + Number(width) + 8} y={Number(y) + Number(height) / 2} dy={5} textAnchor="start" fill="#111827" fontSize={14} fontWeight="bold" > {value} </text> );
-                                }
-                                return null;
-                                }}
-                            />
-                        </Bar>
-                        ))}
-                    </BarChart>
-                    </ResponsiveContainer>
-                ) : ( <div className="flex h-full w-full items-center justify-center"> <Alert className="w-auto bg-gray-50 border-gray-200"> <AlertCircle className="h-4 w-4 text-gray-500" /> <AlertDescription className="text-gray-600">No data for this period.</AlertDescription> </Alert> </div> )}
+            {/* Filters and Search Bar - No changes needed here */}
+            <Card className="shadow-lg border-none bg-white">
+              <CardContent className="p-4 sm:p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                    <DateRangePickerField 
+                        dateRange={dateRange as any} 
+                        onDateRangeChange={setDateRange} 
+                        onApply={() => setCurrentPage(1)} 
+                    />
+                    <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempStatusFilter(statusFilter); } }}>
+                      <DropdownMenuTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start font-normal h-10">
+                              <Tag size={16} className="text-gray-500 mr-2" />
+                              <span className="truncate">
+                                  {statusFilter.length === 0 ? "All Statuses" : `${statusFilter.length} statuses selected`}
+                              </span>
+                          </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-60 max-h-96 z-[60] flex flex-col origin-top">
+                        <div className="overflow-y-auto">
+                          <DropdownMenuCheckboxItem checked={tempStatusFilter.length === 0} onCheckedChange={() => setTempStatusFilter([])} onSelect={(e) => e.preventDefault()}> All Statuses </DropdownMenuCheckboxItem>
+                          <DropdownMenuSeparator />
+                          {groupedStatusOptions.map((group) => (
+                            <React.Fragment key={group.mainStatus}>
+                              <DropdownMenuLabel>{group.mainStatus}</DropdownMenuLabel>
+                              {group.subStatuses.map((subStatus) => (
+                                <DropdownMenuCheckboxItem key={subStatus} checked={tempStatusFilter.includes(subStatus)} onCheckedChange={(checked) => handleStatusFilterChange(subStatus, checked)} onSelect={(e) => e.preventDefault()}> {subStatus} </DropdownMenuCheckboxItem>
+                              ))}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                        <DropdownMenuSeparator />
+                        <div className="p-2 border-t">
+                          <Button className="w-full" size="sm" onClick={() => { setStatusFilter(tempStatusFilter); }}> Apply Filter </Button>
+                        </div>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempClientFilter(clientFilter); } }}>
+                      <DropdownMenuTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start font-normal h-10">
+                              <Building size={16} className="text-gray-500 mr-2" />
+                              <span className="truncate">
+                                  {clientFilter.length === 0 ? "All Clients" : `${clientFilter.length} clients selected`}
+                              </span>
+                          </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-64 max-h-96 z-[60] flex flex-col origin-top">
+                        <div className="overflow-y-auto">
+                          <DropdownMenuCheckboxItem checked={tempClientFilter.length === 0} onCheckedChange={() => setTempClientFilter([])} onSelect={(e) => e.preventDefault()}> All Clients </DropdownMenuCheckboxItem>
+                          <DropdownMenuSeparator />
+                          {clientOptions.map(client => (
+                            <DropdownMenuCheckboxItem key={client} checked={tempClientFilter.includes(client)} onCheckedChange={(checked) => handleClientFilterChange(client, !!checked)} onSelect={(e) => e.preventDefault()}> {client} </DropdownMenuCheckboxItem>
+                          ))}
+                        </div>
+                        <DropdownMenuSeparator />
+                        <div className="p-2 border-t">
+                          <Button className="w-full" size="sm" onClick={() => setClientFilter(tempClientFilter)}> Apply Filter </Button>
+                        </div>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                        <Input placeholder="Search..." className="pl-10 h-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                    </div>
                 </div>
-            </CardContent>
+                <div className="flex justify-end items-center gap-2">
+                    <Button variant="outline" onClick={() => setIsGrouped(!isGrouped)}>
+                        {isGrouped ? <List className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />}
+                        {isGrouped ? 'Ungroup' : 'Group by Status'}
+                    </Button>
+                </div>
+              </CardContent>
             </Card>
-        </div>
 
-<Card className="shadow-xl border-none bg-white transition-all duration-300 hover:shadow-2xl">
-
-    <CardContent className="p-6">
-        <div className="relative z-10">
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-6 items-stretch">
-    <div className="flex-1 min-w-0 overflow-hidden z-0">
-      <div className="p-1">
-        <DateRangePickerField 
-          dateRange={dateRange as any} 
-          onDateRangeChange={setDateRange} 
-          onApply={() => setCurrentPage(1)} 
-        />
-      </div>
-    </div>
-
-    <div className="w-full flex-1 min-w-0 overflow-hidden z-40">
-      <div className="p-1">
-        <DropdownMenu
-          onOpenChange={(isOpen) => {
-            if (isOpen) {
-              setTempStatusFilter(statusFilter);
-            }
-          }}
-        >
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-full justify-start h-10 relative z-0">
-                  <Tag size={16} className="text-gray-500 mr-2 flex-shrink-0" />
-                  <div className="truncate min-w-0">
-                    {statusFilter.length === 0
-                      ? "All Statuses"
-                      : statusFilter.length === 1
-                      ? statusFilter[0]
-                      : `${statusFilter.length} statuses selected`}
-                  </div>
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            {statusFilter.length > 1 && (
-              <TooltipContent side="bottom" align="start" className="z-[70]">
-                <div className="p-1">
-                  <h4 className="font-semibold mb-2 text-center">Selected Statuses</h4>
-                  <ul className="list-disc list-inside space-y-1 max-w-48">
-                    {statusFilter.map((status) => (
-                      <li key={status}>{status}</li>
-                    ))}
-                  </ul>
+            {/* NEW ANIMATED LIST CONTAINER */}
+            <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm animate-scale-in">
+                {/* MODIFIED HEADER */}
+                <div className="hidden lg:grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50/70 border-b border-gray-200">
+                    <div className="col-span-1 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">AI Score</div>
+                    <div className="col-span-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Applied On</div>
+                    <div className="col-span-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Candidate</div>
+                    <div className="col-span-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Job Title</div>
+                    <div className="col-span-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</div>
                 </div>
-              </TooltipContent>
-            )}
-          </Tooltip>
-          <DropdownMenuContent className="w-60 max-h-96 z-[60] flex flex-col origin-top">
-            <div className="overflow-y-auto">
-              <DropdownMenuCheckboxItem
-                checked={tempStatusFilter.length === 0}
-                onCheckedChange={() => setTempStatusFilter([])}
-                onSelect={(e) => e.preventDefault()}
-              >
-                All Statuses
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              {groupedStatusOptions.map((group) => (
-                <React.Fragment key={group.mainStatus}>
-                  <DropdownMenuLabel>{group.mainStatus}</DropdownMenuLabel>
-                  {group.subStatuses.map((subStatus) => (
-                    <DropdownMenuCheckboxItem
-                      key={subStatus}
-                      checked={tempStatusFilter.includes(subStatus)}
-                      onCheckedChange={(checked) => handleStatusFilterChange(subStatus, checked)}
-                      onSelect={(e) => e.preventDefault()}
+
+                {/* List of Animated Rows */}
+                <div className="divide-y divide-gray-200">
+                    {paginatedData.length > 0 ? (
+                        paginatedData.map((row) => {
+                            if (row.type === 'header') {
+                                return (
+                                    <div key={row.statusName} className="flex items-center gap-2 p-3 bg-gray-100 sticky top-0 z-10">
+                                      <Button variant="ghost" size="sm" onClick={() => toggleGroup(row.statusName!)} className="p-0 h-6 w-6">
+                                        {expandedGroups.includes(row.statusName!) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                      </Button>
+                                      <h3 className="font-bold text-gray-700">{row.statusName}</h3>
+                                      <Badge variant="secondary">{row.count}</Badge>
+                                    </div>
+                                );
+                            }
+                            
+                            const { candidate, statusName } = row;
+                            if (!candidate) return null;
+
+                            const createdAtDate = new Date(candidate.created_at);
+                            const formattedDate = isValid(createdAtDate) ? format(createdAtDate, 'dd MMM yyyy') : 'N/A';
+                            const relativeDate = isValid(createdAtDate) ? `(${formatDistanceToNow(createdAtDate, { addSuffix: true })})` : '';
+
+                            return (
+                                <div key={candidate.id} className="grid grid-cols-1 lg:grid-cols-12 gap-x-4 gap-y-3 p-4 items-center transition-all duration-200 ease-in-out hover:shadow-lg hover:-translate-y-px hover:bg-gray-50/50">
+                                    
+                                    {/* AI Score */}
+                                    <div className="col-span-1 flex lg:justify-center items-center">
+                                        <div style={getScoreStyles(candidate.overall_score)} className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
+                                            {formatValue(candidate.overall_score)}
+                                        </div>
+                                    </div>
+
+                                    {/* NEW Applied On Column */}
+                                 <div className="col-span-full lg:col-span-2">
+    <div className="flex items-center gap-2 text-sm text-gray-700">
+        <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0"/>
+        <span>{formattedDate}</span>
+        <span className="text-xs text-gray-500">{relativeDate}</span>
+    </div>
+</div>
+                                    
+                                    {/* Candidate */}
+{/* Candidate */}
+{/* Candidate */}
+<div className="col-span-full lg:col-span-3">
+    <Link to="#" className="font-semibold text-indigo-600 hover:underline truncate" title={candidate.name}>
+        {candidate.name}
+    </Link>
+    {/* MODIFIED: Added min-w-0 to the flex container to allow shrinking */}
+    <div className="flex items-center gap-2 mt-2 flex-nowrap min-w-0">
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 whitespace-nowrap truncate">
+            <span className="text-purple-800 font-semibold mr-1">CCTC:</span>
+            <span className="text-gray-800">{formatCurrency(candidate.current_salary)}</span>
+        </span>
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 whitespace-nowrap truncate">
+            <span className="text-purple-800 font-semibold mr-1">ECTC:</span>
+            <span className="text-gray-800">{formatCurrency(candidate.expected_salary)}</span>
+        </span>
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 whitespace-nowrap truncate">
+            <span className="text-purple-800 font-semibold mr-1">Notice:</span>
+            <span className="text-gray-800">{formatValue(candidate.notice_period)}</span>
+        </span>
+    </div>
+</div>                         {/* Job Title - MODIFIED */}
+                                 {/* Job Title - MODIFIED WITH CLIENT NAME */}
+<div className="col-span-full lg:col-span-4">
+    <p className="font-semibold text-gray-800">{candidate.job_title}</p>
+    <div className="flex items-center gap-2 mt-2 flex-wrap">
+        {/* This span displays the Client Name */}
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800">{candidate.client_name}</span>
+        
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 ">{candidate.display_job_id}</span>
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{candidate.job_type}</span>
+    </div>
+</div>
+
+                                    {/* Status */}
+                                    <div className="col-span-full lg:col-span-2">
+                                        <Badge className={`rounded-full px-3 py-1 text-xs ${getStatusBadgeClass(statusName)}`}>{statusName}</Badge>
+                                    </div>
+
+                                </div>
+                            );
+                        })
+                    ) : (
+                        <div className="p-10 text-center text-gray-500">
+                            No data found matching your criteria.
+                        </div>
+                    )}
+                </div>
+            </div>
+            
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4 bg-white rounded-lg shadow-md p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Rows per page:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="w-[70px] h-10 border border-gray-200 rounded-md text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
-                      {subStatus}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </React.Fragment>
-              ))}
-            </div>
-            <DropdownMenuSeparator />
-            <div className="p-2 border-t">
-              <Button 
-                className="w-full" 
-                size="sm"
-                onClick={() => {
-                  setStatusFilter(tempStatusFilter);
-                }}
-              >
-                Apply Filter
-              </Button>
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
-
-    <div className="w-full flex-1 min-w-0 overflow-hidden z-40">
-      <div className="p-1">
-        <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempClientFilter(clientFilter); } }}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-full justify-start font-normal h-10 relative z-0">
-                  <Building size={16} className="text-gray-500 mr-2 flex-shrink-0" />
-                  <div className="truncate min-w-0">
-                    {clientFilter.length === 0 ? "All Clients" : `${clientFilter.length} clients selected`}
+                      <option value="10">10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                    </select>
                   </div>
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            {clientFilter.length > 1 && (
-              <TooltipContent side="bottom" align="start" className="z-[70]">
-                <p className="max-w-48">Selected: {clientFilter.join(', ')}</p>
-              </TooltipContent>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm font-medium">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <span className="text-sm text-gray-600">
+                    Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, tableRows.length)} of {tableRows.length}
+                  </span>
+                </div>
             )}
-          </Tooltip>
-          <DropdownMenuContent className="w-64 max-h-96 z-[60] flex flex-col origin-top">
-            <div className="overflow-y-auto">
-              <DropdownMenuCheckboxItem
-                checked={tempClientFilter.length === 0}
-                onCheckedChange={() => setTempClientFilter([])}
-                onSelect={(e) => e.preventDefault()}
-              >
-                All Clients
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              {clientOptions.map(client => (
-                <DropdownMenuCheckboxItem
-                  key={client}
-                  checked={tempClientFilter.includes(client)}
-                  onCheckedChange={(checked) => handleClientFilterChange(client, !!checked)}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  {client}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </div>
-            <DropdownMenuSeparator />
-            <div className="p-2 border-t">
-              <Button className="w-full" size="sm" onClick={() => setClientFilter(tempClientFilter)}>
-                Apply Filter
-              </Button>
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
-  </div>
-</div>
-        <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
-            <div className="relative flex-grow w-full sm:w-auto"> <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} /> <Input placeholder="Search name, job, client..." className="pl-10 h-10" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} /> </div>
-            <Button variant="outline" onClick={() => setIsGrouped(!isGrouped)} className="w-full sm:w-auto"> {isGrouped ? <List className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />} {isGrouped ? 'Ungroup' : 'Group by Status'} </Button>
-            <div className="flex gap-2 flex-shrink-0"> <Button variant="outline" size="sm" onClick={exportToCSV}> <Download className="w-4 h-4 mr-2" /> Export CSV </Button> <Button variant="outline" size="sm" onClick={exportToPDF}> <Download className="w-4 h-4 mr-2" /> Export PDF </Button> </div>
+          </main>
         </div>
-<div className="relative w-full rounded-lg border overflow-x-auto">
-    <Table style={{ minWidth: '1400px' }}>
-        {/* --- START OF HEADER MODIFICATION --- */}
-        <TableHeader>
-            <TableRow className="bg-indigo-600 border-indigo-700 hover:bg-indigo-600">
-                <TableHead className="sticky left-0 bg-indigo-600 z-20 font-semibold text-white px-4 py-4 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[250px]">Candidate</TableHead>
-                <TableHead className="text-left font-semibold text-white px-4 py-4 min-w-[220px]">Status</TableHead>
-                <TableHead className="text-left font-semibold text-white px-4 py-4 min-w-[100px]">AI Score</TableHead>
-                <TableHead className="text-left font-semibold text-white px-4 py-4 min-w-[250px]">Job Title</TableHead>
-                <TableHead className="text-left font-semibold text-white px-4 py-4 min-w-[200px]">Client</TableHead>
-                <TableHead className="text-left font-semibold text-white px-4 py-4 min-w-[120px]">CCTC</TableHead>
-                <TableHead className="text-left font-semibold text-white px-4 py-4 min-w-[120px]">ECTC</TableHead>
-                <TableHead className="text-left font-semibold text-white px-4 py-4 min-w-[100px]">Notice</TableHead>
-                <TableHead className="text-left font-semibold text-white px-4 py-4 min-w-[150px]">Location</TableHead>
-            </TableRow>
-        </TableHeader>
-        {/* --- END OF HEADER MODIFICATION --- */}
-        <TableBody>
-            {paginatedData.length > 0 ? ( paginatedData.map((row) => {
-                if (row.type === 'header') {
-                    return ( 
-                        <TableRow key={row.statusName} className="bg-gray-50 hover:bg-gray-100 transition"> 
-                            <TableCell colSpan={9} className="sticky left-0 bg-gray-50 z-10 font-bold text-gray-800 px-4 py-4 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"> 
-                                <div className="flex items-center gap-2"> 
-                                    <Button variant="ghost" size="sm" onClick={() => toggleGroup(row.statusName!)} className="p-0 h-6 w-6" > 
-                                        {expandedGroups.includes(row.statusName!) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />} 
-                                    </Button> 
-                                    {row.statusName} 
-                                    <Badge variant="secondary">{row.count}</Badge> 
-                                </div> 
-                            </TableCell> 
-                        </TableRow> 
-                    );
-                }
-                const { candidate, statusName } = row;
-                if (!candidate) return null;
-
-                const scheduledTime = formatScheduleDateTime(candidate.schedule_date_time);
-                const statusNameLower = statusName?.toLowerCase() || '';
-                const showSchedule = scheduledTime && (statusNameLower.includes('interview') || statusNameLower.includes('round') || statusNameLower.includes('l1') || statusNameLower.includes('l2') || statusNameLower.includes('l3') || statusNameLower.includes('assessment') || statusNameLower.includes('reschedule')) && !statusNameLower.includes('rejected') && !statusNameLower.includes('selected') && !statusNameLower.includes('no show') && !statusNameLower.includes('hold');
-                const showReason = candidate.rejection_reason && statusNameLower.includes('reject');
-
-                return (
-                    <TableRow key={candidate!.id} className="hover:bg-gray-50 transition group">
-                        <TableCell className="sticky left-0 bg-white group-hover:bg-gray-50 z-10 font-medium text-gray-800 px-4 py-4 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                           <div>
-                              <Link to={ candidate!.job_id ? `/employee/${candidate!.id}/${candidate!.job_id}` : `/jobs/unassigned/candidate/${candidate!.id}/bgv` } className="text-indigo-600 hover:underline hover:text-indigo-800" >
-                                  {candidate!.name}
-                              </Link>
-                              <p className="text-xs text-gray-500 mt-1">
-                                  {formatDate(candidate!.created_at)}
-                              </p>
-                           </div>
-                        </TableCell>
-                        <TableCell className="px-4 py-4">
-                            <div>
-                                <Badge className={getStatusBadgeClass(statusName)}>
-                                    {statusName}
-                                </Badge>
-                                {showReason && (
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <p className="text-xs text-gray-500 mt-1 cursor-help truncate w-48">
-                                                {candidate.rejection_reason}
-                                            </p>
-                                        </TooltipTrigger>
-                                        <TooltipContent className="max-w-xs">
-                                            <p>{candidate.rejection_reason}</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                )}
-                                {showSchedule && (
-                                    <p className="text-xs text-gray-500 mt-1">{scheduledTime}</p>
-                                )}
-                            </div>
-                        </TableCell>
-                      <TableCell className="px-4 py-4">
-  <div
-    // The style prop applies the dynamic background and glow colors
-    style={getScoreStyles(candidate!.overall_score)}
-    // These classes create the shape, text style, and animation
-    className="w-12 h-12 
-               rounded-full 
-               flex 
-               items-center 
-               justify-center 
-               text-white 
-               font-bold 
-               text-xl
-               cursor-pointer
-               transition-all 
-               duration-300 
-               ease-in-out 
-               transform-gpu 
-               hover:scale-110 
-               hover:-translate-y-1"
-  >
-    {formatValue(candidate!.overall_score)}
-  </div>
-</TableCell>
-                        <TableCell className="text-gray-600 px-4 py-4">
-                            <Link to={`/jobs/${candidate!.job_id}`} className="text-indigo-600 hover:underline hover:text-indigo-800" >
-                                {formatValue(candidate!.job_title)}
-                            </Link>
-                        </TableCell>
-                        <TableCell className="text-gray-600 px-4 py-4">{formatValue(candidate!.client_name)}</TableCell>
-                        <TableCell className="text-gray-600 px-4 py-4">{formatCurrency(candidate!.current_salary)}</TableCell>
-                        <TableCell className="text-gray-600 px-4 py-4">{formatCurrency(candidate!.expected_salary)}</TableCell>
-                        <TableCell className="text-gray-600 px-4 py-4">{formatValue(candidate!.notice_period)}</TableCell>
-                        <TableCell className="text-gray-600 px-4 py-4">{formatValue(candidate!.location)}</TableCell>
-                    </TableRow>
-                );
-            }) ) : ( <TableRow> <TableCell colSpan={9} className="h-24 text-center text-gray-500"> No data found matching your criteria. </TableCell> </TableRow> )}
-        </TableBody>
-    </Table>
-</div>
-
-      
-        {totalPages > 1 && ( <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4"> <div className="flex items-center gap-2"> <span className="text-sm text-gray-600">Rows per page:</span> <select value={itemsPerPage} onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }} className="w-[70px] h-10 border border-gray-200 rounded-md text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" > <option value="10">10</option> <option value="20">20</option> <option value="50">50</option> <option value="100">100</option> </select> </div> <div className="flex items-center gap-2"> <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} > <ChevronLeft className="h-4 w-4" /> </Button> <span className="text-sm font-medium">Page {currentPage} of {totalPages}</span> <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} > <ChevronRight className="h-4 w-4" /> </Button> </div> <span className="text-sm text-gray-600"> Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, tableRows.length)} of {tableRows.length} </span> </div> )}
-    </CardContent>
-</Card>
-      </main>
-    </div>
-    </TooltipProvider>
+      </TooltipProvider>
   );
 };
   

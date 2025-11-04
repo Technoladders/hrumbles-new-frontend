@@ -223,35 +223,35 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ expense, onClose, expenseData
       if (!uploadedUrl) return;
       finalReceiptUrl = uploadedUrl;
     }
-   const dataToSave = {
+ 
+     const dataToSave = {
       category: expenseData.category,
       description: expenseData.description,
-      date: expenseData.date, // This is already YYYY-MM-DD from the input
+      date: expenseData.date,
       amount: parseFloat(expenseData.amount),
-      payment_method: expenseData.paymentMethod,
+      paymentMethod: expenseData.paymentMethod, // This will be mapped to payment_method in the store
       vendor: expenseData.vendor || undefined,
-      
-      // --- ADD/VERIFY THESE LINES ---
-      vendor_address: expenseData.vendorAddress || undefined,
-      invoice_number: expenseData.invoiceNumber || undefined,
-      taxable_amount: expenseData.taxableAmount ? parseFloat(expenseData.taxableAmount) : undefined,
+      notes: expenseData.notes || undefined,
+      receiptUrl: finalReceiptUrl,
+
+      // Add all the missing fields here
+      vendorAddress: expenseData.vendorAddress || undefined,
+      invoiceNumber: expenseData.invoiceNumber || undefined,
+      taxableAmount: expenseData.taxableAmount ? parseFloat(expenseData.taxableAmount) : undefined,
       cgst: expenseData.cgst ? parseFloat(expenseData.cgst) : undefined,
       sgst: expenseData.sgst ? parseFloat(expenseData.sgst) : undefined,
       hsn: expenseData.hsn || undefined,
       sac: expenseData.sac || undefined,
-      // --- END ADD/VERIFY ---
-      
-      notes: expenseData.notes || undefined,
-      receipt_url: finalReceiptUrl,
     };
- 
-    try {
+    // --- END: CORRECTED DATA OBJECT ---
+
+  try {
       if (expense) {
-        // The update function in zustand needs to map to snake_case too
+        // Pass the corrected object to the update function
         await updateExpense(expense.id, dataToSave);
         toast.success('Expense updated successfully.');
       } else {
-        // The add function in zustand needs to map to snake_case too
+        // Pass the corrected object to the add function
         await addExpense(dataToSave);
         toast.success('Expense added successfully.');
       }
@@ -309,6 +309,18 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ expense, onClose, expenseData
             <h3 className="text-md font-semibold text-gray-700">Billing & Tax Details</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
               <div><Label htmlFor="invoiceNumber">Invoice Number</Label><Input id="invoiceNumber" placeholder="INV-001" value={expenseData.invoiceNumber || ''} onChange={(e) => setExpenseData(prev => ({ ...prev, invoiceNumber: e.target.value }))} disabled={isFormDisabled} /></div>
+                 <div>
+                <Label htmlFor="gstin">GSTIN</Label>
+                <Input 
+                  id="gstin" 
+                  placeholder="e.g., 29ABCDE1234F1Z5" 
+                  value={expenseData.gstin || ''} 
+                  onChange={(e) => setExpenseData(prev => ({ ...prev, gstin: e.target.value.toUpperCase() }))} 
+                  disabled={isFormDisabled} 
+                  maxLength={15}
+                />
+              </div>
+
               <div><Label htmlFor="date">Invoice Date</Label><Input id="date" type="date" value={expenseData.date || ''} onChange={(e) => setExpenseData(prev => ({ ...prev, date: e.target.value }))} disabled={isFormDisabled} /></div>
               {expenseData.hsn && (<div><Label htmlFor="hsn">HSN Code</Label><Input id="hsn" value={expenseData.hsn || ''} onChange={(e) => setExpenseData(prev => ({ ...prev, hsn: e.target.value }))} disabled={isFormDisabled} /></div>)}
               {expenseData.sac && (<div><Label htmlFor="sac">SAC Code</Label><Input id="sac" value={expenseData.sac || ''} onChange={(e) => setExpenseData(prev => ({ ...prev, sac: e.target.value }))} disabled={isFormDisabled} /></div>)}

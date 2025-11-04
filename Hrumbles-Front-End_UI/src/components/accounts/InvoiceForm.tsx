@@ -52,10 +52,12 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
   const { addInvoice, updateInvoice, clients, fetchClients } = useAccountsStore();
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   
-  // --- YOUR EXISTING STATE MANAGEMENT (PRESERVED) ---
+  // --- STATE MANAGEMENT ---
   const [invoiceNumber, setInvoiceNumber] = useState(invoice?.invoiceNumber || generateInvoiceNumber());
   const [clientId, setClientId] = useState(invoice?.clientId || '');
   const [clientName, setClientName] = useState(invoice?.clientName || '');
+  // --- MODIFICATION: Added state for the client's address ---
+  const [clientAddress, setClientAddress] = useState(''); 
   const [currency, setCurrency] = useState<'USD' | 'INR'>(invoice?.currency || 'INR');
   const [items, setItems] = useState<InvoiceItem[]>(invoice?.items || [{ id: '1', description: '', quantity: 1, rate: 0, amount: 0, organizationId }]);
   const [notes, setNotes] = useState(invoice?.notes || '');
@@ -64,13 +66,9 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
   const [subtotal, setSubtotal] = useState(0);
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
-
-  // --- MODIFIED & NEW STATE FOR DATES ---
   const [invoiceDate, setInvoiceDate] = useState<Date | undefined>(invoice?.invoiceDate ? parseDisplayDate(invoice.invoiceDate) : new Date());
   const [dueDate, setDueDate] = useState<Date | undefined>(invoice?.dueDate ? parseDisplayDate(invoice.dueDate) : undefined);
-const [dueDateOption, setDueDateOption] = useState<string>(''); // Set initial state to empty
-
-  // --- YOUR EXISTING ERROR STATE (PRESERVED) ---
+  const [dueDateOption, setDueDateOption] = useState<string>('');
   const [errors, setErrors] = useState<{
     clientId?: string;
     invoiceNumber?: string;
@@ -80,14 +78,11 @@ const [dueDateOption, setDueDateOption] = useState<string>(''); // Set initial s
     itemErrors?: { description?: string; quantity?: string; rate?: string }[];
   }>({});
 
+  // --- EFFECT HOOKS ---
 
-
-// --- THIS IS THE FIX FOR THE EDIT BUTTON ---
   // This effect populates the form's state when the 'invoice' prop is provided for editing.
   useEffect(() => {
-    // This code only runs if an 'invoice' object is passed to the component.
     if (invoice) {
-      // We are in "Edit Mode", so populate all state variables from the invoice prop.
       setInvoiceNumber(invoice.invoiceNumber);
       setClientId(invoice.clientId);
       setClientName(invoice.clientName);
@@ -96,42 +91,39 @@ const [dueDateOption, setDueDateOption] = useState<string>(''); // Set initial s
       setNotes(invoice.notes || '');
       setTerms(invoice.terms || '');
       setTaxRate(invoice.taxRate !== undefined ? invoice.taxRate : (invoice.currency === 'INR' ? 18 : 0));
-      
-      // Convert date strings (e.g., "03-11-2025") back into Date objects for the calendars
       setInvoiceDate(invoice.invoiceDate ? parseDisplayDate(invoice.invoiceDate) : undefined);
       setDueDate(invoice.dueDate ? parseDisplayDate(invoice.dueDate) : undefined);
-
-      // Set the dropdown to 'custom' to show the exact saved date in the calendar picker.
       setDueDateOption('custom');
+      
+      // --- MODIFICATION: Find and set the client's address when editing ---
+      const selectedClient = clients.find(c => c.id === invoice.clientId);
+      if (selectedClient) {
+          setClientAddress(selectedClient.address || 'No address on file.');
+      }
     }
-  }, [invoice]); // The dependency array ensures this runs only when the invoice prop changes.
-  // --- END OF FIX ---
+  }, [invoice, clients]);
 
-
-
-  // --- YOUR EXISTING EFFECTS (PRESERVED) ---
   useEffect(() => {
     fetchClients().catch(error => console.error('Error fetching clients:', error));
   }, [fetchClients]);
 
-useEffect(() => {
-  const selectedClient = clients.find(client => client.id === clientId);
-  if (selectedClient) {
-    // --- This part is the same ---
-    setCurrency(selectedClient.currency);
-    setClientName(selectedClient.client_name);
-    setTaxRate(selectedClient.currency === 'INR' ? 18 : 0);
-    
-    // --- ADD THIS LINE ---
-    // Set a default payment term when client is selected
-    setDueDateOption('net30'); 
-  } else {
-    // --- ADD THIS ENTIRE 'ELSE' BLOCK ---
-    // Reset the terms if no client is selected
-    setDueDateOption('');
-    setDueDate(undefined);
-  }
-}, [clientId, clients]);
+  // Effect to update client details (including address) when clientId changes
+  useEffect(() => {
+    const selectedClient = clients.find(client => client.id === clientId);
+    if (selectedClient) {
+      setCurrency(selectedClient.currency);
+      setClientName(selectedClient.client_name);
+      setTaxRate(selectedClient.currency === 'INR' ? 18 : 0);
+      setDueDateOption('net30');
+      // --- MODIFICATION: Set the address from the selected client ---
+      setClientAddress(selectedClient.address || 'No address on file.');
+    } else {
+      setDueDateOption('');
+      setDueDate(undefined);
+      // --- MODIFICATION: Clear the address if no client is selected ---
+      setClientAddress('');
+    }
+  }, [clientId, clients]);
 
   useEffect(() => {
     const calculatedSubtotal = items.reduce((sum, item) => sum + item.amount, 0);
@@ -143,15 +135,13 @@ useEffect(() => {
     setTotalAmount(calculatedTotal);
   }, [items, taxRate, currency]);
 
-  // --- NEW EFFECT FOR AUTOMATIC DUE DATE CALCULATION ---
+  // Effect for automatic due date calculation
   useEffect(() => {
     if (!invoiceDate || dueDateOption === 'custom') {
-      // If user wants to pick a custom date, don't auto-calculate
       return;
     }
-
     const newDueDate = new Date(invoiceDate);
-    let daysToAdd = 30; // Default to Net 30
+    let daysToAdd = 30;
 
     switch (dueDateOption) {
       case 'on_receipt': daysToAdd = 0; break;
@@ -163,11 +153,9 @@ useEffect(() => {
     
     newDueDate.setDate(invoiceDate.getDate() + daysToAdd);
     setDueDate(newDueDate);
-
   }, [invoiceDate, dueDateOption]);
 
-
-  // --- YOUR VALIDATION LOGIC (MODIFIED FOR NEW DATE STATE) ---
+  // --- YOUR EXISTING VALIDATION & HANDLERS (PRESERVED) ---
   const validateForm = () => {
     const newErrors: typeof errors = {};
     const invoiceDateStr = invoiceDate ? formatToDisplayDate(invoiceDate) : '';
@@ -181,7 +169,6 @@ useEffect(() => {
       newErrors.dueDate = 'Due date must be on or after the invoice date';
     }
 
-    // (Your item validation logic is preserved)
     if (items.length === 0) {
       newErrors.items = 'At least one invoice item is required';
     } else {
@@ -196,7 +183,6 @@ useEffect(() => {
         newErrors.itemErrors = itemErrors;
       }
     }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -204,8 +190,6 @@ useEffect(() => {
   useEffect(() => {
     validateForm();
   }, [clientId, invoiceNumber, invoiceDate, dueDate, items]);
-
-  // --- YOUR EXISTING HANDLERS (PRESERVED) ---
 
   const handleClientChange = (value: string) => {
     setClientId(value);
@@ -236,23 +220,14 @@ useEffect(() => {
       toast.error('Please fix the errors before submitting.');
       return;
     }
-
     const invoiceData: Omit<Invoice, 'id'> = {
-      invoiceNumber,
-      clientId,
-      clientName,
-      currency,
-invoiceDate: invoiceDate ? format(invoiceDate, 'yyyy-MM-dd') : '',
-dueDate: dueDate ? format(dueDate, 'yyyy-MM-dd') : '',
-      items,
-      status,
-      totalAmount,
-      notes,
-      terms,
+      invoiceNumber, clientId, clientName, currency,
+      invoiceDate: invoiceDate ? format(invoiceDate, 'yyyy-MM-dd') : '',
+      dueDate: dueDate ? format(dueDate, 'yyyy-MM-dd') : '',
+      items, status, totalAmount, notes, terms,
       taxRate: currency === 'INR' ? taxRate : undefined,
       taxAmount: currency === 'INR' ? taxAmount : undefined,
-      subtotal,
-      organizationId
+      subtotal, organizationId
     };
     
     if (invoice) {
@@ -260,32 +235,21 @@ dueDate: dueDate ? format(dueDate, 'yyyy-MM-dd') : '',
     } else {
       addInvoice(invoiceData);
     }
-    
     onClose();
   };
 
-  const getCurrencySymbol = () => {
-    return currency === 'USD' ? (
-      <DollarSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-    ) : (
-      <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-    );
-  };
-
-  const formatAmount = (amount: number) => {
-    return currency === 'USD' 
-      ? `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-      : `₹${amount.toLocaleString('en-IN')}`;
-  };
-  
+  const getCurrencySymbol = () => (currency === 'USD' ? <DollarSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /> : <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />);
+  const formatAmount = (amount: number) => (currency === 'USD' ? `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `₹${amount.toLocaleString('en-IN')}`);
   const hasErrors = Object.keys(errors).length > 0;
 
-  // --- JSX WITH NEW DUE DATE UI ---
+  // --- JSX WITH REVISED LAYOUT ---
 
   return (
     <div className="space-y-6">
+      {/* --- MODIFICATION: The entire top grid layout is restructured --- */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Customer and Invoice Number */}
+        
+        {/* --- Left Column: Customer and Address --- */}
         <div className="space-y-4">
           <div>
             <Label htmlFor="clientId">Customer</Label>
@@ -300,13 +264,18 @@ dueDate: dueDate ? format(dueDate, 'yyyy-MM-dd') : '',
             {errors.clientId && <p className="text-red-500 text-sm mt-1">{errors.clientId}</p>}
           </div>
           <div>
-            <Label htmlFor="invoiceNumber">Invoice Number</Label>
-            <Input id="invoiceNumber" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+            <Label htmlFor="clientAddress">Address</Label>
+            <Textarea id="clientAddress" value={clientAddress} readOnly disabled rows={3} placeholder="Client's address will appear here..."/>
           </div>
         </div>
         
-        {/* Invoice Date and NEW Due Date selection */}
+        {/* --- Right Column: Invoice Number, Dates, and Terms --- */}
         <div className="space-y-4">
+          <div>
+            <Label htmlFor="invoiceNumber">Invoice Number</Label>
+            <Input id="invoiceNumber" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+            {errors.invoiceNumber && <p className="text-red-500 text-sm mt-1">{errors.invoiceNumber}</p>}
+          </div>
           <div>
             <Label htmlFor="invoiceDate">Invoice Date</Label>
             <Popover>
@@ -321,73 +290,49 @@ dueDate: dueDate ? format(dueDate, 'yyyy-MM-dd') : '',
              {errors.invoiceDate && <p className="text-red-500 text-sm mt-1">{errors.invoiceDate}</p>}
           </div>
           
-        {clientId && (
-    <>
-        <div>
-            <Label htmlFor="dueDateOption">Payment Terms</Label>
-            <Select value={dueDateOption} onValueChange={setDueDateOption}>
-                <SelectTrigger id="dueDateOption">
-                    <SelectValue placeholder="Select payment terms..." />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="on_receipt">Due on Receipt</SelectItem>
-                    <SelectItem value="net15">Net 15 (15 days)</SelectItem>
-                    <SelectItem value="net30">Net 30 (30 days)</SelectItem>
-                    <SelectItem value="net45">Net 45 (45 days)</SelectItem>
-                    <SelectItem value="net60">Net 60 (60 days)</SelectItem>
-                    <SelectItem value="custom">Custom Date</SelectItem>
-                </SelectContent>
-            </Select>
-        </div>
+          {/* Show payment terms only if a client is selected */}
+          {clientId && (
+            <>
+              <div>
+                  <Label htmlFor="dueDateOption">Payment Terms</Label>
+                  <Select value={dueDateOption} onValueChange={setDueDateOption}>
+                      <SelectTrigger id="dueDateOption"><SelectValue placeholder="Select payment terms..." /></SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="on_receipt">Due on Receipt</SelectItem>
+                          <SelectItem value="net15">Net 15 (15 days)</SelectItem>
+                          <SelectItem value="net30">Net 30 (30 days)</SelectItem>
+                          <SelectItem value="net45">Net 45 (45 days)</SelectItem>
+                          <SelectItem value="net60">Net 60 (60 days)</SelectItem>
+                          <SelectItem value="custom">Custom Date</SelectItem>
+                      </SelectContent>
+                  </Select>
+              </div>
 
-        {/* The conditional UI for the date picker is now inside the main check */}
-        {dueDateOption === 'custom' ? (
-            <div>
-                <Label>Custom Due Date</Label>
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start text-left font-normal">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {dueDate ? format(dueDate, 'PPP') : <span>Pick a due date</span>}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                        <Calendar mode="single" selected={dueDate} onSelect={setDueDate} initialFocus fromDate={invoiceDate} />
-                    </PopoverContent>
-                </Popover>
-                {errors.dueDate && <p className="text-red-500 text-sm mt-1">{errors.dueDate}</p>}
-            </div>
-        ) : (
-            <div>
-                <Label>Calculated Due Date</Label>
-                <Input value={dueDate ? format(dueDate, 'PPP') : ''} readOnly disabled />
-                {errors.dueDate && <p className="text-red-500 text-sm mt-1">{errors.dueDate}</p>}
-            </div>
-        )}
-    </>
-)}
-
-          {/* Conditional UI for Due Date based on selection */}
-          {dueDateOption === 'custom' ? (
-             <div>
-                <Label>Custom Due Date</Label>
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start text-left font-normal">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {dueDate ? format(dueDate, 'PPP') : <span>Pick a due date</span>}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={dueDate} onSelect={setDueDate} initialFocus fromDate={invoiceDate} /></PopoverContent>
-                </Popover>
-                {errors.dueDate && <p className="text-red-500 text-sm mt-1">{errors.dueDate}</p>}
-             </div>
-          ) : (
-            <div>
-                <Label>Calculated Due Date</Label>
-                <Input value={dueDate ? format(dueDate, 'PPP') : ''} readOnly disabled />
-                {errors.dueDate && <p className="text-red-500 text-sm mt-1">{errors.dueDate}</p>}
-            </div>
+              {/* --- MODIFICATION: This is now the ONLY due date block --- */}
+              {dueDateOption === 'custom' ? (
+                  <div>
+                      <Label>Custom Due Date</Label>
+                      <Popover>
+                          <PopoverTrigger asChild>
+                              <Button variant="outline" className="w-full justify-start text-left font-normal">
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  {dueDate ? format(dueDate, 'PPP') : <span>Pick a due date</span>}
+                              </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                              <Calendar mode="single" selected={dueDate} onSelect={setDueDate} initialFocus fromDate={invoiceDate} />
+                          </PopoverContent>
+                      </Popover>
+                      {errors.dueDate && <p className="text-red-500 text-sm mt-1">{errors.dueDate}</p>}
+                  </div>
+              ) : (
+                  <div>
+                      <Label>Due Date</Label>
+                      <Input value={dueDate ? format(dueDate, 'PPP') : ''} readOnly disabled />
+                      {errors.dueDate && <p className="text-red-500 text-sm mt-1">{errors.dueDate}</p>}
+                  </div>
+              )}
+            </>
           )}
         </div>
       </div>

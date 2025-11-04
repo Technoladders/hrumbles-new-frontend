@@ -22,8 +22,16 @@ import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue
 } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge'; 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from 'sonner';
 import { PayrollDrawer } from '@/components/financial/PayrollDrawer';
@@ -86,6 +94,7 @@ const ExpensesPage: React.FC = () => {
     sgst: '',
     hsn: '',
     sac: '',
+    gstin: '',
   };
 
   const [newExpenseData, setNewExpenseData] = useState(initialExpenseState);
@@ -407,29 +416,37 @@ const ExpensesPage: React.FC = () => {
     setIsViewDialogOpen(true);
   };
 
-  const handleEditExpense = (id: string) => {
+// In ExpensesPage.tsx...
+
+const handleEditExpense = (id: string) => {
     const expenseToEdit = expenses.find(exp => exp.id === id);
  
     if (expenseToEdit) {
+      // --- START: CORRECTED STATE SETTING ---
       setEditExpenseData({
         category: expenseToEdit.category || 'Other',
         description: expenseToEdit.description || '',
         date: expenseToEdit.date || '',
-        paymentMethod: expenseToEdit.payment_method || 'UPI',
+        paymentMethod: expenseToEdit.paymentMethod || 'UPI', // Use camelCase
         vendor: expenseToEdit.vendor || '',
-        vendorAddress: expenseToEdit.vendor_address || '',
         notes: expenseToEdit.notes || '',
-        receiptUrl: expenseToEdit.receipt_url || '',
-        invoiceNumber: expenseToEdit.invoice_number || '',
-        taxableAmount: expenseToEdit.taxable_amount?.toString() || '',
+        receiptUrl: expenseToEdit.receiptUrl || '', // Use camelCase
+
+        // Use camelCase properties from the expense object
+        vendorAddress: expenseToEdit.vendorAddress || '',
+        invoiceNumber: expenseToEdit.invoiceNumber || '',
+        taxableAmount: expenseToEdit.taxableAmount?.toString() || '',
         cgst: expenseToEdit.cgst?.toString() || '',
         sgst: expenseToEdit.sgst?.toString() || '',
         hsn: expenseToEdit.hsn || '',
         sac: expenseToEdit.sac || '',
+        gstin: expenseToEdit.gstin || '', 
+        
         amount: expenseToEdit.amount?.toString() || '',
         displayAmount: expenseToEdit.amount ? new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(expenseToEdit.amount) : '',
         fileToUpload: null,
       });
+      // --- END: CORRECTED STATE SETTING ---
  
       setSelectedExpenseId(id);
       setIsEditDialogOpen(true);
@@ -599,9 +616,11 @@ const formatDateForDisplay = (dateStr: string): string => {
     );
   };
 
-  return (
+
+   return (
     <AccountsLayout title="Expenses">
-      <div className="space-y-6">
+      <div className="space-y-6 animate-fade-in">
+        {/* KPI Cards and Filters remain the same */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Card>
             <CardContent className="p-6">
@@ -644,7 +663,7 @@ const formatDateForDisplay = (dateStr: string): string => {
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10"/>
+            <Input placeholder="Search by description, vendor, or category..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10"/>
           </div>
           <div className="flex gap-2">
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -660,78 +679,140 @@ const formatDateForDisplay = (dateStr: string): string => {
         </div>
                               
         <div className="w-full">
-          <div className="flex justify-start gap-2 overflow-x-auto pb-2 mb-4 border-b">
-            <Button variant="ghost" onClick={() => setActiveTab('expense')} className={`text-sm font-medium rounded-none ${activeTab === 'expense' ? 'border-b-2 border-purple-600 text-purple-600' : 'text-muted-foreground'}`}>Expense</Button>
-            <Button variant="ghost" onClick={() => setActiveTab('salary-expense')} className={`text-sm font-medium rounded-none ${activeTab === 'salary-expense' ? 'border-b-2 border-purple-600 text-purple-600' : 'text-muted-foreground'}`}>Salary Expense</Button>
-          </div>
+{/* NEW RESPONSIVE PILL-SHAPED TABS */}
+<div className="inline-flex h-auto items-center justify-center rounded-full bg-gray-100 p-1.5">
+  {/* Expense Tab */}
+  <Button
+    variant="ghost"
+    onClick={() => setActiveTab('expense')}
+    className={`h-auto rounded-full px-4 py-1.5 text-sm font-medium transition-all focus-visible:ring-0 focus-visible:ring-offset-0 ${
+      activeTab === 'expense'
+        ? 'bg-purple-600 text-white shadow-sm hover:bg-purple-600/90'
+        : 'text-muted-foreground hover:bg-transparent hover:text-primary'
+    }`}
+  >
+    Expense
+    {/* MODIFIED: Responsive size and consistent white background */}
+    <span className="ml-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white px-1.5 text-xs font-bold text-purple-800">
+      {filteredExpenses.length}
+    </span>
+  </Button>
+
+  {/* Salary Expense Tab */}
+  <Button
+    variant="ghost"
+    onClick={() => setActiveTab('salary-expense')}
+    className={`h-auto rounded-full px-4 py-1.5 text-sm font-medium transition-all focus-visible:ring-0 focus-visible:ring-offset-0 ${
+      activeTab === 'salary-expense'
+        ? 'bg-purple-600 text-white shadow-sm hover:bg-purple-600/90'
+        : 'text-muted-foreground hover:bg-transparent hover:text-primary'
+    }`}
+  >
+    Salary Expense
+    {/* MODIFIED: Responsive size and consistent white background */}
+    <span className="ml-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white px-1.5 text-xs font-bold text-purple-800">
+      {filteredPayments.length}
+    </span>
+  </Button>
+</div>
  
           {activeTab === 'expense' && (
-            <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-                <div className="overflow-x-auto">
-                    <Table className="min-w-full divide-y divide-gray-200">
-                      <TableHeader className="bg-gray-50">
-                        <TableRow>
-                          <TableHead className="table-header-cell">Date</TableHead><TableHead className="table-header-cell">Category</TableHead><TableHead className="table-header-cell">Description</TableHead><TableHead className="table-header-cell">Vendor</TableHead><TableHead className="table-header-cell">Amount</TableHead><TableHead className="table-header-cell">Payment Method</TableHead><TableHead className="table-header-cell">Receipt</TableHead><TableHead className="table-header-cell">Action</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      {/* THIS IS THE CORRECTED AND FINAL JSX BLOCK FOR THE TABLE BODY */}
-                      <TableBody className="bg-white divide-y divide-gray-200">
-                        {paginatedExpenses.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
-                              No expenses found
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          paginatedExpenses.map((expense) => (
-                            <TableRow key={expense.id} className="hover:bg-gray-50 transition">
-                                <TableCell className="table-cell">{formatDateForDisplay(expense.date)}</TableCell>
-                              <TableCell className="table-cell">{expense.category}</TableCell>
-                              <TableCell className="table-cell">{expense.description}</TableCell>
-                              <TableCell className="table-cell">{expense.vendor || '-'}</TableCell>
-                              <TableCell className="table-cell financial-amount">
-                                <div className="flex items-center">
-                                  <IndianRupee className="h-3 w-3 mr-1" />
-                                  {expense.amount.toLocaleString()}
-                                </div>
-                              </TableCell>
-                              <TableCell className="table-cell">{expense.payment_method}</TableCell>
-                              <TableCell className="table-cell">
-                                {expense.receipt_url ? (
-                                  <Button variant="ghost" size="icon" asChild>
-                                    <a href={expense.receipt_url} target="_blank" rel="noopener noreferrer">
-                                      <Receipt className="h-4 w-4" />
-                                    </a>
-                                  </Button>
-                                ) : (
-                                  <span className="text-muted-foreground">-</span>
-                                )}
-                              </TableCell>
-                              <TableCell className="table-cell">
-                                <div className="flex items-center space-x-1">
-                                  <Button variant="ghost" size="icon" onClick={() => handleViewExpense(expense.id)}>
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" onClick={() => handleEditExpense(expense.id)}>
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" onClick={() => handleDeleteExpense(expense.id)} className="text-red-500 hover:text-red-700">
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                </div>
-                {filteredExpenses.length > 0 && renderPagination(expenseCurrentPage, setExpenseCurrentPage, expenseTotalPages, expenseItemsPerPage, handleExpenseItemsPerPageChange, filteredExpenses.length, expenseStartIndex, "expenses")}
+            <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm animate-scale-in">
+              {/* DESKTOP HEADER */}
+              <div className="hidden lg:grid grid-cols-12 gap-x-4 px-6 py-3 bg-purple-600 border-b border-purple-700">
+                <div className="col-span-1 text-xs font-bold text-white uppercase tracking-wider">Date</div>
+                <div className="col-span-4 text-xs font-bold text-white uppercase tracking-wider">Description</div>
+                <div className="col-span-2 text-xs font-bold text-white uppercase tracking-wider">Vendor</div>
+                <div className="col-span-2 text-xs font-bold text-white uppercase tracking-wider">Amount</div>
+                <div className="col-span-1 text-xs font-bold text-white uppercase tracking-wider">Method</div>
+                <div className="col-span-2 text-center text-xs font-bold text-white uppercase tracking-wider">Actions</div>
+              </div>
+
+              {/* LIST OF EXPENSE CARDS */}
+              <div className="divide-y divide-gray-200">
+                {paginatedExpenses.length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground">
+                    No expenses found.
+                  </div>
+                ) : (
+                  paginatedExpenses.map((expense) => (
+                    <div key={expense.id} className="grid grid-cols-1 lg:grid-cols-12 gap-x-4 gap-y-3 px-6 py-4 items-center transition-all duration-200 ease-in-out hover:shadow-lg hover:-translate-y-px hover:bg-gray-50/50">
+                      
+                      <div className="col-span-full lg:col-span-1 text-sm text-gray-700">{formatDateForDisplay(expense.date)}</div>
+
+                      <div className="col-span-full lg:col-span-4">
+                        <p className="font-semibold text-gray-800 truncate" title={expense.description}>{expense.description}</p>
+                        <Badge variant="outline" className="mt-1">{expense.category}</Badge>
+                      </div>
+
+                      <div className="col-span-full lg:col-span-2 text-sm text-gray-700">{expense.vendor || '-'}</div>
+
+                      <div className="col-span-full lg:col-span-2 text-sm font-semibold financial-amount flex items-center">
+                          <IndianRupee className="h-3.5 w-3.5 mr-1 text-gray-500" />
+                          {expense.amount.toLocaleString()}
+                      </div>
+
+                      <div className="col-span-full lg:col-span-1 text-sm text-gray-700">{expense.paymentMethod}</div>
+
+                      <div className="col-span-full lg:col-span-2 flex lg:justify-center">
+                        <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <a 
+                                  href={expense.receiptUrl || '#'} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className={`h-7 w-7 rounded-full flex items-center justify-center text-slate-500 transition-colors ${expense.receiptUrl ? 'hover:bg-purple-600 hover:text-white' : 'opacity-50 cursor-not-allowed'}`}
+                                  onClick={(e) => !expense.receiptUrl && e.preventDefault()}
+                                >
+                                  <Receipt className="h-4 w-4" />
+                                </a>
+                              </TooltipTrigger>
+                              <TooltipContent><p>View Receipt</p></TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleViewExpense(expense.id)}>
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent><p>View Details</p></TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleEditExpense(expense.id)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent><p>Edit Expense</p></TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-red-600 hover:text-white transition-colors" onClick={() => handleDeleteExpense(expense.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent><p>Delete Expense</p></TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              {filteredExpenses.length > 0 && renderPagination(expenseCurrentPage, setExpenseCurrentPage, expenseTotalPages, expenseItemsPerPage, handleExpenseItemsPerPageChange, filteredExpenses.length, expenseStartIndex, "expenses")}
             </div>
           )}
  
           {activeTab === 'salary-expense' && (
-            // ... (Salary expense table JSX remains the same)
             <div>
               <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                   <div className="flex justify-start gap-2 border border-gray-200 rounded-lg p-1">
@@ -788,27 +869,25 @@ const formatDateForDisplay = (dateStr: string): string => {
         </div>
       </div>
 
+      {/* Dialogs and Drawers */}
       <Dialog open={isAddDialogOpen} onOpenChange={(isOpen) => { setIsAddDialogOpen(isOpen); if (!isOpen) setNewExpenseData(initialExpenseState); }}>
         <DialogContent className="max-w-4xl p-0 bg-gray-50">
           <DialogHeader className="p-6 border-b"><DialogTitle>Add New Expense</DialogTitle></DialogHeader>
           <ExpenseForm onClose={() => setIsAddDialogOpen(false)} expenseData={newExpenseData} setExpenseData={setNewExpenseData} organizationName={"Your Company Name"} />
         </DialogContent>
       </Dialog>
-
       <Dialog open={isViewDialogOpen} onOpenChange={handleViewDialogClose}>
         <DialogContent className="max-w-4xl">
           <DialogHeader><DialogTitle>Expense Details</DialogTitle></DialogHeader>
           {selectedExpense && (<ExpenseDetails expense={selectedExpense} onClose={() => handleViewDialogClose(false)} />)}
         </DialogContent>
       </Dialog>
-
       <Dialog open={isPayslipDialogOpen} onOpenChange={handlePayslipDialogClose}>
         <DialogContent className="max-w-3xl">
           <DialogHeader><DialogTitle>Payslip</DialogTitle></DialogHeader>
           {payslipData && (<PayslipViewer payslipData={payslipData} paymentId={payslipData.employeeId} />)}
         </DialogContent>
       </Dialog>
-
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-4xl p-0 bg-gray-50">
           <DialogHeader className="p-6 border-b"><DialogTitle>Edit Expense</DialogTitle></DialogHeader>
@@ -817,7 +896,6 @@ const formatDateForDisplay = (dateStr: string): string => {
           )}
         </DialogContent>
       </Dialog>
-
       <PayrollDrawer open={isPayrollDrawerOpen} onOpenChange={handlePayrollDrawerClose} payment={selectedPayment} editMode={isEditMode} onPaymentCreated={async (newPayment: any) => { await updatePaymentRecordsForEmployee(newPayment.employeeId, { employee_name: newPayment.employeeName, designation: newPayment.designation, payment_amount: newPayment.paymentAmount, payment_category: newPayment.paymentCategory, joining_date: newPayment.payslipData?.dateOfJoining || null, }); await handlePendingPaymentsForAllMonths(); }} />
     </AccountsLayout>
   );
