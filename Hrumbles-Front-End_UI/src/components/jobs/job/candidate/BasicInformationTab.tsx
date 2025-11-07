@@ -25,10 +25,11 @@ import MultiLocationSelector from "./MultiLocationSelector";
 import SingleLocationSelector from "./SingleLocationSelector";
 import { CandidateFormData } from "./AddCandidateDrawer";
 import { supabase } from "@/integrations/supabase/client";
-import { FileText, Loader2, User, Mail, Phone, MapPin, Briefcase, DollarSign, Clock, Link as LinkIcon, Gift } from "lucide-react";
+import { FileText, Loader2, User, Mail, Phone, MapPin, Briefcase, DollarSign, Clock, Link as LinkIcon, CalendarDays, Paperclip, UploadCloud } from "lucide-react";
 import PhoneInput from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 import { toast } from "sonner";
+import { Candidate } from "@/lib/types";
 
 // --- Animation Variants for Framer Motion ---
 // Defines the animation for each section card (fade in and slide up)
@@ -65,6 +66,8 @@ interface BasicInformationTabProps {
   onSaveAndNext: (data: CandidateFormData) => void;
   onCancel: () => void;
   onParseComplete: (parsedData: any, rawText: string) => void;
+  candidate?: Candidate; 
+  isEditMode?: boolean;
 }
 
 const calculateExperienceFromHistory = (workHistory: any[]) => {
@@ -104,7 +107,16 @@ const LOCATION_OPTIONS = [
   "Howrah", "Gwalior", "Jabalpur", "Coimbatore", "Madurai", "Visakhapatnam",
   "Vijayawada", "Chandigarh", "Thiruvananthapuram", "Kochi", "Mysore",
   "Jodhpur", "Raipur", "Dehradun", "Guwahati", "Hubli-Dharwad", "Salem",
-  "Tiruchirappalli", "Bhubaneshwar", "Gurgaon", "Remote", "Others",
+  "Tiruchirappalli", "Bhubaneshwar", "Gurgaon", "Noida", 
+  "Ghaziabad", 
+  "Thane", 
+  "Pimpri-Chinchwad", 
+  "Kota", 
+  "Jamshedpur", 
+  "Tiruppur", 
+  "Gandhinagar", 
+  "Bareilly", 
+  "Solapur", "Remote", "Others",
 ];
 
 const formatINR = (value: number): string => {
@@ -123,6 +135,28 @@ const NOTICE_PERIOD_OPTIONS = [
   "Immediate", "15 days", "30 days", "45 days", "60 days", "90 days",
 ];
 
+// Constants for CTC fields
+const currencies = [
+    { value: "INR", symbol: "₹" },
+    { value: "USD", symbol: "$" },
+];
+const budgetTypes = ["LPA", "Monthly", "Hourly"];
+
+const formatForInput = (value?: number | string | null): string => {
+    if (value === null || value === undefined || value === '') return '';
+    const numericString = String(value).replace(/[^0-9]/g, '');
+    if (numericString === '') return '';
+    return new Intl.NumberFormat('en-IN').format(Number(numericString));
+};
+
+// This function is for display-only text, like the small text below an input
+const formatForDisplayText = (value: number): string => {
+  const formattedNumber = new Intl.NumberFormat("en-IN").format(value);
+  if (value >= 1_00_00_000) return `${formattedNumber} (Crore)`;
+  if (value >= 1_00_000) return `${formattedNumber} (Lakh)`;
+  return formattedNumber;
+};
+
 const sanitizeFileName = (fileName: string): string => {
   const extension = fileName.split(".").pop()?.toLowerCase() || "";
   const name = fileName.substring(0, fileName.length - (extension.length + 1));
@@ -134,10 +168,16 @@ const sanitizeFileName = (fileName: string): string => {
   return `${sanitizedName}.${extension}`;
 };
 
-const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }: BasicInformationTabProps) => {
+const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete, candidate, isEditMode }: BasicInformationTabProps) => {
   const [isParsing, setIsParsing] = useState(false);
+  const [isUploadingOffer, setIsUploadingOffer] = useState(false);
+  const [isUploadingJoining, setIsUploadingJoining] = useState(false);
   const user = useSelector((state: any) => state.auth.user);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
+  const isOfferIssued = isEditMode && candidate?.sub_status?.name === 'Offer Issued';
+  const isJoined = isEditMode && candidate?.sub_status?.name === 'Joined';
+  const ctcLabel = isJoined ? 'Joined CTC' : 'Offered CTC';
+  const dateLabel = isJoined ? 'Joined Date' : 'Offer/Joining Date';
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -211,18 +251,40 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const isValid = await form.trigger();
-    if (!isValid) {
-      const errors = form.formState.errors;
-      console.log("Form validation errors:", errors);
-      toast.error("Please fill all required fields correctly.");
-      return;
+  const handleAttachmentUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: 'offer' | 'joining'
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file || !candidate?.id) return;
+    const setLoading = type === 'offer' ? setIsUploadingOffer : setIsUploadingJoining;
+    const formField = type === 'offer' ? 'offerLetterUrl' : 'joiningLetterUrl';
+   
+    setLoading(true);
+    toast.info(`Uploading ${type} letter...`);
+    try {
+        const filePath = `public/${type}-letters/${candidate.id}-${Date.now()}-${file.name}`;
+       
+        // **CRITICAL CHANGE:** Use the new bucket name here
+        const { error: uploadError } = await supabase.storage
+            .from("candidate-attachments")
+            .upload(filePath, file, { upsert: true });
+        if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage
+            .from("candidate-attachments")
+            .getPublicUrl(filePath);
+        if (!publicUrl) throw new Error("Failed to get public URL.");
+        form.setValue(formField, publicUrl, { shouldValidate: true, shouldDirty: true });
+        toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} letter uploaded successfully!`);
+    } catch (error: any) {
+        console.error(`Error uploading ${type} letter:`, error);
+        toast.error(`Failed to upload ${type} letter: ${error.message}`);
+    } finally {
+        setLoading(false);
     }
-    const formData = form.getValues();
-    onSaveAndNext(formData);
   };
+
+  console.log("BasicInformationTab",candidate)
 
   const currentSalary = form.watch("currentSalary");
   const expectedSalary = form.watch("expectedSalary");
@@ -231,7 +293,7 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
 
   return (
     <Form {...form}>
-      <form onSubmit={handleSubmit} className="space-y-8 py-4">
+      <form onSubmit={form.handleSubmit(onSaveAndNext)} className="space-y-8 py-4">
         {/* --- Section 1: Resume Upload --- */}
         <motion.div
           variants={sectionVariants}
@@ -432,7 +494,7 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
                         name="totalExperience"
                         render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Total Experience (years)</FormLabel>
+                            <FormLabel>Total Experience (years) <span className="text-red-500">*</span></FormLabel>
                             <Select onValueChange={(value) => field.onChange(value ? Number(value) : undefined)} value={field.value?.toString()}>
                             <FormControl>
                                 <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
@@ -455,7 +517,7 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
                         name="totalExperienceMonths"
                         render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Total Experience (months)</FormLabel>
+                            <FormLabel>Total Experience (months) <span className="text-red-500">*</span></FormLabel>
                             <Select onValueChange={(value) => field.onChange(value ? Number(value) : undefined)} value={field.value?.toString()}>
                             <FormControl>
                                 <motion.div variants={fieldHoverEffect} whileHover="hover">
@@ -536,7 +598,7 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
                         name="currentSalary"
                         render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Current Salary</FormLabel>
+                            <FormLabel>Current Salary <span className="text-red-500">*</span></FormLabel>
                             <FormControl>
                             <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
                                 <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -554,6 +616,7 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
                             <FormMessage />
                         </FormItem>
                         )}
+                        
                     />
                 </motion.div>
                 <motion.div variants={itemVariants}>
@@ -562,7 +625,7 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
                         name="expectedSalary"
                         render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Expected Salary</FormLabel>
+                            <FormLabel>Expected Salary <span className="text-red-500">*</span></FormLabel>
                             <FormControl>
                             <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
                                 <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -629,6 +692,141 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete }:
                         )}
                     />
                 </motion.div>
+                {/* --- DYNAMIC OFFER/JOINING SECTION --- */}
+                {(isOfferIssued || isJoined) && (
+                    <>
+                        <motion.div variants={itemVariants} className="md:col-span-2">
+                            <hr className="my-2 border-gray-200" />
+                        </motion.div>
+
+                        <motion.div variants={itemVariants}>
+                             <FormField
+                                control={form.control}
+                                name="ctc"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="font-semibold text-gray-700">{ctcLabel}</FormLabel>
+                                    <div className="flex items-center mt-2">
+                                        <FormField
+                                            control={form.control} name="currencyType"
+                                            render={({ field: currencyField }) => (
+                                            <Select onValueChange={currencyField.onChange} value={currencyField.value} disabled>
+                                                <FormControl>
+                                                    <SelectTrigger className="w-[80px] rounded-r-none border-r-0"><SelectValue /></SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>{currencies.map((c) => (<SelectItem key={c.value} value={c.value}>{c.symbol}</SelectItem>))}</SelectContent>
+                                            </Select>
+                                            )}
+                                        />
+                                        <FormControl>
+                                            {/* **FIX 2:** Use the safe formatting function here */}
+                                            <Input
+                                                type="text"
+                                                placeholder="e.g., 1,500,000"
+                                                className="rounded-none flex-1"
+                                                value={formatForInput(field.value)}
+                                                onChange={(e) => {
+                                                    const rawValue = e.target.value.replace(/[^0-9]/g, "");
+                                                    field.onChange(rawValue ? Number(rawValue) : undefined);
+                                                }}
+                                            />
+                                        </FormControl>
+                                        <FormField
+                                            control={form.control} name="budgetType"
+                                            render={({ field: budgetField }) => (
+                                            <Select onValueChange={budgetField.onChange} value={budgetField.value} disabled>
+                                                <FormControl>
+                                                    <SelectTrigger className="w-[110px] rounded-l-none border-l-0"><SelectValue /></SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>{budgetTypes.map((type) => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent>
+                                            </Select>
+                                            )}
+                                        />
+                                    </div>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                            />
+                        </motion.div>
+
+                        <motion.div variants={itemVariants}>
+                             <FormField
+                                control={form.control}
+                                name="joiningDate"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="font-semibold text-gray-700">{dateLabel}</FormLabel>
+                                    <FormControl>
+                                        <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative mt-2">
+                                            <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                            <Input type="date" value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value || undefined)} className="pl-10"/>
+                                        </motion.div>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                    />
+                </motion.div>
+
+                        <motion.div variants={itemVariants}>
+                            <FormField
+                                control={form.control} name="offerLetterUrl"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="font-semibold text-gray-700">Offer Letter</FormLabel>
+                                    <div className="mt-2">
+                                        {field.value ? (
+                                            <div className="flex items-center justify-between p-2 border rounded-md bg-gray-50">
+                                                <a href={field.value} target="_blank" rel="noopener noreferrer" className="text-sm text-purple-600 hover:underline flex items-center gap-2 truncate">
+                                                    <Paperclip className="h-4 w-4 flex-shrink-0" /> <span className="truncate">View Uploaded Offer Letter</span>
+                                                </a>
+                                                <Button type="button" size="sm" variant="outline" onClick={() => document.getElementById('offer-letter-input')?.click()} disabled={isUploadingOffer}> Change </Button>
+                                            </div>
+                                        ) : (
+                                            <Button type="button" variant="outline" className="w-full" onClick={() => document.getElementById('offer-letter-input')?.click()} disabled={isUploadingOffer}>
+                                                {isUploadingOffer ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4 mr-2" />}
+                                                Upload Offer Letter
+                                            </Button>
+                                        )}
+                                        <Input id="offer-letter-input" type="file" className="hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,image/*"  onChange={(e) => handleAttachmentUpload(e, 'offer')} />
+                                    </div>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                            />
+                        </motion.div>
+
+                        {isJoined && (
+                            <motion.div variants={itemVariants}>
+                                <FormField
+                                    control={form.control} name="joiningLetterUrl"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="font-semibold text-gray-700">Joining Letter</FormLabel>
+                                        <div className="mt-2">
+                                            {field.value ? (
+                                                <div className="flex items-center justify-between p-2 border rounded-md bg-gray-50">
+                                                    <a href={field.value} target="_blank" rel="noopener noreferrer" className="text-sm text-purple-600 hover:underline flex items-center gap-2 truncate">
+                                                        <Paperclip className="h-4 w-4 flex-shrink-0" /> <span className="truncate">View Uploaded Joining Letter</span>
+                                                    </a>
+                                                    <Button type="button" size="sm" variant="outline" onClick={() => document.getElementById('joining-letter-input')?.click()} disabled={isUploadingJoining}> Change </Button>
+                                                </div>
+                                            ) : (
+                                                <Button type="button" variant="outline" className="w-full" onClick={() => document.getElementById('joining-letter-input')?.click()} disabled={isUploadingJoining}>
+                                                    {isUploadingJoining ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4 mr-2" />}
+                                                    Upload Joining Letter
+                                                </Button>
+                                            )}
+                                            <Input id="joining-letter-input" type="file" className="hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,image/*"  onChange={(e) => handleAttachmentUpload(e, 'joining')} />
+                                        </div>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                            </motion.div>
+                        )}
+                    </>
+                )}
             </div>
         </motion.div>
 

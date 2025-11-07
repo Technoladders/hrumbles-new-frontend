@@ -159,7 +159,7 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
       <CardHeader className="flex-shrink-0 border-b">
         <CardTitle className="text-black-800">Background Verification</CardTitle>
       </CardHeader>
-     <CardContent className="relative flex-grow overflow-y-auto p-0 sm:p-4">
+     <CardContent className="relative h-[calc(100vh-200px)] flex-grow overflow-y-auto p-0 sm:p-4">
        {view === 'all_results' ? (
           <div className="p-6 animate-fade-in">
              <AllResultsDisplay 

@@ -1,6 +1,7 @@
+// jobQueryService.ts
 
 import { JobData } from "@/lib/types";
-import { transformToJobData, transformToDbJob } from "./jobDataTransformer";
+import { transformToJobData } from "./jobDataTransformer"; 
 import {
   fetchAllJobs,
   fetchJobsByType,
@@ -12,20 +13,11 @@ import {
   fetchJobsAssignedToUser
 } from "./supabaseQueries";
 
-
 // Get all jobs
-// jobService.ts (or wherever getAllJobs is defined)
 export const getAllJobs = async (): Promise<JobData[]> => {
   try {
     const { data } = await fetchAllJobs();
-   
-    
-    // Convert raw data to job data
-    const transformedData = Array.isArray(data) 
-      ? data.map(job => transformToJobData(job))
-      : [];
-    
-    return transformedData;
+    return Array.isArray(data) ? data.map(job => transformToJobData(job)) : [];
   } catch (error) {
     console.error("Failed to fetch jobs:", error);
     throw error;
@@ -36,11 +28,7 @@ export const getAllJobs = async (): Promise<JobData[]> => {
 export const getJobsByType = async (jobType: string): Promise<JobData[]> => {
   try {
     const { data } = await fetchJobsByType(jobType);
-    
-    // Transform data to JobData format
-    return Array.isArray(data) 
-      ? data.map(job => transformToJobData(job))
-      : [];
+    return Array.isArray(data) ? data.map(job => transformToJobData(job)) : [];
   } catch (error) {
     console.error(`Failed to fetch ${jobType} jobs:`, error);
     throw error;
@@ -62,32 +50,17 @@ export const getJobById = async (id: string): Promise<JobData | null> => {
 export const getJobsAssignedToUser = async (userId: string): Promise<JobData[]> => {
   try {
     const { data } = await fetchJobsAssignedToUser(userId);
-    
-    return Array.isArray(data) 
-      ? data.map(job => transformToJobData(job))
-      : [];
+    return Array.isArray(data) ? data.map(job => transformToJobData(job)) : [];
   } catch (error) {
     console.error(`Failed to fetch jobs assigned to user ${userId}:`, error);
     throw error;
   }
 };
 
-
 // Create a new job
-export const createJob = async (job: JobData, organization_id: string, created_by: string): Promise<JobData> => {
+export const createJob = async (job: JobData): Promise<JobData> => {
   try {
-    // Transform JobData to DB format
-    const dbJob = transformToDbJob(job);
-
-    // Add organization_id and created_by to the dbJob object
-    const jobWithMeta = {
-      ...dbJob,
-      organization_id, // Add organization_id
-      created_by // Use the passed created_by
-    };
-
-    const { data } = await insertJob(jobWithMeta);
-    
+    const { data } = await insertJob(job);
     return transformToJobData(data);
   } catch (error) {
     console.error("Failed to create job:", error);
@@ -98,18 +71,11 @@ export const createJob = async (job: JobData, organization_id: string, created_b
 // Update a job
 export const updateJob = async (id: string, job: JobData, updated_by: string): Promise<JobData> => {
   try {
-    // Transform JobData to DB format
-    const dbJob = transformToDbJob(job);
-
-    // Add updated_by to the dbJob object
-    const jobWithMeta = {
-      ...dbJob,
-      updated_by // Add updated_by
-    };
-
+    const jobWithMeta = { ...job, updated_by };
     const { data } = await updateJobRecord(id, jobWithMeta);
-    
     return transformToJobData(data);
+  // --- THIS IS THE FIX ---
+  // The underscore has been removed.
   } catch (error) {
     console.error(`Failed to update job with ID ${id}:`, error);
     throw error;

@@ -819,6 +819,7 @@ const candidates = useMemo(() => {
           interview_date: candidate.interview_date,
           interview_time: candidate.interview_time,
           interview_feedback: candidate.interview_feedback,
+          joining_date: candidate.joining_date, 
     };
     });
   }, [candidatesData, job, clientData, validatingIds]);
@@ -2195,7 +2196,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
 <TableCell className="sticky left-[60px] z-10 px-2 font-medium bg-purple-50 group-hover:bg-slate-50 py-1">
   <div className="flex items-start gap-2 h-full">
     <div className="flex-1 min-w-0">
-      <div className="truncate cursor-pointer text-black" onClick={() => navigate(`/employee/${candidate.id}/${jobId}`)} title={candidate.name}>
+      <div className="truncate cursor-pointer text-black" onClick={() => navigate(`/employee/${candidate.id}/${jobId}`, { state: { candidate } })} title={candidate.name}>
         {candidate.name}
       </div>
       <span className="text-xs text-muted-foreground whitespace-nowrap block text-left">

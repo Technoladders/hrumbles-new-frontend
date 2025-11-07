@@ -1,72 +1,89 @@
+// utils/mapFormDataToJobData.ts
 
 import { JobData } from "@/lib/types";
 import { JobFormData } from "../hooks/useJobFormState";
 
+/**
+ * This is the ONLY translator you need. It converts the complex form state
+ * into a single, clean object that perfectly matches the 'hr_jobs' table schema.
+ */
 export const mapFormDataToJobData = (
   formData: JobFormData, 
   editJob: JobData | null,
   jobType: "Internal" | "External",
-   internalType: "Inhouse" | "Client Side" | null
-): JobData => {
-  console.log("Mapping form data to job data:", formData);
+  internalType: "Inhouse" | "Client Side" | null
+): Partial<JobData> => {
+  
+  console.log("Step 1: Raw form data being mapped:", formData);
 
   const isClientSideInternal = jobType === "Internal" && internalType === "Client Side";
-  const submissionType = isClientSideInternal || jobType === "External" ? "Client" : "Internal";
-  const clientOwner = submissionType === "Client" ? formData.clientDetails.clientName : "Internal HR";
+  const submissionType = isClientSideInternal ? "Client Side" : (internalType === 'Inhouse' ? 'Internal' : 'External');
   
-  // Create the job data object
-  const jobData: JobData = {
-    id: editJob?.id || crypto.randomUUID(),
-    jobId: formData.jobInformation.jobId,
-    title: formData.jobInformation.jobTitle,
-    department: editJob?.department || "Engineering", // Default value, could be made editable
-    location: formData.jobInformation.jobLocation,
-    type: "Full-time", // Default value, could be made editable
-    status: editJob?.status || "Active",
-    postedDate: editJob?.postedDate || new Date().toISOString().split('T')[0],
-    applications: editJob?.applications || 0,
-    dueDate: editJob?.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    clientOwner: clientOwner,
-    submissionType: submissionType,
-    hiringMode: formData.jobInformation.hiringMode || "Full Time",
-    
-    jobType: jobType, // Set the job type
-    experience: {
-      min: { 
-        years: formData.experienceSkills.minimumYear, 
-        months: formData.experienceSkills.minimumMonth 
-      },
-      max: { 
-        years: formData.experienceSkills.maximumYear, 
-        months: formData.experienceSkills.maximumMonth 
-      }
+  // Convert the array of skill OBJECTS to a simple array of STRINGS for the database.
+  const skillsForDatabase = (formData.jobDescription.skills || []).map(skill => skill.name);
+  
+  // Construct the nested JSONB object for experience from Step 1's data.
+  const experienceForDatabase = {
+    min: { 
+      years: formData.jobInformation.minimumYear || 0, 
+      months: formData.jobInformation.minimumMonth || 0
     },
-    skills: formData.experienceSkills.skills,
+    max: { 
+      years: formData.jobInformation.maximumYear || 0,
+      months: formData.jobInformation.maximumMonth || 0
+    }
+  };
+
+  // Create the final object that matches your database schema EXACTLY.
+  const jobDataForDatabase: Partial<JobData> = {
+    // --- Data from Job Information (Step 1) ---
+    job_id: formData.jobInformation.jobId,
+    title: formData.jobInformation.jobTitle,
+    location: formData.jobInformation.jobLocation,
+    hiring_mode: formData.jobInformation.hiringMode,
+    notice_period: formData.jobInformation.noticePeriod,
+    number_of_candidates: formData.jobInformation.numberOfCandidates,
+    
+    // --- Data from Job Description (Step 2) ---
     description: formData.jobDescription.description,
-    descriptionBullets: [],
-    clientDetails: {
+    
+    // --- Correctly Mapped Data ---
+    skills: skillsForDatabase,
+    experience: experienceForDatabase,
+    
+    // --- Data from Client Details (if applicable) ---
+    client_details: {
       clientName: formData.clientDetails.clientName,
       clientBudget: formData.clientDetails.clientBudget,
       endClient: formData.clientDetails.endClient,
-      pointOfContact: formData.clientDetails.pointOfContact
+      pointOfContact: formData.clientDetails.pointOfContact,
     },
-    noticePeriod: formData.jobInformation.noticePeriod,
-    numberOfCandidates: formData.jobInformation.numberOfCandidates 
+    client_project_id: formData.clientDetails.clientProjectId || null,
+    currency_type: formData.clientDetails.currency_type,
+    budget_type: formData.clientDetails.budget_type,
+    
+    // --- Metadata and Defaults ---
+    department: editJob?.department || "Engineering",
+    status: editJob?.status || "Active",
+    posted_date: editJob?.posted_date || new Date().toISOString().split('T')[0],
+    client_owner: submissionType === "Client Side" ? formData.clientDetails.clientName : "Internal HR",
+    submission_type: submissionType,
+    job_type_category: jobType,
+    description_bullets: [],
+    applications: 0,
   };
-
-  // Only add clientProjectId if it's present in the form data
-  if (formData.clientDetails.clientProjectId) {
-    jobData.clientProjectId = formData.clientDetails.clientProjectId;
-  }
-
-  // Add assignedTo if present
+  
   if (formData.clientDetails.assignedTo) {
-    jobData.assignedTo = {
+    jobDataForDatabase.assigned_to = {
       type: "individual",
       name: formData.clientDetails.assignedTo
     };
   }
+  
+  if (editJob) {
+    jobDataForDatabase.id = editJob.id;
+  }
 
-  console.log("Final job data:", jobData);
-  return jobData;
+  console.log("Step 2: Final object ready for database:", jobDataForDatabase);
+  return jobDataForDatabase;
 };

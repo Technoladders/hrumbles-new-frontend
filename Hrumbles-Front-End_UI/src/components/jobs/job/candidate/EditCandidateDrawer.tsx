@@ -64,6 +64,12 @@ export type CandidateFormData = {
   isLinkedInRequired?: boolean;
   hasOffers?: "Yes" | "No";
   offerDetails?: string;
+    ctc?: number;
+  currencyType?: string;
+  budgetType?: string;
+  joiningDate?: string;
+  offerLetterUrl?: string;
+  joiningLetterUrl?: string;
 };
 
 const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChange }: AddCandidateDrawerProps) => {
@@ -74,6 +80,8 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
   const user = useSelector((state: any) => state.auth.user);
   const isEditMode = !!candidate;
 
+  console.log("EditCandidate data", candidate);
+
   const { 
     data: jobs, 
   } = useQuery({
@@ -81,6 +89,25 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
     queryFn: () => getJobById(job.id || ""),
     enabled: !!job.id,
   });
+
+// In EditCandidateDrawer.tsx
+
+const parseSalaryString = (salaryString?: string | null) => {
+    if (!salaryString || typeof salaryString !== 'string') {
+        return { amount: undefined, currency: 'INR', period: 'LPA' };
+    }
+    const cleaned = salaryString.replace(/,/g, '');
+    const currencyMatch = cleaned.match(/([$₹])/);
+    const currency = currencyMatch ? (currencyMatch[1] === '$' ? 'USD' : 'INR') : 'INR';
+    const amountMatch = cleaned.match(/(\d+(\.\d+)?)/);
+    const amount = amountMatch ? parseFloat(amountMatch[1]) : undefined;
+    const periodMatch = cleaned.match(/(LPA|Monthly|Hourly)/i);
+    
+    // **THE FIX:** Ensure title case ("Monthly"), not uppercase ("MONTHLY")
+    const period = periodMatch ? (periodMatch[0].charAt(0).toUpperCase() + periodMatch[0].slice(1).toLowerCase()) : 'LPA';
+
+    return { amount, currency, period };
+};
 
   const controlledOpen = open !== undefined ? open : isOpen;
   const controlledOnOpenChange = onOpenChange || setIsOpen;
@@ -108,6 +135,8 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
 
   useEffect(() => {
     if (candidate && isEditMode) {
+      const { amount, currency, period } = parseSalaryString(candidate.ctc);
+      const joiningDate = candidate.joining_date ? candidate.joining_date.split('T')[0] : "";
       setCandidateId(candidate.id);
       basicInfoForm.reset({
         firstName: candidate.name.split(" ")[0] || "",
@@ -128,6 +157,12 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
         linkedInId: candidate.metadata?.linkedInId || "",
         hasOffers: candidate.metadata?.hasOffers,
         offerDetails: candidate.metadata?.offerDetails || "",
+       ctc: amount,
+        currencyType: currency,
+        budgetType: period,
+        joiningDate: joiningDate,
+        offerLetterUrl: candidate.metadata?.offerLetterUrl || "",
+        joiningLetterUrl: candidate.metadata?.joiningLetterUrl || "",
       });
 
       const candidateSkills = candidate.skillRatings || candidate.skills || [];
@@ -214,6 +249,11 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
 
     const appliedFrom = user?.user_metadata ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}` : "Unknown";
 
+    const { ctc, currencyType, budgetType, joiningDate } = basicInfoData;
+    const currencySymbol = currencyType === 'USD' ? '$' : '₹';
+    const ctcString = ctc && currencyType && budgetType ? `${currencySymbol}${ctc} ${budgetType}` : candidate?.ctc;
+
+
     const payload: CandidateData = {
       id: candidateId || undefined,
       name: `${basicInfoData.firstName} ${basicInfoData.lastName}`,
@@ -231,6 +271,10 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
       createdBy: candidate?.createdBy || user?.id,
       updatedBy: user?.id,
       skillRatings: skillsData.skills || [],
+      ctc: ctcString,
+      joining_date: joiningDate,
+      offerLetterUrl: basicInfoData.offerLetterUrl || null,
+      joiningLetterUrl: basicInfoData.joiningLetterUrl || null,
       metadata: {
         currentLocation: basicInfoData.currentLocation,
         preferredLocations: basicInfoData.preferredLocations,
@@ -250,6 +294,8 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
         pan: proofIdData.pan || undefined,
         pf: proofIdData.pf || undefined,
         esicNumber: proofIdData.esicNumber || undefined,
+        offerLetterUrl: basicInfoData.offerLetterUrl || null,
+        joiningLetterUrl: basicInfoData.joiningLetterUrl || null,
       },
       progress: candidate?.progress || { screening: false, interview: false, offer: false, hired: false, joined: false }
     };
@@ -349,6 +395,8 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
                 onSaveAndNext={handleSaveBasicInfo}
                 onCancel={handleClose}
                 onParseComplete={handleParseComplete} // FIX: Prop is now passed
+                candidate={candidate} // Pass the candidate object
+                isEditMode={isEditMode}   // Pass the isEditMode flag
             />
           </TabsContent>
           

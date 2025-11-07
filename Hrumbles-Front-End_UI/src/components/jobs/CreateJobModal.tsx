@@ -106,7 +106,7 @@ export const CreateJobModal = ({ isOpen, onClose, editJob = null, onSave }: Crea
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-6xl w-11/12 max-h-[90vh] flex flex-col" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader className="sticky top-0 z-10 bg-background pt-6 pb-4 text-center">
-          <DialogTitle className="text-2xl font-bold">{editJob ? "Edit Job" : "Create New Job"}</DialogTitle>
+          <DialogTitle className="text-2xl text-purple-600 font-bold">{editJob ? "Edit Job" : "Create New Job"}</DialogTitle>
           <DialogDescription>Fill in the required information to create a new job</DialogDescription>
         </DialogHeader>
 

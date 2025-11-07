@@ -36,6 +36,8 @@ export const CombinedSubmissionOnboardingChart: React.FC<CombinedChartCardProps>
 
   const isSuperAdmin = role === "organization_superadmin";
 
+  console.log("Chartdataatatatat", chartData)
+
   useEffect(() => {
     const fetchCombinedData = async () => {
       if (!organizationId || (!employeeId && !isSuperAdmin)) {
@@ -80,6 +82,9 @@ export const CombinedSubmissionOnboardingChart: React.FC<CombinedChartCardProps>
 
         const submissionStatusId = submissionStatus.id;
         const onboardingStatusId = onboardingStatus.id;
+
+        console.log("submissionStatusId", submissionStatusId)
+        console.log("onboardingStatusId", onboardingStatusId)
 
         let startDate: Date;
         let endDate: Date;

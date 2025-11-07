@@ -1,27 +1,31 @@
+// hooks/useJobFormState.ts
 
 import { useState, useEffect } from "react";
 import { JobData } from "@/lib/types";
-import { Currency } from "lucide-react";
 
-interface UseJobFormStateProps {
-  jobType: "Internal" | "External";
-  editJob: JobData | null;
+// ==================================================================
+// 1. TYPE DEFINITIONS
+// ==================================================================
+
+interface Skill {
+  name: string;
+  category: "IT" | "Non-IT";
 }
 
 export interface JobInformationData {
   hiringMode: string;
-  jobId: string;
+  jobId: string; // The form state expects camelCase
   jobTitle: string;
   numberOfCandidates: number;
   jobLocation: string[];
   noticePeriod: string;
-}
-
-export interface ExperienceSkillsData {
   minimumYear: number;
   minimumMonth: number;
   maximumYear: number;
   maximumMonth: number;
+}
+
+export interface ExperienceSkillsData {
   skills: string[];
 }
 
@@ -33,10 +37,12 @@ export interface ClientDetailsData {
   assignedTo: string;
   clientProjectId: string;
   currency_type: string;
+  budget_type: string;
 }
 
 export interface JobDescriptionData {
   description: string;
+  skills: Skill[];
 }
 
 export interface JobFormData {
@@ -45,6 +51,15 @@ export interface JobFormData {
   clientDetails: ClientDetailsData;
   jobDescription: JobDescriptionData;
 }
+
+interface UseJobFormStateProps {
+  jobType: "Internal" | "External";
+  editJob: JobData | null;
+}
+
+// ==================================================================
+// 2. THE CUSTOM HOOK
+// ==================================================================
 
 export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
   const [formData, setFormData] = useState<JobFormData>({
@@ -55,12 +70,12 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
       numberOfCandidates: 1,
       jobLocation: [],
       noticePeriod: "",
-    },
-    experienceSkills: {
       minimumYear: 0,
       minimumMonth: 0,
       maximumYear: 0,
       maximumMonth: 0,
+    },
+    experienceSkills: {
       skills: [],
     },
     clientDetails: {
@@ -70,43 +85,50 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
       pointOfContact: "",
       assignedTo: "",
       clientProjectId: "",
-      currency_type: "",
+      currency_type: "INR",
+      budget_type: "LPA",
     },
-    jobDescription: {
-      description: "",
+    jobDescription: { 
+      description: '', 
+      skills: [] 
     },
   });
   
-  // Initialize form with edit job data if provided
   useEffect(() => {
     if (editJob) {
-      const initialFormData = {
+      const initialFormData: JobFormData = {
         jobInformation: {
           hiringMode: editJob.hiringMode || (jobType === "Internal" ? "Full Time" : ""),
+          
+          // --- THIS IS THE FIX ---
+          // The `editJob` object was transformed, so we must use the camelCase `jobId` property.
           jobId: editJob.jobId || "",
+
           jobTitle: editJob.title || "",
-          numberOfCandidates: editJob.numberOfCandidates || "",
+          numberOfCandidates: Number(editJob.numberOfCandidates) || 1,
           jobLocation: editJob.location || [],
           noticePeriod: editJob.noticePeriod || "",
-        },
-        experienceSkills: {
           minimumYear: editJob.experience?.min?.years || 0,
           minimumMonth: editJob.experience?.min?.months || 0,
           maximumYear: editJob.experience?.max?.years || 0,
           maximumMonth: editJob.experience?.max?.months || 0,
+        },
+        experienceSkills: {
           skills: editJob.skills || [],
         },
         clientDetails: {
           clientName: editJob.clientDetails?.clientName || "",
-          clientBudget: editJob.clientDetails?.clientBudget || "",
+          clientBudget: String(editJob.clientDetails?.clientBudget) || "",
           endClient: editJob.clientDetails?.endClient || "",
           pointOfContact: editJob.clientDetails?.pointOfContact || "",
           assignedTo: editJob.assignedTo?.name || "",
           clientProjectId: editJob.clientProjectId || "",
-          Currency: editJob.clientDetails?.currency_type || "",
+          currency_type: editJob.currencyType || "INR",
+          budget_type: editJob.budgetType || "LPA",
         },
         jobDescription: {
           description: editJob.description || "",
+          skills: (editJob.skills || []).map(skillName => ({ name: skillName, category: 'IT' })),
         },
       };
       
@@ -114,10 +136,10 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
     }
   }, [editJob, jobType]);
 
-  const updateFormData = (step: string, data: any) => {
+  const updateFormData = (step: keyof JobFormData, data: any) => {
     setFormData(prev => ({
       ...prev,
-      [step]: {...prev[step as keyof typeof prev], ...data},
+      [step]: { ...prev[step], ...data },
     }));
   };
 

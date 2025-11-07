@@ -90,7 +90,7 @@ const ClientInformationFields = ({ data, onChange }: ClientInformationFieldsProp
       </div>
 
       {/* End Client Field */}
-      <div className="space-y-2">
+      {/* <div className="space-y-2">
         <Label htmlFor="endClient">End Client</Label>
         <Input 
           id="endClient" 
@@ -98,7 +98,7 @@ const ClientInformationFields = ({ data, onChange }: ClientInformationFieldsProp
           onChange={(e) => onChange({ endClient: e.target.value })} 
           placeholder="Enter end client (if different)"
         />
-      </div>
+      </div> */}
 
       {/* Point of Contact Field */}
       <div className="space-y-2">

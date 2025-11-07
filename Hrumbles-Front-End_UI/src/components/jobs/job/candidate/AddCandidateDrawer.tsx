@@ -80,15 +80,20 @@ const basicInfoSchema = z.object({
     .min(1, "Phone number is required"),
   currentLocation: z.string().min(1, "Current location is required"),
   preferredLocations: z.array(z.string()).min(1, "At least one preferred location is required"),
-  totalExperience: z
-    .number()
-    .min(0, "Cannot be negative")
-    .optional(),
-  totalExperienceMonths: z
-    .number()
-    .min(0)
-    .max(11, "Max 11 months")
-    .optional(),
+totalExperience: z
+  .number({
+    required_error: "Total experience (years) is required",
+    invalid_type_error: "Enter a valid number",
+  })
+  .min(0, "Cannot be negative"),
+
+totalExperienceMonths: z
+  .number({
+    required_error: "Total experience (months) is required",
+    invalid_type_error: "Enter a valid number",
+  })
+  .min(0)
+  .max(11, "Max 11 months"),
   relevantExperience: z
     .number()
     .min(0, "Cannot be negative")
@@ -98,14 +103,19 @@ const basicInfoSchema = z.object({
     .min(0)
     .max(11, "Max 11 months")
     .optional(),
-  currentSalary: z
-    .number()
-    .min(0, "Cannot be negative")
-    .optional(),
-  expectedSalary: z
-    .number()
-    .min(0, "Cannot be negative")
-    .optional(),
+currentSalary: z
+  .number({
+    required_error: "Current salary is required",
+    invalid_type_error: "Enter a valid number",
+  })
+  .min(0, "Cannot be negative"),
+
+expectedSalary: z
+  .number({
+    required_error: "Expected salary is required",
+    invalid_type_error: "Enter a valid number",
+  })
+  .min(0, "Cannot be negative"),
   resume: z.string().url("Resume URL is required"),
   noticePeriod: z
     .enum(["Immediate", "15 days", "30 days", "45 days", "60 days", "90 days"])

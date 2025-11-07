@@ -69,9 +69,14 @@ export const useLeaveTypes = () => {
   // Add a new leave type
   const addLeaveTypeMutation = useMutation({
     mutationFn: async (newLeaveType: Omit<LeaveType, 'id' | 'created_at' | 'updated_at'>) => {
+
+      const payload = {
+      ...newLeaveType,
+      organization_id, 
+    };
       const { data, error } = await supabase
         .from('leave_types')
-        .insert(newLeaveType, organization_id)
+        .insert([payload])
         .select()
         .single();
       

@@ -744,7 +744,7 @@ useEffect(() => {
         maritalStatus: employeeData.marital_status || "",
         bloodGroup: employeeData.blood_group || "",
         employmentStatus: employeeData.employment_status || employeeData.status || "",
-        hire_type: employeeData.hire_type || "",
+        hire_type: employeeData.hire_type || null,
         contractDuration: employeeData.contract_duration || "",
         paymentBasis: employeeData.payment_basis || "",
         hoursPerWeek: employeeData.hours_per_week || "",
@@ -2010,7 +2010,7 @@ const bloodGroupOptions = [
         <Button
   variant="ghost"
   // ✅ FIX: Always navigate back to the completion overview page
-  onClick={() => navigate('/complete-profile')}
+  onClick={() => navigate(-1)}
   className="hover:bg-purple-50 transition-colors"
 >
   <ArrowLeft className="h-5 w-5" />

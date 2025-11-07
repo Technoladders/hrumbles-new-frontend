@@ -1,84 +1,39 @@
+// src/components/jobs/job/steps/experience-skills/ExperienceSelector.tsx
 
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface ExperienceSelectorProps {
   label: string;
   yearsValue: number;
   monthsValue: number;
-  onYearChange: (value: number) => void;
-  onMonthChange: (value: number) => void;
+  onYearChange: (year: number) => void;
+  onMonthChange: (month: number) => void;
+  isMinimum?: boolean;
   minYear?: number;
   minMonth?: number;
-  isMinimum?: boolean;
 }
 
-const ExperienceSelector = ({
-  label,
-  yearsValue,
-  monthsValue,
-  onYearChange,
-  onMonthChange,
-  minYear = 0,
-  minMonth = 0,
-  isMinimum = false,
-}: ExperienceSelectorProps) => {
-  // Generate years array for dropdowns (0-20 years)
-  const years = Array.from({ length: 21 }, (_, i) => i);
-  const months = Array.from({ length: 12 }, (_, i) => i);
+const ExperienceSelector = ({ label, yearsValue, monthsValue, onYearChange, onMonthChange }: ExperienceSelectorProps) => {
+  const years = Array.from({ length: 31 }, (_, i) => i); // 0-30 years
+  const months = Array.from({ length: 12 }, (_, i) => i); // 0-11 months
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <Label>{label} <span className="text-red-500">*</span></Label>
-      <div className="flex gap-4">
-        <div className="w-1/2">
-          <Select
-            value={yearsValue.toString()}
-            onValueChange={(value) => onYearChange(parseInt(value))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Years" />
-            </SelectTrigger>
-            <SelectContent>
-              {years.map((year) => (
-                <SelectItem
-                  key={`${isMinimum ? 'min' : 'max'}-year-${year}`}
-                  value={year.toString()}
-                  disabled={!isMinimum && year < minYear}
-                >
-                  {year} {year === 1 ? "Year" : "Years"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="w-1/2">
-          <Select
-            value={monthsValue.toString()}
-            onValueChange={(value) => onMonthChange(parseInt(value))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Months" />
-            </SelectTrigger>
-            <SelectContent>
-              {months.map((month) => (
-                <SelectItem
-                  key={`${isMinimum ? 'min' : 'max'}-month-${month}`}
-                  value={month.toString()}
-                  disabled={!isMinimum && yearsValue === minYear && month < minMonth}
-                >
-                  {month} {month === 1 ? "Month" : "Months"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Select value={String(yearsValue || 0)} onValueChange={(val) => onYearChange(Number(val))}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {years.map(y => <SelectItem key={y} value={String(y)}>{y} Years</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={String(monthsValue || 0)} onValueChange={(val) => onMonthChange(Number(val))}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {months.map(m => <SelectItem key={m} value={String(m)}>{m} Months</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

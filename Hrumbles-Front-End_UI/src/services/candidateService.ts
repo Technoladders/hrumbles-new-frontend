@@ -643,14 +643,45 @@ export const updateCandidate = async (
 
 export const editCandidate = async (id: string, candidate: CandidateData): Promise<CandidateData> => {
   try {
-    const dbCandidate = mapCandidateToDbData(candidate);
-    console.log("Payload being sent to DB:", dbCandidate); // Debug log
+    // Construct the payload directly from the 'candidate' object.
+    // This bypasses the restrictive mapCandidateToDbData function and ensures all fields are included.
+    const dbPayload = {
+      name: candidate.name,
+      status: candidate.status,
+      experience: candidate.experience,
+      match_score: candidate.matchScore,
+      applied_date: candidate.appliedDate,
+      email: candidate.email,
+      phone: candidate.phone,
+      resume_url: candidate.resumeUrl,
+      current_salary: candidate.currentSalary,
+      expected_salary: candidate.expectedSalary,
+      location: candidate.location,
+      applied_from: candidate.appliedFrom,
+      updated_by: candidate.updatedBy,
+      skill_ratings: candidate.skillRatings,
+      
+      // Include the crucial top-level fields for Offer/Joined status
+      ctc: candidate.ctc,
+      joining_date: candidate.joining_date,
+      offer_letter_url: candidate.offerLetterUrl,
+      joining_letter_url: candidate.joiningLetterUrl,
+
+      // Pass the entire metadata object to ensure attachment URLs and other details are saved
+      metadata: candidate.metadata,
+    };
+
+    console.log("Payload being sent to DB for update:", dbPayload); // For debugging
 
     const { data, error } = await supabase
       .from('hr_job_candidates')
-      .update(dbCandidate)
+      .update(dbPayload) // Use the complete, locally constructed payload
       .eq('id', id)
-      .select('*')
+      .select(`
+        *,
+        main_status:job_statuses!left!main_status_id(*),
+        sub_status:job_statuses!left!sub_status_id(*)
+      `)
       .single();
 
     if (error) {
@@ -658,6 +689,7 @@ export const editCandidate = async (id: string, candidate: CandidateData): Promi
       throw error;
     }
 
+    // After a successful update, map the returned DB data back to the application format
     return mapDbCandidateToData(data as HrJobCandidate);
   } catch (error) {
     console.error(`Failed to update candidate with ID ${id}:`, error);
