@@ -320,7 +320,7 @@ const TimesheetList = ({
                         <PopoverTrigger asChild>
                           <span className="cursor-pointer">{truncateNotes(timesheet.notes)}</span>
                         </PopoverTrigger>
-                        <PopoverContent className="w-250">
+                        <PopoverContent className="w-auto h-auto">
                           {timesheet.notes ? parse(timesheet.notes) : '-'}
                         </PopoverContent>
                       </Popover>

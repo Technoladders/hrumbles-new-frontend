@@ -160,7 +160,7 @@ const parseSalaryString = (salaryString?: string | null) => {
        ctc: amount,
         currencyType: currency,
         budgetType: period,
-        joiningDate: joiningDate,
+        joiningDate: joiningDate || null,
         offerLetterUrl: candidate.metadata?.offerLetterUrl || "",
         joiningLetterUrl: candidate.metadata?.joiningLetterUrl || "",
       });

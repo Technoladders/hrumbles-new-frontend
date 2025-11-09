@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import QuillTableBetterDemo from '@/utils/QuillTableBetterDemo';
+import Editor from "react-simple-wysiwyg";
 
 export interface JobLog {
   jobId: string;
@@ -26,8 +26,6 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({ open, onOpenChange, 
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
   const [challenges, setChallenges] = useState('');
- 
-  // FIX: State to prevent duplicate toolbar
   const [isEditorVisible, setIsEditorVisible] = useState(false);
 
   useEffect(() => {
@@ -37,8 +35,7 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({ open, onOpenChange, 
       setChallenges(jobLog.challenges || '');
     }
   }, [jobLog]);
- 
-  // FIX: Delay editor rendering until the modal is fully mounted
+
   useEffect(() => {
     if (open) {
       const timer = setTimeout(() => setIsEditorVisible(true), 100);
@@ -57,12 +54,12 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({ open, onOpenChange, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[625px]">
+      <DialogContent className="sm:max-w-[625px] h-[80vh] overflow-auto">
         <DialogHeader>
           <DialogTitle>Log Time for: {jobLog.jobTitle}</DialogTitle>
           <p className="text-sm text-muted-foreground">{jobLog.clientName}</p>
         </DialogHeader>
-        
+
         <div className="py-4 space-y-4">
           {jobLog.submissions.length > 0 && (
             <div>
@@ -72,7 +69,7 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({ open, onOpenChange, 
               </ul>
             </div>
           )}
-          
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label htmlFor="hours">Hours</Label>
@@ -83,15 +80,14 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({ open, onOpenChange, 
               <Input id="minutes" type="number" value={minutes} onChange={e => setMinutes(parseInt(e.target.value) || 0)} min="0" max="59" />
             </div>
           </div>
-          
+
           <div>
             <Label htmlFor="challenges">Challenges / Notes</Label>
-            <div className="mt-1 border rounded-md">
-              {/* FIX: Conditionally render the editor */}
+            <div className="mt-1 border rounded-md overflow-hidden">
               {isEditorVisible && (
-                <QuillTableBetterDemo
-                    value={challenges}
-                    onChange={setChallenges}
+                <Editor
+                  value={challenges}
+                  onChange={(e) => setChallenges(e.target.value)}
                 />
               )}
             </div>
@@ -102,6 +98,24 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({ open, onOpenChange, 
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSave}>Save Log</Button>
         </DialogFooter>
+
+        {/* ✅ Local bullet list style fix */}
+        <style>{`
+          .rsw-editor ul {
+            list-style-type: disc !important;
+            padding-left: 1.5rem !important;
+            margin: 0.5rem 0 !important;
+          }
+          .rsw-editor ol {
+            list-style-type: decimal !important;
+            padding-left: 1.5rem !important;
+            margin: 0.5rem 0 !important;
+          }
+          .rsw-editor li {
+            display: list-item !important;
+            margin-left: 0.5rem !important;
+          }
+        `}</style>
       </DialogContent>
     </Dialog>
   );

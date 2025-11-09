@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { JobLogDialog, JobLog } from './JobLogDialog';
 import QuillTableBetterDemo from '@/utils/QuillTableBetterDemo';
 
+
 interface RecruiterTimesheetFormProps {
   timesheet: TimeLog;
   onDataChange: (data: { logs: JobLog[] | null; report: string }) => void;
@@ -114,8 +115,11 @@ export const RecruiterTimesheetForm: React.FC<RecruiterTimesheetFormProps> = ({
   // Update parent whenever data changes
   useEffect(() => {
     onDataChange({ logs: jobLogs, report: overallWorkReport });
+    const hasLoggedJobs = jobLogs.length > 0;
     const totalMinutes = jobLogs.reduce((sum, log) => sum + (log.hours * 60) + log.minutes, 0);
-    onValidationChange(totalMinutes > 0 && overallWorkReport.replace(/<[^>]+>/g, "").trim().length > 0);
+    const hasPositiveTime = totalMinutes > 0;
+    const hasWorkReport = overallWorkReport.replace(/<[^>]+>/g, "").trim().length > 0;
+    onValidationChange(hasLoggedJobs && hasPositiveTime && hasWorkReport);
   }, [jobLogs, overallWorkReport, onDataChange, onValidationChange]);
 
   const handleAddJobLog = (jobId: string) => {

@@ -155,6 +155,9 @@ import Projects from "./pages/TimeManagement/admin/Projects";
 // Bench Profiles
 import BenchProfilesPage from "./pages/bench-profiles/BenchProfilesPage";
 
+// reports detail page
+import UserActivityDetailsPage from "./components/reports/UserActivityDetailsPage";
+
 // --- Google Analytics Tracker ---
 const RouteChangeTracker = () => {
   const location = useLocation();
@@ -375,6 +378,7 @@ function AppContent() {
 
               {/* Reports */}
               <Route path="/reports" element={<ReportsPage />} />
+               <Route path="/user-activity-details/:employeeId" element={<UserActivityDetailsPage />}  />
 
               {/* Finance & Accounts */}
               <Route path="/finance" element={<FinanceIndex />} />

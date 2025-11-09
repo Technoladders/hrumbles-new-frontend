@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -8,11 +10,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Calendar, Search, Download, ChevronLeft, ChevronRight, User, CheckCircle, MonitorPlay, Coffee, Clock, Sigma } from 'lucide-react';
-import { DateRange } from 'react-day-picker';
-import { DateRangePickerField } from './DateRangePickerField'; // Assuming this component exists
+import { AlertCircle, Search, Download, ChevronLeft, ChevronRight, User, CheckCircle } from 'lucide-react';
+import { DateRangePickerField } from '@/components/ui/DateRangePickerField';
 import { supabase } from '@/integrations/supabase/client';
-import { format as formatDateFns, differenceInDays } from 'date-fns';
+import { format as formatDateFns, startOfDay, endOfDay } from 'date-fns';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -34,35 +35,45 @@ interface ActivityData {
 // Helper to format seconds into HH:MM:SS
 const formatDuration = (seconds: number): string => {
   if (isNaN(seconds) || seconds < 0) return "00:00:00";
-  return new Date(seconds * 1000).toISOString().substr(11, 8);
+  return new Date(Number(seconds) * 1000).toISOString().substr(11, 8);
 };
 
 const UserActivityReportPage: React.FC = () => {
-  const [rawData, setRawData] = useState<any[]>([]);
+  const navigate = useNavigate();
+  const organization_id = useSelector((state: any) => state.auth.organization_id);
+  const [processedData, setProcessedData] = useState<ActivityData[]>([]);
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  const [draftDateRange, setDraftDateRange] = useState<DateRange | undefined>({
-    from: new Date(new Date().setDate(new Date().getDate() - 7)),
-    to: new Date(),
+ 
+  // --- FIX: Restore Draft and Applied Date Range states ---
+  const [draftDateRange, setDraftDateRange] = useState({
+    startDate: startOfDay(new Date(new Date().setDate(new Date().getDate() - 7))),
+    endDate: endOfDay(new Date()),
+    key: 'selection',
   });
   const [appliedDateRange, setAppliedDateRange] = useState(draftDateRange);
-  
+ 
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(10);
+
+  // Reset page on filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedEmployees, searchTerm]);
 
   // Fetch employees for the filter dropdown
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const { data, error } = await supabase
+        const { data, error: empError } = await supabase
           .from('hr_employees')
           .select('id, first_name, last_name')
+          .eq('organization_id', organization_id)
           .order('first_name');
-        if (error) throw error;
+        if (empError) throw empError;
         setAllEmployees(data.map(emp => ({ id: emp.id, name: `${emp.first_name} ${emp.last_name}` })));
       } catch (err: any) {
         setError(err.message || 'Failed to fetch employees.');
@@ -74,77 +85,54 @@ const UserActivityReportPage: React.FC = () => {
   // Main data fetching logic
   useEffect(() => {
     const fetchData = async () => {
-      if (!appliedDateRange?.from || !appliedDateRange?.to) return;
+      // Use appliedDateRange for fetching
+      if (!appliedDateRange.startDate || !appliedDateRange.endDate) return;
+     
       setIsLoading(true);
       setError(null);
+      setCurrentPage(1);
+     
       try {
-        // We fetch raw data and aggregate on the client. For very large datasets,
-        // a dedicated database function would be even better.
-        let query = supabase
-          .from('user_session_activity')
-          .select('user_id, activity_type, duration_seconds, employee:hr_employees!user_session_activity_user_id_fkey1(id, first_name, last_name)')
-          .gte('start_time', appliedDateRange.from.toISOString())
-          .lte('end_time', appliedDateRange.to.toISOString());
-
-        if (selectedEmployees.length > 0) {
-          query = query.in('user_id', selectedEmployees);
-        }
-
-        const { data, error: dataError } = await query;
-        if (dataError) throw dataError;
-        setRawData(data.filter(d => d.employee)); // Ensure employee data exists
+        const { data, error: rpcError } = await supabase
+          .rpc('get_user_activity_summary', {
+            start_date: appliedDateRange.startDate.toISOString(),
+            end_date: appliedDateRange.endDate.toISOString()
+          });
+        if (rpcError) throw rpcError;
+        const transformedData: ActivityData[] = data.map((d: any) => ({
+          employeeId: d.employee_id,
+          employeeName: d.employee_name,
+          active: d.active_seconds,
+          inactive: d.inactive_seconds,
+          away: d.away_seconds,
+          total: d.total_seconds
+        }));
+        setProcessedData(transformedData);
+      
       } catch (err: any) {
-        setError(err.message || 'An unknown error occurred while fetching activity data.');
+        setError(err.message || 'An unknown error occurred.');
+        setProcessedData([]);
       } finally {
         setIsLoading(false);
       }
     };
     fetchData();
-  }, [appliedDateRange, selectedEmployees]);
+  }, [appliedDateRange]); // <-- Trigger fetch only when appliedDateRange changes
 
-  // Process raw data into a structured format for the table
-  const processedData = useMemo<ActivityData[]>(() => {
-    const aggregation: Record<string, Omit<ActivityData, 'employeeId'>> = {};
-
-    for (const record of rawData) {
-      const { user_id, employee, activity_type, duration_seconds } = record;
-      
-      if (!aggregation[user_id]) {
-        aggregation[user_id] = {
-          employeeName: `${employee.first_name} ${employee.last_name}`,
-          active: 0,
-          inactive: 0,
-          away: 0,
-          total: 0
-        };
-      }
-
-      aggregation[user_id][activity_type] = (aggregation[user_id][activity_type] || 0) + duration_seconds;
-      aggregation[user_id].total += duration_seconds;
-    }
-
-    return Object.entries(aggregation).map(([employeeId, data]) => ({
-      employeeId,
-      ...data
-    }));
-  }, [rawData]);
-
-  const filteredTableData = useMemo(() =>
-    processedData.filter(row =>
-      row.employeeName.toLowerCase().includes(searchTerm.toLowerCase())
-    ), [processedData, searchTerm]);
+  const filteredTableData = useMemo(() => {
+    return processedData.filter(row => {
+        const searchMatch = row.employeeName.toLowerCase().includes(searchTerm.toLowerCase());
+        const employeeMatch = selectedEmployees.length === 0 || selectedEmployees.includes(row.employeeId);
+        return searchMatch && employeeMatch;
+    });
+  }, [processedData, searchTerm, selectedEmployees]);
 
   // Summary card calculations
   const totalActive = filteredTableData.reduce((sum, item) => sum + item.active, 0);
   const totalInactive = filteredTableData.reduce((sum, item) => sum + item.inactive, 0);
   const totalAway = filteredTableData.reduce((sum, item) => sum + item.away, 0);
   const totalOverall = totalActive + totalInactive + totalAway;
-
-  const handleApplyFilters = () => {
-    setAppliedDateRange(draftDateRange);
-    setCurrentPage(1);
-  };
-  
+ 
   // Pagination
   const totalPages = Math.ceil(filteredTableData.length / itemsPerPage);
   const paginatedData = filteredTableData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -176,6 +164,18 @@ const UserActivityReportPage: React.FC = () => {
     });
     doc.save(`user_activity_report_${formatDateFns(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
+ 
+  // --- NEW: Handler for the Apply button ---
+  const handleApplyFilters = () => {
+    setAppliedDateRange(draftDateRange);
+  };
+
+  const handleEmployeeClick = (employeeId: string) => {
+    if (!appliedDateRange.startDate || !appliedDateRange.endDate) return;
+    const from = formatDateFns(appliedDateRange.startDate, 'yyyy-MM-dd');
+    const to = formatDateFns(appliedDateRange.endDate, 'yyyy-MM-dd');
+    navigate(`/user-activity-details/${employeeId}?from=${from}&to=${to}`);
+  };
 
   if (error) {
     return (
@@ -204,7 +204,24 @@ const UserActivityReportPage: React.FC = () => {
         <Card>
           <CardContent className="p-6">
             <div className="flex flex-wrap items-center gap-4 mb-6">
-                <DateRangePickerField dateRange={draftDateRange} onDateRangeChange={setDraftDateRange} className="h-10" />
+               
+                {/* --- FIX: Using DateRangePickerField correctly with onApply --- */}
+                <DateRangePickerField
+                  dateRange={draftDateRange}
+                  onDateRangeChange={(range) => {
+                    if (range) {
+                      setDraftDateRange({
+                        startDate: range.startDate,
+                        endDate: range.endDate ? endOfDay(range.endDate) : null,
+                        key: 'selection'
+                      });
+                    } else {
+                      setDraftDateRange({ startDate: null, endDate: null, key: 'selection' });
+                    }
+                  }}
+                  onApply={handleApplyFilters} // Pass the apply handler
+                />
+              
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full sm:w-auto justify-start text-left font-normal gap-2">
@@ -219,10 +236,18 @@ const UserActivityReportPage: React.FC = () => {
                     </Label>))}
                   </div></PopoverContent>
                 </Popover>
-                <Button onClick={handleApplyFilters}><CheckCircle className="h-4 w-4 mr-2" />Apply Filters</Button>
-                <div className="relative flex-grow"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} /><Input placeholder="Search employees..." className="pl-10 h-10" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}/></div>
-                <Button variant="outline" onClick={exportToCSV}><Download className="w-4 h-4 mr-2" />Export CSV</Button>
-                <Button variant="outline" onClick={exportToPDF}><Download className="w-4 h-4 mr-2" />Export PDF</Button>
+                {/* This button is now effectively handled by the one inside DateRangePickerField, but can be kept for consistency */}
+                <Button onClick={handleApplyFilters}>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Apply
+                </Button>
+              
+                <div className="relative flex-grow">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                    <Input placeholder="Search employees..." className="pl-10 h-10" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); }}/>
+                </div>
+                <Button variant="outline" onClick={exportToCSV}><Download className="w-4 h-4 mr-2" />CSV</Button>
+                <Button variant="outline" onClick={exportToPDF}><Download className="w-4 h-4 mr-2" />PDF</Button>
             </div>
             {isLoading ? <div className="flex justify-center p-12"><LoadingSpinner size={48} /></div> : (
               <>
@@ -231,10 +256,17 @@ const UserActivityReportPage: React.FC = () => {
                   <TableBody>
                     {paginatedData.length > 0 ? paginatedData.map(row => (
                       <TableRow key={row.employeeId}>
-                        <TableCell className="font-medium">{row.employeeName}</TableCell>
-                        <TableCell>{formatDuration(row.active)}</TableCell>
-                        <TableCell>{formatDuration(row.inactive)}</TableCell>
-                        <TableCell>{formatDuration(row.away)}</TableCell>
+                        <TableCell className="font-medium">
+                          <span
+                            className="cursor-pointer text-blue-600 hover:underline"
+                            onClick={() => handleEmployeeClick(row.employeeId)}
+                          >
+                            {row.employeeName}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-green-700">{formatDuration(row.active)}</TableCell>
+                        <TableCell className="text-gray-600">{formatDuration(row.inactive)}</TableCell>
+                        <TableCell className="text-orange-600">{formatDuration(row.away)}</TableCell>
                         <TableCell className="font-bold">{formatDuration(row.total)}</TableCell>
                       </TableRow>
                     )) : (<TableRow><TableCell colSpan={5} className="h-24 text-center">No data found for the selected filters.</TableCell></TableRow>)}
@@ -254,7 +286,6 @@ const UserActivityReportPage: React.FC = () => {
             )}
           </CardContent>
         </Card>
-     
     </div>
   );
 };

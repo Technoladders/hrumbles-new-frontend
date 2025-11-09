@@ -152,6 +152,7 @@ export const fetchTimeLogs = async (employeeId: string): Promise<TimeLog[]> => {
         approved_by: item.approved_by || null,
         rejection_reason: item.rejection_reason || null,
         project_time_data: item.project_time_data || null,
+        recruiter_report_data: item.recruiter_report_data || null,
         created_at: item.created_at || null,
         updated_at: null,
         project: item.project_id ? { name: `Project ${item.project_id.substring(0, 8)}` } : null,
@@ -185,25 +186,32 @@ export const submitTimesheet = async (
   organization_id: string
 ): Promise<boolean> => {
   try {
-
     const authData = getAuthDataFromLocalStorage();
-        if (!authData) {
-          throw new Error('Failed to retrieve authentication data');
-        }
-        const { organization_id, userId } = authData;
-    const projectTimeData = formData.projectEntries
-      ? { projects: formData.projectEntries }
-      : null;
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id: authOrgId, userId } = authData;
+
+    const updatePayload: any = {
+      is_submitted: true,
+      notes: formData.notes, // This will be the overall summary for everyone
+      updated_at: new Date().toISOString(),
+    };
+   
+    // Conditionally add the recruiter-specific data
+    if (formData.recruiter_report_data) {
+        updatePayload.recruiter_report_data = formData.recruiter_report_data;
+    }
+   
+    // Conditionally add project-based data
+    if (formData.projectEntries) {
+        updatePayload.project_time_data = { projects: formData.projectEntries };
+        updatePayload.total_working_hours = formData.totalWorkingHours || 8;
+    }
 
     const { error: timeLogError } = await supabase
       .from('time_logs')
-      .update({
-        is_submitted: true,
-        notes: formData.title || formData.workReport || null,
-        project_time_data: projectTimeData,
-        total_working_hours: formData.totalWorkingHours || 8,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq('id', timeLogId);
 
     if (timeLogError) throw timeLogError;

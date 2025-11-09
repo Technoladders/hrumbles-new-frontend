@@ -18,8 +18,12 @@ const Timesheet = () => {
   const [clarificationDialogOpen, setClarificationDialogOpen] = useState(false);
   const [employeeHasProjects, setEmployeeHasProjects] = useState(false);
 
+  console.log("Employes has projectssss", employeeHasProjects)
+
   const user = useSelector((state: any) => state.auth.user);
   const employeeId = user?.id || "";
+
+  console.log("Selected Timesheet:", selectedTimesheet);
 
   const {
     loading,

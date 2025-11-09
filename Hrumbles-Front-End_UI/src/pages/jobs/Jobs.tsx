@@ -433,7 +433,7 @@ if (isLoading) {
                   {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
                     <td className="table-cell">
                       <div className="flex flex-col">
-                        <span className="text-gray-800">{job.clientOwner}</span>
+                        <span className="text-gray-800">{job.clientDetails?.clientName || "N/A"}</span>
                         <Badge variant="outline" className="w-fit mt-1">{job.clientDetails?.pointOfContact || "N/A"}</Badge>
                       </div>
                     </td>

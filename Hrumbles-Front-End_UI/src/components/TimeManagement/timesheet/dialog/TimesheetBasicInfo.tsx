@@ -9,10 +9,18 @@ interface TimesheetBasicInfoProps {
 
 export const TimesheetBasicInfo: React.FC<TimesheetBasicInfoProps> = ({ timesheet }) => {
   const formatDuration = (minutes?: number | null) => {
-    if (!minutes) return "N/A";
+    if (minutes === null || minutes === undefined) return "N/A";
+    if (minutes === 0) return "0m";
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
-    return `${hours}h ${remainingMinutes}m`;
+    
+    if (hours > 0 && remainingMinutes > 0) {
+        return `${hours}h ${remainingMinutes}m`;
+    } else if (hours > 0) {
+        return `${hours}h`;
+    } else {
+        return `${remainingMinutes}m`;
+    }
   };
 
   // Format clock-in and clock-out times
@@ -21,18 +29,30 @@ export const TimesheetBasicInfo: React.FC<TimesheetBasicInfoProps> = ({ timeshee
     return format(new Date(time), "h:mm a");
   };
 
-  console.log("Timesheet data:", timesheet);
+  // --- NEW: Calculate total break minutes ---
+  const totalBreakMinutes = timesheet.break_logs?.reduce(
+    (sum, breakLog) => sum + (breakLog.duration_minutes || 0), 0
+  ) || 0;
+
+  console.log("Timesheet data (with breaks):", timesheet);
 
   return (
-    <div className="grid grid-cols-2 gap-4">
+    // --- UPDATED: Changed grid to 3 columns for better layout ---
+    <div className="grid grid-cols-3 gap-4">
       <div>
         <h3 className="font-semibold text-sm text-muted-foreground">Date</h3>
         <p>{formatDate(timesheet.date)}</p>
       </div>
       
       <div>
-        <h3 className="font-semibold text-sm text-muted-foreground">Duration</h3>
+        <h3 className="font-semibold text-sm text-muted-foreground">Total Duration</h3>
         <p>{formatDuration(timesheet.duration_minutes)}</p>
+      </div>
+
+      {/* --- NEW: Display Total Breaks --- */}
+      <div>
+        <h3 className="font-semibold text-sm text-muted-foreground">Total Breaks</h3>
+        <p className="text-orange-600">{formatDuration(totalBreakMinutes)}</p>
       </div>
       
       <div>
@@ -49,7 +69,7 @@ export const TimesheetBasicInfo: React.FC<TimesheetBasicInfoProps> = ({ timeshee
         <h3 className="font-semibold text-sm text-muted-foreground">Status</h3>
         <p className="capitalize">{timesheet.status || 'Normal'}</p>
       </div>
-      
+
       <div>
         <h3 className="font-semibold text-sm text-muted-foreground">Submission Status</h3>
         <p>{timesheet.is_submitted ? 'Submitted' : 'Not submitted'}</p>

@@ -2,13 +2,23 @@ import { useState, useEffect } from "react";
 import { TimeLog } from "@/types/time-tracker-types";
 import { formatDate } from "@/utils/timeFormatters";
 import { formatDuration } from "../TimesheetList";
-import { format } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import parse from "html-react-parser";
+import { Clock, Coffee, Utensils, MousePointerClick, BarChart, WifiOff, Moon } from "lucide-react";
 
 interface TimesheetInfoProps {
   dialogTimesheet: TimeLog;
   type: 'normal' | 'clarification';
+}
+
+// --- NEW: Define a type for activity logs ---
+interface ActivityLog {
+  id: string;
+  activity_type: 'active' | 'inactive' | 'away';
+  start_time: string;
+  end_time: string | null;
+  duration_seconds: number | null;
 }
 
 interface Project {
@@ -25,6 +35,40 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
   const [projects, setProjects] = useState<Map<string, string>>(new Map());
   const [clients, setClients] = useState<Map<string, string>>(new Map());
   const hasProjects = !!dialogTimesheet.project_time_data?.projects?.length;
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(true);
+
+
+    useEffect(() => {
+    if (!dialogTimesheet.employee_id || !dialogTimesheet.date) return;
+
+    const fetchActivityLogs = async () => {
+      setLoadingActivity(true);
+      try {
+        const dateStart = startOfDay(new Date(dialogTimesheet.date)).toISOString();
+        const dateEnd = endOfDay(new Date(dialogTimesheet.date)).toISOString();
+
+        const { data, error } = await supabase
+          .from('user_session_activity')
+          .select('id, activity_type, start_time, end_time, duration_seconds')
+          .eq('user_id', dialogTimesheet.employee_id)
+          .gte('start_time', dateStart)
+          .lte('start_time', dateEnd)
+          .order('start_time', { ascending: true });
+        
+        if (error) throw error;
+        
+        setActivityLogs(data as ActivityLog[]);
+      } catch (error) {
+        console.error("Error fetching user activity logs:", error);
+        setActivityLogs([]);
+      } finally {
+        setLoadingActivity(false);
+      }
+    };
+    
+    fetchActivityLogs();
+  }, [dialogTimesheet.employee_id, dialogTimesheet.date]);
 
   // Fetch project and client names
   useEffect(() => {
@@ -112,6 +156,119 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
     return format(new Date(time), "h:mm a");
   };
 
+    const activitySummary = activityLogs.reduce((acc, log) => {
+    const duration = log.duration_seconds || 0;
+    if (log.activity_type === 'active') acc.active += duration;
+    if (log.activity_type === 'inactive') acc.inactive += duration;
+    if (log.activity_type === 'away') acc.away += duration;
+    return acc;
+  }, { active: 0, inactive: 0, away: 0 });
+  
+  const formatSeconds = (seconds: number) => {
+    if (seconds < 60) return `${seconds}s`;
+    return formatDuration(Math.floor(seconds / 60));
+  };
+
+    // --- NEW: Calculate total break minutes ---
+  const totalBreakMinutes = dialogTimesheet.break_logs?.reduce(
+    (sum, breakLog) => sum + (breakLog.duration_minutes || 0), 0
+  ) || 0;
+
+
+   // --- NEW: Component to render the activity log timeline ---
+  const renderActivityLog = () => {
+    const activityIcon = (type: string) => {
+        switch(type) {
+            case 'active': return <WifiOff size={14} className="text-green-500" />;
+            case 'inactive': return <Moon size={14} className="text-gray-500" />;
+            case 'away': return <Coffee size={14} className="text-orange-500" />;
+            default: return <MousePointerClick size={14} />;
+        }
+    };
+
+    return (
+        <div className="mt-6">
+            <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                <BarChart size={16} /> Activity Log
+            </h4>
+            <div className="bg-white rounded-lg border p-3">
+                {loadingActivity ? (
+                    <p className="text-sm text-gray-500">Loading activity...</p>
+                ) : activityLogs.length === 0 ? (
+                    <p className="text-sm text-gray-500">No activity recorded for this day.</p>
+                ) : (
+                    <>
+                        {/* Summary Section */}
+                        <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+                            <div>
+                                <p className="text-xs text-green-600">Active</p>
+                                <p className="text-sm font-semibold text-green-700">{formatSeconds(activitySummary.active)}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-600">Inactive</p>
+                                <p className="text-sm font-semibold text-gray-700">{formatSeconds(activitySummary.inactive)}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-orange-600">Away</p>
+                                <p className="text-sm font-semibold text-orange-700">{formatSeconds(activitySummary.away)}</p>
+                            </div>
+                        </div>
+                        {/* Timeline Section */}
+                        <div className="max-h-[200px] overflow-y-auto space-y-2 border-t pt-3 pr-2">
+                           {activityLogs.map(log => (
+                               <div key={log.id} className="flex justify-between items-center text-xs">
+                                   <span className="capitalize flex items-center gap-2">
+                                       {activityIcon(log.activity_type)}
+                                       {formatTime(log.start_time)}
+                                   </span>
+                                   <span className="font-medium text-gray-600">
+                                       {formatSeconds(log.duration_seconds || 0)}
+                                   </span>
+                               </div>
+                           ))}
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
+    );
+  };
+
+
+  // --- NEW: Component to render break logs ---
+  const renderBreakLogs = () => {
+    if (!dialogTimesheet.break_logs || dialogTimesheet.break_logs.length === 0) {
+        return null; // Don't render anything if there are no breaks
+    }
+
+    return (
+        <div className="mt-6">
+            <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                <Coffee size={16} /> Break Details
+            </h4>
+            <div className="bg-white rounded-lg border p-3 space-y-2">
+                {dialogTimesheet.break_logs.map(log => (
+                    <div key={log.id} className="flex justify-between items-center text-sm">
+                        <span className="capitalize flex items-center gap-2">
+                            {log.break_type === 'lunch' ? <Utensils size={14} /> : <Coffee size={14} />}
+                            {log.break_type} Break
+                        </span>
+                        <span className="font-medium text-gray-700">
+                            {formatDuration(log.duration_minutes)}
+                        </span>
+                    </div>
+                ))}
+                <div className="flex justify-between items-center text-sm font-semibold border-t pt-2 mt-2">
+                    <span>Total Break Time</span>
+                    <span className="text-orange-600">
+                        {formatDuration(totalBreakMinutes)}
+                    </span>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
   // Render project details in a table
   const renderProjectDetails = () => {
     if (!hasProjects) return null;
@@ -186,14 +343,20 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
 
       {type === 'normal' ? (
         <>
-          <div className="grid grid-cols-2 gap-4">
+          {/* --- Time Info: Adjusted to 3 columns --- */}
+          <div className="grid grid-cols-3 gap-4 border-t pt-4 mt-4">
             <div>
               <h4 className="text-sm font-semibold">Date</h4>
               <p>{formatDate(dialogTimesheet.date)}</p>
             </div>
             <div>
-              <h4 className="text-sm font-semibold">Duration</h4>
+              <h4 className="text-sm font-semibold">Total Duration</h4>
               <p>{formatDuration(dialogTimesheet.duration_minutes)}</p>
+            </div>
+             {/* --- ADDED: Total Breaks Info --- */}
+            <div>
+              <h4 className="text-sm font-semibold">Total Breaks</h4>
+              <p className="font-medium text-orange-600">{formatDuration(totalBreakMinutes)}</p>
             </div>
             <div>
               <h4 className="text-sm font-semibold">Log In</h4>
@@ -204,7 +367,16 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
               <p>{formatTime(dialogTimesheet.clock_out_time)}</p>
             </div>
           </div>
+         <div className="flex gap-4">
+            <div className="w-1/2 space-y-6">
+                {renderBreakLogs()}
+            </div>
+            <div className="w-1/2 space-y-6">
+                {renderActivityLog()}
+            </div>
+          </div>
           {renderProjectDetails()}
+
         </>
       ) : (
         <>
@@ -223,6 +395,14 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
             <p className="text-sm mt-1">
               {dialogTimesheet.clarification_response || 'No clarification provided'}
             </p>
+          </div>
+          <div className="flex gap-4">
+            <div className="w-1/2 space-y-6">
+                {renderBreakLogs()}
+            </div>
+            <div className="w-1/2 space-y-6">
+                {renderActivityLog()}
+            </div>
           </div>
           {renderProjectDetails()}
         </>

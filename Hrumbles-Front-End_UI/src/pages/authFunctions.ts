@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { getAuthDataFromLocalStorage } from '@/utils/localstorage';
 
 interface User {
   id: string;
@@ -8,10 +9,18 @@ interface User {
 }
 
 export const fetchUsers = async (): Promise<User[]> => {
+
+    const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id, userId } = authData;
+
   try {
     const { data, error } = await supabase
       .from('hr_employees')
-      .select('id, email, first_name, last_name');
+      .select('id, email, first_name, last_name')
+      .eq('organization_id', organization_id);
     if (error) throw error;
     return data || [];
   } catch (error: any) {

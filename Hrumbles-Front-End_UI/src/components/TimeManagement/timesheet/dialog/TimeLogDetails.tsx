@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { TimeLog } from "@/types/time-tracker-types";
+import { TimeLog, DetailedTimesheetEntry, JobLog } from "@/types/time-tracker-types";
 import { Button } from "@/components/ui/button";
 import { FileText } from "lucide-react";
 import { BasicInfoSection } from "./sections/BasicInfoSection";
 import { TimeEntrySection } from "./sections/TimeEntrySection";
 import { ProjectAllocationSection } from "./sections/ProjectAllocationSection";
 import { getWorkflowState, canRegularize } from "./utils/timeLogUtils";
-import DOMPurify from "dompurify"; // For sanitizing HTML
+import DOMPurify from "dompurify";
+import parse from 'html-react-parser';
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfDay, endOfDay } from "date-fns";
 
@@ -66,7 +67,64 @@ interface TimeLogDetailsProps {
   timesheet?: TimeLog;
   getProjectName?: (projectId: string | null) => string;
   onRegularizationRequest?: () => void;
+  employeeHasProjects?: boolean;
 }
+
+// A simple component to render the recruiter's detailed report
+const RecruiterReportView = ({ log }: { log: TimeLog }) => {
+  // Sanitize and parse the overall summary
+  const sanitizedSummary = log.notes ? DOMPurify.sanitize(log.notes) : '';
+  return (
+    <div className="space-y-4">
+      {/* --- Detailed Job Report Section --- */}
+      {log.recruiter_report_data && Array.isArray(log.recruiter_report_data) && log.recruiter_report_data.length > 0 && (
+        <div className="bg-gradient-to-r from-sky-50 to-blue-50 p-3 rounded-lg border border-blue-100">
+            <h3 className="text-sm font-semibold text-blue-800 mb-2">Detailed Job Report</h3>
+            <div className="space-y-3">
+              {(log.recruiter_report_data as JobLog[]).map((jobLog, index) => (
+                <div key={index} className="bg-white/90 p-3 rounded-md shadow-sm border">
+                   <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <p className="font-semibold text-sm text-gray-800">{jobLog.jobTitle}</p>
+                        <p className="text-xs text-gray-500">{jobLog.clientName}</p>
+                      </div>
+                      <span className="text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-full">{jobLog.hours}h {jobLog.minutes}m</span>
+                   </div>
+                   {jobLog.submissions && jobLog.submissions.length > 0 && (
+                     <div className="mt-2 pt-2 border-t">
+                        <h4 className="text-xs font-semibold text-gray-600 mb-1">Profiles Submitted:</h4>
+                        <ul className="list-disc pl-5 text-xs text-gray-700">
+                          {jobLog.submissions.map(sub => <li key={sub.id}>{sub.name}</li>)}
+                        </ul>
+                     </div>
+                   )}
+                   {jobLog.challenges && (
+                     <div className="mt-2 pt-2 border-t">
+                        <h4 className="text-xs font-semibold text-gray-600 mb-1">Challenges & Notes:</h4>
+                        <div className="work-report text-xs text-gray-700 prose prose-sm max-w-none">
+                          {parse(DOMPurify.sanitize(jobLog.challenges))}
+                        </div>
+                     </div>
+                   )}
+                </div>
+              ))}
+            </div>
+        </div>
+      )}
+      {/* --- Overall Work Summary Section --- */}
+      {sanitizedSummary && (
+        <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 rounded-lg border border-green-100">
+          <h3 className="text-sm font-semibold text-green-800 mb-2">Overall Work Summary</h3>
+          <div className="bg-white/90 p-3 rounded-md shadow-sm border">
+            <div className="work-report text-xs text-green-700 prose prose-sm max-w-none">
+              {parse(sanitizedSummary)}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const TimeLogDetails = ({
   timeLog,
@@ -76,9 +134,11 @@ export const TimeLogDetails = ({
   employeeHasProjects
 }: TimeLogDetailsProps) => {
   const log = timeLog || timesheet;
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
-  const [isRecruiter, setIsRecruiter] = useState(false);
+  if (!log) return null;
+
+  // --- CONDITIONAL RENDERING LOGIC ---
+  // Check if this is a submitted recruiter timesheet
+  const isRecruiterReport = log.recruiter_report_data && Array.isArray(log.recruiter_report_data);
 
   // Parse notes to extract title and work report
   let parsedNotes = {
@@ -96,185 +156,34 @@ export const TimeLogDetails = ({
     if (log.notes) parsedNotes.workReport = log.notes;
   }
 
-  // Sanitize the HTML content to prevent XSS attacks
-  const sanitizedWorkReport = DOMPurify.sanitize(parsedNotes.workReport, {
-    ALLOWED_TAGS: [
-      "p",
-      "br",
-      "table",
-      "thead",
-      "tbody",
-      "tr",
-      "th",
-      "td",
-      "strong",
-      "em",
-      "a",
-      "span",
-      "div",
-      "u",
-    ],
-    ALLOWED_ATTR: [
-      "style",
-      "href",
-      "target",
-      "rel",
-      "class",
-      "data-row",
-      "data-cell",
-      "data-rowspan",
-      "data-colspan",
-      "data-cell-bg",
-    ],
-  });
-
-  // Fetch department name to determine if user is a recruiter
-  useEffect(() => {
-    const fetchDepartmentName = async () => {
-      if (!log.employee_id) return;
-
-      try {
-        const { data: employeeData, error: employeeError } = await supabase
-          .from("hr_employees")
-          .select("department_id")
-          .eq("id", log.employee_id)
-          .single();
-
-        if (employeeError) throw employeeError;
-        if (!employeeData?.department_id) return;
-
-        const { data: departmentData, error: departmentError } = await supabase
-          .from("hr_departments")
-          .select("name")
-          .eq("id", employeeData.department_id)
-          .single();
-
-        if (departmentError) throw departmentError;
-
-        if (departmentData.name === "Human Resource") {
-          setIsRecruiter(true);
-        }
-      } catch (error) {
-        console.error("Error fetching department:", error);
-      }
-    };
-
-    fetchDepartmentName();
-  }, [log.employee_id]);
-
-  // Fetch candidate submissions for recruiters
-  useEffect(() => {
-    if (!isRecruiter || !log.employee_id || !log.date) return;
-
-    const fetchSubmissions = async () => {
-      setLoadingSubmissions(true);
-      try {
-        const dateStart = startOfDay(new Date(log.date));
-        const dateEnd = endOfDay(new Date(log.date));
-
-        const { data: candidates, error } = await supabase
-          .from("hr_job_candidates")
-          .select(`
-            name,
-            status:job_statuses!hr_job_candidates_sub_status_id_fkey(name),
-            created_at,
-            job_id,
-            hr_jobs!hr_job_candidates_job_id_fkey(
-              title,
-              client_owner
-            )
-          `)
-          .eq("created_by", log.employee_id)
-          .gte("created_at", format(dateStart, "yyyy-MM-dd'T'HH:mm:ss"))
-          .lte("created_at", format(dateEnd, "yyyy-MM-dd'T'HH:mm:ss"));
-
-        if (error) throw error;
-
-        const formattedSubmissions: Submission[] = candidates.map(
-          (candidate: any) => ({
-            job_title: candidate.hr_jobs?.title || "N/A",
-            client_owner: candidate.hr_jobs?.client_owner || "N/A",
-            candidate_name: candidate.name,
-            status: candidate.status?.name,
-          })
-        );
-
-        setSubmissions(formattedSubmissions);
-        console.log("submissions", formattedSubmissions);
-      } catch (error) {
-        console.error("Error fetching submissions:", error);
-      } finally {
-        setLoadingSubmissions(false);
-      }
-    };
-
-    fetchSubmissions();
-  }, [isRecruiter, log.employee_id, log.date]);
-
-  if (!log) return null;
-
   console.log("TimeLogDetails", log);
 
   return (
     <div className="space-y-3 max-h-[60vh] overflow-y-auto px-1">
-      <BasicInfoSection timeLog={log} parsedNotes={parsedNotes} />
-      {/* <TimeEntrySection timeLog={log} employeeHasProjects={employeeHasProjects} /> */}
-      <ProjectAllocationSection timeLog={log} getProjectName={getProjectName} />
-
-      {/* Candidate Submissions Section */}
-      {isRecruiter && (
-        <div className="bg-gradient-to-r from-blue-50 to-sky-50 p-3 rounded-lg border border-blue-100">
-          <h3 className="text-xs font-medium text-blue-800 mb-2">Candidate Submissions</h3>
-          <div className="bg-white/80 p-2 rounded shadow-sm">
-            {loadingSubmissions ? (
-              <div className="flex justify-center p-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-gray-900"></div>
+     
+      {/* If it's a recruiter report, show the new dedicated view */}
+      {isRecruiterReport ? (
+        <RecruiterReportView log={log} />
+      ) : (
+        // Otherwise, show the original view for other employees
+        <>
+          <BasicInfoSection timeLog={log} parsedNotes={parsedNotes} />
+          {/* <TimeEntrySection timeLog={log} employeeHasProjects={employeeHasProjects} /> */}
+          <ProjectAllocationSection timeLog={log} getProjectName={getProjectName} />
+          {/* Work Summary Section */}
+          {parsedNotes.workReport && (
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 rounded-lg border border-green-100">
+              <h3 className="text-xs font-medium text-green-800 mb-2">Work Summary</h3>
+              <div className="bg-white/80 p-2 rounded shadow-sm">
+                <div className="work-report text-xs text-green-700 prose prose-sm max-w-none">
+                  {parse(DOMPurify.sanitize(parsedNotes.workReport))}
+                </div>
               </div>
-            ) : submissions.length > 0 ? (
-              <div>
-                <p className="mb-2 text-xs text-blue-700">Total Submissions: {submissions.length}</p>
-                <table className="w-full border-collapse border border-gray-300">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="border border-gray-300 p-2 text-left text-xs">Job Title</th>
-                      <th className="border border-gray-300 p-2 text-left text-xs">Client Name</th>
-                      <th className="border border-gray-300 p-2 text-left text-xs">Candidate Name</th>
-                      <th className="border border-gray-300 p-2 text-left text-xs">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {submissions.map((sub, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="border border-gray-300 p-2 text-xs">{sub.job_title}</td>
-                        <td className="border border-gray-300 p-2 text-xs">{sub.client_owner}</td>
-                        <td className="border border-gray-300 p-2 text-xs">{sub.candidate_name}</td>
-                        <td className="border border-gray-300 p-2 text-xs">{sub.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-xs text-gray-500">No submissions found for this date.</p>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
+        </>
       )}
-
-      {/* Work Summary Section */}
-      {parsedNotes.workReport && (
-        <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 rounded-lg border border-green-100">
-          <h3 className="text-xs font-medium text-green-800 mb-2">Work Summary</h3>
-          <div className="bg-white/80 p-2 rounded shadow-sm">
-            <div
-              className="work-report text-xs text-green-700"
-              dangerouslySetInnerHTML={{ __html: sanitizedWorkReport }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Clarification Section */}
+      {/* Clarification Section (Common for all roles) */}
       {(log.rejection_reason || log.clarification_response) && (
         <div
           className={`bg-gradient-to-r ${
@@ -325,8 +234,7 @@ export const TimeLogDetails = ({
           )}
         </div>
       )}
-
-      {/* Regularization Button */}
+      {/* Regularization Button (Common for all roles) */}
       {canRegularize(log) && onRegularizationRequest && (
         <div className="pt-2">
           <Button
