@@ -933,83 +933,63 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
     }
   },
 
-  deleteExpense: async (id) => {
+deleteExpense: async (id: string) => {
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError || !userData?.user) {
-        throw new Error('You must be signed in to delete an expense.');
-      }
-
       const authData = getAuthDataFromLocalStorage();
-      if (!authData) {
-        throw new Error('Failed to retrieve authentication data');
-      }
+      if (!authData) throw new Error('Authentication data not found.');
       const { organization_id } = authData;
 
-      const { data: expenseData, error: fetchError } = await supabase
+      // Step 1: Fetch the expense to backup WITHOUT using .single()
+      const { data: expenseDataArray, error: fetchError } = await supabase
         .from('hr_expenses')
         .select('*')
         .eq('id', id)
-        .eq('created_by', userData.user.id)
-        .eq('organization_id', organization_id)
-        .single();
+        .eq('organization_id', organization_id);
 
       if (fetchError) {
-        throw new Error(`Error fetching expense: ${fetchError.message}`);
+        // This is a real database error
+        throw new Error(`Database error: ${fetchError.message}`);
       }
 
-      if (!expenseData) {
-        throw new Error('Expense not found or you do not have permission to delete it.');
+      // If no expense is found, it's likely already deleted. Exit gracefully.
+      if (!expenseDataArray || expenseDataArray.length === 0) {
+        console.warn(`Expense with ID ${id} not found for deletion. It might already be deleted.`);
+        await get().fetchExpenses(); // Refresh state just in case
+        return; 
       }
+      const expenseData = expenseDataArray[0];
 
-      const { error: backupError } = await supabase
-        .from('backup_expenses')
-        .insert({
-          id: expenseData.id,
-          category: expenseData.category,
-          description: expenseData.description,
-          date: expenseData.date,
-          amount: expenseData.amount,
-          payment_method: expenseData.payment_method,
-          receipt_url: expenseData.receipt_url,
-          notes: expenseData.notes,
-          vendor: expenseData.vendor,
-          created_at: expenseData.created_at,
-          updated_at: expenseData.updated_at,
-          organization_id: organization_id,
-          created_by: expenseData.created_by,
-          status: expenseData.status,
-          deleted_at: new Date().toISOString(),
-        });
+      // Step 2: Backup the expense
+      const { error: backupError } = await supabase.from('backup_expenses').insert({
+        ...expenseData, // Use spread operator for cleaner backup
+        deleted_at: new Date().toISOString(),
+      });
 
       if (backupError) {
-        throw new Error(`Error backing up expense: ${backupError.message}`);
+        throw new Error(`Backup failed: ${backupError.message}`);
       }
 
+      // Step 3: Delete the original expense from the database
       const { error: deleteError } = await supabase
         .from('hr_expenses')
         .delete()
-        .eq('id', id)
-        .eq('created_by', userData.user.id)
-        .eq('organization_id', organization_id);
+        .match({ id: id, organization_id: organization_id }); // Use .match for safety
 
       if (deleteError) {
-        await supabase
-          .from('backup_expenses')
-          .delete()
-          .eq('id', id);
-        throw new Error(`Error deleting expense: ${deleteError.message}`);
+        // Attempt to roll back the backup if the deletion fails
+        await supabase.from('backup_expenses').delete().eq('id', id);
+        throw new Error(`Deletion failed: ${deleteError.message}`);
       }
-
+      
+      // Step 4: Update local state and show success message
       await get().fetchExpenses();
-      set((state) => ({
-        selectedExpense: state.selectedExpense?.id === id ? null : state.selectedExpense,
-      }));
-
       toast.success('Expense deleted successfully');
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('Error deleting expense:', error);
-      toast.error(error.message || 'Failed to delete expense. Please try again.');
+      toast.error(error.message || 'Failed to delete expense.');
+      // Rethrow the error so it can be caught by the calling UI component if needed
+      throw error;
     }
   },
 

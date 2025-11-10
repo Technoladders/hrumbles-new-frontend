@@ -137,16 +137,24 @@ const InvoicesPage: React.FC = () => {
     setIsEditDialogOpen(true);
   };
 
-  const handleDeleteInvoice = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this invoice?')) {
-      try {
-        await deleteInvoice(id);
-        toast.success('Invoice deleted successfully.');
-      } catch (error) {
-        console.error('Error deleting invoice:', error);
-        toast.error('Failed to delete invoice.');
-      }
-    }
+const handleDeleteInvoice = (id: string) => {
+    toast.warning("Are you sure you want to delete this invoice?", {
+      action: {
+        label: "Delete",
+        onClick: async () => {
+          try {
+            await deleteInvoice(id);
+            toast.success('Invoice deleted successfully.');
+          } catch (error) {
+            console.error('Error deleting invoice:', error);
+            toast.error('Failed to delete invoice.');
+          }
+        },
+      },
+      cancel: {
+        label: "Cancel",
+      },
+    });
   };
 
   const handleStatusChange = async (id: string, status: 'Paid' | 'Unpaid' | 'Overdue' | 'Draft') => {

@@ -33,7 +33,8 @@ import {
 } from '@/components/ui/tooltip';
 
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from 'sonner';
+// STEP 1: Import Toaster along with toast
+  import { toast } from 'sonner';
 import { PayrollDrawer } from '@/components/financial/PayrollDrawer';
 import PayslipViewer from '@/components/financial/PayslipViewer'
 import { PayslipData } from '@/utils/payslip-extractor';
@@ -51,6 +52,7 @@ const ExpensesPage: React.FC = () => {
 
   const { payments, setPayments } = useFinancialStore();
 
+  // ... all your state and functions remain the same here ...
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -122,9 +124,6 @@ const ExpensesPage: React.FC = () => {
     }
   }, [isAuthenticated, fetchExpenses]);
 
-  // All other functions (fetchPayments, handlePendingPaymentsForAllMonths, etc.) remain the same...
-  // ... (keeping them hidden for brevity, but they are included in the final code block)
-
   const updatePaymentStatus = async (payment: any) => {
     if (!payment?.payment_date) {
       return { ...payment, status: 'Pending' };
@@ -151,7 +150,6 @@ const ExpensesPage: React.FC = () => {
       if (error) throw error;
       if (!data || data.length === 0) {
         setPayments([]);
-        toast.warning('No payment records found');
         return [];
       }
       const fetchPaymentDetails = async (record: any) => {
@@ -165,7 +163,6 @@ const ExpensesPage: React.FC = () => {
         }
         const paymentDate = record.payment_date ? new Date(record.payment_date) : new Date();
         if (isNaN(paymentDate.getTime())) {
-          console.warn(`Invalid payment_date for record ${record.id}, using current date as fallback`);
           paymentDate.setTime(new Date().getTime());
         }
         const payPeriod = paymentDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
@@ -200,14 +197,13 @@ const ExpensesPage: React.FC = () => {
       const { data, error } = await supabase.from('payment_records').select('employee_id, employee_name, designation, joining_date').order('created_at', { ascending: true });
       if (error) throw error;
       if (!data || data.length === 0) {
-        toast.warning('No employees found in payment records');
         return [];
       }
       const uniqueEmployees = Array.from(new Map(data.map(emp => [emp.employee_id, { employee_id: emp.employee_id, full_name: emp.employee_name || `Employee ${emp.employee_id}`, designation: emp.designation || 'N/A', joining_date: emp.joining_date || null, }])).values());
       return uniqueEmployees;
     } catch (error) {
       console.error('Error fetching employees from payment records:', error);
-      toast.error('Failed to fetch employee data from payment records');
+      toast.error('Failed to fetch employee data');
       return [];
     }
   };
@@ -216,16 +212,13 @@ const ExpensesPage: React.FC = () => {
     try {
       const { data, error } = await supabase.from('payment_records').select('payment_amount').eq('employee_id', employeeId).neq('payment_amount', 0).order('payment_date', { ascending: false }).limit(1);
       if (error) {
-        console.error(`Error fetching payment amount for employee ${employeeId}:`, error);
         return 0;
       }
       if (!data || data.length === 0) {
-        console.log(`No payment records found for employee ${employeeId} with non-zero payment_amount`);
         return 0;
       }
       return data[0]?.payment_amount || 0;
     } catch (error) {
-      console.error(`Unexpected error fetching payment amount for employee ${employeeId}:`, error);
       return 0;
     }
   };
@@ -239,60 +232,46 @@ const ExpensesPage: React.FC = () => {
       const updatePromises = existingRecords.map(async (record) => {
         if (record.status === 'Success') return record;
         const joiningDate = joining_date ? new Date(joining_date) : null;
-        if (joining_date && (!joiningDate || isNaN(joiningDate.getTime()))) {
-          console.warn(`Invalid joining_date for employee ${employeeId}, setting to null`);
-        }
         const { error: updateError } = await supabase.from('payment_records').update({ employee_name: employee_name || record.employee_name, designation: designation || record.designation, payment_amount: payment_amount !== undefined ? payment_amount : record.payment_amount, payment_category: payment_category || record.payment_category, joining_date: joiningDate && !isNaN(joiningDate.getTime()) ? joiningDate.toISOString() : null, updated_at: new Date().toISOString(), }).eq('id', record.id);
         if (updateError) throw updateError;
-        return { ...record, employee_name, designation, payment_amount, payment_category, joining_date };
       });
       await Promise.all(updatePromises);
       await fetchPayments();
-      toast.success(`Updated payment records for employee ${employeeId}`);
+      toast.success(`Updated payment records for ${employeeId}`);
     } catch (error) {
-      console.error(`Error updating payment records for employee ${employeeId}:`, error);
-      toast.error(`Failed to update payment records for employee ${employeeId}`);
+      console.error(`Error updating payment records for ${employeeId}:`, error);
+      toast.error(`Failed to update records for ${employeeId}`);
     }
   };
  
   const handlePendingPaymentsForAllMonths = async () => {
     const today = new Date();
     const employees = await fetchEmployeesFromPayments();
-    if (!employees || employees.length === 0) {
-      toast.warning('No employees found to create payments');
-      return;
-    }
+    if (!employees || employees.length === 0) return;
+    
     const newPayments: any[] = [];
     for (const employee of employees) {
       const { data: employeePayments, error: paymentsError } = await supabase.from('payment_records').select('*').eq('employee_id', employee.employee_id).order('payment_date', { ascending: true });
-      if (paymentsError) {
-        console.error(`Error fetching payments for employee ${employee.employee_id}:`, paymentsError);
-        continue;
-      }
+      if (paymentsError) continue;
       if (!employeePayments || employeePayments.length === 0) continue;
+      
       const firstPayment = employeePayments[0];
       let paymentAmount = await fetchEmployeePaymentAmount(employee.employee_id);
       if (paymentAmount === 0 && firstPayment.payment_amount > 0) {
         paymentAmount = firstPayment.payment_amount;
       }
-      if (paymentAmount === 0) {
-        console.warn(`No valid payment amount found for employee ${employee.employee_id}`);
-        continue;
-      }
+      if (paymentAmount === 0) continue;
+      
       const firstPaymentDate = firstPayment.payment_date ? new Date(firstPayment.payment_date) : new Date();
-      if (isNaN(firstPaymentDate.getTime())) {
-        console.warn(`Invalid first payment_date for employee ${employee.employee_id}, using current date as fallback`);
-        firstPaymentDate.setTime(new Date().getTime());
-      }
+      if (isNaN(firstPaymentDate.getTime())) firstPaymentDate.setTime(new Date().getTime());
+      
       let currentDate = new Date(firstPaymentDate);
       while (currentDate <= today) {
         const targetMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
         const targetMonthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
         const { data: existingPayments, error: existingPaymentsError } = await supabase.from('payment_records').select('*').eq('employee_id', employee.employee_id).gte('payment_date', targetMonthStart.toISOString()).lte('payment_date', targetMonthEnd.toISOString());
-        if (existingPaymentsError) {
-          console.error(`Error checking existing payments for ${employee.full_name}:`, existingPaymentsError);
-          continue;
-        }
+        
+        if (existingPaymentsError) continue;
         if (existingPayments && existingPayments.length > 0) {
           for (const payment of existingPayments) {
             await updatePaymentStatus(payment);
@@ -300,34 +279,17 @@ const ExpensesPage: React.FC = () => {
           currentDate.setMonth(currentDate.getMonth() + 1);
           continue;
         }
-        const paymentDate = targetMonthEnd.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+
         const joiningDate = employee.joining_date ? new Date(employee.joining_date) : null;
-        if (employee.joining_date && (!joiningDate || isNaN(joiningDate.getTime()))) {
-          console.warn(`Invalid joining_date for employee ${employee.employee_id}, setting to null`);
-        }
         const newPaymentRecord = {
-          employee_id: employee.employee_id, employee_name: employee.full_name, designation: employee.designation, joining_date: joiningDate && !isNaN(joiningDate.getTime()) ? joiningDate.toISOString() : null, payment_date: targetMonthEnd.toISOString(), payment_amount: paymentAmount, payment_category: 'Staff', status: 'Pending', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), organization_id: organization_id,
+          employee_id: employee.employee_id, employee_name: employee.full_name, designation: employee.designation, joining_date: joiningDate && !isNaN(joiningDate.getTime()) ? joiningDate.toISOString() : null, payment_date: targetMonthEnd.toISOString(), payment_amount: paymentAmount, payment_category: 'Staff', status: 'Pending', organization_id: organization_id,
         };
         const { data, error } = await supabase.from('payment_records').insert(newPaymentRecord).select().single();
-        if (error) {
-          console.error(`Error creating pending payment for ${employee.full_name}:`, error);
-          toast.error(`Failed to create pending payment for ${employee.full_name}`);
-          continue;
-        }
+        if (error) continue;
+        
         await updatePaymentRecordsForEmployee(employee.employee_id, { employee_name: employee.full_name, designation: employee.designation, payment_amount: paymentAmount, payment_category: 'Staff', joining_date: employee.joining_date || null });
-        let updatedPayment = await updatePaymentStatus(data);
-        const payslipData = {
-          employeeId: employee.employee_id || 'N/A', employeeName: employee.full_name || 'N/A', designation: employee.designation || 'N/A', payPeriod: targetMonthEnd.toLocaleString('en-US', { month: 'long', year: 'numeric' }), payDate: paymentDate, dateOfJoining: employee.joining_date || null, paidDays: 30, lopDays: 0, ctc: 0, basicSalary: 0, houseRentAllowance: 0, conveyanceAllowance: 0, medicalAllowance: 0, specialAllowance: 0, customEarnings: [], totalEarnings: 0, providentFund: 0, professionalTax: 0, incomeTax: 0, customDeductions: [], loanDeduction: 0, netPayable: paymentAmount,
-        };
-        newPayments.push({
-          id: data.id, employeeId: employee.employee_id, employeeName: employee.full_name, paymentDate: paymentDate, paymentAmount: paymentAmount, paymentCategory: 'Staff', status: updatedPayment.status, avatar: '', designation: employee.designation, payslipData,
-        });
         currentDate.setMonth(currentDate.getMonth() + 1);
       }
-    }
-    if (newPayments.length > 0) {
-      setPayments([...payments, ...newPayments]);
-      toast.success(`Added ${newPayments.length} pending payments for employees`);
     }
     await fetchPayments();
   };
@@ -347,10 +309,7 @@ const ExpensesPage: React.FC = () => {
     months.push({ label: 'Last Month Salary Status', value: 'last-month' });
     for (let i = 0; i < 12; i++) {
       const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const monthName = monthNames[date.getMonth()];
-      const year = date.getFullYear();
-      const value = `${monthName}-${year}`;
-      months.push({ label: `${monthName} ${year}`, value });
+      months.push({ label: `${monthNames[date.getMonth()]} ${date.getFullYear()}`, value: `${monthNames[date.getMonth()]}-${date.getFullYear()}` });
     }
     return months;
   };
@@ -361,9 +320,7 @@ const ExpensesPage: React.FC = () => {
       const today = new Date();
       return `${today.toLocaleString('en-US', { month: 'long' })}-${today.getFullYear()}`;
     }
-    const month = date.toLocaleString('en-US', { month: 'long' });
-    const year = date.getFullYear();
-    return `${month}-${year}`;
+    return `${date.toLocaleString('en-US', { month: 'long' })}-${date.getFullYear()}`;
   };
 
   const filteredExpenses = expenses.filter(expense => {
@@ -389,20 +346,10 @@ const ExpensesPage: React.FC = () => {
     if (selectedMonth === 'last-month') {
       const today = new Date();
       const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      const lastMonthName = lastMonth.toLocaleString('en-US', { month: 'long' });
-      const lastMonthYear = lastMonth.getFullYear();
-      const lastMonthValue = `${lastMonthName}-${lastMonthYear}`;
-      return paymentsToFilter.filter(payment => {
-        if (!payment.paymentDate) return false;
-        const paymentMonthYear = getPaymentMonthYear(payment.paymentDate);
-        return paymentMonthYear === lastMonthValue;
-      });
+      const lastMonthValue = `${lastMonth.toLocaleString('en-US', { month: 'long' })}-${lastMonth.getFullYear()}`;
+      return paymentsToFilter.filter(p => getPaymentMonthYear(p.paymentDate) === lastMonthValue);
     }
-    return paymentsToFilter.filter(payment => {
-      if (!payment.paymentDate) return false;
-      const paymentMonthYear = getPaymentMonthYear(payment.paymentDate);
-      return paymentMonthYear === selectedMonth;
-    });
+    return paymentsToFilter.filter(p => getPaymentMonthYear(p.paymentDate) === selectedMonth);
   };
 
   const paidPayments = filterPaymentsByMonth(filteredPayments.filter(payment => payment.status && payment.status.toLowerCase() === 'success'));
@@ -416,103 +363,87 @@ const ExpensesPage: React.FC = () => {
     setIsViewDialogOpen(true);
   };
 
-// In ExpensesPage.tsx...
-
-const handleEditExpense = (id: string) => {
+  const handleEditExpense = (id: string) => {
     const expenseToEdit = expenses.find(exp => exp.id === id);
- 
     if (expenseToEdit) {
-      // --- START: CORRECTED STATE SETTING ---
       setEditExpenseData({
-        category: expenseToEdit.category || 'Other',
-        description: expenseToEdit.description || '',
-        date: expenseToEdit.date || '',
-        paymentMethod: expenseToEdit.paymentMethod || 'UPI', // Use camelCase
-        vendor: expenseToEdit.vendor || '',
-        notes: expenseToEdit.notes || '',
-        receiptUrl: expenseToEdit.receiptUrl || '', // Use camelCase
-
-        // Use camelCase properties from the expense object
-        vendorAddress: expenseToEdit.vendorAddress || '',
-        invoiceNumber: expenseToEdit.invoiceNumber || '',
-        taxableAmount: expenseToEdit.taxableAmount?.toString() || '',
-        cgst: expenseToEdit.cgst?.toString() || '',
-        sgst: expenseToEdit.sgst?.toString() || '',
-        hsn: expenseToEdit.hsn || '',
-        sac: expenseToEdit.sac || '',
-        gstin: expenseToEdit.gstin || '', 
-        
+        ...expenseToEdit,
         amount: expenseToEdit.amount?.toString() || '',
-        displayAmount: expenseToEdit.amount ? new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(expenseToEdit.amount) : '',
+        displayAmount: expenseToEdit.amount ? new Intl.NumberFormat('en-IN').format(expenseToEdit.amount) : '',
         fileToUpload: null,
       });
-      // --- END: CORRECTED STATE SETTING ---
- 
       setSelectedExpenseId(id);
       setIsEditDialogOpen(true);
     }
   };
 
-const formatDateForDisplay = (dateStr: string): string => {
-    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return ''; // Handle invalid or empty dates
+  const formatDateForDisplay = (dateStr: string): string => {
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return '';
     const [year, month, day] = dateStr.split('-');
     return `${day}-${month}-${year}`;
-};
+  };
 
-  const handleDeleteExpense = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this expense?')) {
-      try {
-        await deleteExpense(id);
-        toast.success('Expense deleted successfully.');
-        await fetchExpenses();
-      } catch (error: any) {
-        console.error('Error deleting expense:', error.message);
-        toast.error(`Failed to delete expense: ${error.message}`);
-      }
-    }
+  const handleDeleteExpense = (id: string) => {
+    toast.warning("Are you sure you want to delete this expense?", {
+      action: {
+        label: "Delete",
+        onClick: async () => {
+          try {
+            await deleteExpense(id);
+            toast.success('Expense deleted successfully.');
+          } catch (error: any) {
+            console.error('Error deleting expense:', error.message);
+            toast.error(`Failed to delete expense: ${error.message}`);
+          }
+        },
+      },
+      cancel: {
+        label: "Cancel",
+      },
+    });
   };
 
   const handleExportExpenses = () => {
     exportData('expenses', 'csv');
   };
 
-  const generateAvatarFallback = (name: string) => {
-    const initials = name.split(' ').map(word => word[0]).join('').slice(0, 2).toUpperCase();
-    return initials;
-  };
+  const generateAvatarFallback = (name: string) => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
   const mapPaymentToPayslipData = (payment: any): PayslipData => {
     return payment.payslipData || {
-      employeeId: payment.employeeId || 'N/A', employeeName: payment.employeeName || 'N/A', designation: payment.designation || 'N/A', payPeriod: '', payDate: payment.paymentDate, dateOfJoining: payment.payslipData?.dateOfJoining || null, paidDays: 30, lopDays: 0, ctc: 0, basicSalary: 0, houseRentAllowance: 0, conveyanceAllowance: 0, medicalAllowance: 0, specialAllowance: 0, customEarnings: [], totalEarnings: 0, providentFund: 0, professionalTax: 0, incomeTax: 0, customDeductions: [], loanDeduction: 0, totalDeductions: 0, netPayable: payment.paymentAmount || 0,
+      employeeId: payment.employeeId || 'N/A', employeeName: payment.employeeName || 'N/A', designation: payment.designation || 'N/A', payPeriod: '', payDate: payment.paymentDate, dateOfJoining: null, paidDays: 30, lopDays: 0, ctc: 0, basicSalary: 0, houseRentAllowance: 0, conveyanceAllowance: 0, medicalAllowance: 0, specialAllowance: 0, customEarnings: [], totalEarnings: 0, providentFund: 0, professionalTax: 0, incomeTax: 0, customDeductions: [], loanDeduction: 0, totalDeductions: 0, netPayable: payment.paymentAmount || 0,
     };
   };
  
   const handleViewPayment = (payment: any) => {
-    const payslip = mapPaymentToPayslipData(payment);
-    setPayslipData(payslip);
+    setPayslipData(mapPaymentToPayslipData(payment));
     setIsPayslipDialogOpen(true);
   };
  
   const handleDownloadPayment = (payment: any) => {
-    const payslip = mapPaymentToPayslipData(payment);
-    setPayslipData(payslip);
+    setPayslipData(mapPaymentToPayslipData(payment));
     setIsPayslipDialogOpen(true);
   };
  
-  const handleDeletePayment = async (payment: any) => {
-    if (window.confirm('Are you sure you want to delete this payment?')) {
-      try {
-        const { error } = await supabase.from('payment_records').delete().eq('id', payment.id);
-        if (error) throw error;
-        const updatedPayments = payments.filter(p => p.id !== payment.id);
-        setPayments(updatedPayments);
-        toast.success(`Payment for ${payment.employeeName} deleted successfully`);
-        await handlePendingPaymentsForAllMonths();
-      } catch (error) {
-        console.error('Error deleting payment:', error);
-        toast.error('Failed to delete payment');
-      }
-    }
+  const handleDeletePayment = (payment: any) => {
+    toast.warning(`Delete payment for ${payment.employeeName}?`, {
+      action: {
+        label: "Delete",
+        onClick: async () => {
+          try {
+            const { error } = await supabase.from('payment_records').delete().eq('id', payment.id);
+            if (error) throw error;
+            setPayments(payments.filter(p => p.id !== payment.id));
+            toast.success(`Payment for ${payment.employeeName} deleted`);
+          } catch (error) {
+            toast.error('Failed to delete payment');
+          }
+        },
+      },
+      cancel: {
+        label: "Cancel",
+      },
+    });
   };
  
   const handleEditPayment = async (payment: any) => {
@@ -525,38 +456,15 @@ const formatDateForDisplay = (dateStr: string): string => {
     setIsPayrollDrawerOpen(open);
     if (!open) {
       if (updatedPayment) {
-        const updatedPayments = payments.map(p => p.id === updatedPayment.id ? { ...p, ...updatedPayment } : p);
-        let finalPayments = updatedPayments;
-        const updatedPaymentWithStatus = await updatePaymentStatus(updatedPayment);
-        finalPayments = finalPayments.map(p => p.id === updatedPaymentWithStatus.id ? updatedPaymentWithStatus : p);
-        setPayments(finalPayments);
-        await updatePaymentRecordsForEmployee(updatedPayment.employeeId, { employee_name: updatedPayment.employeeName, designation: updatedPayment.designation, payment_amount: updatedPayment.paymentAmount, payment_category: updatedPayment.paymentCategory, joining_date: updatedPayment.payslipData?.dateOfJoining || null, });
-        await handlePendingPaymentsForAllMonths();
+        await fetchPayments();
       }
       setIsEditMode(false);
       setSelectedPayment(null);
-      const searchInput = document.querySelector('input[placeholder="Search..."]') as HTMLInputElement;
-      if (searchInput) searchInput.focus();
     }
   };
  
-  const handleViewDialogClose = (open: boolean) => {
-    setIsViewDialogOpen(open);
-    if (!open) {
-      setSelectedPayment(null);
-      const searchInput = document.querySelector('input[placeholder="Search..."]') as HTMLInputElement;
-      if (searchInput) searchInput.focus();
-    }
-  };
- 
-  const handlePayslipDialogClose = (open: boolean) => {
-    setIsPayslipDialogOpen(open);
-    if (!open) {
-      setPayslipData(null);
-      const searchInput = document.querySelector('input[placeholder="Search..."]') as HTMLInputElement;
-      if (searchInput) searchInput.focus();
-    }
-  };
+  const handleViewDialogClose = (open: boolean) => setIsViewDialogOpen(open);
+  const handlePayslipDialogClose = (open: boolean) => setIsPayslipDialogOpen(open);
 
   const expenseTotalPages = Math.ceil(filteredExpenses.length / expenseItemsPerPage);
   const expenseStartIndex = (expenseCurrentPage - 1) * expenseItemsPerPage;
@@ -583,52 +491,69 @@ const formatDateForDisplay = (dateStr: string): string => {
   if (!isAuthenticated) {
     return (
       <div className="text-center">
-        <p className="text-red-500">You must be signed in to access this page.</p>
+        <p>You must be signed in to access this page.</p>
         <Button onClick={() => navigate('/login')}>Go to Login</Button>
       </div>
     );
   }
 
-  const renderPagination = (currentPage: number, setCurrentPage: (page: number) => void, totalPages: number, itemsPerPage: number, handleItemsPerPageChange: (value: string) => void, totalItems: number, startIndex: number, itemType: string) => {
-    return (
-      <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4 px-2 py-2 border-t">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600">Show</span>
-          <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
-            <SelectTrigger className="w-[70px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="5">5</SelectItem><SelectItem value="10">10</SelectItem><SelectItem value="20">20</SelectItem><SelectItem value="50">50</SelectItem>
-            </SelectContent>
-          </Select>
-          <span className="text-sm text-gray-600">per page</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))} disabled={currentPage === 1}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm text-gray-600">Page {currentPage} of {totalPages}</span>
-          <Button variant="outline" size="sm" onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))} disabled={currentPage === totalPages}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-        <span className="text-sm text-gray-600">Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, totalItems)} of {totalItems} {itemType}</span>
+  const renderPagination = (currentPage: number, setCurrentPage: (page: number) => void, totalPages: number, itemsPerPage: number, handleItemsPerPageChange: (value: string) => void, totalItems: number, startIndex: number, itemType: string) => (
+    <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4 px-2 py-2 border-t">
+      <div className="flex items-center gap-2">
+        <span className="text-sm">Show</span>
+        <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+          <SelectTrigger className="w-[70px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="5">5</SelectItem><SelectItem value="10">10</SelectItem><SelectItem value="20">20</SelectItem><SelectItem value="50">50</SelectItem>
+          </SelectContent>
+        </Select>
+        <span className="text-sm">per page</span>
       </div>
-    );
-  };
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))} disabled={currentPage === 1}>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span>Page {currentPage} of {totalPages}</span>
+        <Button variant="outline" size="sm" onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))} disabled={currentPage === totalPages}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+      <span>Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, totalItems)} of {totalItems} {itemType}</span>
+    </div>
+  );
 
-
-   return (
+  return (
     <AccountsLayout title="Expenses">
+      {/* 
+        ====================================================================
+        ===> STEP 2: Add the fully styled Toaster component right here <===
+        ====================================================================
+      */}
+      {/* <Toaster 
+        position="bottom-right" 
+        richColors
+        toastOptions={{
+          classNames: {
+            toast: 'border-2 shadow-lg rounded-lg p-4 font-sans',
+            success: 'bg-green-50 border-green-200 text-green-800',
+            error: 'bg-red-50 border-red-200 text-red-800',
+            warning: 'bg-yellow-50 border-yellow-200 text-yellow-800', 
+            actionButton: 'bg-red-600 text-white hover:bg-red-700 px-3 py-1.5 rounded-md text-sm', 
+            cancelButton: 'bg-gray-200 text-gray-700 hover:bg-gray-300 px-3 py-1.5 rounded-md text-sm',
+          },
+        }}
+      /> */}
+
       <div className="space-y-6 animate-fade-in">
-        {/* KPI Cards and Filters remain the same */}
+        {/* KPI Cards and Filters */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Expenses</p>
-                  <h3 className="text-2xl font-bold financial-amount">{formatINR(stats.totalExpenses)}</h3>
-                  <p className="text-xs text-muted-foreground mt-1">No. of expenses: {expenses.length}</p>
+                  <p className="text-sm font-medium">Total Expenses</p>
+                  <h3 className="text-2xl font-bold">{formatINR(stats.totalExpenses)}</h3>
+                  <p className="text-xs mt-1">No. of expenses: {expenses.length}</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center"><Receipt className="h-6 w-6 text-orange-600" /></div>
               </div>
@@ -638,9 +563,9 @@ const formatDateForDisplay = (dateStr: string): string => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Paid</p>
-                  <h3 className="text-2xl font-bold financial-amount">{formatINR(totalPaidAmount)}</h3>
-                  <p className="text-xs text-muted-foreground mt-1">No. of payments: {paidPayments.length}</p>
+                  <p className="text-sm font-medium">Total Paid</p>
+                  <h3 className="text-2xl font-bold">{formatINR(totalPaidAmount)}</h3>
+                  <p className="text-xs mt-1">No. of payments: {paidPayments.length}</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center"><CheckCircle className="h-6 w-6 text-green-600" /></div>
               </div>
@@ -650,9 +575,9 @@ const formatDateForDisplay = (dateStr: string): string => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Pending</p>
-                  <h3 className="text-2xl font-bold financial-amount">{formatINR(totalPendingAmount)}</h3>
-                  <p className="text-xs text-muted-foreground mt-1">No. of payments: {unpaidPayments.length}</p>
+                  <p className="text-sm font-medium">Total Pending</p>
+                  <h3 className="text-2xl font-bold">{formatINR(totalPendingAmount)}</h3>
+                  <p className="text-xs mt-1">No. of payments: {unpaidPayments.length}</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-yellow-100 flex items-center justify-center"><Clock className="h-6 w-6 text-yellow-600" /></div>
               </div>
@@ -662,7 +587,7 @@ const formatDateForDisplay = (dateStr: string): string => {
 
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-3 h-4 w-4" />
             <Input placeholder="Search by description, vendor, or category..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10"/>
           </div>
           <div className="flex gap-2">
@@ -679,128 +604,59 @@ const formatDateForDisplay = (dateStr: string): string => {
         </div>
                               
         <div className="w-full">
-{/* NEW RESPONSIVE PILL-SHAPED TABS */}
-<div className="inline-flex h-auto items-center justify-center rounded-full bg-gray-100 p-1.5">
-  {/* Expense Tab */}
-  <Button
-    variant="ghost"
-    onClick={() => setActiveTab('expense')}
-    className={`h-auto rounded-full px-4 py-1.5 text-sm font-medium transition-all focus-visible:ring-0 focus-visible:ring-offset-0 ${
-      activeTab === 'expense'
-        ? 'bg-purple-600 text-white shadow-sm hover:bg-purple-600/90'
-        : 'text-muted-foreground hover:bg-transparent hover:text-primary'
-    }`}
-  >
-    Expense
-    {/* MODIFIED: Responsive size and consistent white background */}
-    <span className="ml-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white px-1.5 text-xs font-bold text-purple-800">
-      {filteredExpenses.length}
-    </span>
-  </Button>
+          <div className="inline-flex h-auto items-center justify-center rounded-full bg-gray-100 p-1.5">
+            <Button
+              variant="ghost"
+              onClick={() => setActiveTab('expense')}
+              className={`h-auto rounded-full px-4 py-1.5 text-sm font-medium ${activeTab === 'expense' ? 'bg-purple-600 text-white shadow-sm' : ''}`}>
+              Expense
+              <span className="ml-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white px-1.5 text-xs text-purple-800">
+                {filteredExpenses.length}
+              </span>
+            </Button>
 
-  {/* Salary Expense Tab */}
-  <Button
-    variant="ghost"
-    onClick={() => setActiveTab('salary-expense')}
-    className={`h-auto rounded-full px-4 py-1.5 text-sm font-medium transition-all focus-visible:ring-0 focus-visible:ring-offset-0 ${
-      activeTab === 'salary-expense'
-        ? 'bg-purple-600 text-white shadow-sm hover:bg-purple-600/90'
-        : 'text-muted-foreground hover:bg-transparent hover:text-primary'
-    }`}
-  >
-    Salary Expense
-    {/* MODIFIED: Responsive size and consistent white background */}
-    <span className="ml-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white px-1.5 text-xs font-bold text-purple-800">
-      {filteredPayments.length}
-    </span>
-  </Button>
-</div>
+            <Button
+              variant="ghost"
+              onClick={() => setActiveTab('salary-expense')}
+              className={`h-auto rounded-full px-4 py-1.5 text-sm font-medium ${activeTab === 'salary-expense' ? 'bg-purple-600 text-white shadow-sm' : ''}`}>
+              Salary Expense
+              <span className="ml-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white px-1.5 text-xs text-purple-800">
+                {filteredPayments.length}
+              </span>
+            </Button>
+          </div>
  
           {activeTab === 'expense' && (
-            <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm animate-scale-in">
-              {/* DESKTOP HEADER */}
-              <div className="hidden lg:grid grid-cols-12 gap-x-4 px-6 py-3 bg-purple-600 border-b border-purple-700">
-                <div className="col-span-1 text-xs font-bold text-white uppercase tracking-wider">Date</div>
-                <div className="col-span-4 text-xs font-bold text-white uppercase tracking-wider">Description</div>
-                <div className="col-span-2 text-xs font-bold text-white uppercase tracking-wider">Vendor</div>
-                <div className="col-span-2 text-xs font-bold text-white uppercase tracking-wider">Amount</div>
-                <div className="col-span-1 text-xs font-bold text-white uppercase tracking-wider">Method</div>
-                <div className="col-span-2 text-center text-xs font-bold text-white uppercase tracking-wider">Actions</div>
+            <div className="mt-4 bg-white rounded-xl border shadow-sm">
+              <div className="hidden lg:grid grid-cols-12 gap-x-4 px-6 py-3 bg-purple-600 text-white">
+                <div className="col-span-1">Date</div>
+                <div className="col-span-4">Description</div>
+                <div className="col-span-2">Vendor</div>
+                <div className="col-span-2">Amount</div>
+                <div className="col-span-1">Method</div>
+                <div className="col-span-2 text-center">Actions</div>
               </div>
-
-              {/* LIST OF EXPENSE CARDS */}
-              <div className="divide-y divide-gray-200">
+              <div>
                 {paginatedExpenses.length === 0 ? (
-                  <div className="text-center py-10 text-muted-foreground">
-                    No expenses found.
-                  </div>
+                  <div className="text-center py-10">No expenses found.</div>
                 ) : (
                   paginatedExpenses.map((expense) => (
-                    <div key={expense.id} className="grid grid-cols-1 lg:grid-cols-12 gap-x-4 gap-y-3 px-6 py-4 items-center transition-all duration-200 ease-in-out hover:shadow-lg hover:-translate-y-px hover:bg-gray-50/50">
-                      
-                      <div className="col-span-full lg:col-span-1 text-sm text-gray-700">{formatDateForDisplay(expense.date)}</div>
-
-                      <div className="col-span-full lg:col-span-4">
-                        <p className="font-semibold text-gray-800 truncate" title={expense.description}>{expense.description}</p>
-                        <Badge variant="outline" className="mt-1">{expense.category}</Badge>
+                    <div key={expense.id} className="grid grid-cols-1 lg:grid-cols-12 gap-4 px-6 py-4 items-center border-b">
+                      <div className="lg:col-span-1">{formatDateForDisplay(expense.date)}</div>
+                      <div className="lg:col-span-4">
+                        <p className="font-semibold">{expense.description}</p>
+                        <Badge variant="outline">{expense.category}</Badge>
                       </div>
-
-                      <div className="col-span-full lg:col-span-2 text-sm text-gray-700">{expense.vendor || '-'}</div>
-
-                      <div className="col-span-full lg:col-span-2 text-sm font-semibold financial-amount flex items-center">
-                          <IndianRupee className="h-3.5 w-3.5 mr-1 text-gray-500" />
-                          {expense.amount.toLocaleString()}
-                      </div>
-
-                      <div className="col-span-full lg:col-span-1 text-sm text-gray-700">{expense.paymentMethod}</div>
-
-                      <div className="col-span-full lg:col-span-2 flex lg:justify-center">
-                        <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200">
+                      <div className="lg:col-span-2">{expense.vendor || '-'}</div>
+                      <div className="lg:col-span-2 font-semibold">{formatINR(expense.amount)}</div>
+                      <div className="lg:col-span-1">{expense.paymentMethod}</div>
+                      <div className="lg:col-span-2 flex justify-center">
+                        <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1">
                           <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <a 
-                                  href={expense.receiptUrl || '#'} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer" 
-                                  className={`h-7 w-7 rounded-full flex items-center justify-center text-slate-500 transition-colors ${expense.receiptUrl ? 'hover:bg-purple-600 hover:text-white' : 'opacity-50 cursor-not-allowed'}`}
-                                  onClick={(e) => !expense.receiptUrl && e.preventDefault()}
-                                >
-                                  <Receipt className="h-4 w-4" />
-                                </a>
-                              </TooltipTrigger>
-                              <TooltipContent><p>View Receipt</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleViewExpense(expense.id)}>
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>View Details</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" onClick={() => handleEditExpense(expense.id)}>
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Edit Expense</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-red-600 hover:text-white transition-colors" onClick={() => handleDeleteExpense(expense.id)}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Delete Expense</p></TooltipContent>
-                            </Tooltip>
+                            <Tooltip><TooltipTrigger asChild><a href={expense.receiptUrl || '#'} target="_blank" rel="noopener noreferrer" className={`h-7 w-7 flex items-center justify-center ${!expense.receiptUrl && 'opacity-50'}`}><Receipt className="h-4 w-4" /></a></TooltipTrigger><TooltipContent>View Receipt</TooltipContent></Tooltip>
+                            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleViewExpense(expense.id)}><Eye className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>View Details</TooltipContent></Tooltip>
+                            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditExpense(expense.id)}><Edit className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Edit Expense</TooltipContent></Tooltip>
+                            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteExpense(expense.id)}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Delete Expense</TooltipContent></Tooltip>
                           </TooltipProvider>
                         </div>
                       </div>
@@ -813,55 +669,49 @@ const formatDateForDisplay = (dateStr: string): string => {
           )}
  
           {activeTab === 'salary-expense' && (
-            <div>
-              <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-                  <div className="flex justify-start gap-2 border border-gray-200 rounded-lg p-1">
-                    <Button variant="outline" onClick={() => handleActiveSalaryCategoryChange('Paid Salary')} className={`text-sm font-medium h-8 px-4 py-1 rounded-md ${activeSalaryCategory === 'Paid Salary' ? 'bg-purple-600 text-white border-purple-600' : ''}`}>Paid Salary</Button>
-                    <Button variant="outline" onClick={() => handleActiveSalaryCategoryChange('Unpaid Salary')} className={`text-sm font-medium h-8 px-4 py-1 rounded-md ${activeSalaryCategory === 'Unpaid Salary' ? 'bg-purple-600 text-white border-purple-600' : ''}`}>Unpaid Salary</Button>
+            <div className="mt-4">
+              <div className="flex justify-between items-center mb-4">
+                  <div className="flex gap-2 border rounded-lg p-1">
+                    <Button variant={activeSalaryCategory === 'Paid Salary' ? 'default' : 'outline'} onClick={() => handleActiveSalaryCategoryChange('Paid Salary')}>Paid Salary</Button>
+                    <Button variant={activeSalaryCategory === 'Unpaid Salary' ? 'default' : 'outline'} onClick={() => handleActiveSalaryCategoryChange('Unpaid Salary')}>Unpaid Salary</Button>
                   </div>
-                  <div className="flex justify-end">
-                      <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                          <SelectTrigger className="w-[200px]"><SelectValue placeholder="Select month" /></SelectTrigger>
-                          <SelectContent>{generateMonthOptions().map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent>
-                      </Select>
-                  </div>
+                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                      <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>{generateMonthOptions().map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                  </Select>
               </div>
-              <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-                  <div className="overflow-x-auto">
-                      <Table className="min-w-full divide-y divide-gray-200">
-                          <TableHeader className="bg-gray-50">
-                              <TableRow>
-                                  <TableHead className="table-header-cell">Profile</TableHead><TableHead className="table-header-cell">Payday</TableHead><TableHead className="table-header-cell">Payment Amount</TableHead><TableHead className="table-header-cell">Payment Category</TableHead><TableHead className="table-header-cell">Status</TableHead><TableHead className="table-header-cell text-right">Action</TableHead>
-                              </TableRow>
-                          </TableHeader>
-                          <TableBody className="bg-white divide-y divide-gray-200">
-                              {loading ? (
-                                  <TableRow><TableCell colSpan={6} className="text-center py-8"><div className="flex flex-col items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-primary mb-2" /><p className="text-sm text-muted-foreground">Loading payment data...</p></div></TableCell></TableRow>
-                              ) : paginatedSalaryPayments.length === 0 ? (
-                                  <TableRow><TableCell colSpan={6} className="text-center py-8"><p className="text-muted-foreground">No {activeSalaryCategory.toLowerCase()} records found for the selected month</p></TableCell></TableRow>
-                              ) : (
-                                  paginatedSalaryPayments.map((payment) => (
-                                      <TableRow key={payment.id} className="hover:bg-gray-50 transition">
-                                          <TableCell className="table-cell"><div className="flex items-center space-x-3"><Avatar className="h-10 w-10 border"><AvatarImage src={payment.avatar} alt={payment.employeeName} /><AvatarFallback>{generateAvatarFallback(payment.employeeName)}</AvatarFallback></Avatar><div><div className="font-medium">{payment.employeeName}</div><div className="text-xs text-gray-500">{payment.employeeId}</div></div></div></TableCell>
-                                          <TableCell className="table-cell">{payment.paymentDate}</TableCell><TableCell className="table-cell font-medium financial-amount">{formatINR(payment.paymentAmount)}</TableCell><TableCell className="table-cell">{payment.paymentCategory} Payday</TableCell>
-                                          <TableCell className="table-cell"><span className={statusClasses[payment.status as keyof typeof statusClasses] || 'text-gray-600 bg-gray-50 px-2 py-1 rounded-full text-xs font-medium'}>{payment.status}</span></TableCell>
-                                          <TableCell className="table-cell text-right">
-                                              <DropdownMenu>
-                                                  <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                                  <DropdownMenuContent align="end">
-                                                      <DropdownMenuItem onClick={() => handleViewPayment(payment)} className="cursor-pointer"><Eye className="mr-2 h-4 w-4" />View</DropdownMenuItem>
-                                                      <DropdownMenuItem onClick={() => handleEditPayment(payment)} className="cursor-pointer"><Edit className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
-                                                      <DropdownMenuItem onClick={() => handleDownloadPayment(payment)} className="cursor-pointer"><Download className="mr-2 h-4 w-4" />Download</DropdownMenuItem>
-                                                      <DropdownMenuItem onClick={() => handleDeletePayment(payment)} className="cursor-pointer text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
-                                                  </DropdownMenuContent>
-                                              </DropdownMenu>
-                                          </TableCell>
-                                      </TableRow>
-                                  ))
-                              )}
-                          </TableBody>
-                      </Table>
-                  </div>
+              <div className="bg-white rounded-xl border shadow-sm">
+                  <Table>
+                      <TableHeader>
+                          <TableRow><TableHead>Profile</TableHead><TableHead>Payday</TableHead><TableHead>Amount</TableHead><TableHead>Category</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow>
+                      </TableHeader>
+                      <TableBody>
+                          {loading ? (
+                              <TableRow><TableCell colSpan={6} className="text-center"><RefreshCw className="h-8 w-8 animate-spin" /></TableCell></TableRow>
+                          ) : paginatedSalaryPayments.length === 0 ? (
+                              <TableRow><TableCell colSpan={6} className="text-center">No records found</TableCell></TableRow>
+                          ) : (
+                              paginatedSalaryPayments.map((payment) => (
+                                  <TableRow key={payment.id}>
+                                      <TableCell><div className="flex items-center gap-3"><Avatar><AvatarImage src={payment.avatar} /><AvatarFallback>{generateAvatarFallback(payment.employeeName)}</AvatarFallback></Avatar><div><div>{payment.employeeName}</div><div className="text-xs">{payment.employeeId}</div></div></div></TableCell>
+                                      <TableCell>{payment.paymentDate}</TableCell><TableCell>{formatINR(payment.paymentAmount)}</TableCell><TableCell>{payment.paymentCategory}</TableCell>
+                                      <TableCell><span className={statusClasses[payment.status as keyof typeof statusClasses]}>{payment.status}</span></TableCell>
+                                      <TableCell className="text-right">
+                                          <DropdownMenu>
+                                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                              <DropdownMenuContent align="end">
+                                                  <DropdownMenuItem onClick={() => handleViewPayment(payment)}><Eye className="mr-2 h-4 w-4" />View</DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => handleEditPayment(payment)}><Edit className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => handleDownloadPayment(payment)}><Download className="mr-2 h-4 w-4" />Download</DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => handleDeletePayment(payment)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
+                                              </DropdownMenuContent>
+                                          </DropdownMenu>
+                                      </TableCell>
+                                  </TableRow>
+                              ))
+                          )}
+                      </TableBody>
+                  </Table>
                   {displayedPayments.length > 0 && renderPagination(salaryCurrentPage, setSalaryCurrentPage, salaryTotalPages, salaryItemsPerPage, handleSalaryItemsPerPageChange, displayedPayments.length, salaryStartIndex, "payments")}
               </div>
             </div>
@@ -870,33 +720,19 @@ const formatDateForDisplay = (dateStr: string): string => {
       </div>
 
       {/* Dialogs and Drawers */}
-      <Dialog open={isAddDialogOpen} onOpenChange={(isOpen) => { setIsAddDialogOpen(isOpen); if (!isOpen) setNewExpenseData(initialExpenseState); }}>
-        <DialogContent className="max-w-4xl p-0 bg-gray-50">
-          <DialogHeader className="p-6 border-b"><DialogTitle>Add New Expense</DialogTitle></DialogHeader>
-          <ExpenseForm onClose={() => setIsAddDialogOpen(false)} expenseData={newExpenseData} setExpenseData={setNewExpenseData} organizationName={"Your Company Name"} />
-        </DialogContent>
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent className="max-w-4xl"><DialogHeader><DialogTitle>Add New Expense</DialogTitle></DialogHeader><ExpenseForm onClose={() => setIsAddDialogOpen(false)} expenseData={newExpenseData} setExpenseData={setNewExpenseData} organizationName={"Your Company Name"} /></DialogContent>
       </Dialog>
       <Dialog open={isViewDialogOpen} onOpenChange={handleViewDialogClose}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader><DialogTitle>Expense Details</DialogTitle></DialogHeader>
-          {selectedExpense && (<ExpenseDetails expense={selectedExpense} onClose={() => handleViewDialogClose(false)} />)}
-        </DialogContent>
+        <DialogContent className="max-w-4xl"><DialogHeader><DialogTitle>Expense Details</DialogTitle></DialogHeader>{selectedExpense && <ExpenseDetails expense={selectedExpense} onClose={() => handleViewDialogClose(false)} />}</DialogContent>
       </Dialog>
       <Dialog open={isPayslipDialogOpen} onOpenChange={handlePayslipDialogClose}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader><DialogTitle>Payslip</DialogTitle></DialogHeader>
-          {payslipData && (<PayslipViewer payslipData={payslipData} paymentId={payslipData.employeeId} />)}
-        </DialogContent>
+        <DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Payslip</DialogTitle></DialogHeader>{payslipData && <PayslipViewer payslipData={payslipData} paymentId={payslipData.employeeId} />}</DialogContent>
       </Dialog>
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-4xl p-0 bg-gray-50">
-          <DialogHeader className="p-6 border-b"><DialogTitle>Edit Expense</DialogTitle></DialogHeader>
-          {selectedExpense && (
-            <ExpenseForm expense={selectedExpense} onClose={() => setIsEditDialogOpen(false)} expenseData={editExpenseData} setExpenseData={setEditExpenseData} organizationName={"Your Company Name"} />
-          )}
-        </DialogContent>
+        <DialogContent className="max-w-4xl"><DialogHeader><DialogTitle>Edit Expense</DialogTitle></DialogHeader>{selectedExpense && <ExpenseForm expense={selectedExpense} onClose={() => setIsEditDialogOpen(false)} expenseData={editExpenseData} setExpenseData={setEditExpenseData} organizationName={"Your Company Name"} />}</DialogContent>
       </Dialog>
-      <PayrollDrawer open={isPayrollDrawerOpen} onOpenChange={handlePayrollDrawerClose} payment={selectedPayment} editMode={isEditMode} onPaymentCreated={async (newPayment: any) => { await updatePaymentRecordsForEmployee(newPayment.employeeId, { employee_name: newPayment.employeeName, designation: newPayment.designation, payment_amount: newPayment.paymentAmount, payment_category: newPayment.paymentCategory, joining_date: newPayment.payslipData?.dateOfJoining || null, }); await handlePendingPaymentsForAllMonths(); }} />
+      <PayrollDrawer open={isPayrollDrawerOpen} onOpenChange={handlePayrollDrawerClose} payment={selectedPayment} editMode={isEditMode} onPaymentCreated={async (p: any) => await fetchPayments()} />
     </AccountsLayout>
   );
 };

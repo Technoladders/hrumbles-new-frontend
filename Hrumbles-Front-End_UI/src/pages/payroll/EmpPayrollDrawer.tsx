@@ -1149,7 +1149,7 @@ const EmpPayrollDrawer = ({ isOpen, onOpenChange, selectedEmployee, month, year 
               disabled={loading}
             >
               <Save className="mr-1 h-4 w-4" />
-              {loading ? 'Saving...' : paymentRecord.id ? 'Update Payment' : 'Save Payment'}
+              {loading ? 'Saving...' : paymentRecord.id ? 'Updante Payment' : 'Save Payment'}
             </Button>
           )}
         </div>
