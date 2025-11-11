@@ -47,7 +47,11 @@ export const CreateJobModal = ({ isOpen, onClose, editJob = null, onSave }: Crea
       if (editJob) {
         setJobType(editJob.jobType || "Internal");
         if (editJob.jobType === "Internal") {
-          setInternalType(editJob.submissionType === "Client" ? "Client Side" : "Inhouse");
+          setInternalType(
+          (editJob.submissionType === "Client" || editJob.submissionType === "Client Side")
+            ? "Client Side"
+            : "Inhouse"
+        );
         }
         setView('SHOW_STEPPER');
       } else if (Array.isArray(ITECH_ORGANIZATION_ID) && ITECH_ORGANIZATION_ID.includes(organizationId)) {

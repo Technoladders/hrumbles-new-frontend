@@ -9,9 +9,25 @@ const AssociateClientModal = ({ isOpen, onClose, job, onAssociate }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!clientName.trim()) {
+      toast.error("Client name cannot be empty.");
+      return;
+    }
     try {
-      // Call the function to associate the client with the job
-      await onAssociate(job.id, clientName);
+      // --- CHANGE 2: Build the updated job object here ---
+      const updatedJobPayload = {
+        ...job, // Keep all existing job data
+        submissionType: "Client Side", // This is the required fix
+        clientOwner: clientName,       // Update the top-level owner
+        clientDetails: {
+          ...job.clientDetails,         // Preserve other details like budget
+          clientName: clientName,      // Update the name within the details object
+        },
+      };
+
+      // --- CHANGE 3: Pass the entire object to the parent's handler ---
+      await onAssociate(updatedJobPayload);
+      
       toast.success(`Client "${clientName}" associated with job "${job.title}" successfully.`);
       onClose(); // Close the modal after successful association
     } catch (error) {

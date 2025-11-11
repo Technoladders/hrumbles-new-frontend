@@ -53,6 +53,7 @@ import {
   getJobsByType,
   createJob,
   updateJob,
+  updateAssociate,
   deleteJob,
   updateJobStatus,
   getJobsAssignedToUser,
@@ -321,7 +322,7 @@ const Jobs = () => {
 
   const handleAssociateToClient = async (updatedJob: JobData) => {
     try {
-      await updateJob(updatedJob.id, updatedJob, user.id);
+      await updateAssociate(updatedJob.id, updatedJob, user.id);
       refetch();
       toast.success("Job successfully associated with client");
     } catch (err) {

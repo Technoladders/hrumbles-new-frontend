@@ -12,6 +12,7 @@ import {
   deleteJobRecord,
   fetchJobsAssignedToUser
 } from "./supabaseQueries";
+import { sub } from "date-fns";
 
 // Get all jobs
 export const getAllJobs = async (): Promise<JobData[]> => {
@@ -69,7 +70,22 @@ export const createJob = async (job: JobData): Promise<JobData> => {
 };
 
 // Update a job
+// Update a job
 export const updateJob = async (id: string, job: JobData, updated_by: string): Promise<JobData> => {
+  try {
+    // --- FIX 2: REMOVE the double transformation. The 'job' object is already formatted. ---
+    const jobWithMeta = { ...job, updated_by };
+    
+    // Pass the already-correct object directly to the update function.
+    const { data } = await updateJobRecord(id, jobWithMeta);
+    return transformToJobData(data);
+  } catch (error) {
+    console.error(`Failed to update job with ID ${id}:`, error);
+    throw error;
+  }
+};
+
+export const updateAssociate = async (id: string, job: JobData, updated_by: string): Promise<JobData> => {
   try {
     // Transform JobData to DB format
     const dbJob = transformToDbJob(job);
@@ -77,6 +93,7 @@ export const updateJob = async (id: string, job: JobData, updated_by: string): P
     // Add updated_by to the dbJob object
     const jobWithMeta = {
       ...dbJob,
+      submission_type: "Client Side",
       updated_by // Add updated_by
     };
 
