@@ -1,6 +1,7 @@
-
+import { useState } from 'react'; 
 import { clockIn, clockOut, startBreak, endBreak } from "@/api/timeTracker";
 import { formatTime } from "@/utils/timeFormatters";
+import { useTimesheetStore } from '@/stores/timesheetStore';
 
 export const useTimeTrackerOperations = (
   employeeId: string,
@@ -21,8 +22,17 @@ export const useTimeTrackerOperations = (
     currentBreakLog
   }: any
 ) => {
+
+  const [isProcessingClockIn, setIsProcessingClockIn] = useState(false);
+  const openSubmissionModal = useTimesheetStore((state) => state.openSubmissionModal);
+
   const handleClockIn = async () => {
-    if (!employeeId) return;
+    // --- FIX: Add a guard clause ---
+    if (!employeeId || isProcessingClockIn) return;
+    
+    setIsProcessingClockIn(true); // Set lock
+
+    try {
     
     const clockInData = prepareClockInData(notes);
     const newTimeLog = await clockIn(
@@ -37,20 +47,30 @@ export const useTimeTrackerOperations = (
       setIsTracking(true);
       loadTimeLogs();
     }
+    } catch (error) {
+      console.error("Clock in failed:", error);
+      // Handle error, maybe show a toast
+    } finally {
+      setIsProcessingClockIn(false); // Release lock
+    }
   };
 
   const handleClockOut = async () => {
-    if (!currentTimeLog) return;
+    console.log("DEBUG: 2. [useTimeTrackerOperations] handleClockOut called.");
     
-    const success = await clockOut(currentTimeLog.id, elapsedSeconds, inGracePeriod);
-    if (success) {
-      resetState();
-      loadTimeLogs();
-      if (setElapsedSeconds && setTime) {
-        setElapsedSeconds(0);
-        setTime(formatTime(0));
-      }
+    if (!currentTimeLog) {
+      console.error("DEBUG: handleClockOut FAILED because currentTimeLog is null or undefined.");
+      return;
     }
+
+    const finalDurationMinutes = Math.floor(elapsedSeconds / 60);
+    
+    console.log("DEBUG: 3. [useTimeTrackerOperations] Preparing to open modal with:", {
+      timeLogId: currentTimeLog.id,
+      finalDurationMinutes: finalDurationMinutes
+    });
+
+    openSubmissionModal(currentTimeLog, finalDurationMinutes);
   };
 
   // --- NEW: handleStartBreak ---

@@ -26,6 +26,7 @@ interface ViewTimesheetDialogProps {
   timesheet: TimeLog;
   onSubmitTimesheet: () => void;
   employeeHasProjects: boolean;
+  finalDurationMinutes?: number;
 }
 
 interface Submission {
@@ -72,6 +73,7 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
   timesheet,
   onSubmitTimesheet,
   employeeHasProjects,
+  finalDurationMinutes,
 }) => {
   const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
@@ -80,7 +82,7 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
   // Core State
   const [isEditing, setIsEditing] = useState(!timesheet?.is_submitted);
   const [isLoading, setIsLoading] = useState(false);
-  const [isFormValid, setIsFormValid] = useState(false);
+  const [isFormValid, setIsFormValid] = useState(true);
 
   // --- State for different user roles ---
   // 1. Recruiter State
@@ -118,16 +120,8 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
         setFormData({ workReport: timesheet.notes || '' });
         setOverallWorkReport(timesheet.notes || '');
         setIsEditing(!timesheet.is_submitted);
-        setIsFormValid(false); // Default to false until validated
       }
   }, [timesheet, open]);
-
-  // Validation for project-based employees
-  useEffect(() => {
-    if (employeeHasProjects) {
-      setIsFormValid(validateForm({ title, workReport, totalWorkingHours, employeeHasProjects, projectEntries, detailedEntries }));
-    }
-  }, [title, workReport, totalWorkingHours, projectEntries, detailedEntries, employeeHasProjects]);
 
   // Combined data fetching and role detection effect
   useEffect(() => {
@@ -307,7 +301,7 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     setOverallWorkReport(data.report);
   };
 
-  const sendEODReport = async (finalWorkReport: string) => {
+  const sendEODReport = async (finalWorkReport: string, newClockOutTime: string) => {
     setEmailStatus('Sending EOD report...');
     try {
       const { data: { session }, error: authError } = await supabase.auth.getSession();
@@ -330,9 +324,9 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
         workReport: finalWorkReport,
         timesheetDetails: {
           date: timesheet.date,
-          duration_minutes: timesheet.duration_minutes,
+          duration_minutes: finalDurationMinutes,
           clock_in_time: timesheet.clock_in_time,
-          clock_out_time: timesheet.clock_out_time,
+          clock_out_time: newClockOutTime,
         },
         allRecipients: uniqueRecipients,
         csvContent: isRecruiter && submissions.length > 0 ? generateCSV(submissions) : null,
@@ -360,7 +354,7 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     }
   };
 
-  const sendRecruiterEODReport = async () => {
+  const sendRecruiterEODReport = async (newClockOutTime: string) => {
     setEmailStatus('Sending EOD report...');
     try {
       const { data: { session }, error: authError } = await supabase.auth.getSession();
@@ -379,9 +373,9 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
         userName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
         timesheetDetails: {
           date: timesheet.date,
-          duration_minutes: timesheet.duration_minutes,
+          duration_minutes: finalDurationMinutes,
           clock_in_time: timesheet.clock_in_time,
-          clock_out_time: timesheet.clock_out_time,
+          clock_out_time: newClockOutTime,
         },
         jobLogs: recruiterJobLogs,
         overallSummary: overallWorkReport,
@@ -421,7 +415,7 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     setOverallWorkReport('');
     setSubmissions([]);
     setIsEditing(false);
-    setIsFormValid(false);
+    setIsFormValid(true);
     setEmailStatus(null);
     onOpenChange(false);
   };
@@ -431,64 +425,104 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
       toast.error('User not authenticated.');
       return;
     }
-    if (!isFormValid) {
-        toast.error("Please fill all required fields before submitting.");
-        return;
+
+  
+    // --- REVISED: Perform validation right before submitting ---
+    if (isRecruiter) {
+        // For recruiters, validation state is controlled by the child form
+        if (!isFormValid) {
+            toast.error("Please fill all required fields before submitting.");
+            return;
+        }
+    } else if (employeeHasProjects) {
+        // For project-based employees, run validation now
+        const calculatedTotalHours = projectEntries.reduce((sum, p) => sum + (p.hours || 0), 0);
+        const isValid = validateForm({
+            title, workReport,
+            totalWorkingHours: calculatedTotalHours,
+            employeeHasProjects,
+            projectEntries,
+            detailedEntries: projectEntries // Assuming detailedEntries are the same as projectEntries here
+        });
+        if (!isValid) {
+            // The toast will be shown by the validateForm function itself.
+            return;
+        }
+    } else {
+        // For standard employees, run validation now
+        const isValid = formData.workReport.replace(/<[^>]+>/g, "").trim().length > 0;
+        if (!isValid) {
+            toast.error('Work Summary is required');
+            return;
+        }
     }
+
+    const newClockOutTime = new Date().toISOString();
     setIsLoading(true);
     try {
-        const clockIn = timesheet.clock_in_time ? DateTime.fromISO(timesheet.clock_in_time, { zone: 'utc' }).setZone('Asia/Kolkata').toFormat('HH:mm') : undefined;
-        const clockOut = timesheet.clock_out_time ? DateTime.fromISO(timesheet.clock_out_time, { zone: 'utc' }).setZone('Asia/Kolkata').toFormat('HH:mm') : undefined;
-        let timesheetData: any = {
-            employeeId: timesheet.employee_id,
-            date: new Date(timesheet.date),
-            clockIn,
-            clockOut,
-        };
-       
-        let finalWorkReport = '';
-        let isSubmissionSuccessful = false;
-       
-        if (isRecruiter) {
-            timesheetData.notes = overallWorkReport;
-            timesheetData.recruiter_report_data = recruiterJobLogs;
-            const totalHours = recruiterJobLogs?.reduce((sum, log) => sum + log.hours + (log.minutes / 60), 0) || 8;
-            timesheetData.totalWorkingHours = totalHours;
-            isSubmissionSuccessful = await submitTimesheet(timesheet.id, timesheetData, organization_id);
-            if (isSubmissionSuccessful) {
-                await sendRecruiterEODReport(); // <-- CALL THE NEW EOD FUNCTION
-            }
-        } else {
-            if (employeeHasProjects) {
-                timesheetData.title = title;
-                timesheetData.notes = title || workReport;
-                timesheetData.workReport = workReport;
-                timesheetData.totalWorkingHours = totalWorkingHours;
-                timesheetData.projectEntries = projectEntries;
-                timesheetData.detailedEntries = detailedEntries;
-                finalWorkReport = workReport;
-            } else {
-                timesheetData.notes = formData.workReport;
-                timesheetData.workReport = formData.workReport;
-                timesheetData.totalWorkingHours = timesheet.duration_minutes ? timesheet.duration_minutes / 60 : 8;
-                finalWorkReport = formData.workReport;
-            }
-            isSubmissionSuccessful = await submitTimesheet(timesheet.id, timesheetData, organization_id);
-            if (isSubmissionSuccessful) {
-                await sendEODReport(finalWorkReport);
-            }
-        }
-        if (isSubmissionSuccessful) {
-            if (emailStatus && emailStatus.startsWith('Failed')) {
-                // Error already shown
-            } else {
-                toast.success("Timesheet submitted successfully");
-                onSubmitTimesheet();
-                handleClose();
-            }
-        } else {
-            toast.error('Failed to submit timesheet');
-        }
+      const clockIn = timesheet.clock_in_time ? DateTime.fromISO(timesheet.clock_in_time, { zone: 'utc' }).setZone('Asia/Kolkata').toFormat('HH:mm') : undefined;
+      // Clock out is now handled by the API, so we don't need the `clockOut` variable here.
+      let timesheetData: any = {
+          employeeId: timesheet.employee_id,
+          date: new Date(timesheet.date),
+          clockIn,
+          // No clockOut here
+      };
+      let isSubmissionSuccessful = false;
+      let finalWorkReport = '';
+
+      if (isRecruiter) {
+          timesheetData.notes = overallWorkReport;
+          timesheetData.recruiter_report_data = recruiterJobLogs;
+          // --- FIX: Pass finalDurationMinutes for recruiters ---
+          isSubmissionSuccessful = await submitTimesheet(
+              timesheet.id,
+              timesheetData,
+              organization_id,
+              finalDurationMinutes // Pass the duration
+          );
+          if (isSubmissionSuccessful) {
+             await sendRecruiterEODReport(newClockOutTime);
+          }
+      } else {
+          // This block handles both project-based and standard employees
+          if (employeeHasProjects) {
+              timesheetData.title = title;
+              timesheetData.notes = title || workReport;
+              timesheetData.workReport = workReport;
+              timesheetData.totalWorkingHours = totalWorkingHours;
+              timesheetData.projectEntries = projectEntries;
+              timesheetData.detailedEntries = detailedEntries;
+              finalWorkReport = workReport;
+          } else {
+              timesheetData.notes = formData.workReport;
+              timesheetData.workReport = formData.workReport;
+              timesheetData.totalWorkingHours = timesheet.duration_minutes ? timesheet.duration_minutes / 60 : 8;
+              finalWorkReport = formData.workReport;
+          }
+          // --- FIX: Pass finalDurationMinutes for ALL non-recruiter roles ---
+          isSubmissionSuccessful = await submitTimesheet(
+              timesheet.id,
+              timesheetData,
+              organization_id,
+              finalDurationMinutes // Pass the duration
+          );
+          if (isSubmissionSuccessful) {
+              await sendEODReport(finalWorkReport, newClockOutTime);
+          }
+      }
+      if (isSubmissionSuccessful) {
+          if (emailStatus && emailStatus.startsWith('Failed')) {
+              // Error already shown
+          } else {
+              toast.success("Timesheet submitted successfully");
+              onSubmitTimesheet();
+              // This will trigger the refresh via App.jsx
+              handleClose();
+          }
+      } else {
+          toast.error('Failed to submit timesheet');
+      }
     } catch (error: any) {
         console.error("Error during submission:", error);
         toast.error(`Submission Failed: ${error.message || 'An unknown error occurred'}`);
@@ -522,6 +556,7 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
                   ) : employeeHasProjects ? (
                     <TimesheetDialogContent
                       date={new Date(timesheet.date)}
+                      mode="submit"
                       setDate={() => {}} // Date is fixed in this view
                       title={title}
                       setTitle={setTitle}
@@ -545,7 +580,6 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
                       formData={formData}
                       setFormData={setFormData}
                       timesheet={timesheet}
-                      onValidationChange={setIsFormValid}
                     />
                   )}
                  

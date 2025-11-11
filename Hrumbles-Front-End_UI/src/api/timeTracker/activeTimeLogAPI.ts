@@ -10,7 +10,7 @@ export const fetchActiveTimeLog = async (employeeId: string): Promise<TimeLog | 
       .select('*, break_logs(*)')
       .eq('employee_id', employeeId)
       .is('clock_out_time', null)
-      .single();
+     .maybeSingle();
 
     if (error) throw error;
     

@@ -30,7 +30,6 @@ const formatSecondsToHHMMSS = (totalSeconds: number): string => {
 
 export function DigitalTimeDisplay({ time, timeLogs, isOnBreak, breakTime }: DigitalTimeDisplayProps) {
 
-    console.log("DigitalTimeDisplay props:", { time, timeLogs, isOnBreak, breakTime });
   // Find the log for the current day to display its data.
   const todayLog = timeLogs.find(log => log.date && isToday(parseISO(log.date)));
 
@@ -74,7 +73,7 @@ export function DigitalTimeDisplay({ time, timeLogs, isOnBreak, breakTime }: Dig
   }
   // --- END: CORRECTED DURATION LOGIC ---
 
-  console.log("sessionDurationDisplay:", sessionDurationDisplay);
+
 
   return (
     <div className="w-full bg-gray-50 p-2 rounded-lg border">

@@ -508,7 +508,6 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         .from('hr_invoices')
         .select('*')
         .eq('id', id)
-        .eq('created_by', userData.user.id)
         .eq('organization_id', organization_id)
         .single();
 
@@ -594,7 +593,6 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         .from('hr_invoices')
         .delete()
         .eq('id', id)
-        .eq('created_by', userData.user.id)
         .eq('organization_id', organization_id);
 
       if (deleteError) {

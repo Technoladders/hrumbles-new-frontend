@@ -9,6 +9,7 @@ import { TimesheetClarificationDialog } from "@/components/TimeManagement/timesh
 import { TimesheetHeader } from "@/components/TimeManagement/timesheet/TimesheetHeader";
 import { TimesheetContent } from "@/components/TimeManagement/timesheet/TimesheetContent";
 import { useTimesheetManagement } from '@/hooks/TimeManagement/useTimesheetManagement';
+import { useTimesheetStore } from '@/stores/timesheetStore';
  
 const Timesheet = () => {
   const [activeTab, setActiveTab] = useState("pending");
@@ -19,6 +20,9 @@ const Timesheet = () => {
   const [employeeHasProjects, setEmployeeHasProjects] = useState(false);
 
   console.log("Employes has projectssss", employeeHasProjects)
+
+    const { isSubmissionModalOpen, submissionTarget, closeSubmissionModal } = useTimesheetStore();
+
 
   const user = useSelector((state: any) => state.auth.user);
   const employeeId = user?.id || "";
@@ -100,6 +104,18 @@ const Timesheet = () => {
     });
   }, [employeeId, employeeHasProjects, activeTab, createDialogOpen, viewDialogOpen, clarificationDialogOpen, selectedTimesheet]);
 
+  const handleDialogClose = (open: boolean) => {
+    if (!open) {
+      setViewDialogOpen(false);
+      setSelectedTimesheet(null);
+      closeSubmissionModal(); // Also close the global state
+    }
+  };
+  
+  // --- NEW: Determine which timesheet and state should be active ---
+  const isModalActive = viewDialogOpen || isSubmissionModalOpen;
+  const activeTimesheet = submissionTarget?.timeLog || selectedTimesheet;
+
   return (
     <div className="content-area">
       <TimesheetHeader 
@@ -134,17 +150,17 @@ const Timesheet = () => {
         />
       )}
       
-      {selectedTimesheet && (
+      {isModalActive && activeTimesheet && (
         <ViewTimesheetDialog 
-          open={viewDialogOpen}
-          onOpenChange={(open) => {
-            console.log('ViewTimesheetDialog open changed:', { open });
-            setViewDialogOpen(open);
-            if (!open) setSelectedTimesheet(null);
+          open={isModalActive}
+          onOpenChange={handleDialogClose}
+          timesheet={activeTimesheet} // Always pass the determined active timesheet
+          finalDurationMinutes={submissionTarget?.finalDurationMinutes}
+          onSubmitTimesheet={() => {
+            fetchTimesheetData();
+            closeSubmissionModal(); // Ensure state is cleared on successful submit
           }}
-          timesheet={selectedTimesheet}
-          onSubmitTimesheet={fetchTimesheetData}
-          employeeHasProjects={employeeHasProjects} // Pass employeeHasProjects
+          employeeHasProjects={employeeHasProjects}
         />
       )}
       

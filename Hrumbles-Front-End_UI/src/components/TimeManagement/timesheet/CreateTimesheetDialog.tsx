@@ -105,6 +105,7 @@ export const CreateTimesheetDialog: React.FC<CreateTimesheetDialogProps> = ({
     <Dialog open={open} onOpenChange={handleClose}>
       <TimesheetDialogContent
         date={date}
+        mode="create"
         setDate={setDate}
         detailedEntries={detailedEntries}
         setDetailedEntries={setDetailedEntries}

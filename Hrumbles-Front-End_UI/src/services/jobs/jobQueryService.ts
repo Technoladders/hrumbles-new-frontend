@@ -1,7 +1,7 @@
 // jobQueryService.ts
 
 import { JobData } from "@/lib/types";
-import { transformToJobData } from "./jobDataTransformer"; 
+import { transformToJobData, transformToDbJob } from "./jobDataTransformer"; 
 import {
   fetchAllJobs,
   fetchJobsByType,
@@ -71,17 +71,23 @@ export const createJob = async (job: JobData): Promise<JobData> => {
 // Update a job
 export const updateJob = async (id: string, job: JobData, updated_by: string): Promise<JobData> => {
   try {
-    const jobWithMeta = { ...job, updated_by };
+    // Transform JobData to DB format
+    const dbJob = transformToDbJob(job);
+
+    // Add updated_by to the dbJob object
+    const jobWithMeta = {
+      ...dbJob,
+      updated_by // Add updated_by
+    };
+
     const { data } = await updateJobRecord(id, jobWithMeta);
+    
     return transformToJobData(data);
-  // --- THIS IS THE FIX ---
-  // The underscore has been removed.
   } catch (error) {
     console.error(`Failed to update job with ID ${id}:`, error);
     throw error;
   }
 };
-
 // Update job status
 export const updateJobStatus = async (jobId: string, status: string): Promise<JobData> => {
   try {

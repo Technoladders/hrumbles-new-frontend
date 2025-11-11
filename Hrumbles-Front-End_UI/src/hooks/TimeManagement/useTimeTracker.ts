@@ -10,6 +10,7 @@ import { hasGracePeriodEnded, isWithinGracePeriod } from "@/utils/timeTrackerUti
 import { autoTerminateTimeLog } from "@/api/timeTracker";
 import { useTimeTrackerMonitoring } from "./timeTracker/useTimeTrackerMonitoring";
 import { formatTime } from "@/utils/timeFormatters"; 
+import { useTimesheetStore } from "@/stores/timesheetStore";
 
 export const useTimeTracker = (employeeId: string) => {
   const baseState = useTimeTrackerBaseState();
@@ -34,6 +35,8 @@ export const useTimeTracker = (employeeId: string) => {
     setLastEmployeeId,
     resetState
   } = baseState;
+
+   const refreshTracker = useTimesheetStore((state) => state.refreshTracker);
 
   const {
     elapsedSeconds,
@@ -108,6 +111,7 @@ export const useTimeTracker = (employeeId: string) => {
       setIsOnBreak,
       setCurrentBreakLog,
       notes,
+      elapsedSeconds,
       currentTimeLog,
       resetState,
       loadTimeLogs,
@@ -118,6 +122,16 @@ export const useTimeTracker = (employeeId: string) => {
       prepareClockInData
     }
   );
+
+    useEffect(() => {
+    // The initial value is 0, so this won't run on the first render.
+    // It only runs when the trigger is explicitly incremented.
+    if (refreshTracker > 0) {
+      console.log("DEBUG: [useTimeTracker] Refresh trigger detected. Resetting state and reloading logs.");
+      resetState();
+      loadTimeLogs();
+    }
+  }, [refreshTracker, resetState, loadTimeLogs]);
 
   // --- NEW: Effect to calculate ongoing break duration on load ---
   useEffect(() => {

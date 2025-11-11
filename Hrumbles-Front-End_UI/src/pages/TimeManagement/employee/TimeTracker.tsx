@@ -35,24 +35,29 @@ const TimeTracker: React.FC<TimeTrackerProps> = ({ employeeId }) => {
   } = useTimeTracker(employeeId);
 
   // This useEffect now manages all submission-related states.
-  useEffect(() => {
+useEffect(() => {
     if (timeLogs && timeLogs.length > 0) {
+      // --- NEW SIMPLIFIED LOGIC ---
+      // Check if ANY log entry exists for today's date.
+      const todayLogExists = timeLogs.some(log => isToday(parseISO(log.date)));
+      // You can only clock in if a log for today does NOT exist.
+      setCanClockInToday(!todayLogExists);
+      // --- END NEW LOGIC ---
+
+      // --- Logic for Alerts ---
       const unsubmittedLogs = filterUnsubmittedTimesheets(timeLogs);
       
       const previousDayLogs = unsubmittedLogs.filter(isPreviousDayTimesheet);
       setHasPreviousDayUnsubmitted(previousDayLogs.length > 0);
 
-      const todayUnsubmittedLogs = unsubmittedLogs.filter(log => !isPreviousDayTimesheet(log));
-      setHasTodayUnsubmitted(todayUnsubmittedLogs.length > 0);
-
-      // Re-clock-in logic: find a log for today that has been clocked out but not submitted.
-      const todayLogClockedOut = timeLogs.find(log => 
-        isToday(parseISO(log.date)) && log.clock_out_time && !log.is_submitted
+      // Show "Submit Now" alert only if there is a log for today that is clocked out but NOT submitted.
+      const todayUnsubmittedLog = unsubmittedLogs.find(log => 
+        isToday(parseISO(log.date)) && log.clock_out_time
       );
-      setCanClockInToday(!todayLogClockedOut);
+      setHasTodayUnsubmitted(!!todayUnsubmittedLog);
 
     } else {
-      // If no logs, reset all states
+      // If no logs exist at all, reset all states
       setHasPreviousDayUnsubmitted(false);
       setHasTodayUnsubmitted(false);
       setCanClockInToday(true);
@@ -107,7 +112,7 @@ const TimeTracker: React.FC<TimeTrackerProps> = ({ employeeId }) => {
         <TimerControls
           isTracking={isTracking}
           isOnBreak={isOnBreak}
-          handleClockIn={isOnApprovedLeave || hasPreviousDayUnsubmitted || !canClockInToday ? undefined : handleClockIn}
+           handleClockIn={isOnApprovedLeave || hasPreviousDayUnsubmitted || !canClockInToday ? undefined : handleClockIn}
           handleClockOut={handleClockOut}
           handleStartBreak={handleStartBreak}
           handleEndBreak={handleEndBreak}

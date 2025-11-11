@@ -37,6 +37,11 @@ export function TimerControls({
     );
   }
 
+    const onClockOutClick = () => {
+    console.log("DEBUG: 1. [TimerControls] Clock Out button CLICKED.");
+    handleClockOut();
+  };
+
   return (
     <div className="flex justify-center gap-3 w-full mt-4">
       {isTracking ? (
@@ -49,7 +54,7 @@ export function TimerControls({
             <Button 
             size="sm"
               className="w-full gap-2 shadow-md bg-gray-800 hover:bg-gray-900 text-white"
-              onClick={handleClockOut}
+              onClick={onClockOutClick}
             >
               Clock Out <LogOut className="h-4 w-4" />
             </Button>
