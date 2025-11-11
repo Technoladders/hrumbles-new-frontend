@@ -172,6 +172,7 @@ export const TimesheetTable: React.FC<TimesheetTableProps> = ({
                         size="sm"
                         className="h-8 px-2"
                         onClick={() => onViewTimesheet(timesheet)}
+                        disabled={!timesheet.clock_out_time}
                       >
                         <FileText className="h-4 w-4 mr-1" />
                         Submit

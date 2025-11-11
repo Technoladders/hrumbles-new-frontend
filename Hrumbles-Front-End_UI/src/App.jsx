@@ -115,6 +115,9 @@ import PayrollRun from '././pages/payroll/index';
 import PayrollDetails from './pages/payroll/PayrollDetails';
 import PayrollHistoryDetails from './pages/payroll/PayrollHistoryDetails';
 import TerminatedEmployeesPayroll from './pages/payroll/TerminatedEmployeesPayroll';
+import ReconciliationPage from '@/components/accounts/ReconciliationPage';
+import BankStatement from './pages/finance/accounts/BankStatement'; 
+import StatementDetailPage from "./pages/finance/accounts/StatementDetailPage.tsx"; 
 
 // Sales Companies and Contacts
 import CompaniesPage from "./pages/sales/CompaniesPage";
@@ -423,6 +426,9 @@ function AppContent() {
               <Route path="/payroll/:year/:month" element={<PayrollDetails />} />
               <Route path="/payroll/history/:year/:month" element={<PayrollHistoryDetails />} />
               <Route path="/payroll/terminated/:year/:month/:employeeId" element={<TerminatedEmployeesPayroll />} />
+              <Route path="/finance/bank-statement" element={<BankStatement />} />
+              <Route path="/finance/accounts/:statementId" element={<StatementDetailPage />} />
+              <Route path="/accounts/reconciliation" element={<ReconciliationPage />} />
 
 
               {/* Sales Companies and Contacts */}

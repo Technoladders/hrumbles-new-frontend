@@ -33,13 +33,14 @@ import {
 } from '@/components/ui/tooltip';
 
 import { supabase } from "@/integrations/supabase/client";
-// STEP 1: Import Toaster along with toast
-  import { toast } from 'sonner';
+import { toast } from 'sonner';
 import { PayrollDrawer } from '@/components/financial/PayrollDrawer';
 import PayslipViewer from '@/components/financial/PayslipViewer'
 import { PayslipData } from '@/utils/payslip-extractor';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+
+type ReconciliationStatus = 'matched' | 'suggested' | 'unmatched';
 
 const ExpensesPage: React.FC = () => {
   const {
@@ -52,7 +53,6 @@ const ExpensesPage: React.FC = () => {
 
   const { payments, setPayments } = useFinancialStore();
 
-  // ... all your state and functions remain the same here ...
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -99,6 +99,65 @@ const ExpensesPage: React.FC = () => {
     gstin: '',
   };
 
+  // ===================================================================
+  // RECONCILIATION STATUS BADGE FUNCTION
+  // ===================================================================
+  const getReconciliationStatusBadge = (status: string | undefined) => {
+    switch (status) {
+      case 'matched':
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-2.5 w-2.5 rounded-full bg-green-500 flex-shrink-0" />
+                  <span className="text-xs font-medium text-green-700">Matched</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="font-semibold">✅ Reconciled</p>
+                <p className="text-xs">Confirmed match with bank transaction</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      case 'suggested':
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-2.5 w-2.5 rounded-full bg-yellow-500 flex-shrink-0 animate-pulse" />
+                  <span className="text-xs font-medium text-yellow-700">Pending</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="font-semibold">⚠️ Suggestion Available</p>
+                <p className="text-xs">AI found a potential match - review in bank statement</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      default:
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-2.5 w-2.5 rounded-full bg-gray-400 flex-shrink-0" />
+                  <span className="text-xs font-medium text-gray-600">Unmatched</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="font-semibold">⚪ Unmatched</p>
+                <p className="text-xs">No bank transaction match found yet</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+    }
+  };
+
   const [newExpenseData, setNewExpenseData] = useState(initialExpenseState);
   const [editExpenseData, setEditExpenseData] = useState<any>(initialExpenseState);
 
@@ -118,9 +177,35 @@ const ExpensesPage: React.FC = () => {
     checkAuth();
   }, []);
 
+  // ===================================================================
+  // REALTIME LISTENER - Automatically refreshes when expenses change
+  // ===================================================================
   useEffect(() => {
     if (isAuthenticated) {
       fetchExpenses();
+      
+      // Setup realtime subscription
+      const channel = supabase
+        .channel('expenses-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*', // Listen to INSERT, UPDATE, DELETE
+            schema: 'public',
+            table: 'hr_expenses'
+          },
+          (payload) => {
+            console.log('Expense changed:', payload);
+            // Refetch expenses when any change occurs
+            fetchExpenses();
+          }
+        )
+        .subscribe();
+
+      // Cleanup subscription on unmount
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [isAuthenticated, fetchExpenses]);
 
@@ -524,26 +609,6 @@ const ExpensesPage: React.FC = () => {
 
   return (
     <AccountsLayout title="Expenses">
-      {/* 
-        ====================================================================
-        ===> STEP 2: Add the fully styled Toaster component right here <===
-        ====================================================================
-      */}
-      {/* <Toaster 
-        position="bottom-right" 
-        richColors
-        toastOptions={{
-          classNames: {
-            toast: 'border-2 shadow-lg rounded-lg p-4 font-sans',
-            success: 'bg-green-50 border-green-200 text-green-800',
-            error: 'bg-red-50 border-red-200 text-red-800',
-            warning: 'bg-yellow-50 border-yellow-200 text-yellow-800', 
-            actionButton: 'bg-red-600 text-white hover:bg-red-700 px-3 py-1.5 rounded-md text-sm', 
-            cancelButton: 'bg-gray-200 text-gray-700 hover:bg-gray-300 px-3 py-1.5 rounded-md text-sm',
-          },
-        }}
-      /> */}
-
       <div className="space-y-6 animate-fade-in">
         {/* KPI Cards and Filters */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -628,28 +693,32 @@ const ExpensesPage: React.FC = () => {
  
           {activeTab === 'expense' && (
             <div className="mt-4 bg-white rounded-xl border shadow-sm">
-              <div className="hidden lg:grid grid-cols-12 gap-x-4 px-6 py-3 bg-purple-600 text-white">
-                <div className="col-span-1">Date</div>
-                <div className="col-span-4">Description</div>
-                <div className="col-span-2">Vendor</div>
-                <div className="col-span-2">Amount</div>
-                <div className="col-span-1">Method</div>
-                <div className="col-span-2 text-center">Actions</div>
-              </div>
+      <div className="hidden lg:grid grid-cols-12 gap-x-4 px-6 py-3 bg-purple-600 text-white">
+  <div className="col-span-1">Date</div>
+  <div className="col-span-3">Description</div>
+  <div className="col-span-2">Vendor</div>
+  <div className="col-span-2">Amount</div>
+  <div className="col-span-1">Method</div>
+  <div className="col-span-1">Status</div>
+  <div className="col-span-2 text-center">Actions</div>
+</div>
               <div>
                 {paginatedExpenses.length === 0 ? (
                   <div className="text-center py-10">No expenses found.</div>
                 ) : (
                   paginatedExpenses.map((expense) => (
-                    <div key={expense.id} className="grid grid-cols-1 lg:grid-cols-12 gap-4 px-6 py-4 items-center border-b">
-                      <div className="lg:col-span-1">{formatDateForDisplay(expense.date)}</div>
-                      <div className="lg:col-span-4">
-                        <p className="font-semibold">{expense.description}</p>
-                        <Badge variant="outline">{expense.category}</Badge>
-                      </div>
-                      <div className="lg:col-span-2">{expense.vendor || '-'}</div>
-                      <div className="lg:col-span-2 font-semibold">{formatINR(expense.amount)}</div>
-                      <div className="lg:col-span-1">{expense.paymentMethod}</div>
+                    <div key={expense.id} className="grid grid-cols-1 lg:grid-cols-12 gap-4 px-6 py-4 items-center border-b hover:bg-gray-50">
+  <div className="lg:col-span-1">{formatDateForDisplay(expense.date)}</div>
+  <div className="lg:col-span-3">
+    <p className="font-semibold">{expense.description}</p>
+    <Badge variant="outline">{expense.category}</Badge>
+  </div>
+  <div className="lg:col-span-2">{expense.vendor || '-'}</div>
+  <div className="lg:col-span-2 font-semibold">{formatINR(expense.amount)}</div>
+  <div className="lg:col-span-1">{expense.paymentMethod}</div>
+  <div className="lg:col-span-1">
+    {getReconciliationStatusBadge(expense.reconciliation_status)}
+  </div>
                       <div className="lg:col-span-2 flex justify-center">
                         <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1">
                           <TooltipProvider>

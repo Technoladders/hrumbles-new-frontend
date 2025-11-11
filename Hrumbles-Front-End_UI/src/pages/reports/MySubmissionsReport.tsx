@@ -312,7 +312,8 @@ const [recruiterFilter, setRecruiterFilter] = useState<string[]>([]);
     current_salary, expected_salary, location, notice_period, overall_score, 
     job_id, interview_date, interview_time, interview_feedback, metadata,
     job:hr_jobs!hr_job_candidates_job_id_fkey(title, client_details, job_type, job_id),
-    recruiter:hr_employees!hr_job_candidates_created_by_fkey(first_name, last_name)
+    recruiter:hr_employees!hr_job_candidates_created_by_fkey(first_name, last_name),
+    candidate_resume_analysis(overall_score) 
 `;
         let candidatesQuery = supabase
           .from('hr_job_candidates')
@@ -331,6 +332,8 @@ const [recruiterFilter, setRecruiterFilter] = useState<string[]>([]);
           supabase.from('job_statuses').select('id, name, type, parent_id, color, display_order').eq('organization_id', organizationId),
         ]);
 
+        console.log("Candidates response", candidatesResponse)
+
         if (candidatesResponse.error) throw candidatesResponse.error;
         if (statusesResponse.error) throw statusesResponse.error;
         
@@ -344,6 +347,12 @@ const formattedCandidates: Candidate[] = candidatesResponse.data.map((c: any) =>
 
     const scheduleDateTime = combineDateTime(c.interview_date, c.interview_time);
     const metadata = c.metadata || {};
+
+                const analysisRecord = c.candidate_resume_analysis && c.candidate_resume_analysis.length > 0
+                ? c.candidate_resume_analysis[0]
+                : null;
+            
+            const overallScore = analysisRecord ? analysisRecord.overall_score : null;
 
     return {
         id: c.id,
@@ -362,7 +371,7 @@ const formattedCandidates: Candidate[] = candidatesResponse.data.map((c: any) =>
         expected_salary: c.expected_salary ?? metadata.expectedSalary,
         location: c.location ?? metadata.currentLocation,
         notice_period: c.notice_period ?? metadata.noticePeriod,
-        overall_score: c.overall_score ?? c.metadata?.overall_score, // <-- FIX APPLIED HERE
+        overall_score: overallScore, // <-- FIX APPLIED HERE
         schedule_date_time: scheduleDateTime,
         rejection_reason: c.interview_feedback,
     };
@@ -761,6 +770,8 @@ return (
                             
                             const { candidate, statusName } = row;
                             if (!candidate) return null;
+
+                            
 
                             const createdAtDate = new Date(candidate.created_at);
                             const formattedDate = isValid(createdAtDate) ? format(createdAtDate, 'dd MMM yyyy') : 'N/A';

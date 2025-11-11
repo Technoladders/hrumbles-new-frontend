@@ -52,45 +52,42 @@ const ClientFinancials: React.FC<ClientFinancialsProps> = ({ metrics, monthlyDat
           <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Total Profit</CardTitle><TrendingUp className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{formatCurrency(totalProfit)}</div><p className="text-xs text-muted-foreground">For the selected period</p></CardContent></Card>
       </div>
 
-           <Card>
+ <Card>
         <CardHeader>
           <CardTitle>Performance Over Time</CardTitle>
         </CardHeader>
         <CardContent>
             {monthlyData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
-                    {/* --- We now use a ComposedChart --- */}
-                    <ComposedChart data={monthlyData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                    {/* --- Chart is now simplified to an AreaChart for Revenue --- */}
+                    <AreaChart data={monthlyData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                         <defs>
-                          {/* --- Define the color gradients for the chart --- */}
-                          <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#505050" stopOpacity={0.8} />
-                            <stop offset="100%" stopColor="#505050" stopOpacity={0.4} />
-                          </linearGradient>
-                          <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#10b981" stopOpacity={0.7} />
-                            <stop offset="100%" stopColor="#10b981" stopOpacity={0.2} />
+                          {/* --- Define the purple color gradient for the Revenue area --- */}
+                          <linearGradient id="revenueGradientPurple" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#7B43F1" stopOpacity={0.8} />
+                            <stop offset="100%" stopColor="#7B43F1" stopOpacity={0.2} />
                           </linearGradient>
                         </defs>
 
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="month" tick={{ fontSize: 12 }}/>
                         
-                        {/* Y-Axis on the LEFT for Revenue */}
-                        <YAxis yAxisId="left" orientation="left" stroke="#7B43F1" tickFormatter={(val) => `₹${val/1000}k`} tick={{ fontSize: 12 }}/>
-                        
-                        {/* Y-Axis on the RIGHT for Profit */}
-                        <YAxis yAxisId="right" orientation="right" stroke="#10b981" tickFormatter={(val) => `₹${val/1000}k`} tick={{ fontSize: 12 }}/>
+                        {/* --- A single Y-Axis for Revenue --- */}
+                        <YAxis stroke="#7B43F1" tickFormatter={(val) => `₹${val/1000}k`} tick={{ fontSize: 12 }}/>
 
                         <RechartsTooltip content={<CustomTooltip />} />
                         <Legend />
-
-                        {/* --- Area for Profit (drawn in the background) --- */}
-                        <Area yAxisId="right" type="monotone" dataKey="profit" stroke="#10b981" strokeWidth={2} fill="url(#profitGradient)" name="Profit"/>
                         
-                        {/* --- Bars for Revenue (drawn on top) --- */}
-                        <Bar yAxisId="left" dataKey="revenue" fill="url(#revenueGradient)" name="Revenue" radius={[4, 4, 0, 0]} />
-                    </ComposedChart>
+                        {/* --- Area chart for Revenue, using the purple gradient --- */}
+                        <Area 
+                            type="monotone" 
+                            dataKey="revenue" 
+                            stroke="#7B43F1" 
+                            strokeWidth={2} 
+                            fill="url(#revenueGradientPurple)" 
+                            name="Revenue" 
+                        />
+                    </AreaChart>
                 </ResponsiveContainer>
             ) : (
                 <div className="h-[300px] flex items-center justify-center text-sm text-gray-500">

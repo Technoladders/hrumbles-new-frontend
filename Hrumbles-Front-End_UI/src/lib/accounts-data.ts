@@ -74,6 +74,7 @@ export interface Expense {
   status?: string;
   createdAt?: string;
   updatedAt?: string;
+  reconciliation_status: 'matched' | 'suggested' | 'unmatched';
 }
 
 export interface AccountsStats {
@@ -508,6 +509,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         .from('hr_invoices')
         .select('*')
         .eq('id', id)
+        // .eq('created_by', userData.user.id)
         .eq('organization_id', organization_id)
         .single();
 
@@ -593,6 +595,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         .from('hr_invoices')
         .delete()
         .eq('id', id)
+        // .eq('created_by', userData.user.id)
         .eq('organization_id', organization_id);
 
       if (deleteError) {
@@ -780,8 +783,12 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         status: expense.status || undefined,
         createdAt: expense.created_at || undefined,
         updatedAt: expense.updated_at || undefined,
+
+         reconciliation_status: expense.reconciliation_status || 'unmatched',
       }));
       // --- END OF FIX ---
+        
+
 
       set({
         expenses,

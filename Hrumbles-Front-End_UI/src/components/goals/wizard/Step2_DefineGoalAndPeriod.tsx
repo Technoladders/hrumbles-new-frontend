@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import GoalPeriodSelector from './GoalPeriodSelector';
 import { GoalDefinition } from './CreateAndAssignGoalWizard';
+import { AUTOMATION_SOURCES } from '@/lib/goalAutomationConfig';
 
 interface Step2Props {
   department: string;
@@ -36,96 +37,87 @@ const Step2_DefineGoalAndPeriod: React.FC<Step2Props> = ({ department, metric, o
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const [loading, setLoading] = useState(false);
   const [isGoalDefined, setIsGoalDefined] = useState(false);
-  
-  const [goalSelectionType, setGoalSelectionType] = useState<'existing' | 'submission' | 'onboarding' | 'other' | ''>('');
+ 
+  const [goalSelectionType, setGoalSelectionType] = useState<'existing' | 'new'>(department === 'Human Resource' ? 'existing' : 'new');
   const [selectedExistingGoalId, setSelectedExistingGoalId] = useState('');
   const [newGoalName, setNewGoalName] = useState('');
   const [selectedStatusId, setSelectedStatusId] = useState('');
-  
+ 
   const [periodType, setPeriodType] = useState<GoalType | ''>('');
   const [period, setPeriod] = useState<{ start: Date, end: Date } | null>(null);
-
+  const isHrFlow = department === 'Human Resource';
+  const sourceConfig = useMemo(() => AUTOMATION_SOURCES.find(s => s.value === metric), [metric]);
   const { data: allGoals = [] } = useQuery({ queryKey: ['goals'], queryFn: getGoals });
   const { data: jobSubStatuses = [], isLoading: isLoadingStatuses } = useQuery({
     queryKey: ['jobSubStatuses', organizationId],
     queryFn: async () => (await supabase.from('job_statuses').select('id, name').eq('organization_id', organizationId).eq('type', 'sub').order('name')).data || [],
-    enabled: department === 'Human Resource',
+    enabled: isHrFlow,
   });
-  const hrGoals = allGoals.filter(g => g.sector === department);
-
+ 
+  const relevantGoals = allGoals.filter(g => g.sector === department);
   const handleConfirmGoal = () => {
-    if (!goalSelectionType || (goalSelectionType === 'existing' && !selectedExistingGoalId) || (goalSelectionType !== 'existing' && !selectedStatusId) || (goalSelectionType === 'other' && !newGoalName)) {
-        toast.error("Please complete all fields for the goal definition.");
-        return;
-    }
     setIsGoalDefined(true);
   };
-
-   const handleProceed = async () => {
+  const handleProceed = async () => {
     if (!period) { toast.error("Please select a date range."); return; }
-
     let goalDef: GoalDefinition | null = null;
-    
+   
     if (goalSelectionType === 'existing') {
-        if (!selectedExistingGoalId) { toast.error("Please select an existing goal."); return; }
         const existingGoal = allGoals.find(g => g.id === selectedExistingGoalId);
         if (!existingGoal) { toast.error("Selected goal not found."); return; }
-        goalDef = {
-            type: 'existing',
-            id: existingGoal.id,
-            name: existingGoal.name,
-        };
+        goalDef = { type: 'existing', id: existingGoal.id, name: existingGoal.name };
     } else {
-        if (!selectedStatusId) { toast.error("Please select a status to track."); return; }
-        let name = '', dateColumn = 'submission_date';
-
-        if (goalSelectionType === 'submission') { name = 'Submission'; dateColumn = 'submission_date'; }
-        else if (goalSelectionType === 'onboarding') { name = 'Onboarding'; dateColumn = 'joining_date'; }
-        else {
-            if (!newGoalName) { toast.error("Please name your new goal."); return; }
-            name = newGoalName;
+        if (!newGoalName || !selectedStatusId) { toast.error("Please provide a name and select a status/stage."); return; }
+       
+        let payload = {};
+        if (isHrFlow) {
+            payload = { name: newGoalName, description: `Automated goal for ${newGoalName}`, sector: department as any, metricType: 'count', metricUnit: '#', is_automated: true, source_table: 'hr_status_change_counts', source_value_column: 'count', source_employee_column: 'candidate_owner', source_filter_conditions: { sub_status_id: selectedStatusId }, source_date_table: 'hr_job_candidates', source_date_column: 'submission_date' };
+        } else if (sourceConfig) {
+            payload = { name: newGoalName, description: `Automated goal for ${sourceConfig.label}`, sector: department as any, metricType: 'count', metricUnit: '#', is_automated: true, source_table: sourceConfig.sourceTable, source_value_column: sourceConfig.valueColumn, source_employee_column: sourceConfig.employeeColumn, source_date_column: sourceConfig.dateColumn, source_filter_conditions: { filter_column: sourceConfig.filterColumn, filter_value: selectedStatusId } };
         }
-
-        goalDef = {
-            type: 'new',
-            name: name,
-            payload: { // This is the data packet we will send to step 3
-                name, description: `Automated goal for ${name}`, sector: department as any,
-                metricType: 'count', metricUnit: '#', is_automated: true,
-                source_table: 'hr_status_change_counts', source_value_column: 'count',
-                source_employee_column: 'candidate_owner',
-                source_filter_conditions: { sub_status_id: selectedStatusId },
-                source_date_table: 'hr_job_candidates', source_date_column: dateColumn,
-            }
-        };
+        goalDef = { type: 'new', name: newGoalName, payload };
     }
-    
-    if (goalDef) {
-      onNext(goalDef, { type: periodType as GoalType, ...period });
-    } else {
-      toast.error("Could not define the goal. Please try again.");
-    }
+   
+    if (goalDef) { onNext(goalDef, { type: periodType as GoalType, ...period }); }
+    else { toast.error("Could not define the goal."); }
   };
-  
+ 
+  const renderGoalCreationUI = () => {
+      if (isHrFlow) {
+          // Keep the rich HR flow with multiple creation options
+          return (
+              <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <SelectionCard label="Use Existing Template" icon={<BookOpen size={20}/>} isSelected={goalSelectionType === 'existing'} onClick={() => setGoalSelectionType('existing')} />
+                      <SelectionCard label="Create New Goal" icon={<PlusCircle size={20}/>} isSelected={goalSelectionType === 'new'} onClick={() => setGoalSelectionType('new')} />
+                  </div>
+                  {goalSelectionType === 'existing' && <Select onValueChange={setSelectedExistingGoalId}><SelectTrigger className="h-12 text-base"><SelectValue placeholder="Select an existing HR goal..."/></SelectTrigger><SelectContent>{relevantGoals.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent></Select>}
+                  {goalSelectionType === 'new' && <div className="space-y-3 pt-2 border-t"><Input className="h-12 text-base" placeholder="Enter new goal name..." value={newGoalName} onChange={e => setNewGoalName(e.target.value)} /><Select onValueChange={setSelectedStatusId} disabled={isLoadingStatuses}><SelectTrigger className="h-12 text-base"><SelectValue placeholder="Select HR status to track..."/></SelectTrigger><SelectContent>{jobSubStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>}
+              </div>
+          );
+      }
+      if (sourceConfig) {
+          // Simpler flow for Sales & Marketing
+          return (
+              <div className="space-y-3">
+                  <Input className="h-12 text-base" placeholder="Enter new goal name (e.g., 'Q4 Leads')" value={newGoalName} onChange={e => setNewGoalName(e.target.value)} />
+                  <Select onValueChange={setSelectedStatusId}>
+                      <SelectTrigger className="h-12 text-base"><SelectValue placeholder={`Select ${sourceConfig.label} stage to track...`}/></SelectTrigger>
+                      <SelectContent>{sourceConfig.statuses.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+                  </Select>
+              </div>
+          );
+      }
+      return null;
+  };
   return (
     <div className="space-y-6">
       <AnimatePresence>
         {!isGoalDefined ? (
           <motion.div key="defineGoal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }} className="space-y-4">
             <Label className="font-semibold text-lg flex items-center"><BookOpen className="mr-3 h-5 w-5 text-primary"/>1. Define the Goal</Label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <SelectionCard label="Use Existing Template" icon={<BookOpen size={20}/>} isSelected={goalSelectionType === 'existing'} onClick={() => setGoalSelectionType('existing')} />
-                <SelectionCard label="Create: Submission Goal" icon={<PlusCircle size={20}/>} isSelected={goalSelectionType === 'submission'} onClick={() => setGoalSelectionType('submission')} />
-                <SelectionCard label="Create: Onboarding Goal" icon={<PlusCircle size={20}/>} isSelected={goalSelectionType === 'onboarding'} onClick={() => setGoalSelectionType('onboarding')} />
-                <SelectionCard label="Create: Other Goal" icon={<PlusCircle size={20}/>} isSelected={goalSelectionType === 'other'} onClick={() => setGoalSelectionType('other')} />
-            </div>
-            
-            {goalSelectionType && <motion.div initial={{opacity:0, y:-10}} animate={{opacity:1, y:0}} className="pt-2 space-y-3">
-                {goalSelectionType === 'existing' && <Select onValueChange={setSelectedExistingGoalId}><SelectTrigger className="h-12 text-base"><SelectValue placeholder="Select an existing goal..."/></SelectTrigger><SelectContent>{hrGoals.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent></Select>}
-                {(goalSelectionType === 'submission' || goalSelectionType === 'onboarding') && <Select onValueChange={setSelectedStatusId} disabled={isLoadingStatuses}><SelectTrigger className="h-12 text-base"><SelectValue placeholder={`Select status that counts as "${goalSelectionType}"...`}/></SelectTrigger><SelectContent>{jobSubStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select>}
-                {goalSelectionType === 'other' && <div className="space-y-3 pt-2 border-t"><Input className="h-12 text-base" placeholder="Enter new goal name..." value={newGoalName} onChange={e => setNewGoalName(e.target.value)} /><Select onValueChange={setSelectedStatusId} disabled={isLoadingStatuses}><SelectTrigger className="h-12 text-base"><SelectValue placeholder="Select status to track..."/></SelectTrigger><SelectContent>{jobSubStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>}
-                <div className="flex justify-end pt-2"><Button onClick={handleConfirmGoal} size="lg">Confirm Goal <CheckCircle className="ml-2 h-5 w-5"/></Button></div>
-            </motion.div>}
+            {renderGoalCreationUI()}
+            <div className="flex justify-end pt-4"><Button onClick={handleConfirmGoal} size="lg">Confirm Goal <CheckCircle className="ml-2 h-5 w-5"/></Button></div>
           </motion.div>
         ) : (
           <motion.div key="setPeriod" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">

@@ -1,7 +1,7 @@
-
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, FileText, Receipt, PieChart } from 'lucide-react';
+// ===> STEP 1: Import a new icon for the Reconciliation link <===
+import { Home, FileText, Receipt, GitCompareArrows } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -29,7 +29,12 @@ const AccountsLayout: React.FC<AccountsLayoutProps> = ({ children, title }) => {
       path: '/accounts/expenses', 
       icon: Receipt 
     },
-   
+    // ===> STEP 2: Add this new object to your navigation items array <===
+    { 
+      label: 'Reconciliation', 
+      path: '/accounts/reconciliation', 
+      icon: GitCompareArrows 
+    },
   ];
   
   return (
@@ -38,6 +43,7 @@ const AccountsLayout: React.FC<AccountsLayoutProps> = ({ children, title }) => {
         {/* Top Navigation */}
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
           <nav className="hidden flex-1 items-center space-x-2 md:flex">
+            {/* No changes needed here, the code will automatically render the new button */}
             {navItems.map((item) => (
               <Button 
                 key={item.path} 

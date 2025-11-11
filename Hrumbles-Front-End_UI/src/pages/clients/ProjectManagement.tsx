@@ -17,7 +17,7 @@ import { startOfYear, endOfYear, setMonth, setDate, eachMonthOfInterval, startOf
 
 const EXCHANGE_RATE_USD_TO_INR = 84;
 
-// INTERFACES UPDATED FOR PROJECTS
+// INTERFACES UPDATED FOR PROJECTS (PROFIT REMOVED)
 interface Project {
   id: string;
   name: string;
@@ -58,8 +58,6 @@ export interface ProjectFinancialData extends Project {
     assigned_employees: number;
     revenue_inr: number;
     revenue_usd: number;
-    profit_inr: number;
-    profit_usd: number;
 }
 
 // Helper function to get financial year boundaries (retained)
@@ -92,9 +90,8 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
 
 const ProjectManagement = () => {
   const [addProjectOpen, setAddProjectOpen] = useState(false); // UPDATED
-  const [dataType, setDataType] = useState<"revenue" | "profit">("revenue");
-  const [chartView, setChartView] = useState<'topRevenue' | 'topProfit' | 'all'>('topRevenue');
-const [currentPage, setCurrentPage] = useState(0);
+  const [chartView, setChartView] = useState<'topRevenue' | 'all'>('topRevenue'); // PROFIT VIEW REMOVED
+  const [currentPage, setCurrentPage] = useState(0);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   const [editingProject, setEditingProject] = useState<ProjectFinancialData | null>(null);
   const [dateRange, setDateRange] = useState<{ startDate: Date; endDate: Date; key: string }>({
@@ -173,7 +170,7 @@ useEffect(() => {
     enabled: !!organization_id,
   });
 
-  // --- CALCULATION HELPERS (Unchanged) ---
+  // --- CALCULATION HELPERS (PROFIT FUNCTION REMOVED) ---
 // Calculate total hours per employee from time logs (This function remains)
 const calculateEmployeeHours = (employeeId: string, projectId: string, logs: TimeLog[]) => {
   return (
@@ -216,38 +213,7 @@ const calculateActualRevenue = (employee: ProjectEmployee, projectId: string, cl
     return hours * (hourlyRate || 0);
 };
 
-// NEW: Calculate profit for an employee using the improved 'Actual' logic
-const calculateActualProfit = (employee: ProjectEmployee, projectId: string, clientCurrency: string, logs: TimeLog[]) => {
-    const revenue = calculateActualRevenue(employee, projectId, clientCurrency, logs);
-    const hours = calculateEmployeeHours(employee.assign_employee, projectId, logs);
-    const config = employee.working_days_config || 'all_days';
-    let salary = Number(employee.salary) || 0;
-    if (employee.salary_currency === "USD") {
-        salary *= EXCHANGE_RATE_USD_TO_INR;
-    }
-    
-    let salaryCost = 0;
-    let hourlySalaryRate = 0;
-    const avgWorkingDaysInYear = config === 'weekdays_only' ? 260 : config === 'saturday_working' ? 312 : 365;
-    const dailyWorkingHours = employee.working_hours || 8;
-
-    switch (employee.salary_type) {
-        case "Monthly":
-            hourlySalaryRate = (salary * 12) / (avgWorkingDaysInYear * dailyWorkingHours);
-            break;
-        case "LPA":
-            hourlySalaryRate = salary / (avgWorkingDaysInYear * dailyWorkingHours);
-            break;
-        case "Hourly":
-            hourlySalaryRate = salary;
-            break;
-    }
-    salaryCost = hours * (hourlySalaryRate || 0);
-
-    return revenue - salaryCost;
-};
-  // --- CORE LOGIC CHANGE: Calculate financials per project ---
-// ~ line 226
+  // --- CORE LOGIC CHANGE: Calculate financials per project (PROFIT REMOVED) ---
 const projectFinancials: ProjectFinancialData[] = useMemo(() => {
   if (!projects || !projectEmployees || !timeLogs) {
     return [];
@@ -257,36 +223,27 @@ const projectFinancials: ProjectFinancialData[] = useMemo(() => {
     const employeesOnProject = projectEmployees.filter((pe) => pe.project_id === project.id);
     const projectCurrency = project.hr_clients?.currency || "INR";
 
-    // MODIFIED LINES: Use the new calculation functions
+    // MODIFIED LINES: Use the new calculation functions (PROFIT REMOVED)
     const totalRevenueINR = employeesOnProject.reduce(
       (acc, pe) => acc + calculateActualRevenue(pe, project.id, projectCurrency, timeLogs),
       0
     );
-    const totalProfitINR = employeesOnProject.reduce(
-      (acc, pe) => acc + calculateActualProfit(pe, project.id, projectCurrency, timeLogs),
-      0
-    );
-
+    
     return {
       ...project,
       assigned_employees: employeesOnProject.length,
       revenue_inr: totalRevenueINR,
       revenue_usd: totalRevenueINR / EXCHANGE_RATE_USD_TO_INR,
-      profit_inr: totalProfitINR,
-      profit_usd: totalProfitINR / EXCHANGE_RATE_USD_TO_INR,
     };
   });
 }, [projects, projectEmployees, timeLogs]);
 
-  // In ProjectManagement.tsx, after the 'projectFinancials' useMemo hook
-
-// ~ line 251
+// In ProjectManagement.tsx, after the 'projectFinancials' useMemo hook (PROFIT REMOVED)
 const monthlyChartData = useMemo(() => {
   const months = eachMonthOfInterval({ start: dateRange.startDate, end: dateRange.endDate });
   const initialData = months.map(month => ({
     month: format(month, 'MMM'),
     revenue: 0,
-    profit: 0,
   }));
 
   if (!timeLogs || !projectEmployees || !projects) return initialData;
@@ -321,23 +278,8 @@ const monthlyChartData = useMemo(() => {
           }
           const logRevenue = hours * hourlyRate;
           
-          // Calculate profit for this specific log
-          let salary = Number(employee.salary) || 0;
-          if (employee.salary_currency === "USD") salary *= EXCHANGE_RATE_USD_TO_INR;
-
-          let hourlySalary = 0;
-          switch (employee.salary_type) {
-              case "Monthly": hourlySalary = (salary * 12) / (avgWorkingDaysInYear * dailyWorkingHours); break;
-              case "LPA": hourlySalary = salary / (avgWorkingDaysInYear * dailyWorkingHours); break;
-              case "Hourly": hourlySalary = salary; break;
-          }
-          const logExpense = hours * hourlySalary;
-          const logProfit = logRevenue - logExpense;
-          // --- END OF MODIFIED LOGIC ---
-          
           // Add to the monthly totals
           monthData.revenue += logRevenue;
-          monthData.profit += logProfit;
         }
       });
     }
@@ -346,14 +288,13 @@ const monthlyChartData = useMemo(() => {
   return initialData;
 }, [timeLogs, projectEmployees, projects, dateRange]);
 
+
 const dataForChart = useMemo(() => {
   const projectsCopy = [...projectFinancials];
 
   switch (chartView) {
     case 'topRevenue':
       return projectsCopy.sort((a, b) => b.revenue_inr - a.revenue_inr).slice(0, 10);
-    case 'topProfit':
-      return projectsCopy.sort((a, b) => b.profit_inr - a.profit_inr).slice(0, 10);
     case 'all':
       const startIndex = currentPage * ITEMS_PER_PAGE;
       const endIndex = startIndex + ITEMS_PER_PAGE;
@@ -363,18 +304,16 @@ const dataForChart = useMemo(() => {
   }
 }, [projectFinancials, chartView, currentPage]);
 
-  // --- UPDATED STATS FOR OVERVIEW CARD ---
+  // --- UPDATED STATS FOR OVERVIEW CARD (PROFIT REMOVED) ---
    const topPerformer = projectFinancials.reduce((top, project) => (!top || project.revenue_inr > top.revenue_inr) ? project : top, null);
   const totalProjects = projectFinancials.length;
   // ** NEW STATS **
   const ongoingProjects = projectFinancials.filter((project) => project.status === "ongoing").length;
   const completedProjects = projectFinancials.filter((project) => project.status === "completed").length;
   const cancelledProjects = projectFinancials.filter((project) => project.status === "cancelled").length;
-  // Revenue and profit stats remain unchanged
+  // Revenue stats remain unchanged
   const totalRevenueINR = projectFinancials.reduce((acc, p) => acc + p.revenue_inr, 0) || 0;
-  const totalProfitINR = projectFinancials.reduce((acc, p) => acc + p.profit_inr, 0) || 0;
   const totalRevenueUSD = totalRevenueINR / EXCHANGE_RATE_USD_TO_INR;
-  const totalProfitUSD = totalProfitINR / EXCHANGE_RATE_USD_TO_INR;
 
   const isDataLoading = !successProjects || !successEmployees || !successTimeLogs;
   const formatINR = (number: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(number);
@@ -454,13 +393,7 @@ const dataForChart = useMemo(() => {
                         <TooltipProvider><ReactTooltip><TooltipTrigger asChild><span className="text-xs opacity-80">${totalRevenueUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })} USD</span></TooltipTrigger><TooltipContent><p>Converted at 1 USD = ₹{EXCHANGE_RATE_USD_TO_INR}</p></TooltipContent></ReactTooltip></TooltipProvider>
                     </div>
                 </li>
-                <li className="flex items-start justify-between">
-                    <div className="flex items-center text-sm text-white"><TrendingUp size={16} className="mr-2" /><span>Total Profit:</span></div>
-                     <div className="text-right text-white">
-                        <span className="font-medium">{formatINR(totalProfitINR)}</span><br />
-                        <TooltipProvider><ReactTooltip><TooltipTrigger asChild><span className="text-xs opacity-80">${totalProfitUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })} USD</span></TooltipTrigger><TooltipContent><p>Converted at 1 USD = ₹{EXCHANGE_RATE_USD_TO_INR}</p></TooltipContent></ReactTooltip></TooltipProvider>
-                    </div>
-                </li>
+                {/* TOTAL PROFIT REMOVED */}
                 <li className="flex items-start justify-between">
                   <div className="flex items-center text-sm text-white"><Star size={16} className="mr-2 text-yellow-300" /><span>Top Performer:</span></div>
                   <div className="text-right text-white">
@@ -471,65 +404,75 @@ const dataForChart = useMemo(() => {
               </ul>
             </CardContent>
           </Card>
-         <div className="lg:col-span-2">
-            <Card className="shadow-xl border-none bg-white overflow-hidden h-full">
-              <CardHeader className="p-6">
-                <CardTitle className="text-xl md:text-xl font-semibold text-gray-800">
-                  Monthly Revenue vs. Profit
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <ErrorBoundary>
-                    {isDataLoading ? (
-                        <div className="flex items-center justify-center h-[240px]">
-                            <Loader size={40} />
-                        </div>
-                    ) : (
-                        <ResponsiveContainer width="100%" height={240}>
-                            <ComposedChart
-              data={monthlyChartData} // Uses the data you already calculated
-              margin={{ top: 20, right: 20, left: 20, bottom: 5 }}
-            >
-              <defs>
-                <linearGradient id="onboardingGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#505050" stopOpacity={0.8} />
-                  <stop offset="50%" stopColor="#505050" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="#505050" stopOpacity={0.1} />
-                </linearGradient>
-                <linearGradient id="submissionGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#7235DD" stopOpacity={0.6} /> 
-                  <stop offset="50%" stopColor="#7235DD" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#7235DD" stopOpacity={0.1} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis yAxisId="left" orientation="left" stroke="#505050" />
-              <YAxis yAxisId="right" orientation="right" stroke="#10b981" />
-              <Tooltip formatter={(value: number) => `₹${value.toLocaleString('en-IN')}`} />
-              <Legend />
-              <Bar yAxisId="left" dataKey="profit" name="Profit" fill="url(#onboardingGradient)" radius={[4, 4, 0, 0]} />
-            
-              <Area yAxisId="right" type="monotone"  dataKey="revenue" name="Revenue" fill="url(#submissionGradient)" stroke="#7235DD" fillOpacity={0.6} />
-           
-            </ComposedChart>
-                        </ResponsiveContainer>
-                    )}
-                </ErrorBoundary>
-              </CardContent>
-            </Card>
-          </div>
+        <div className="lg:col-span-2">
+  <Card className="shadow-xl border-none bg-white overflow-hidden h-full">
+    <CardHeader className="p-6">
+      <CardTitle className="text-xl md:text-xl font-semibold text-gray-800">
+        Monthly Revenue
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="pt-0">
+      <ErrorBoundary>
+          {isDataLoading ? (
+              <div className="flex items-center justify-center h-[240px]">
+                  <Loader size={40} />
+              </div>
+          ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                  <ComposedChart
+                    data={monthlyChartData} 
+                    margin={{ top: 0, right: 10, left: -30, bottom: 5 }}
+                  >
+                    <defs>
+                      <linearGradient id="monthlyRevenueGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#7B43F1" stopOpacity={0.8} />
+                        <stop offset="100%" stopColor="#7B43F1" stopOpacity={0.1} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    
+                    
+                    <YAxis 
+                      tickCount={5}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#37b762ff' }}
+                      tickFormatter={(value) => `₹${(value / 100000).toFixed(0)}L`}
+                    />
+
+                    <Tooltip formatter={(value: number) => `₹${value.toLocaleString('en-IN')}`} />
+                    <Legend 
+    verticalAlign="top" 
+    wrapperStyle={{ paddingBottom: '10px' }} 
+  />
+                    <Area 
+                      type="monotone"  
+                      dataKey="revenue" 
+                      name="Revenue" 
+                      stroke="#7B43F1"
+                      strokeWidth={3}
+                      fill="url(#monthlyRevenueGradient)"
+                      fillOpacity={1}
+                    />
+                  </ComposedChart>
+              </ResponsiveContainer>
+          )}
+      </ErrorBoundary>
+    </CardContent>
+  </Card>
+</div>
         </div>
 
-        {/* REVENUE/PROFIT PER PROJECT CHART (updated) */}
+        {/* REVENUE PER PROJECT CHART (updated to only show Revenue Area chart) */}
      <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
   <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6">
     <h2 className="text-xl md:text-xl font-semibold text-gray-800">
-      Revenue & Profit per Project
+      Revenue per Project
     </h2>
     <div className="flex items-center gap-2">
       <Button variant={chartView === 'topRevenue' ? 'default' : 'outline'} size="sm" onClick={() => setChartView('topRevenue')}>Top 10 Revenue</Button>
-      <Button variant={chartView === 'topProfit' ? 'default' : 'outline'} size="sm" onClick={() => setChartView('topProfit')}>Top 10 Profit</Button>
+      {/* PROFIT BUTTON REMOVED */}
       <Button variant={chartView === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setChartView('all')}>Show All</Button>
     </div>
   </CardHeader>
@@ -543,19 +486,15 @@ const dataForChart = useMemo(() => {
         <div className="overflow-x-auto h-full">
           <div style={{ minWidth: `${dataForChart.length * 80}px`, height: '100%' }}>
             <ResponsiveContainer width="100%" height={250}>
+               {/* CHART UPDATED TO BE AN AREA CHART FOR REVENUE ONLY */}
               <ComposedChart
                 data={dataForChart}
                 margin={{ top: 20, right: 40, left: 40, bottom: 20 }}
               >
                 <defs>
                   <linearGradient id="projectRevenueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#505050" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#505050" stopOpacity={1} />
-                  </linearGradient>
-                  <linearGradient id="projectProfitGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
-                    <stop offset="50%" stopColor="#10b981" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.1} />
+                     <stop offset="0%" stopColor="#7B43F1" stopOpacity={0.8} />
+                    <stop offset="100%" stopColor="#7B43F1" stopOpacity={0.1} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -580,16 +519,6 @@ const dataForChart = useMemo(() => {
                   label={{ value: "Revenue (₹)", angle: -90, position: "insideLeft", style: { textAnchor: 'middle', fill: '#7B43F1' }}}
                   tickFormatter={(value) => `₹${(value / 100000).toFixed(0)}L`}
                 />
-                <YAxis
-                  yAxisId="profit"
-                  orientation="right"
-                  tickCount={5}
-                  tick={{ fontSize: 11, fill: '#10b981', fontWeight: '600' }}
-                  axisLine={false}
-                  tickLine={false}
-                  label={{ value: "Profit (₹)", angle: 90, position: "insideRight", style: { textAnchor: 'middle', fill: '#10b981' }}}
-                  tickFormatter={(value) => `₹${(value / 100000).toFixed(0)}L`}
-                />
                 <Tooltip
                   contentStyle={{ backgroundColor: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(10px)", border: "none", borderRadius: "12px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)"}}
                   formatter={(value, name) => {
@@ -600,8 +529,7 @@ const dataForChart = useMemo(() => {
                   labelStyle={{ fontWeight: 'bold', color: '#374151' }}
                 />
                 <Legend verticalAlign="top" height={46} wrapperStyle={{ fontSize: "14px", color: "#4b5563", paddingBottom: "20px" }} iconType="rect"/>
-                <Area yAxisId="profit" type="monotone" dataKey="profit_inr" name="Profit" stroke="#10b981" strokeWidth={3} fill="url(#projectProfitGradient)" fillOpacity={1}/>
-                <Bar yAxisId="revenue" dataKey="revenue_inr" name="Revenue" fill="url(#projectRevenueGradient)" radius={[10, 10, 0, 0]} maxBarSize={60}/>
+                <Area yAxisId="revenue" type="monotone" dataKey="revenue_inr" name="Revenue" stroke="#7B43F1" strokeWidth={3} fill="url(#projectRevenueGradient)" fillOpacity={1}/>
               </ComposedChart>
             </ResponsiveContainer>
           </div>

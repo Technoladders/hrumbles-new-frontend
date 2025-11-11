@@ -5,7 +5,7 @@ import { MdDashboardCustomize, MdOutlineManageAccounts, MdOutlineEmojiPeople, Md
 import { ImProfile } from "react-icons/im";
 import { GoGoal } from "react-icons/go";
 import { AiOutlineProfile } from "react-icons/ai";
-import { FaFileInvoiceDollar, FaSackDollar, FaArrowsDownToPeople, FaRegCalendarCheck, FaDropbox } from "react-icons/fa6";
+import { FaFileInvoiceDollar, FaSackDollar, FaArrowsDownToPeople, FaRegCalendarCheck, FaDropbox, FaFileLines } from "react-icons/fa6";
 import { TbCheckbox } from "react-icons/tb";
 import { GoOrganization } from "react-icons/go";
 import { VscOrganization } from "react-icons/vsc";
@@ -51,6 +51,7 @@ const orgSuperAdminAllItems = [
             { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices",  },
             { icon: FaSackDollar, label: "Expenses", path: "/accounts/expenses",  },
             { icon: FiBriefcase, label: "Payroll", path: "/payroll",  },
+            { icon: FaFileLines, label: "Bank Statement", path: "/finance/bank-statement" },
   {
     icon: TbCheckbox,
     label: "Approvals",
@@ -228,7 +229,7 @@ const AscendionOrgSuperAdminMenu = [
 // 2. Define the items for each suite
 const projectSuiteLabels = ["Clients", "Projects"];
 const salesSuiteLabels = ["Companies", "People", "Lists", "Kanban"];
-const financeSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll"];
+const financeSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll", "Bank Statement"];
 const verificationSuiteLabels = ["All Candidates"];
 
 const projectSuiteItems = orgSuperAdminAllItems.filter(item => projectSuiteLabels.includes(item.label));
