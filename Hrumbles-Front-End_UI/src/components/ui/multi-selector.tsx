@@ -135,7 +135,7 @@ export function MultiSelect({
                           setInputValue("");
                           onChange([...selected, option.value]);
                         }}
-                        className="cursor-pointer"
+                        className="cursor-pointer transition-colors hover:bg-indigo-600 hover:text-white data-[selected=true]:bg-indigo-600 data-[selected=true]:text-white"
                       >
                         {option.label}
                       </CommandItem>

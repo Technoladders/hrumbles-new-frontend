@@ -26,12 +26,11 @@ const ClientInformationFields = ({ data, onChange }: ClientInformationFieldsProp
   useEffect(() => {
     const fetchClients = async () => {
       const { data: clientData } = await supabase.from("hr_clients").select("*");
-      const validClients = clientData.filter(client =>
-        client.service_type.includes("permanent")
-      );
+    
 
-      setClients(clientData);
-      setFilteredClients(validClients);
+// NEW (all clients)
+setClients(clientData || []);
+setFilteredClients(clientData || []);
     };
 
     const fetchContacts = async () => {

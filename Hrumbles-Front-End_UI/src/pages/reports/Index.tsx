@@ -21,6 +21,7 @@ import AttendanceReportsPage from '@/components/reports/attendance/AttendanceRep
 import ContactStatusReport from '@/components/reports/ContactsStatusReport';
 import CompaniesStatusReport from '@/components/reports/CompaniesStatusReport';
 import UserActivityReportPage from '@/components/reports/UserActivityReportPage';
+import DynamicRecruiterReportPage from '@/components/reports/DynamicRecruiterReportPage';
 import { LoadingSpinner } from '@/components/ui/loading-spinner'; // NEW: Import a loading spinner
 
 const ITECH_ORGANIZATION_ID = [
@@ -59,6 +60,8 @@ const ReportIndex: React.FC = () => {
   // MODIFIED: Get full auth state
   const { organization_id: organizationId, user, role } = useSelector((state: any) => state.auth);
     const { details: organizationDetails, status: firmOrgStatus } = useSelector((state: any) => state.firmOrganization);
+
+     const DYNAMIC_REPORT_ORG_ID = '0e4318d8-b1a5-4606-b311-c56d7eec47ce';
     
 
   // NEW: State for department fetching
@@ -118,7 +121,10 @@ const ReportIndex: React.FC = () => {
     switch (selectedReportType) {
       case 'client': return <ClientWiseReport />;
       case 'individual': return <IndividualReport />;
-      case 'recruiter': return <RecruiterReportPage />;
+      case 'recruiter':  if (organizationId === DYNAMIC_REPORT_ORG_ID) {
+          return <DynamicRecruiterReportPage />;
+        }
+        return <RecruiterReportPage />;;
       case 'talent': return <TalentProfileReport />;
       case 'talent_trends': return <TalentTrendsReport />;
       case 'verification': return <VerificationReportPage />;

@@ -12,7 +12,6 @@ import { Input } from '@/components/ui/input';
 import { Badge } from "@/components/ui/badge";
 import { Edit, Mail, Phone, Globe, User, MoreVertical, Activity, Clock, FileText, Home, Eye, Pencil, Users, UserCircle, Building2, BadgeCheck, Cog, MessageCircle, Fingerprint, CreditCard, Download, Copy, Briefcase, ShieldCheck, ShieldAlert, Loader2, CalendarDays, Heart, Droplet, CalendarPlus, IndianRupee, Timer, Hourglass, ClipboardList } from "lucide-react";
 import {useSelector} from "react-redux";
- 
 interface PaymentEarning {
   id: string;
   payment_id: string;
@@ -27,7 +26,6 @@ interface PaymentEarning {
   created_at: string;
   updated_at: string;
 }
- 
 interface PaymentDeduction {
   id: string;
   payment_id: string;
@@ -41,7 +39,6 @@ interface PaymentDeduction {
   created_at: string;
   updated_at: string;
 }
- 
 interface PaymentCustomDeduction {
   id: string;
   payment_id: string;
@@ -49,7 +46,6 @@ interface PaymentCustomDeduction {
   amount: number;
   created_at: string;
 }
- 
 interface PaymentRecord {
   id: string;
   employee_id: string;
@@ -68,7 +64,6 @@ interface PaymentRecord {
   deductions?: PaymentDeduction;
   customDeductions?: PaymentCustomDeduction[];
 }
- 
 interface AppraisalRecord {
   id: string;
   employee_id: string;
@@ -82,7 +77,6 @@ interface AppraisalRecord {
   last_updated_by: string;
   paymentRecord?: PaymentRecord;
 }
- 
 interface EmployeeDetail {
   id: string;
   first_name: string;
@@ -99,9 +93,11 @@ interface EmployeeDetail {
   employment_status?: string;
   hire_type?: string; // Make sure this is here
   internship_duration?: string; // Add this
-  contract_duration?: string;   // Add this
-  payment_basis?: string;       // Add this
-  hours_per_week?: string;      // Add this
+  contract_duration?: string; // Add this
+  payment_basis?: string; // Add this
+  hours_per_week?: string; // Add this
+  salary?: number;
+  salary_type?: string;
   aadhar_number?: string;
   aadhar_url?: string;
   pan_number?: string;
@@ -171,7 +167,6 @@ interface EmployeeDetail {
   latestPaymentRecord?: PaymentRecord;
   appraisalHistory?: AppraisalRecord[];
 }
- 
 const EmployeeProfile = () => {
   const { id } = useParams<{ id: string }>();
     const user = useSelector((state: any) => state.auth.user);
@@ -194,30 +189,23 @@ const EmployeeProfile = () => {
     personalEmail: '',
     notes: '',
   });
- 
     const [isPayslipOpen, setIsPayslipOpen] = useState(false);
-  const [selectedPayslip, setSelectedPayslip] = useState<PayslipData | null>(null);
- 
+  const [selectedPayslip, setSelectedPayslip] = useState<any | null>(null);
   useEffect(() => {
     if (id) {
       fetchEmployeeDetails(id);
     }
   }, [id]);
- 
   console.log("employee", employee)
- 
   const fetchEmployeeDetails = async (employeeId: string) => {
     try {
       setLoading(true);
- 
       const { data: employeeData, error: employeeError } = await supabase
         .from('hr_employees')
-        .select('*, hr_departments(name), hr_designations(name)')
+        .select('*, hr_departments(name), hr_designations(name), personal_email, hire_type, internship_duration, contract_duration, payment_basis, hours_per_week, salary, salary_type, employment_status, joining_date')
         .eq('id', employeeId)
         .single();
- 
       if (employeeError) throw employeeError;
- 
       // FIXED: Get emergency contacts from JSONB field first, fallback to table
       let contactsData = employeeData.emergency_contacts || [];
       if (contactsData.length === 0) {
@@ -227,14 +215,13 @@ const EmployeeProfile = () => {
           .eq('employee_id', employeeId);
         if (tableContacts) contactsData = tableContacts;
       }
- 
       // ============================================
       // CRITICAL FIX: Read addresses from JSONB fields FIRST
       // This fixes the issue where edits don't show on profile
       // ============================================
       let presentAddressData = employeeData.present_address || null;
       let permanentAddressData = employeeData.permanent_address || null;
-      
+     
       // Only query the addresses table if JSONB fields are empty (fallback)
       if (!presentAddressData || Object.keys(presentAddressData).length === 0) {
         const { data } = await supabase
@@ -245,7 +232,7 @@ const EmployeeProfile = () => {
           .maybeSingle();
         presentAddressData = data;
       }
-      
+     
       if (!permanentAddressData || Object.keys(permanentAddressData).length === 0) {
         const { data } = await supabase
           .from('hr_employee_addresses')
@@ -258,7 +245,6 @@ const EmployeeProfile = () => {
       // ============================================
       // END OF CRITICAL FIX
       // ============================================
- 
       // Get education data (handle if table doesn't exist)
       let educationData = [];
       try {
@@ -271,7 +257,6 @@ const EmployeeProfile = () => {
       } catch (error) {
         console.log('Education table may not exist or query failed:', error);
       }
- 
          // Get experiences data (handle if table doesn't exist)
       let experiencesData = [];
       try {
@@ -279,7 +264,7 @@ const EmployeeProfile = () => {
           .from('hr_employee_experiences')
           .select('*')
           .eq('employee_id', employeeId);
-          
+         
         // =================================================================
         // START: ADD THIS DEBUGGING LOG
         // =================================================================
@@ -287,19 +272,16 @@ const EmployeeProfile = () => {
         // =================================================================
         // END: ADD THIS DEBUGGING LOG
         // =================================================================
-
         if (error) throw error;
         experiencesData = data || [];
       } catch (error) {
         console.log('Experiences table may not exist or query failed:', error);
       }
-
- 
       // Get bank details (handle if table doesn't exist)
       let bankData = null;
       try {
         const { data, error } = await supabase
-          .from('hr_employee_bank_details')  // ✅ Correct table name!
+          .from('hr_employee_bank_details') // ✅ Correct table name!
           .select('*')
           .eq('employee_id', employeeId)
           .maybeSingle();
@@ -308,9 +290,7 @@ const EmployeeProfile = () => {
       } catch (error) {
         console.log('Bank details table may not exist or query failed:', error);
       }
- 
-
-      
+     
       // Fetch the latest payment record for the employee
       const { data: paymentRecordsData, error: paymentRecordsError } = await supabase
         .from('payment_records')
@@ -318,37 +298,27 @@ const EmployeeProfile = () => {
         .eq('employee_id', employeeData.employee_id)
         .order('created_at', { ascending: false })
         .limit(1);
- 
       if (paymentRecordsError) throw paymentRecordsError;
- 
       let latestPaymentRecord: PaymentRecord | undefined;
- 
       if (paymentRecordsData && paymentRecordsData.length > 0) {
         const paymentRecord = paymentRecordsData[0];
- 
         const { data: earningsData, error: earningsError } = await supabase
           .from('payment_earnings')
           .select('*')
           .eq('payment_id', paymentRecord.id)
           .maybeSingle();
- 
         if (earningsError) throw earningsError;
- 
         const { data: deductionsData, error: deductionsError } = await supabase
           .from('payment_deductions')
           .select('*')
           .eq('payment_id', paymentRecord.id)
           .maybeSingle();
- 
         if (deductionsError) throw deductionsError;
- 
         const { data: customDeductionsData, error: customDeductionsError } = await supabase
           .from('payment_custom_deductions')
           .select('*')
           .eq('payment_id', paymentRecord.id);
- 
         if (customDeductionsError) throw customDeductionsError;
- 
         latestPaymentRecord = {
           id: paymentRecord.id,
           employee_id: paymentRecord.employee_id,
@@ -368,45 +338,34 @@ const EmployeeProfile = () => {
           customDeductions: customDeductionsData || [],
         };
       }
- 
       // Fetch appraisal history
       const { data: appraisalRecordsData, error: appraisalRecordsError } = await supabase
         .from('appraisal_records')
         .select('*, paymentRecord:payment_records(*, last_updated_by)')
         .eq('employee_id', employeeData.employee_id)
         .order('created_at', { ascending: false });
- 
       if (appraisalRecordsError) throw appraisalRecordsError;
- 
       const appraisalHistory: AppraisalRecord[] = [];
- 
       if (appraisalRecordsData && appraisalRecordsData.length > 0) {
         for (const record of appraisalRecordsData) {
           const paymentRecord = record.paymentRecord;
- 
           const { data: earningsData, error: earningsError } = await supabase
             .from('payment_earnings')
             .select('*')
             .eq('payment_id', paymentRecord.id)
             .maybeSingle();
- 
           if (earningsError) throw earningsError;
- 
           const { data: deductionsData, error: deductionsError } = await supabase
             .from('payment_deductions')
             .select('*')
             .eq('payment_id', paymentRecord.id)
             .maybeSingle();
- 
           if (deductionsError) throw deductionsError;
- 
           const { data: customDeductionsData, error: customDeductionsError } = await supabase
             .from('payment_custom_deductions')
             .select('*')
             .eq('payment_id', paymentRecord.id);
- 
           if (customDeductionsError) throw customDeductionsError;
- 
           const mappedPaymentRecord: PaymentRecord = {
             id: paymentRecord.id,
             employee_id: paymentRecord.employee_id,
@@ -425,7 +384,6 @@ const EmployeeProfile = () => {
             deductions: deductionsData,
             customDeductions: customDeductionsData || [],
           };
- 
           appraisalHistory.push({
             id: record.id,
             employee_id: record.employee_id,
@@ -446,7 +404,7 @@ const EmployeeProfile = () => {
             id: exp.id,
             company: exp.company,
             // ✅ MAP: database 'job_title' -> component 'position'
-            position: exp.job_title, 
+            position: exp.job_title,
             location: exp.location,
             // ✅ MAP: database 'start_date' -> component 'start_date' (already correct)
             start_date: exp.start_date,
@@ -465,16 +423,14 @@ const EmployeeProfile = () => {
       const mappedEducation = educationData
         ? educationData.map((edu: any) => ({
             id: edu.id,
-            type: edu.type,                    // ✅ Correct: database has "type"
-            institute: edu.institute,          // ✅ Correct: database has "institute"
+            type: edu.type, // ✅ Correct: database has "type"
+            institute: edu.institute, // ✅ Correct: database has "institute"
             year_completed: edu.year_completed, // ✅ Correct: database has "year_completed"
             document_url: edu.document_url,
           }))
         : [];
- 
    const departmentName = employeeData?.hr_departments?.name || 'N/A';
       const designationName = employeeData?.hr_designations?.name || 'N/A';
- 
       // FIXED: Normalize address field names (handle both camelCase from JSONB and snake_case from table)
       const normalizeAddress = (addr: any) => {
         if (!addr) return {};
@@ -487,10 +443,8 @@ const EmployeeProfile = () => {
           zip_code: addr.zip_code || addr.zipCode || '',
         };
       };
-
       const normalizedPresentAddress = normalizeAddress(presentAddressData);
       const normalizedPermanentAddress = normalizeAddress(permanentAddressData);
- 
       const completeEmployeeData: EmployeeDetail = {
         ...employeeData,
         department_name: departmentName,
@@ -504,17 +458,14 @@ const EmployeeProfile = () => {
         latestPaymentRecord,
         appraisalHistory,
       };
- 
       // ADD THIS: Fetch verification history
       const { data: verificationsData, error: verificationsError } = await supabase
         .from('hr_identity_verifications')
         .select('*')
         .eq('employee_id', employeeId)
         .order('created_at', { ascending: false });
- 
       if (verificationsError) throw verificationsError;
       setVerifications(verificationsData || []);
- 
       setEmployee(completeEmployeeData);
     } catch (error: any) {
       console.error("Error fetching employee details:", error);
@@ -523,19 +474,15 @@ const EmployeeProfile = () => {
       setLoading(false);
     }
   };
- 
    // NEW FUNCTION: Handle Identity Verification
   const handleVerifyIdentity = async (type: 'pan' | 'aadhaar') => {
     if (!employee || !user || !organizationId) return;
- 
     const docNumber = type === 'pan' ? employee.pan_number : employee.aadhar_number;
     if (!docNumber) {
       toast.error(`${type.toUpperCase()} number is not available.`);
       return;
     }
- 
     setIsVerifying(prev => ({ ...prev, [type]: true }));
- 
     try {
       const { data, error } = await supabase.functions.invoke('verify-identity-document', {
         body: {
@@ -548,18 +495,15 @@ const EmployeeProfile = () => {
           },
         },
       });
- 
       if (error) throw error;
-     
+    
       if (data.status === 'completed') {
         toast.success(`${type.toUpperCase()} verification completed.`);
       } else {
         toast.info(`${type.toUpperCase()} verification is pending.`);
       }
- 
       // Refresh data to show new verification status
       fetchEmployeeDetails(employee.id);
- 
     } catch (error: any) {
       console.error(`Error verifying ${type}:`, error);
       toast.error(`Failed to verify ${type}: ${error.message}`);
@@ -567,12 +511,10 @@ const EmployeeProfile = () => {
       setIsVerifying(prev => ({ ...prev, [type]: false }));
     }
   };
- 
   // NEW HELPER: To render verification status
   const renderVerificationStatus = (type: 'pan' | 'aadhaar') => {
     const verification = verifications.find(v => v.verification_type === `${type}_verification`);
     if (!verification) return null;
- 
     if (verification.status === '1' || verification.status === '0') {
       return (
         <Badge variant="default" className="bg-green-100 text-green-700 hover:bg-green-100 ml-2">
@@ -595,38 +537,32 @@ const EmployeeProfile = () => {
       </Badge>
     );
   };
- 
- 
   const handleExitProcessSubmit = async () => {
     // Validate required fields
     if (!exitForm.lastWorkingDay || !exitForm.reason) {
       toast.error('Please fill in all required fields.');
       return;
     }
- 
     if (paySettlementOption === 'date' && !exitForm.finalSettlementDate) {
       toast.error('Please select a Final Settlement Date.');
       return;
     }
- 
     if (!exitForm.personalEmail) {
       toast.error('Please provide a personal email address.');
       return;
     }
- 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(exitForm.personalEmail)) {
       toast.error('Please provide a valid email address.');
       return;
     }
- 
     // Prepare data for submission
     const exitData = {
       employee_id: employee!.employee_id,
       employee_name: `${employee!.first_name} ${employee!.last_name}`,
       designation: employee!.designation_name,
       department: employee!.department_name,
-      date_of_joining: employeejoining_date,
+      date_of_joining: employee!.joining_date,
       last_working_day: exitForm.lastWorkingDay,
       exit_reason: exitForm.reason,
       exit_comments: exitForm.comments,
@@ -638,15 +574,12 @@ const EmployeeProfile = () => {
       employment_status: 'Terminated',
       organization_id: organization_id,
     };
- 
     try {
       // Insert into hr_employee_exits table
       const { error: insertError } = await supabase
         .from('hr_employee_exits')
         .insert([exitData]);
- 
       if (insertError) throw insertError;
- 
       // Update employee's employment status
       const { error: updateError } = await supabase
         .from('hr_employees')
@@ -656,16 +589,13 @@ const EmployeeProfile = () => {
           updated_at: new Date().toISOString(),
         })
         .eq('id', employee!.id);
- 
       if (updateError) throw updateError;
- 
       toast.success('Exit process initiated successfully.');
     } catch (error: any) {
       console.error('Error initiating exit process:', error);
       toast.error(`Failed to initiate exit process: ${error.message}`);
       return;
     }
- 
     // Reset form and close modal
     setExitForm({
       lastWorkingDay: '',
@@ -677,11 +607,9 @@ const EmployeeProfile = () => {
     });
     setPaySettlementOption('regular');
     setIsExitModalOpen(false);
- 
     // Refresh employee data
     fetchEmployeeDetails(employee!.id);
   };
- 
   const getAge = (dateOfBirth?: string) => {
     if (!dateOfBirth) return "N/A";
     const birthDate = new Date(dateOfBirth);
@@ -693,26 +621,22 @@ const EmployeeProfile = () => {
     }
     return age;
   };
- 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   };
- 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | undefined) => {
+    if (amount === undefined || amount === null) return '₹0.00';
     return amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 });
   };
- 
   const generateActivityTimeline = () => {
     const activities: { date: string; description: string; icon: JSX.Element }[] = [];
- 
     activities.push({
       date: employee?.created_at || new Date().toISOString(),
       description: `Profile created for ${employee?.first_name} ${employee?.last_name}`,
       icon: <User className="h-5 w-5 text-purple-500 dark:text-purple-400" />,
     });
- 
     employee?.education?.forEach((edu) => {
       if (edu.year_completed) {
         activities.push({
@@ -722,7 +646,6 @@ const EmployeeProfile = () => {
         });
       }
     });
- 
     employee?.experiences?.forEach((exp) => {
       if (exp.start_date) {
         activities.push({
@@ -739,24 +662,19 @@ const EmployeeProfile = () => {
         });
       }
     });
- 
     activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
- 
     return activities;
   };
- 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied to clipboard!`);
   };
- 
   const isNewAppraisal = (record: AppraisalRecord) => {
     const createdAt = new Date(record.created_at).getTime();
     const updatedAt = new Date(record.updated_at).getTime();
     const isUpdatedByDrawer = record.last_updated_by === 'EmployeesPayrollDrawer';
     return updatedAt > createdAt && isUpdatedByDrawer;
   };
- 
   const renderSalaryDetailsModal = (record: PaymentRecord) => (
     <DialogContent className="sm:max-w-[600px]">
       <DialogHeader>
@@ -769,19 +687,19 @@ const EmployeeProfile = () => {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Basic Salary</span>
-                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.earnings?.basic_salary || 0)}</span>
+                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.earnings?.basic_salary)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">House Rent Allowance</span>
-                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.earnings?.house_rent_allowance || 0)}</span>
+                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.earnings?.house_rent_allowance)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Conveyance Allowance</span>
-                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.earnings?.conveyance_allowance || 0)}</span>
+                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.earnings?.conveyance_allowance)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Fixed Allowance</span>
-                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.earnings?.fixed_allowance || 0)}</span>
+                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.earnings?.fixed_allowance)}</span>
               </div>
               {record.earnings?.hourly_rate && record.earnings?.total_hours_worked ? (
                 <>
@@ -798,32 +716,31 @@ const EmployeeProfile = () => {
               <div className="border-t pt-2 mt-2">
                 <div className="flex justify-between">
                   <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Earnings</span>
-                  <span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(record.earnings?.total_earnings || 0)}</span>
+                  <span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(record.earnings?.total_earnings)}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
- 
         <div>
           <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">Deductions</h5>
           <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Provident Fund</span>
-                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.deductions?.provident_fund || 0)}</span>
+                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.deductions?.provident_fund)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Professional Tax</span>
-                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.deductions?.professional_tax || 0)}</span>
+                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.deductions?.professional_tax)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Income Tax</span>
-                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.deductions?.income_tax || 0)}</span>
+                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.deductions?.income_tax)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Loan Deduction</span>
-                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.deductions?.loan_deduction || 0)}</span>
+                <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(record.deductions?.loan_deduction)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Paid Days</span>
@@ -836,13 +753,12 @@ const EmployeeProfile = () => {
               <div className="border-t pt-2 mt-2">
                 <div className="flex justify-between">
                   <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Deductions</span>
-                  <span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(record.deductions?.total_deductions || 0)}</span>
+                  <span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(record.deductions?.total_deductions)}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
- 
         {record.customDeductions && record.customDeductions.length > 0 && (
           <div>
             <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">Custom Deductions</h5>
@@ -861,7 +777,6 @@ const EmployeeProfile = () => {
       </div>
     </DialogContent>
   );
- 
   const renderCurrentSalarySummary = (record: PaymentRecord) => (
     <div className="flex items-center justify-between mb-4 border-b pb-4">
       <div className="flex items-center">
@@ -897,7 +812,6 @@ const EmployeeProfile = () => {
       </div>
     </div>
   );
- 
   const renderAppraisalSummary = (record: AppraisalRecord) => (
     <div className="flex items-center justify-between mb-4 border-b pb-4">
       <div className="flex items-center">
@@ -944,23 +858,32 @@ const EmployeeProfile = () => {
       </div>
     </div>
   );
- 
+  // Compute current salary record using latest appraisal if available
+  const currentSalaryRecord = (() => {
+    if (employee?.appraisalHistory && employee.appraisalHistory.length > 0) {
+      const latestApp = employee.appraisalHistory[0];
+      return {
+        ...latestApp.paymentRecord,
+        payment_date: latestApp.appraisal_date,
+        payment_amount: latestApp.new_payment_amount,
+        status: latestApp.status,
+      };
+    }
+    return employee?.latestPaymentRecord;
+  })();
   if (loading) {
     return <div className="flex items-center justify-center h-screen text-gray-600 dark:text-gray-400">Loading employee details...</div>;
   }
- 
   if (!employee) {
     return <div className="flex items-center justify-center h-screen text-gray-600 dark:text-gray-400">Employee not found</div>;
   }
- 
 return (
     <div className="bg-gray-100 dark:bg-gray-900 min-h-screen p-4 sm:p-6 lg:p-8">
       {/* --- MAIN CONTENT GRID --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
- 
         {/* --- LEFT COLUMN: Basic Information & Activity Timeline --- */}
         <div className="lg:col-span-1 space-y-8">
-         
+        
 {/* Basic Information Card */}
           <Card className="rounded-2xl shadow-lg border-none relative">
             <div className="absolute top-4 right-4">
@@ -976,7 +899,7 @@ return (
                   <AvatarImage src={employee.profile_picture_url} alt={`${employee.first_name} ${employee.last_name}`} />
                   <AvatarFallback className="text-3xl font-bold bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200">{employee.first_name?.[0]}{employee.last_name?.[0]}</AvatarFallback>
                 </Avatar>
-                
+               
                 {/* User Info and Statuses to the right of Avatar */}
                 <div className="flex flex-col items-start">
                   <h1 className="text-xl font-bold text-purple-800 dark:text-purple-400 capitalize">
@@ -985,18 +908,17 @@ return (
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                     {employee.designation_name || "Test account"} ({employee.employee_id || "Test001"})
                   </p>
-                  
+                 
                   {/* Statuses placed directly below the designation */}
                   <div className="mt-2 flex items-center gap-3">
                      <span className={`font-semibold rounded-full px-2 py-1 text-xs flex items-center gap-2 ${employee.employment_status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                         <span className={`w-2 h-2 rounded-full ${employee.employment_status === 'Active' ? 'bg-green-500' : 'bg-red-500'}`}></span>
                         {employee.employment_status || "Not provided"}
                      </span>
-                     <p className="font-medium text-gray-500 dark:text-gray-400 text-xs">{employee.type_of_hire || "Not provided"}</p>
+                     <p className="font-medium text-gray-500 dark:text-gray-400 text-xs">{employee.hire_type || "Not provided"}</p>
                   </div>
                 </div>
               </div>
-
            <div className="mt-8">
                 <h2 className="text-lg font-bold text-gray-800 dark:text-gray-200 mb-6">Basic Information</h2>
                 <div className="space-y-5 text-sm">
@@ -1016,14 +938,12 @@ return (
                     </div>
                   </div>
                   <div className="flex items-center gap-4"><Phone className="h-5 w-5 text-gray-400" /><div><p className="font-medium text-gray-800 dark:text-gray-200">{employee.phone || "Not provided"}</p></div></div>
-
                   {/* --- Personal Details --- */}
                   <div className="flex items-center gap-4 pt-2 border-t dark:border-gray-700"><Globe className="h-5 w-5 text-gray-400" /><div><p className="font-medium text-gray-800 dark:text-gray-200">{employee.address?.country || "Not provided"}</p></div></div>
                   <div className="flex items-center gap-4"><Users className="h-5 w-5 text-gray-400" /><div><p className="font-medium text-gray-800 dark:text-gray-200">{employee.gender || "Not provided"}</p></div></div>
                   <div className="flex items-start gap-4"><CalendarDays className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Date of Birth</p><p className="font-medium text-gray-800 dark:text-gray-200">{formatDate(employee.date_of_birth)} (Age: {getAge(employee.date_of_birth)})</p></div></div>
                   <div className="flex items-start gap-4"><Heart className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Marital Status</p><p className="font-medium text-gray-800 dark:text-gray-200">{employee.marital_status || 'Not provided'}</p></div></div>
                   <div className="flex items-start gap-4"><Droplet className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Blood Group</p><p className="font-medium text-gray-800 dark:text-gray-200">{employee.blood_group || 'Not provided'}</p></div></div>
-
                   {/* --- DYNAMIC EMPLOYMENT DETAILS --- */}
                   <div className="flex items-start gap-4 pt-2 border-t dark:border-gray-700">
                     <Clock className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" />
@@ -1032,7 +952,6 @@ return (
                       <p className="font-medium text-gray-800 dark:text-gray-200">{employee.hire_type || "Not provided"}</p>
                     </div>
                   </div>
-
                   {/* Fields for Internship */}
                   {employee.hire_type === 'Internship' && employee.internship_duration && (
                     <div className="flex items-start gap-4">
@@ -1043,7 +962,6 @@ return (
                       </div>
                     </div>
                   )}
-
                   {/* Fields for Contract */}
                   {employee.hire_type === 'Contract' && (
                     <>
@@ -1061,7 +979,6 @@ return (
                       )}
                     </>
                   )}
-
                   {/* Fields for Part Time */}
                   {employee.hire_type === 'Part Time' && (
                     <>
@@ -1079,7 +996,7 @@ return (
                       )}
                     </>
                   )}
-                  
+                 
                   {/* --- Salary / Stipend --- */}
                   <div className="flex items-start gap-4">
                     <IndianRupee className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" />
@@ -1088,8 +1005,8 @@ return (
                       <p className="font-medium text-gray-800 dark:text-gray-200">
                         {(() => {
                           // Priority 1: Use the latest payment record if it exists.
-                          if (employee.latestPaymentRecord?.payment_amount) {
-                            return formatCurrency(employee.latestPaymentRecord.payment_amount);
+                          if (currentSalaryRecord?.payment_amount && currentSalaryRecord.payment_amount > 0) {
+                            return formatCurrency(currentSalaryRecord.payment_amount);
                           }
                           // Priority 2: Fallback to the base salary/stipend from the employee record.
                           if (employee.salary) {
@@ -1102,12 +1019,11 @@ return (
                       </p>
                     </div>
                   </div>
-
                   {/* --- Static Professional Details --- */}
                   <div className="flex items-start gap-4 pt-2 border-t dark:border-gray-700"><Building2 className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Department</p><p className="font-medium text-gray-800 dark:text-gray-200">{employee.department_name || 'Not provided'}</p></div></div>
                   <div className="flex items-start gap-4"><BadgeCheck className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Designation</p><p className="font-medium text-gray-800 dark:text-gray-200">{employee.designation_name || 'Not provided'}</p></div></div>
                   <div className="flex items-start gap-4"><CalendarPlus className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Joining Date</p><p className="font-medium text-gray-800 dark:text-gray-200">{formatDate(employee.joining_date)}</p></div></div>
-                  
+                 
                   {/* --- Skills --- */}
                   <div className="flex items-start gap-4 pt-2 border-t dark:border-gray-700"><Cog className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Hard Skill</p><p className="font-medium text-gray-800 dark:text-gray-200">Technical</p></div></div>
                   <div className="flex items-start gap-4"><MessageCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" /><div><p className="text-xs text-gray-500">Soft Skill</p><p className="font-medium text-gray-800 dark:text-gray-200">Communication</p></div></div>
@@ -1116,27 +1032,26 @@ return (
             </CardContent>
           </Card>
         </div>
- 
         {/* --- RIGHT COLUMN: Tabbed Content Area --- */}
         <div className="lg:col-span-2">
           <Tabs defaultValue="personal" className="w-full">
             {/* --- NEW Pill-Style Tabs --- */}
             <div className="flex justify-start mb-6">
               <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1.5 shadow-inner">
-                <TabsTrigger 
-                  value="personal" 
+                <TabsTrigger
+                  value="personal"
                   className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
                 >
                   Personal
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="professional" 
+                <TabsTrigger
+                  value="professional"
                   className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
                 >
                   Professional
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="salary" 
+                <TabsTrigger
+                  value="salary"
                   className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
                 >
                   Salary
@@ -1150,7 +1065,6 @@ return (
                 <CardContent className="p-8">
                   <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Identity Documents</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
                     {/* Aadhar Card */}
                     <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
                       <div className="flex items-center gap-3">
@@ -1169,7 +1083,7 @@ return (
                           </Button>
                           <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
                             {/* ================================================================= */}
-                            {/* ✅ FIX APPLIED HERE                                              */}
+                            {/* ✅ FIX APPLIED HERE */}
                             {/* ================================================================= */}
                             <a href={`${employee.aadhar_url}?download=`} download>
                               <Download className="h-4 w-4 mr-2"/>Download
@@ -1178,7 +1092,6 @@ return (
                         </div>
                       )}
                     </div>
-
                     {/* PAN Card */}
                     <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
                        <div className="flex items-center gap-3">
@@ -1197,7 +1110,7 @@ return (
                            </Button>
                            <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
                             {/* ================================================================= */}
-                            {/* ✅ FIX APPLIED HERE                                              */}
+                            {/* ✅ FIX APPLIED HERE */}
                             {/* ================================================================= */}
                              <a href={`${employee.pan_url}?download=`} download>
                                <Download className="h-4 w-4 mr-2"/>Download
@@ -1206,7 +1119,6 @@ return (
                          </div>
                        )}
                     </div>
-
                     {/* ESIC Card */}
                     <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
                        <div className="flex items-center gap-3">
@@ -1225,7 +1137,7 @@ return (
                            </Button>
                            <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
                             {/* ================================================================= */}
-                            {/* ✅ FIX APPLIED HERE                                              */}
+                            {/* ✅ FIX APPLIED HERE */}
                             {/* ================================================================= */}
                              <a href={`${employee.esic_url}?download=`} download>
                                <Download className="h-4 w-4 mr-2"/>Download
@@ -1234,11 +1146,9 @@ return (
                          </div>
                        )}
                     </div>
-
                   </div>
                 </CardContent>
               </Card>
-
               <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
                 <CardContent className="p-8">
                   <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Addresses</h3>
@@ -1266,29 +1176,27 @@ return (
                   </div>
                 </CardContent>
               </Card>
-              
+             
   <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
                 <CardContent className="p-8">
                   <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Education</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {['SSC', 'HSC/Diploma', 'Degree'].map(type => {
                       const edu = employee.education?.find(e => e.type === type);
-                      
+                     
                       // Extract filename for the download attribute
                       const fileName = edu?.document_url ? edu.document_url.split('/').pop().split('?')[0] : '';
-
                       return (
                         <div key={type} className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg text-center flex flex-col">
                           <div className="flex-grow">
                             <h4 className="font-semibold text-gray-600 dark:text-gray-400">{type}</h4>
                             <p className="font-bold mt-1 break-words text-gray-800 dark:text-gray-200">{edu?.institute || 'N/A'}</p>
                             <p className="text-xs text-gray-500">
-                              {edu?.year_completed 
-                                ? new Date(edu.year_completed).getFullYear() 
+                              {edu?.year_completed
+                                ? new Date(edu.year_completed).getFullYear()
                                 : 'N/A'}
                             </p>
                           </div>
-
                           {/* This is the section with the fix */}
                           {edu?.document_url && (
                             <div className="flex items-center justify-center gap-1 border-t dark:border-gray-600 pt-2 mt-2">
@@ -1298,12 +1206,11 @@ return (
                                   <Eye className="h-4 w-4 mr-2"/>View
                                 </a>
                               </Button>
-
                               {/* ================================================================= */}
-                              {/* START: CRITICAL FIX FOR DIRECT DOWNLOAD                     */}
+                              {/* START: CRITICAL FIX FOR DIRECT DOWNLOAD */}
                               {/* ================================================================= */}
                               <Button variant="ghost" size="sm" asChild>
-                                <a 
+                                <a
                                   href={`${edu.document_url}?download=`} // <-- The Fix is here
                                   download={fileName}
                                 >
@@ -1311,7 +1218,7 @@ return (
                                 </a>
                               </Button>
                               {/* ================================================================= */}
-                              {/* END: CRITICAL FIX FOR DIRECT DOWNLOAD                       */}
+                              {/* END: CRITICAL FIX FOR DIRECT DOWNLOAD */}
                               {/* ================================================================= */}
                             </div>
                           )}
@@ -1321,7 +1228,6 @@ return (
                   </div>
                 </CardContent>
               </Card>
-
               <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
                 <CardContent className="p-8">
                   <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Bank Details</h3>
@@ -1345,7 +1251,7 @@ return (
                 </CardContent>
               </Card>
             </TabsContent>
-           
+          
            <TabsContent value="professional" className="mt-6 space-y-8">
               <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
                 <CardContent className="p-8">
@@ -1362,7 +1268,6 @@ return (
                           { label: 'Payslip 3', url: exp.payslip3 },
                         ];
                         const availableDocuments = documents.filter(doc => doc.url);
-
                         return (
                           <div key={exp.id} className="p-4 rounded-lg border dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
                             {/* --- Basic Experience Info --- */}
@@ -1371,7 +1276,6 @@ return (
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                               {formatDate(exp.start_date)} - {exp.end_date ? formatDate(exp.end_date) : 'Present'}
                             </p>
-
                             {/* --- Conditionally Rendered Documents Section --- */}
                             {availableDocuments.length > 0 && (
                               <div className="mt-4 border-t dark:border-gray-600 pt-3">
@@ -1383,7 +1287,6 @@ return (
                                   {availableDocuments.map(doc => {
                                     // Get the original filename from the URL for a better user experience
                                     const fileName = doc.url.split('/').pop().split('?')[0];
-
                                     return (
                                       <div key={doc.label} className="flex items-center justify-between p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
                                         <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
@@ -1396,21 +1299,20 @@ return (
                                               <Eye className="h-4 w-4" />
                                             </a>
                                           </Button>
-
                                           {/* ================================================================= */}
-                                          {/* START: CRITICAL FIX FOR DIRECT DOWNLOAD                     */}
+                                          {/* START: CRITICAL FIX FOR DIRECT DOWNLOAD */}
                                           {/* ================================================================= */}
                                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild>
                                             <a
                                               href={`${doc.url}?download=`} // <-- The Fix: Append '?download='
-                                              download={fileName}           // <-- Suggest the original filename
+                                              download={fileName} // <-- Suggest the original filename
                                               title="Download"
                                             >
                                               <Download className="h-4 w-4" />
                                             </a>
                                           </Button>
                                           {/* ================================================================= */}
-                                          {/* END: CRITICAL FIX FOR DIRECT DOWNLOAD                       */}
+                                          {/* END: CRITICAL FIX FOR DIRECT DOWNLOAD */}
                                           {/* ================================================================= */}
                                         </div>
                                       </div>
@@ -1429,62 +1331,76 @@ return (
                 </CardContent>
               </Card>
             </TabsContent>
-
 <TabsContent value="salary" className="mt-6 space-y-8">
               {/* --- Salary Information Card --- */}
               <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
                 <CardContent className="p-8">
-                  {employee.latestPaymentRecord ? (
+                  {currentSalaryRecord ? (
                     <>
                       {/* --- Header Section --- */}
                       <div className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b dark:border-gray-700">
                         <h3 className="font-bold text-xl text-gray-800 dark:text-gray-200">
-                          Salary Details - {formatDate(employee.latestPaymentRecord.payment_date)}
+                          Salary Details - {formatDate(currentSalaryRecord.payment_date)}
                         </h3>
                         <div className="flex items-center space-x-4 mt-2 sm:mt-0">
                           <div className="flex items-center">
                             <span className="text-sm text-gray-500 dark:text-gray-400 mr-2">Status:</span>
                             <span
                               className={`w-2 h-2 rounded-full mr-2 ${
-                                employee.latestPaymentRecord.status === 'Success' ? 'bg-green-500' : employee.latestPaymentRecord.status === 'Pending' ? 'bg-yellow-500' : 'bg-red-500'
+                                currentSalaryRecord.status === 'Success' ? 'bg-green-500' : currentSalaryRecord.status === 'Pending' ? 'bg-yellow-500' : 'bg-red-500'
                               }`}
                             ></span>
-                            <span className="font-medium text-gray-800 dark:text-gray-200">{employee.latestPaymentRecord.status}</span>
+                            <span className="font-medium text-gray-800 dark:text-gray-200">{currentSalaryRecord.status}</span>
                           </div>
                           <div>
                             <span className="text-sm text-gray-500 dark:text-gray-400 mr-2">Net Pay:</span>
-                            <span className="font-medium text-green-600 dark:text-green-400">{formatCurrency(employee.latestPaymentRecord.payment_amount)}</span>
+                            <span className="font-medium text-green-600 dark:text-green-400">{formatCurrency(currentSalaryRecord.payment_amount)}</span>
                           </div>
                         </div>
                       </div>
-
                       {/* --- Detailed Breakdown Grid --- */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {/* Earnings */}
                         <div>
                           <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">Earnings</h5>
                           <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 space-y-2">
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Basic Salary</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.earnings?.basic_salary || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">House Rent Allowance</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.earnings?.house_rent_allowance || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Conveyance Allowance</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.earnings?.conveyance_allowance || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Fixed Allowance</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.earnings?.fixed_allowance || 0)}</span></div>
-                            <div className="border-t pt-2 mt-2 flex justify-between"><span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Earnings</span><span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.earnings?.total_earnings || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Basic Salary</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.earnings?.basic_salary || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">House Rent Allowance</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.earnings?.house_rent_allowance || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Conveyance Allowance</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.earnings?.conveyance_allowance || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Fixed Allowance</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.earnings?.fixed_allowance || 0)}</span></div>
+                            <div className="border-t pt-2 mt-2 flex justify-between"><span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Earnings</span><span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.earnings?.total_earnings || 0)}</span></div>
                           </div>
                         </div>
                         {/* Deductions */}
                         <div>
                           <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">Deductions</h5>
                           <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 space-y-2">
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Provident Fund</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.deductions?.provident_fund || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Professional Tax</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.deductions?.professional_tax || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Income Tax</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.deductions?.income_tax || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Loan Deduction</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.deductions?.loan_deduction || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Paid Days</span><span className="font-medium text-gray-800 dark:text-gray-200">{employee.latestPaymentRecord.deductions?.paid_days || 0}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">LOP Days</span><span className="font-medium text-gray-800 dark:text-gray-200">{employee.latestPaymentRecord.deductions?.lop_days || 0}</span></div>
-                            <div className="border-t pt-2 mt-2 flex justify-between"><span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Deductions</span><span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(employee.latestPaymentRecord.deductions?.total_deductions || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Provident Fund</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.deductions?.provident_fund || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Professional Tax</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.deductions?.professional_tax || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Income Tax</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.deductions?.income_tax || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Loan Deduction</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.deductions?.loan_deduction || 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Paid Days</span><span className="font-medium text-gray-800 dark:text-gray-200">{currentSalaryRecord.deductions?.paid_days || 0}</span></div>
+                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">LOP Days</span><span className="font-medium text-gray-800 dark:text-gray-200">{currentSalaryRecord.deductions?.lop_days || 0}</span></div>
+                            <div className="border-t pt-2 mt-2 flex justify-between"><span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Deductions</span><span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.deductions?.total_deductions || 0)}</span></div>
                           </div>
                         </div>
                       </div>
+
+                      {/* Appraisal History Section */}
+                      {/* {employee.appraisalHistory && employee.appraisalHistory.length > 0 ? (
+                        <div className="mt-6">
+                          <h4 className="font-bold text-lg mb-4 pt-4 border-t dark:border-gray-700">Appraisal History</h4>
+                          {employee.appraisalHistory.map((record) => (
+                            <div key={record.id} className="mb-4 border-b pb-4">
+                              {renderAppraisalSummary(record)}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="pt-4 mt-4 border-t dark:border-gray-700">
+                          <p className="text-sm text-gray-500">No appraisal history available.</p>
+                        </div>
+                      )} */}
                     </>
                   ) : (
                     <p className="text-sm text-center text-gray-500 py-4">
@@ -1497,9 +1413,6 @@ return (
           </Tabs>
         </div>
       </div>
- 
-
-
       {/* --- Dialog for the Payslip Viewer --- */}
       <Dialog open={isPayslipOpen} onOpenChange={setIsPayslipOpen}>
         <DialogContent className="max-w-3xl p-0">
@@ -1508,8 +1421,7 @@ return (
           )}
         </DialogContent>
       </Dialog>
-    </div> 
+    </div>
   );
 };
- 
 export default EmployeeProfile;
