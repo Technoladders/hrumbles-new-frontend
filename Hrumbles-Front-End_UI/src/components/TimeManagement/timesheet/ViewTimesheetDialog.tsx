@@ -19,6 +19,8 @@ import { fetchEmployees } from '@/api/user';
 import { MultiSelect } from '@/components/ui/multi-selector';
 import { DateTime } from 'luxon';
 import { RecruiterTimesheetForm } from "./dialog/RecruiterTimesheetForm";
+import { Share2 } from 'lucide-react';
+
 
 interface ViewTimesheetDialogProps {
   open: boolean;
@@ -63,8 +65,8 @@ interface Submission {
 }
 
 interface EmployeeOption {
-  value: string; // employee email
-  label: string; // employee name
+  value: string;
+  label: string;
 }
 
 export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
@@ -78,11 +80,17 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
   const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   const employeeId = user?.id || "";
+
+ 
  
   // Core State
   const [isEditing, setIsEditing] = useState(!timesheet?.is_submitted);
   const [isLoading, setIsLoading] = useState(false);
   const [isFormValid, setIsFormValid] = useState(true);
+
+  const [temporaryClockOutTime, setTemporaryClockOutTime] = useState<string | null>(null);
+
+  const [temporaryDurationMinutes, setTemporaryDurationMinutes] = useState<number | null>(null);
 
   // --- State for different user roles ---
   // 1. Recruiter State
@@ -120,8 +128,31 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
         setFormData({ workReport: timesheet.notes || '' });
         setOverallWorkReport(timesheet.notes || '');
         setIsEditing(!timesheet.is_submitted);
+
+if (!timesheet.is_submitted) {
+        const nowISO = new Date().toISOString();
+        setTemporaryClockOutTime(nowISO);
+
+        // NEW: Calculate and set the temporary duration
+        if (timesheet.clock_in_time) {
+          const clockInTime = DateTime.fromISO(timesheet.clock_in_time);
+          const tempClockOutTime = DateTime.fromISO(nowISO);
+          
+          // Calculate the gross difference in minutes
+          const diffInMinutes = tempClockOutTime.diff(clockInTime, 'minutes').toObject().minutes || 0;
+          
+          // Subtract any breaks that have already been logged
+          const totalBreakMinutes = timesheet.break_logs?.reduce(
+            (sum, b) => sum + (b.duration_minutes || 0), 0
+          ) || 0;
+            
+          const netDuration = Math.floor(diffInMinutes) - totalBreakMinutes;
+
+          setTemporaryDurationMinutes(netDuration > 0 ? netDuration : 0);
+        }
       }
-  }, [timesheet, open]);
+    }
+}, [timesheet, open]);
 
   // Combined data fetching and role detection effect
   useEffect(() => {
@@ -297,6 +328,7 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
   };
 
   const handleRecruiterDataChange = (data: { logs: JobLog[] | null; report: string }) => {
+    console.log('Recruiter data changed:', data);
     setRecruiterJobLogs(data.logs);
     setOverallWorkReport(data.report);
   };
@@ -348,11 +380,48 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
       }
       
       setEmailStatus('EOD report sent successfully!');
-    } catch (err) {
+    } catch (err: any) {
       setEmailStatus(`Failed to send EOD report: ${err.message}`);
       toast.error(`EOD Send Failed: ${err.message}`);
     }
   };
+
+
+const generateRecruiterCSV = (jobLogs: JobLog[]) => {
+  const headers = [
+    'Job Title', 'Job ID', 'Client Name', 'Job Type', 'Job Category',
+    'Candidate Name', 'Submission Date', 'Main Status', 'Sub Status',
+    'Time Spent (Hours)', 'Time Spent (Minutes)', 'Total Time (Minutes)',
+    'Challenges/Notes'
+  ];
+
+  const csvData: any[] = [];
+
+  jobLogs.forEach(job => {
+    if (job.candidates && job.candidates.length > 0) {
+      job.candidates.forEach(candidate => {
+        csvData.push([
+          job.jobTitle || 'N/A',
+          job.job_display_id || 'N/A',
+          job.clientName || 'N/A',
+          job.job_type || 'N/A',
+          job.job_type_category || 'N/A',
+          candidate.name || 'N/A',
+          candidate.submissionDate ? format(new Date(candidate.submissionDate), 'dd/MM/yyyy') : 'N/A',
+          candidate.mainStatus || 'N/A',
+          candidate.subStatus || 'N/A',
+          candidate.hours || 0,
+          candidate.minutes || 0,
+          (candidate.hours * 60) + candidate.minutes,
+          job.challenges ? job.challenges.replace(/<[^>]+>/g, '') : ''
+        ]);
+      });
+    }
+  });
+
+  return Papa.unparse({ fields: headers, data: csvData }, { delimiter: ',', quotes: true });
+};
+
 
   const sendRecruiterEODReport = async (newClockOutTime: string) => {
     setEmailStatus('Sending EOD report...');
@@ -367,8 +436,10 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
       }
       const allRecipientEmails = [user.email, ...additionalRecipients, ...defaultRecipientEmails];
       const uniqueRecipients = [...new Set(allRecipientEmails.filter(Boolean))];
-      const csvContent = submissions.length > 0 ? generateCSV(submissions) : null;
-      // --- NEW PAYLOAD FOR THE DEDICATED FUNCTION ---
+     const csvContent = recruiterJobLogs && recruiterJobLogs.length > 0 
+  ? generateRecruiterCSV(recruiterJobLogs) 
+  : null;
+      
       const payload = {
         userName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
         timesheetDetails: {
@@ -379,11 +450,11 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
         },
         jobLogs: recruiterJobLogs,
         overallSummary: overallWorkReport,
-        breakLogs: timesheet.break_logs || [], // Pass the break logs
+        breakLogs: timesheet.break_logs || [],
         allRecipients: uniqueRecipients,
         csvContent,
       };
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recruiter-eod-report`, { // <-- CALL THE NEW FUNCTION
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/recruiter-eod-report`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -417,6 +488,8 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     setIsEditing(false);
     setIsFormValid(true);
     setEmailStatus(null);
+    setTemporaryClockOutTime(null); 
+    setTemporaryDurationMinutes(null);
     onOpenChange(false);
   };
 
@@ -426,30 +499,25 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
       return;
     }
 
-  
-    // --- REVISED: Perform validation right before submitting ---
+    // Perform validation right before submitting
     if (isRecruiter) {
-        // For recruiters, validation state is controlled by the child form
         if (!isFormValid) {
             toast.error("Please fill all required fields before submitting.");
             return;
         }
     } else if (employeeHasProjects) {
-        // For project-based employees, run validation now
         const calculatedTotalHours = projectEntries.reduce((sum, p) => sum + (p.hours || 0), 0);
         const isValid = validateForm({
             title, workReport,
             totalWorkingHours: calculatedTotalHours,
             employeeHasProjects,
             projectEntries,
-            detailedEntries: projectEntries // Assuming detailedEntries are the same as projectEntries here
+            detailedEntries: projectEntries
         });
         if (!isValid) {
-            // The toast will be shown by the validateForm function itself.
             return;
         }
     } else {
-        // For standard employees, run validation now
         const isValid = formData.workReport.replace(/<[^>]+>/g, "").trim().length > 0;
         if (!isValid) {
             toast.error('Work Summary is required');
@@ -461,31 +529,30 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     setIsLoading(true);
     try {
       const clockIn = timesheet.clock_in_time ? DateTime.fromISO(timesheet.clock_in_time, { zone: 'utc' }).setZone('Asia/Kolkata').toFormat('HH:mm') : undefined;
-      // Clock out is now handled by the API, so we don't need the `clockOut` variable here.
+      
       let timesheetData: any = {
           employeeId: timesheet.employee_id,
           date: new Date(timesheet.date),
           clockIn,
-          // No clockOut here
       };
       let isSubmissionSuccessful = false;
       let finalWorkReport = '';
 
       if (isRecruiter) {
           timesheetData.notes = overallWorkReport;
-          timesheetData.recruiter_report_data = recruiterJobLogs;
-          // --- FIX: Pass finalDurationMinutes for recruiters ---
+          timesheetData.recruiter_report_data = recruiterJobLogs; // Save the job logs with candidates
+          console.log('Submitting recruiter data:', recruiterJobLogs);
+          
           isSubmissionSuccessful = await submitTimesheet(
               timesheet.id,
               timesheetData,
               organization_id,
-              finalDurationMinutes // Pass the duration
+              finalDurationMinutes
           );
           if (isSubmissionSuccessful) {
              await sendRecruiterEODReport(newClockOutTime);
           }
       } else {
-          // This block handles both project-based and standard employees
           if (employeeHasProjects) {
               timesheetData.title = title;
               timesheetData.notes = title || workReport;
@@ -500,24 +567,24 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
               timesheetData.totalWorkingHours = timesheet.duration_minutes ? timesheet.duration_minutes / 60 : 8;
               finalWorkReport = formData.workReport;
           }
-          // --- FIX: Pass finalDurationMinutes for ALL non-recruiter roles ---
+          
           isSubmissionSuccessful = await submitTimesheet(
               timesheet.id,
               timesheetData,
               organization_id,
-              finalDurationMinutes // Pass the duration
+              finalDurationMinutes
           );
           if (isSubmissionSuccessful) {
               await sendEODReport(finalWorkReport, newClockOutTime);
           }
       }
+      
       if (isSubmissionSuccessful) {
           if (emailStatus && emailStatus.startsWith('Failed')) {
               // Error already shown
           } else {
               toast.success("Timesheet submitted successfully");
               onSubmitTimesheet();
-              // This will trigger the refresh via App.jsx
               handleClose();
           }
       } else {
@@ -531,7 +598,9 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
     }
   };
  
+  
   const canSubmit = !timesheet?.is_submitted && !isLoading && isFormValid;
+  
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[80vh] flex flex-col">
@@ -542,11 +611,14 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
         <div className="flex-1 overflow-y-auto space-y-4 p-4">
           {isLoading && isEditing ? <div>Loading...</div> : (
             <>
-              <TimesheetBasicInfo timesheet={timesheet} />
+              <TimesheetBasicInfo timesheet={timesheet} 
+               temporaryClockOutTime={temporaryClockOutTime} 
+               temporaryDurationMinutes={temporaryDurationMinutes} 
+              />
+
              
               {isEditing ? (
                 <>
-                  {/* --- CONDITIONAL FORM RENDERING --- */}
                   {isRecruiter ? (
                     <RecruiterTimesheetForm
                       timesheet={timesheet}
@@ -557,7 +629,7 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
                     <TimesheetDialogContent
                       date={new Date(timesheet.date)}
                       mode="submit"
-                      setDate={() => {}} // Date is fixed in this view
+                      setDate={() => {}}
                       title={title}
                       setTitle={setTitle}
                       totalWorkingHours={totalWorkingHours}
@@ -583,8 +655,23 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
                     />
                   )}
                  
-                  <div className="space-y-2 pt-4 border-t mt-4">
-                    <Label htmlFor="recipients">Add More Recipients for EOD (Optional)</Label>
+                  <div className="p-5 bg-white rounded-lg border border-slate-200 mt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Share2 className="h-5 w-5 mr-3 text-indigo-600" />
+                        <Label htmlFor="recipients" className="text-lg font-bold text-gray-800">
+                         Add Timesheet Recipients
+                        </Label>
+                      </div>
+                      <span className="px-2 py-1 text-xs font-semibold text-gray-600 bg-gray-200 rounded-md">
+                        Optional
+                      </span>
+                    </div>
+
+                    <p className="mt-1 mb-4 text-sm text-gray-500">
+                     Forward this report to additional recipients if needed.
+                    </p>
+
                     <MultiSelect
                       id="recipients"
                       options={allEmployees}
@@ -597,13 +684,13 @@ export const ViewTimesheetDialog: React.FC<ViewTimesheetDialogProps> = ({
               ) : (
                 <>
                   <TimeLogDetails timeLog={timesheet} employeeHasProjects={employeeHasProjects} />
-                  {/* For project employees, you might want a specific view component */}
                   {employeeHasProjects && <TimesheetProjectDetails timesheet={timesheet} />}
                 </>
               )}
             </>
           )}
         </div>
+        
         <DialogFooter className="border-t pt-4">
           {emailStatus && <div className="text-sm text-gray-600 mr-4">{emailStatus}</div>}
          

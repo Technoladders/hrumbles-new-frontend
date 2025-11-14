@@ -15,29 +15,33 @@ const QuillTableBetterDemo: React.FC<QuillTableBetterDemoProps> = ({
 }) => {
   const quillRef = useRef<ReactQuill>(null);
 
-  // Register BetterTable module
+  // Register BetterTable module (no changes here)
   useEffect(() => {
     Quill.register({ "modules/better-table": BetterTable }, true);
   }, []);
 
+  // --- UPDATED AND REORGANIZED TOOLBAR ---
   const modules = useMemo(
     () => ({
       toolbar: {
         container: [
-          [{ header: 1 }, { header: 2 }],
+          // Group 1: Font and Size
+          [{ font: [] }, { size: ["small", false, "large", "huge"] }],
+          // Group 2: Text Style
           ["bold", "italic", "underline", "strike"],
-          ["link", "image"],
-          [{ list: "bullet" }],
-          [{ indent: "-1" }, { indent: "+1" }],
-          [{ direction: "rtl" }],
-          [{ size: ["small", false, "large", "huge"] }],
+          // Group 3: Color and Background
           [{ color: [] }, { background: [] }],
-          [{ font: [] }],
-          [{ align: [] }],
-          ["table"],
+          // Group 4: Headers and Alignment
+          [{ header: 1 }, { header: 2 }, { align: [] }],
+          // Group 5: Lists and Indentation
+          [{ list: "ordered" }, { list: "bullet" }, { indent: "-1" }, { indent: "+1" }],
+          // Group 6: Links, Images, and Tables
+          ["link", "image", "table"],
+          // Group 7: RTL Direction (optional, can be removed if not needed)
+          [{ direction: "rtl" }],
         ],
       },
-      table: false,
+      table: false, // Keep BetterTable config as is
       "better-table": {
         operationMenu: {
           items: {

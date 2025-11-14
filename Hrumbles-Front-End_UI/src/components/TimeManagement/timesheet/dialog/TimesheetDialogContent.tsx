@@ -1,15 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import React, { useEffect, useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ProjectAllocationForm } from './ProjectAllocationForm';
 import { StandardTimesheetForm } from '../StandardTimesheetForm';
 import { DetailedTimesheetEntry } from '@/types/time-tracker-types';
 import { useProjectData } from '@/hooks/TimeManagement/useProjectData';
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 
 interface TimesheetDialogContentProps {
+  // ========================================
+  // NEW: Add Dialog control props
+  // ========================================
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  
+  // Existing props
   date: Date;
   setDate: (date: Date) => void;
   detailedEntries: DetailedTimesheetEntry[];
@@ -19,17 +23,21 @@ interface TimesheetDialogContentProps {
   employeeHasProjects: boolean;
   isSubmitting: boolean;
   handleClose: () => void;
- handleSubmit: (title: string, workReport: string, clockIn?: string, clockOut?: string) => void;
+  handleSubmit: (title: string, workReport: string) => void;
   employeeId: string;
   hrProjectEmployees: any[];
   clockIn: string | undefined;
-setClockIn: React.Dispatch<React.SetStateAction<string | undefined>>;
-clockOut: string | undefined;
-setClockOut: React.Dispatch<React.SetStateAction<string | undefined>>;
-
+  setClockIn: React.Dispatch<React.SetStateAction<string | undefined>>;
+  clockOut: string | undefined;
+  setClockOut: React.Dispatch<React.SetStateAction<string | undefined>>;
 }
 
 export const TimesheetDialogContent: React.FC<TimesheetDialogContentProps> = ({
+  // Destructure Dialog props
+  open,
+  onOpenChange,
+  
+  // Existing props
   date,
   setDate,
   detailedEntries,
@@ -42,25 +50,21 @@ export const TimesheetDialogContent: React.FC<TimesheetDialogContentProps> = ({
   handleSubmit,
   employeeId,
   hrProjectEmployees,
+  clockIn,
+  setClockIn,
+  clockOut,
+  setClockOut,
 }) => {
   const { projects, loading } = useProjectData();
-  const [projectTimeData, setProjectTimeData] = useState<{ [key: string]: number }>({});
   const [projectReports, setProjectReports] = useState<{ [key: string]: string }>({});
   const [title, setTitle] = useState("");
   const [workReport, setWorkReport] = useState("");
-  const [clockIn, setClockIn] = useState<string | undefined>(undefined);
-  const [clockOut, setClockOut] = useState<string | undefined>(undefined);
 
-  console.log("clockin", clockIn)
-  console.log("clockout", clockOut)
-  console.log("projectEntries", projectEntries)
-  console.log("projectTimeData", projectTimeData)
+  console.log("employeehasproject", employeeHasProjects)
+  
 
   const updateProjectTimeAllocation = (projectId: string, hours: number) => {
-    setProjectTimeData((prev) => ({
-      ...prev,
-      [projectId]: hours,
-    }));
+    // This logic is handled in ProjectAllocationForm
   };
 
   const updateProjectReport = (projectId: string, report: string) => {
@@ -70,84 +74,75 @@ export const TimesheetDialogContent: React.FC<TimesheetDialogContentProps> = ({
     }));
   };
 
+  // Fixed infinite loop issue
   useEffect(() => {
-    if (employeeHasProjects) {
+    if (employeeHasProjects && Object.keys(projectReports).length > 0) {
       const updatedEntries = projectEntries.map((entry) => ({
-        projectId: entry.projectId,
-        clockIn: entry.clockIn,
-        clockOut: entry.clockOut,
-        hours: entry.hours,
+        ...entry,
         report: projectReports[entry.projectId] || entry.report || "",
       }));
-      setProjectEntries(updatedEntries);
+      
+      // Only update if something actually changed
+      const hasChanges = updatedEntries.some((entry, index) => 
+        entry.report !== projectEntries[index]?.report
+      );
+      
+      if (hasChanges) {
+        setProjectEntries(updatedEntries);
+      }
     }
-  }, [projectReports, employeeHasProjects, setProjectEntries]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectReports, employeeHasProjects]);
 
+  // ========================================
+  // NEW: Wrap everything in Dialog component
+  // ========================================
   return (
-    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-      <DialogHeader>
-        <DialogTitle>Create New Timesheet</DialogTitle>
-        <DialogDescription>
-          Fill in the details below to create a new timesheet.
-        </DialogDescription>
-      </DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Create New Timesheet</DialogTitle>
+          <DialogDescription>
+            Fill in the details below to create a new timesheet.
+          </DialogDescription>
+        </DialogHeader>
 
-      <div className="space-y-4">
-        {/* <div>
-          <Label htmlFor="title">Timesheet Title</Label>
-          <Input
-            id="title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Enter timesheet title"
-            className="mt-1"
-          />
-        </div> */}
-        {/* <div>
-          <Label htmlFor="workReport">General Work Report</Label>
-          <Textarea
-            id="workReport"
-            value={workReport}
-            onChange={(e) => setWorkReport(e.target.value)}
-            placeholder="Describe your overall work for the day"
-            className="mt-1 min-h-[80px]"
-          />
-        </div> */}
+        <div className="space-y-4">
+          {employeeHasProjects ? (
+            <ProjectAllocationForm
+              date={date}
+              setDate={setDate}
+              projectEntries={projectEntries}
+              setProjectEntries={setProjectEntries}
+              projects={projects}
+              updateProjectTimeAllocation={updateProjectTimeAllocation}
+              updateProjectReport={updateProjectReport}
+              employeeId={employeeId}
+              hrProjectEmployees={hrProjectEmployees}
+              clockIn={clockIn}
+              setClockIn={setClockIn}
+              clockOut={clockOut}        
+              setClockOut={setClockOut}
+            />
+          ) : (
+            <StandardTimesheetForm
+              detailedEntries={detailedEntries}
+              setDetailedEntries={setDetailedEntries}
+              totalWorkingHours={8}
+            />
+          )}
+        </div>
 
-        {employeeHasProjects ? (
-          <ProjectAllocationForm
-            date={date}
-            setDate={setDate}
-            projectEntries={projectEntries}
-            setProjectEntries={setProjectEntries}
-            projects={projects}
-            updateProjectTimeAllocation={updateProjectTimeAllocation}
-            updateProjectReport={updateProjectReport}
-            employeeId={employeeId}
-            hrProjectEmployees={hrProjectEmployees}
-             clockIn={clockIn}
-            setClockIn={setClockIn}
-            clockOut={clockOut}
-            setClockOut={setClockOut}
-          />
-        ) : (
-          <StandardTimesheetForm
-            detailedEntries={detailedEntries}
-            setDetailedEntries={setDetailedEntries}
-          />
-        )}
-      </div>
-
-      <DialogFooter>
-        <Button variant="outline" onClick={handleClose}>Cancel</Button>
-        <Button
-          onClick={() => handleSubmit(title, workReport, clockIn, clockOut)}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? "Submitting..." : "Submit Timesheet"}
-        </Button>
-      </DialogFooter>
-    </DialogContent>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>Cancel</Button>
+          <Button
+            onClick={() => handleSubmit(title, workReport)}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? "Submitting..." : "Submit Timesheet"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
-// 

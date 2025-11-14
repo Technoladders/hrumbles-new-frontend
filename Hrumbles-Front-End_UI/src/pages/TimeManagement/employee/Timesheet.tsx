@@ -10,24 +10,26 @@ import { TimesheetHeader } from "@/components/TimeManagement/timesheet/Timesheet
 import { TimesheetContent } from "@/components/TimeManagement/timesheet/TimesheetContent";
 import { useTimesheetManagement } from '@/hooks/TimeManagement/useTimesheetManagement';
 import { useTimesheetStore } from '@/stores/timesheetStore';
- 
+
+// ===============================================
+// ULTRA-AGGRESSIVE FIX: Enum for dialog state
+// ===============================================
+type ActiveDialogType = 'NONE' | 'CREATE' | 'VIEW' | 'CLARIFICATION';
+
 const Timesheet = () => {
   const [activeTab, setActiveTab] = useState("pending");
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [selectedTimesheet, setSelectedTimesheet] = useState<TimeLog | null>(null);
-  const [viewDialogOpen, setViewDialogOpen] = useState(false);
-  const [clarificationDialogOpen, setClarificationDialogOpen] = useState(false);
   const [employeeHasProjects, setEmployeeHasProjects] = useState(false);
+  const [selectedTimesheet, setSelectedTimesheet] = useState<TimeLog | null>(null);
+  
+  // ===============================================
+  // SINGLE SOURCE OF TRUTH: Only one dialog active
+  // ===============================================
+  const [activeDialogType, setActiveDialogType] = useState<ActiveDialogType>('NONE');
+  const [dialogKey, setDialogKey] = useState(0); // Force remount
 
-  console.log("Employes has projectssss", employeeHasProjects)
-
-    const { isSubmissionModalOpen, submissionTarget, closeSubmissionModal } = useTimesheetStore();
-
-
+  const { isSubmissionModalOpen, submissionTarget, closeSubmissionModal } = useTimesheetStore();
   const user = useSelector((state: any) => state.auth.user);
   const employeeId = user?.id || "";
-
-  console.log("Selected Timesheet:", selectedTimesheet);
 
   const {
     loading,
@@ -44,7 +46,6 @@ const Timesheet = () => {
         return;
       }
       try {
-        console.log('Checking project assignments for employee:', { employeeId });
         const { data, error } = await supabase
           .from('hr_project_employees')
           .select('id, status, end_date')
@@ -55,66 +56,68 @@ const Timesheet = () => {
 
         if (error) throw error;
         setEmployeeHasProjects(data && data.length > 0);
-        console.log('Project assignments found:', { 
-          hasProjects: data && data.length > 0, 
-          count: data?.length, 
-          status: data?.[0]?.status, 
-          end_date: data?.[0]?.end_date 
-        });
       } catch (error: any) {
         console.error('Error checking project assignments:', error);
-        toast.error('Failed to load project assignment data');
         setEmployeeHasProjects(false);
       }
     };
     fetchEmployeeHasProjects();
   }, [employeeId]);
 
+  // ===============================================
+  // Handlers that control SINGLE dialog state
+  // ===============================================
+
+  const handleAddTimesheet = useCallback(() => {
+    console.log("🟢 Opening CREATE dialog");
+    setSelectedTimesheet(null);
+    closeSubmissionModal();
+    setDialogKey(prev => prev + 1); // Force remount
+    setActiveDialogType('CREATE');
+  }, [closeSubmissionModal]);
+
   const handleViewTimesheet = useCallback((timesheet: TimeLog) => {
-    console.log('handleViewTimesheet triggered:', { timesheetId: timesheet.id });
+    console.log("🔵 Opening VIEW dialog");
     setSelectedTimesheet(timesheet);
-    setViewDialogOpen(true);
+    setDialogKey(prev => prev + 1); // Force remount
+    setActiveDialogType('VIEW');
   }, []);
 
   const handleClarificationResponse = useCallback((timesheet: TimeLog) => {
-    console.log('handleClarificationResponse triggered:', { timesheetId: timesheet.id });
+    console.log("🟡 Opening CLARIFICATION dialog");
     setSelectedTimesheet(timesheet);
-    setClarificationDialogOpen(true);
+    setDialogKey(prev => prev + 1); // Force remount
+    setActiveDialogType('CLARIFICATION');
   }, []);
 
-  const handleAddTimesheet = useCallback(() => {
-    console.log('handleAddTimesheet triggered');
-    setCreateDialogOpen(true);
-  }, []);
+  const handleCloseAllDialogs = useCallback(() => {
+    console.log("⭕ Closing all dialogs");
+    setActiveDialogType('NONE');
+    setSelectedTimesheet(null);
+    closeSubmissionModal();
+    setDialogKey(prev => prev + 1); // Force remount
+  }, [closeSubmissionModal]);
 
   const handleTimesheetCreated = useCallback(() => {
-    console.log('handleTimesheetCreated triggered');
+    console.log("✅ Timesheet created");
     fetchTimesheetData();
-  }, [fetchTimesheetData]);
+    handleCloseAllDialogs();
+  }, [fetchTimesheetData, handleCloseAllDialogs]);
 
+  // Handle global submission modal
   useEffect(() => {
-    console.log('Timesheet state updated:', { 
-      employeeId, 
-      employeeHasProjects, 
-      activeTab, 
-      createDialogOpen, 
-      viewDialogOpen, 
-      clarificationDialogOpen, 
-      selectedTimesheetId: selectedTimesheet?.id 
-    });
-  }, [employeeId, employeeHasProjects, activeTab, createDialogOpen, viewDialogOpen, clarificationDialogOpen, selectedTimesheet]);
-
-  const handleDialogClose = (open: boolean) => {
-    if (!open) {
-      setViewDialogOpen(false);
-      setSelectedTimesheet(null);
-      closeSubmissionModal(); // Also close the global state
+    if (isSubmissionModalOpen && submissionTarget?.timeLog) {
+      console.log("⚡ Submission modal triggered");
+      setSelectedTimesheet(submissionTarget.timeLog);
+      setDialogKey(prev => prev + 1);
+      setActiveDialogType('VIEW');
     }
-  };
-  
-  // --- NEW: Determine which timesheet and state should be active ---
-  const isModalActive = viewDialogOpen || isSubmissionModalOpen;
+  }, [isSubmissionModalOpen, submissionTarget]);
+
   const activeTimesheet = submissionTarget?.timeLog || selectedTimesheet;
+
+  // Log state for debugging
+  console.log("🎯 Active Dialog:", activeDialogType, "| Key:", dialogKey);
 
   return (
     <div className="content-area">
@@ -125,57 +128,66 @@ const Timesheet = () => {
 
       <TimesheetContent 
         activeTab={activeTab}
-        setActiveTab={(tab) => {
-          console.log('setActiveTab triggered:', { newTab: tab });
-          setActiveTab(tab);
-        }}
+        setActiveTab={setActiveTab}
         pendingTimesheets={pendingTimesheets}
         clarificationTimesheets={clarificationTimesheets}
         approvedTimesheets={approvedTimesheets}
         loading={loading}
         onViewTimesheet={handleViewTimesheet}
         onRespondToClarification={handleClarificationResponse}
-        employeeHasProjects={employeeHasProjects} // Pass employeeHasProjects
+        employeeHasProjects={employeeHasProjects}
       />
       
-      {employeeHasProjects && (
+      {/* ===============================================
+          ULTRA-STRICT: Only ONE can render at a time
+          =============================================== */}
+      
+      {/* CREATE DIALOG */}
+      {activeDialogType === 'CREATE' && employeeHasProjects ? (
         <CreateTimesheetDialog 
-          open={createDialogOpen}
+          key={`create-${dialogKey}`}
+          open={true}
           onOpenChange={(open) => {
-            console.log('CreateTimesheetDialog open changed:', { open });
-            setCreateDialogOpen(open);
+            if (!open) handleCloseAllDialogs();
           }}
           employeeHasProjects={employeeHasProjects}
           onTimesheetCreated={handleTimesheetCreated}
         />
-      )}
+      ) : null}
       
-      {isModalActive && activeTimesheet && (
+      {/* VIEW DIALOG */}
+      {activeDialogType === 'VIEW' && activeTimesheet ? (
         <ViewTimesheetDialog 
-          open={isModalActive}
-          onOpenChange={handleDialogClose}
-          timesheet={activeTimesheet} // Always pass the determined active timesheet
+          key={`view-${dialogKey}`}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) handleCloseAllDialogs();
+          }}
+          timesheet={activeTimesheet}
           finalDurationMinutes={submissionTarget?.finalDurationMinutes}
           onSubmitTimesheet={() => {
             fetchTimesheetData();
-            closeSubmissionModal(); // Ensure state is cleared on successful submit
+            handleCloseAllDialogs();
           }}
           employeeHasProjects={employeeHasProjects}
         />
-      )}
+      ) : null}
       
-      {selectedTimesheet && (
+      {/* CLARIFICATION DIALOG */}
+      {activeDialogType === 'CLARIFICATION' && selectedTimesheet ? (
         <TimesheetClarificationDialog 
-          open={clarificationDialogOpen}
+          key={`clarification-${dialogKey}`}
+          open={true}
           onOpenChange={(open) => {
-            console.log('TimesheetClarificationDialog open changed:', { open });
-            setClarificationDialogOpen(open);
-            if (!open) setSelectedTimesheet(null);
+            if (!open) handleCloseAllDialogs();
           }}
           timesheet={selectedTimesheet}
-          onSubmitClarification={fetchTimesheetData}
+          onSubmitClarification={() => {
+            fetchTimesheetData();
+            handleCloseAllDialogs();
+          }}
         />
-      )}
+      ) : null}
     </div>
   );
 };

@@ -336,16 +336,16 @@ export const TimesheetEditForm: React.FC<TimesheetEditFormProps> = ({
         )}
       </div>
 
-      <div>
-        <Label htmlFor="totalWorkingHours">Total Working Hours</Label>
-        <Input
+      {/* <div> */}
+        {/* <Label htmlFor="totalWorkingHours">Total Working Hours</Label> */}
+        {/* <Input
           id="totalWorkingHours"
           type="number"
           value={calculatedWorkingHours}
           readOnly
           className="mb-3 bg-muted"
-        />
-      </div>
+        /> */}
+      {/* </div> */}
 
       <div>
         {isRecruiter && (
