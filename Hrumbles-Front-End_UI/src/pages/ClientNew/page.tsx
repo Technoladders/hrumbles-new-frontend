@@ -1,4 +1,3 @@
-// src/pages/ClientNew/page.tsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import supabase from '@/config/supabaseClient';
@@ -8,6 +7,8 @@ import { addMonths, format, startOfMonth } from 'date-fns';
 import { ClientEditDialog } from '@/components/clients-new/ClientEditDialog';
 import { ContactFormDialog } from '@/components/clients-new/ContactFormDialog';
 import { AddressEditDialog, EditingAddress } from '@/components/clients-new/AddressEditDialog';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { Button } from '@/components/ui/button';
 import OverviewTab from '@/components/clients-new/OverviewTab';
@@ -16,8 +17,13 @@ import EmployeesTab from '@/components/clients-new/EmployeesTab';
 import AllCandidatesTab from '@/components/clients-new/AllCandidatesTab';
 import { CheckCircle, HelpCircle, Loader2, MoreVertical, ArrowLeft } from 'lucide-react';
 import { CompanyVerificationDialog } from '@/components/clients-new/CompanyVerificationDialog';
-import { DateRangePickerField } from '@/components/ui/DateRangePickerField';
+import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { Client, ClientContact, ClientMetrics, Candidate, Employee, Job, TimeLog, MonthlyData, HiresByMonth, StatusMap, RecruiterPerformance, PipelineStage } from '@/components/clients-new/ClientTypes';
+
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
 
 // --- CONSTANTS ---
 // --- NEW DYNAMIC STATUS ID CONFIGURATION ---
@@ -67,7 +73,10 @@ const ClientViewPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
    // Update the initial dateRange state
-const [dateRange, setDateRange] = useState<{ startDate: Date | null; endDate: Date | null; key: string } | null>(null);
+const [dateRange, setDateRange] = useState<DateRange>({
+  startDate: startOfMonth(addMonths(new Date(), -1)),
+  endDate: new Date(),
+});
 
     // Verification State
     const [isVerifying, setIsVerifying] = useState(false);
@@ -399,29 +408,50 @@ const fetchDashboardData = useCallback(async () => {
                 </div> */}
 
                 {/* NEW TABS UI */}
-               <div className="border-b border-gray-200 flex justify-between items-center">
-                    <nav className="-mb-px flex space-x-6" aria-label="Tabs">
-                        <button onClick={() => setActiveTab('overview')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'overview' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                            Overview
-                        </button>
-                        {/* Renamed the original 'Candidates' tab to be more specific */}
-                        <button onClick={() => setActiveTab('hired_candidates')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'hired_candidates' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                            FTE Staffing ({candidates.length})
+              <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+  {/* Tabs */}
+  <div className="flex-shrink-0 order-1">
+    <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+        <TabsTrigger
+          value="overview"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          Overview
+        </TabsTrigger>
+        <TabsTrigger
+          value="hired_candidates"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center"
+        >
+          FTE Staffing ({candidates.length})
+        </TabsTrigger>
+        {client.service_type?.includes('contractual') && (
+          <TabsTrigger
+            value="employees"
+            className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+              data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center"
+          >
+            Contractual Staffing ({employees.length})
+          </TabsTrigger>
+        )}
+        <TabsTrigger
+          value="all_candidates"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          Engaged Candidates
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  </div>
 
-                        </button>
-                        {/* --- ADDED: The new tab for ALL candidates --- */}
-                        
-                        {client.service_type?.includes('contractual') && (
-                            <button onClick={() => setActiveTab('employees')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'employees' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                                Contractual Staffing ({employees.length})
-                            </button>
-                        )}
-                        <button onClick={() => setActiveTab('all_candidates')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'all_candidates' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                            Engaged Candidates
-                        </button>
-                    </nav>
-                     <DateRangePickerField dateRange={dateRange} onDateRangeChange={(range) => setDateRange(range)} onApply={fetchDashboardData} />
-                </div>
+  {/* Date Range */}
+  <div className="flex-shrink-0 order-2 w-full sm:w-auto">
+    <EnhancedDateRangeSelector value={dateRange} onChange={setDateRange} />
+  </div>
+</div>
 
                 {/* CONDITIONAL CONTENT */}
                 <div className="mt-6">

@@ -1,0 +1,48 @@
+.compact-date-range-container {
+  background-color: #fff;
+  min-width: 540px;
+  max-width: 620px;
+}
+
+.compact-date-shortcuts {
+  background-color: #f9fafb;
+}
+
+.compact-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.2s;
+  color: #374151;
+}
+
+.compact-btn:hover {
+  background-color: #e5e7eb;
+}
+
+.custom-calendar {
+  border: none !important;
+  width: 260px;
+  font-size: 12px;
+}
+
+.custom-calendar .ant-picker-calendar-date {
+  height: 26px !important;
+  padding: 0 !important;
+}
+
+.custom-calendar .ant-picker-calendar-date-value {
+  line-height: 24px !important;
+  font-size: 12px;
+}
+
+.custom-calendar .ant-picker-calendar-header {
+  padding: 0.25rem 0.5rem !important;
+  font-size: 12px;
+}
+
+.custom-calendar .ant-picker-calendar-mode-switch {
+  display: none !important;
+}

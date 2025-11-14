@@ -10,8 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Search, User, BarChart2, SlidersHorizontal, CheckCircle, Download, Calendar } from 'lucide-react';
-import { DateRangePickerField } from './DateRangePickerField';
+import { AlertCircle, Search, User, BarChart2, SlidersHorizontal, CheckCircle, Download, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import Papa from 'papaparse';
@@ -21,6 +21,11 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
   ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell
 } from 'recharts';
+
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
 
 // Define the types for our data
 interface CompanyProfile {
@@ -51,21 +56,14 @@ const CompaniesReport: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Filters State
-  const [draftDateRange, setDraftDateRange] = useState({
+  const [dateRange, setDateRange] = useState<DateRange>({
     startDate: new Date(new Date().getFullYear(), 0, 1),
     endDate: new Date(),
-    key: 'selection',
   });
-  const [appliedDateRange, setAppliedDateRange] = useState(draftDateRange);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCreators, setSelectedCreators] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-
-  const handleApplyFilters = () => {
-    setAppliedDateRange(draftDateRange);
-    setCurrentPage(1);
-  };
 
   const fetchInitialData = async () => {
     if (!organizationId) return;
@@ -128,10 +126,9 @@ const CompaniesReport: React.FC = () => {
   }, [organizationId]);
 
   useEffect(() => {
-    if (appliedDateRange.startDate && appliedDateRange.endDate) {
-      fetchDataForRange(appliedDateRange.startDate, appliedDateRange.endDate);
-    }
-  }, [appliedDateRange, organizationId]);
+    if (!dateRange.startDate || !dateRange.endDate) return;
+    fetchDataForRange(dateRange.startDate, dateRange.endDate);
+  }, [dateRange, organizationId]);
 
   const filteredRawData = useMemo(() => {
     return reportData.filter(profile => {
@@ -219,8 +216,8 @@ const CompaniesReport: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-6 md:p-10 animate-fade-in">
-      <main className="w-full max-w-10xl mx-auto space-y-8">
+    <div className="w-full h-full animate-fade-in overflow-x-hidden">
+      <main className="w-full space-y-8">
         {/* Title Section */}
         <div>
           <h1 className="text-xl md:text-2xl font-semibold text-gray-800">Companies Contribution Report</h1>
@@ -380,66 +377,73 @@ const CompaniesReport: React.FC = () => {
         {/* Filter Bar and Table */}
         <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
           <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
-              <div className="relative flex-grow w-full sm:w-auto">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                <Input
-                  placeholder="Search by company or creator..."
-                  className="pl-10 h-10"
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                />
-              </div>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full sm:w-auto flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    Filter Creators
-                    {selectedCreators.length > 0 && <Badge variant="secondary">{selectedCreators.length}</Badge>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-2">
-                  <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedCreators([])}>Deselect All</Button>
-                    {allCreators.map(creator => (
-                      <Label key={creator.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-normal">
-                        <Checkbox
-                          checked={selectedCreators.includes(creator.id)}
-                          onCheckedChange={() => setSelectedCreators(prev =>
-                            prev.includes(creator.id) ? prev.filter(id => id !== creator.id) : [...prev, creator.id]
-                          )}
-                        />
-                        {creator.name}
-                      </Label>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <div className="flex-1 relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                <DateRangePickerField
-                  dateRange={draftDateRange}
-                  onDateRangeChange={setDraftDateRange}
-                  className="pl-10 h-10 w-full"
-                />
-              </div>
-              <Button
-                onClick={handleApplyFilters}
-                className="w-full sm:w-auto flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700"
-              >
-                <CheckCircle className="h-4 w-4" /> Apply
-              </Button>
-              <div className="flex gap-2 flex-shrink-0">
-                <Button variant="outline" size="sm" onClick={exportToCSV}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Export CSV
-                </Button>
-                <Button variant="outline" size="sm" onClick={exportToPDF}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Export PDF
-                </Button>
-              </div>
-            </div>
+<div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+  {/* Search Bar */}
+  <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+    <Search
+      className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+      size={18}
+    />
+    <Input
+      placeholder="Search by company or creator..."
+      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm"
+      value={searchTerm}
+      onChange={(e) => {
+        setSearchTerm(e.target.value);
+        setCurrentPage(1);
+      }}
+    />
+  </div>
+
+  {/* Filter Creators */}
+  <div className="flex-shrink-0 order-2 w-full sm:w-auto">
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm flex items-center gap-2 justify-start">
+          <User className="h-4 w-4" />
+          Filter Creators
+          {selectedCreators.length > 0 && <Badge variant="secondary">{selectedCreators.length}</Badge>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2">
+        <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+          <Button variant="ghost" size="sm" onClick={() => setSelectedCreators([])}>Deselect All</Button>
+          {allCreators.map(creator => (
+            <Label key={creator.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-normal">
+              <Checkbox
+                checked={selectedCreators.includes(creator.id)}
+                onCheckedChange={() => setSelectedCreators(prev =>
+                  prev.includes(creator.id) ? prev.filter(id => id !== creator.id) : [...prev, creator.id]
+                )}
+              />
+              {creator.name}
+            </Label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  </div>
+
+  {/* Date Range Picker */}
+  <div className="flex-shrink-0 order-3 w-full sm:w-auto">
+    <EnhancedDateRangeSelector
+      value={dateRange}
+      onChange={setDateRange}
+    />
+  </div>
+
+  {/* Export Buttons */}
+  <div className="flex gap-2 flex-shrink-0 order-4">
+    <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Download className="w-4 h-4 mr-2" />
+      Export CSV
+    </Button>
+    <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Download className="w-4 h-4 mr-2" />
+      Export PDF
+    </Button>
+  </div>
+</div>
 
             <div className="rounded-xl border border-gray-200 shadow-sm animate-scale-in">
               <div className="overflow-x-auto">

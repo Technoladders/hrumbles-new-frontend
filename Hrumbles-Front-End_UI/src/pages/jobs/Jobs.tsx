@@ -84,6 +84,13 @@ import { fetchEmployeesByIds } from "@/services/jobs/supabaseQueries";
 import Loader from "@/components/ui/Loader";
 // Goal: Import the new DateRangePickerField component
 import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
+import { CompactDateRangeSelector } from "@/components/ui/CompactDateRangeSelector";
+import { EnhancedDateRangeSelector } from "@/components/ui/EnhancedDateRangeSelector";
+
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
 
 const ITECH_ORGANIZATION_ID = [
   "1961d419-1272-4371-8dc7-63a4ec71be83",
@@ -148,11 +155,15 @@ const Jobs = () => {
   const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get("page") || "1", 10));
   const [itemsPerPage, setItemsPerPage] = useState(parseInt(searchParams.get("limit") || "20", 10));
   const [selectedClient, setSelectedClient] = useState(searchParams.get("client") || "all");
-  const [dateRange, setDateRange] = useState({
-    startDate: searchParams.get("startDate") ? new Date(searchParams.get("startDate")!) : null,
-    endDate: searchParams.get("endDate") ? new Date(searchParams.get("endDate")!) : null,
-    key: "selection",
-  });
+  const [selectedStatus, setSelectedStatus] = useState(searchParams.get("status") || "all");
+  const [dateRange, setDateRange] = useState<DateRange | null>(
+    searchParams.get("startDate") || searchParams.get("endDate") 
+      ? {
+          startDate: searchParams.get("startDate") ? new Date(searchParams.get("startDate")!) : null,
+          endDate: searchParams.get("endDate") ? new Date(searchParams.get("endDate")!) : null,
+        }
+      : null
+  );
   const [selectedJob, setSelectedJob] = useState<JobData | null>(null);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [editJob, setEditJob] = useState<JobData | null>(null);
@@ -170,17 +181,40 @@ const Jobs = () => {
   
   const isEmployee = userRole === "employee" && user?.id !== "0fa0aa1b-9cb3-482f-b679-5bd8fa355a6e";
 
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (searchTerm) params.set("search", searchTerm);
-    if (activeTab !== "all") params.set("tab", activeTab);
-    if (currentPage !== 1) params.set("page", currentPage.toString());
-    if (itemsPerPage !== 20) params.set("limit", itemsPerPage.toString());
-    if (selectedClient !== "all") params.set("client", selectedClient);
-    if (dateRange.startDate) params.set("startDate", dateRange.startDate.toISOString());
-    if (dateRange.endDate) params.set("endDate", dateRange.endDate.toISOString());
-    setSearchParams(params, { replace: true });
-  }, [searchTerm, activeTab, currentPage, itemsPerPage, selectedClient, dateRange, setSearchParams]);
+
+
+  
+  // ⛔ FIX: Prevent URL updates while modal is open — otherwise modal state resets
+useEffect(() => {
+  if (isCreateModalOpen) {
+    console.log("%c[DEBUG] URL sync paused because modal is open", "color: purple; font-weight: bold;");
+    return;
+  }
+
+  const params = new URLSearchParams();
+
+  if (searchTerm) params.set("search", searchTerm);
+  if (activeTab !== "all") params.set("tab", activeTab);
+  if (currentPage !== 1) params.set("page", currentPage.toString());
+  if (itemsPerPage !== 20) params.set("limit", itemsPerPage.toString());
+  if (selectedClient !== "all") params.set("client", selectedClient);
+  if (selectedStatus !== "all") params.set("status", selectedStatus);
+  if (dateRange?.startDate) params.set("startDate", dateRange.startDate.toISOString());
+  if (dateRange?.endDate) params.set("endDate", dateRange.endDate.toISOString());
+
+  console.log("%c[DEBUG] URL sync running — modal CLOSED", "color: teal; font-weight: bold");
+  setSearchParams(params, { replace: true });
+}, [
+  searchTerm,
+  activeTab,
+  currentPage,
+  itemsPerPage,
+  selectedClient,
+  selectedStatus,
+  dateRange,
+  setSearchParams,
+  isCreateModalOpen    // 👈 add this to dependency
+]);
 
   const {
     data: jobs = [],
@@ -210,6 +244,16 @@ const Jobs = () => {
     }
   }, [error]);
 
+  const totalJobsCount = useMemo(() => jobs.length, [jobs]);
+  const activeJobsCount = useMemo(() => jobs.filter(job => job.status === "Active" || job.status === "OPEN").length, [jobs]);
+  const pendingJobsCount = useMemo(() => jobs.filter(job => job.status === "Pending" || job.status === "HOLD").length, [jobs]);
+  const completedJobsCount = useMemo(() => jobs.filter(job => job.status === "Completed" || job.status === "CLOSE").length, [jobs]);
+
+  const handleCardClick = (status: string) => {
+    setSelectedStatus(status === 'all' ? "all" : status);
+    setCurrentPage(1);
+  };
+
   const filteredJobs = useMemo(() => jobs.filter((job) => {
     const lowercasedSearchTerm = searchTerm.toLowerCase();
     const matchesSearch =
@@ -218,21 +262,30 @@ const Jobs = () => {
       (job.hr_job_candidates && job.hr_job_candidates.some((candidate) => candidate.name.toLowerCase().includes(lowercasedSearchTerm)));
 
     const matchesDate = (() => {
-      if (!dateRange.startDate || !dateRange.endDate) return true;
+      if (!dateRange || !dateRange.startDate || !dateRange.endDate) return true;
       const jobDate = moment(job.createdAt);
       const endDate = moment(dateRange.endDate).endOf('day');
       return jobDate.isBetween(dateRange.startDate, endDate, undefined, '[]');
     })();
 
     const matchesClient = selectedClient === "all" || job.clientOwner === selectedClient;
+    
+    const matchesStatus = (() => {
+      if (selectedStatus === "all") return true;
+      if (selectedStatus === "open") return job.status === "OPEN" || job.status === "Active";
+      if (selectedStatus === "hold") return job.status === "HOLD" || job.status === "Pending";
+      if (selectedStatus === "closed") return job.status === "CLOSE" || job.status === "Completed";
+      return true;
+    })();
+
     const matchesTab = (() => {
       if (ITECH_ORGANIZATION_ID.includes(organization_id) || activeTab === "all") return true;
       if (activeTab === "internal") return job.jobType === "Internal";
       if (activeTab === "external") return job.jobType === "External";
       return true;
     })();
-    return matchesSearch && matchesDate && matchesClient && matchesTab;
-  }), [jobs, searchTerm, dateRange, selectedClient, activeTab, organization_id]);
+    return matchesSearch && matchesDate && matchesClient && matchesTab && matchesStatus;
+  }), [jobs, searchTerm, dateRange, selectedClient, activeTab, organization_id, selectedStatus]);
   
   // --- FIX: startIndex is defined here ---
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -334,7 +387,7 @@ const Jobs = () => {
     switch (status) {
       case "OPEN": case "Active": return "bg-green-100 text-green-800";
       case "HOLD": case "Pending": return "bg-yellow-100 text-yellow-800";
-      case "CLOSE": case "Completed": return "bg-blue-100 text-blue-800";
+      case "CLOSE": case "Completed": return "bg-red-100 text-red-800";
       default: return "bg-gray-100 text-gray-800";
     }
   };
@@ -356,7 +409,8 @@ if (isLoading) {
         enabled: !!assignedTo && assignedTo.type === 'individual' && !!assignedTo.id,
     });
 
-      const colorClasses = [
+
+    const colorClasses = [
       'from-green-500 to-teal-600',
       'from-blue-500 to-cyan-500',
       'from-rose-500 to-pink-500',
@@ -459,12 +513,12 @@ if (isLoading) {
                   </td>
                   <td className="table-cell">
                     {isEmployee ? (
-                      <Badge variant="outline" className={getStatusBadgeClass(job.status)}>{job.status}</Badge>
+                      <Badge variant="outline" className={getStatusBadgeClass(job.status)}>{job.status === "Active" ? "OPEN" : job.status}</Badge>
                     ) : (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="transparent" className="h-8 px-2 py-0 hover:bg-gray-100">
-                            {statusUpdateLoading === job.id ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Badge className={getStatusBadgeClass(job.status)}>{job.status}</Badge>}
+                            {statusUpdateLoading === job.id ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Badge className={getStatusBadgeClass(job.status)}>{job.status === "Active" ? "OPEN" : job.status}</Badge>}
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="center">
@@ -578,38 +632,146 @@ if (isLoading) {
           <h1 className="text-3xl font-bold mb-1">Job Dashboard</h1>
           <p className="text-gray-500">Manage and track all job postings</p>
         </div>
-        {!isEmployee && <Button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-2"><Plus size={16} /><span>Create New Job</span></Button>}
+        {!isEmployee && <Button 
+          onClick={() => {
+    console.log("%c[DEBUG] Create button clicked → setting isCreateModalOpen = true", "color: green; font-weight: bold");
+    setIsCreateModalOpen(true);
+  }}
+         className="flex items-center gap-2"><Plus size={16} /><span>Create New Job</span></Button>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="p-4 flex justify-between items-start"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">Total Jobs</p><h3 className="text-3xl font-bold">{filteredJobs.length}</h3></div><div className="p-2 bg-blue-100 rounded-lg"><Briefcase className="text-blue-600" size={22} /></div></Card>
-          <Card className="p-4 flex justify-between items-start"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">Active Jobs</p><h3 className="text-3xl font-bold">{activeJobs}</h3></div><div className="p-2 bg-green-100 rounded-lg"><Calendar className="text-green-600" size={22} /></div></Card>
-          <Card className="p-4 flex justify-between items-start"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">On Hold</p><h3 className="text-3xl font-bold">{pendingJobs}</h3></div><div className="p-2 bg-yellow-100 rounded-lg"><Clock className="text-yellow-600" size={22} /></div></Card>
-          <Card className="p-4 flex justify-between items-start"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">Closed Jobs</p><h3 className="text-3xl font-bold">{completedJobs}</h3></div><div className="p-2 bg-purple-100 rounded-lg"><CheckCircle className="text-purple-600" size={22} /></div></Card>
+          <Card onClick={() => handleCardClick('all')} className="p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">Total Jobs</p><h3 className="text-3xl font-bold">{totalJobsCount}</h3></div><div className="p-2 bg-blue-100 rounded-lg"><Briefcase className="text-blue-600" size={22} /></div></Card>
+          <Card onClick={() => handleCardClick('open')} className="p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">Active Jobs</p><h3 className="text-3xl font-bold">{activeJobsCount}</h3></div><div className="p-2 bg-green-100 rounded-lg"><Calendar className="text-green-600" size={22} /></div></Card>
+          <Card onClick={() => handleCardClick('hold')} className="p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">On Hold</p><h3 className="text-3xl font-bold">{pendingJobsCount}</h3></div><div className="p-2 bg-yellow-100 rounded-lg"><Clock className="text-yellow-600" size={22} /></div></Card>
+          <Card onClick={() => handleCardClick('closed')} className="p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">Closed Jobs</p><h3 className="text-3xl font-bold">{completedJobsCount}</h3></div><div className="p-2 bg-purple-100 rounded-lg"><CheckCircle className="text-purple-600" size={22} /></div></Card>
       </div>
 
-      <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-        {!isEmployee && !ITECH_ORGANIZATION_ID.includes(organization_id) && (
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-3 w-full sm:w-80"><TabsTrigger value="all">All</TabsTrigger><TabsTrigger value="internal">Internal</TabsTrigger><TabsTrigger value="external">External</TabsTrigger></TabsList>
-          </Tabs>
-        )}
-        <div className="relative flex-grow w-full"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} /><Input placeholder="Search by Job Title, ID, or Candidate Name" className="pl-10 h-10 w-full" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} /></div>
-        {!isEmployee && <DateRangePickerField dateRange={dateRange as any} onDateRangeChange={(range) => setDateRange(range as any)} onApply={() => setCurrentPage(1)} />}
-        {!isEmployee && (
-          <Select value={selectedClient} onValueChange={(value) => { setSelectedClient(value); setCurrentPage(1); }}>
-            <SelectTrigger className="w-full md:w-[200px]"><SelectValue placeholder="Filter by Client" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">All Clients</SelectItem>{clientList.map((clientName) => (<SelectItem key={clientName} value={clientName}>{clientName}</SelectItem>))}</SelectContent>
-          </Select>
-        )}
-      </div>
+<div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full">
+  {/* Tabs Section */}
+  {!isEmployee && !ITECH_ORGANIZATION_ID.includes(organization_id) && (
+    <div className="flex-shrink-0 order-1">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+          <TabsTrigger
+            value="all"
+            className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+              data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+          >
+            All
+          </TabsTrigger>
+          <TabsTrigger
+            value="internal"
+            className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+              data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+          >
+            Internal
+          </TabsTrigger>
+          <TabsTrigger
+            value="external"
+            className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+              data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+          >
+            External
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </div>
+  )}
+
+  {/* Search Bar */}
+  <div className="relative flex-grow order-2 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+    <Search
+      className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+      size={18}
+    />
+    <Input
+      placeholder="Search by Job Title, ID, or Candidate Name"
+      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm"
+      value={searchTerm}
+      onChange={(e) => {
+        setSearchTerm(e.target.value);
+        setCurrentPage(1);
+      }}
+    />
+  </div>
+
+  {/* Date Range Picker */}
+  {!isEmployee && (
+    <div className="flex-shrink-0 order-5 w-full sm:w-auto">
+      <EnhancedDateRangeSelector
+        value={dateRange}
+        onChange={setDateRange}
+        onApply={() => setCurrentPage(1)}
+       
+      />
+    </div>
+  )}
+
+  {/* Status Filter */}
+  {!isEmployee && (
+    <div className="flex-shrink-0 order-3 w-full sm:w-[150px]">
+      <Select
+        value={selectedStatus}
+        onValueChange={(value) => {
+          setSelectedStatus(value);
+          setCurrentPage(1);
+        }}
+      >
+        <SelectTrigger className="w-full rounded-full text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+          <SelectValue placeholder="Status" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Status</SelectItem>
+          <SelectItem value="open">Open</SelectItem>
+          <SelectItem value="hold">On Hold</SelectItem>
+          <SelectItem value="closed">Closed</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  )}
+
+  {/* Client Filter */}
+  {!isEmployee && (
+    <div className="flex-shrink-0 order-4 w-full sm:w-[150px]">
+      <Select
+        value={selectedClient}
+        onValueChange={(value) => {
+          setSelectedClient(value);
+          setCurrentPage(1);
+        }}
+      >
+        <SelectTrigger className="w-full rounded-full text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+          <SelectValue placeholder="Client" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Clients</SelectItem>
+          {clientList.map((clientName) => (
+            <SelectItem key={clientName} value={clientName}>
+              {clientName}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )}
+</div>
+
+
 
       {renderTable(paginatedJobs)}
       
       {/* --- FIX: Pass the variables when calling the function --- */}
       {filteredJobs.length > 0 && renderPagination(startIndex, itemsPerPage, filteredJobs.length)}
 
-      <CreateJobModal isOpen={isCreateModalOpen} onClose={() => { setIsCreateModalOpen(false); setEditJob(null); }} onSave={handleSaveJob} editJob={editJob} />
+      <CreateJobModal isOpen={isCreateModalOpen} onClose={() => {
+        console.log(
+          "%c[DEBUG] <CreateJobModal> onClose fired → setting isCreateModalOpen = false",
+          "color: red; font-weight: bold"
+        );
+        setIsCreateModalOpen(false);
+        setEditJob(null);
+      }} onSave={handleSaveJob} editJob={editJob} />
       <AssignJobModal isOpen={isAssignModalOpen} onClose={() => setIsAssignModalOpen(false)} job={selectedJob} />
       {clientselectedJob && <AssociateToClientModal isOpen={associateModalOpen} onClose={() => setAssociateModalOpen(false)} job={clientselectedJob} onAssociate={handleAssociateToClient} />}
 

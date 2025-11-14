@@ -293,24 +293,64 @@ const ProjectTable = ({ projectFinancials, setAddProjectOpen, setEditingProject,
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid grid-cols-4 w-full sm:w-[420px]">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="ongoing" className="flex items-center gap-1"><Briefcase size={14} /><span>Ongoing</span></TabsTrigger>
-            <TabsTrigger value="completed" className="flex items-center gap-1"><CheckCircle size={14} /><span>Completed</span></TabsTrigger>
-            <TabsTrigger value="cancelled" className="flex items-center gap-1"><XCircle size={14} /><span>Cancelled</span></TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <div className="relative flex-grow w-full sm:w-auto">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-          <Input placeholder="Search project or client..." className="pl-10 h-10 w-full" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={exportToCSV}><Download className="w-4 h-4 mr-2" />Export CSV</Button>
-          <Button variant="outline" size="sm" onClick={exportToPDF}><Download className="w-4 h-4 mr-2" />Export PDF</Button>
-        </div>
-      </div>
+     <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+  <div className="flex-shrink-0 order-1">
+    <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+      <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+        <TabsTrigger
+          value="all"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          All
+        </TabsTrigger>
+        <TabsTrigger
+          value="ongoing"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1"
+        >
+          <Briefcase size={14} />
+          <span>Ongoing</span>
+        </TabsTrigger>
+        <TabsTrigger
+          value="completed"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1"
+        >
+          <CheckCircle size={14} />
+          <span>Completed</span>
+        </TabsTrigger>
+        <TabsTrigger
+          value="cancelled"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1"
+        >
+          <XCircle size={14} />
+          <span>Cancelled</span>
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  </div>
+  <div className="relative flex-grow order-2 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+    <Input 
+      placeholder="Search project or client..." 
+      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm" 
+      value={searchTerm} 
+      onChange={(e) => setSearchTerm(e.target.value)} 
+    />
+  </div>
+  <div className="flex gap-2 flex-shrink-0 order-3">
+    <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Download className="w-4 h-4 mr-2" />
+      Export CSV
+    </Button>
+    <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Download className="w-4 h-4 mr-2" />
+      Export PDF
+    </Button>
+  </div>
+</div>
 
       {renderTable(paginatedProjects)}
 

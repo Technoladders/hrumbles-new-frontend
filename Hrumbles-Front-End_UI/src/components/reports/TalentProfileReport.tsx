@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Search, User, BarChart2, SlidersHorizontal, CheckCircle, Download, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
-import { DateRangePickerField } from '@/components/ui/DateRangePickerField'; // Assuming this component exists
+import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { supabase } from '@/integrations/supabase/client'; // Assuming this client exists
 import { format } from 'date-fns';
 import Papa from 'papaparse';
@@ -21,6 +21,11 @@ import 'jspdf-autotable';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell
 } from 'recharts';
+
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
 
 // --- TYPE DEFINITIONS ---
 interface TalentProfile {
@@ -51,19 +56,13 @@ const TalentProfileReport: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // --- FILTERS STATE ---
-  const [draftDateRange, setDraftDateRange] = useState({ startDate: new Date(new Date().getFullYear(), 0, 1), endDate: new Date(), key: 'selection' });
-  const [appliedDateRange, setAppliedDateRange] = useState(draftDateRange);
+  const [dateRange, setDateRange] = useState<DateRange>({ startDate: new Date(new Date().getFullYear(), 0, 1), endDate: new Date() });
   const [selectedRecruiters, setSelectedRecruiters] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState(''); // For table search
 
   // --- PAGINATION STATE ---
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-
-  const handleApplyFilters = () => {
-    setAppliedDateRange(draftDateRange);
-    setCurrentPage(1); // Reset to first page on new filter application
-  };
 
   // --- DATA FETCHING ---
   useEffect(() => {
@@ -86,11 +85,11 @@ const TalentProfileReport: React.FC = () => {
 
   useEffect(() => {
     const fetchDataForRange = async () => {
-      if (!appliedDateRange.startDate || !appliedDateRange.endDate || !organizationId) return;
+      if (!dateRange.startDate || !dateRange.endDate || !organizationId) return;
       setIsLoading(true);
       setError(null);
       try {
-        const { data, error } = await supabase.from('hr_talent_pool').select(`id, created_at, created_by, hr_employees!hr_talent_pool_created_by_fkey (id, first_name, last_name)`).eq('organization_id', organizationId).gte('created_at', appliedDateRange.startDate.toISOString()).lte('created_at', appliedDateRange.endDate.toISOString());
+        const { data, error } = await supabase.from('hr_talent_pool').select(`id, created_at, created_by, hr_employees!hr_talent_pool_created_by_fkey (id, first_name, last_name)`).eq('organization_id', organizationId).gte('created_at', dateRange.startDate.toISOString()).lte('created_at', dateRange.endDate.toISOString());
         if (error) throw error;
 
         const formattedData: TalentProfile[] = data.map((item: any) => ({
@@ -107,7 +106,7 @@ const TalentProfileReport: React.FC = () => {
       }
     };
     fetchDataForRange();
-  }, [appliedDateRange, organizationId]);
+  }, [dateRange, organizationId]);
 
   console.log("reportData", reportData);``
 
@@ -187,36 +186,7 @@ const TalentProfileReport: React.FC = () => {
           <StatCard icon={TrendingUp} title="Top Contributor" value={aggregatedData[0]?.recruiter_name || 'N/A'} subtitle={`${aggregatedData[0]?.count || 0} profiles added`} iconBg="from-green-400 to-green-600" />
         </div>
 
-        {/* === GLOBAL FILTERS BAR === */}
-        <Card className="shadow-lg border-none">
-          <CardContent className="p-4">
-            <div className="flex flex-col md:flex-row gap-4 items-center">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full md:w-auto flex-grow justify-start text-left font-normal gap-2">
-                    <User className="h-4 w-4" />
-                    <span>{selectedRecruiters.length > 0 ? `${selectedRecruiters.length} Recruiters Selected` : 'Filter Recruiters'}</span>
-                    {selectedRecruiters.length > 0 && <Badge variant="secondary" className="ml-auto">{selectedRecruiters.length}</Badge>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-2">
-                  <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedRecruiters([])}>Deselect All</Button>
-                    {allRecruiters.map(r => (
-                      <Label key={r.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-normal">
-                        <Checkbox checked={selectedRecruiters.includes(r.id)} onCheckedChange={() => setSelectedRecruiters(p => p.includes(r.id) ? p.filter(id => id !== r.id) : [...p, r.id])} /> {r.name}
-                      </Label>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <DateRangePickerField dateRange={draftDateRange} onDateRangeChange={setDraftDateRange} />
-              <Button onClick={handleApplyFilters} className="w-full md:w-auto flex-shrink-0 bg-indigo-600 hover:bg-indigo-700">
-                <CheckCircle className="h-4 w-4 mr-2" /> Apply Filters
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+
 
         {/* === CHARTS GRID === */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -248,16 +218,71 @@ const TalentProfileReport: React.FC = () => {
 
         {/* === ADVANCED TABLE SECTION === */}
         <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-                <div className="relative flex-grow w-full">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                    <Input placeholder="Search recruiters in table..." className="pl-10 h-10" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
-                    <Button variant="outline" size="sm" onClick={exportToCSV}><Download className="w-4 h-4 mr-2" />Export CSV</Button>
-                    <Button variant="outline" size="sm" onClick={exportToPDF}><Download className="w-4 h-4 mr-2" />Export PDF</Button>
-                </div>
-            </div>
+<div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+  {/* Filter Recruiters */}
+  <div className="flex-shrink-0 order-2 w-full sm:w-auto">
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm flex-grow justify-start text-left font-normal gap-2">
+          <User className="h-4 w-4" />
+          <span>{selectedRecruiters.length > 0 ? `${selectedRecruiters.length} Recruiters Selected` : 'Filter Recruiters'}</span>
+          {selectedRecruiters.length > 0 && <Badge variant="secondary" className="ml-auto">{selectedRecruiters.length}</Badge>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2">
+        <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
+          <Button variant="ghost" size="sm" onClick={() => setSelectedRecruiters([])}>Deselect All</Button>
+          {allRecruiters.map(r => (
+            <Label key={r.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-normal">
+              <Checkbox 
+                checked={selectedRecruiters.includes(r.id)} 
+                onCheckedChange={() => setSelectedRecruiters(p => p.includes(r.id) ? p.filter(id => id !== r.id) : [...p, r.id])}
+              /> 
+              {r.name}
+            </Label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  </div>
+
+  {/* Date Range Picker */}
+  <div className="flex-shrink-0 order-3 w-full sm:w-auto">
+    <EnhancedDateRangeSelector
+      value={dateRange}
+      onChange={setDateRange}
+    />
+  </div>
+
+  {/* Search Bar */}
+  <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+    <Search
+      className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+      size={18}
+    />
+    <Input
+      placeholder="Search recruiters in table..."
+      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm"
+      value={searchTerm}
+      onChange={(e) => { 
+        setSearchTerm(e.target.value); 
+        setCurrentPage(1); 
+      }}
+    />
+  </div>
+
+  {/* Export Buttons */}
+  <div className="flex gap-2 flex-shrink-0 order-4">
+    <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Download className="w-4 h-4 mr-2" />
+      Export CSV
+    </Button>
+    <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Download className="w-4 h-4 mr-2" />
+      Export PDF
+    </Button>
+  </div>
+</div>
             <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
                 <div className="overflow-x-auto">
                     <Table className="min-w-full">

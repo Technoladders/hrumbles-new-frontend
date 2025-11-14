@@ -51,10 +51,22 @@ const MonthlyInOutReport: React.FC<MonthlyInOutReportProps> = ({ data, employees
       </CardHeader>
       <CardContent className="space-y-6">
         <Tabs value={viewType} onValueChange={setViewType as any}>
-          <TabsList className="m-4">
-            <TabsTrigger value="billable">Billable</TabsTrigger>
-            <TabsTrigger value="non_billable">Non-Billable</TabsTrigger>
-          </TabsList>
+<TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+      <TabsTrigger
+        value="billable"
+        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+      >
+        Billable
+      </TabsTrigger>
+      <TabsTrigger
+        value="non_billable"
+        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+      >
+        Non-Billable
+      </TabsTrigger>
+    </TabsList>
           <div className="overflow-x-auto max-w-full" style={{ maxWidth: '80vw', overflowX: 'auto' }}>
             <Table className="min-w-[1000px] w-full">
               <TableHeader>

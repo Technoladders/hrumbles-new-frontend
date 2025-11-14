@@ -107,7 +107,17 @@ export const CreateJobModal = ({ isOpen, onClose, editJob = null, onSave }: Crea
   );
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+    console.log(
+      "%c[DEBUG] Radix onOpenChange → new state:",
+      "color: magenta; font-weight: bold",
+      open
+    );
+    if (!open) {
+      console.log("%c[DEBUG] Radix trying to CLOSE the modal", "color: red; font-weight: bold");
+      onClose();
+    }
+  }}>
       <DialogContent className="sm:max-w-6xl w-11/12 max-h-[90vh] flex flex-col" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader className="sticky top-0 z-10 bg-background pt-6 pb-4 text-center">
           <DialogTitle className="text-2xl text-purple-600 font-bold">{editJob ? "Edit Job" : "Create New Job"}</DialogTitle>

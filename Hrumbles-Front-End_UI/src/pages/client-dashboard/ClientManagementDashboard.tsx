@@ -957,20 +957,44 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
                 {/* Client List Table */}
                 <Tabs value={activeFilter} onValueChange={(value) => { setActiveFilter(value); setCurrentPage(1); }}>
                     <div className="flex flex-col sm:flex-row justify-between items-center gap-4 py-3 ">
-                        <TabsList className="grid grid-cols-4 w-full sm:w-auto">
-                            <TabsTrigger value="all">All</TabsTrigger>
-                            <TabsTrigger value="permanent">Permanent</TabsTrigger>
-                            <TabsTrigger value="contractual">Contractual</TabsTrigger>
-                            <TabsTrigger value="both">Both</TabsTrigger>
-                        </TabsList>
+                        <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+        <TabsTrigger
+          value="all"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          All
+        </TabsTrigger>
+        <TabsTrigger
+          value="permanent"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          Permanent
+        </TabsTrigger>
+        <TabsTrigger
+          value="contractual"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          Contractual
+        </TabsTrigger>
+        <TabsTrigger
+          value="both"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          Both
+        </TabsTrigger>
+      </TabsList>
                         <div className="relative flex-grow">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-                            <Input
-                                placeholder="Search Clients..."
-                                className="pl-9 w-full sm:w-64 h-9"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+    <Input
+      placeholder="Search Clients..."
+      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm"
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+    />
                         </div>
                     </div>
                     <Card className="shadow-sm">

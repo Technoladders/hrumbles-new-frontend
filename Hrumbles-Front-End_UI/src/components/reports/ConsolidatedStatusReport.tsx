@@ -44,7 +44,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { DateRangePickerField } from '@/components/ui/DateRangePickerField';
+import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { format, isValid } from 'date-fns';
 import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, Calendar, ChevronLeft, ChevronRight, Sigma, ArrowUp, Activity, TrendingUp, CheckCircle, Tag, Building, User } from 'lucide-react';
 import {
@@ -61,6 +61,11 @@ import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Candidate as OriginalCandidate } from '@/lib/types';
+
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
 
 // --- Type Definitions ---
 interface Candidate {
@@ -232,11 +237,7 @@ const [recruiterFilter, setRecruiterFilter] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
-    const [dateRange, setDateRange] = useState({
-    startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)),
-    endDate: new Date(),
-    key: 'selection',
-  });
+    const [dateRange, setDateRange] = useState<DateRange>({ startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)), endDate: new Date() });
 
   const [departmentName, setDepartmentName] = useState<string | null>(null);
   const [isDepartmentLoading, setIsDepartmentLoading] = useState(true);
@@ -274,7 +275,7 @@ const [recruiterFilter, setRecruiterFilter] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!organizationId || isDepartmentLoading) return;
+      if (!organizationId || isDepartmentLoading || !dateRange.startDate || !dateRange.endDate) return;
       
       setIsLoading(true);
       setError(null);
@@ -695,217 +696,234 @@ console.log("return data", paginatedData)
 <Card className="shadow-xl border-none bg-white transition-all duration-300 hover:shadow-2xl">
 
     <CardContent className="p-6">
-        <div className="relative z-10"> {/* New: Stacking context for the whole toolbar */}
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-6 items-stretch"> {/* Bigger gap for breathing room */}
-    {/* Date Range: Pin to z-0 and clip overflow */}
-    <div className="flex-1 min-w-0 overflow-hidden z-0"> {/* z-0 pins it low; overflow-hidden clips any expansion */}
-      <div className="p-1"> {/* Subtle padding inside for buffer */}
-        <DateRangePickerField 
-          dateRange={dateRange as any} 
-          onDateRangeChange={setDateRange} 
-          onApply={() => setCurrentPage(1)} 
-        />
-      </div>
+<div className="relative z-10">
+  <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+    {/* Date Range */}
+    <div className="flex-shrink-0 order-1 w-full sm:w-auto min-w-0 overflow-hidden">
+      <EnhancedDateRangeSelector 
+        value={dateRange} 
+        onChange={setDateRange} 
+      />
     </div>
 
-    {/* Status Filter: Bump to z-40 (higher than date, below potential popover) */}
-    <div className="w-full flex-1 min-w-0 overflow-hidden z-40">
-      <div className="p-1">
-        <DropdownMenu
-          onOpenChange={(isOpen) => {
-            if (isOpen) {
-              setTempStatusFilter(statusFilter);
-            }
-          }}
-        >
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-full justify-start h-10 relative z-0"> {/* z-0 on trigger */}
-                  <Tag size={16} className="text-gray-500 mr-2 flex-shrink-0" />
-                  <div className="truncate min-w-0">
-                    {statusFilter.length === 0
-                      ? "All Statuses"
-                      : statusFilter.length === 1
-                      ? statusFilter[0]
-                      : `${statusFilter.length} statuses selected`}
-                  </div>
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            {statusFilter.length > 1 && (
-              <TooltipContent side="bottom" align="start" className="z-[70]"> {/* High z for tooltip */}
-                <div className="p-1">
-                  <h4 className="font-semibold mb-2 text-center">Selected Statuses</h4>
-                  <ul className="list-disc list-inside space-y-1 max-w-48">
-                    {statusFilter.map((status) => (
-                      <li key={status}>{status}</li>
-                    ))}
-                  </ul>
+    {/* Status Filter */}
+    <div className="flex-shrink-0 order-2 w-full sm:w-[150px] min-w-0 overflow-hidden">
+      <DropdownMenu
+        onOpenChange={(isOpen) => {
+          if (isOpen) {
+            setTempStatusFilter(statusFilter);
+          }
+        }}
+      >
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button className="w-full rounded-full justify-start h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm relative z-0">
+                <Tag size={16} className="text-gray-500 mr-2 flex-shrink-0" />
+                <div className="truncate min-w-0">
+                  {statusFilter.length === 0
+                    ? "All Statuses"
+                    : statusFilter.length === 1
+                    ? statusFilter[0]
+                    : `${statusFilter.length} statuses selected`}
                 </div>
-              </TooltipContent>
-            )}
-          </Tooltip>
-          <DropdownMenuContent className="w-60 max-h-96 z-[60] flex flex-col origin-top"> {/* z-[60] for menu content */}
-            {/* Rest unchanged */}
-            <div className="overflow-y-auto">
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          {statusFilter.length > 1 && (
+            <TooltipContent side="bottom" align="start" className="z-[70]">
+              <div className="p-1">
+                <h4 className="font-semibold mb-2 text-center">Selected Statuses</h4>
+                <ul className="list-disc list-inside space-y-1 max-w-48">
+                  {statusFilter.map((status) => (
+                    <li key={status}>{status}</li>
+                  ))}
+                </ul>
+              </div>
+            </TooltipContent>
+          )}
+        </Tooltip>
+        <DropdownMenuContent className="w-60 max-h-96 z-[60] flex flex-col origin-top">
+          <div className="overflow-y-auto">
+            <DropdownMenuCheckboxItem
+              checked={tempStatusFilter.length === 0}
+              onCheckedChange={() => setTempStatusFilter([])}
+              onSelect={(e) => e.preventDefault()}
+            >
+              All Statuses
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            {groupedStatusOptions.map((group) => (
+              <React.Fragment key={group.mainStatus}>
+                <DropdownMenuLabel>{group.mainStatus}</DropdownMenuLabel>
+                {group.subStatuses.map((subStatus) => (
+                  <DropdownMenuCheckboxItem
+                    key={subStatus}
+                    checked={tempStatusFilter.includes(subStatus)}
+                    onCheckedChange={(checked) => handleStatusFilterChange(subStatus, checked)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {subStatus}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </React.Fragment>
+            ))}
+          </div>
+          <DropdownMenuSeparator />
+          <div className="p-2 border-t">
+            <Button 
+              className="w-full" 
+              size="sm"
+              onClick={() => {
+                setStatusFilter(tempStatusFilter);
+              }}
+            >
+              Apply Filter
+            </Button>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+
+    {/* Client Filter */}
+    <div className="flex-shrink-0 order-3 w-full sm:w-[150px] min-w-0 overflow-hidden">
+      <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempClientFilter(clientFilter); } }}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button className="w-full rounded-full justify-start font-normal h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm relative z-0">
+                <Building size={16} className="text-gray-500 mr-2 flex-shrink-0" />
+                <div className="truncate min-w-0">
+                  {clientFilter.length === 0 ? "All Clients" : `${clientFilter.length} clients selected`}
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          {clientFilter.length > 1 && (
+            <TooltipContent side="bottom" align="start" className="z-[70]">
+              <p className="max-w-48">Selected: {clientFilter.join(', ')}</p>
+            </TooltipContent>
+          )}
+        </Tooltip>
+        <DropdownMenuContent className="w-64 max-h-96 z-[60] flex flex-col origin-top">
+          <div className="overflow-y-auto">
+            <DropdownMenuCheckboxItem
+              checked={tempClientFilter.length === 0}
+              onCheckedChange={() => setTempClientFilter([])}
+              onSelect={(e) => e.preventDefault()}
+            >
+              All Clients
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            {clientOptions.map(client => (
               <DropdownMenuCheckboxItem
-                checked={tempStatusFilter.length === 0}
-                onCheckedChange={() => setTempStatusFilter([])}
+                key={client}
+                checked={tempClientFilter.includes(client)}
+                onCheckedChange={(checked) => handleClientFilterChange(client, !!checked)}
                 onSelect={(e) => e.preventDefault()}
               >
-                All Statuses
+                {client}
               </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              {groupedStatusOptions.map((group) => (
-                <React.Fragment key={group.mainStatus}>
-                  <DropdownMenuLabel>{group.mainStatus}</DropdownMenuLabel>
-                  {group.subStatuses.map((subStatus) => (
-                    <DropdownMenuCheckboxItem
-                      key={subStatus}
-                      checked={tempStatusFilter.includes(subStatus)}
-                      onCheckedChange={(checked) => handleStatusFilterChange(subStatus, checked)}
-                      onSelect={(e) => e.preventDefault()}
-                    >
-                      {subStatus}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </React.Fragment>
-              ))}
-            </div>
-            <DropdownMenuSeparator />
-            <div className="p-2 border-t">
-              <Button 
-                className="w-full" 
-                size="sm"
-                onClick={() => {
-                  setStatusFilter(tempStatusFilter);
-                }}
-              >
-                Apply Filter
-              </Button>
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+            ))}
+          </div>
+          <DropdownMenuSeparator />
+          <div className="p-2 border-t">
+            <Button className="w-full" size="sm" onClick={() => setClientFilter(tempClientFilter)}>
+              Apply Filter
+            </Button>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
 
-    {/* Client Filter: Same z-40 pattern */}
-    <div className="w-full flex-1 min-w-0 overflow-hidden z-40">
-      <div className="p-1">
-        <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempClientFilter(clientFilter); } }}>
+    {/* Recruiter Filter */}
+    {!isRestrictedView && (
+      <div className="flex-shrink-0 order-4 w-full sm:w-[150px] min-w-0 overflow-hidden">
+        <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempRecruiterFilter(recruiterFilter); } }}>
           <Tooltip>
             <TooltipTrigger asChild>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-full justify-start font-normal h-10 relative z-0">
-                  <Building size={16} className="text-gray-500 mr-2 flex-shrink-0" />
+                <Button className="w-full rounded-full justify-start font-normal h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm relative z-0">
+                  <User size={16} className="text-gray-500 mr-2 flex-shrink-0" />
                   <div className="truncate min-w-0">
-                    {clientFilter.length === 0 ? "All Clients" : `${clientFilter.length} clients selected`}
+                    {recruiterFilter.length === 0 ? "All Recruiters" : `${recruiterFilter.length} recruiters selected`}
                   </div>
                 </Button>
               </DropdownMenuTrigger>
             </TooltipTrigger>
-            {clientFilter.length > 1 && (
+            {recruiterFilter.length > 1 && (
               <TooltipContent side="bottom" align="start" className="z-[70]">
-                <p className="max-w-48">Selected: {clientFilter.join(', ')}</p>
+                <p className="max-w-48">Selected: {recruiterFilter.join(', ')}</p>
               </TooltipContent>
             )}
           </Tooltip>
           <DropdownMenuContent className="w-64 max-h-96 z-[60] flex flex-col origin-top">
-            {/* Rest unchanged */}
             <div className="overflow-y-auto">
               <DropdownMenuCheckboxItem
-                checked={tempClientFilter.length === 0}
-                onCheckedChange={() => setTempClientFilter([])}
+                checked={tempRecruiterFilter.length === 0}
+                onCheckedChange={() => setTempRecruiterFilter([])}
                 onSelect={(e) => e.preventDefault()}
               >
-                All Clients
+                All Recruiters
               </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
-              {clientOptions.map(client => (
+              {recruiterOptions.map(recruiter => (
                 <DropdownMenuCheckboxItem
-                  key={client}
-                  checked={tempClientFilter.includes(client)}
-                  onCheckedChange={(checked) => handleClientFilterChange(client, !!checked)}
+                  key={recruiter}
+                  checked={tempRecruiterFilter.includes(recruiter)}
+                  onCheckedChange={(checked) => handleRecruiterFilterChange(recruiter, !!checked)}
                   onSelect={(e) => e.preventDefault()}
                 >
-                  {client}
+                  {recruiter}
                 </DropdownMenuCheckboxItem>
               ))}
             </div>
             <DropdownMenuSeparator />
             <div className="p-2 border-t">
-              <Button className="w-full" size="sm" onClick={() => setClientFilter(tempClientFilter)}>
+              <Button className="w-full" size="sm" onClick={() => setRecruiterFilter(tempRecruiterFilter)}>
                 Apply Filter
               </Button>
             </div>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+    )}
+
+    {/* Search Bar */}
+    <div className="relative flex-grow order-5 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+      <Input 
+        placeholder="Search name, job, client..." 
+        className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm" 
+        value={searchTerm} 
+        onChange={(e) => { 
+          setSearchTerm(e.target.value); 
+          setCurrentPage(1); 
+        }} 
+      />
     </div>
 
-    {/* Recruiter Filter: Same z-40 */}
-    {!isRestrictedView && (
-      <div className="w-full flex-1 min-w-0 overflow-hidden z-40">
-        <div className="p-1">
-          <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempRecruiterFilter(recruiterFilter); } }}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="w-full sm:w-[200px] justify-start font-normal h-10 relative z-0">
-                    <User size={16} className="text-gray-500 mr-2 flex-shrink-0" />
-                    <div className="truncate min-w-0">
-                      {recruiterFilter.length === 0 ? "All Recruiters" : `${recruiterFilter.length} recruiters selected`}
-                    </div>
-                  </Button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              {recruiterFilter.length > 1 && (
-                <TooltipContent side="bottom" align="start" className="z-[70]">
-                  <p className="max-w-48">Selected: {recruiterFilter.join(', ')}</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-            <DropdownMenuContent className="w-64 max-h-96 z-[60] flex flex-col origin-top">
-              {/* Rest unchanged */}
-              <div className="overflow-y-auto">
-                <DropdownMenuCheckboxItem
-                  checked={tempRecruiterFilter.length === 0}
-                  onCheckedChange={() => setTempRecruiterFilter([])}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  All Recruiters
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuSeparator />
-                {recruiterOptions.map(recruiter => (
-                  <DropdownMenuCheckboxItem
-                    key={recruiter}
-                    checked={tempRecruiterFilter.includes(recruiter)}
-                    onCheckedChange={(checked) => handleRecruiterFilterChange(recruiter, !!checked)}
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    {recruiter}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </div>
-              <DropdownMenuSeparator />
-              <div className="p-2 border-t">
-                <Button className="w-full" size="sm" onClick={() => setRecruiterFilter(tempRecruiterFilter)}>
-                  Apply Filter
-                </Button>
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-    )}
+    {/* Group Button */}
+    <Button 
+      variant="outline" 
+      onClick={() => setIsGrouped(!isGrouped)} 
+      className="flex-shrink-0 order-6 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm"
+    >
+      {isGrouped ? <List className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />} 
+      {isGrouped ? 'Ungroup' : 'Group by Status'}
+    </Button>
+
+    {/* Export Buttons */}
+    <div className="flex gap-2 flex-shrink-0 order-7">
+      <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+        <Download className="w-4 h-4 mr-2" /> Export CSV
+      </Button>
+      <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+        <Download className="w-4 h-4 mr-2" /> Export PDF
+      </Button>
+    </div>
   </div>
 </div>
-        <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
-            <div className="relative flex-grow w-full sm:w-auto"> <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} /> <Input placeholder="Search name, job, client..." className="pl-10 h-10" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} /> </div>
-            <Button variant="outline" onClick={() => setIsGrouped(!isGrouped)} className="w-full sm:w-auto"> {isGrouped ? <List className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />} {isGrouped ? 'Ungroup' : 'Group by Status'} </Button>
-            <div className="flex gap-2 flex-shrink-0"> <Button variant="outline" size="sm" onClick={exportToCSV}> <Download className="w-4 h-4 mr-2" /> Export CSV </Button> <Button variant="outline" size="sm" onClick={exportToPDF}> <Download className="w-4 h-4 mr-2" /> Export PDF </Button> </div>
-        </div>
 <div className="relative w-full rounded-lg border overflow-x-auto">
     <Table style={{ minWidth: '1600px' }}>
         <TableHeader>

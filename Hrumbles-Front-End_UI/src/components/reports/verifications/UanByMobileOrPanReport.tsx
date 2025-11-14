@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { DateRangePickerField } from '../DateRangePickerField';
+import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { format, isValid } from 'date-fns';
 import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, Calendar, ChevronLeft, ChevronRight, Sigma, ArrowUp, Activity, TrendingUp, CheckCircle, Tag, User } from 'lucide-react';
 import {
@@ -43,6 +43,11 @@ import {
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
 
 // --- Type Definitions ---
 interface Verification {
@@ -97,12 +102,15 @@ const UanByMobileOrPanReport: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isGrouped, setIsGrouped] = useState(false);
-  const [draftDateRange, setDraftDateRange] = useState({
-    startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)),
+  const [dateRange, setDateRange] = useState<DateRange>({
+    startDate: (() => {
+      const now = new Date();
+      const start = new Date(now);
+      start.setMonth(now.getMonth() - 1);
+      return start;
+    })(),
     endDate: new Date(),
-    key: 'selection',
   });
-  const [appliedDateRange, setAppliedDateRange] = useState(draftDateRange);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [verifierFilter, setVerifierFilter] = useState('all');
@@ -114,7 +122,7 @@ const UanByMobileOrPanReport: React.FC = () => {
   // --- Data Fetching ---
   useEffect(() => {
     const fetchData = async () => {
-      if (!organizationId) return;
+      if (!organizationId || !dateRange.startDate || !dateRange.endDate) return;
       setIsLoading(true);
       setError(null);
       try {
@@ -123,8 +131,8 @@ const UanByMobileOrPanReport: React.FC = () => {
           .select('*, verified_by:hr_employees(first_name, last_name)')
           .eq('organization_id', organizationId)
           .in('lookup_type', ['mobile', 'pan'])
-          .gte('created_at', appliedDateRange.startDate.toISOString())
-          .lte('created_at', appliedDateRange.endDate.toISOString())
+          .gte('created_at', dateRange.startDate.toISOString())
+          .lte('created_at', dateRange.endDate.toISOString())
           .order('created_at', { ascending: false });
 
         if (fetchError) throw fetchError;
@@ -151,7 +159,7 @@ const UanByMobileOrPanReport: React.FC = () => {
       }
     };
     fetchData();
-  }, [organizationId, appliedDateRange]);
+  }, [organizationId, dateRange]);
 
   // --- Memoized Data Transformations ---
   const filteredVerifications = useMemo(() => {
@@ -280,12 +288,6 @@ const UanByMobileOrPanReport: React.FC = () => {
         ? prev.filter(g => g !== statusName)
         : [...prev, statusName]
     );
-  };
-
-  // --- Handle Filters ---
-  const handleApplyFilters = () => {
-    setAppliedDateRange(draftDateRange);
-    setCurrentPage(1);
   };
 
   const onFilterChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (value: string) => {
@@ -457,76 +459,90 @@ const UanByMobileOrPanReport: React.FC = () => {
 
       {/* Filter Bar and Table */}
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 items-center">
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-            <DateRangePickerField
-              dateRange={draftDateRange}
-              onDateRangeChange={setDraftDateRange}
-              className="pl-10 h-10 w-full"
-            />
-          </div>
-          <Select value={statusFilter} onValueChange={onFilterChange(setStatusFilter)}>
-            <SelectTrigger>
-              <div className="flex items-center gap-2">
-                <Tag size={16} className="text-gray-500" />
-                <SelectValue placeholder="Filter by Status" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="Found">Found</SelectItem>
-              <SelectItem value="Not Found">Not Found</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={verifierFilter} onValueChange={onFilterChange(setVerifierFilter)}>
-            <SelectTrigger>
-              <div className="flex items-center gap-2">
-                <User size={16} className="text-gray-500" />
-                <SelectValue placeholder="Filter by Verifier" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Verifiers</SelectItem>
-              {verifierOptions.map(v => (
-                <SelectItem key={v} value={v}>{v}</SelectItem>
-              ))}
-              <SelectItem value="System">System</SelectItem>
-            </SelectContent>
-          </Select>
+<div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+  {/* Date Range */}
+  <div className="flex-shrink-0 order-4 w-full sm:w-auto">
+    <EnhancedDateRangeSelector
+      value={dateRange}
+      onChange={setDateRange}
+    />
+  </div>
+
+  {/* Status Filter */}
+  <div className="flex-shrink-0 order-2 w-full sm:w-[150px]">
+    <Select value={statusFilter} onValueChange={onFilterChange(setStatusFilter)}>
+      <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+        <div className="flex items-center gap-2">
+          <Tag size={16} className="text-gray-500" />
+          <SelectValue placeholder="Filter by Status" />
         </div>
-        <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
-          <Button
-            onClick={handleApplyFilters}
-            className="w-full sm:w-auto flex-shrink-0 bg-indigo-600 hover:bg-indigo-700"
-          >
-            <CheckCircle className="h-4 w-4 mr-2" />
-            Apply Filters
-          </Button>
-          <div className="relative flex-grow w-full sm:w-auto">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-            <Input
-              placeholder="Search by Input, Name, or UAN..."
-              className="pl-10 h-10"
-              value={searchTerm}
-              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-            />
-          </div>
-          <Button variant="outline" onClick={() => setIsGrouped(!isGrouped)} className="w-full sm:w-auto">
-            {isGrouped ? <List className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />}
-            {isGrouped ? 'Ungroup' : 'Group by Status'}
-          </Button>
-          <div className="flex gap-2 flex-shrink-0">
-            <Button variant="outline" size="sm" onClick={exportToCSV}>
-              <Download className="w-4 h-4 mr-2" />
-              Export CSV
-            </Button>
-            <Button variant="outline" size="sm" onClick={exportToPDF}>
-              <Download className="w-4 h-4 mr-2" />
-              Export PDF
-            </Button>
-          </div>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">All Statuses</SelectItem>
+        <SelectItem value="Found">Found</SelectItem>
+        <SelectItem value="Not Found">Not Found</SelectItem>
+      </SelectContent>
+    </Select>
+  </div>
+
+  {/* Verifier Filter */}
+  <div className="flex-shrink-0 order-3 w-full sm:w-[150px]">
+    <Select value={verifierFilter} onValueChange={onFilterChange(setVerifierFilter)}>
+      <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+        <div className="flex items-center gap-2">
+          <User size={16} className="text-gray-500" />
+          <SelectValue placeholder="Filter by Verifier" />
         </div>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">All Verifiers</SelectItem>
+        {verifierOptions.map(v => (
+          <SelectItem key={v} value={v}>{v}</SelectItem>
+        ))}
+        <SelectItem value="System">System</SelectItem>
+      </SelectContent>
+    </Select>
+  </div>
+
+  {/* Search Bar */}
+  <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+    <Search
+      className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+      size={18}
+    />
+    <Input
+      placeholder="Search by Input, Name, or UAN..."
+      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm"
+      value={searchTerm}
+      onChange={(e) => { 
+        setSearchTerm(e.target.value); 
+        setCurrentPage(1); 
+      }}
+    />
+  </div>
+
+  {/* Group Button */}
+  <Button 
+    variant="outline" 
+    onClick={() => setIsGrouped(!isGrouped)} 
+    className="flex-shrink-0 order-5 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm"
+  >
+    {isGrouped ? <List className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />}
+    {isGrouped ? 'Ungroup' : 'Group by Status'}
+  </Button>
+
+  {/* Export Buttons */}
+  <div className="flex gap-2 flex-shrink-0 order-6">
+    <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Download className="w-4 h-4 mr-2" />
+      Export CSV
+    </Button>
+    <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Download className="w-4 h-4 mr-2" />
+      Export PDF
+    </Button>
+  </div>
+</div>
 
         <div className="rounded-xl border border-gray-200 shadow-sm animate-scale-in">
           <div className="overflow-x-auto">

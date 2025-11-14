@@ -73,7 +73,7 @@ import { startOfMonth, startOfWeek, isSameDay, isWithinInterval, format, eachDay
   getDaysInYear, 
   isSunday,    
   isWeekend } from "date-fns";
-import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
+import { EnhancedDateRangeSelector } from "@/components/ui/EnhancedDateRangeSelector";
 import RevenueExpenseChart from "./RevenueExpenseChart";
 
 interface AssignEmployee {
@@ -129,9 +129,8 @@ interface TimeLog {
 }
 
 interface DateRange {
-  startDate: Date;
-  endDate: Date;
-  key: string;
+  startDate: Date | null;
+  endDate: Date | null;
 }
 
 const EXCHANGE_RATE_USD_TO_INR = 84;
@@ -162,7 +161,6 @@ const ProjectDashboard = () => {
   const [dateRange, setDateRange] = useState<DateRange>({
     startDate: startOfMonth(new Date()),
     endDate: new Date(),
-    key: "selection",
   });
 
   const user = useSelector((state: any) => state.auth.user);
@@ -184,12 +182,12 @@ const ProjectDashboard = () => {
     return { startDate, endDate: endDateFY, year };
   };
 
-  const { startDate: financialYearStart, endDate: financialYearEnd, year: financialYear } = getFinancialYear(dateRange.endDate);
+  const { startDate: financialYearStart, endDate: financialYearEnd, year: financialYear } = dateRange.endDate ? getFinancialYear(dateRange.endDate) : { startDate: new Date(), endDate: new Date(), year: new Date().getFullYear() };
 
   // Check if dateRange spans multiple financial years
-  const spansMultipleYears = dateRange.startDate.getFullYear() !== dateRange.endDate.getFullYear() ||
+  const spansMultipleYears = dateRange.startDate && dateRange.endDate && (dateRange.startDate.getFullYear() !== dateRange.endDate.getFullYear() ||
     (dateRange.startDate.getFullYear() === dateRange.endDate.getFullYear() &&
-     dateRange.startDate.getMonth() < 3 && dateRange.endDate.getMonth() >= 3);
+     dateRange.startDate.getMonth() < 3 && dateRange.endDate.getMonth() >= 3));
 
   // Fetch client details
   const { data: client, isLoading: loadingClient, error: clientError } = useQuery<Client>({
@@ -326,7 +324,7 @@ const ProjectDashboard = () => {
   >({
     queryKey: ["time_logs_table", id, dateRange],
     queryFn: async () => {
-      if (!id) throw new Error("Project ID is missing");
+      if (!id || !dateRange.startDate || !dateRange.endDate) return [];
       const { data, error } = await supabase
         .from("time_logs")
         .select("id, employee_id, date, project_time_data, total_working_hours")
@@ -338,7 +336,7 @@ const ProjectDashboard = () => {
         log.project_time_data?.projects?.some((proj) => proj.projectId === id)
       ) as TimeLog[];
     },
-    enabled: calculationMode === "actual" && !!id,
+    enabled: calculationMode === "actual" && !!id && !!dateRange.startDate && !!dateRange.endDate,
   });
 
    console.log("unfilteredTimeLogs", unfilteredTimeLogs);
@@ -366,7 +364,6 @@ useEffect(() => {
     setDateRange({
       startDate: new Date(project.start_date),
       endDate: new Date(),
-      key: "selection",
     });
   }
 }, [project]); // The dependency array ensures this runs only when the 'project' object changes
@@ -737,7 +734,8 @@ const calculateProfit = (employee: AssignEmployee, mode: "accrual" | "actual") =
     // CHANGE_HIGHLIGHT: The date range filter is now conditional. It's always true for accrual mode.
     const isWithinDateRange =
       calculationMode === "accrual" || // For accrual, we don't filter by date range
-      (new Date(employee.start_date) <= dateRange.endDate &&
+      (dateRange.startDate && dateRange.endDate &&
+        new Date(employee.start_date) <= dateRange.endDate &&
         new Date(employee.end_date) >= dateRange.startDate);
 
     if (activeTab === "all") return matchesSearch && isWithinDateRange;
@@ -943,8 +941,8 @@ console.log("pagiodkmndndu", assignEmployee)
                         return `${totalWorkingDays} days`;
                       } else { // Actual mode
                         // Calculate intersection of employee assignment and date range
-                        const effectiveStartDate = new Date(Math.max(new Date(employee.start_date).getTime(), dateRange.startDate.getTime()));
-                        const effectiveEndDate = new Date(Math.min(new Date(employee.end_date).getTime(), dateRange.endDate.getTime()));
+                        const effectiveStartDate = dateRange.startDate && dateRange.endDate ? new Date(Math.max(new Date(employee.start_date).getTime(), dateRange.startDate.getTime())) : new Date(employee.start_date);
+                        const effectiveEndDate = dateRange.startDate && dateRange.endDate ? new Date(Math.min(new Date(employee.end_date).getTime(), dateRange.endDate.getTime())) : new Date(employee.end_date);
                         
                         const daysInPeriod = countWorkingDays(effectiveStartDate, effectiveEndDate, employee.working_days_config);
                         return `${daysInPeriod} days`;
@@ -953,7 +951,7 @@ console.log("pagiodkmndndu", assignEmployee)
                   </td>
                   <td className={`px-4 py-2 ${calculationMode === "actual" ? "cursor-pointer hover:bg-indigo-50 transition" : ""}`}
   onClick={() => {
-    if (calculationMode === "actual") {
+    if (calculationMode === "actual" && dateRange.startDate && dateRange.endDate) {
       // Pass projectId, employeeId, and the current dateRange to the new page
       navigate(
         `/project/${id}/employee/${employee.assign_employee}/details?startDate=${dateRange.startDate.toISOString()}&endDate=${dateRange.endDate.toISOString()}`
@@ -1247,18 +1245,31 @@ console.log("pagiodkmndndu", assignEmployee)
         </div>
 
         {/* Calculation Mode Tabs */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <Tabs
-            value={calculationMode}
-            onValueChange={(value) => setCalculationMode(value as "accrual" | "actual")}
-            className="mb-6"
-          >
-            <TabsList className="grid grid-cols-2 w-[200px]">
-              <TabsTrigger value="actual">Actual</TabsTrigger>
-              <TabsTrigger value="accrual">Accrual</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
+<div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+  <div className="flex-shrink-0 order-1">
+    <Tabs
+      value={calculationMode}
+      onValueChange={(value) => setCalculationMode(value as "accrual" | "actual")}
+    >
+      <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+        <TabsTrigger
+          value="actual"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          Actual
+        </TabsTrigger>
+        <TabsTrigger
+          value="accrual"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          Accrual
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  </div>
+</div>
 
         {/* Stats Overview and Finance Chart */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -1419,56 +1430,76 @@ console.log("pagiodkmndndu", assignEmployee)
         {/* Table Section */}
         <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl rounded-2xl">
           <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
-              <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid grid-cols-4 w-full sm:w-[400px]">
-                  <TabsTrigger value="all">All</TabsTrigger>
-                  <TabsTrigger value="working" className="flex items-center gap-1">
-                    <Briefcase size={14} />
-                    <span>Working</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="relieved" className="flex items-center gap-1">
-                    <Calendar size={14} />
-                    <span>Relieved</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="terminated" className="flex items-center gap-1">
-                    <Clock size={14} />
-                    <span>Terminated</span>
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <div className="relative flex-grow">
-                <Search
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                  size={18}
-                />
-                <Input
-                  placeholder="Search for employees..."
-                  className="pl-10 h-10 rounded-lg border-gray-200"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              {/* CHANGE_HIGHLIGHT: Conditionally render the DateRangePickerField */}
-              {calculationMode === "actual" && (
-                <DateRangePickerField
-                  dateRange={dateRange}
-                  onDateRangeChange={setDateRange}
-                  onApply={() => {}}
-                  className="mt-4 sm:mt-0"
-                />
-              )}
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={exportToCSV} className="border-gray-200 hover:bg-gray-50">
-                  <Download className="w-4 h-4 mr-2" />
-                  Export CSV
-                </Button>
-                <Button variant="outline" size="sm" onClick={exportToPDF} className="border-gray-200 hover:bg-gray-50">
-                  <Download className="w-4 h-4 mr-2" />
-                  Export PDF
-                </Button>
-              </div>
-            </div>
+<div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+  <div className="flex-shrink-0 order-1">
+    <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+      <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+        <TabsTrigger
+          value="all"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          All
+        </TabsTrigger>
+        <TabsTrigger
+          value="working"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1"
+        >
+          <Briefcase size={14} />
+          <span>Working</span>
+        </TabsTrigger>
+        <TabsTrigger
+          value="relieved"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1"
+        >
+          <Calendar size={14} />
+          <span>Relieved</span>
+        </TabsTrigger>
+        <TabsTrigger
+          value="terminated"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1"
+        >
+          <Clock size={14} />
+          <span>Terminated</span>
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  </div>
+  <div className="relative flex-grow order-2 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+    <Search
+      className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+      size={18}
+    />
+    <Input
+      placeholder="Search for employees..."
+      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm"
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+    />
+  </div>
+  {/* CHANGE_HIGHLIGHT: Conditionally render the DateRangePickerField */}
+  {calculationMode === "actual" && (
+    <div className="flex-shrink-0 order-3 w-full sm:w-auto">
+      <EnhancedDateRangeSelector
+        value={dateRange}
+        onChange={setDateRange}
+      />
+    </div>
+  )}
+  <div className="flex gap-2 flex-shrink-0 order-4">
+    <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm border-gray-200 hover:bg-gray-50">
+      <Download className="w-4 h-4 mr-2" />
+      Export CSV
+    </Button>
+    <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm border-gray-200 hover:bg-gray-50">
+      <Download className="w-4 h-4 mr-2" />
+      Export PDF
+    </Button>
+  </div>
+</div>
             <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
               <TabsContent value="all" className="space-y-6">
                 {renderTable(paginatedEmployees)}

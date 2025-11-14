@@ -143,7 +143,8 @@ import Leave from "./pages/TimeManagement/employee/Leave";
 import Attendance from "./pages/TimeManagement/employee/Attendance";
 import Calendar from "./pages/TimeManagement/employee/Calendar";
 import EmployeeRegularization from "./pages/TimeManagement/employee/Regularization";
-import { ViewTimesheetDialog } from "@/components/TimeManagement/timesheet/ViewTimesheetDialog";
+
+import GlobalDialogs from "./components/TimeManagement/timesheet/GlobalDialogs";
 import { useTimesheetStore } from '@/stores/timesheetStore';
 import { useEmployeeContext } from './hooks/useEmployeeContext';
 
@@ -190,33 +191,8 @@ function AppContent() {
     '/careers', '/job/', '/share/', '/consent/'
   ];
 
-    const { 
-    isSubmissionModalOpen, 
-    submissionTarget, 
-    closeSubmissionModal,
-    triggerTrackerRefresh
-  } = useTimesheetStore();
 
-  const { employeeHasProjects, isLoading: isEmployeeContextLoading } = useEmployeeContext();
-    
 
-  console.log("DEBUG: [AppLayout] Component rendered. Global state is:", {
-    isSubmissionModalOpen,
-    submissionTargetId: submissionTarget?.timeLog?.id,
-  });
-
-  const handleDialogClose = (open) => {
-    if (!open) {
-      closeSubmissionModal();
-    }
-  };
-
-    const handleSubmissionSuccess = () => {
-    console.log("DEBUG: [App.jsx] Submission successful. Triggering tracker refresh.");
-    triggerTrackerRefresh(); // <-- Trigger the refresh
-    closeSubmissionModal();
-    // You might also want to refresh other data sources here if needed
-  };
   
 
   // --- Session Validation Logic ---
@@ -467,17 +443,6 @@ function AppContent() {
           </Route>
         </Route>
       </Routes>
-      {/* --- DIALOG RENDERED HERE, AT THE TOP LEVEL --- */}
-      {isSubmissionModalOpen && submissionTarget && (
-        <ViewTimesheetDialog 
-          open={isSubmissionModalOpen}
-          onOpenChange={handleDialogClose}
-          timesheet={submissionTarget.timeLog}
-          finalDurationMinutes={submissionTarget.finalDurationMinutes}
-          onSubmitTimesheet={handleSubmissionSuccess}
-          employeeHasProjects={employeeHasProjects} // Pass the required prop
-        />
-      )}
     </>
   );
 }
@@ -488,6 +453,8 @@ function App() {
   return (
     <Router>
       <AppContent />
+      <GlobalDialogs />
+
     </Router>
   );
 }

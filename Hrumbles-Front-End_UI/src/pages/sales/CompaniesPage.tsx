@@ -38,14 +38,17 @@ import Papa from 'papaparse';
 import { z } from 'zod';
 import { useSelector } from 'react-redux';
 import moment from "moment";
-import { DateRange } from "react-day-picker";
-import { format, startOfMonth } from "date-fns";
+import { startOfMonth } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CreatorPerformanceChart from "@/components/sales/chart/CreatorPerformanceChart";
-import { DateRangePickerField } from "@/components/sales/chart/dateRangePickerField";
+import { EnhancedDateRangeSelector } from "@/components/ui/EnhancedDateRangeSelector";
 import CompanyStagePieChart from "@/components/sales/chart/CompanyStagePieChart";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, Spinner } from "@chakra-ui/react";
 
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
 
 const companyCsvSchema = z.object({
   name: z.string().min(1, { message: "Company Name is required" }),
@@ -151,9 +154,9 @@ const CompaniesPage = () => {
     const [isManualAddDialogOpen, setIsManualAddDialogOpen] = useState(false);
     const currentUserId = user?.id || null;
 
-    const [chartDateRange, setChartDateRange] = useState<DateRange | undefined>({
-      from: startOfMonth(new Date()),
-      to: new Date(),
+    const [chartDateRange, setChartDateRange] = useState<DateRange>({
+      startDate: startOfMonth(new Date()),
+      endDate: new Date(),
     });
 
     const { data: breadcrumbData, isLoading: isLoadingBreadcrumb } = useQuery({
@@ -223,10 +226,10 @@ const CompaniesPage = () => {
 
     const chartFilteredData = useMemo(() => {
         return companies.filter(company => {
-            if (!chartDateRange?.from) return true;
+            if (!chartDateRange?.startDate) return true;
             const createdAt = new Date(company.created_at);
-            const from = chartDateRange.from;
-            const to = chartDateRange.to || new Date();
+            const from = chartDateRange.startDate;
+            const to = chartDateRange.endDate || new Date();
             return createdAt >= from && createdAt <= to;
         });
     }, [companies, chartDateRange]);
@@ -404,7 +407,7 @@ const CompaniesPage = () => {
             <div className="mb-6">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-semibold">Performance Dashboard</h2>
-                    <DateRangePickerField dateRange={chartDateRange} onDateRangeChange={setChartDateRange} />
+                    <EnhancedDateRangeSelector value={chartDateRange} onChange={setChartDateRange} />
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <CreatorPerformanceChart data={creatorStatsForChart} />
@@ -412,19 +415,35 @@ const CompaniesPage = () => {
                 </div>
             </div>
 
-            <div className="flex flex-col md:flex-row items-center gap-4">
-                <div className="relative flex-grow w-full">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                    <Input placeholder="Search companies by name..." className="pl-10 h-10 w-full" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                </div>
-                <Select value={selectedCreatorId} onValueChange={setSelectedCreatorId}>
-                    <SelectTrigger className="w-full md:w-[220px] h-10"><SelectValue placeholder="Filter by Creator" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Creators</SelectItem>
-                        {uniqueCreators.map(creator => (<SelectItem key={creator.id} value={creator.id}>{creator.name}</SelectItem>))}
-                    </SelectContent>
-                </Select>
-            </div>
+            <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+  {/* Search */}
+  <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+    <Input 
+      placeholder="Search companies by name..." 
+      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm" 
+      value={searchTerm} 
+      onChange={(e) => setSearchTerm(e.target.value)} 
+    />
+  </div>
+
+  {/* Creator Filter */}
+  <div className="flex-shrink-0 order-2 w-full md:w-[220px]">
+    <Select value={selectedCreatorId} onValueChange={setSelectedCreatorId}>
+      <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+        <SelectValue placeholder="Filter by Creator" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">All Creators</SelectItem>
+        {uniqueCreators.map(creator => (
+          <SelectItem key={creator.id} value={creator.id}>
+            {creator.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+</div>
 
             <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
                 <div className="overflow-x-auto">
@@ -465,7 +484,7 @@ const CompaniesPage = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getDisplayValue(company.location)}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             <div>{getDisplayValue(company.employee_count?.toLocaleString())}</div>
-                                            {company.employee_count_date && (<div className="text-xs text-gray-400">as of {format(new Date(company.employee_count_date), "MMM yyyy")}</div>)}
+                                            {company.employee_count_date && (<div className="text-xs text-gray-400">as of {moment(company.employee_count_date).format("MMM yyyy")}</div>)}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <DropdownMenu>

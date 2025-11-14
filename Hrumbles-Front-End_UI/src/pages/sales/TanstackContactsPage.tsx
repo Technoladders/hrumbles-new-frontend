@@ -39,7 +39,7 @@ import { AddContactForm } from '@/components/sales/contacts-table/AddContactForm
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useDeleteContact } from '@/hooks/sales/useDeleteContact';
 import { DataTablePagination } from '@/components/ui/data-table-pagination';
-import { DateRangePickerField } from '@/components/sales/chart/dateRangePickerField';
+import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { startOfMonth } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { MoreHorizontal, FileText, Download } from 'lucide-react';
@@ -60,9 +60,8 @@ import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
 
 interface DateRange {
-  from: Date;
-  to: Date;
-  key?: string;
+  startDate: Date | null;
+  endDate: Date | null;
 }
 
 const NATIVE_COLUMNS = ['id', 'name', 'email', 'mobile', 'job_title', 'linkedin_url', 'contact_stage', 'company_id', 'company_name', 'created_at', 'updated_at', 'created_by', 'updated_by', 'organization_id', 'file_id', 'medium', 'country', 'state', 'city', 'timezone', 'alt_mobile'];
@@ -111,8 +110,8 @@ const TanstackContactsPage: React.FC = () => {
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   
   const [chartDateRange, setChartDateRange] = React.useState<DateRange>({
-    from: startOfMonth(new Date()),
-    to: new Date(),
+    startDate: startOfMonth(new Date()),
+    endDate: new Date(),
   });
 
   const { data: savedColumnOrder, set: saveColumnOrder } = useUserPreferences<ColumnOrderState>('contactsColumnOrderV2');
@@ -149,10 +148,10 @@ const TanstackContactsPage: React.FC = () => {
 
   const filteredData = React.useMemo(() => {
     return serverContacts.filter(contact => {
-      if (!chartDateRange?.from) return true;
+      if (!chartDateRange?.startDate) return true;
       const createdAt = new Date(contact.created_at);
-      const from = chartDateRange.from;
-      const to = chartDateRange.to || new Date();
+      const from = chartDateRange.startDate;
+      const to = chartDateRange.endDate || new Date();
       to.setHours(23, 59, 59, 999);
       return createdAt >= from && createdAt <= to;
     });
@@ -360,7 +359,7 @@ return (
                         </p>
                     </div>
                     <div className="flex items-center space-x-2">
-                        <DateRangePickerField dateRange={chartDateRange} onDateRangeChange={setChartDateRange} />
+                        <EnhancedDateRangeSelector value={chartDateRange} onChange={setChartDateRange} />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="h-9"><Download className="mr-2 h-4 w-4" /> Export</Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">

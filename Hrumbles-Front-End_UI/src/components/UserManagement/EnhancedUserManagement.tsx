@@ -41,72 +41,77 @@ const EnhancedUserManagement = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="users" className="w-full">
-            {/* MODIFICATION: Use the dynamic grid class */}
-            <TabsList className={`grid w-full ${gridColsClass}`}>
-              {/* --- Tabs visible for ALL users --- */}
-              <TabsTrigger value="users" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Users
-              </TabsTrigger>
-              
-              {/* --- MODIFICATION: Conditionally render tabs for non-Ascendion users --- */}
-              {!isAscendionUser && !isRecruitmentFirmUser && (
-                <>
-                  <TabsTrigger value="teams" className="flex items-center gap-2">
-                    <Building className="h-4 w-4" />
-                    Teams
-                  </TabsTrigger>
-                  <TabsTrigger value="structure" className="flex items-center gap-2">
-                    <Blocks className="h-4 w-4" />
-                    Structure
-                  </TabsTrigger>
-                  <TabsTrigger value="roles" className="flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
-                    Roles & Permissions
-                  </TabsTrigger>
-                </>
-              )}
+<Tabs defaultValue="users" className="w-full">
+  {/* MODIFICATION: Use the dynamic grid class */}
+  <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5 flex-wrap">
+    {/* --- Tabs visible for ALL users --- */}
+    <TabsTrigger value="users" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+      data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-2">
+      <Users className="h-4 w-4" />
+      Users
+    </TabsTrigger>
+    
+    {/* --- MODIFICATION: Conditionally render tabs for non-Ascendion users --- */}
+    {!isAscendionUser && !isRecruitmentFirmUser && (
+      <>
+        <TabsTrigger value="teams" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-2">
+          <Building className="h-4 w-4" />
+          Teams
+        </TabsTrigger>
+        <TabsTrigger value="structure" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-2">
+          <Blocks className="h-4 w-4" />
+          Structure
+        </TabsTrigger>
+        <TabsTrigger value="roles" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-2">
+          <Shield className="h-4 w-4" />
+          Roles & Permissions
+        </TabsTrigger>
+      </>
+    )}
 
-              {/* --- Tabs visible for ALL users --- */}
-              <TabsTrigger value="org-chart" className="flex items-center gap-2">
-                <LocateFixed className="h-4 w-4" />
-                Org Chart
-              </TabsTrigger>
-              <TabsTrigger value="email-config" className="flex items-center gap-2">
-                <Mail className="h-4 w-4" />
-                Email Config
-              </TabsTrigger>
-            </TabsList>
+    {/* --- Tabs visible for ALL users --- */}
+    <TabsTrigger value="org-chart" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+      data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-2">
+      <LocateFixed className="h-4 w-4" />
+      Org Chart
+    </TabsTrigger>
+    <TabsTrigger value="email-config" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+      data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-2">
+      <Mail className="h-4 w-4" />
+      Email Config
+    </TabsTrigger>
+  </TabsList>
 
-            {/* --- Render Tab Content --- */}
-            <TabsContent value="users" className="mt-6">
-              <UserManagementDashboard />
-            </TabsContent>
+  {/* --- Render Tab Content --- */}
+  <TabsContent value="users" className="mt-6">
+    <UserManagementDashboard />
+  </TabsContent>
 
-            {/* --- MODIFICATION: Conditionally render content for non-Ascendion users --- */}
-            {!isAscendionUser && (
-              <>
-                <TabsContent value="teams" className="mt-6">
-                  <TeamManagement />
-                </TabsContent>
-                <TabsContent value="structure" className="mt-6">
-                  <OrganizationStructureManagement />
-                </TabsContent>
-                <TabsContent value="roles" className="mt-6">
-                  <RolePermissionsManagement />
-                </TabsContent>
-              </>
-            )}
+  {/* --- MODIFICATION: Conditionally render content for non-Ascendion users --- */}
+  {!isAscendionUser && (
+    <>
+      <TabsContent value="teams" className="mt-6">
+        <TeamManagement />
+      </TabsContent>
+      <TabsContent value="structure" className="mt-6">
+        <OrganizationStructureManagement />
+      </TabsContent>
+      <TabsContent value="roles" className="mt-6">
+        <RolePermissionsManagement />
+      </TabsContent>
+    </>
+  )}
 
-            <TabsContent value="org-chart" className="mt-6">
-              <OrganizationalChart />
-            </TabsContent>
-            <TabsContent value="email-config" className="mt-6">
-              <EmailConfigurationManagement />
-            </TabsContent>
-            
-          </Tabs>
+  <TabsContent value="org-chart" className="mt-6">
+    <OrganizationalChart />
+  </TabsContent>
+  <TabsContent value="email-config" className="mt-6">
+    <EmailConfigurationManagement />
+  </TabsContent>
+</Tabs>
         </CardContent>
       </Card>
     </div>

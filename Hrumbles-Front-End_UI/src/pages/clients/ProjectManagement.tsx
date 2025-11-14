@@ -12,7 +12,7 @@ import Loader from "@/components/ui/Loader";
 import { useSelector } from "react-redux";
 import { Tooltip as ReactTooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
+import { EnhancedDateRangeSelector } from "@/components/ui/EnhancedDateRangeSelector";
 import { startOfYear, endOfYear, setMonth, setDate, eachMonthOfInterval, startOfMonth, endOfMonth, format, isWithinInterval } from "date-fns";
 
 const EXCHANGE_RATE_USD_TO_INR = 84;
@@ -60,6 +60,11 @@ export interface ProjectFinancialData extends Project {
     revenue_usd: number;
 }
 
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
+
 // Helper function to get financial year boundaries (retained)
 const getFinancialYearRange = (date: Date): { start: Date; end: Date } => {
   const year = date.getFullYear();
@@ -94,10 +99,9 @@ const ProjectManagement = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   const [editingProject, setEditingProject] = useState<ProjectFinancialData | null>(null);
-  const [dateRange, setDateRange] = useState<{ startDate: Date; endDate: Date; key: string }>({
+  const [dateRange, setDateRange] = useState<DateRange>({
     startDate: startOfYear(new Date()),
     endDate: new Date(),
-    key: "selection",
   });
 
   const ITEMS_PER_PAGE = 10;
@@ -156,7 +160,7 @@ useEffect(() => {
   const { data: timeLogs, isLoading: loadingTimeLogs, isSuccess: successTimeLogs } = useQuery({
     queryKey: ["time_logs", organization_id, dateRange],
     queryFn: async () => {
-        if (!organization_id) return [];
+        if (!organization_id || !dateRange.startDate || !dateRange.endDate) return [];
         const { data, error } = await supabase
             .from("time_logs")
             .select("id, employee_id, date, project_time_data, total_working_hours")
@@ -240,6 +244,9 @@ const projectFinancials: ProjectFinancialData[] = useMemo(() => {
 
 // In ProjectManagement.tsx, after the 'projectFinancials' useMemo hook (PROFIT REMOVED)
 const monthlyChartData = useMemo(() => {
+  if (!dateRange.startDate || !dateRange.endDate) {
+    return [];
+  }
   const months = eachMonthOfInterval({ start: dateRange.startDate, end: dateRange.endDate });
   const initialData = months.map(month => ({
     month: format(month, 'MMM'),
@@ -350,12 +357,7 @@ const dataForChart = useMemo(() => {
         {/* Date Range Picker */}
         <div className="flex justify-end">
           <ErrorBoundary>
-            <DateRangePickerField
-              dateRange={dateRange}
-              onDateRangeChange={setDateRange}
-              onApply={() => {}}
-              className="w-full sm:w-80"
-            />
+            <EnhancedDateRangeSelector value={dateRange} onChange={setDateRange} />
           </ErrorBoundary>
         </div>
 

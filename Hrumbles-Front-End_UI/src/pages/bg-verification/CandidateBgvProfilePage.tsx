@@ -160,28 +160,50 @@ const CandidateBgvProfilePage = () => {
      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
         <div className="lg:col-span-3 flex flex-col gap-6">
           <BgvCandidateInfoCard candidate={candidate} />
-          <Tabs defaultValue="experience" value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="experience">Experience</TabsTrigger>
-              {hasAnyResults && <TabsTrigger value="all-results">All Results</TabsTrigger>}
-              {candidate.resume_url && <TabsTrigger value="resume">Resume</TabsTrigger>}
-            </TabsList>
-            <TabsContent value="experience" className="mt-4">
-              <CandidateExperienceCard candidate={candidate} uanHistory={verifiedUanHistory} />
-            </TabsContent>
-            {hasAnyResults && (
-              <TabsContent value="all-results" className="mt-4">
-                <AllResultsDisplay candidate={candidate} results={bgvState.results} onBack={() => setActiveTab('experience')} />
-              </TabsContent>
-            )}
-            {candidate.resume_url && (
-              <TabsContent value="resume" className="mt-4">
-                <CardContent>
-                  <ResumePreviewSection resumeUrl={candidate.resume_url} />
-                </CardContent>
-              </TabsContent>
-            )}
-          </Tabs>
+         <Tabs defaultValue="experience" value={activeTab} onValueChange={setActiveTab}>
+    <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+      <TabsTrigger
+        value="experience"
+        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+      >
+        Experience
+      </TabsTrigger>
+      {hasAnyResults && (
+        <TabsTrigger
+          value="all-results"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          All Results
+        </TabsTrigger>
+      )}
+      {candidate.resume_url && (
+        <TabsTrigger
+          value="resume"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          Resume
+        </TabsTrigger>
+      )}
+    </TabsList>
+    <TabsContent value="experience" className="mt-4">
+      <CandidateExperienceCard candidate={candidate} uanHistory={verifiedUanHistory} />
+    </TabsContent>
+    {hasAnyResults && (
+      <TabsContent value="all-results" className="mt-4">
+        <AllResultsDisplay candidate={candidate} results={bgvState.results} onBack={() => setActiveTab('experience')} />
+      </TabsContent>
+    )}
+    {candidate.resume_url && (
+      <TabsContent value="resume" className="mt-4">
+        <CardContent>
+          <ResumePreviewSection resumeUrl={candidate.resume_url} />
+        </CardContent>
+      </TabsContent>
+    )}
+  </Tabs>
         </div>
         <div className="lg:col-span-2 flex flex-col gap-6">
           <BgvVerificationSection candidate={candidate} />

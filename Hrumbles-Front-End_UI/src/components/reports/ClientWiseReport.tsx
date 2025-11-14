@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { debounce } from 'lodash';
-import { DateRangePickerField } from '@/components/ui/DateRangePickerField';
+import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import { autoTable } from 'jspdf-autotable'; // Explicitly import autoTable
@@ -26,13 +26,17 @@ const COLORS = {
   Joined: '#8E2DE2',    // Vibrant purple
 };
 
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
+
 const ClientWiseReport: React.FC = () => {
   const { isLoading, error, fetchClientReport } = useStatusReport();
   const [reportData, setReportData] = useState([]);
-  const [dateRange, setDateRange] = useState({
+  const [dateRange, setDateRange] = useState<DateRange>({
     startDate: new Date(new Date().getFullYear(), 0, 1),
     endDate: new Date(),
-    key: 'selection',
   });
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
 
@@ -47,9 +51,13 @@ const ClientWiseReport: React.FC = () => {
   }, 500);
 
   useEffect(() => {
+    if (!dateRange?.startDate || !dateRange?.endDate) {
+      setReportData([]);
+      return;
+    }
     debouncedFetch(dateRange.startDate, dateRange.endDate);
     return () => debouncedFetch.cancel();
-  }, [dateRange.startDate, dateRange.endDate]);
+  }, [dateRange?.startDate, dateRange?.endDate]);
 
   // Aggregate status counts across all clients for PieChart
   const pieChartData = reportData.reduce((acc, client) => {
@@ -271,9 +279,19 @@ const ClientWiseReport: React.FC = () => {
   }
   if (!reportData.length) {
     return (
+      <>
+            <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Client Report</h2>
+        <EnhancedDateRangeSelector
+          value={dateRange}
+          onChange={setDateRange}
+        />
+      </div>
       <Alert>
         <AlertDescription>No data available for the selected date range.</AlertDescription>
       </Alert>
+      </>
+
     );
   }
 
@@ -281,9 +299,9 @@ const ClientWiseReport: React.FC = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Client Report</h2>
-        <DateRangePickerField
-          dateRange={dateRange}
-          onDateRangeChange={(range) => setDateRange(range)}
+        <EnhancedDateRangeSelector
+          value={dateRange}
+          onChange={setDateRange}
         />
       </div>
 

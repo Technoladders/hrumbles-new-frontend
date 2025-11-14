@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Activity, ArrowUp, Sigma, Calendar, Search, Download, ChevronLeft, ChevronRight, User, CheckCircle, TrendingUp } from 'lucide-react';
-import { DateRangePickerField } from './DateRangePickerField';
+import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { supabase } from '@/integrations/supabase/client';
 import { format, isValid } from 'date-fns';
 import Papa from 'papaparse';
@@ -25,6 +25,12 @@ import {
 
 type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly';
 type ChartType = 'area' | 'bar';
+
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
+
 interface ContactProfile {
   id: string;
   created_at: string;
@@ -52,12 +58,10 @@ const ContactsTrendsReport: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [granularity, setGranularity] = useState<Granularity>('daily');
   const [chartType, setChartType] = useState<ChartType>('area');
-  const [draftDateRange, setDraftDateRange] = useState({
+  const [dateRange, setDateRange] = useState<DateRange>({
     startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)),
     endDate: new Date(),
-    key: 'selection',
   });
-  const [appliedDateRange, setAppliedDateRange] = useState(draftDateRange);
   const [selectedCreators, setSelectedCreators] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -96,7 +100,7 @@ const ContactsTrendsReport: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!organizationId || !appliedDateRange.startDate || !appliedDateRange.endDate) return;
+      if (!organizationId || !dateRange.startDate || !dateRange.endDate) return;
       setIsLoading(true);
       setError(null);
       try {
@@ -108,8 +112,8 @@ const ContactsTrendsReport: React.FC = () => {
             companies(name)
           `)
           .eq('organization_id', organizationId)
-          .gte('created_at', appliedDateRange.startDate.toISOString())
-          .lte('created_at', appliedDateRange.endDate.toISOString());
+          .gte('created_at', dateRange.startDate.toISOString())
+          .lte('created_at', dateRange.endDate.toISOString());
 
         if (selectedCreators.length > 0) {
           query = query.in('created_by', selectedCreators);
@@ -134,7 +138,7 @@ const ContactsTrendsReport: React.FC = () => {
       }
     };
     fetchData();
-  }, [appliedDateRange, selectedCreators, organizationId]);
+  }, [dateRange, selectedCreators, organizationId]);
 
   const filteredRawData = useMemo(() => {
     return rawData.filter(profile => {
@@ -224,9 +228,9 @@ const ContactsTrendsReport: React.FC = () => {
       tableData: finalTableData,
       tableColumns: ['Creator Name', ...columns, 'Total'],
       aggregatedData: aggregated,
-      chartTitle: `Trend for ${format(appliedDateRange.startDate, 'MMM d, yyyy')} - ${format(appliedDateRange.endDate, 'MMM d, yyyy')}`
+      chartTitle: `Trend for ${format(dateRange.startDate, 'MMM d, yyyy')} - ${format(dateRange.endDate, 'MMM d, yyyy')}`
     };
-  }, [filteredRawData, granularity, appliedDateRange]);
+  }, [filteredRawData, granularity, dateRange]);
 
   const filteredTableData = useMemo(() =>
     tableData.filter(row =>
@@ -252,11 +256,6 @@ const ContactsTrendsReport: React.FC = () => {
     if (granularity === 'daily') return format(date, 'MMM d');
     if (granularity === 'monthly') return tick.split(' ')[0];
     return tick;
-  };
-
-  const handleApplyFilters = () => {
-    setAppliedDateRange(draftDateRange);
-    setCurrentPage(1);
   };
 
   // Pagination Logic
@@ -311,8 +310,8 @@ const ContactsTrendsReport: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-6 md:p-10 animate-fade-in">
-      <main className="w-full max-w-10xl mx-auto space-y-8">
+    <div className="w-full h-full animate-fade-in overflow-x-hidden">
+      <main className="w-full space-y-8">
         {/* Title Section */}
         <div>
           <h1 className="text-xl md:text-2xl font-semibold text-gray-800">Contact Acquisition Trends</h1>
@@ -550,84 +549,101 @@ const ContactsTrendsReport: React.FC = () => {
         {/* Filter Bar and Table */}
         <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
           <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
-              <Tabs value={granularity} onValueChange={(v) => setGranularity(v as Granularity)}>
-                <TabsList className="grid grid-cols-4 w-full sm:w-80">
-                  <TabsTrigger value="daily" className="flex items-center gap-1">
-                    <Calendar size={14} />
-                    Daily
-                  </TabsTrigger>
-                  <TabsTrigger value="weekly" className="flex items-center gap-1">
-                    <Calendar size={14} />
-                    Weekly
-                  </TabsTrigger>
-                  <TabsTrigger value="monthly" className="flex items-center gap-1">
-                    <Calendar size={14} />
-                    Monthly
-                  </TabsTrigger>
-                  <TabsTrigger value="yearly" className="flex items-center gap-1">
-                    <Calendar size={14} />
-                    Yearly
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <div className="flex-1 relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                <DateRangePickerField
-                  dateRange={draftDateRange}
-                  onDateRangeChange={setDraftDateRange}
-                  className="pl-10 h-10 w-full"
-                />
-              </div>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full sm:w-auto flex-grow justify-start text-left font-normal gap-2">
-                    <User className="h-4 w-4" />
-                    <span>{selectedCreators.length > 0 ? `${selectedCreators.length} Creators Selected` : 'Filter Creators'}</span>
-                    {selectedCreators.length > 0 && <Badge variant="secondary" className="ml-auto">{selectedCreators.length}</Badge>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-2">
-                  <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedCreators([])}>Deselect All</Button>
-                    {allCreators.map(creator => (
-                      <Label key={creator.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-normal">
-                        <Checkbox
-                          checked={selectedCreators.includes(creator.id)}
-                          onCheckedChange={() => setSelectedCreators(prev =>
-                            prev.includes(creator.id) ? prev.filter(id => id !== creator.id) : [...prev, creator.id]
-                          )}
-                        />
-                        {creator.name}
-                      </Label>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <Button onClick={handleApplyFilters} className="w-full sm:w-auto flex-shrink-0 bg-indigo-600 hover:bg-indigo-700">
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Apply Filters
-              </Button>
-              <div className="relative flex-grow w-full sm:w-auto">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                <Input
-                  placeholder="Search by creator, contact, or company..."
-                  className="pl-10 h-10"
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                />
-              </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <Button variant="outline" size="sm" onClick={exportToCSV}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Export CSV
-                </Button>
-                <Button variant="outline" size="sm" onClick={exportToPDF}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Export PDF
-                </Button>
-              </div>
-            </div>
+           <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+  {/* Granularity Tabs */}
+  <div className="flex-shrink-0 order-1">
+    <Tabs value={granularity} onValueChange={(v) => setGranularity(v as Granularity)}>
+      <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+        <TabsTrigger value="daily" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1">
+          <Calendar size={14} />
+          Daily
+        </TabsTrigger>
+        <TabsTrigger value="weekly" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1">
+          <Calendar size={14} />
+          Weekly
+        </TabsTrigger>
+        <TabsTrigger value="monthly" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1">
+          <Calendar size={14} />
+          Monthly
+        </TabsTrigger>
+        <TabsTrigger value="yearly" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1">
+          <Calendar size={14} />
+          Yearly
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  </div>
+
+  {/* Date Range Picker */}
+  <div className="flex-shrink-0 order-2 w-full sm:w-auto">
+    <EnhancedDateRangeSelector
+      value={dateRange}
+      onChange={setDateRange}
+    />
+  </div>
+
+  {/* Filter Creators */}
+  <div className="flex-shrink-0 order-3 w-full sm:w-auto">
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm flex items-center gap-2 justify-start font-normal">
+          <User className="h-4 w-4" />
+          <span>{selectedCreators.length > 0 ? `${selectedCreators.length} Creators Selected` : 'Filter Creators'}</span>
+          {selectedCreators.length > 0 && <Badge variant="secondary" className="ml-auto">{selectedCreators.length}</Badge>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2">
+        <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
+          <Button variant="ghost" size="sm" onClick={() => setSelectedCreators([])}>Deselect All</Button>
+          {allCreators.map(creator => (
+            <Label key={creator.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-normal">
+              <Checkbox
+                checked={selectedCreators.includes(creator.id)}
+                onCheckedChange={() => setSelectedCreators(prev =>
+                  prev.includes(creator.id) ? prev.filter(id => id !== creator.id) : [...prev, creator.id]
+                )}
+              />
+              {creator.name}
+            </Label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  </div>
+
+  {/* Search Bar */}
+  <div className="relative flex-grow order-4 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+    <Search
+      className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+      size={18}
+    />
+    <Input
+      placeholder="Search by creator, contact, or company..."
+      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm"
+      value={searchTerm}
+      onChange={(e) => {
+        setSearchTerm(e.target.value);
+        setCurrentPage(1);
+      }}
+    />
+  </div>
+
+  {/* Export Buttons */}
+  <div className="flex gap-2 flex-shrink-0 order-5">
+    <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Download className="w-4 h-4 mr-2" />
+      Export CSV
+    </Button>
+    <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Download className="w-4 h-4 mr-2" />
+      Export PDF
+    </Button>
+  </div>
+</div>
 
             <div className="rounded-xl border border-gray-200 shadow-sm animate-scale-in">
               <div className="overflow-x-auto">

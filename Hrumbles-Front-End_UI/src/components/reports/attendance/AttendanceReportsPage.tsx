@@ -173,88 +173,122 @@ const AttendanceReportsPage: React.FC = () => {
         <CardDescription>Analyze daily and monthly attendance records for your team.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <TabsList>
-              <TabsTrigger value="daily">Daily Attendance</TabsTrigger>
-              <TabsTrigger value="monthly">Monthly Attendance</TabsTrigger>
-              <TabsTrigger value="monthly-inout">Monthly In-Out</TabsTrigger>
-            </TabsList>
-            <div className="flex flex-wrap items-center gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="flex items-center gap-2">
-                    <UserIcon className="h-4 w-4" />
-                    {selectedEmployees.length > 0 ? `${selectedEmployees.length} Users Selected` : 'All Users'}
-                    {selectedEmployees.length > 0 && <Badge variant="secondary">{selectedEmployees.length}</Badge>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-2">
-                  <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedEmployees([])}>Clear Selection</Button>
-                    {employees.map(e => (
-                      <Label key={e.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-normal">
-                        <Checkbox checked={selectedEmployees.includes(e.id)} onCheckedChange={() => setSelectedEmployees(p => p.includes(e.id) ? p.filter(id => id !== e.id) : [...p, e.id])}/>
-                        {e.name}
-                      </Label>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              {activeTab === 'daily' ? (
-                <input
-                  type="date"
-                  value={format(selectedDate, 'yyyy-MM-dd')}
-                  onChange={(e) => setSelectedDate(new Date(e.target.value))}
-                  className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+<Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+  <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+    {/* Tabs */}
+    <div className="flex-shrink-0 order-1">
+      <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+        <TabsTrigger
+          value="daily"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          Daily Attendance
+        </TabsTrigger>
+        <TabsTrigger
+          value="monthly"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          Monthly Attendance
+        </TabsTrigger>
+        <TabsTrigger
+          value="monthly-inout"
+          className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+            data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+        >
+          Monthly In-Out
+        </TabsTrigger>
+      </TabsList>
+    </div>
+
+    {/* Filter Users */}
+    <div className="flex-shrink-0 order-2 w-full sm:w-auto">
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm flex items-center gap-2 justify-start">
+            <UserIcon className="h-4 w-4" />
+            {selectedEmployees.length > 0 ? `${selectedEmployees.length} Users Selected` : 'All Users'}
+            {selectedEmployees.length > 0 && <Badge variant="secondary">{selectedEmployees.length}</Badge>}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-2">
+          <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedEmployees([])}>Clear Selection</Button>
+            {employees.map(e => (
+              <Label key={e.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-normal">
+                <Checkbox 
+                  checked={selectedEmployees.includes(e.id)} 
+                  onCheckedChange={() => setSelectedEmployees(p => p.includes(e.id) ? p.filter(id => id !== e.id) : [...p, e.id])}
                 />
-              ) : (
-                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Select Month" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {monthOptions.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>
-                        {m.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <div className="flex gap-2 flex-shrink-0">
-                <Button variant="outline" size="sm" onClick={exportToCSV}>
-                  <Download className="w-4 h-4 mr-2" /> Export CSV
-                </Button>
-                <Button variant="outline" size="sm" onClick={exportToPDF}>
-                  <Download className="w-4 h-4 mr-2" /> Export PDF
-                </Button>
-              </div>
-            </div>
+                {e.name}
+              </Label>
+            ))}
           </div>
-          {isLoading ? (
-            <div className="flex justify-center items-center h-64 animate-fade-in">
-              <LoadingSpinner size={60} className="border-[6px] animate-spin text-indigo-600" />
-            </div>
-          ) : error ? (
-            <Alert variant="destructive" className="animate-fade-in">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : (
-            <>
-              <TabsContent value="daily" className="mt-4">
-                <DailyAttendanceReport data={filteredLogs} />
-              </TabsContent>
-              <TabsContent value="monthly" className="mt-4">
-                <MonthlyAttendanceReport data={filteredLogs} employees={employees} selectedMonth={new Date(selectedMonth)} />
-              </TabsContent>
-              <TabsContent value="monthly-inout" className="mt-4">
-                <MonthlyInOutReport data={filteredLogs} employees={employees} selectedMonth={new Date(selectedMonth)} />
-              </TabsContent>
-            </>
-          )}
-        </Tabs>
+        </PopoverContent>
+      </Popover>
+    </div>
+
+    {/* Date/Month Selector */}
+    <div className="flex-shrink-0 order-3 w-full sm:w-[180px]">
+      {activeTab === 'daily' ? (
+        <input
+          type="date"
+          value={format(selectedDate, 'yyyy-MM-dd')}
+          onChange={(e) => setSelectedDate(new Date(e.target.value))}
+          className="h-10 w-full rounded-full border border-input bg-gray-100 dark:bg-gray-800 shadow-inner px-3 text-sm text-gray-600 dark:text-gray-300"
+        />
+      ) : (
+        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+          <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+            <SelectValue placeholder="Select Month" />
+          </SelectTrigger>
+          <SelectContent>
+            {monthOptions.map((m) => (
+              <SelectItem key={m.value} value={m.value}>
+                {m.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+    </div>
+
+    {/* Export Buttons */}
+    <div className="flex gap-2 flex-shrink-0 order-4">
+      <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+        <Download className="w-4 h-4 mr-2" />
+        Export CSV
+      </Button>
+      <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+        <Download className="w-4 h-4 mr-2" />
+        Export PDF
+      </Button>
+    </div>
+  </div>
+  {isLoading ? (
+    <div className="flex justify-center items-center h-64 animate-fade-in">
+      <LoadingSpinner size={60} className="border-[6px] animate-spin text-indigo-600" />
+    </div>
+  ) : error ? (
+    <Alert variant="destructive" className="animate-fade-in">
+      <AlertCircle className="h-4 w-4" />
+      <AlertDescription>{error}</AlertDescription>
+    </Alert>
+  ) : (
+    <>
+      <TabsContent value="daily" className="mt-4">
+        <DailyAttendanceReport data={filteredLogs} />
+      </TabsContent>
+      <TabsContent value="monthly" className="mt-4">
+        <MonthlyAttendanceReport data={filteredLogs} employees={employees} selectedMonth={new Date(selectedMonth)} />
+      </TabsContent>
+      <TabsContent value="monthly-inout" className="mt-4">
+        <MonthlyInOutReport data={filteredLogs} employees={employees} selectedMonth={new Date(selectedMonth)} />
+      </TabsContent>
+    </>
+  )}
+</Tabs>
       </CardContent>
     </Card>
   );

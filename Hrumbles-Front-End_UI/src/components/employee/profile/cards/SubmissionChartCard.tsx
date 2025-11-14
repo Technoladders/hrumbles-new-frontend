@@ -177,19 +177,39 @@ export const CombinedSubmissionOnboardingChart: React.FC<CombinedChartCardProps>
             </h3>
           </div>
            <div className="flex items-center gap-4"> 
-          <Tabs 
-            value={activeTab} 
-            onValueChange={(value) => {
-              setActiveTab(value as "week" | "month" | "year");
-              setDateRange(null);
-            }}
-          >
-            <TabsList className="grid grid-cols-3">
-              <TabsTrigger value="week">Week</TabsTrigger>
-              <TabsTrigger value="month">Month</TabsTrigger>
-              <TabsTrigger value="year">Year</TabsTrigger>
-            </TabsList>
-          </Tabs>
+         <div className="flex-shrink-0 order-1">
+  <Tabs 
+    value={activeTab} 
+    onValueChange={(value) => {
+      setActiveTab(value as "week" | "month" | "year");
+      setDateRange(null);
+    }}
+  >
+    <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+      <TabsTrigger
+        value="week"
+        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+      >
+        Week
+      </TabsTrigger>
+      <TabsTrigger
+        value="month"
+        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+      >
+        Month
+      </TabsTrigger>
+      <TabsTrigger
+        value="year"
+        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+      >
+        Year
+      </TabsTrigger>
+    </TabsList>
+  </Tabs>
+</div>
            <MiniDateRangePicker
               dateRange={dateRange}
               onDateRangeChange={setDateRange}

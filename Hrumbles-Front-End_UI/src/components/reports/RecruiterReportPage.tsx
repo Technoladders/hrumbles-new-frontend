@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Download, FileSpreadsheet, Files, ChevronUp, ChevronDown, User } from 'lucide-react';
-import { DateRangePickerField } from './DateRangePickerField';
+import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { startOfMonth, endOfMonth } from 'date-fns';
 import FunnelChart from './FunnelChart';
 import RecruiterPerformanceTable from './RecruiterPerformanceTable';
@@ -53,6 +53,11 @@ interface RecruiterPerformanceData {
 interface ResumeAnalysisData {
   recruiter: string;
   resumes_analyzed: number;
+}
+
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
 }
 
 const ResumeAnalysisTable: React.FC<{ data: ResumeAnalysisData[] }> = ({ data }) => {
@@ -200,14 +205,9 @@ const ResumeAnalysisTable: React.FC<{ data: ResumeAnalysisData[] }> = ({ data })
 };
 
 const RecruiterReportPage: React.FC = () => {
-  const [dateRange, setDateRange] = useState<{
-    startDate: Date;
-    endDate: Date;
-    key: string;
-  }>({
+  const [dateRange, setDateRange] = useState<DateRange>({
     startDate: startOfMonth(new Date()),
     endDate: endOfMonth(new Date()),
-    key: 'selection',
   });
 
   const { isLoading, error, fetchRecruiterReport } = useStatusReport();
@@ -264,6 +264,9 @@ const RecruiterReportPage: React.FC = () => {
           console.error(err);
           setResumeData([]);
         }
+      } else {
+        setData([]);
+        setResumeData([]);
       }
     };
 
@@ -426,19 +429,43 @@ const RecruiterReportPage: React.FC = () => {
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Recruiter Performance Report</h1>
-        <DateRangePickerField
-          dateRange={dateRange}
-          onDateRangeChange={setDateRange}
+        <EnhancedDateRangeSelector
+          value={dateRange}
+          onChange={setDateRange}
         />
       </div>
 
       <Tabs defaultValue="overview">
-        <TabsList className="mb-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="funnelAnalysis">Funnel Analysis</TabsTrigger>
-          <TabsTrigger value="recruiters">Recruiter Performance</TabsTrigger>
-          <TabsTrigger value="activity">Activity Patterns</TabsTrigger>
-        </TabsList>
+<TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+      <TabsTrigger
+        value="overview"
+        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+      >
+        Overview
+      </TabsTrigger>
+      <TabsTrigger
+        value="funnelAnalysis"
+        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+      >
+        Funnel Analysis
+      </TabsTrigger>
+      <TabsTrigger
+        value="recruiters"
+        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+      >
+        Recruiter Performance
+      </TabsTrigger>
+      <TabsTrigger
+        value="activity"
+        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+      >
+        Activity Patterns
+      </TabsTrigger>
+    </TabsList>
 
         <TabsContent value="overview">
         <div className="mx-auto">

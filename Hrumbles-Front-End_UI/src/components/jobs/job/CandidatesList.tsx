@@ -2093,44 +2093,40 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
         </div>
       </div> }
       <div className="w-full mb-4 flex justify-center">
- <div className="p-1 flex items-center gap-2 rounded-xl bg-white border">
-    {/* Combine "All Candidates" with the dynamic statuses into one array */}
-    {[{ id: "all-candidates", name: "All Candidates" }, ...mainStatuses].map((status) => {
-      const isActive = activeTab === status.name || (status.id === 'all-candidates' && activeTab === 'All Candidates');
+<div className="flex-shrink-0 order-1">
+  <Tabs value={activeTab} onValueChange={setActiveTab}>
+    <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+      {/* Combine "All Candidates" with the dynamic statuses into one array */}
+      {[{ id: "all-candidates", name: "All Candidates" }, ...mainStatuses].map((status) => {
+        const isActive = activeTab === status.name || (status.id === 'all-candidates' && activeTab === 'All Candidates');
 
-      return (
-        <button
-          key={status.id}
-          onClick={() => setActiveTab(status.name)}
-          className={`relative px-4 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-            isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-primary"
-          }`}
-        >
-          {/* The sliding, animated background pill */}
-          {isActive && (
-            <motion.div
-              layoutId="active-tab-pill"
-              className="absolute inset-0 bg-primary rounded-lg"
-              style={{ zIndex: 10 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            />
-          )}
-
-          {/* Tab Content (Text and Count) */}
-          <span className="relative flex items-center" style={{ zIndex: 20 }}>
-            {status.name}
-            <span
-              className={`ml-2 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
-                isActive ? "bg-white/20 text-white" : "bg-primary/10 text-primary"
+        return (
+          <TabsTrigger
+            key={status.id}
+            value={status.name}
+            className={`relative px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+              data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-primary"
               }`}
-            >
-              {getTabCount(status.name)}
+          >
+            {/* Tab Content (Text and Count) */}
+            <span className="relative flex items-center">
+              {status.name}
+              <span
+                className={`ml-2 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
+                  isActive ? "bg-white/20 text-white" : "bg-primary/10 text-primary"
+                }`}
+              >
+                {getTabCount(status.name)}
+              </span>
             </span>
-          </span>
-        </button>
-      );
-    })}
-  </div>
+          </TabsTrigger>
+        );
+      })}
+    </TabsList>
+  </Tabs>
+</div>
 </div>
       {filteredCandidates.length === 0 ? (
         <EmptyState onAddCandidate={async () => {

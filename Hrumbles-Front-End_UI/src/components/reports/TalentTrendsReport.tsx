@@ -10,8 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Activity, ArrowUp, Sigma, Calendar, Search, Download, ChevronLeft, ChevronRight, User, CheckCircle, TrendingUp } from 'lucide-react';
-import { DateRangePickerField } from './DateRangePickerField';
+import { AlertCircle, Activity, ArrowUp, Sigma, Calendar, Search, Download, ChevronLeft, ChevronRight, User, TrendingUp } from 'lucide-react';
+import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { supabase } from '@/integrations/supabase/client';
 import { format, isValid } from 'date-fns';
 import Papa from 'papaparse';
@@ -24,6 +24,12 @@ import {
 
 type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly';
 type ChartType = 'area' | 'bar';
+
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
+
 interface Recruiter {
   id: string;
   name: string;
@@ -36,12 +42,15 @@ const TalentTrendsReport: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [granularity, setGranularity] = useState<Granularity>('daily');
   const [chartType, setChartType] = useState<ChartType>('area');
-  const [draftDateRange, setDraftDateRange] = useState({
-    startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)),
+  const [dateRange, setDateRange] = useState<DateRange>({
+    startDate: (() => {
+      const now = new Date();
+      const start = new Date(now);
+      start.setMonth(now.getMonth() - 1);
+      return start;
+    })(),
     endDate: new Date(),
-    key: 'selection',
   });
-  const [appliedDateRange, setAppliedDateRange] = useState(draftDateRange);
   const [selectedRecruiters, setSelectedRecruiters] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -65,15 +74,15 @@ const TalentTrendsReport: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!appliedDateRange.startDate || !appliedDateRange.endDate) return;
+      if (!dateRange.startDate || !dateRange.endDate) return;
       setIsLoading(true);
       setError(null);
       try {
         let query = supabase
           .from('hr_talent_pool')
           .select('created_at, hr_employees!hr_talent_pool_created_by_fkey(id, first_name, last_name)')
-          .gte('created_at', appliedDateRange.startDate.toISOString())
-          .lte('created_at', appliedDateRange.endDate.toISOString());
+          .gte('created_at', dateRange.startDate.toISOString())
+          .lte('created_at', dateRange.endDate.toISOString());
 
         if (selectedRecruiters.length > 0) {
           query = query.in('created_by', selectedRecruiters);
@@ -89,7 +98,7 @@ const TalentTrendsReport: React.FC = () => {
       }
     };
     fetchData();
-  }, [appliedDateRange, selectedRecruiters]);
+  }, [dateRange, selectedRecruiters]);
 
   const { chartData, verticalChartData, tableData, tableColumns, chartTitle, recruiterNames } = useMemo(() => {
     const getRecruiterName = (item: any) => `${item.hr_employees.first_name} ${item.hr_employees.last_name}`;
@@ -147,10 +156,10 @@ const TalentTrendsReport: React.FC = () => {
       verticalChartData,
       tableData: finalTableData,
       tableColumns: ['Recruiter Name', ...columns, 'Total'],
-      chartTitle: `Trend for ${format(appliedDateRange.startDate, 'MMM d, yyyy')} - ${format(appliedDateRange.endDate, 'MMM d, yyyy')}`,
+      chartTitle: `Trend for ${format(dateRange.startDate, 'MMM d, yyyy')} - ${format(dateRange.endDate, 'MMM d, yyyy')}`,
       recruiterNames: Object.keys(pivotedData)
     };
-  }, [rawData, granularity, appliedDateRange]);
+  }, [rawData, granularity, dateRange]);
 
   const filteredTableData = useMemo(() =>
     tableData.filter(row =>
@@ -178,11 +187,6 @@ const TalentTrendsReport: React.FC = () => {
     if (granularity === 'daily') return format(date, 'MMM d');
     if (granularity === 'monthly') return tick.split(' ')[0];
     return tick;
-  };
-
-  const handleApplyFilters = () => {
-    setAppliedDateRange(draftDateRange);
-    setCurrentPage(1);
   };
 
   // Pagination Logic
@@ -422,82 +426,99 @@ const TalentTrendsReport: React.FC = () => {
         {/* Filter Bar and Table */}
         <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl">
           <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
-              <Tabs value={granularity} onValueChange={(v) => setGranularity(v as Granularity)}>
-                <TabsList className="grid grid-cols-4 w-full sm:w-80">
-                  <TabsTrigger value="daily" className="flex items-center gap-1">
-                    <Calendar size={14} />
-                    Daily
-                  </TabsTrigger>
-                  <TabsTrigger value="weekly" className="flex items-center gap-1">
-                    <Calendar size={14} />
-                    Weekly
-                  </TabsTrigger>
-                  <TabsTrigger value="monthly" className="flex items-center gap-1">
-                    <Calendar size={14} />
-                    Monthly
-                  </TabsTrigger>
-                  <TabsTrigger value="yearly" className="flex items-center gap-1">
-                    <Calendar size={14} />
-                    Yearly
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <div className="flex-1 relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                <DateRangePickerField
-                  dateRange={draftDateRange}
-                  onDateRangeChange={setDraftDateRange}
-                  className="pl-10 h-10 w-full"
-                />
-              </div>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full sm:w-auto flex-grow justify-start text-left font-normal gap-2">
-                    <User className="h-4 w-4" />
-                    <span>{selectedRecruiters.length > 0 ? `${selectedRecruiters.length} Recruiters Selected` : 'Filter Recruiters'}</span>
-                    {selectedRecruiters.length > 0 && <Badge variant="secondary" className="ml-auto">{selectedRecruiters.length}</Badge>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-2">
-                  <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedRecruiters([])}>Deselect All</Button>
-                    {allRecruiters.map(r => (
-                      <Label key={r.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-normal">
-                        <Checkbox
-                          checked={selectedRecruiters.includes(r.id)}
-                          onCheckedChange={() => setSelectedRecruiters(p => p.includes(r.id) ? p.filter(id => id !== r.id) : [...p, r.id])}
-                        />
-                        {r.name}
-                      </Label>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <Button onClick={handleApplyFilters} className="w-full sm:w-auto flex-shrink-0 bg-indigo-600 hover:bg-indigo-700">
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Apply Filters
-              </Button>
-              <div className="relative flex-grow w-full sm:w-auto">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                <Input
-                  placeholder="Search recruiters in table..."
-                  className="pl-10 h-10"
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                />
-              </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <Button variant="outline" size="sm" onClick={exportToCSV}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Export CSV
-                </Button>
-                <Button variant="outline" size="sm" onClick={exportToPDF}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Export PDF
-                </Button>
-              </div>
-            </div>
+  <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+  {/* Granularity Tabs */}
+  <div className="flex-shrink-0 order-4">
+    <Tabs value={granularity} onValueChange={(v) => setGranularity(v as Granularity)}>
+      <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+        <TabsTrigger value="daily" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1">
+          <Calendar size={14} />
+          Daily
+        </TabsTrigger>
+        <TabsTrigger value="weekly" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1">
+          <Calendar size={14} />
+          Weekly
+        </TabsTrigger>
+        <TabsTrigger value="monthly" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1">
+          <Calendar size={14} />
+          Monthly
+        </TabsTrigger>
+        <TabsTrigger value="yearly" className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center gap-1">
+          <Calendar size={14} />
+          Yearly
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  </div>
+
+  {/* Date Range Picker */}
+  <div className="flex-shrink-0 order-2 w-full sm:w-auto">
+    <EnhancedDateRangeSelector
+      value={dateRange}
+      onChange={setDateRange}
+    />
+  </div>
+
+  {/* Filter Recruiters */}
+  <div className="flex-shrink-0 order-3 w-full sm:w-auto">
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm flex-grow justify-start text-left font-normal gap-2">
+          <User className="h-4 w-4" />
+          <span>{selectedRecruiters.length > 0 ? `${selectedRecruiters.length} Recruiters Selected` : 'Filter Recruiters'}</span>
+          {selectedRecruiters.length > 0 && <Badge variant="secondary" className="ml-auto">{selectedRecruiters.length}</Badge>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2">
+        <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
+          <Button variant="ghost" size="sm" onClick={() => setSelectedRecruiters([])}>Deselect All</Button>
+          {allRecruiters.map(r => (
+            <Label key={r.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-normal">
+              <Checkbox
+                checked={selectedRecruiters.includes(r.id)}
+                onCheckedChange={() => setSelectedRecruiters(p => p.includes(r.id) ? p.filter(id => id !== r.id) : [...p, r.id])}
+              />
+              {r.name}
+            </Label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  </div>
+
+  {/* Search Bar */}
+  <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+    <Search
+      className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+      size={18}
+    />
+    <Input
+      placeholder="Search recruiters in table..."
+      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm"
+      value={searchTerm}
+      onChange={(e) => { 
+        setSearchTerm(e.target.value); 
+        setCurrentPage(1); 
+      }}
+    />
+  </div>
+
+  {/* Export Buttons */}
+  <div className="flex gap-2 flex-shrink-0 order-5">
+    <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Download className="w-4 h-4 mr-2" />
+      CSV
+    </Button>
+    <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Download className="w-4 h-4 mr-2" />
+      PDF
+    </Button>
+  </div>
+</div>
 
             <div className="rounded-xl border border-gray-200 shadow-sm animate-scale-in">
               <div className="overflow-x-auto">
@@ -600,4 +621,3 @@ const TalentTrendsReport: React.FC = () => {
 };
 
 export default TalentTrendsReport;
-// 

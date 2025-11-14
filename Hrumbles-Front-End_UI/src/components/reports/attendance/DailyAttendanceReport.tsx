@@ -34,10 +34,22 @@ const DailyAttendanceReport: React.FC<DailyAttendanceReportProps> = ({ data }) =
     <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl animate-scale-in">
       <CardContent className="p-0">
         <Tabs value={viewType} onValueChange={setViewType as any}>
-          <TabsList className="m-4">
-            <TabsTrigger value="billable">Billable</TabsTrigger>
-            <TabsTrigger value="non_billable">Non-Billable</TabsTrigger>
-          </TabsList>
+<TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+      <TabsTrigger
+        value="billable"
+        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+      >
+        Billable
+      </TabsTrigger>
+      <TabsTrigger
+        value="non_billable"
+        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
+          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+      >
+        Non-Billable
+      </TabsTrigger>
+    </TabsList>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
