@@ -699,7 +699,7 @@ console.log("return data", paginatedData)
 <div className="relative z-10">
   <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
     {/* Date Range */}
-    <div className="flex-shrink-0 order-1 w-full sm:w-auto min-w-0 overflow-hidden">
+    <div className="flex-shrink-0 order-5 w-full sm:w-auto min-w-0 overflow-hidden">
       <EnhancedDateRangeSelector 
         value={dateRange} 
         onChange={setDateRange} 
@@ -718,8 +718,8 @@ console.log("return data", paginatedData)
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
-              <Button className="w-full rounded-full justify-start h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm relative z-0">
-                <Tag size={16} className="text-gray-500 mr-2 flex-shrink-0" />
+              <Button variant='outline' className="group w-full rounded-full justify-start h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 shadow-inner text-sm relative z-0">
+                <Tag size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
                 <div className="truncate min-w-0">
                   {statusFilter.length === 0
                     ? "All Statuses"
@@ -791,8 +791,8 @@ console.log("return data", paginatedData)
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
-              <Button className="w-full rounded-full justify-start font-normal h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm relative z-0">
-                <Building size={16} className="text-gray-500 mr-2 flex-shrink-0" />
+              <Button variant='outline' className="group w-full rounded-full justify-start font-normal h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 shadow-inner text-sm relative z-0">
+                <Building size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
                 <div className="truncate min-w-0">
                   {clientFilter.length === 0 ? "All Clients" : `${clientFilter.length} clients selected`}
                 </div>
@@ -843,8 +843,8 @@ console.log("return data", paginatedData)
           <Tooltip>
             <TooltipTrigger asChild>
               <DropdownMenuTrigger asChild>
-                <Button className="w-full rounded-full justify-start font-normal h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm relative z-0">
-                  <User size={16} className="text-gray-500 mr-2 flex-shrink-0" />
+                <Button variant='outline' className="group w-full rounded-full justify-start font-normal h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 shadow-inner text-sm relative z-0">
+                  <User size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
                   <div className="truncate min-w-0">
                     {recruiterFilter.length === 0 ? "All Recruiters" : `${recruiterFilter.length} recruiters selected`}
                   </div>
@@ -890,7 +890,7 @@ console.log("return data", paginatedData)
     )}
 
     {/* Search Bar */}
-    <div className="relative flex-grow order-5 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+    <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
       <Input 
         placeholder="Search name, job, client..." 
@@ -907,7 +907,7 @@ console.log("return data", paginatedData)
     <Button 
       variant="outline" 
       onClick={() => setIsGrouped(!isGrouped)} 
-      className="flex-shrink-0 order-6 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm"
+      className="flex-shrink-0 order-6 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500"
     >
       {isGrouped ? <List className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />} 
       {isGrouped ? 'Ungroup' : 'Group by Status'}
@@ -915,10 +915,10 @@ console.log("return data", paginatedData)
 
     {/* Export Buttons */}
     <div className="flex gap-2 flex-shrink-0 order-7">
-      <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500">
         <Download className="w-4 h-4 mr-2" /> Export CSV
       </Button>
-      <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+      <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500">
         <Download className="w-4 h-4 mr-2" /> Export PDF
       </Button>
     </div>

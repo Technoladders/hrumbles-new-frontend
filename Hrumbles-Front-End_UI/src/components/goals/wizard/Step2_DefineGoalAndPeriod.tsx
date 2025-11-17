@@ -48,11 +48,31 @@ const Step2_DefineGoalAndPeriod: React.FC<Step2Props> = ({ department, metric, o
   const isHrFlow = department === 'Human Resource';
   const sourceConfig = useMemo(() => AUTOMATION_SOURCES.find(s => s.value === metric), [metric]);
   const { data: allGoals = [] } = useQuery({ queryKey: ['goals'], queryFn: getGoals });
-  const { data: jobSubStatuses = [], isLoading: isLoadingStatuses } = useQuery({
-    queryKey: ['jobSubStatuses', organizationId],
-    queryFn: async () => (await supabase.from('job_statuses').select('id, name').eq('organization_id', organizationId).eq('type', 'sub').order('name')).data || [],
+  
+  const { data: allStatuses = [], isLoading: isLoadingStatuses } = useQuery({
+    queryKey: ['jobStatuses', organizationId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('job_statuses')
+        .select('id, name, color, type, parent_id, display_order')
+        .eq('organization_id', organizationId)
+        .order('display_order', { ascending: true });
+      return data || [];
+    },
     enabled: isHrFlow,
   });
+
+  const groupedStatuses = useMemo(() => {
+    const mains = allStatuses.filter((s: any) => s.type === 'main').sort((a: any, b: any) => a.display_order - b.display_order);
+    return mains.map((main: any) => ({
+      main,
+      subs: allStatuses
+        .filter((s: any) => s.type === 'sub' && s.parent_id === main.id)
+        .sort((a: any, b: any) => a.display_order - b.display_order),
+    })).filter((g: any) => g.subs.length > 0);
+  }, [allStatuses]);
+
+  console.log('groupedStatuses', groupedStatuses);
  
   const relevantGoals = allGoals.filter(g => g.sector === department);
   const handleConfirmGoal = () => {
@@ -92,7 +112,7 @@ const Step2_DefineGoalAndPeriod: React.FC<Step2Props> = ({ department, metric, o
                       <SelectionCard label="Create New Goal" icon={<PlusCircle size={20}/>} isSelected={goalSelectionType === 'new'} onClick={() => setGoalSelectionType('new')} />
                   </div>
                   {goalSelectionType === 'existing' && <Select onValueChange={setSelectedExistingGoalId}><SelectTrigger className="h-12 text-base"><SelectValue placeholder="Select an existing HR goal..."/></SelectTrigger><SelectContent>{relevantGoals.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent></Select>}
-                  {goalSelectionType === 'new' && <div className="space-y-3 pt-2 border-t"><Input className="h-12 text-base" placeholder="Enter new goal name..." value={newGoalName} onChange={e => setNewGoalName(e.target.value)} /><Select onValueChange={setSelectedStatusId} disabled={isLoadingStatuses}><SelectTrigger className="h-12 text-base"><SelectValue placeholder="Select HR status to track..."/></SelectTrigger><SelectContent>{jobSubStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>}
+                  {goalSelectionType === 'new' && <div className="space-y-3 pt-2 border-t"><Input className="h-12 text-base" placeholder="Enter new goal name..." value={newGoalName} onChange={e => setNewGoalName(e.target.value)} /><Select onValueChange={setSelectedStatusId} disabled={isLoadingStatuses}><SelectTrigger className="h-12 text-base"><SelectValue placeholder="Select HR status to track..."/></SelectTrigger><SelectContent>{groupedStatuses.map((group: any) => (<div key={group.main.id} className="py-1"><div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-gray-200">{group.main.name}</div>{group.subs.map((sub: any) => (<SelectItem key={sub.id} value={sub.id} className="pl-8"><div className="flex items-center"><div className="w-3 h-3 rounded-full mr-2 flex-shrink-0" style={{ backgroundColor: sub.color }}></div>{sub.name}</div></SelectItem>))}</div>))}</SelectContent></Select></div>}
               </div>
           );
       }

@@ -20,10 +20,11 @@ interface Step3Props {
   department: string;
   period: { type: GoalType, start: Date, end: Date };
   onBack: () => void;
-  onClose: () => void;
+  onSuccess: () => void;
+  onCancel: () => void;
 }
 
-const Step3_AssignEmployees: React.FC<Step3Props> = ({ goalDefinition, department, period, onBack, onClose }) => {
+const Step3_AssignEmployees: React.FC<Step3Props> = ({ goalDefinition, department, period, onBack, onSuccess, onCancel }) => {
   const [selectedEmployees, setSelectedEmployees] = useState<Employee[]>([]);
   const [employeeTargets, setEmployeeTargets] = useState<Map<string, number | undefined>>(new Map());
   const queryClient = useQueryClient();
@@ -78,7 +79,7 @@ const Step3_AssignEmployees: React.FC<Step3Props> = ({ goalDefinition, departmen
     onSuccess: () => {
       toast.success("Goal created and assigned successfully!");
       queryClient.invalidateQueries({ queryKey: ["goals"] });
-      onClose();
+      onSuccess();
     },
     onError: (error: Error) => toast.error(`Error: ${error.message}`),
   });
@@ -120,6 +121,7 @@ const Step3_AssignEmployees: React.FC<Step3Props> = ({ goalDefinition, departmen
       )}
 
       <DialogFooter className="pt-8">
+        <Button variant="outline" onClick={onCancel}>Cancel</Button>
         <Button variant="outline" onClick={onBack}><ArrowLeft className="h-4 w-4 mr-2" />Back</Button>
         <Button onClick={() => assignGoalsMutation.mutate()} disabled={assignGoalsMutation.isPending || selectedEmployees.length === 0}>
           {assignGoalsMutation.isPending ? "Saving..." : "Finish & Assign Goal"}

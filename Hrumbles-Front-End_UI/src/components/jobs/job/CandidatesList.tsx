@@ -96,6 +96,7 @@ interface CandidatesListProps {
   onRefresh: () => Promise<void>;
   isCareerPage?: boolean;
   scoreFilter?: string;
+  candidateFilter?: "All" | "Yours";
    rejection_reason?: string; 
 }
 
@@ -116,6 +117,7 @@ const CandidatesList = forwardRef((props: CandidatesListProps, ref) => {
     jobdescription,
     onRefresh,
     scoreFilter = "all",
+    candidateFilter = "All",
     isCareerPage = false
   } = props;
   const navigate = useNavigate();
@@ -279,7 +281,7 @@ console.log('mainStatuses', mainStatuses)
   const [currentSubStatusId, setCurrentSubStatusId] = useState<string | null>(null);
   const [currentRound, setCurrentRound] = useState<string | null>(null);
   const [needsReschedule, setNeedsReschedule] = useState(false);
-  const [candidateFilter, setCandidateFilter] = useState<"All" | "Yours">("All"); // New filter state
+
 
   const [isTimelineModalOpen, setIsTimelineModalOpen] = useState(false);
 const [selectedCandidateForTimeline, setSelectedCandidateForTimeline] = useState<Candidate | null>(null);
@@ -1308,12 +1310,12 @@ const candidates = useMemo(() => {
       filtered = filtered.filter(c => c.appliedFrom === "Candidate");
     }
 
-    if (candidateFilter === "Yours") {
-      const userFullName = `${user.user_metadata.first_name} ${user.user_metadata.last_name}`;
-      filtered = filtered.filter(
-        c => c.owner === userFullName || c.appliedFrom === userFullName
-      );
-    }
+if (candidateFilter === "Yours") { // Use prop directly
+    const userFullName = `${user.user_metadata.first_name} ${user.user_metadata.last_name}`;
+    filtered = filtered.filter(
+      c => c.owner === userFullName || c.appliedFrom === userFullName
+    );
+  }
     
     return filtered;
   }, [candidates, appliedCandidates, activeTab, statusFilters, statusFilter, isCareerPage, candidateFilter, scoreFilter, candidateAnalysisData, user]); // Added user to dependencies
@@ -2075,23 +2077,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
 };
   return (
     <>
-    {isEmployee && <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600">Filter Candidates:</span>
-          <Select
-            value={candidateFilter}
-            onValueChange={(value: "All" | "Yours") => setCandidateFilter(value)}
-          >
-            <SelectTrigger className="w-[120px]">
-              <SelectValue placeholder="All" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All</SelectItem>
-              <SelectItem value="Yours">Yours</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div> }
+
       <div className="w-full mb-4 flex justify-center">
 <div className="flex-shrink-0 order-1">
   <Tabs value={activeTab} onValueChange={setActiveTab}>

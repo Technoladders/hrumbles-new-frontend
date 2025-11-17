@@ -44,19 +44,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { DateRangePickerField } from '@/components/ui/DateRangePickerField';
+import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { format, isValid, formatDistanceToNow } from 'date-fns';
 import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, Calendar, ChevronLeft, ChevronRight, Sigma, ArrowUp, Activity, TrendingUp, CheckCircle, Tag, Building, User } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  LabelList,
-} from 'recharts';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -100,6 +90,11 @@ interface TableRowData {
 interface GroupedStatusOption {
     mainStatus: string;
     subStatuses: string[];
+}
+
+interface DateRange {
+  startDate: Date | null;
+  endDate: Date | null;
 }
 
 // --- Color map ---
@@ -166,45 +161,6 @@ const getScoreBadgeClass = (score: number | null | undefined): string => {
 };
 
 
-// --- Tooltip ---
-const CustomFunnelTooltip = (props: any) => {
-  const { active, payload, label, barDefinitions } = props;
-
-  if (active && payload && payload.length) {
-    const currentRowData = payload[0].payload;
-    const activeBars = barDefinitions.filter((bar: any) => (currentRowData[bar.key] || 0) > 0);
-
-    return (
-      <div className="p-3 text-sm bg-white border border-gray-200 rounded-lg shadow-lg animate-fade-in">
-        <p className="font-bold text-gray-800 mb-2">{label}</p>
-        <div className="space-y-1.5">
-          {activeBars.map((bar: any, index: number) => {
-            const value = currentRowData[bar.key];
-            const displayName = (label === 'Joined') ? 'Joined' : bar.name;
-
-            return (
-              <div key={index} className="flex items-center">
-                <div
-                  className="w-3 h-3 rounded-sm mr-2"
-                  style={{ backgroundColor: bar.color }}
-                />
-                <span className="text-gray-600">{`${displayName}: `}</span>
-                <span className="font-semibold text-gray-800">{value}</span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="border-t border-gray-200 mt-3 pt-2 flex justify-between font-bold text-gray-900">
-          <span>Total:</span>
-          <span>{currentRowData.total}</span>
-        </div>
-      </div>
-    );
-  }
-  return null;
-};
-
-
 // This is the correct location, right after imports and before the component.
 const getScoreStyles = (score: number | null | undefined): React.CSSProperties => {
   if (score == null) {
@@ -260,11 +216,7 @@ const [recruiterFilter, setRecruiterFilter] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
-    const [dateRange, setDateRange] = useState({
-    startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)),
-    endDate: new Date(),
-    key: 'selection',
-  });
+    const [dateRange, setDateRange] = useState<DateRange>({ startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)), endDate: new Date() });
 
   const [departmentName, setDepartmentName] = useState<string | null>(null);
   const [isDepartmentLoading, setIsDepartmentLoading] = useState(true);
@@ -302,7 +254,7 @@ const [recruiterFilter, setRecruiterFilter] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!organizationId || isDepartmentLoading) return;
+      if (!organizationId || isDepartmentLoading || !dateRange.startDate || !dateRange.endDate) return;
       
       setIsLoading(true);
       setError(null);
@@ -458,53 +410,6 @@ const filteredCandidates = useMemo(() => {
       .sort((a, b) => b.value - a.value);
   }, [groupedBySubStatus]);
 
-  const dynamicChartConfig = useMemo(() => {
-    if (mainStatuses.length === 0) {
-      return { barDefinitions: [], funnelData: [] };
-    }
-
-    const barDefinitions = subStatuses.map(sub => ({
-      key: sub.name.replace(/\s+/g, ''),
-      name: sub.name,
-      color: statusColorMap[sub.name] || sub.color || defaultColor, 
-      parent_id: sub.parent_id,
-    }));
-
-    const subToMainIdMap = new Map(subStatuses.map(s => [s.id, s.parent_id]));
-    
-    const dataTemplate = new Map(mainStatuses.map(main => [main.id, {
-        name: main.name,
-        total: 0,
-        ...barDefinitions.reduce((acc, bar) => ({ ...acc, [bar.key]: 0 }), {})
-    }]));
-
-    filteredCandidates.forEach(candidate => {
-        const subStatusId = candidate.sub_status_id;
-        const mainStatusId = candidate.main_status_id || (subStatusId ? subToMainIdMap.get(subStatusId) : null);
-        if (mainStatusId && dataTemplate.has(mainStatusId)) {
-            const entry = dataTemplate.get(mainStatusId)!;
-            const subStatusName = statusNameMap[subStatusId || ''] || 'New Applicant';
-            const subStatusKey = subStatusName.replace(/\s+/g, '');
-            if (entry.hasOwnProperty(subStatusKey)) {
-                entry[subStatusKey]++;
-                entry.total++;
-            }
-        }
-    });
-
-    const funnelData = Array.from(dataTemplate.values());
-    
-    funnelData.forEach((row: any) => {
-        const orderedKeys = barDefinitions.map(b => b.key);
-        const lastVisibleKey = [...orderedKeys].reverse().find(key => row[key] > 0);
-        if (lastVisibleKey) {
-            row.lastKey = lastVisibleKey;
-        }
-    });
-
-    return { barDefinitions, funnelData };
-  }, [mainStatuses, subStatuses, filteredCandidates, statusNameMap]);
-
 
   const tableRows = useMemo<TableRowData[]>(() => {
     if (!isGrouped) {
@@ -585,29 +490,6 @@ const filteredCandidates = useMemo(() => {
     setCurrentPage(1);
   };
 
-const generateAxisTicks = (data: any[], step: number) => {
-  const maxTotalInData = Math.max(...data.map(d => d.total), 0);
-  
-  if (maxTotalInData === 0) {
-    const defaultMax = 40;
-    const defaultTicks = [];
-    for (let i = 0; i <= defaultMax; i += 10) {
-      defaultTicks.push(i);
-    }
-    return { domain: [0, defaultMax], ticks: defaultTicks };
-  }
-
-  const axisTopValue = Math.ceil((maxTotalInData + (step / 4)) / step) * step;
-  
-  const ticks = [];
-  for (let i = 0; i <= axisTopValue; i += step) {
-    ticks.push(i);
-  }
-  return { domain: [0, axisTopValue], ticks };
-};
-
-const { domain: axisDomain, ticks: axisTicks } = generateAxisTicks(dynamicChartConfig.funnelData, 20);
-
 const handleStatusFilterChange = (statusName: string, checked: boolean) => {
   setTempStatusFilter(prev => {
     if (checked) {
@@ -653,8 +535,8 @@ const getStatusBadgeClass = (statusName: string | null | undefined): string => {
 
 return (
       <TooltipProvider>
-        <div className="w-full h-full animate-fade-in overflow-x-hidden bg-gray-50/50 p-4 sm:p-6">
-          <main className="w-full space-y-6">
+        <div className="w-full h-full animate-fade-in overflow-x-hidden">
+          <main className="w-full space-y-8">
             {/* Header and KPI Cards - No changes needed here */}
             <div>
               <h1 className="text-xl md:text-2xl font-semibold text-gray-800">My Submissions</h1>
@@ -667,79 +549,185 @@ return (
               <Card className="shadow-lg border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-xl"> <CardContent className="p-5"> <div className="flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-1">Top Status</p> <h3 className="text-2xl font-bold text-gray-800 truncate" title={topStatus.name}>{topStatus.name}</h3> </div> <div className="bg-teal-100 p-3 rounded-full"> <TrendingUp size={20} className="text-teal-600" /> </div> </div> </CardContent> </Card>
             </div>
 
-            {/* Filters and Search Bar - No changes needed here */}
-            <Card className="shadow-lg border-none bg-white">
-              <CardContent className="p-4 sm:p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                    <DateRangePickerField 
-                        dateRange={dateRange as any} 
-                        onDateRangeChange={setDateRange} 
-                        onApply={() => setCurrentPage(1)} 
-                    />
-                    <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempStatusFilter(statusFilter); } }}>
-                      <DropdownMenuTrigger asChild>
-                          <Button variant="outline" className="w-full justify-start font-normal h-10">
-                              <Tag size={16} className="text-gray-500 mr-2" />
-                              <span className="truncate">
-                                  {statusFilter.length === 0 ? "All Statuses" : `${statusFilter.length} statuses selected`}
-                              </span>
-                          </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-60 max-h-96 z-[60] flex flex-col origin-top">
-                        <div className="overflow-y-auto">
-                          <DropdownMenuCheckboxItem checked={tempStatusFilter.length === 0} onCheckedChange={() => setTempStatusFilter([])} onSelect={(e) => e.preventDefault()}> All Statuses </DropdownMenuCheckboxItem>
-                          <DropdownMenuSeparator />
-                          {groupedStatusOptions.map((group) => (
-                            <React.Fragment key={group.mainStatus}>
-                              <DropdownMenuLabel>{group.mainStatus}</DropdownMenuLabel>
-                              {group.subStatuses.map((subStatus) => (
-                                <DropdownMenuCheckboxItem key={subStatus} checked={tempStatusFilter.includes(subStatus)} onCheckedChange={(checked) => handleStatusFilterChange(subStatus, checked)} onSelect={(e) => e.preventDefault()}> {subStatus} </DropdownMenuCheckboxItem>
-                              ))}
-                            </React.Fragment>
-                          ))}
-                        </div>
-                        <DropdownMenuSeparator />
-                        <div className="p-2 border-t">
-                          <Button className="w-full" size="sm" onClick={() => { setStatusFilter(tempStatusFilter); }}> Apply Filter </Button>
-                        </div>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempClientFilter(clientFilter); } }}>
-                      <DropdownMenuTrigger asChild>
-                          <Button variant="outline" className="w-full justify-start font-normal h-10">
-                              <Building size={16} className="text-gray-500 mr-2" />
-                              <span className="truncate">
-                                  {clientFilter.length === 0 ? "All Clients" : `${clientFilter.length} clients selected`}
-                              </span>
-                          </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-64 max-h-96 z-[60] flex flex-col origin-top">
-                        <div className="overflow-y-auto">
-                          <DropdownMenuCheckboxItem checked={tempClientFilter.length === 0} onCheckedChange={() => setTempClientFilter([])} onSelect={(e) => e.preventDefault()}> All Clients </DropdownMenuCheckboxItem>
-                          <DropdownMenuSeparator />
-                          {clientOptions.map(client => (
-                            <DropdownMenuCheckboxItem key={client} checked={tempClientFilter.includes(client)} onCheckedChange={(checked) => handleClientFilterChange(client, !!checked)} onSelect={(e) => e.preventDefault()}> {client} </DropdownMenuCheckboxItem>
-                          ))}
-                        </div>
-                        <DropdownMenuSeparator />
-                        <div className="p-2 border-t">
-                          <Button className="w-full" size="sm" onClick={() => setClientFilter(tempClientFilter)}> Apply Filter </Button>
-                        </div>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                        <Input placeholder="Search..." className="pl-10 h-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                    </div>
+            <Card className="shadow-xl border-none bg-white transition-all duration-300 hover:shadow-2xl">
+    <CardContent className="p-6">
+<div className="relative z-10">
+  <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+    {/* Date Range */}
+    <div className="flex-shrink-0 order-5 w-full sm:w-auto min-w-0 overflow-hidden">
+      <EnhancedDateRangeSelector 
+        value={dateRange} 
+        onChange={setDateRange} 
+      />
+    </div>
+
+    {/* Status Filter */}
+    <div className="flex-shrink-0 order-2 w-full sm:w-[150px] min-w-0 overflow-hidden">
+      <DropdownMenu
+        onOpenChange={(isOpen) => {
+          if (isOpen) {
+            setTempStatusFilter(statusFilter);
+          }
+        }}
+      >
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button variant='outline' className="group w-full rounded-full justify-start h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 shadow-inner text-sm relative z-0">
+                <Tag size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
+                <div className="truncate min-w-0">
+                  {statusFilter.length === 0
+                    ? "All Statuses"
+                    : statusFilter.length === 1
+                    ? statusFilter[0]
+                    : `${statusFilter.length} statuses selected`}
                 </div>
-                <div className="flex justify-end items-center gap-2">
-                    <Button variant="outline" onClick={() => setIsGrouped(!isGrouped)}>
-                        {isGrouped ? <List className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />}
-                        {isGrouped ? 'Ungroup' : 'Group by Status'}
-                    </Button>
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          {statusFilter.length > 1 && (
+            <TooltipContent side="bottom" align="start" className="z-[70]">
+              <div className="p-1">
+                <h4 className="font-semibold mb-2 text-center">Selected Statuses</h4>
+                <ul className="list-disc list-inside space-y-1 max-w-48">
+                  {statusFilter.map((status) => (
+                    <li key={status}>{status}</li>
+                  ))}
+                </ul>
+              </div>
+            </TooltipContent>
+          )}
+        </Tooltip>
+        <DropdownMenuContent className="w-60 max-h-96 z-[60] flex flex-col origin-top">
+          <div className="overflow-y-auto">
+            <DropdownMenuCheckboxItem
+              checked={tempStatusFilter.length === 0}
+              onCheckedChange={() => setTempStatusFilter([])}
+              onSelect={(e) => e.preventDefault()}
+            >
+              All Statuses
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            {groupedStatusOptions.map((group) => (
+              <React.Fragment key={group.mainStatus}>
+                <DropdownMenuLabel>{group.mainStatus}</DropdownMenuLabel>
+                {group.subStatuses.map((subStatus) => (
+                  <DropdownMenuCheckboxItem
+                    key={subStatus}
+                    checked={tempStatusFilter.includes(subStatus)}
+                    onCheckedChange={(checked) => handleStatusFilterChange(subStatus, checked)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {subStatus}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </React.Fragment>
+            ))}
+          </div>
+          <DropdownMenuSeparator />
+          <div className="p-2 border-t">
+            <Button 
+              className="w-full" 
+              size="sm"
+              onClick={() => {
+                setStatusFilter(tempStatusFilter);
+              }}
+            >
+              Apply Filter
+            </Button>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+
+    {/* Client Filter */}
+    <div className="flex-shrink-0 order-3 w-full sm:w-[150px] min-w-0 overflow-hidden">
+      <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempClientFilter(clientFilter); } }}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button variant='outline' className="group w-full rounded-full justify-start font-normal h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 shadow-inner text-sm relative z-0">
+                <Building size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
+                <div className="truncate min-w-0">
+                  {clientFilter.length === 0 ? "All Clients" : `${clientFilter.length} clients selected`}
                 </div>
-              </CardContent>
-            </Card>
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          {clientFilter.length > 1 && (
+            <TooltipContent side="bottom" align="start" className="z-[70]">
+              <p className="max-w-48">Selected: {clientFilter.join(', ')}</p>
+            </TooltipContent>
+          )}
+        </Tooltip>
+        <DropdownMenuContent className="w-64 max-h-96 z-[60] flex flex-col origin-top">
+          <div className="overflow-y-auto">
+            <DropdownMenuCheckboxItem
+              checked={tempClientFilter.length === 0}
+              onCheckedChange={() => setTempClientFilter([])}
+              onSelect={(e) => e.preventDefault()}
+            >
+              All Clients
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            {clientOptions.map(client => (
+              <DropdownMenuCheckboxItem
+                key={client}
+                checked={tempClientFilter.includes(client)}
+                onCheckedChange={(checked) => handleClientFilterChange(client, !!checked)}
+                onSelect={(e) => e.preventDefault()}
+              >
+                {client}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </div>
+          <DropdownMenuSeparator />
+          <div className="p-2 border-t">
+            <Button className="w-full" size="sm" onClick={() => setClientFilter(tempClientFilter)}>
+              Apply Filter
+            </Button>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+
+    {/* Search Bar */}
+    <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+      <Input 
+        placeholder="Search name, job, client..." 
+        className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm" 
+        value={searchTerm} 
+        onChange={(e) => { 
+          setSearchTerm(e.target.value); 
+          setCurrentPage(1); 
+        }} 
+      />
+    </div>
+
+    {/* Group Button */}
+    <Button 
+      variant="outline" 
+      onClick={() => setIsGrouped(!isGrouped)} 
+      className="flex-shrink-0 order-6 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500"
+    >
+      {isGrouped ? <List className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />} 
+      {isGrouped ? 'Ungroup' : 'Group by Status'}
+    </Button>
+
+    {/* Export Buttons */}
+    <div className="flex gap-2 flex-shrink-0 order-7">
+      <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500">
+        <Download className="w-4 h-4 mr-2" /> Export CSV
+      </Button>
+      <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500">
+        <Download className="w-4 h-4 mr-2" /> Export PDF
+      </Button>
+    </div>
+  </div>
+</div>
+
+
 
             {/* NEW ANIMATED LIST CONTAINER */}
             <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm animate-scale-in">
@@ -797,10 +785,8 @@ return (
 </div>
                                     
                                     {/* Candidate */}
-{/* Candidate */}
-{/* Candidate */}
 <div className="col-span-full lg:col-span-3">
-    <Link to="#" className="font-semibold text-indigo-600 hover:underline truncate" title={candidate.name}>
+    <Link to={ candidate!.job_id ? `/employee/${candidate!.id}/${candidate!.job_id}` : `/jobs/unassigned/candidate/${candidate!.id}/bgv` } className="font-semibold text-indigo-600 hover:underline truncate" title={candidate.name}>
         {candidate.name}
     </Link>
     {/* MODIFIED: Added min-w-0 to the flex container to allow shrinking */}
@@ -821,7 +807,9 @@ return (
 </div>                         {/* Job Title - MODIFIED */}
                                  {/* Job Title - MODIFIED WITH CLIENT NAME */}
 <div className="col-span-full lg:col-span-4">
+  <Link to={`/jobs/${candidate!.job_id}`} className="text-indigo-600 hover:underline hover:text-indigo-800" >
     <p className="font-semibold text-gray-800">{candidate.job_title}</p>
+    </Link>
     <div className="flex items-center gap-2 mt-2 flex-wrap">
         {/* This span displays the Client Name */}
         <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800">{candidate.client_name}</span>
@@ -847,7 +835,6 @@ return (
                 </div>
             </div>
             
-            {/* Pagination */}
             {totalPages > 1 && (
                 <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4 bg-white rounded-lg shadow-md p-4">
                   <div className="flex items-center gap-2">
@@ -882,6 +869,9 @@ return (
                   </span>
                 </div>
             )}
+
+                </CardContent>
+  </Card>
           </main>
         </div>
       </TooltipProvider>

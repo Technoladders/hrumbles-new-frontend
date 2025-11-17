@@ -107,10 +107,34 @@ const EmployeeGoalCard: React.FC<EmployeeGoalCardProps> = ({ goal, employee, onU
 
         <CardContent className="flex-grow">
           <Tabs value={selectedGoalType} onValueChange={setSelectedGoalType} className="w-full">
-            <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${activeGoalTypes.length || 1}, 1fr)`}}>
-              {activeGoalTypes.map(type => (
-                <TabsTrigger key={type} value={type} className="text-xs">{type}</TabsTrigger>
-              ))}
+            <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-0.5 shadow-inner space-x-0.5">
+              {activeGoalTypes.map((type) => {
+                const isActive = selectedGoalType === type;
+
+                return (
+                  <TabsTrigger
+                    key={type}
+                    value={type}
+                    className={`relative px-3 py-1 rounded-full text-xs font-medium text-gray-600 dark:text-gray-300 
+                      data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                        isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-primary"
+                      }`}
+                  >
+                    {/* Tab Content (Text and Count) */}
+                    <span className="relative flex items-center">
+                      {type}
+                      <span
+                        className={`ml-1 text-[10px] rounded-full h-4 w-4 flex items-center justify-center ${
+                          isActive ? "bg-white/20 text-white" : "bg-primary/10 text-primary"
+                        }`}
+                      >
+                        {goal.assignmentDetails?.filter(ad => ad.goalType === type).length || 0}
+                      </span>
+                    </span>
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
 
             <TabsContent value={selectedGoalType} className="mt-4 space-y-4">
@@ -150,7 +174,7 @@ const EmployeeGoalCard: React.FC<EmployeeGoalCardProps> = ({ goal, employee, onU
         </CardContent>
 
         <CardFooter>
-            <Button className="w-full" onClick={() => setIsUpdateDialogOpen(true)} disabled={!activeInstance || isAutomatedGoal}>
+            <Button className="w-full" onClick={() => setIsUpdateDialogOpen(true)} disabled={true}>
               Update Progress
             </Button>
         </CardFooter>
