@@ -15,6 +15,10 @@ import {
   LinearScale,
   BarElement,
   ArcElement,
+  LineElement,    
+  PointElement,   
+  LineController,  
+  BarController,
   Title,
   Tooltip,
   Legend,
@@ -25,7 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import GoalProgressTable from "../common/GoalProgressTable";
 
 // Register Chart.js components
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, LineElement, PointElement, LineController, BarController, Title, Tooltip, Legend);
 
 interface EmployeeGoalDashboardProps {
   employee: Employee;

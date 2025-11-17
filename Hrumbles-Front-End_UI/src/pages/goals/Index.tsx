@@ -21,6 +21,8 @@ import {
   ArcElement,
   LineElement,
   PointElement,
+  LineController,  
+  BarController,
   Title,
   Tooltip,
   Legend,
@@ -32,7 +34,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Register Chart.js components
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, LineElement, PointElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, LineElement, LineController, BarController, PointElement, Title, Tooltip, Legend);
 
 const GoalsIndex = () => {
   const navigate = useNavigate();
