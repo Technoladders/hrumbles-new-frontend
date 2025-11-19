@@ -26,18 +26,34 @@ export interface LeaveRequest {
   } | null;
 }
 
+export interface LeaveDayBreakdown {
+  date: string; // "yyyy-MM-dd" format
+  type: 'full' | 'half_am' | 'half_pm';
+}
+
+export interface LeaveRequestDateRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
+
 export interface LeaveRequestFormData {
   leaveTypeId: string;
   startDate: string;
   endDate: string;
   notes: string;
+  dayBreakdown: LeaveDayBreakdown[]; // Pass the breakdown to the hook
+  additionalRecipients: string[];
+  ccRecipients: string[];
 }
+
 
 export interface LeaveRequestFormValues {
   leave_type_id: string;
-  start_date: Date;
-  end_date: Date;
+  date_range: LeaveRequestDateRange;
+  day_breakdown: LeaveDayBreakdown[]; // This will now hold the day-by-day selections
   reason: string;
+  additional_recipients: string[];
+  cc_recipients: string[]; 
 }
 
 export interface LeaveType {

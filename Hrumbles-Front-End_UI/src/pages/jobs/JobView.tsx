@@ -174,38 +174,58 @@ const JobView = () => {
         
         {/* Action Buttons */}
         <div className="flex gap-2">
-          <Link to={`/jobs/${job.id}/description`}>
-            <Button variant="outline" className="flex items-center gap-2">
-              <FileText size={16} />
-              <span className="hidden sm:inline">Job Description</span>
-            </Button>
-          </Link>
 
-          {/* Main Dropdown for All Candidate Actions */}
+            {/* Main Dropdown for All Candidate Actions */}
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="default">
-                Add Candidate
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
+<DropdownMenuTrigger asChild>
+  <Button
+    variant="default"
+    className="
+      relative overflow-hidden
+      w-[350px] px-10 py-4 text-lg font-semibold text-white
+      rounded-xl border border-white/10
+      bg-gradient-to-r from-purple-500 via-rose-600 to-violet-600
+      bg-[length:200%_200%] bg-[position:0%_50%]
+      transition-all duration-500 ease-out
+      shadow-lg shadow-zinc-600 hover:shadow-2xl hover:shadow-purple-500/40
+      hover:-translate-y-1 hover:scale-[1.01]
+      hover:bg-[position:100%_50%]
+      group
+    "
+  >
+    {/* Shiny overlay on hover */}
+    <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent 
+      transition-transform duration-700 ease-out 
+      group-hover:translate-x-full pointer-events-none" 
+    />
+
+    {/* Letter-by-letter animation */}
+    <span className="relative z-10 flex gap-[1px] items-center">
+      {"Analyse with AI".split("").map((char, i) => (
+        <span
+          key={i}
+          className="inline-block opacity-0 animate-text-reveal"
+          style={{ animationDelay: `${i * 0.05}s` }}
+        >
+          {char === " " ? "\u00A0" : char}
+        </span>
+      ))}
+      
+      <ChevronDown className="ml-3 h-5 w-5 relative z-10 opacity-80 
+        transition-transform duration-300 group-hover:rotate-180" 
+      />
+    </span>
+  </Button>
+</DropdownMenuTrigger>
+
+
+
             
             <DropdownMenuContent 
               align="end" 
               className="w-64 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-700 shadow-2xl rounded-xl p-2"
             >
-              <DropdownMenuItem 
-                onSelect={() => setIsAddCandidateDrawerOpen(true)}
-                className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
-              >
-                <UserPlus className="h-5 w-5 mt-1 text-purple-500" />
-                <div>
-                  <p className="font-semibold text-slate-800 dark:text-slate-100">Add Manually</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Enter candidate details one by one.</p>
-                </div>
-              </DropdownMenuItem>
-
-              <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700" />
+            
 
               <DropdownMenuItem 
   onSelect={() => setIsAddTalentPoolModalOpen(true)}
@@ -233,6 +253,23 @@ const JobView = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <Link to={`/jobs/${job.id}/description`}>
+            <Button variant="outline" className="flex items-center gap-2">
+              <FileText size={16} />
+              <span className="hidden sm:inline">Job Description</span>
+            </Button>
+          </Link>
+
+          <Button
+            onClick={() => setIsAddCandidateDrawerOpen(true)}
+            className="gap-2"
+          >
+            <UserPlus size={16} />
+            Add Candidate
+          </Button>
+
+        
         </div>
       </div>
 

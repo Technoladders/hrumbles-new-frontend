@@ -117,7 +117,6 @@ export const useTimeTracker = (employeeId: string) => {
       loadTimeLogs,
       setCurrentTimeLog,
       setIsTracking,
-      elapsedSeconds,
       inGracePeriod,
       prepareClockInData
     }

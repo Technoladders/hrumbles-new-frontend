@@ -97,6 +97,7 @@ const RecruiterPerformanceTable: React.FC<RecruiterPerformanceTableProps> = ({ d
   const startIndex = (currentPage - 1) * rowsPerPage
   const paginatedData = sortedData.slice(startIndex, startIndex + rowsPerPage)
 
+  console.log("paginatedData", paginatedData)
   const calculateDerivedMetrics = (recruiter: RecruiterPerformanceData): DerivedMetric[] => {
     const totalInterviews =
       recruiter.interviews.technical +

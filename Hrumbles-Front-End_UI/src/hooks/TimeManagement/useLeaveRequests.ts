@@ -1,3 +1,4 @@
+// Updated useLeaveRequests.ts - Enhanced createLeaveRequest mutation to include overlap check in DB (more robust than client-side), using a subquery before insert. Also fixed formData keys to match (additionalRecipients -> additional_recipient, etc., but actually aligned to table: additional_recipients).
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,7 +9,7 @@ import {getAuthDataFromLocalStorage} from '@/utils/localstorage';
 export const useLeaveRequests = (employeeId: string) => {
   const queryClient = useQueryClient();
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
-const authData = getAuthDataFromLocalStorage();
+  const authData = getAuthDataFromLocalStorage();
     if (!authData) {
       throw new Error('Failed to retrieve authentication data');
     }
@@ -74,27 +75,40 @@ const authData = getAuthDataFromLocalStorage();
 
   const createLeaveRequest = useMutation({
     mutationFn: async (formData: LeaveRequestFormData) => {
-      console.log('Creating leave request:', { employeeId, formData });
-      if (!employeeId) {
-        throw new Error('Employee ID is required');
-      }
-
+      if (!employeeId) throw new Error('Employee ID is required');
+      // Calculate the total working days from the breakdown
+      const workingDays = formData.dayBreakdown.reduce((acc, day) => {
+        if (day.type === 'full') return acc + 1;
+        if (day.type === 'half_am' || day.type === 'half_pm') return acc + 0.5;
+        return acc;
+      }, 0);
+      // We still call the RPC to get the number of holidays in the period
       const { data: daysCalculation, error: calculationError } = await supabase.rpc(
         'calculate_working_and_holiday_days',
-        {
-          p_start_date: formData.startDate,
-          p_end_date: formData.endDate
-        }
+        { p_start_date: formData.startDate, p_end_date: formData.endDate }
       );
-
-      if (calculationError) {
-        console.error('Error calculating days:', calculationError);
-        throw calculationError;
-      }
-
-      const workingDays = daysCalculation?.[0]?.working_days || 0;
+      if (calculationError) throw calculationError;
+     
       const holidayDays = daysCalculation?.[0]?.holiday_days || 0;
       const totalDays = workingDays + holidayDays;
+
+      // Check for overlaps with non-rejected requests
+      const { data: overlaps, error: overlapError } = await supabase
+        .from('leave_requests')
+        .select('id')
+        .eq('employee_id', employeeId)
+        .gte('start_date', formData.startDate)
+        .lte('end_date', formData.endDate)
+        .or(`start_date.lte.${formData.endDate},end_date.gte.${formData.startDate}`)
+        .neq('status', 'rejected'); // Only block if not rejected
+
+      if (overlapError) {
+        console.error('Error checking overlaps:', overlapError);
+        throw overlapError;
+      }
+      if (overlaps && overlaps.length > 0) {
+        throw new Error('Cannot request leave for dates that overlap with existing pending or approved requests. Rejected requests are allowed.');
+      }
 
       const { data, error } = await supabase
         .from('leave_requests')
@@ -104,21 +118,17 @@ const authData = getAuthDataFromLocalStorage();
           start_date: formData.startDate,
           end_date: formData.endDate,
           total_days: totalDays,
-          working_days: workingDays,
+          working_days: workingDays, // The new calculated value
           holiday_days: holidayDays,
           status: 'pending',
           notes: formData.notes,
-          organization_id
+          organization_id,
+          day_breakdown: formData.dayBreakdown, // Save the JSONB data
+          additional_recipients: formData.additionalRecipients || null,
+          cc_recipients: formData.ccRecipients || null,
         })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating leave request:', error);
-        throw error;
-      }
-
-      console.log('Leave request created:', data);
+        .select().single();
+      if (error) throw error;
       return data as LeaveRequest;
     },
     onSuccess: (newRequest) => {

@@ -3,21 +3,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Label } from '@/components/ui/label';
 import Editor from "react-simple-wysiwyg";
-import { Briefcase, Users, Clock, MessageSquare, PlusCircle, Calendar, Trash2, X } from 'lucide-react';
+import { Briefcase, Users, Clock, MessageSquare, PlusCircle, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { cn } from "@/lib/utils";
 
-// Interface for a single candidate with their time
+// Interface for a single candidate (no per-candidate time)
 interface CandidateWithTime {
   id: string;
   name: string;
   submissionDate: string;
   mainStatus?: string;
   subStatus?: string;
-  hours: number;
-  minutes: number;
 }
 
 // Interface for available candidates (for dropdown)
@@ -29,17 +28,19 @@ interface AvailableCandidate {
   subStatus?: string;
 }
 
-// UPDATED: JobLog interface with per-candidate time tracking
+// JobLog interface with job-level time tracking
 export interface JobLog {
   jobId: string;
   jobTitle: string;
   clientName: string;
-  candidates: CandidateWithTime[]; // Changed from submissions to candidates with time
+  candidates: CandidateWithTime[];
   challenges: string;
   job_display_id?: string;
   job_type?: string;
   submission_type?: string;
   job_type_category?: string;
+  hours?: number; // Job-level time
+  minutes?: number; // Job-level time
 }
 
 interface JobLogDialogProps {
@@ -60,6 +61,10 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({
   const [challenges, setChallenges] = useState('');
   const [isEditorVisible, setIsEditorVisible] = useState(false);
   
+  // Job-level time tracking - initialize with 0
+  const [jobHours, setJobHours] = useState<number>(0);
+  const [jobMinutes, setJobMinutes] = useState<number>(0);
+  
   // State for candidate management
   const [localCandidates, setLocalCandidates] = useState<CandidateWithTime[]>([]);
   const [availableCandidates, setAvailableCandidates] = useState<AvailableCandidate[]>([]);
@@ -71,6 +76,12 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({
       console.log('JobLog data:', jobLog);
       setChallenges(jobLog.challenges || '');
       setLocalCandidates(jobLog.candidates || []);
+      
+      // Ensure hours and minutes are valid numbers
+      const hours = Number(jobLog.hours) || 0;
+      const minutes = Number(jobLog.minutes) || 0;
+      setJobHours(hours);
+      setJobMinutes(minutes);
     }
   }, [jobLog]);
 
@@ -145,8 +156,6 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({
 
     const newCandidate: CandidateWithTime = {
       ...candidateToAdd,
-      hours: 0,
-      minutes: 0,
     };
 
     setLocalCandidates(prev => [...prev, newCandidate]);
@@ -160,19 +169,19 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({
     toast.info(`${candidate?.name} removed from this job log.`);
   };
 
-  const handleCandidateTimeChange = (candidateId: string, field: 'hours' | 'minutes', value: number) => {
-    setLocalCandidates(prev => prev.map(c => 
-      c.id === candidateId ? { ...c, [field]: value } : c
-    ));
-  };
-
   const handleSave = () => {
     if (!jobLog) return;
 
-    // Validate that at least one candidate has time logged
-    const totalMinutes = localCandidates.reduce((sum, c) => sum + (c.hours * 60) + c.minutes, 0);
+    // Validate that time has been logged
+    const totalMinutes = (jobHours * 60) + jobMinutes;
     if (totalMinutes === 0) {
-      toast.error("Please log time for at least one candidate.");
+      toast.error("Please log time for this job.");
+      return;
+    }
+
+    // Validate that at least one candidate is added
+    if (localCandidates.length === 0) {
+      toast.error("Please add at least one candidate.");
       return;
     }
 
@@ -180,6 +189,8 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({
       ...jobLog,
       candidates: localCandidates,
       challenges,
+      hours: jobHours,
+      minutes: jobMinutes,
     };
 
     onSave(updatedLog);
@@ -194,15 +205,13 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({
     ac => !localCandidates.some(lc => lc.id === ac.id)
   );
 
-  // Calculate total time across all candidates
-  const totalHours = localCandidates.reduce((sum, c) => sum + c.hours, 0);
-  const totalMinutes = localCandidates.reduce((sum, c) => sum + c.minutes, 0);
-  const displayTotalHours = totalHours + Math.floor(totalMinutes / 60);
-  const displayTotalMinutes = totalMinutes % 60;
+  // Calculate display time
+  const displayTotalHours = jobHours + Math.floor(jobMinutes / 60);
+  const displayTotalMinutes = jobMinutes % 60;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] flex flex-col">
         
         <DialogHeader className="border-b pb-4">
           <div className="flex items-center justify-between">
@@ -216,7 +225,7 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({
               </div>
             </div>
             <div className="text-right">
-              <p className="text-sm font-semibold text-gray-600">Total Time</p>
+              <p className="text-sm font-medium text-gray-600">Total Time</p>
               <p className="text-2xl font-bold text-indigo-600">
                 {displayTotalHours}h {displayTotalMinutes}m
               </p>
@@ -226,11 +235,59 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({
 
         <div className="py-4 space-y-6 flex-grow overflow-auto pr-2">
 
+          {/* Job-Level Time Input */}
+          <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg">
+            <div className="flex items-center gap-3 mb-3">
+              <Clock className="h-5 w-5 text-indigo-600" />
+              <Label className="text-base font-semibold text-indigo-800">Time Spent on This Job</Label>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <Select 
+                value={String(jobHours)} 
+                onValueChange={(value) => setJobHours(parseInt(value))}
+              >
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 13 }, (_, i) => (
+                    <SelectItem key={i} value={String(i)}>
+                      {i} hour{i !== 1 ? 's' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select 
+                value={String(jobMinutes)} 
+                onValueChange={(value) => setJobMinutes(parseInt(value))}
+              >
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
+                    <SelectItem key={m} value={String(m)}>
+                      {m} min
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {(jobHours > 0 || jobMinutes > 0) && (
+                <span className="ml-auto px-3 py-1.5 text-sm font-semibold text-indigo-700 bg-indigo-100 rounded-md">
+                  Total: {displayTotalHours}h {displayTotalMinutes}m
+                </span>
+              )}
+            </div>
+          </div>
+
           {/* Add Candidate Section */}
-          <div className="p-4 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg">
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-center mb-3">
-              <PlusCircle className="h-5 w-5 mr-3 text-indigo-600" />
-              <Label className="font-semibold text-indigo-800">Select Candidate to Add</Label>
+              <PlusCircle className="h-5 w-5 mr-3 text-blue-600" />
+              <Label className="font-semibold text-blue-800">Select Candidate to Add</Label>
             </div>
             
             <div className="flex gap-3">
@@ -264,7 +321,7 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({
               <Button 
                 onClick={handleAddCandidate}
                 disabled={!selectedCandidateId}
-                className="bg-indigo-600 hover:bg-indigo-700"
+                className="bg-blue-600 hover:bg-blue-700"
               >
                 <PlusCircle className="h-4 w-4 mr-2" />
                 Add
@@ -272,108 +329,98 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({
             </div>
           </div>
 
-          {/* Selected Candidates with Time Tracking */}
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-start justify-between mb-4">
+          {/* Selected Candidates Table */}
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+            <div className="flex items-start justify-between px-4 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-200">
               <div className="flex items-center">
-                <Users className="h-5 w-5 mr-3 text-blue-600" />
-                <Label className="font-semibold text-blue-800">Candidates & Time Logged</Label>
+                <Users className="h-5 w-5 mr-3 text-indigo-600" />
+                <Label className="font-semibold text-indigo-800">Candidates & Time Logged</Label>
               </div>
-              <span className="px-2 py-1 text-xs font-semibold text-blue-700 bg-blue-100 rounded-md">
+              <span className="px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-100 rounded-md">
                 {localCandidates.length} candidate{localCandidates.length !== 1 ? 's' : ''}
               </span>
             </div>
             
             {localCandidates.length > 0 ? (
-              <div className="space-y-3">
-                {localCandidates.map(candidate => (
-                  <div key={candidate.id} className="p-4 bg-white rounded-md border border-blue-100 shadow-sm">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-grow">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="font-semibold text-gray-800">{candidate.name}</span>
-                          <span className="px-2 py-0.5 text-xs font-medium text-purple-700 bg-purple-100 rounded-full">
-                            📅 {format(new Date(candidate.submissionDate), 'MMM dd, yyyy')}
-                          </span>
-                        </div>
-                        
-                        <div className="flex flex-wrap items-center gap-2">
-                          {candidate.mainStatus && candidate.mainStatus !== 'N/A' && (
-                            <span className="px-2.5 py-0.5 text-xs font-semibold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded-full">
-                              Main: {candidate.mainStatus}
-                            </span>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+                      <th className="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider">
+                        Candidate Name
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider">
+                        Client
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider">
+                        Submission Date
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold uppercase tracking-wider w-16">
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {localCandidates.map((candidate, index) => {
+                      // Format status: "MainStatus (SubStatus)" or just status if only one exists
+                      let statusDisplay = '';
+                      if (candidate.mainStatus && candidate.mainStatus !== 'N/A') {
+                        statusDisplay = candidate.mainStatus;
+                        if (candidate.subStatus && candidate.subStatus !== 'N/A') {
+                          statusDisplay += ` (${candidate.subStatus})`;
+                        }
+                      } else if (candidate.subStatus && candidate.subStatus !== 'N/A') {
+                        statusDisplay = candidate.subStatus;
+                      } else {
+                        statusDisplay = 'N/A';
+                      }
+
+                      return (
+                        <tr 
+                          key={candidate.id} 
+                          className={cn(
+                            "hover:bg-indigo-50 transition-colors",
+                            index % 2 === 0 ? "bg-white" : "bg-gray-50"
                           )}
-                          {candidate.subStatus && candidate.subStatus !== 'N/A' && (
-                            <span className="px-2.5 py-0.5 text-xs font-semibold text-blue-800 bg-blue-100 border border-blue-300 rounded-full">
-                              Sub: {candidate.subStatus}
+                        >
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                            {candidate.name}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700">
+                            {jobLog.clientName}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {format(new Date(candidate.submissionDate), 'MMM dd, yyyy')}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className="px-2.5 py-1 text-xs font-medium text-indigo-700 bg-indigo-100 rounded-full border border-indigo-200">
+                              {statusDisplay}
                             </span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemoveCandidate(candidate.id)}
-                        className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    {/* Time Input for This Candidate */}
-                    <div className="flex items-center gap-3 pt-3 border-t border-blue-100">
-                      <Clock className="h-4 w-4 text-indigo-600" />
-                      <Label className="text-sm font-medium text-gray-700 min-w-[80px]">Time Spent:</Label>
-                      
-                      <div className="flex items-center gap-2">
-                        <Select 
-                          value={String(candidate.hours)} 
-                          onValueChange={(value) => handleCandidateTimeChange(candidate.id, 'hours', parseInt(value))}
-                        >
-                          <SelectTrigger className="w-[100px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Array.from({ length: 13 }, (_, i) => (
-                              <SelectItem key={i} value={String(i)}>
-                                {i} hour{i !== 1 ? 's' : ''}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-
-                        <Select 
-                          value={String(candidate.minutes)} 
-                          onValueChange={(value) => handleCandidateTimeChange(candidate.id, 'minutes', parseInt(value))}
-                        >
-                          <SelectTrigger className="w-[110px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
-                              <SelectItem key={m} value={String(m)}>
-                                {m} min
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {(candidate.hours > 0 || candidate.minutes > 0) && (
-                        <span className="ml-auto px-2.5 py-1 text-sm font-semibold text-indigo-700 bg-indigo-100 rounded-md">
-                          {candidate.hours}h {candidate.minutes}m
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveCandidate(candidate.id)}
+                              className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             ) : (
-              <div className="text-center py-6">
+              <div className="text-center py-8 px-4">
                 <Users className="h-12 w-12 mx-auto text-gray-300 mb-2" />
                 <p className="text-sm text-gray-500">
-                  No candidates added yet. Select candidates above to track time.
+                  No candidates added yet. Select candidates above to add to this job log.
                 </p>
               </div>
             )}
@@ -403,7 +450,7 @@ export const JobLogDialog: React.FC<JobLogDialogProps> = ({
           <Button 
             onClick={handleSave} 
             className="bg-indigo-600 hover:bg-indigo-700"
-            disabled={localCandidates.length === 0}
+            disabled={localCandidates.length === 0 || (jobHours === 0 && jobMinutes === 0)}
           >
             <PlusCircle className="h-4 w-4 mr-2"/>
             Save Log

@@ -108,7 +108,7 @@
     "react-circular-progressbar": "^2.2.0",
     "react-country-state-city": "^1.1.12",
     "react-csv": "^2.2.2",
-    "react-data-grid": "^7.0.0-beta.44",
+    "react-data-grid": "7.0.0-beta.43",
     "react-date-picker": "^11.0.0",
     "react-date-range": "^2.0.1",
     "react-datepicker": "^8.4.0",

@@ -4,18 +4,25 @@ import { supabase } from '@/integrations/supabase/client';
 import { startOfDay, endOfDay, format } from 'date-fns';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Eye, Briefcase, PlusCircle, FileText, Trash2 } from 'lucide-react';
+import { Briefcase, PlusCircle, FileText, Trash2 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { toast } from 'sonner';
 import { JobLogDialog, JobLog } from './JobLogDialog';
 import QuillTableBetterDemo from '@/utils/QuillTableBetterDemo';
+import { ChevronsUpDown } from 'lucide-react';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface RecruiterTimesheetFormProps {
   timesheet: TimeLog;
@@ -43,10 +50,11 @@ export const RecruiterTimesheetForm: React.FC<RecruiterTimesheetFormProps> = ({
   const [selectedJobLog, setSelectedJobLog] = useState<JobLog | null>(null);
   
   const [selectKeyValue, setSelectKeyValue] = useState(Date.now());
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  const handleJobSelection = (jobId: string) => {
+  const handleJobSelection = async (jobId: string) => {
     if (!jobId) return;
-    handleAddJobLog(jobId);
+    await handleAddJobLog(jobId);
     setSelectKeyValue(Date.now()); 
   };
 
@@ -74,7 +82,48 @@ export const RecruiterTimesheetForm: React.FC<RecruiterTimesheetFormProps> = ({
       // Load existing job logs from recruiter_report_data
       if (timesheet.recruiter_report_data && Array.isArray(timesheet.recruiter_report_data)) {
         console.log('Loading existing recruiter report data:', timesheet.recruiter_report_data);
-        setJobLogs(timesheet.recruiter_report_data as JobLog[]);
+        
+        // Migrate old format to new format
+        const migratedLogs = (timesheet.recruiter_report_data as any[]).map((log: any) => {
+          // Check if this is old format (candidates have hours/minutes)
+          if (log.candidates && log.candidates.length > 0 && 
+              log.candidates[0].hasOwnProperty('hours') && 
+              log.candidates[0].hasOwnProperty('minutes')) {
+            
+            // Old format: sum up all candidate times
+            const totalMinutes = log.candidates.reduce((sum: number, candidate: any) => {
+              const candidateHours = candidate.hours || 0;
+              const candidateMinutes = candidate.minutes || 0;
+              return sum + (candidateHours * 60) + candidateMinutes;
+            }, 0);
+            
+            const jobHours = Math.floor(totalMinutes / 60);
+            const jobMinutes = totalMinutes % 60;
+            
+            // Convert to new format: remove time from candidates, add to job level
+            return {
+              ...log,
+              hours: jobHours,
+              minutes: jobMinutes,
+              candidates: log.candidates.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                submissionDate: c.submissionDate,
+                mainStatus: c.mainStatus,
+                subStatus: c.subStatus,
+              }))
+            };
+          } else {
+            // New format or no time data: ensure hours/minutes exist
+            return {
+              ...log,
+              hours: log.hours || 0,
+              minutes: log.minutes || 0,
+            };
+          }
+        });
+        
+        setJobLogs(migratedLogs as JobLog[]);
       }
     }
   }, [timesheet]);
@@ -110,12 +159,11 @@ export const RecruiterTimesheetForm: React.FC<RecruiterTimesheetFormProps> = ({
     // Validation logic
     const hasLoggedJobs = jobLogs.length > 0;
     
-    // Calculate total time from all candidates across all jobs
+    // Calculate total time from all jobs (job-level time)
     const totalMinutes = jobLogs.reduce((sum, log) => {
-      const logTotal = log.candidates.reduce((candidateSum, candidate) => 
-        candidateSum + (candidate.hours * 60) + candidate.minutes, 0
-      );
-      return sum + logTotal;
+      const hours = log.hours || 0;
+      const minutes = log.minutes || 0;
+      return sum + (hours * 60) + minutes;
     }, 0);
     
     const hasPositiveTime = totalMinutes > 0;
@@ -156,10 +204,17 @@ export const RecruiterTimesheetForm: React.FC<RecruiterTimesheetFormProps> = ({
         job_type: jobData?.job_type,
         submission_type: jobData?.submission_type,
         job_type_category: jobData?.job_type_category,
+        hours: 0,
+        minutes: 0,
       };
 
       setJobLogs(prev => [...prev, newJobLog]);
-      toast.success(`${jobToAdd.title} added. Click "View Log" to add candidates and time.`);
+      
+      // Immediately open the dialog for the newly created job
+      setSelectedJobLog(newJobLog);
+      setIsLogDialogOpen(true);
+      
+      toast.success(`${jobToAdd.title} added. Please add time and candidates.`);
 
     } catch (error) {
       console.error("Error adding job log:", error);
@@ -186,12 +241,14 @@ export const RecruiterTimesheetForm: React.FC<RecruiterTimesheetFormProps> = ({
   
   const unloggedAssignedJobs = assignedJobs.filter(job => !jobLogs.some(log => log.jobId === job.id));
 
-  // Calculate total time for a job
+  // Calculate total time for a job (job-level)
   const calculateJobTotalTime = (job: JobLog) => {
-    const totalMinutes = job.candidates.reduce((sum, c) => sum + (c.hours * 60) + c.minutes, 0);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return { hours, minutes, totalMinutes };
+    const hours = Number(job.hours) || 0;
+    const minutes = Number(job.minutes) || 0;
+    const totalMinutes = (hours * 60) + minutes;
+    const displayHours = Math.floor(totalMinutes / 60);
+    const displayMinutes = totalMinutes % 60;
+    return { hours: displayHours, minutes: displayMinutes, totalMinutes };
   };
 
   if (loading) return <div>Loading assigned jobs...</div>;
@@ -206,24 +263,47 @@ export const RecruiterTimesheetForm: React.FC<RecruiterTimesheetFormProps> = ({
 
         {unloggedAssignedJobs.length > 0 && (
           <div className="mb-5">
-            <Select 
-              key={selectKeyValue}
-              onValueChange={handleJobSelection}
-            >
-              <SelectTrigger className="w-full justify-start p-3 h-auto bg-indigo-600 text-white rounded-lg transition-colors duration-200 ease-in-out hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-400">
-                <div className="flex items-center">
-                  <PlusCircle className="h-5 w-5 mr-3" />
-                  <SelectValue placeholder="Add Job Entry..." />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                {unloggedAssignedJobs.map((job) => (
-                  <SelectItem key={job.id} value={job.id}>
-                    {job.title} - {job.client_owner}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={isSearchOpen}
+                  className="w-full justify-start p-3 h-auto bg-indigo-600 text-white rounded-lg transition-colors duration-200 ease-in-out hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-400 focus:text-white"
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center">
+                      <PlusCircle className="h-5 w-5 mr-3" />
+                      <span>Add Job Entry...</span>
+                    </div>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </div>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                <Command>
+                  <CommandInput placeholder="Search job title or client..." />
+                  <CommandList>
+                    <CommandEmpty>No job found.</CommandEmpty>
+                    <CommandGroup>
+                      {unloggedAssignedJobs.map((job) => (
+                        <CommandItem
+                          key={job.id}
+                          value={`${job.title} ${job.client_owner}`}
+                          onSelect={() => {
+                            handleJobSelection(job.id);
+                            setIsSearchOpen(false);
+                          }}
+                          className="cursor-pointer data-[selected=true]:bg-purple-600 data-[selected=true]:text-white"
+                        >
+                          {job.title} - {job.client_owner}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
         )}
 
@@ -236,42 +316,31 @@ export const RecruiterTimesheetForm: React.FC<RecruiterTimesheetFormProps> = ({
             return (
               <div 
                 key={log.jobId} 
-                className={cn(
-                  "flex items-center justify-between p-4 border rounded-lg bg-white shadow-sm transition-all hover:shadow-md",
-                  hasTime ? "hover:border-indigo-300" : "hover:border-amber-300 border-amber-200"
-                )}
+                className="border rounded-lg bg-white shadow-sm"
               >
-                <div className="flex items-center flex-grow">
-                  <div className={cn(
-                    "p-2.5 rounded-full mr-4",
-                    hasTime ? "bg-indigo-100" : "bg-amber-100"
-                  )}>
-                    <Briefcase className={cn(
-                      "h-5 w-5",
-                      hasTime ? "text-indigo-700" : "text-amber-700"
-                    )} />
-                  </div>
+                {/* Job Header - NO ICON */}
+                <div className="flex items-center justify-between p-4">
                   <div className="flex-grow">
                     <p className="font-semibold text-gray-900">{log.jobTitle} ({log.clientName})</p>
                     
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       {log.job_display_id && (
-                        <span className="px-2.5 py-0.5 text-xs font-semibold text-purple-800 bg-purple-100 rounded-full">
+                        <span className="px-2.5 py-0.5 text-xs font-semibold text-purple-700 bg-gray-100 rounded-full">
                           {log.job_display_id}
                         </span>
                       )}
                       {log.job_type && (
-                        <span className="px-2.5 py-0.5 text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-300 rounded-full">
+                        <span className="px-2.5 py-0.5 text-xs font-semibold text-purple-700 bg-gray-100 rounded-full">
                           {log.job_type}
                         </span>
                       )}
                       {log.job_type_category && (
-                        <span className="px-2.5 py-0.5 text-xs font-semibold text-amber-800 bg-amber-100 border border-amber-300 rounded-full">
+                        <span className="px-2.5 py-0.5 text-xs font-semibold text-purple-700 bg-gray-100 rounded-full">
                           {log.job_type_category === 'Internal' ? 'In-House' : log.job_type_category}
                         </span>
                       )}
                       {hasCandidates && (
-                        <span className="px-2.5 py-0.5 text-xs font-semibold text-blue-800 bg-blue-100 border border-blue-300 rounded-full">
+                        <span className="px-2.5 py-0.5 text-xs font-semibold text-purple-700 bg-gray-100 rounded-full">
                           {log.candidates.length} candidate{log.candidates.length !== 1 ? 's' : ''}
                         </span>
                       )}
@@ -294,32 +363,98 @@ export const RecruiterTimesheetForm: React.FC<RecruiterTimesheetFormProps> = ({
                       )}
                     </div>
                   </div>
-                </div>
-                
-                <div className="flex items-center gap-2 ml-4">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handleOpenLogDialog(log)}
-                    className={cn(
-                      "hover:bg-indigo-50",
-                      !hasTime && "border border-amber-300 hover:border-amber-400"
-                    )}
-                  >
-                    <Eye className="h-4 w-4 mr-2 text-gray-500" /> 
-                    {hasCandidates ? 'Edit Log' : 'Add Details'}
-                  </Button>
+                  
+                  <div className="flex items-center gap-2 ml-4">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => handleOpenLogDialog(log)}
+                      className={cn(
+                        "hover:bg-indigo-50",
+                        !hasTime && "border border-amber-300 hover:border-amber-400"
+                      )}
+                    >
+                      Edit Log
+                    </Button>
 
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => handleDeleteJobLog(log.jobId)}
-                    className="h-8 w-8 text-gray-500 hover:bg-red-100 hover:text-red-600"
-                    aria-label="Remove job log"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => handleDeleteJobLog(log.jobId)}
+                      className="h-8 w-8 text-gray-500 hover:bg-red-100 hover:text-red-600"
+                      aria-label="Remove job log"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
+
+                {/* Candidates Table - Always shown when candidates exist */}
+                {hasCandidates && (
+                  <div className="border-t">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">
+                              Candidate Name
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">
+                              Client
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">
+                              Submission Date
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">
+                              Status
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {log.candidates.map((candidate, index) => {
+                            // Format status: "MainStatus (SubStatus)" or just status if only one exists
+                            let statusDisplay = '';
+                            if (candidate.mainStatus && candidate.mainStatus !== 'N/A') {
+                              statusDisplay = candidate.mainStatus;
+                              if (candidate.subStatus && candidate.subStatus !== 'N/A') {
+                                statusDisplay += ` (${candidate.subStatus})`;
+                              }
+                            } else if (candidate.subStatus && candidate.subStatus !== 'N/A') {
+                              statusDisplay = candidate.subStatus;
+                            } else {
+                              statusDisplay = 'N/A';
+                            }
+
+                            return (
+                              <tr 
+                                key={candidate.id} 
+                                className={cn(
+                                  "hover:bg-indigo-50 transition-colors",
+                                  index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                                )}
+                              >
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                  {candidate.name}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-700">
+                                  {log.clientName}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {format(new Date(candidate.submissionDate), 'MMM dd, yyyy')}
+                                </td>
+                                <td className="px-4 py-3 text-sm">
+                                  <span className="px-2.5 py-1 text-xs font-medium text-indigo-700 bg-indigo-100 rounded-full border border-indigo-200">
+                                    {statusDisplay}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

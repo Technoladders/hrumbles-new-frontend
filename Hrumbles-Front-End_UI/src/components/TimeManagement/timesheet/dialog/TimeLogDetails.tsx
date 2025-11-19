@@ -32,7 +32,7 @@ const tableStyles = `
   .work-report table th, .work-report table td {
     border: 1px solid #d1d5db;
     padding: 8px;
-    min-width: 150px; /* Increased cell width */
+    min-width: 150px;
     text-align: left;
   }
   .work-report table th {
@@ -55,6 +55,34 @@ const tableStyles = `
   .work-report em {
     font-style: italic;
   }
+  /* New styles for recruiter report table inside job cards */
+  .recruiter-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 12px;
+  }
+  .recruiter-table th {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+  }
+  .recruiter-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 12px;
+  }
+  .recruiter-table tbody tr:hover {
+    background-color: #f9fafb;
+  }
+  .recruiter-table tbody tr:nth-child(even) {
+    background-color: #fafafa;
+  }
 `;
 
 // Inject table styles into the document
@@ -70,47 +98,91 @@ interface TimeLogDetailsProps {
   employeeHasProjects?: boolean;
 }
 
-// A simple component to render the recruiter's detailed report
+// Updated component to render the recruiter's detailed report with TABLE inside each job card
 const RecruiterReportView = ({ log }: { log: TimeLog }) => {
   // Sanitize and parse the overall summary
   const sanitizedSummary = log.notes ? DOMPurify.sanitize(log.notes) : '';
+
   return (
     <div className="space-y-4">
       {/* --- Detailed Job Report Section --- */}
       {log.recruiter_report_data && Array.isArray(log.recruiter_report_data) && log.recruiter_report_data.length > 0 && (
-        <div className="bg-gradient-to-r from-sky-50 to-blue-50 p-3 rounded-lg border border-blue-100">
-            <h3 className="text-sm font-semibold text-blue-800 mb-2">Detailed Job Report</h3>
-            <div className="space-y-3">
-              {(log.recruiter_report_data as JobLog[]).map((jobLog, index) => (
-                <div key={index} className="bg-white/90 p-3 rounded-md shadow-sm border">
-                   <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-semibold text-sm text-gray-800">{jobLog.jobTitle}</p>
-                        <p className="text-xs text-gray-500">{jobLog.clientName}</p>
-                      </div>
-                      <span className="text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-full">{jobLog.hours}h {jobLog.minutes}m</span>
-                   </div>
-                   {jobLog.submissions && jobLog.submissions.length > 0 && (
-                     <div className="mt-2 pt-2 border-t">
-                        <h4 className="text-xs font-semibold text-gray-600 mb-1">Profiles Submitted:</h4>
-                        <ul className="list-disc pl-5 text-xs text-gray-700">
-                          {jobLog.submissions.map(sub => <li key={sub.id}>{sub.name}</li>)}
-                        </ul>
-                     </div>
-                   )}
-                   {jobLog.challenges && (
-                     <div className="mt-2 pt-2 border-t">
-                        <h4 className="text-xs font-semibold text-gray-600 mb-1">Challenges & Notes:</h4>
-                        <div className="work-report text-xs text-gray-700 prose prose-sm max-w-none">
-                          {parse(DOMPurify.sanitize(jobLog.challenges))}
-                        </div>
-                     </div>
-                   )}
-                </div>
-              ))}
+        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-4 rounded-lg border border-purple-100">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-2 bg-purple-600 rounded-lg">
+              <FileText className="w-4 h-4 text-white" />
             </div>
+            <h3 className="text-sm font-semibold text-purple-800">Detailed Job Report</h3>
+          </div>
+          
+          {/* Individual Job Cards with TABLE inside */}
+          <div className="space-y-3">
+            {(log.recruiter_report_data as JobLog[]).map((jobLog, index) => {
+
+              // --- TOTAL TIME CALCULATION ---
+              const totalMinutesForJob = jobLog.candidates?.reduce((sum, candidate) => {
+                const hoursInMinutes = (candidate.hours || 0) * 60;
+                const minutes = (candidate.minutes || 0);
+                return sum + hoursInMinutes + minutes;
+              }, 0) || 0;
+
+              const totalHours = Math.floor(totalMinutesForJob / 60);
+              const remainingMinutes = totalMinutesForJob % 60;
+              // --- END OF CALCULATION ---
+
+              return (
+                <div key={index} className="bg-white/90 p-3 rounded-md shadow-sm border">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="font-semibold text-sm text-gray-800">{jobLog.jobTitle}</p>
+                      <p className="text-xs text-gray-500">{jobLog.clientName}</p>
+                    </div>
+                    <span className="text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                      {/* --- DISPLAY THE CALCULATED TIME --- */}
+                      {totalHours}h {remainingMinutes}m
+                    </span>
+                  </div>
+                  
+                  {/* TABLE for Profiles Submitted */}
+                  {jobLog.candidates && jobLog.candidates.length > 0 && (
+                    <div className="mt-2 pt-2 border-t">
+                      <h4 className="text-xs font-semibold text-gray-600 mb-2">Profiles Submitted:</h4>
+                      <div className="overflow-x-auto">
+                        <table className="recruiter-table">
+                          <thead>
+                            <tr>
+                              <th className="text-left">Candidate Name</th>
+                              <th className="text-left">Client</th>
+                              <th className="text-left">Time Spent</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {jobLog.candidates.map((candidate) => (
+                              <tr key={candidate.id}>
+                                <td className="font-medium text-gray-900">{candidate.name}</td>
+                                <td className="text-gray-600">{jobLog.clientName}</td>
+                                <td className="font-semibold text-blue-600">{candidate.hours}h {candidate.minutes}m</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {jobLog.challenges && (
+                    <div className="mt-2 pt-2 border-t">
+                      <h4 className="text-xs font-semibold text-gray-600 mb-1">Challenges & Notes:</h4>
+                      <p className="text-xs text-gray-700">{jobLog.challenges}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
+      
       {/* --- Overall Work Summary Section --- */}
       {sanitizedSummary && (
         <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 rounded-lg border border-green-100">
@@ -183,6 +255,7 @@ export const TimeLogDetails = ({
           )}
         </>
       )}
+      
       {/* Clarification Section (Common for all roles) */}
       {(log.rejection_reason || log.clarification_response) && (
         <div
@@ -234,6 +307,7 @@ export const TimeLogDetails = ({
           )}
         </div>
       )}
+      
       {/* Regularization Button (Common for all roles) */}
       {canRegularize(log) && onRegularizationRequest && (
         <div className="pt-2">

@@ -1,3 +1,5 @@
+// TimesheetInfo.tsx
+
 import { useState, useEffect } from "react";
 import { TimeLog } from "@/types/time-tracker-types";
 import { formatDate } from "@/utils/timeFormatters";
@@ -5,14 +7,29 @@ import { formatDuration } from "../TimesheetList";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import parse from "html-react-parser";
-import { Clock, Coffee, Utensils, MousePointerClick, BarChart, WifiOff, Moon } from "lucide-react";
+import {
+  Clock,
+  Coffee,
+  Utensils,
+  MousePointerClick,
+  BarChart,
+  WifiOff,
+  Moon,
+  Calendar,
+  LogIn,
+  LogOut,
+  Timer,
+  TrendingUp,
+  User,
+  Briefcase
+} from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 interface TimesheetInfoProps {
   dialogTimesheet: TimeLog;
   type: 'normal' | 'clarification';
 }
 
-// --- NEW: Define a type for activity logs ---
 interface ActivityLog {
   id: string;
   activity_type: 'active' | 'inactive' | 'away';
@@ -31,6 +48,16 @@ interface Client {
   name: string;
 }
 
+// A simple type definition for recruiter report data for clarity
+interface RecruiterJobReport {
+    jobTitle: string;
+    clientName: string;
+    hours: number;
+    minutes?: number;
+    submissions: Array<{ id: string; name: string }>;
+    challenges?: string;
+}
+
 export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => {
   const [projects, setProjects] = useState<Map<string, string>>(new Map());
   const [clients, setClients] = useState<Map<string, string>>(new Map());
@@ -38,8 +65,7 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(true);
 
-
-    useEffect(() => {
+  useEffect(() => {
     if (!dialogTimesheet.employee_id || !dialogTimesheet.date) return;
 
     const fetchActivityLogs = async () => {
@@ -70,16 +96,9 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
     fetchActivityLogs();
   }, [dialogTimesheet.employee_id, dialogTimesheet.date]);
 
-  // Fetch project and client names
   useEffect(() => {
     const fetchProjectsAndClients = async () => {
-      if (!hasProjects) {
-        console.log('Debug: No projects to fetch', {
-          timeLogId: dialogTimesheet.id,
-          projectData: dialogTimesheet.project_time_data?.projects || null,
-        });
-        return;
-      }
+      if (!hasProjects) return;
 
       const projectIds = dialogTimesheet.project_time_data!.projects
         .map((entry) => entry.projectId)
@@ -89,22 +108,16 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
         .map((entry) => entry.clientId)
         .filter((id): id is string => !!id);
 
-      console.log('Debug: IDs to fetch', { projectIds, clientIds, projectCount: projectIds.length, clientCount: clientIds.length });
-
-      if (projectIds.length === 0) {
-        console.log('Debug: No valid project IDs found');
-        return;
-      }
+      if (projectIds.length === 0) return;
 
       try {
-        // Fetch projects
         const { data: projectData, error: projectError } = await supabase
           .from('hr_projects')
           .select('id, name')
           .in('id', projectIds);
 
         if (projectError) {
-          console.error('Error fetching projects from hr_projects:', projectError);
+          console.error('Error fetching projects:', projectError);
           return;
         }
 
@@ -114,12 +127,6 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
         });
         setProjects(projectMap);
 
-        console.log('Debug: Fetched projects', {
-          projectCount: projectData.length,
-          projects: projectData.map((p: Project) => ({ id: p.id, name: p.name })),
-        });
-
-        // Fetch clients
         if (clientIds.length > 0) {
           const { data: clientData, error: clientError } = await supabase
             .from('hr_clients')
@@ -127,7 +134,7 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
             .in('id', clientIds);
 
           if (clientError) {
-            console.error('Error fetching clients from hr_clients:', clientError);
+            console.error('Error fetching clients:', clientError);
             return;
           }
 
@@ -136,11 +143,6 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
             clientMap.set(client.id, client.client_name);
           });
           setClients(clientMap);
-
-          console.log('Debug: Fetched clients', {
-            clientCount: clientData.length,
-            clients: clientData.map((c: Client) => ({ id: c.id, name: c.name })),
-          });
         }
       } catch (error) {
         console.error('Error fetching projects or clients:', error);
@@ -150,13 +152,12 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
     fetchProjectsAndClients();
   }, [dialogTimesheet, hasProjects]);
 
-  // Format clock-in and clock-out times
   const formatTime = (time: string | null) => {
     if (!time) return "N/A";
     return format(new Date(time), "h:mm a");
   };
 
-    const activitySummary = activityLogs.reduce((acc, log) => {
+  const activitySummary = activityLogs.reduce((acc, log) => {
     const duration = log.duration_seconds || 0;
     if (log.activity_type === 'active') acc.active += duration;
     if (log.activity_type === 'inactive') acc.inactive += duration;
@@ -165,147 +166,226 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
   }, { active: 0, inactive: 0, away: 0 });
   
   const formatSeconds = (seconds: number) => {
-    if (seconds < 60) return `${seconds}s`;
-    return formatDuration(Math.floor(seconds / 60));
+    const totalMinutes = Math.floor(seconds / 60);
+    if (totalMinutes > 0) {
+        return formatDuration(totalMinutes);
+    }
+    if (seconds < 60) {
+        return `${seconds}s`;
+    }
+    return formatDuration(totalMinutes);
   };
 
-    // --- NEW: Calculate total break minutes ---
   const totalBreakMinutes = dialogTimesheet.break_logs?.reduce(
     (sum, breakLog) => sum + (breakLog.duration_minutes || 0), 0
   ) || 0;
 
+  const totalActivitySeconds = activitySummary.active + activitySummary.inactive + activitySummary.away;
+  const activePercentage = totalActivitySeconds > 0 ? (activitySummary.active / totalActivitySeconds) * 100 : 0;
+  const inactivePercentage = totalActivitySeconds > 0 ? (activitySummary.inactive / totalActivitySeconds) * 100 : 0;
+  const awayPercentage = totalActivitySeconds > 0 ? (activitySummary.away / totalActivitySeconds) * 100 : 0;
 
-   // --- NEW: Component to render the activity log timeline ---
-  const renderActivityLog = () => {
+const renderActivityLog = () => {
     const activityIcon = (type: string) => {
-        switch(type) {
-            case 'active': return <WifiOff size={14} className="text-green-500" />;
-            case 'inactive': return <Moon size={14} className="text-gray-500" />;
-            case 'away': return <Coffee size={14} className="text-orange-500" />;
-            default: return <MousePointerClick size={14} />;
-        }
+      // Using icons that match the visual style of the screenshot
+      switch(type) {
+        case 'active': return <TrendingUp size={14} className="text-emerald-500" />;
+        case 'inactive': return <Moon size={14} className="text-slate-500" />;
+        case 'away': return <Coffee size={14} className="text-blue-500" />;
+        default: return <MousePointerClick size={14} />;
+      }
+    };
+
+    const activityColor = (type: string) => {
+      switch(type) {
+        case 'active': return 'bg-emerald-50 border-emerald-200';
+        case 'inactive': return 'bg-slate-50 border-slate-200';
+        case 'away': return 'bg-blue-50 border-blue-200';
+        default: return 'bg-gray-50 border-gray-200';
+      }
     };
 
     return (
-        <div className="mt-6">
-            <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                <BarChart size={16} /> Activity Log
-            </h4>
-            <div className="bg-white rounded-lg border p-3">
-                {loadingActivity ? (
-                    <p className="text-sm text-gray-500">Loading activity...</p>
-                ) : activityLogs.length === 0 ? (
-                    <p className="text-sm text-gray-500">No activity recorded for this day.</p>
-                ) : (
-                    <>
-                        {/* Summary Section */}
-                        <div className="grid grid-cols-3 gap-2 mb-3 text-center">
-                            <div>
-                                <p className="text-xs text-green-600">Active</p>
-                                <p className="text-sm font-semibold text-green-700">{formatSeconds(activitySummary.active)}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-600">Inactive</p>
-                                <p className="text-sm font-semibold text-gray-700">{formatSeconds(activitySummary.inactive)}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-orange-600">Away</p>
-                                <p className="text-sm font-semibold text-orange-700">{formatSeconds(activitySummary.away)}</p>
-                            </div>
-                        </div>
-                        {/* Timeline Section */}
-                        <div className="max-h-[200px] overflow-y-auto space-y-2 border-t pt-3 pr-2">
-                           {activityLogs.map(log => (
-                               <div key={log.id} className="flex justify-between items-center text-xs">
-                                   <span className="capitalize flex items-center gap-2">
-                                       {activityIcon(log.activity_type)}
-                                       {formatTime(log.start_time)}
-                                   </span>
-                                   <span className="font-medium text-gray-600">
-                                       {formatSeconds(log.duration_seconds || 0)}
-                                   </span>
-                               </div>
-                           ))}
-                        </div>
-                    </>
-                )}
-            </div>
+      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-3 border border-blue-100 shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="p-1.5 bg-blue-600 rounded-md">
+            <BarChart size={14} className="text-white" />
+          </div>
+          <h4 className="text-sm font-bold text-gray-800">Activity Timeline</h4>
         </div>
+        
+        {loadingActivity ? (
+          <div className="text-center py-5">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent mx-auto"></div>
+            <p className="text-xs text-gray-500 mt-2">Loading...</p>
+          </div>
+        ) : activityLogs.length === 0 ? (
+          <div className="text-center py-5">
+            <BarChart size={32} className="text-gray-300 mx-auto mb-2" />
+            <p className="text-xs text-gray-500">No activity recorded.</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              {/* Active Card */}
+              <div className="bg-white rounded-lg p-2.5 border border-emerald-200 shadow-sm text-center">
+                 <div className="flex items-center justify-center gap-1.5">
+                   <TrendingUp size={14} className="text-emerald-500" />
+                   <span className="text-xs font-medium text-gray-600">Active</span>
+                </div>
+                <p className="text-lg font-bold text-gray-800">{formatSeconds(activitySummary.active)}</p>
+                <p className="text-xs text-gray-500 -mt-1">{activePercentage.toFixed(0)}%</p>
+              </div>
+              
+              {/* Inactive Card */}
+              <div className="bg-white rounded-lg p-2.5 border border-slate-200 shadow-sm text-center">
+                 <div className="flex items-center justify-center gap-1.5">
+                   <Moon size={14} className="text-slate-500" />
+                   <span className="text-xs font-medium text-gray-600">Inactive</span>
+                </div>
+                <p className="text-lg font-bold text-gray-800">{formatSeconds(activitySummary.inactive)}</p>
+                <p className="text-xs text-gray-500 -mt-1">{inactivePercentage.toFixed(0)}%</p>
+              </div>
+              
+              {/* Away Card */}
+              <div className="bg-white rounded-lg p-2.5 border border-blue-200 shadow-sm text-center">
+                 <div className="flex items-center justify-center gap-1.5">
+                   <Coffee size={14} className="text-blue-500" />
+                   <span className="text-xs font-medium text-gray-600">Away</span>
+                </div>
+                <p className="text-lg font-bold text-gray-800">{formatSeconds(activitySummary.away)}</p>
+                <p className="text-xs text-gray-500 -mt-1">{awayPercentage.toFixed(0)}%</p>
+              </div>
+            </div>
+
+            {/* Timeline List */}
+            <div className="bg-white rounded-lg p-2 max-h-[180px] overflow-y-auto custom-scrollbar border">
+              <div className="space-y-1">
+                {activityLogs.map((log) => (
+                  <div 
+                    key={log.id} 
+                    className={`flex items-center justify-between p-1.5 rounded-md border ${activityColor(log.activity_type)}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {activityIcon(log.activity_type)}
+                      <span className="text-xs font-medium text-gray-700">{formatTime(log.start_time)}</span>
+                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                        log.activity_type === 'active' ? 'bg-emerald-100 text-emerald-700' :
+                        log.activity_type === 'inactive' ? 'bg-slate-100 text-slate-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {log.activity_type}
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-gray-800 w-12 text-right">
+                      {formatSeconds(log.duration_seconds || 0)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     );
   };
 
 
-  // --- NEW: Component to render break logs ---
-  const renderBreakLogs = () => {
+
+   const renderBreakLogs = () => {
     if (!dialogTimesheet.break_logs || dialogTimesheet.break_logs.length === 0) {
-        return null; // Don't render anything if there are no breaks
+      return null;
     }
 
     return (
-        <div className="mt-6">
-            <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                <Coffee size={16} /> Break Details
-            </h4>
-            <div className="bg-white rounded-lg border p-3 space-y-2">
-                {dialogTimesheet.break_logs.map(log => (
-                    <div key={log.id} className="flex justify-between items-center text-sm">
-                        <span className="capitalize flex items-center gap-2">
-                            {log.break_type === 'lunch' ? <Utensils size={14} /> : <Coffee size={14} />}
-                            {log.break_type} Break
-                        </span>
-                        <span className="font-medium text-gray-700">
-                            {formatDuration(log.duration_minutes)}
-                        </span>
-                    </div>
-                ))}
-                <div className="flex justify-between items-center text-sm font-semibold border-t pt-2 mt-2">
-                    <span>Total Break Time</span>
-                    <span className="text-orange-600">
-                        {formatDuration(totalBreakMinutes)}
-                    </span>
-                </div>
-            </div>
+      <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl p-3 border border-purple-100 shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="p-1.5 bg-purple-600 rounded-md">
+            <Coffee size={14} className="text-white" />
+          </div>
+          <h4 className="text-sm font-bold text-gray-800">Break Details</h4>
         </div>
+        
+        <div className="space-y-2">
+          {dialogTimesheet.break_logs.map(log => (
+            <div 
+              key={log.id} 
+              className="bg-white rounded-lg p-2.5 border border-purple-200"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-md ${log.break_type === 'lunch' ? 'bg-purple-100' : 'bg-indigo-100'}`}>
+                    {log.break_type === 'lunch' ? 
+                      <Utensils size={14} className="text-purple-600" /> : 
+                      <Coffee size={14} className="text-indigo-600" />
+                    }
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-800 capitalize">{log.break_type} Break</p>
+                    <p className="text-xs text-gray-500 -mt-1">Duration</p>
+                  </div>
+                </div>
+                <p className="text-lg font-bold text-purple-600">
+                  {formatDuration(log.duration_minutes)}
+                </p>
+              </div>
+            </div>
+          ))}
+          
+          <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg p-2.5 text-white shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Timer size={16} />
+                <span className="text-xs font-semibold">Total Break Time</span>
+              </div>
+              <span className="text-lg font-bold">
+                {formatDuration(totalBreakMinutes)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   };
-
-  // Render project details in a table
+  
   const renderProjectDetails = () => {
     if (!hasProjects) return null;
 
     return (
-      <div className="mt-6">
-        <h4 className="text-sm font-semibold text-gray-800 mb-3">Project Details</h4>
-        <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+      <div className="mt-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="p-2 bg-indigo-100 rounded-lg">
+            <Briefcase size={16} className="text-indigo-600" />
+          </div>
+          <h4 className="text-base font-bold text-gray-800">Project Breakdown</h4>
+        </div>
+        
+        <div className="bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Project
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Client
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Hours
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Work Summary
-                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider text-gray-600">Project</th>
+                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider text-gray-600">Client</th>
+                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider text-gray-600">Hours</th>
+                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider text-gray-600">Work Summary</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200">
                 {dialogTimesheet.project_time_data!.projects.map((entry, index) => {
-                  const projectName = projects.get(entry.projectId) || 'Unknown Project';
-                  const clientName = clients.get(entry.clientId) || 'Unknown Client';
+                  const projectName = projects.get(entry.projectId) || 'N/A';
+                  const clientName = clients.get(entry.clientId) || 'N/A';
                   return (
-                    <tr key={index} className="hover:bg-gray-50 transition">
-                      <td className="px-4 py-2 text-sm font-medium text-gray-800">{projectName}</td>
-                      <td className="px-4 py-2 text-sm text-gray-700">{clientName}</td>
-                      <td className="px-4 py-2 text-sm text-indigo-600">{`${entry.hours}h`}</td>
-                      <td className="px-4 py-2 text-sm text-gray-700">
-                        {entry.report ? parse(entry.report) : 'No summary provided'}
+                    <tr key={index} className="hover:bg-gray-50">
+                      <td className="px-4 py-2 font-semibold text-gray-800">{projectName}</td>
+                      <td className="px-4 py-2 text-gray-600">{clientName}</td>
+                      <td className="px-4 py-2">
+                        <span className="font-bold text-indigo-700">{`${entry.hours}h`}</span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="text-xs text-gray-700 max-w-xs">
+                          {entry.report ? parse(entry.report) : <span className="text-gray-400 italic">No summary</span>}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -318,95 +398,175 @@ export const TimesheetInfo = ({ dialogTimesheet, type }: TimesheetInfoProps) => 
     );
   };
 
-  console.log("dialogTimesheet", dialogTimesheet);
+  const renderRecruiterReport = () => {
+    if (!dialogTimesheet.recruiter_report_data) return null;
+    
+    try {
+      const reportData = (
+        typeof dialogTimesheet.recruiter_report_data === 'string' 
+          ? JSON.parse(dialogTimesheet.recruiter_report_data) 
+          : dialogTimesheet.recruiter_report_data
+      ) as RecruiterJobReport[];
+
+      if (!Array.isArray(reportData) || reportData.length === 0) return null;
+
+      return (
+        <div className="mt-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <Briefcase size={18} className="text-purple-600" />
+            </div>
+            <h4 className="text-base font-bold text-gray-800">Detailed Job Report</h4>
+          </div>
+
+          <div className="space-y-3">
+            {reportData.map((job, index) => {
+              const timeSpent = `${job.hours}h ${job.minutes || 0}m`;
+              return (
+                <div key={index} className="bg-white rounded-lg border border-gray-200 p-3 hover:shadow-sm">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h5 className="text-sm font-bold text-gray-900">{job.jobTitle}</h5>
+                      <p className="text-xs text-gray-600">{job.clientName}</p>
+                    </div>
+                    <span className="text-sm font-bold text-blue-600">{timeSpent}</span>
+                  </div>
+
+                  {job.submissions?.length > 0 && (
+                    <div className="pt-2 border-t border-gray-100">
+                      <p className="text-xs font-semibold text-gray-700 mb-1">Profiles Submitted:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        {job.submissions.map((submission) => (
+                          <li key={submission.id} className="text-xs text-gray-700">
+                            {submission.name}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    } catch (error) {
+      console.error('Error parsing recruiter report data:', error);
+      return null;
+    }
+  };
+  
+  const getDayName = (dateString: string) => format(new Date(dateString), "EEEE");
+  const getFormattedDate = (dateString: string) => format(new Date(dateString), "MMM dd, yyyy");
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <h4 className="text-sm font-semibold">Employee</h4>
-          <p>
-            {dialogTimesheet.employee?.first_name && dialogTimesheet.employee?.last_name
-              ? `${dialogTimesheet.employee.first_name} ${dialogTimesheet.employee.last_name}`
-              : 'Unknown Employee'}
-          </p>
+      <div className="grid grid-cols-[220px_1fr] gap-4">
+        <div className="bg-gradient-to-br from-100 to-emerald-100 rounded-2xl p-4 border-2 border-green-200 shadow-md flex flex-col items-center justify-center">
+          <div className="p-2 bg-blue-600 rounded-lg mb-2">
+            <Calendar size={28} className="text-white" />
+          </div>
+          <p className="text-base font-bold text-gray-700">{getDayName(dialogTimesheet.date)}</p>
+          <p className="text-xl font-bold text-gray-900">{getFormattedDate(dialogTimesheet.date)}</p>
         </div>
-        <div>
-          <h4 className="text-sm font-semibold">Department</h4>
-          <p>
-            {dialogTimesheet?.employee?.department?.name ||
-              dialogTimesheet?.employee?.hr_departments?.name ||
-              'Unknown'}
-          </p>
+        
+        <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl p-4 border-2 border-purple-400 shadow-md text-white">
+          <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
+            <Clock size={20} />
+            Timesheet Details
+          </h3>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center py-1.5 border-b border-purple-400/30">
+              <div className="flex items-center gap-2">
+                <User size={14} className="text-purple-200" />
+                <span className="text-xs font-semibold text-purple-100">Employee</span>
+              </div>
+              <span className="text-base font-bold">
+                {dialogTimesheet.employee?.first_name && dialogTimesheet.employee?.last_name
+                  ? `${dialogTimesheet.employee.first_name} ${dialogTimesheet.employee.last_name}`
+                  : 'Unknown'}
+              </span>
+            </div>
+            
+            <div className="flex justify-between items-center py-1.5 border-b border-purple-400/30">
+              <div className="flex items-center gap-2">
+                <Briefcase size={14} className="text-purple-200" />
+                <span className="text-xs font-semibold text-purple-100">Department</span>
+              </div>
+              <span className="text-base font-bold">
+                {dialogTimesheet?.employee?.department?.name || 'Unknown'}
+              </span>
+            </div>
+            
+            <div className="flex justify-between items-center py-1.5 border-b border-purple-400/30">
+              <div className="flex items-center gap-2">
+                <Clock size={14} className="text-purple-200" />
+                <span className="text-xs font-semibold text-purple-100">Total Duration</span>
+              </div>
+              <span className="text-base font-bold">{formatDuration(dialogTimesheet.duration_minutes)}</span>
+            </div>
+            
+            <div className="flex justify-between items-center py-1.5 border-b border-purple-400/30">
+              <div className="flex items-center gap-2">
+                <Coffee size={14} className="text-purple-200" />
+                <span className="text-xs font-semibold text-purple-100">Total Breaks</span>
+              </div>
+              <span className="text-base font-bold">{formatDuration(totalBreakMinutes)}</span>
+            </div>
+            
+            <div className="flex justify-between items-center py-1.5 border-b border-purple-400/30">
+              <div className="flex items-center gap-2">
+                <LogIn size={14} className="text-purple-200" />
+                <span className="text-xs font-semibold text-purple-100">Log In</span>
+              </div>
+              <span className="text-base font-bold">{formatTime(dialogTimesheet.clock_in_time)}</span>
+            </div>
+            
+            <div className="flex justify-between items-center py-1.5">
+              <div className="flex items-center gap-2">
+                <LogOut size={14} className="text-purple-200" />
+                <span className="text-xs font-semibold text-purple-100">Log Out</span>
+              </div>
+              <span className="text-base font-bold">{formatTime(dialogTimesheet.clock_out_time)}</span>
+            </div>
+          </div>
         </div>
       </div>
 
       {type === 'normal' ? (
         <>
-          {/* --- Time Info: Adjusted to 3 columns --- */}
-          <div className="grid grid-cols-3 gap-4 border-t pt-4 mt-4">
-            <div>
-              <h4 className="text-sm font-semibold">Date</h4>
-              <p>{formatDate(dialogTimesheet.date)}</p>
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold">Total Duration</h4>
-              <p>{formatDuration(dialogTimesheet.duration_minutes)}</p>
-            </div>
-             {/* --- ADDED: Total Breaks Info --- */}
-            <div>
-              <h4 className="text-sm font-semibold">Total Breaks</h4>
-              <p className="font-medium text-orange-600">{formatDuration(totalBreakMinutes)}</p>
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold">Log In</h4>
-              <p>{formatTime(dialogTimesheet.clock_in_time)}</p>
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold">Log Out</h4>
-              <p>{formatTime(dialogTimesheet.clock_out_time)}</p>
-            </div>
-          </div>
-         <div className="flex gap-4">
-            <div className="w-1/2 space-y-6">
-                {renderBreakLogs()}
-            </div>
-            <div className="w-1/2 space-y-6">
-                {renderActivityLog()}
-            </div>
+          <div className="grid grid-cols-2 gap-4">
+            {renderBreakLogs()}
+            {renderActivityLog()}
           </div>
           {renderProjectDetails()}
-
+      
         </>
       ) : (
         <>
-          <div>
-            <h4 className="text-sm font-semibold">Date</h4>
-            <p>{formatDate(dialogTimesheet.date)}</p>
+          <div className="bg-red-50 rounded-lg p-3 border border-red-200 shadow-sm">
+            <h4 className="text-xs font-bold text-red-600 uppercase mb-2">Original Issue</h4>
+            <p className="text-sm text-gray-700">{dialogTimesheet.rejection_reason || 'No reason provided'}</p>
           </div>
-          <div>
-            <h4 className="text-sm font-semibold">Original Issue</h4>
-            <p className="text-sm text-muted-foreground">
-              {dialogTimesheet.rejection_reason || 'No reason provided'}
-            </p>
+          <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 shadow-sm">
+            <h4 className="text-xs font-bold text-blue-600 uppercase mb-2">Employee's Clarification</h4>
+            <p className="text-sm text-gray-700">{dialogTimesheet.clarification_response || 'No clarification provided'}</p>
           </div>
-          <div className="bg-slate-200 p-3 rounded-md">
-            <h4 className="text-sm font-semibold">Employee's Clarification</h4>
-            <p className="text-sm mt-1">
-              {dialogTimesheet.clarification_response || 'No clarification provided'}
-            </p>
-          </div>
-          <div className="flex gap-4">
-            <div className="w-1/2 space-y-6">
-                {renderBreakLogs()}
-            </div>
-            <div className="w-1/2 space-y-6">
-                {renderActivityLog()}
-            </div>
+          <div className="grid grid-cols-2 gap-4">
+            {renderBreakLogs()}
+            {renderActivityLog()}
           </div>
           {renderProjectDetails()}
+         
         </>
       )}
+      
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      `}</style>
     </div>
   );
 };

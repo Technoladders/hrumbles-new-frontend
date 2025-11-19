@@ -48,7 +48,7 @@ const getDayOfWeek = (dateString: string | null) => {
 return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Left Column: Date Display */}
-   <div className="lg:col-span-1 bg-green-100 rounded-lg border border-slate-200 flex flex-col items-center justify-center p-6 text-center">
+   <div className="lg:col-span-1  rounded-lg border border-slate-200 flex flex-col items-center justify-center p-6 text-center">
     <Calendar className="w-16 h-16 text-blue-500 mb-4" />
     <p className="text-xl font-bold">{getDayOfWeek(timesheet.date)}</p>
     <p className="text-3xl font-bold text-slate-800">{formatDate(timesheet.date)}</p>

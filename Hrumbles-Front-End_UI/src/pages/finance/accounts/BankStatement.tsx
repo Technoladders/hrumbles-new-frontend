@@ -171,7 +171,7 @@ const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
             <label className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700">
               <Upload className="w-5 h-5" />
               <span>{uploading ? 'Processing...' : 'Upload Statement'}</span>
-              <input type="file" onChange={handleFileUpload} disabled={uploading} accept=".pdf,.png,.jpg,.jpeg" className="hidden" />
+            <input type="file" onChange={handleFileUpload} disabled={uploading} accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls" className="hidden" />
             </label>
             {uploading && <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>}
           </div>
