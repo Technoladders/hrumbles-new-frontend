@@ -1,27 +1,19 @@
-
-# Use Node.js base image
 FROM node:18.17.0
 
-# Set working directory
 WORKDIR /usr/src/app
 
-# Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json* ./
+RUN npm ci --silent
 
-# Install dependencies
-RUN npm install --force --quiet
-
-# Copy the rest of the application code
 COPY . .
 
-# Build the application
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+
 RUN npm run build
 
-# Install serve to run the application
-RUN npm install -g serve
+# install serve (only if you need it)
+RUN npm install -g serve --silent
 
-# Expose port 80
 EXPOSE 80
 
-# Start the application
 CMD ["serve", "-s", "dist", "-l", "80"]
