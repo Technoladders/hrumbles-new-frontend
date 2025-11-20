@@ -14,7 +14,7 @@ RUN npm install --force --quiet
 COPY . .
 
 # Add this line (INCREASE HEAP SIZE)
-ENV NODE_OPTIONS="--max-old-space-size=2048"
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Build the application
 RUN npm run build
