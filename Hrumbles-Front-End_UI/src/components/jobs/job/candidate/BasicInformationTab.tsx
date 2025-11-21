@@ -260,11 +260,11 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete, c
     const setLoading = type === 'offer' ? setIsUploadingOffer : setIsUploadingJoining;
     const formField = type === 'offer' ? 'offerLetterUrl' : 'joiningLetterUrl';
    
-    setLoading(true);
+    setLoading(true);                                                
     toast.info(`Uploading ${type} letter...`);
     try {
         const filePath = `public/${type}-letters/${candidate.id}-${Date.now()}-${file.name}`;
-       
+                                                        
         // **CRITICAL CHANGE:** Use the new bucket name here
         const { error: uploadError } = await supabase.storage
             .from("candidate-attachments")

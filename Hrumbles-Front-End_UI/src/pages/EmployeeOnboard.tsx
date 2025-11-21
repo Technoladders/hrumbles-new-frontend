@@ -369,6 +369,9 @@ const [isSameAsPresent, setIsSameAsPresent] = useState(false);
 
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
+  console.log("Current Organization ID:", organizationId);
+
+
 const educationColors = ["bg-blue-50", "bg-indigo-50", "bg-violet-50"];
 
   // Load countries on component mount
@@ -1462,8 +1465,8 @@ if (!validateTab(activeTab)) {
         personal_email: formData.personalEmail,
         phone: formData.phone,
         employee_id: formData.employeeId,
-        department_id: formData.department,
-        designation_id: formData.designation,
+       department_id: formData.department || null,
+       designation_id: formData.designation || null, 
         position: formData.position,
         date_of_birth: formData.dateOfBirth || null,
         gender: formData.gender,

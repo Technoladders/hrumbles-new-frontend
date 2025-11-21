@@ -11,6 +11,8 @@ export const useEmployees = () => {
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  // ✅ FIX: Removed dependencies on `employees` and `selectedEmployee`
+  // The function now uses functional updates to safely interact with state.
   const fetchEmployees = useCallback(async () => {
     try {
       setLoading(true);
@@ -36,52 +38,66 @@ export const useEmployees = () => {
         has_projects: employeesWithProjects.has(emp.id)
       })) || [];
 
-      // Only update if data has changed
-      if (!isEqual(employees, employeesWithProjectsFlag)) {
-        setEmployees(employeesWithProjectsFlag);
-      }
-
-      // Set first employee if none selected
-      if (employeesWithProjectsFlag.length > 0 && !selectedEmployee) {
-        setSelectedEmployee(employeesWithProjectsFlag[0]);
-      }
-
-      // Update selected employee only if data has changed
-      if (selectedEmployee) {
-        const updatedSelectedEmployee = employeesWithProjectsFlag.find(
-          emp => emp.id === selectedEmployee.id
-        );
-        if (updatedSelectedEmployee && !isEqual(selectedEmployee, updatedSelectedEmployee)) {
-          setSelectedEmployee(updatedSelectedEmployee);
+      // ✅ FIX: Use functional update for setting employees
+      setEmployees(prevEmployees => {
+        if (isEqual(prevEmployees, employeesWithProjectsFlag)) {
+          return prevEmployees; // If data is identical, don't update state
         }
-      }
+        return employeesWithProjectsFlag;
+      });
+
+      // ✅ FIX: Use functional update for setting the selected employee
+      setSelectedEmployee(prevSelected => {
+        // If nothing was selected previously, select the first employee
+        if (employeesWithProjectsFlag.length > 0 && !prevSelected) {
+          return employeesWithProjectsFlag[0];
+        }
+
+        // If something was selected, find its updated version
+        if (prevSelected) {
+          const updatedSelectedEmployee = employeesWithProjectsFlag.find(
+            emp => emp.id === prevSelected.id
+          );
+          // Only update if the data has actually changed
+          if (updatedSelectedEmployee && !isEqual(prevSelected, updatedSelectedEmployee)) {
+            return updatedSelectedEmployee;
+          }
+        }
+        
+        // Otherwise, keep the current selection
+        return prevSelected;
+      });
+
     } catch (err) {
       console.error('Error fetching employees:', err);
       setError('Failed to load employees');
-      toast('Failed to load employees');
+      toast.error('Failed to load employees'); // Use toast.error for errors
     } finally {
       setLoading(false);
     }
-  }, [employees, selectedEmployee, setEmployees, setSelectedEmployee]);
+  }, [setEmployees, setSelectedEmployee]); // Dependencies are now stable
 
   useEffect(() => {
-    console.log('useEmployees useEffect: Fetching employees', { refreshTrigger });
     fetchEmployees();
   }, [fetchEmployees, refreshTrigger]);
 
   const selectEmployee = useCallback((employeeId: string) => {
     const employee = employees.find(emp => emp.id === employeeId);
-    if (employee && !isEqual(selectedEmployee, employee)) {
-      setSelectedEmployee(employee);
+    if (employee) {
+      // Use functional update here as well for consistency and to avoid stale closures
+      setSelectedEmployee(prevSelected => {
+        if (!isEqual(prevSelected, employee)) {
+          return employee;
+        }
+        return prevSelected;
+      });
     }
-  }, [employees, selectedEmployee, setSelectedEmployee]);
+  }, [employees, setSelectedEmployee]);
 
   const refreshEmployees = useCallback(() => {
-    console.log('refreshEmployees called');
     setRefreshTrigger(prev => prev + 1);
   }, []);
 
-  // Memoize the return value to prevent unnecessary re-renders
   return useMemo(() => ({
     employees,
     currentEmployee: selectedEmployee,

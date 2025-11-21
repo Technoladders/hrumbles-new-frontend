@@ -2,7 +2,8 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock } from "lucide-react";
+import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Sparkles } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -178,46 +179,19 @@ const JobView = () => {
             {/* Main Dropdown for All Candidate Actions */}
           <DropdownMenu>
 <DropdownMenuTrigger asChild>
-  <Button
-    variant="default"
-    className="
-      relative overflow-hidden
-      w-[350px] px-10 py-4 text-lg font-semibold text-white
-      rounded-xl border border-white/10
-      bg-gradient-to-r from-purple-500 via-rose-600 to-violet-600
-      bg-[length:200%_200%] bg-[position:0%_50%]
-      transition-all duration-500 ease-out
-      shadow-lg shadow-zinc-600 hover:shadow-2xl hover:shadow-purple-500/40
-      hover:-translate-y-1 hover:scale-[1.01]
-      hover:bg-[position:100%_50%]
-      group
-    "
-  >
-    {/* Shiny overlay on hover */}
-    <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent 
-      transition-transform duration-700 ease-out 
-      group-hover:translate-x-full pointer-events-none" 
-    />
-
-    {/* Letter-by-letter animation */}
-    <span className="relative z-10 flex gap-[1px] items-center">
-      {"Analyse with AI".split("").map((char, i) => (
-        <span
-          key={i}
-          className="inline-block opacity-0 animate-text-reveal"
-          style={{ animationDelay: `${i * 0.05}s` }}
-        >
-          {char === " " ? "\u00A0" : char}
-        </span>
-      ))}
-      
-      <ChevronDown className="ml-3 h-5 w-5 relative z-10 opacity-80 
-        transition-transform duration-300 group-hover:rotate-180" 
-      />
-    </span>
-  </Button>
+    <Button className="
+        h-10 px-6 font-semibold text-white whitespace-nowrap
+        bg-gradient-to-r from-purple-500 to-pink-500
+        hover:from-purple-600 hover:to-pink-600
+        rounded-full shadow-lg
+        transform hover:scale-105 transition-transform duration-200
+        flex items-center gap-2"
+    >
+        <Sparkles size={18} />
+        <span>Analyse with AI</span>
+        <ChevronDown className="h-5 w-5" />
+    </Button>
 </DropdownMenuTrigger>
-
 
 
             

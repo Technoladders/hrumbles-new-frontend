@@ -66,8 +66,6 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
     updateWorkHistoryItem,
   } = useWorkHistoryVerification(candidate, organization_id);
 
-  console.log("candidateptofile", workHistory);
-
   const { timeline, timelineLoading, timelineError } = useTimeline(
     candidateId,
     shareMode
@@ -91,7 +89,6 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
     isCopied: isConsentLinkCopied,
     generateConsentLink,
     copyConsentLink,
-    setConsentLink,
   } = useConsentLink();
 
   const handleSaveUanResult = useCallback(async (dataToSave: any) => {
@@ -148,8 +145,6 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
     isQueued: isUanQueued,
   } = useUanLookup(candidate, organization_id, user?.id, handleSaveUanResult);
 
-  console.log("UAN Data:", uanData);
-
   useEffect(() => {
     setDocuments(verifiedDocuments);
   }, [verifiedDocuments, setDocuments]);
@@ -159,10 +154,6 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
       setCurrentDataOptions(initialSharedDataOptions);
     }
   }, [shareMode, initialSharedDataOptions, setCurrentDataOptions]);
-
-  // Separate state for left and right tabs
-const [leftActiveTab, setLeftActiveTab] = useState<string>("resume-analysis");
-const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
 
   const normalizeSkills = (skills: any[] | undefined): string[] => {
     if (!skills || !skills.length) return ["N/A"];
@@ -191,8 +182,8 @@ const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
           ? candidate.metadata.preferredLocations.join(", ")
           : "N/A",
         resume: candidate.resume || candidate.metadata?.resume_url || "#",
-        currentSalary: candidate.current_salary  || "N/A",
-        expectedSalary: candidate.expected_salary || "N/A",
+         currentSalary: candidate.currentSalary || candidate.metadata?.currentSalary || "N/A",
+        expectedSalary: candidate.expectedSalary || candidate.metadata?.expectedSalary || "N/A",
         linkedInId: candidate.metadata?.linkedInId || "N/A",
         noticePeriod: candidate.metadata?.noticePeriod || "N/A",
         hasOffers: candidate.metadata?.hasOffers || "N/A",
@@ -241,6 +232,7 @@ const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
       }
     : employeeFormatted;
 
+  // --- THIS IS THE CORRECTED PART 1: A SINGLE LIST OF ALL AVAILABLE TABS ---
   const availableTabs = [
     resumeAnalysis && "resume-analysis",
     (!shareMode || currentDataOptions?.skillinfo) && "skill-matrix",
@@ -307,7 +299,7 @@ const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
     <div className="min-h-screen bg-gray-50 py-4 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-10xl mx-auto">
 
-                {!shareMode && (
+        {!shareMode && (
           <div className="mb-4">
             <Button
               variant="outline"
@@ -319,10 +311,9 @@ const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
             </Button>
           </div>
         )}
-        {/* CHANGED: Single column layout - removed flex-row and width constraints */}
+        
         <div className="flex flex-col gap-6">
           
-          {/* Employee Info Card - Full Width */}
           <EmployeeInfoCard
             employee={employee as any}
             shareMode={shareMode}
@@ -357,7 +348,6 @@ const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
             isUanQueued={isUanQueued}
           />
 
-          {/* Work History Timeline - Full Width */}
           {workHistory.length > 0 && (
             <WorkHistorySection
               workHistory={workHistory}
@@ -370,11 +360,10 @@ const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
             />
           )}
 
-          {/* Skill Matrix - Full Width */}
+          {/* --- THIS IS THE CORRECTED PART 2: A SINGLE PROFILE TABS COMPONENT --- */}
+          {/* It receives the full list of available tabs and manages them internally. */}
           <ProfileTabs
-            availableTabs={[
-              (!shareMode || currentDataOptions?.skillinfo) && "skill-matrix",
-            ].filter(Boolean) as string[]}
+            availableTabs={availableTabs}
             resumeAnalysis={resumeAnalysis}
             workHistory={workHistory}
             shareMode={shareMode}
@@ -398,37 +387,6 @@ const [rightActiveTab, setRightActiveTab] = useState<string>("skill-matrix");
             updateWorkHistoryItem={updateWorkHistoryItem}
             candidate={candidate}
           />
-
-          {/* Resume Analysis and Resume tabs - Full Width */}
-          <ProfileTabs
-            availableTabs={[
-              resumeAnalysis && "resume-analysis",
-              "resume"
-            ].filter(Boolean) as string[]}
-            resumeAnalysis={resumeAnalysis}
-            workHistory={workHistory}
-            shareMode={shareMode}
-            sharedDataOptions={currentDataOptions}
-            employeeSkillRatings={employee.skillRatings}
-            onDocumentChange={handleDocumentChange}
-            onToggleEditing={toggleEditing}
-            onToggleUANResults={toggleUANResults}
-            onVerifyDocument={(type) =>
-              verifyDocument(type, candidateId || '', workHistory, candidate, organization_id)
-            }
-            onSaveDocuments={() => saveDocuments(candidateId || '', candidate?.metadata)}
-            isSavingDocuments={isSavingDocuments}
-            isVerifyingAllWorkHistory={isVerifyingAllWorkHistory}
-            employeeResumeUrl={employee.resume}
-            candidateId={candidateId}
-            userId={user?.id}
-            organizationId={organization_id}
-            onVerifyAllCompanies={verifyAllCompanies}
-            onVerifySingleWorkHistory={handleVerifySingleWorkHistory}
-            updateWorkHistoryItem={updateWorkHistoryItem}
-            candidate={candidate}
-          />
-
         </div>
       </div>
     </div>
