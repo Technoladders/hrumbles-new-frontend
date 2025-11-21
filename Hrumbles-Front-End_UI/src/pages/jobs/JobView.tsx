@@ -16,25 +16,26 @@ import { getJobById } from "@/services/jobService";
 import { getCandidatesByJobId } from "@/services/candidateService";
 import JobDetailView from "@/components/jobs/job/JobDetailView";
 import { Candidate } from "@/lib/types";
-import AddCandidateDrawer from "@/components/jobs/job/candidate/AddCandidateDrawer";
+import AddCandidateDrawer, { CandidateFormData } from "@/components/jobs/job/candidate/AddCandidateDrawer";
 import Modal from 'react-modal';
-
-// --- FIX: This import path has been corrected to match your file structure ---
-import AddCandidateModal from '@/components/candidates/talent-pool/AddCandidateModal'; 
+import AiCandidateFinalizeDrawer from "@/components/jobs/job/candidate/AiCandidateFinalizeDrawer";
 import ResumeUploadModal from '@/components/ui/ResumeUploadModal'; 
 
 const JobView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // --- STATE MANAGEMENT ---
-  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  // --- SIMPLIFIED STATE MANAGEMENT ---
+  // For the manual "Add Candidate" drawer
   const [isAddCandidateDrawerOpen, setIsAddCandidateDrawerOpen] = useState(false);
-  
-  // State to control the newly integrated AddCandidateModal
-  const [isAddTalentPoolModalOpen, setIsAddTalentPoolModalOpen] = useState(false);
-  
-  const [error, setError] = useState<string | null>(null);
+ 
+  // For the AI "Resume Upload" modal
+  const [isResumeUploadModalOpen, setIsResumeUploadModalOpen] = useState(false);
+ 
+  // --- SINGLE STATE FOR AI-TO-DRAWER FLOW ---
+  // This state will hold the data. If it has data, the finalize drawer will open. If it's null, the drawer is closed.
+  const [prefilledData, setPrefilledData] = useState<Partial<CandidateFormData> | null>(null);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
   // --- DATA FETCHING (tanstack/react-query) ---
   // Fetch job details
@@ -99,6 +100,25 @@ const JobView = () => {
     skills: candidate.skills || []
   }));
 
+  // --- useEffect TO CHECK sessionStorage ---
+  useEffect(() => {
+    const dataFromAnalysisPage = sessionStorage.getItem('aiCandidateForFinalize');
+
+    if (dataFromAnalysisPage) {
+      try {
+        const parsedData: Partial<CandidateFormData> = JSON.parse(dataFromAnalysisPage);
+        // Directly set the data. This will trigger the drawer to open in the JSX.
+        setPrefilledData(parsedData);
+      } catch (e) {
+        console.error("Failed to parse candidate data from session storage:", e);
+        toast.error("Could not load candidate data from analysis page.");
+      } finally {
+        // IMPORTANT: Clear the data from storage so it doesn't trigger again on a page refresh
+        sessionStorage.removeItem('aiCandidateForFinalize');
+      }
+    }
+  }, []); // Run only on mount
+
   // --- REAL-TIME SUBSCRIPTIONS (useEffect) ---
   useEffect(() => {
     if (!id) return;
@@ -119,18 +139,27 @@ const JobView = () => {
   }, [id, refetchHistory]);
 
   // --- HANDLER FUNCTIONS ---
-  // Handles closing the new modal and refreshing data
-  const handleTalentPoolCandidateAdded = () => {
-    setIsAddTalentPoolModalOpen(false);
-    refetchCandidates();
-    toast.success("Candidate processed and added to Talent Pool!");
-  };
-
-  // Handles closing the manual drawer and refreshing data
   const handleManualCandidateAdded = () => {
     setIsAddCandidateDrawerOpen(false);
     refetchCandidates();
     toast.success("Candidate added successfully");
+  };
+
+  // This handler is for BOTH flows now (from modal or from redirect)
+  const handleInitiateAddFromAnalysis = (formData: Partial<CandidateFormData>) => {
+    setPrefilledData(formData);
+    setIsResumeUploadModalOpen(false); // Ensure modal is closed
+  };
+
+  // This handler is called when the finalize drawer successfully saves OR is cancelled
+  const handleFinalizeDrawerClose = () => {
+    setPrefilledData(null); // Just clear the data to close the drawer
+  };
+ 
+  const handleFinalizeCandidateAdded = () => {
+    handleFinalizeDrawerClose(); // Close the drawer
+    refetchCandidates();
+    toast.success("AI-scanned candidate has been added!");
   };
 
   const formatDate = (dateString: string) => {
@@ -228,7 +257,7 @@ const JobView = () => {
             
 
               <DropdownMenuItem 
-  onSelect={() => setIsAddTalentPoolModalOpen(true)}
+ onSelect={() => setIsResumeUploadModalOpen(true)}
   // --- THIS IS THE FIX ---
   // This disables the button if the job is loading or has no skills
   disabled={jobLoading || !job} 
@@ -289,14 +318,32 @@ const JobView = () => {
         onOpenChange={setIsAddCandidateDrawerOpen}
       />
       
-       {isAddTalentPoolModalOpen && job && (
-  <ResumeUploadModal
-    isOpen={isAddTalentPoolModalOpen}
-    onClose={() => setIsAddTalentPoolModalOpen(false)}
-    onCandidateAdded={handleTalentPoolCandidateAdded}
-    job={job} // <-- THIS IS THE CRUCIAL FIX
-  />
-)}
+      {isResumeUploadModalOpen && job && (
+        <ResumeUploadModal
+          isOpen={isResumeUploadModalOpen}
+          onClose={() => setIsResumeUploadModalOpen(false)}
+          onInitiateCandidateAdd={handleInitiateAddFromAnalysis}
+          job={job}
+        />
+      )}
+      {/* 3. AI Finalize Drawer - Simplified Logic */}
+      {/*
+        This is the key change. The drawer's visibility is now directly controlled
+        by whether `prefilledData` exists. No separate `isFinalizeDrawerOpen` state is needed.
+      */}
+      {prefilledData && (
+        <AiCandidateFinalizeDrawer
+          job={job}
+          open={!!prefilledData} // Drawer is open if prefilledData is not null
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              handleFinalizeDrawerClose(); // If user closes it, clear the data
+            }
+          }}
+          initialData={prefilledData}
+          onCandidateAdded={handleFinalizeCandidateAdded}
+        />
+      )}
       
 
       {isHistoryModalOpen && (

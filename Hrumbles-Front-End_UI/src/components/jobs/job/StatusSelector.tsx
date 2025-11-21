@@ -30,6 +30,8 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
   const [selectedSubStatus, setSelectedSubStatus] = useState<SubStatus | null>(null);
   const [selectedMainStatus, setSelectedMainStatus] = useState<MainStatus | null>(null);
 
+  console.log('Selected Sub Status:', selectedSubStatus);
+
   // Load all statuses on mount (No changes here)
   useEffect(() => {
     const loadStatuses = async () => {
@@ -102,8 +104,8 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
     // --- Start of Your Original Logic (modified to populate baseOptions) ---
     if (selectedMainStatus.name === 'New Applicants' && mainStatus.name === 'Processed') {
       baseOptions = mainStatus.subStatuses.filter(s => s.name === 'Processed (Internal)');
-    } else if ((selectedSubStatus.name === 'Processed (Internal)' || selectedSubStatus.name === 'Internal Hold' || selectedSubStatus.name === 'Candidate on hold') && mainStatus.name === 'Processed') {
-      baseOptions = mainStatus.subStatuses.filter(s => ['Processed (Client)', 'Duplicate (Internal)', 'Internal Reject', 'Internal Hold'].includes(s.name));
+    } else if ((selectedSubStatus.name === 'Processed (Internal)' || selectedSubStatus.name === 'Future Fit' || selectedSubStatus.name === 'Internal Reject' || selectedSubStatus.name === 'Internal Hold' || selectedSubStatus.name === 'Candidate on hold') && mainStatus.name === 'Processed') {
+      baseOptions = mainStatus.subStatuses.filter(s => ['Processed (Client)', 'Future Fit', 'Duplicate (Internal)', 'Internal Reject', 'Internal Hold'].includes(s.name));
     } else if (selectedSubStatus.name === 'Processed (Client)' || selectedSubStatus.name === 'Client Hold' || selectedSubStatus.name === 'Candidate on hold') {
       if (mainStatus.name === 'Processed') {
         baseOptions = mainStatus.subStatuses.filter(s => ['Duplicate (Client)', 'Client Reject', 'Client Hold'].includes(s.name));

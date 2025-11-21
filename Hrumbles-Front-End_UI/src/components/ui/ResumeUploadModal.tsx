@@ -14,6 +14,7 @@ import { useSelector } from 'react-redux';
 
 // Import your card-based comparison view and its data type
 import { CandidateComparisonView, ParsedCandidateProfile } from './CandidateComparisonView'; 
+import { CandidateFormData } from '@/components/jobs/job/candidate/AddDrawer';
 
 // --- DYNAMIC MODAL STYLES ---
 const compactViewStyles = {
@@ -275,122 +276,58 @@ async function saveAnalysisToDB(profile: ParsedCandidateProfile, job_id: string,
   }
 }
 
-async function addToJobCandidates(profiles: ParsedCandidateProfile[], job_id: string, user: any, organizationId: string): Promise<void> {
-  const insertPromises = profiles.map(profile => {
-    const appliedFrom = user?.user_metadata
-      ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
-      : 'Unknown';
+const transformAnalysisToFormData = (analysis: ParsedCandidateProfile): Partial<CandidateFormData> => {
+    // This check prevents the crash if undefined is accidentally passed.
+    if (!analysis) {
+        toast.error("Analysis data is missing.");
+        return {};
+    }
+    const [firstName, ...lastNameParts] = (analysis.candidate_name || "").split(" ");
+    const lastName = lastNameParts.join(" ");
+    const totalExperience = analysis.experience_years ? parseInt(analysis.experience_years, 10) : undefined;
 
-    const payload = {
-      job_id,
-      name: profile.candidate_name || 'Unknown Candidate',
-      email: profile.email || null,
-      github: profile.github || null,
-      linkedin: profile.linkedin || null,
-      skills: profile.top_skills || [],
-      overall_score: profile.overall_match_score || null, // Aligned with analysis output
-      applied_from: appliedFrom,
-      created_by: user.id,
-      has_validated_resume: false,
-      main_status_id: null,
-      sub_status_id: null,
-      organization_id: organizationId,
-      candidate_id: null, // From resume_analysis
-      talent_id: null,
-      resume_url: profile.resume_url || null,
+    return {
+        firstName: firstName || "",
+        lastName: lastName || "",
+        email: analysis.email || "",
+        phone: "", // Leave for manual entry
+        currentLocation: analysis.location || "",
+        preferredLocations: [],
+        totalExperience: isNaN(totalExperience) ? undefined : totalExperience,
+        totalExperienceMonths: 0,
+        resume: analysis.resume_url || null,
+        skills: analysis.top_skills?.map(skill => ({
+            name: skill,
+            rating: 0,
+            experienceYears: 0,
+            experienceMonths: 0,
+        })) || [],
+        linkedInId: analysis.linkedin || "",
+        currentSalary: undefined,
+        expectedSalary: undefined,
     };
-
-    console.log('Inserting into hr_job_candidates:', JSON.stringify(payload, null, 2));
-
-    return supabase.from('hr_job_candidates').insert(payload);
-  });
-
-  const results = await Promise.all(insertPromises);
-  const errors = results.filter(res => res.error);
-
-  if (errors.length > 0) {
-    // Log per-candidate errors for debugging
-    errors.forEach((res, i) => console.error(`Candidate ${i} error:`, res.error));
-    toast.error(`${errors.length} candidate(s) could not be added to job.`);
-  }
-  if (results.length > errors.length) {
-    toast.success(`${results.length - errors.length} candidate(s) were successfully added to the job!`);
-  }
-}
+};
 
 // ===================================================================
 // --- NEW: Single Candidate Detail View Component (inside the modal file) ---
 // ===================================================================
-const SingleAnalysisDetail = ({ analysisResult, onAddToJob, onBack, job, user, organizationId }: { 
+const SingleAnalysisDetail = ({ analysisResult, onInitiateManualAdd, onBack, job, user, organizationId }: { 
   analysisResult: ParsedCandidateProfile, 
-  onAddToJob: (updated: ParsedCandidateProfile) => void, 
+  // This prop will now correctly expect the final, transformed form data.
+  onInitiateManualAdd: (formData: Partial<CandidateFormData>) => void,   
   onBack: () => void, 
   job: any,
   user: any,
   organizationId: string
 }) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [updatedSkills, setUpdatedSkills] = useState(analysisResult.matched_skills || []);
   const [currentAnalysis, setCurrentAnalysis] = useState(analysisResult);
-  const [isRevalidated, setIsRevalidated] = useState(false);
 
-  const updateSkillLocally = (index: number, newStatus: string) => {
-    const newSkills = [...updatedSkills];
-    newSkills[index].matched = newStatus;
-    setUpdatedSkills(newSkills);
-    setIsRevalidated(false); // Allow revalidation again if changed
-  };
-
-  const revalidateScores = async () => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('initial-analysis-4o', {
-        body: {
-          type: 'revalidation',
-          payload: {
-            updatedSkills,
-            initialSectionWiseScoring: currentAnalysis.section_wise_scoring,
-          },
-        },
-      });
-      if (error) throw new Error(error.message);
-
-      // Merge the new scores with the existing analysis
-      const revalidatedAnalysis = {
-        ...currentAnalysis,
-        overall_match_score: data.analysis.overall_match_score,
-        section_wise_scoring: data.analysis.section_wise_scoring,
-        matched_skills: updatedSkills, // Keep the user-modified skills
-      };
-
-      // Auto-save the revalidated data to DB
-      const updatedWithId = {
-        ...revalidatedAnalysis,
-        candidate_id: currentAnalysis.candidate_id,
-      };
-      const saved = await saveAnalysisToDB(updatedWithId, job.id, currentAnalysis.candidate_id, false, user, organizationId, currentAnalysis.resume_text);
-      if (saved) {
-        setCurrentAnalysis(updatedWithId);
-        setIsRevalidated(true);
-        toast.success("Scores revalidated and saved successfully!");
-      } else {
-        throw new Error("Failed to save revalidated data.");
-      }
-
-    } catch (err: any) {
-      toast.error(`Revalidation failed: ${err.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  // Add to job
-  const handleAddToJob = () => {
-    const updatedProfile = {
-      ...currentAnalysis,
-      matched_skills: updatedSkills,
-    };
-    onAddToJob(updatedProfile);
+  // --- MODIFIED ---
+  // This handler now does the transformation itself and passes the correct data up.
+  const handleProceedToAdd = () => {
+    const formData = transformAnalysisToFormData(currentAnalysis);
+    onInitiateManualAdd(formData); // Pass the final, ready-to-use form data.
   }
 
   // RENDER LOGIC FOR THE DETAIL VIEW (Adapted from your old ResumeAnalysisModal)
@@ -400,8 +337,9 @@ const SingleAnalysisDetail = ({ analysisResult, onAddToJob, onBack, job, user, o
         <h2 className="text-xl font-semibold">Analysis for: {currentAnalysis.candidate_name}</h2>
         <div className="flex items-center gap-2">
            <Button variant="outline" onClick={onBack}>Back to Input</Button>
-           <Button onClick={handleAddToJob} disabled={isLoading}>
-             {isLoading ? 'Adding...' : 'Add to Job'}
+           {/* This button now correctly triggers the simplified handler */}
+           <Button onClick={handleProceedToAdd} disabled={isLoading}>
+             {isLoading ? 'Processing...' : 'Proceed to Add Candidate'}
            </Button>
         </div>
       </div>
@@ -488,37 +426,28 @@ const SingleAnalysisDetail = ({ analysisResult, onAddToJob, onBack, job, user, o
                   <th className="p-3 text-purple-800 font-semibold border-b-2 border-purple-200">Requirement</th>
                   <th className="p-3 text-purple-800 font-semibold border-b-2 border-purple-200">Status</th>
                   <th className="p-3 text-purple-800 font-semibold border-b-2 border-purple-200">Details</th>
-                  <th className="p-3 text-purple-800 font-semibold border-b-2 border-purple-200">Update</th>
                 </tr>
               </thead>
               <tbody>
-                {updatedSkills?.length > 0 ? (
-                  updatedSkills.map((skill: any, index: number) => (
+                {currentAnalysis.matched_skills?.length > 0 ? (
+                  currentAnalysis.matched_skills.map((skill: any, index: number) => (
                     <tr key={index} className="hover:bg-purple-50 transition-colors">
                       <td className="p-3 text-purple-700 border-b border-purple-100">{skill.requirement}</td>
                       <td className="p-3 text-purple-700 border-b border-purple-100 text-center">
                         {skill.matched === 'yes' ? '✅ Yes' : skill.matched === 'partial' ? '⚠️ Partial' : '❌ No'}
                       </td>
                       <td className="p-3 text-purple-600 border-b border-purple-100">{skill.details}</td>
-                      <td className="p-3 text-purple-600 border-b border-purple-100">
-                        <select value={skill.matched} onChange={(e) => updateSkillLocally(index, e.target.value)} className="p-1 border rounded">
-                          <option value="yes">Yes</option>
-                          <option value="partial">Partial</option>
-                          <option value="no">No</option>
-                        </select>
-                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={4} className="p-3 text-purple-600 text-center">No skills data available</td>
+                    <td colSpan={3} className="p-3 text-purple-600 text-center">No skills data available</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
-        {!isRevalidated && <Button onClick={revalidateScores} disabled={isLoading} className="mt-2">{isLoading ? 'Revalidating...' : 'Revalidate Scores'}</Button>}
 
         {currentAnalysis.companies && currentAnalysis.companies.length > 0 && (
           <>
@@ -592,7 +521,7 @@ const SingleAnalysisDetail = ({ analysisResult, onAddToJob, onBack, job, user, o
 };
 
 // --- MAIN COMPONENT ---
-const ResumeUploadModal = ({ isOpen, onClose, onCandidateAdded,job }: any) => {
+const ResumeUploadModal = ({ isOpen, onClose, onInitiateCandidateAdd,job }: any) => {
   
   const [view, setView] = useState<'input' | 'detail' | 'compare'>('input');
   const [singleAnalysisResult, setSingleAnalysisResult] = useState<ParsedCandidateProfile | null>(null);
@@ -728,28 +657,16 @@ const ResumeUploadModal = ({ isOpen, onClose, onCandidateAdded,job }: any) => {
     setIsProcessing(false);
   };
 
-  const handleAddToJob = async (candidatesToAdd: ParsedCandidateProfile[]) => {
+   // --- MODIFIED ---
+  // This handler is now ONLY for the bulk/compare view.
+  const handleBulkAddToJob = (candidatesToAdd: ParsedCandidateProfile[]) => {
     if (candidatesToAdd.length === 0) {
-      return toast.error("No candidates to add.");
+      return toast.error("No candidates selected.");
     }
-
-    if (!job?.id || !user?.id) {
-      return toast.error("Missing job or user context.");
-    }
-
-    setIsProcessing(true);
-    toast.info(`Adding ${candidatesToAdd.length} candidate(s) to the job...`);
-
-    try {
-      await addToJobCandidates(candidatesToAdd, job.id, user, organizationId);
-      onCandidateAdded(); // Signal parent page to refetch
-      handleClose();
-    } catch (error: any) {
-      console.error("Add to job failed:", error);
-      toast.error(`Failed to add candidates: ${error.message}`);
-    } finally {
-      setIsProcessing(false);
-    }
+    const firstCandidate = candidatesToAdd[0];
+    const formData = transformAnalysisToFormData(firstCandidate);
+    toast.info(`Opening form for ${firstCandidate.candidate_name}...`);
+    onInitiateCandidateAdd(formData);
   };
 
   const handleClose = () => {
@@ -870,7 +787,10 @@ const ResumeUploadModal = ({ isOpen, onClose, onCandidateAdded,job }: any) => {
             job={job}
             user={user}
             organizationId={organizationId}
-            onAddToJob={(updated) => handleAddToJob([updated])}
+            // --- CRITICAL FIX ---
+            // We provide a simple function that calls the top-level prop directly.
+            // This decouples the detail view from the bulk-add logic.
+            onInitiateManualAdd={(formData) => onInitiateCandidateAdd(formData)}
             onBack={() => setView('input')}
           />
         )}
@@ -883,7 +803,9 @@ const ResumeUploadModal = ({ isOpen, onClose, onCandidateAdded,job }: any) => {
               onSelectionChange={handleSelectionChange}
               onSelectAll={handleSelectAll}
               onExit={handleClose}
-              onAddSingleCandidate={(candidate) => handleAddToJob([candidate])}
+              // --- CRITICAL FIX ---
+              // The single add button from the compare view now calls the correct handler
+              onAddSingleCandidate={(candidate) => handleBulkAddToJob([candidate])}
               currentPage={currentPage}
               totalPages={totalPages}
               onPageChange={setCurrentPage}
@@ -892,11 +814,12 @@ const ResumeUploadModal = ({ isOpen, onClose, onCandidateAdded,job }: any) => {
             <div className="flex justify-end gap-2 p-4 border-t mt-auto bg-gray-50 flex-shrink-0">
               <Button variant="outline" onClick={handleClose} disabled={isProcessing}>Cancel</Button>
               <Button 
-                onClick={() => handleAddToJob(Array.from(selectedIndices).map(index => parsedCandidates[index]))} 
+                // This button correctly calls the handler for the bulk view
+                onClick={() => handleBulkAddToJob(Array.from(selectedIndices).map(index => parsedCandidates[index]))} 
                 disabled={isProcessing || selectedIndices.size === 0} 
                 className="bg-purple-600 hover:bg-purple-700 text-white"
               >
-                {isProcessing ? 'Adding...' : `Add ${selectedIndices.size} Selected`}
+                {isProcessing ? 'Processing...' : `Add First Selected (${selectedIndices.size})`}
               </Button>
             </div>
           </>

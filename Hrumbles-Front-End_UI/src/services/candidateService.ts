@@ -292,7 +292,7 @@ export const getCandidatesByJobId = async (jobId: string, statusFilter?: string)
         const { data: mainStatuses, error: mainStatusError } = await supabase
           .from('job_statuses')
           .select('*')
-          .eq('name', 'New')
+          
           .eq('type', 'main')
           .eq('organization_id', organization_id)
           .order('display_order', { ascending: true })

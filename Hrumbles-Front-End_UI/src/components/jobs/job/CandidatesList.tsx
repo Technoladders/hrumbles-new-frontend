@@ -98,6 +98,7 @@ interface CandidatesListProps {
   scoreFilter?: string;
   candidateFilter?: "All" | "Yours";
    rejection_reason?: string; 
+    searchTerm?: string;
 }
 
 interface HiddenContactCellProps {
@@ -118,7 +119,8 @@ const CandidatesList = forwardRef((props: CandidatesListProps, ref) => {
     onRefresh,
     scoreFilter = "all",
     candidateFilter = "All",
-    isCareerPage = false
+    isCareerPage = false,
+     searchTerm = "",
   } = props;
   const navigate = useNavigate();
   const user = useSelector((state: any) => state.auth.user);
@@ -1269,6 +1271,18 @@ const candidates = useMemo(() => {
   const filteredCandidates = useMemo(() => {
     let filtered = [...candidates];
 
+
+       if (searchTerm.trim() !== "") {
+      const lowercasedSearchTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(c => {
+        const nameMatch = c.name?.toLowerCase().includes(lowercasedSearchTerm);
+        const emailMatch = c.email?.toLowerCase().includes(lowercasedSearchTerm);
+        const phoneMatch = c.phone?.toLowerCase().includes(lowercasedSearchTerm);
+        return nameMatch || emailMatch || phoneMatch;
+      });
+    }
+
+
     // Score filtering logic
     if (scoreFilter !== "all") {
       filtered = filtered.filter(c => {
@@ -1318,7 +1332,7 @@ if (candidateFilter === "Yours") { // Use prop directly
   }
     
     return filtered;
-  }, [candidates, appliedCandidates, activeTab, statusFilters, statusFilter, isCareerPage, candidateFilter, scoreFilter, candidateAnalysisData, user]); // Added user to dependencies
+  }, [candidates, appliedCandidates, activeTab, statusFilters, statusFilter, isCareerPage, candidateFilter, searchTerm, scoreFilter, candidateAnalysisData, user]); // Added user to dependencies
 
 
   const handleViewResume = (candidateId: string) => {
