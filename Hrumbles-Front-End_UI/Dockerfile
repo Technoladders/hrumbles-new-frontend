@@ -1,4 +1,3 @@
-
 # Use Node.js base image
 FROM node:18.17.0
 
@@ -13,6 +12,9 @@ RUN npm install --force --quiet
 
 # Copy the rest of the application code
 COPY . .
+
+# Add this line (INCREASE HEAP SIZE)
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Build the application
 RUN npm run build
