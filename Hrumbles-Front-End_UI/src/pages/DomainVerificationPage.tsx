@@ -88,8 +88,8 @@ const DomainVerificationPage: FC = () => {
     e.preventDefault();
     if (validationStatus !== 'valid') return;
     setIsRedirecting(true);
-    const rootDomain = import.meta.env.VITE_APP_ROOT_DOMAIN || 'hrumbles.ai' || '147.79.66.219';
-    const port = window.location.port ? `:${window.location.port}` : 5003;
+    const rootDomain = '147.79.66.219';
+    const port =  5003;
     const protocol = window.location.protocol;
     const host = window.location.hostname === 'localhost' ? 'localhost' : rootDomain;
     window.location.href = `${protocol}//${debouncedSubdomain}.${host}${port}/login`;
