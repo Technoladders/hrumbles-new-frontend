@@ -2,7 +2,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Sparkles } from "lucide-react";
+import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Sparkles, Bookmark } from "lucide-react"; // Changed from Heart to Bookmark
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,9 +20,9 @@ import { Candidate } from "@/lib/types";
 import AddCandidateDrawer from "@/components/jobs/job/candidate/AddCandidateDrawer";
 import Modal from 'react-modal';
 
-// --- FIX: This import path has been corrected to match your file structure ---
 import AddCandidateModal from '@/components/candidates/talent-pool/AddCandidateModal'; 
 import ResumeUploadModal from '@/components/ui/ResumeUploadModal'; 
+import WishlistModal from '@/components/candidates/talent-pool/WishlistModal';
 
 const JobView = () => {
   const { id } = useParams<{ id: string }>();
@@ -31,14 +31,11 @@ const JobView = () => {
   // --- STATE MANAGEMENT ---
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isAddCandidateDrawerOpen, setIsAddCandidateDrawerOpen] = useState(false);
-  
-  // State to control the newly integrated AddCandidateModal
   const [isAddTalentPoolModalOpen, setIsAddTalentPoolModalOpen] = useState(false);
-  
+  const [isWishlistModalOpen, setIsWishlistModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // --- DATA FETCHING (tanstack/react-query) ---
-  // Fetch job details
+  // --- DATA FETCHING ---
   const { 
     data: job, 
     isLoading: jobLoading, 
@@ -50,7 +47,6 @@ const JobView = () => {
     enabled: !!id,
   });
   
-  // Fetch candidates associated with this job
   const { 
     data: candidatesData = [],
     refetch: refetchCandidates
@@ -60,7 +56,6 @@ const JobView = () => {
     enabled: !!id,
   });
 
-  // Fetch analysis history data for the history modal
   const { 
     data: historyData = [],
     isLoading: historyLoading,
@@ -100,7 +95,7 @@ const JobView = () => {
     skills: candidate.skills || []
   }));
 
-  // --- REAL-TIME SUBSCRIPTIONS (useEffect) ---
+  // --- REAL-TIME SUBSCRIPTIONS ---
   useEffect(() => {
     if (!id) return;
     const channel = supabase.channel('job-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'hr_jobs', filter: `id=eq.${id}` }, () => { refetchJob(); }).subscribe();
@@ -120,14 +115,12 @@ const JobView = () => {
   }, [id, refetchHistory]);
 
   // --- HANDLER FUNCTIONS ---
-  // Handles closing the new modal and refreshing data
   const handleTalentPoolCandidateAdded = () => {
     setIsAddTalentPoolModalOpen(false);
     refetchCandidates();
     toast.success("Candidate processed and added to Talent Pool!");
   };
 
-  // Handles closing the manual drawer and refreshing data
   const handleManualCandidateAdded = () => {
     setIsAddCandidateDrawerOpen(false);
     refetchCandidates();
@@ -162,12 +155,11 @@ const JobView = () => {
     );
   }
   
-   return (
+  return (
     <div className="space-y-6 py-4">
       <div className="flex items-center justify-between mb-4">
-        {/* Header: Back Button and Job Title */}
         <div className="flex items-center gap-2">
-           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-gray-500 hover:text-gray-700">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-gray-500 hover:text-gray-700">
             <ArrowLeft size={20} />
           </Button>
           <h1 className="text-xl font-semibold">{job.title}</h1>
@@ -175,45 +167,42 @@ const JobView = () => {
         
         {/* Action Buttons */}
         <div className="flex gap-2">
+          
+          {/* My Shortlist Button - Updated Icon */}
+          <Button 
+            variant="outline" 
+            onClick={() => setIsWishlistModalOpen(true)} 
+            className="flex items-center gap-2"
+          >
+            <Bookmark size={16} className="text-indigo-600" />
+            <span>My Shortlist</span>
+          </Button>
 
-            {/* Main Dropdown for All Candidate Actions */}
+          {/* Analyse with AI Dropdown */}
           <DropdownMenu>
-<DropdownMenuTrigger asChild>
-    <Button className="
-        h-10 px-6 font-semibold text-white whitespace-nowrap
-        bg-gradient-to-r from-purple-500 to-pink-500
-        hover:from-purple-600 hover:to-pink-600
-        rounded-full shadow-lg
-        transform hover:scale-105 transition-transform duration-200
-        flex items-center gap-2"
-    >
-        <Sparkles size={18} />
-        <span>Analyse with AI</span>
-        <ChevronDown className="h-5 w-5" />
-    </Button>
-</DropdownMenuTrigger>
-
-
+            <DropdownMenuTrigger asChild>
+              <Button className="h-10 px-6 font-semibold text-white whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200 flex items-center gap-2">
+                <Sparkles size={18} />
+                <span>Analyse with AI</span>
+                <ChevronDown className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
             
             <DropdownMenuContent 
               align="end" 
               className="w-64 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-700 shadow-2xl rounded-xl p-2"
             >
-            
-
               <DropdownMenuItem 
-  onSelect={() => setIsAddTalentPoolModalOpen(true)}
-  // --- THIS IS THE FIX ---
-  // This disables the button if the job is loading or has no skills
-  disabled={jobLoading || !job} 
-  className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
->
-  <FileText className="h-5 w-5 mt-1 text-blue-500" />
-  <div>
-    <p className="font-semibold text-slate-800 dark:text-slate-100">Analyse Resume</p>
-    <p className="text-xs text-slate-500 dark:text-slate-400">Paste or upload resumes for AI parsing.</p>
-  </div>
-</DropdownMenuItem>
+                onSelect={() => setIsAddTalentPoolModalOpen(true)}
+                disabled={jobLoading || !job} 
+                className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
+              >
+                <FileText className="h-5 w-5 mt-1 text-blue-500" />
+                <div>
+                  <p className="font-semibold text-slate-800 dark:text-slate-100">Analyse Resume</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Paste or upload resumes for AI parsing.</p>
+                </div>
+              </DropdownMenuItem>
               
               <DropdownMenuItem 
                 onSelect={() => setIsHistoryModalOpen(true)}
@@ -235,19 +224,13 @@ const JobView = () => {
             </Button>
           </Link>
 
-          <Button
-            onClick={() => setIsAddCandidateDrawerOpen(true)}
-            className="gap-2"
-          >
+          <Button onClick={() => setIsAddCandidateDrawerOpen(true)} className="gap-2">
             <UserPlus size={16} />
             Add Candidate
           </Button>
-
-        
         </div>
       </div>
 
-      {/* Main Content: Job Details and Candidate List */}
       <JobDetailView 
         job={job} 
         candidates={candidates} 
@@ -255,7 +238,6 @@ const JobView = () => {
       />
       
       {/* --- MODALS & DRAWERS --- */}
-
       <AddCandidateDrawer 
         job={job} 
         onCandidateAdded={handleManualCandidateAdded}
@@ -263,15 +245,21 @@ const JobView = () => {
         onOpenChange={setIsAddCandidateDrawerOpen}
       />
       
-       {isAddTalentPoolModalOpen && job && (
-  <ResumeUploadModal
-    isOpen={isAddTalentPoolModalOpen}
-    onClose={() => setIsAddTalentPoolModalOpen(false)}
-    onCandidateAdded={handleTalentPoolCandidateAdded}
-    job={job} // <-- THIS IS THE CRUCIAL FIX
-  />
-)}
-      
+      {isAddTalentPoolModalOpen && job && (
+        <ResumeUploadModal
+          isOpen={isAddTalentPoolModalOpen}
+          onClose={() => setIsAddTalentPoolModalOpen(false)}
+          onCandidateAdded={handleTalentPoolCandidateAdded}
+          job={job}
+        />
+      )}
+
+      {/* Wishlist Modal - Filter by Job ID */}
+      <WishlistModal 
+        isOpen={isWishlistModalOpen}
+        onClose={() => setIsWishlistModalOpen(false)}
+        jobId={id}
+      />
 
       {isHistoryModalOpen && (
         <Modal 
@@ -286,8 +274,8 @@ const JobView = () => {
               zIndex: 1000,
             },
             overlay: {
-        zIndex: 999, // Overlay just below content
-      } 
+              zIndex: 999,
+            } 
           }}
         >
           <div className="p-4">

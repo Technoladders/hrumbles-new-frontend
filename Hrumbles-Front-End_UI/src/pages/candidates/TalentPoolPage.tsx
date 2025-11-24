@@ -19,17 +19,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   Users, User, UserPlus, Search, History, ChevronsRight, Calendar,
   ChevronLeft, ChevronRight, Briefcase, ScanSearch, Mail, Phone, Copy, Sparkles,
-  CheckCircle, GitCompareArrows, XCircle
+  CheckCircle, GitCompareArrows, XCircle, Heart,Bookmark
 } from 'lucide-react';
 
 // Import your modals and custom components
 import AddCandidateModal from '@/components/candidates/talent-pool/AddCandidateModal';
 import CompareWithJobDialog from '@/components/candidates/talent-pool/CompareWithJobDialog';
 import AnalysisHistoryDialog from '@/components/candidates/AnalysisHistoryDialog';
-import Loader from '@/components/ui/Loader';
 import EnrichDataDialog from '@/components/candidates/talent-pool/EnrichDataDialog';
 import CircularProgress from '@/components/jobs/ui/CircularProgress';
 import JobMatchLoader from '@/components/candidates/talent-pool/JobMatchLoader';
+import WishlistModal from '@/components/candidates/talent-pool/WishlistModal'; // Import the new modal
 
 // Define the main interface for a candidate
 export interface TalentPoolCandidate {
@@ -124,6 +124,7 @@ const TalentPoolPage: FC = () => {
   const [jobSearchTerm, setJobSearchTerm] = useState("");
 
   const [isAddModalOpen, setAddModalOpen] = useState<boolean>(false);
+  const [isWishlistModalOpen, setIsWishlistModalOpen] = useState<boolean>(false);
   const [compareCandidate, setCompareCandidate] = useState<TalentPoolCandidate | null>(null);
   const [historyCandidate, setHistoryCandidate] = useState<TalentPoolCandidate | null>(null);
   const [enrichCandidate, setEnrichCandidate] = useState<TalentPoolCandidate | null>(null);
@@ -146,9 +147,6 @@ const TalentPoolPage: FC = () => {
     setTimeout(() => { setCopiedValue(null); }, 1500);
   };
 
-
-
-  // --- MAIN DATA FETCHING LOGIC (FINAL VERSION) ---
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['talentPoolCandidates', role, user?.id, currentPage, itemsPerPage, debouncedSearchTerm, selectedJob?.id],
     queryFn: async () => {
@@ -167,7 +165,6 @@ const TalentPoolPage: FC = () => {
 
         if (error) throw new Error(error.message);
 
-        // The database now does ALL the filtering. We trust its results directly.
         const candidates = (rpcData as TalentPoolCandidate[]) || [];
         const totalCount = candidates[0]?.total_candidate_count || 0;
 
@@ -210,7 +207,6 @@ const TalentPoolPage: FC = () => {
     enabled: !!user && !!organizationId,
   });
 
-  // Query to fetch full jobs for the popover
   const { data: jobs, isLoading: isLoadingJobs } = useQuery({
     queryKey: ['jobsForMatching', organizationId, jobSearchTerm],
     queryFn: async () => {
@@ -252,7 +248,6 @@ const TalentPoolPage: FC = () => {
 
   const totalCandidatesInPool = totalPoolData?.count ?? 0;
 
-  // --- CRASH-PROOF EXPECTED MATCH COUNT (FINAL VERSION) ---
   const { data: matchCountData } = useQuery({
     queryKey: ['jobMatchCount', selectedJob?.id, organizationId],
     queryFn: async () => {
@@ -270,7 +265,6 @@ const TalentPoolPage: FC = () => {
     enabled: !!selectedJob?.id && !!organizationId,
   });
 
-
   const expectedMatches = matchCountData ?? 0;
 
   const parsedExperience = useMemo(() => {
@@ -284,6 +278,7 @@ const TalentPoolPage: FC = () => {
   }, [selectedJob?.experience]);
 
   const jobDataForLoader = useMemo(() => ({
+    id: selectedJob?.id || '',
     title: selectedJob?.title || '',
     skills: selectedJob?.primary_skills || selectedJob?.skills || [],
     description: selectedJob?.description || '',
@@ -301,30 +296,18 @@ const TalentPoolPage: FC = () => {
         const thisMonthStart = moment().startOf('month').toISOString();
         const thisWeekStart = moment().startOf('week').toISOString();
 
-        let monthQuery = supabase
-            .from('hr_talent_pool')
-            .select('*', { count: 'exact', head: true })
-            .gte('created_at', thisMonthStart);
-
-        let weekQuery = supabase
-            .from('hr_talent_pool')
-            .select('*', { count: 'exact', head: true })
-            .gte('created_at', thisWeekStart);
+        let monthQuery = supabase.from('hr_talent_pool').select('*', { count: 'exact', head: true }).gte('created_at', thisMonthStart);
+        let weekQuery = supabase.from('hr_talent_pool').select('*', { count: 'exact', head: true }).gte('created_at', thisWeekStart);
 
         if (role === '' && user?.id) {
           monthQuery = monthQuery.eq('created_by', user.id);
           weekQuery = weekQuery.eq('created_by', user.id);
         }
 
-        const { count: monthCount, error: monthError } = await monthQuery;
-        const { count: weekCount, error: weekError } = await weekQuery;
+        const { count: monthCount } = await monthQuery;
+        const { count: weekCount } = await weekQuery;
         
-        if (monthError || weekError) console.error("Error fetching stats:", monthError || weekError);
-        
-        return {
-            addedThisMonth: monthCount ?? 0,
-            addedThisWeek: weekCount ?? 0
-        };
+        return { addedThisMonth: monthCount ?? 0, addedThisWeek: weekCount ?? 0 };
       },
       enabled: !!user && !!organizationId,
   });
@@ -354,7 +337,7 @@ const TalentPoolPage: FC = () => {
     setCurrentPage(1);
     setJobPopoverOpen(false);
     setLoaderStartTime(Date.now());
-     setDisplayingLoader(true); 
+    setDisplayingLoader(true); 
   };
   
   const clearJobFilter = () => {
@@ -366,9 +349,9 @@ const TalentPoolPage: FC = () => {
   const renderCandidateList = () => {
     if (isDisplayingLoader && selectedJob) {
       const primarySkills = selectedJob.primary_skills || selectedJob.skills || [];
-
       return (
         <JobMatchLoader 
+          jobId={selectedJob.id}
           jobTitle={selectedJob.title} 
           totalCandidatesInPool={totalCandidatesInPool}
           expectedMatches={expectedMatches}
@@ -387,25 +370,22 @@ const TalentPoolPage: FC = () => {
     if (isLoading) {
       return (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          {/* Skeleton loading state... */}
           <div className="grid grid-cols-12 gap-3 px-4 py-3 bg-gray-50/80 border-b border-gray-200">
             <div className="col-span-3"><Skeleton className="h-4 w-16" /></div>
-            <div className="col-span-1 text-center"><Skeleton className="h-4 w-12 mx-auto" /></div>
             <div className="col-span-2 text-center"><Skeleton className="h-4 w-12 mx-auto" /></div>
             <div className="col-span-1"><Skeleton className="h-4 w-10" /></div>
             <div className="col-span-1"><Skeleton className="h-4 w-12" /></div>
-            <div className="col-span-1"><Skeleton className="h-4 w-20" /></div>
+            <div className="col-span-2"><Skeleton className="h-4 w-20" /></div>
             <div className="col-span-3"><Skeleton className="h-4 w-16" /></div>
           </div>
           <div className="divide-y divide-gray-200/80">
             {Array.from({ length: 10 }).map((_, index) => (
               <div key={index} className="grid grid-cols-12 gap-3 items-center px-4 py-4">
                 <div className="col-span-3"><Skeleton className="h-4 w-32" /></div>
-                <div className="col-span-1 text-center"><Skeleton className="h-6 w-16 mx-auto" /></div>
                 <div className="col-span-2 flex justify-center"><Skeleton className="h-7 w-40" /></div>
                 <div className="col-span-1"><Skeleton className="h-4 w-12" /></div>
                 <div className="col-span-1"><Skeleton className="h-4 w-16" /></div>
-                <div className="col-span-1"><Skeleton className="h-4 w-24" /></div>
+                <div className="col-span-2"><Skeleton className="h-4 w-24" /></div>
                 <div className="col-span-3"><Skeleton className="h-8 w-32" /></div>
               </div>
             ))}
@@ -418,7 +398,6 @@ const TalentPoolPage: FC = () => {
       return (
         <Card className="p-12 text-center">
           <p className="text-gray-500 mb-2">No candidates found.</p>
-          {selectedJob && <p className="text-sm text-gray-400">No candidates in your talent pool matched the primary skills for this job.</p>}
           {searchTerm && <p className="text-sm text-gray-400">Try adjusting your search criteria.</p>}
         </Card>
       );
@@ -428,13 +407,10 @@ const TalentPoolPage: FC = () => {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="grid grid-cols-12 gap-3 px-4 py-3 bg-gray-50/80 border-b border-gray-200">
           <div className="col-span-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Candidate</div>
-          {selectedJob && (
-            <div className="col-span-1 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Match</div>
-          )}
           <div className="col-span-2 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Actions</div>
           <div className="col-span-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">Salary</div>
           <div className="col-span-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">Location</div>
-          <div className={`${selectedJob ? 'col-span-1' : 'col-span-2'} text-xs font-semibold text-gray-500 uppercase tracking-wider`}>Suggested Title</div>
+          <div className="col-span-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Suggested Title</div>
           <div className="col-span-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Added By</div>
         </div>
 
@@ -447,57 +423,23 @@ const TalentPoolPage: FC = () => {
             const hasCreator = candidate.created_by && (firstInitial || lastInitial);
             return (
               <div key={candidate.id} className="grid grid-cols-12 gap-3 items-center px-4 py-4 transition-all duration-300 ease-in-out hover:bg-gray-50">
-                
                 <div className="col-span-3">
                   <div className="flex items-center gap-3">
-                    <Link 
-                      to={`/talent-pool/${candidate.id}`} 
-                      className="font text-gray-900 hover:text-purple-600 hover:underline text-sm truncate transition-colors"
-                    >
+                    <Link to={`/talent-pool/${candidate.id}`} className="font-medium text-gray-900 hover:text-purple-600 hover:underline text-sm truncate transition-colors">
                       {candidate.candidate_name || 'N/A'}
                     </Link>
-                    
                     <Tooltip>
                       <TooltipTrigger>
-                        <CircularProgress
-                          percentage={profileStatus.percentage}
-                          showEnrichButton={true}
-                          onEnrichClick={() => setEnrichCandidate(candidate)}
-                        />
+                        <CircularProgress percentage={profileStatus.percentage} showEnrichButton={true} onEnrichClick={() => setEnrichCandidate(candidate)} />
                       </TooltipTrigger>
                       <TooltipContent>
-                        {profileStatus.percentage === 100 ? (
-                          <p>Profile Completed</p>
-                        ) : (
-                          <div className="p-1">
-                            <p className="font-semibold text-xs mb-1">Missing Info:</p>
-                            <ul className="list-disc pl-4 text-xs space-y-0.5">
-                              {profileStatus.missingFields.map(field => <li key={field}>{field}</li>)}
-                            </ul>
-                          </div>
+                        {profileStatus.percentage === 100 ? ( <p>Profile Completed</p> ) : (
+                          <div className="p-1"><p className="font-semibold text-xs mb-1">Missing Info:</p><ul className="list-disc pl-4 text-xs space-y-0.5">{profileStatus.missingFields.map(field => <li key={field}>{field}</li>)}</ul></div>
                         )}
                       </TooltipContent>
                     </Tooltip>
                   </div>
                 </div>
-
-                {selectedJob && (
-                  <div className="col-span-1 text-center">
-                      <Tooltip side="top">
-                        <TooltipTrigger>
-                          <Badge variant="secondary" className="cursor-help bg-green-100 text-green-800 hover:bg-green-200">
-                            {candidate.matching_skill_count} Skills
-                          </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent side="top">
-                          <p className="font-semibold text-xs mb-1">Matching Skills:</p>
-                          <ul className="list-disc pl-4 text-xs space-y-0.5">
-                            {candidate.matching_skills?.map(skill => <li key={skill}>{skill}</li>)}
-                          </ul>
-                        </TooltipContent>
-                      </Tooltip>
-                  </div>
-                )}
                 
                 <div className="col-span-2 flex justify-center items-center">
                    <div className="flex items-center space-x-1 rounded-full bg-slate-50 p-1 shadow-sm border border-slate-200">
@@ -511,10 +453,10 @@ const TalentPoolPage: FC = () => {
                    </div>
                 </div>
 
-                <div className="col-span-1 text-sm text-gray-700 truncate">{candidate.current_salary ? (<span className="font-medium">{candidate.current_salary}</span>) : (<span className="text-black-400 text-xs">N/A</span>)}</div>
-                <div className="col-span-1 text-sm text-gray-700 truncate">{candidate.current_location ? (<span>{candidate.current_location}</span>) : (<span className="text-black-400 text-xs">N/A</span>)}</div>
+                <div className="col-span-1 text-sm text-gray-700 truncate">{candidate.current_salary ? (<span>{candidate.current_salary}</span>) : (<span className="text-gray-400 text-xs">N/A</span>)}</div>
+                <div className="col-span-1 text-sm text-gray-700 truncate">{candidate.current_location ? (<span>{candidate.current_location}</span>) : (<span className="text-gray-400 text-xs">N/A</span>)}</div>
 
-                <div className={`${selectedJob ? 'col-span-1' : 'col-span-2'} text-sm text-gray-700`}>{candidate.suggested_title ? (<span className="text-black-500">{candidate.suggested_title}</span>) : (<span className="text-black-300 text-xs">Not specified</span>)}</div>
+                <div className="col-span-2 text-sm text-gray-700">{candidate.suggested_title ? (<span>{candidate.suggested_title}</span>) : (<span className="text-gray-400 text-xs">Not specified</span>)}</div>
 
                 <div className="col-span-3">
                     {hasCreator ? (
@@ -523,7 +465,7 @@ const TalentPoolPage: FC = () => {
                               {`${firstInitial}${lastInitial}`.toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                                <p className="font text-sm text-gray-800 truncate">{fullName}</p>
+                                <p className="font-medium text-sm text-gray-800 truncate">{fullName}</p>
                                 <p className="text-xs text-gray-500">{moment(candidate.created_at).format("DD MMM YY")} ({moment(candidate.created_at).fromNow()})</p>
                             </div>
                         </div>
@@ -556,7 +498,17 @@ const TalentPoolPage: FC = () => {
       <div className="space-y-8 animate-fade-in p-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div><h1 className="text-3xl font-bold mb-1">Talent Pool</h1><p className="text-gray-500">Search and manage your organization's candidates.</p></div>
-          <Button onClick={() => setAddModalOpen(true)} className="flex items-center gap-2"><UserPlus size={16} /><span>Add Candidate</span></Button>
+          <div className="flex items-center gap-2">
+           
+<Button variant="outline" onClick={() => setIsWishlistModalOpen(true)} className="flex items-center gap-2">
+  <Bookmark size={16} className="text-indigo-600" />
+  <span>My Shortlist</span>
+</Button>
+            <Button onClick={() => setAddModalOpen(true)} className="flex items-center gap-2">
+              <UserPlus size={16} />
+              <span>Add Candidate</span>
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -583,6 +535,11 @@ const TalentPoolPage: FC = () => {
         {compareCandidate && (<CompareWithJobDialog isOpen={!!compareCandidate} onClose={() => setCompareCandidate(null)} candidateId={compareCandidate.id} />)}
         {historyCandidate && (<AnalysisHistoryDialog isOpen={!!historyCandidate} onClose={() => setHistoryCandidate(null)} candidateId={historyCandidate.id} candidateName={historyCandidate.candidate_name ?? ''} />)}
         {enrichCandidate && (<EnrichDataDialog isOpen={!!enrichCandidate} onClose={() => setEnrichCandidate(null)} candidate={enrichCandidate} />)}
+
+        <WishlistModal 
+            isOpen={isWishlistModalOpen}
+            onClose={() => setIsWishlistModalOpen(false)}
+        />
       </div>
     </TooltipProvider>
   );

@@ -1,1008 +1,563 @@
-import { useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
-import { useSelector } from "react-redux";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import {
-  ArrowLeft,
-  Briefcase,
-  GraduationCap,
-  Award,
-  Mail,
-  Phone,
-  Linkedin,
-  Download,
-  Info,
-  Lightbulb,
-  History,
-  ScanSearch,
-  Sparkles,
-  Building,
-  Factory,
-  MapPin,
-  Calendar,
-  Wallet,
-  Clock,
-  ChevronRight,
-  TrendingUp,
-} from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import CompareWithJobDialog from "@/components/candidates/talent-pool/CompareWithJobDialog";
-import AnalysisHistoryDialog from "@/components/candidates/AnalysisHistoryDialog";
-import EnrichDataDialog from "@/components/candidates/talent-pool/EnrichDataDialog";
-import { generateDocx, generatePdf } from "@/utils/cvGenerator";
+import { useState, useEffect, FC, Fragment, useMemo } from 'react';
+import moment from 'moment';
+import { Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { 
+  CheckCircle2, FileText, Filter, Loader2, SearchCode, Brain, Zap, Target, Activity, 
+  Sparkles, X, TrendingUp, Users, Award, ChevronDown, BrainCircuit, Lightbulb, Frown, PlusCircle
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { useSelector } from 'react-redux';
+import { supabase } from '@/integrations/supabase/client'; // Adjust path if needed
 
-// Helper to safely parse JSON arrays from the database
-const parseJsonArray = (data: any) => {
-  if (Array.isArray(data)) return data;
-  if (typeof data === "string") {
-    try {
-      const parsed = JSON.parse(data);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      return [];
-    }
-  }
-  return [];
+// --- INTERFACES ---
+interface MatchedCandidate {
+  id: string;
+  candidate_name: string;
+  suggested_title?: string;
+  matching_skill_count?: number;
+  matching_skills?: string[];
+  unmatched_skills?: string[]; 
+  created_by: { first_name: string; last_name: string; } | null;
+  created_at: string;
+  email?: string;
+  phone?: string;
+  total_experience?: string;
+  current_salary?: string;
+  expected_salary?: string;
+  notice_period?: string;
+  [key: string]: any;
+}
+interface JobData {
+  id: string;
+  title: string;
+  skills: string[];
+  description: string;
+  experience: { min: { years: number; months: number }; max: { years: number; months: number } };
+  location: string[];
+}
+interface AnalysisResult {
+  score: number;
+  summary?: string;
+  report_url?: string;
+}
+
+// --- HELPER FUNCTION: Typewriter ---
+const Typewriter: FC<{ text: string; speed?: number; }> = ({ text, speed = 20 }) => {
+  const [displayText, setDisplayText] = useState('');
+  useEffect(() => {
+    setDisplayText(''); 
+    let i = 0;
+    const typingInterval = setInterval(() => {
+      if (i < text.length) {
+        setDisplayText(prevText => prevText + text.charAt(i));
+        i++;
+      } else {
+        clearInterval(typingInterval);
+      }
+    }, speed);
+    return () => clearInterval(typingInterval);
+  }, [text, speed]);
+  return <p className="text-xs font-mono text-purple-600 leading-relaxed">{displayText}</p>;
 };
 
-const CandidateProfilePage = () => {
-  const { candidateId } = useParams<{ candidateId: string }>();
-  const [isCompareModalOpen, setCompareModalOpen] = useState(false);
-  const [isHistoryModalOpen, setHistoryModalOpen] = useState(false);
-  const [isEnrichModalOpen, setEnrichModalOpen] = useState(false);
-  const organizationId = useSelector(
-    (state: any) => state.auth.organization_id
+// --- HELPER FUNCTION: generateDynamicSubSteps ---
+const generateDynamicSubSteps = (jobData: JobData, phase: string): string[] => {
+  const { skills, experience, location } = jobData;
+  const randomSkill = skills.length > 0 ? skills[Math.floor(Math.random() * skills.length)] : 'key skills';
+  const randomOtherSkill = skills.length > 1 ? skills[Math.floor(Math.random() * skills.length)] : 'related technologies';
+  switch (phase) {
+    case 'Understanding Your Needs': return [ `Analyzing ${jobData.title} requirements`, `Identifying must-have skills: ${randomSkill}, ${randomOtherSkill}`, `Setting experience range: ${experience.min.years}-${experience.max.years} years`, `Noting location preference: ${location.length > 0 ? location[0] : 'any'}`, ];
+    case 'Smart Criteria Building': return [ `Prioritizing ${randomSkill} expertise (High weight)`, `Balancing experience requirements`, `Considering location flexibility`, `Adding culture fit parameters`, ];
+    case 'Intelligent Talent Search': return [ 'Searching through talent database', `Finding ${randomSkill} specialists`, 'Analyzing career trajectories', `Matching soft skills for ${jobData.title}`, ];
+    case 'Precision Ranking': return [ 'Calculating compatibility scores', `Evaluating ${randomSkill} proficiency`, 'Applying smart filters', 'Finalizing top recommendations', ];
+    default: return [];
+  }
+};
+
+// --- HELPER FUNCTION: generateDynamicLogs ---
+const generateDynamicLogs = (jobData: JobData, totalCandidates: number, matchCount: number): any[] => {
+  const { skills, title } = jobData;
+  const randomSkill = skills.length > 0 ? skills[Math.floor(Math.random() * skills.length)] : 'critical skills';
+  const candidateNames = ['Ashley Viji P', 'Pranav B', 'Mayank S'];
+  const randomCandidateName = candidateNames[Math.floor(Math.random() * candidateNames.length)];
+  return [
+    { id: 1, icon: Lightbulb, title: 'Role Analysis Complete', message: `Identified ${skills.length} key technical skills and 2 soft skills critical for ${title} success.` },
+    { id: 2, icon: Users, title: 'Talent Pool Scanned', message: `AI is analyzing profiles in your database using advanced pattern recognition.` },
+    { id: 3, icon: TrendingUp, title: 'Experience Pattern Detected', message: `Found strong correlation: Candidates with CMDB often excel in this role.` },
+    { id: 4, icon: Award, title: 'Top Performer Identified', message: `${randomCandidateName} shows exceptional match with proven experience.` },
+    { id: 5, icon: Zap, title: 'Final Optimization', message: `AI has ranked the top ${matchCount} matches based on over 11 compatibility factors.` },
+  ];
+};
+
+// --- COMPONENT PROPS ---
+interface JobMatchLoaderProps {
+  jobId: string;
+  jobTitle: string;
+  totalCandidatesInPool: number;
+  expectedMatches?: number;
+  jobData?: JobData;
+  onComplete?: () => void;
+  matchedCandidates: MatchedCandidate[];
+  jobSkills: string[];
+}
+
+// --- MAIN COMPONENT ---
+const JobMatchLoader: FC<JobMatchLoaderProps> = ({ 
+  jobId,
+  jobTitle, 
+  totalCandidatesInPool, 
+  expectedMatches = 5,
+  jobData = { id: jobId, title: jobTitle, skills: ['GRC', 'IRM'], description: '...', experience: { min: { years: 3, months: 0 }, max: { years: 5, months: 0 } }, location: ['India'] },
+  onComplete,
+  matchedCandidates,
+  jobSkills,
+}) => {
+  const [currentPhase, setCurrentPhase] = useState(0);
+  const [isComplete, setIsComplete] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const [currentSubStep, setCurrentSubStep] = useState(0);
+  const [displayScanned, setDisplayScanned] = useState(0);
+  const [displayMatches, setDisplayMatches] = useState(0);
+  const [matchRate, setMatchRate] = useState(0);
+  const [visibleLogs, setVisibleLogs] = useState(0);
+  const [dynamicLogs, setDynamicLogs] = useState<any[]>([]);
+  const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(null);
+  const [analysisScores, setAnalysisScores] = useState<Record<string, AnalysisResult>>({});
+  const [validatingIds, setValidatingIds] = useState<string[]>([]);
+  const [candidatesWithSkillAnalysis, setCandidatesWithSkillAnalysis] = useState<MatchedCandidate[]>([]);
+  const [addedCandidates, setAddedCandidates] = useState<string[]>([]);
+  
+  const user = useSelector((state: any) => state.auth.user);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
+  
+  const trulyMatchedCandidates = useMemo(() => 
+    matchedCandidates.filter(c => c.matching_skill_count && c.matching_skill_count > 0),
+    [matchedCandidates]
   );
-
-  const { data: candidate, isLoading } = useQuery({
-    queryKey: ["talentPoolCandidate", candidateId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("hr_talent_pool")
-        .select("*")
-        .eq("id", candidateId)
-        .single();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    enabled: !!candidateId,
-  });
-
-  const topSkills = useMemo(
-    () => parseJsonArray(candidate?.top_skills),
-    [candidate]
-  );
-
-  const { data: enrichedSkills, isLoading: isLoadingEnrichedSkills } = useQuery(
-    {
-      queryKey: ["enrichedSkills", topSkills],
-      queryFn: async () => {
-        if (!topSkills || topSkills.length === 0) return [];
-        const { data, error } = await supabase.rpc("get_enriched_skills", {
-          p_skill_names: topSkills,
-        });
-        if (error)
-          throw new Error(`Error fetching enriched skills: ${error.message}`);
-        return data;
-      },
-      enabled: !!topSkills && topSkills.length > 0,
-    }
-  );
-
-  const { data: relatedCandidates, isLoading: isLoadingRelated } = useQuery({
-    queryKey: ["relatedCandidates", candidateId, organizationId],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_related_candidates", {
-        p_candidate_id: candidateId,
-        p_organization_id: organizationId,
-        p_limit: 10,
+  
+  useEffect(() => {
+    if (jobSkills.length > 0 && trulyMatchedCandidates.length > 0) {
+      const jobSkillsSet = new Set(jobSkills.map(s => s.toLowerCase()));
+      const processedCandidates = trulyMatchedCandidates.map(candidate => {
+        const matchedSkillsSet = new Set((candidate.matching_skills || []).map(s => s.toLowerCase()));
+        const unmatched = Array.from(jobSkillsSet).filter(skill => !matchedSkillsSet.has(skill));
+        return { ...candidate, unmatched_skills: unmatched };
       });
-      if (error) {
-        console.error("Error fetching related candidates:", error);
-        return [];
-      }
-      return data;
-    },
-    enabled: !!candidateId && !!organizationId,
-  });
+      setCandidatesWithSkillAnalysis(processedCandidates);
+    } else {
+      setCandidatesWithSkillAnalysis(trulyMatchedCandidates);
+    }
+  }, [trulyMatchedCandidates, jobSkills]);
 
-  interface TimelineEvent {
-    id: string;
-    event_type: string;
-    changed_at: string;
-    talent_pool_id: string;
-    changed_by_user: {
-      first_name: string;
-      last_name: string;
-    } | null;
-  }
+  useEffect(() => { const logs = generateDynamicLogs(jobData, totalCandidatesInPool, expectedMatches); setDynamicLogs(logs); }, [jobData, totalCandidatesInPool, expectedMatches]);
+  useEffect(() => { if (isComplete) return; const phaseDurations = [2500, 2500, 3500, 2000]; const advancePhase = () => { if (currentPhase < 3) { setCurrentPhase(prev => prev + 1); setCurrentSubStep(0); } else { setIsComplete(true); setTimeout(() => setShowResults(true), 1000); } }; const phaseTimer = setTimeout(advancePhase, phaseDurations[currentPhase]); return () => clearTimeout(phaseTimer); }, [currentPhase, isComplete]);
+  useEffect(() => { if (isComplete) return; const phaseDurations = [2500, 2500, 3500, 2000]; const currentPhaseData = { subSteps: generateDynamicSubSteps(jobData, phases[currentPhase]) }; const subDuration = (phaseDurations[currentPhase] || 2000) / currentPhaseData.subSteps.length; const subTimer = setTimeout(() => { if (currentSubStep < currentPhaseData.subSteps.length - 1) { setCurrentSubStep(prev => prev + 1); } }, subDuration); return () => clearTimeout(subTimer); }, [currentPhase, currentSubStep, jobData]);
+  useEffect(() => { const scannedDuration = 3500; const interval = 50; const steps = scannedDuration / interval; const increment = Math.ceil(totalCandidatesInPool / steps) || 1; let count = 0; const timer = setInterval(() => { count += increment; setDisplayScanned(Math.min(count, totalCandidatesInPool)); if (count >= totalCandidatesInPool) clearInterval(timer); }, interval); return () => clearInterval(timer); }, [totalCandidatesInPool]);
+  useEffect(() => { if (currentPhase >= 2) { const timer = setInterval(() => { setDisplayMatches(prev => { if (prev < expectedMatches) return prev + 1; clearInterval(timer); return prev; }); }, 400); return () => clearInterval(timer); } }, [currentPhase, expectedMatches]);
+  useEffect(() => { if (displayScanned > 0) { setMatchRate(Math.round((displayMatches / displayScanned) * 10000) / 100); } }, [displayMatches, displayScanned]);
+  useEffect(() => { const logInterval = setInterval(() => { setVisibleLogs(prev => Math.min(prev + 1, dynamicLogs.length)); }, 1500); return () => clearInterval(logInterval); }, [dynamicLogs.length]);
 
-  interface SupabaseResponse {
-    data: TimelineEvent[] | null;
-    error: Error | null;
-  }
+  const phases = ['Understanding Your Needs', 'Smart Criteria Building', 'Intelligent Talent Search', 'Precision Ranking'];
 
-  const { data: timelineEvents, isLoading: isLoadingTimeline } = useQuery<TimelineEvent[]>({
-    queryKey: ["candidateTimeline", candidateId],
-    queryFn: async () => {
-      console.log("Fetching timeline for candidateId:", candidateId);
+  const handleToggleExpand = (candidateId: string) => { setExpandedCandidateId(prevId => (prevId === candidateId ? null : candidateId)); };
+  
+  const handleDeepAnalysis = async (candidateId: string, candidateName: string) => {
+    if (validatingIds.includes(candidateId)) return;
 
-      const { data, error } = await supabase
-        .from("hr_talent_pool_timeline")
-        .select("*, changed_by_user:hr_employees(first_name, last_name)") 
-        .eq("talent_pool_id", candidateId)
-        .order("changed_at", { ascending: false });
+    const candidateData = candidatesWithSkillAnalysis.find(c => c.id === candidateId);
+    if (!candidateData) {
+      toast.error("Could not find candidate data to analyze.");
+      return;
+    }
+    
+    setValidatingIds(prev => [...prev, candidateId]);
+    toast.info(`AI deep analysis has started for ${candidateName}. This may take a moment...`);
+    
+    let analysisForLog: any = null;
+    let status = 'FAILURE';
+    let inputTokens = 0;
+    let outputTokens = 0;
 
-      console.log("Data returned from Supabase:", data);
+    try {
+      const { data, error: functionError } = await supabase.functions.invoke(
+        'talent-match-analysis',
+        { body: { jobData: jobData, candidateData: candidateData } }
+      );
 
-      if (error) {
-        console.error("Error fetching timeline:", error);
-        return [];
-      }
-      return data ?? [];
-    },
-    enabled: !!candidateId,
-  });
-
-  const groupedSkills = useMemo(() => {
-    if (!enrichedSkills || !topSkills) return {};
-    const enrichedSkillMap = new Map(
-      enrichedSkills.map((skill) => [
-        skill.skill_name.trim().toLowerCase(),
-        skill,
-      ])
-    );
-
-    const groups = topSkills.reduce((acc, rawSkill) => {
-      const skillKey = rawSkill.trim().toLowerCase();
-      const enriched = enrichedSkillMap.get(skillKey);
-
-      if (enriched) {
-        const groupKey = `${enriched.category || "Other"}`;
-        if (!acc[groupKey]) acc[groupKey] = [];
-        if (!acc[groupKey].some((s) => s.name === enriched.normalized_name)) {
-          acc[groupKey].push({
-            name: enriched.normalized_name,
-            description: enriched.description,
-          });
-        }
-      } else {
-        const groupKey = "Other Skills (General)";
-        if (!acc[groupKey]) acc[groupKey] = [];
-        if (!acc[groupKey].some((s) => s.name === rawSkill)) {
-          acc[groupKey].push({
-            name: rawSkill,
-            description: "No description available.",
-          });
+      if (functionError) {
+        try {
+            const errorBody = JSON.parse(functionError.message);
+            throw new Error(errorBody.error || `Function Error: ${functionError.message}`);
+        } catch {
+            throw new Error(`Function Error: ${functionError.message}`);
         }
       }
-      return acc;
-    }, {} as Record<string, { name: string; description: string }[]>);
+      
+      const { analysis: result, usage } = data;
+      analysisForLog = result;
 
-    return groups;
-  }, [enrichedSkills, topSkills]);
-
-  const sortedGroupedSkills = useMemo(() => {
-    const entries = Object.entries(groupedSkills);
-    const otherSkillsEntry = entries.find(([key]) =>
-      key.startsWith("Other Skills")
-    );
-    const sortedEntries = entries
-      .filter(([key]) => !key.startsWith("Other Skills"))
-      .sort(([a], [b]) => a.localeCompare(b));
-
-    if (otherSkillsEntry) {
-      sortedEntries.push(otherSkillsEntry);
-    }
-
-    return Object.fromEntries(sortedEntries);
-  }, [groupedSkills]);
-
-  // Helper function to sort work experience by end date
-  const getEndYear = (duration: string) => {
-    if (!duration || typeof duration !== "string") return 0;
-    if (
-      duration.toLowerCase().includes("present") ||
-      duration.toLowerCase().includes("current")
-    ) {
-      return new Date().getFullYear() + 1;
-    }
-    const years = duration.match(/\d{4}/g);
-    if (!years) return 0;
-    return Math.max(...years.map((year) => parseInt(year, 10)));
-  };
-
-  const sortedWorkExperience = useMemo(() => {
-    const workExp = parseJsonArray(candidate?.work_experience);
-    return [...workExp].sort((a, b) => {
-      const yearB = getEndYear(b.duration || b.end_date || "");
-      const yearA = getEndYear(a.duration || a.end_date || "");
-      return yearB - yearA;
-    });
-  }, [candidate]);
-
-  const keyDetails = useMemo(() => {
-    if (!candidate) return [];
-
-    const details = [
-      {
-        icon: Briefcase,
-        label: "Experience",
-        value: candidate.total_experience,
-      },
-      {
-        icon: Calendar,
-        label: "Notice Period",
-        value: candidate.notice_period,
-      },
-      {
-        icon: Factory,
-        label: "Current Company",
-        value: candidate.current_company,
-      },
-      {
-        icon: Briefcase,
-        label: "Current Role",
-        value: candidate.current_designation,
-      },
-      {
-        icon: MapPin,
-        label: "Current Location",
-        value: candidate.current_location,
-      },
-      {
-        icon: MapPin,
-        label: "Preferred Locations",
-        value: parseJsonArray(candidate.preferred_locations).join(", "),
-      },
-      {
-        icon: Wallet,
-        label: "Current Salary",
-        value: candidate.current_salary,
-      },
-      {
-        icon: Wallet,
-        label: "Expected Salary",
-        value: candidate.expected_salary,
-      },
-      {
-        icon: GraduationCap,
-        label: "Highest Education",
-        value: candidate.highest_education,
-      },
-    ];
-
-    return details.filter((detail) => detail.value);
-  }, [candidate]);
-
-  const professionalSummaryPoints = candidate?.professional_summary;
-
-  const renderAboutContent = () => {
-    const summaryArray = parseJsonArray(professionalSummaryPoints);
-    if (summaryArray.length > 0) {
-      return summaryArray.map((point, index) => <p key={index}>{point}</p>);
-    }
-    if (
-      typeof professionalSummaryPoints === "string" &&
-      professionalSummaryPoints.trim() !== ""
-    ) {
-      return <p>{professionalSummaryPoints}</p>;
-    }
-    return (
-      <p className="text-gray-500">No summary available for this candidate.</p>
-    );
-  };
-
-  // Enhanced projects processing
-  const processedProjects = useMemo(() => {
-    const rawProjects = parseJsonArray(candidate?.projects);
-    return rawProjects.map((proj: any) => {
-      if (typeof proj === 'string') {
-        const lines = proj.split('\n');
-        const name = lines[0]?.trim() || 'Untitled Project';
-        const description = lines.slice(1).join('\n').trim();
-        return { name, description, technologies: [] };
-      } else if (typeof proj === 'object' && proj !== null) {
-        const name = proj.name || proj.title || 'Untitled Project';
-        const description = proj.description || '';
-        const technologies = proj.technologies || [];
-        return { name, description, technologies };
+      if (!result || typeof result.score === 'undefined') {
+        throw new Error("AI analysis did not return a valid score.");
       }
-      return { name: 'Untitled Project', description: '', technologies: [] };
-    }).filter(proj => proj.description || proj.name !== 'Untitled Project');
-  }, [candidate]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
-      </div>
-    );
-  }
+      status = 'SUCCESS';
+      inputTokens = usage?.prompt_tokens ?? 0;
+      outputTokens = usage?.completion_tokens ?? 0;
 
-  if (!candidate) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-slate-500">Candidate not found</p>
-      </div>
-    );
-  }
+      setAnalysisScores(prev => ({ ...prev, [candidateId]: result }));
+      toast.success(`Analysis complete for ${candidateName}! Score: ${result.score}%`);
+
+    } catch (error: any) {
+      status = 'FAILURE';
+      analysisForLog = { error: error.message };
+      console.error("Deep analysis failed:", error);
+      toast.error(`Analysis failed for ${candidateName}: ${error.message}`);
+    } finally {
+      await supabase.from('hr_gemini_usage_log').insert({
+        organization_id: organizationId,
+        created_by: user.id,
+        status: status,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        analysis_response: analysisForLog,
+        parsed_email: candidateData.email || null,
+        usage_type: 'talent_match'
+      });
+      setValidatingIds(prev => prev.filter(id => id !== candidateId));
+    }
+  };
+
+  const handleAddCandidateToJob = async (candidateId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+  
+    if (!jobId) {
+      toast.error("Job ID is missing. Cannot add candidate.");
+      return;
+    }
+  
+    const talentPoolCandidate = candidatesWithSkillAnalysis.find(c => c.id === candidateId);
+    if (!talentPoolCandidate) return;
+  
+    const analysisResult = analysisScores[candidateId];
+    if (!analysisResult) {
+      toast.warning("Please run Deep Analysis first to get a score before adding to job.");
+      return;
+    }
+  
+    setAddedCandidates(prev => [...prev, candidateId]);
+    const toastId = toast.loading(`Processing ${talentPoolCandidate.candidate_name}...`);
+  
+    try {
+      // Step 1: "Get or Create" the candidate in the main `hr_candidates` table.
+      let { data: mainCandidate, error: findError } = await supabase
+        .from('hr_candidates')
+        .select('id')
+        .eq('email', talentPoolCandidate.email)
+        .single();
+  
+      if (findError && findError.code !== 'PGRST116') { // Ignore 'not found' error
+        throw new Error(`Error checking for existing candidate: ${findError.message}`);
+      }
+  
+      if (!mainCandidate) {
+        toast.info(`Adding '${talentPoolCandidate.candidate_name}' to main candidates list...`, { id: toastId });
+        
+        const { data: newMainCandidate, error: createError } = await supabase
+          .from('hr_candidates')
+          .insert({
+            name: talentPoolCandidate.candidate_name,
+            email: talentPoolCandidate.email,
+            phone_number: talentPoolCandidate.phone,
+            experience: talentPoolCandidate.total_experience,
+            current_salary: talentPoolCandidate.current_salary,
+            expected_salary: talentPoolCandidate.expected_salary,
+            notice_period: talentPoolCandidate.notice_period,
+            organization_id: organizationId,
+            owner: user.id, // Use the 'owner' column
+          })
+          .select('id')
+          .single();
+        
+        if (createError) {
+          throw new Error(`Failed to create candidate in main list: ${createError.message}`);
+        }
+        mainCandidate = newMainCandidate;
+      }
+      
+      // Step 2: Find the default statuses for the job.
+      const { data: mainStatus, error: mainStatusError } = await supabase
+        .from('job_statuses').select('id').eq('type', 'main').eq('organization_id', organizationId).order('display_order', { ascending: true }).limit(1).single();
+      if (mainStatusError || !mainStatus) throw new Error('Could not find a default main status for this organization.');
+  
+      const { data: subStatus, error: subStatusError } = await supabase
+        .from('job_statuses').select('id').eq('parent_id', mainStatus.id).eq('type', 'sub').eq('organization_id', organizationId).order('display_order', { ascending: true }).limit(1).single();
+      if (subStatusError || !subStatus) throw new Error('Could not find a default sub-status for the initial stage.');
+  
+      // Step 3: Create the link in `hr_job_candidates` using the correct ID.
+      toast.info(`Linking ${talentPoolCandidate.candidate_name} to the job...`, { id: toastId });
+  
+      const { error: jobLinkError } = await supabase
+        .from('hr_job_candidates')
+        .upsert(
+          {
+            job_id: jobId,
+            candidate_id: mainCandidate.id, // Use the ID from `hr_candidates`
+            name: talentPoolCandidate.candidate_name,
+            created_by: user.id,
+            main_status_id: mainStatus.id,
+            sub_status_id: subStatus.id,
+            organization_id: organizationId,
+          },
+          { onConflict: 'job_id, candidate_id' }
+        );
+  
+      if (jobLinkError) throw jobLinkError;
+  
+      // Step 4: Save the analysis result.
+      const { error: analysisError } = await supabase
+        .from('candidate_resume_analysis')
+        .upsert({
+            job_id: jobId,
+            candidate_id: mainCandidate.id, // Use the ID from `hr_candidates`
+            overall_score: analysisResult.score,
+            summary: analysisResult.summary,
+            candidate_name: talentPoolCandidate.candidate_name,
+            has_validated_resume: true,
+        },
+        { onConflict: 'job_id, candidate_id' }
+      );
+  
+      if (analysisError) throw analysisError;
+      
+      toast.success(`${talentPoolCandidate.candidate_name} successfully added to the job!`, { id: toastId });
+  
+    } catch (error: any) {
+      toast.error(`Failed to add candidate: ${error.message}`, { id: toastId });
+      setAddedCandidates(prev => prev.filter(id => id !== candidateId));
+    }
+  };
+
+  const getScoreColor = (score: number | null | undefined): string => {
+    if (score == null) return 'text-gray-600';
+    if (score > 80) return 'text-green-600';
+    if (score >= 75) return 'text-yellow-600';
+    return 'text-red-600';
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      <div className="mx-auto max-w-screen-8xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* Header - STICKY */}
-        <div className="sticky top-0 z-20 bg-white border-b border-slate-200 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 mb-6 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-2">
-         <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => window.history.back()}
-                className="h-8 w-8 rounded-full"
-              >
-                <ArrowLeft className="h-4 w-4 text-slate-600" />
-              </Button>
-              <div>
-                <p className="text-xs font-semibold text-slate-800">
-                  {candidate.candidate_name}
-                </p>
-                <p className="text-xs text-slate-500 -mt-0.5">
-                  {candidate.suggested_title}
-                </p>
+    <TooltipProvider>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
+        <Card className="w-full max-w-5xl h-[90vh] flex flex-col relative overflow-hidden bg-white/95 backdrop-blur-xl shadow-2xl border-0">
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50"></div>
+          
+          {showResults ? (
+            <>
+              <div className="absolute top-4 right-4 z-20"><Button variant="ghost" size="icon" onClick={onComplete} className="rounded-full bg-white/80 hover:bg-white shadow-sm"><X className="h-4 w-4" /></Button></div>
+              <div className="relative z-10 flex flex-col items-center p-8 text-center">
+                <div className="relative mb-6"><div className="absolute inset-0 bg-gradient-to-r from-green-500 to-teal-500 rounded-2xl blur-xl opacity-30"></div><div className="relative bg-gradient-to-br from-green-500 to-teal-500 p-4 rounded-2xl shadow-lg"><Award className="h-10 w-10 text-white" /></div></div>
+                <h2 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-teal-600 bg-clip-text text-transparent mb-2">
+                  {candidatesWithSkillAnalysis.length} Matches Found
+                </h2>
+                <p className="text-gray-600 font-medium">Presenting the most qualified candidates for <span className="text-teal-600 font-semibold">{jobTitle}</span></p>
               </div>
-              </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCompareModalOpen(true)}
-              className="gap-2"
-            >
-              <ScanSearch className="h-4 w-4" />
-              Compare
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setHistoryModalOpen(true)}
-              className="gap-2"
-            >
-              <History className="h-4 w-4" />
-              History
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setEnrichModalOpen(true)}
-              className="gap-2"
-            >
-              <Sparkles className="h-4 w-4" />
-              Enrich
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="default" size="sm" className="gap-2">
-                  <Download className="h-4 w-4" />
-                  Export
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => generatePdf(candidate)}>
-                  Download as PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => generateDocx(candidate)}>
-                  Download as DOCX
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Candidate Card */}
-        <Card className="border-slate-200 bg-white shadow-md mb-8">
-          <CardContent className="p-6">
-            <div className="flex gap-6">
-              <div className="grid h-20 w-20 flex-shrink-0 place-items-center rounded-full bg-gradient-to-br from-purple-500 to-purple-600 text-3xl font-bold text-white shadow-lg">
-                {candidate.candidate_name?.charAt(0)}
-              </div>
-              <div className="flex-grow">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h1 className="text-2xl font-bold text-slate-900">
-                      {candidate.candidate_name}
-                    </h1>
-                    <p className="mt-1 text-base text-slate-600">
-                      {candidate.suggested_title}
-                    </p>
-                  </div>
+              
+              <div className="flex-1 relative z-10 px-8 pb-6 overflow-y-auto space-y-2 custom-scrollbar">
+                <div className="grid grid-cols-12 gap-4 text-xs font-semibold text-gray-500 uppercase px-3 py-2">
+                  <div className="col-span-3">Candidate Name</div>
+                  <div className="col-span-2">Match</div>
+                  <div className="col-span-3">Suggested Title</div>
+                  <div className="col-span-2 text-center">AI Score</div>
+                  <div className="col-span-2 text-center">Actions</div>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600">
-                  {candidate.email && (
-                    <a
-                      href={`mailto:${candidate.email}`}
-                      className="flex items-center gap-1.5 hover:text-purple-600 transition-colors"
-                    >
-                      <Mail className="h-4 w-4" />
-                      {candidate.email}
-                    </a>
-                  )}
-                  {candidate.phone && (
-                    <a
-                      href={`tel:${candidate.phone}`}
-                      className="flex items-center gap-1.5 hover:text-purple-600 transition-colors"
-                    >
-                      <Phone className="h-4 w-4" />
-                      {candidate.phone}
-                    </a>
-                  )}
-                  {candidate.linkedin_url && (
-                    <a
-                      href={candidate.linkedin_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 hover:text-purple-600 transition-colors"
-                    >
-                      <Linkedin className="h-4 w-4" />
-                      LinkedIn Profile
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
 
-            {/* Details in single long box */}
-            <div className="mt-6 border border-slate-200 rounded-lg bg-slate-50/30 p-4">
-              <div className="flex flex-wrap gap-x-8 gap-y-3">
-                {keyDetails.map((detail, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-2"
-                  >
-                    <div className="rounded-md bg-white p-1.5 text-slate-600 shadow-sm">
-                      <detail.icon className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-slate-500">
-                        {detail.label}
-                      </p>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {detail.value}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* IMPROVED SECTIONS START HERE */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Left Column - Main Content (2/3 width) */}
-          <div className="space-y-6 lg:col-span-2">
-            {/* Top Skills Section - COMPACT TABLE WITH NEW UI */}
-            <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-              <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                  <div className="rounded-lg bg-purple-100 p-2">
-                    <TrendingUp className="h-5 w-5 text-purple-600" />
-                  </div>
-                  Top Skills
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-5">
-                {isLoadingEnrichedSkills ? (
-                  <div className="space-y-4">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="space-y-2">
-                        <div className="h-4 w-32 rounded bg-slate-100 animate-pulse"></div>
-                        <div className="flex flex-wrap gap-2">
-                          {[...Array(4)].map((_, j) => (
-                            <div
-                              key={j}
-                              className="h-8 w-20 rounded-full bg-slate-100 animate-pulse"
-                            ></div>
-                          ))}
+                {candidatesWithSkillAnalysis.length > 0 ? (
+                  candidatesWithSkillAnalysis.map((candidate, index) => (
+                    <Fragment key={candidate.id}>
+                      <div 
+                        className="grid grid-cols-12 gap-4 items-center p-3 bg-white/80 backdrop-blur-sm border border-gray-200/50 rounded-xl shadow-sm animate-slide-in cursor-pointer hover:bg-purple-50/50 transition-colors"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                        onClick={() => handleToggleExpand(candidate.id)}
+                      >
+                        <div className="col-span-3 font-semibold text-gray-800 flex items-center gap-2">
+                          {candidate.candidate_name}
+                          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${expandedCandidateId === candidate.id ? 'rotate-180' : ''}`} />
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : Object.keys(sortedGroupedSkills).length === 0 ? (
-                  <p className="text-sm text-slate-500">No skills available.</p>
-                ) : (
-                  (() => {
-                    const entries = Object.entries(sortedGroupedSkills);
-                    const totalSkills = entries.reduce((acc, [, skills]) => acc + skills.length, 0);
-                    const half = Math.ceil(entries.length / 2);
-                    const firstHalf = entries.slice(0, half);
-                    const secondHalf = entries.slice(half);
-                    const renderTable = (tableEntries: [string, { name: string; description: string }[]][]) => (
-                      <table className="w-full text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50">
-                            <th className="w-1/3 text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                              Category
-                            </th>
-                            <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                              Skills
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {tableEntries.map(([groupKey, skills]) => (
-                            <tr
-                              key={groupKey}
-                              className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
-                            >
-                              <td className="px-3 py-2 align-top font-medium text-xs text-slate-600">
-                                {groupKey}
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex flex-wrap gap-1">
-                                  {skills.map((skill) => (
-                                    <div
-                                      key={skill.name}
-                                      className="relative group"
-                                    >
-                                      <Badge
-                                        variant="secondary"
-                                        className="cursor-help px-2 py-0.5 text-xs font-medium bg-purple-500 text-white border-0 shadow-sm hover:shadow hover:bg-purple-400 transition-all duration-200"
-                                      >
-                                        {skill.name}
-                                      </Badge>
-                                      {skill.description && skill.description !== "No description available." && (
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-max max-w-xs p-2 rounded-md bg-slate-800 text-white text-xs shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10 pointer-events-none whitespace-pre-wrap">
-                                          <p className="leading-tight">
-                                            {skill.description}
-                                          </p>
-                                          <div className="absolute left-1/2 -translate-x-1/2 bottom-[-4px] h-2 w-2 bg-slate-800 rotate-45"></div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    );
-                    if (totalSkills <= 5) {
-                      return renderTable(entries);
-                    } else {
-                      return (
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>{renderTable(firstHalf)}</div>
-                          <div>{renderTable(secondHalf)}</div>
+                        <div className="col-span-2">
+                          <Tooltip><TooltipTrigger asChild><Badge variant="secondary" className="cursor-help bg-green-100 text-green-800 hover:bg-green-200">{candidate.matching_skill_count || 0} Matched Skills</Badge></TooltipTrigger><TooltipContent><p className="font-semibold text-xs mb-1">Matching Skills:</p><ul className="list-disc pl-4 text-xs space-y-0.5">{candidate.matching_skills?.map(skill => <li key={skill}>{skill}</li>) || <li>N/A</li>}</ul></TooltipContent></Tooltip>
                         </div>
-                      );
-                    }
-                  })()
-                )}
-              </CardContent>
-            </Card>
-
-            {/* About Section - IMPROVED */}
-            <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-              <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                  <div className="rounded-lg bg-blue-100 p-2">
-                    <Info className="h-5 w-5 text-blue-600" />
-                  </div>
-                  About
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-5">
-                <div className="text-sm text-slate-700 leading-relaxed space-y-2">
-                  {renderAboutContent()}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Work Experience - IMPROVED */}
-            {sortedWorkExperience.length > 0 && (
-                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                      <div className="rounded-lg bg-green-100 p-2">
-                        <Briefcase className="h-5 w-5 text-green-600" />
-                      </div>
-                      Work Experience
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-5">
-                    <div className="relative pl-8">
-                      {/* Timeline line */}
-                      <div className="absolute left-4 top-3 h-[calc(100%-24px)] w-0.5 bg-gradient-to-b from-slate-300 via-slate-200 to-transparent" />
-                      
-                      <div className="space-y-6">
-                        {sortedWorkExperience.map((exp: any, index: number) => {
-                          const title = exp.designation || exp.title;
-                          const company = exp.company;
-                          const duration = exp.duration || 
-                            (exp.start_date && exp.end_date 
-                              ? `${exp.start_date} - ${exp.end_date}`
-                              : exp.start_date || exp.end_date || "");
-                          const responsibilities = parseJsonArray(exp.responsibilities);
-                          const description = exp.description;
-                          
-                          return (
-                            <div key={index} className="relative group/exp">
-                              {/* Timeline dot */}
-                              <div className="absolute -left-8 top-1.5 h-4 w-4 rounded-full bg-white border-2 border-purple-500 shadow-sm group-hover/exp:border-purple-600 group-hover/exp:shadow-md transition-all duration-200"></div>
-                              
-                              <div className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-4 hover:border-purple-200 hover:shadow-sm transition-all duration-200">
-                                <div className="flex items-start justify-between gap-4">
-                                  <div className="flex-grow">
-                                    <h3 className="text-base font-bold text-slate-900">
-                                      {title}
-                                    </h3>
-                                    <p className="mt-1 text-sm font-medium text-purple-600 flex items-center gap-1">
-                                      <Building className="h-3.5 w-3.5" />
-                                      {company}
-                                    </p>
-                                  </div>
-                                  {duration && (
-                                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
-                                      <Calendar className="h-3.5 w-3.5" />
-                                      <span>{duration}</span>
-                                    </div>
-                                  )}
-                                </div>
-                                
-                                {/* Show responsibilities as bullet points if available */}
-                                {responsibilities.length > 0 && (
-                                  <ul className="mt-3 list-disc pl-5 text-sm text-slate-600 space-y-1.5 leading-relaxed">
-                                    {responsibilities.map((resp: string, i: number) => (
-                                      <li key={i}>{resp}</li>
-                                    ))}
-                                  </ul>
-                                )}
-                                
-                                {/* Show description as paragraph if available and no responsibilities */}
-                                {!responsibilities.length && description && (
-                                  <p className="mt-3 text-sm text-slate-600 leading-relaxed">
-                                    {description}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-            {/* Education - IMPROVED */}
-            {candidate.education &&
-              parseJsonArray(candidate.education).length > 0 && (
-                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                      <div className="rounded-lg bg-indigo-100 p-2">
-                        <GraduationCap className="h-5 w-5 text-indigo-600" />
-                      </div>
-                      Education
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-5">
-                    <div className="space-y-4">
-                      {parseJsonArray(candidate.education).map(
-                        (edu: any, index: number) => (
-                          <div
-                            key={index}
-                            className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-4 hover:border-indigo-200 hover:shadow-sm transition-all duration-200"
-                          >
-                            <h3 className="text-base font-bold text-slate-900">
-                              {edu.degree}
-                            </h3>
-                            <p className="mt-1 text-sm font-medium text-indigo-600">
-                              {edu.institution}
-                            </p>
-                            {edu.year && (
-                              <p className="mt-1 text-xs text-slate-500 flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {edu.year}
-                              </p>
-                            )}
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-            {/* Certifications - IMPROVED */}
-            {candidate.certifications &&
-              parseJsonArray(candidate.certifications).length > 0 && (
-                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                      <div className="rounded-lg bg-amber-100 p-2">
-                        <Award className="h-5 w-5 text-amber-600" />
-                      </div>
-                      Certifications
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-5">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {parseJsonArray(candidate.certifications).map(
-                        (cert: string, index: number) => (
-                          <div
-                            key={index}
-                            className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-amber-50/30 p-3 hover:border-amber-200 hover:shadow-sm transition-all duration-200"
-                          >
-                            <div className="flex items-start gap-2">
-                              <Award className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                              <p className="text-sm font-medium text-slate-800 leading-relaxed">
-                                {cert}
-                              </p>
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-            {/* Projects - IMPROVED */}
-            {processedProjects.length > 0 && (
-                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                      <div className="rounded-lg bg-teal-100 p-2">
-                        <Lightbulb className="h-5 w-5 text-teal-600" />
-                      </div>
-                      Projects
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-5">
-                    <div className="space-y-4">
-                      {processedProjects.map((proj: any, index: number) => (
-                        <div
-                          key={index}
-                          className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-4 hover:border-teal-200 hover:shadow-sm transition-all duration-200"
-                        >
-                          <h3 className="text-base font-bold text-slate-900">
-                            {proj.name}
-                          </h3>
-                          {proj.description && (
-                            <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-                              {proj.description}
-                            </p>
-                          )}
-                          {proj.technologies && proj.technologies.length > 0 && (
-                            <div className="mt-3">
-                              <p className="text-xs font-medium text-slate-500 mb-2">Technologies:</p>
-                              <div className="flex flex-wrap gap-1">
-                                {proj.technologies.map((tech: string, techIdx: number) => (
-                                  <Badge key={techIdx} variant="secondary" className="text-xs">
-                                    {tech}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
+                        <div className="col-span-3 text-sm text-gray-600 truncate">{candidate.suggested_title || <span className="italic text-gray-400">Not specified</span>}</div>
+                        <div className="col-span-2 text-center font-bold text-lg">
+                          {analysisScores[candidate.id] ? ( 
+                            <span className={getScoreColor(analysisScores[candidate.id].score)}>
+                              {analysisScores[candidate.id].score}%
+                            </span> 
+                          ) : ( 
+                            <span className="text-gray-400">-</span> 
                           )}
                         </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-            {/* Other Details - IMPROVED */}
-            {candidate.other_details &&
-              Object.keys(candidate.other_details).length > 0 && (
-                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                      <div className="rounded-lg bg-cyan-100 p-2">
-                        <Info className="h-5 w-5 text-cyan-600" />
-                      </div>
-                      Other Details
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-5">
-                    <div className="space-y-4">
-                      {Object.entries(candidate.other_details).map(
-                        ([key, value]) =>
-                          Array.isArray(value) &&
-                          value.length > 0 && (
-                            <div key={key} className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-4">
-                              <h3 className="text-sm font-bold text-slate-800 mb-2 uppercase tracking-wide">
-                                {key}
-                              </h3>
-                              <ul className="space-y-1.5">
-                                {value.map((item, index) => (
-                                  <li key={index} className="flex items-start gap-2 text-sm text-slate-600">
-                                    <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0 mt-0.5" />
-                                    <span>{item}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-          </div>
-
-          {/* Right Column - Sidebar (1/3 width) */}
-          <div className="space-y-6">
-                         {/* Candidate Timeline - IMPROVED */}
-            {(isLoadingTimeline ||
-              (timelineEvents && timelineEvents.length > 0)) && (
-              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                  <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                    <div className="rounded-lg bg-orange-100 p-2">
-                      <History className="h-5 w-5 text-orange-600" />
-                    </div>
-                    Candidate Timeline
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-5">
-                  {isLoadingTimeline ? (
-                    <div className="space-y-4">
-                      {[...Array(2)].map((_, i) => (
-                        <div key={i} className="flex gap-3">
-                          <div className="h-10 w-10 rounded-full bg-slate-100 animate-pulse flex-shrink-0"></div>
-                          <div className="flex-grow space-y-2">
-                            <div className="h-3 w-3/4 rounded bg-slate-100 animate-pulse"></div>
-                            <div className="h-2.5 w-1/2 rounded bg-slate-100 animate-pulse"></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <div className="absolute left-5 top-5 h-[calc(100%-40px)] w-0.5 bg-gradient-to-b from-orange-200 via-orange-100 to-transparent" />
-                      <div className="space-y-5">
-                        {timelineEvents.map((event, index) => (
-                          <div key={event.id} className="relative pl-12">
-                            <div className="absolute left-0 top-0.5 grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-orange-100 to-orange-50 text-orange-600 ring-4 ring-white shadow-sm">
-                              <Clock className="h-4 w-4" />
-                            </div>
-                            <div className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-3 hover:border-orange-200 hover:shadow-sm transition-all duration-200">
-                              <p className="font-semibold text-sm text-slate-900">
-                                {event.event_type}
-                              </p>
-                              <p className="text-xs text-slate-500 mt-1">
-                                by{" "}
-                                <span className="font-medium text-slate-700">
-                                  {event.changed_by_user
-                                    ? `${event.changed_by_user.first_name} ${event.changed_by_user.last_name}`
-                                    : "System"}
-                                </span>
-                              </p>
-                              <p className="text-xs text-slate-400 mt-1.5 flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {new Date(event.changed_at).toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Related Candidates - IMPROVED */}
-            {(isLoadingRelated ||
-              (relatedCandidates && relatedCandidates.length > 0)) && (
-              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200 sticky top-6">
-                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                  <CardTitle className="text-lg font-bold text-slate-900">
-                    Related Candidates
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3">
-                  {isLoadingRelated ? (
-                    <div className="space-y-3">
-                      {[...Array(3)].map((_, i) => (
-                        <div key={i} className="flex items-center gap-3 p-3">
-                          <div className="h-10 w-10 rounded-full bg-slate-100 animate-pulse"></div>
-                          <div className="flex-grow space-y-2">
-                            <div className="h-3 w-3/4 rounded bg-slate-100 animate-pulse"></div>
-                            <div className="h-2.5 w-1/2 rounded bg-slate-100 animate-pulse"></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      {relatedCandidates.map((rel_candidate) => (
-                        <div key={rel_candidate.id} className="relative group/candidate">
-                          <Link
-                            to={`/talent-pool/${rel_candidate.id}`}
-                            className="flex items-center gap-3 rounded-lg p-3 transition-all hover:bg-gradient-to-r hover:from-purple-50 hover:to-transparent border border-transparent hover:border-purple-100"
+                        <div className="col-span-2 text-center flex items-center justify-center gap-1">
+                          <Button 
+                            variant="default" 
+                            size="sm"
+                            className="bg-purple-600 hover:bg-purple-700 text-white"
+                            onClick={(e) => handleAddCandidateToJob(candidate.id, e)}
+                            disabled={addedCandidates.includes(candidate.id)}
                           >
-                            <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-full bg-gradient-to-br from-purple-100 to-purple-50 text-sm font-bold text-purple-700 shadow-sm">
-                              {rel_candidate.candidate_name?.charAt(0)}
-                            </div>
-                            <div className="flex-grow overflow-hidden">
-                              <p className="truncate text-sm font-semibold text-slate-900 group-hover/candidate:text-purple-700 transition-colors">
-                                {rel_candidate.candidate_name}
-                              </p>
-                              <p className="truncate text-xs text-slate-500 mt-0.5">
-                                {rel_candidate.suggested_title}
-                              </p>
-                            </div>
-                            <Badge
-                              variant="secondary"
-                              className="bg-purple-100 text-purple-700 text-[10px] h-5 px-2 font-semibold shrink-0"
-                            >
-                              {rel_candidate.matching_skill_count}
-                            </Badge>
+                            <PlusCircle className="h-4 w-4 mr-2"/>
+                            {addedCandidates.includes(candidate.id) ? 'Added' : 'Add'}
+                          </Button>
+                          <Link to={`/talent-pool/${candidate.id}`} onClick={(e) => e.stopPropagation()} target="_blank" rel="noopener noreferrer">
+                            <Button variant="outline" size="sm">View</Button>
                           </Link>
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs p-3 rounded-lg bg-slate-900 text-white text-xs shadow-xl opacity-0 group-hover/candidate:opacity-100 transition-opacity duration-200 z-30 pointer-events-none">
-                            <p className="font-semibold mb-2 border-b border-slate-700 pb-1.5 text-center">
-                              Matched Skills
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {rel_candidate.matching_skills?.map((skill) => (
-                                <span
-                                  key={skill}
-                                  className="bg-slate-700 px-2 py-1 rounded text-[10px] font-medium"
-                                >
-                                  {skill}
-                                </span>
-                              ))}
-                            </div>
-                            <div className="absolute left-1/2 -translate-x-1/2 bottom-[-4px] h-2 w-2 bg-slate-900 rotate-45"></div>
-                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                      </div>
 
+                      <AnimatePresence>
+                        {expandedCandidateId === candidate.id && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.3 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="grid grid-cols-12 gap-4 p-4 mx-2 my-1 bg-gray-50/80 border-l-4 border-purple-400 rounded-lg">
+                              <div className="col-span-5">
+                                <h4 className="text-sm font-semibold mb-2 text-gray-700">Skill Analysis</h4>
+                                <p className="text-xs font-medium text-green-600 mb-1">Matched Skills:</p>
+                                <div className="flex flex-wrap gap-1 mb-3">
+                                  {candidate.matching_skills?.length > 0 ? candidate.matching_skills.map(s => <Badge key={s} variant="outline" className="bg-green-100 text-green-800">{s}</Badge>) : <span className="text-xs text-gray-500">None</span>}
+                                </div>
+                                <p className="text-xs font-medium text-red-600 mb-1">Unmatched Skills:</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {candidate.unmatched_skills?.length > 0 ? candidate.unmatched_skills.map(s => <Badge key={s} variant="outline" className="bg-red-100 text-red-800">{s}</Badge>) : <span className="text-xs text-gray-500">All job skills are matched.</span>}
+                                </div>
+                              </div>
+                              <div className="col-span-2"></div>
+                              <div className="col-span-5 flex flex-col items-center justify-center">
+                                <h4 className="text-sm font-semibold mb-2 text-gray-700">AI Deep Analysis</h4>
+                                {validatingIds.includes(candidate.id) ? (
+                                  <Button disabled className="bg-purple-600 hover:bg-purple-700">
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Analyzing...
+                                  </Button>
+                                ) : analysisScores[candidate.id] ? (
+                                  <div className="text-center">
+                                    <p className={`text-4xl font-bold ${getScoreColor(analysisScores[candidate.id].score)}`}>
+                                        {analysisScores[candidate.id].score}%
+                                    </p>
+                                    <p className="text-sm text-gray-600">Compatibility Score</p>
+                                  </div>
+                                ) : (
+                                  <Button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeepAnalysis(candidate.id, candidate.candidate_name)
+                                    }}
+                                    className="bg-purple-600 hover:bg-purple-700"
+                                  >
+                                    <BrainCircuit className="mr-2 h-4 w-4" />
+                                    Run Deep Analysis
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </Fragment>
+                  ))
+                ) : (
+                  <div className="text-center py-12 text-gray-500">
+                    <Frown className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-700">No Matches Found</h3>
+                    <p>There were no candidates in the talent pool with skills matching this job.</p>
+                  </div>
+                )}
+              </div>
+              <div className="relative z-10 p-4"><Button onClick={onComplete} className="w-full h-12 text-base font-semibold bg-purple-600 hover:bg-purple-700 text-white">Close and View in Talent Pool</Button></div>
+            </>
+          ) : (
+            <>
+              <div className="absolute top-4 right-4 z-20"><Button variant="ghost" size="icon" onClick={onComplete} className="rounded-full bg-white/80 hover:bg-white shadow-sm"><X className="h-4 w-4" /></Button></div>
+              <div className="relative z-10 flex flex-col items-center pt-8 px-8 text-center">
+                 <div className="relative mb-6"><div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-600 rounded-2xl blur-xl opacity-30 animate-pulse"></div><div className="relative bg-gradient-to-br from-purple-600 to-blue-600 p-4 rounded-2xl shadow-lg"><Brain className="h-10 w-10 text-white" /></div></div>
+                 <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">AI Matching Engine Active</h2>
+                 <p className="text-gray-600 font-medium">Deep analysis for <span className="text-purple-600 font-semibold">{jobTitle}</span></p>
+                 <div className="flex items-center gap-2 mt-4"><Badge className="bg-purple-600 text-white border-0 px-3 py-1"><BrainCircuit className="h-3 w-3 mr-1" />Neural Processing</Badge><Badge className="bg-green-100 text-green-700 border-green-300/50 px-3 py-1"><Activity className="h-3 w-3 mr-1 animate-pulse" />Live Analysis</Badge></div>
+              </div>
+              
+              <div className="flex-1 relative z-10 p-8 overflow-y-auto space-y-6 custom-scrollbar">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                  {phases.map((phase, index) => {
+                    const isActive = index === currentPhase;
+                    const isCompleted = index < currentPhase;
+                    const Icon = index === 0 ? FileText : index === 1 ? Filter : index === 2 ? SearchCode : Target;
+                    const phaseProgress = ((currentSubStep + 1) / generateDynamicSubSteps(jobData, phases[currentPhase]).length) * 100;
+                    return (
+                      <div key={index} className="relative">
+                        {index < phases.length - 1 && ( <div className={`hidden md:block absolute top-8 left-[60%] w-full h-0.5 transition-all duration-1000 ${ isCompleted ? 'bg-gradient-to-r from-green-400 to-teal-400' : 'bg-gray-200' }`}></div> )}
+                        <div className={`relative p-4 rounded-xl border transition-all duration-500 ${ isActive ? 'bg-white border-purple-300 shadow-lg scale-105' : isCompleted ? 'bg-green-50 border-green-300' : 'bg-gray-50/70 border-gray-200' }`}>
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${ isCompleted ? 'bg-green-500 text-white' : isActive ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white animate-pulse' : 'bg-gray-300 text-gray-500' }`}>
+                              {isCompleted ? <CheckCircle2 size={16} /> : isActive ? <Loader2 size={16} className="animate-spin" /> : <Icon size={16} />}
+                            </div>
+                            <h4 className={`font-semibold text-sm ${ isActive ? 'text-purple-700' : isCompleted ? 'text-green-700' : 'text-gray-500' }`}>{phase}</h4>
+                          </div>
+                          {isActive && ( <div className="space-y-2"><Progress value={phaseProgress} className="h-1.5" /><p className="text-xs text-purple-600 font-medium truncate">{generateDynamicSubSteps(jobData, phases[currentPhase])[currentSubStep]}</p></div> )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="grid grid-cols-3 gap-6">
+                  <div className="bg-white/80 backdrop-blur rounded-xl p-4 border border-gray-200/50 shadow-sm"><div className="flex items-center justify-between mb-2"><Users className="h-5 w-5 text-purple-500" /><Badge className="text-xs bg-purple-100 text-purple-700 border-0">Scanning</Badge></div><p className="text-2xl font-bold text-purple-700">{displayScanned.toLocaleString()}</p><p className="text-xs text-gray-600">Profiles analyzed</p></div>
+                  <div className="bg-white/80 backdrop-blur rounded-xl p-4 border border-gray-200/50 shadow-sm"><div className="flex items-center justify-between mb-2"><Award className="h-5 w-5 text-green-500" /><Badge className="text-xs bg-green-100 text-green-700 border-0">Matches</Badge></div><p className="text-2xl font-bold text-green-700">{displayMatches}</p><p className="text-xs text-gray-600">Perfect matches</p></div>
+                  <div className="bg-white/80 backdrop-blur rounded-xl p-4 border border-gray-200/50 shadow-sm"><div className="flex items-center justify-between mb-2"><TrendingUp className="h-5 w-5 text-blue-500" /><Badge className="text-xs bg-blue-100 text-blue-700 border-0">Rate</Badge></div><p className="text-2xl font-bold text-blue-700">{matchRate}%</p><p className="text-xs text-gray-600">Match quality</p></div>
+                </div>
+                <div className="bg-white/80 backdrop-blur rounded-xl p-6 border border-gray-200/50 shadow-sm">
+                  <div className="flex items-center gap-3 mb-4"><div className="p-2 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg"><Sparkles className="h-4 w-4 text-white" /></div><h3 className="font-semibold text-gray-800">AI Analysis Insights</h3><Badge className="ml-auto text-xs bg-purple-100 text-purple-700 border-0">Real-time</Badge></div>
+                  <div className="space-y-3">
+                    {dynamicLogs.slice(0, visibleLogs).map((entry, index) => { 
+                      const Icon = entry.icon; 
+                      return ( 
+                        <div key={entry.id} className="flex gap-3 p-3 rounded-lg border bg-purple-50/50 border-purple-200/60 animate-slide-in" style={{ animationDelay: `${index * 100}ms` }}>
+                          <div className="flex-shrink-0 text-purple-500 pt-0.5"><Icon className="h-5 w-5" /></div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1"><span className="font-semibold text-sm text-purple-800">{entry.title}</span></div>
+                            <Typewriter text={entry.message} />
+                          </div>
+                        </div> 
+                      ); 
+                    })}
+                    {visibleLogs < dynamicLogs.length && ( <div className="flex items-center justify-center py-4"><div className="flex items-center gap-2 text-purple-600"><Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm font-medium">Analyzing more insights...</span></div></div> )}
+                  </div>
+                </div>
+              </div>
 
-          </div>
-        </div>
-
-        {candidateId && (
-          <>
-            <CompareWithJobDialog
-              isOpen={isCompareModalOpen}
-              onClose={() => setCompareModalOpen(false)}
-              candidateId={candidateId}
-            />
-            <AnalysisHistoryDialog
-              isOpen={isHistoryModalOpen}
-              onClose={() => setHistoryModalOpen(false)}
-              candidateId={candidateId}
-              candidateName={candidate.candidate_name}
-            />
-            <EnrichDataDialog
-              isOpen={isEnrichModalOpen}
-              onClose={() => setEnrichModalOpen(false)}
-              candidate={candidate}
-            />
-          </>
-        )}
+              <div className="relative z-10 p-4 bg-white/50 backdrop-blur-sm">
+                <div className="flex items-center justify-center">{isComplete ? ( <div className="flex items-center gap-3 text-green-600"><div className="p-2 bg-green-100 rounded-full"><CheckCircle2 className="h-5 w-5" /></div><span className="font-semibold">Analysis Complete! Preparing results...</span></div> ) : ( <div className="flex items-center gap-3 text-purple-600"><div className="flex space-x-1">{[0, 1, 2].map((i) => ( <div key={i} className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: `${i * 150}ms` }} /> ))}</div><span className="text-sm font-medium">Processing {totalCandidatesInPool.toLocaleString()} profiles with advanced AI algorithms...</span></div> )}</div>
+              </div>
+            </>
+          )}
+        </Card>
+        <style jsx>{`
+          @keyframes slide-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+          .animate-slide-in { animation: slide-in 0.5s ease-out forwards; }
+          .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+          .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+          .custom-scrollbar::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
+          .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #aaa; }
+        `}</style>
       </div>
-    </div>
+    </TooltipProvider>
   );
 };
 
-export default CandidateProfilePage;
+export default JobMatchLoader;
