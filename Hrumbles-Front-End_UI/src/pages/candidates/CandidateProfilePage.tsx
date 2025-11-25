@@ -119,6 +119,25 @@ const CandidateProfilePage = () => {
     enabled: !!candidateId && !!organizationId,
   });
 
+  // Query to check button permission for talent_exportbutton
+  const { data: exportPermission, isLoading: isPermissionLoading } = useQuery({
+    queryKey: ["exportPermission", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return null;
+      const { data, error } = await supabase
+        .from("button_permissions")
+        .select("is_enabled")
+        .eq("organization_id", organizationId)
+        .eq("permission_type", "talent_exportbutton")
+        .single();
+      if (error || !data) return null;
+      return data.is_enabled;
+    },
+    enabled: !!organizationId,
+  });
+
+  const hasExportPermission = exportPermission === true && !isPermissionLoading;
+
   interface TimelineEvent {
     id: string;
     event_type: string;
@@ -394,7 +413,7 @@ const CandidateProfilePage = () => {
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="default" size="sm" className="gap-2">
+                <Button variant="default" size="sm" className="gap-2" disabled={hasExportPermission}>
                   <Download className="h-4 w-4" />
                   Export
                 </Button>
@@ -409,8 +428,10 @@ const CandidateProfilePage = () => {
               </DropdownMenuContent>
             </DropdownMenu>
              {candidate.resume_path && (
-                  <a href={candidate.resume_path} download={resumeFileName} className="w-full">
-                    <Button size="sm" variant="datepicker" className="w-full flex items-center justify-center gap-2">
+                  <a href={!hasExportPermission ? candidate.resume_path : '#'} 
+      download={!hasExportPermission ? resumeFileName : undefined}
+      className={hasExportPermission ? 'pointer-events-none' : ''} className="w-full">
+                    <Button size="sm" variant="datepicker" className="w-full flex items-center justify-center gap-2" disabled={hasExportPermission}>
                         <Download size={16} />
                         <span>View CV</span>
                     </Button>
