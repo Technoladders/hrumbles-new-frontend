@@ -2,7 +2,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock } from "lucide-react";
+import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Bookmark, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -20,6 +20,7 @@ import AddCandidateDrawer, { CandidateFormData } from "@/components/jobs/job/can
 import Modal from 'react-modal';
 import AiCandidateFinalizeDrawer from "@/components/jobs/job/candidate/AiCandidateFinalizeDrawer";
 import ResumeUploadModal from '@/components/ui/ResumeUploadModal'; 
+import WishlistModal from '@/components/candidates/talent-pool/WishlistModal';
 
 const JobView = () => {
   const { id } = useParams<{ id: string }>();
@@ -31,6 +32,7 @@ const JobView = () => {
  
   // For the AI "Resume Upload" modal
   const [isResumeUploadModalOpen, setIsResumeUploadModalOpen] = useState(false);
+  const [isWishlistModalOpen, setIsWishlistModalOpen] = useState(false);
  
   // --- SINGLE STATE FOR AI-TO-DRAWER FLOW ---
   // This state will hold the data. If it has data, the finalize drawer will open. If it's null, the drawer is closed.
@@ -138,6 +140,13 @@ const JobView = () => {
     return () => { supabase.removeChannel(channel); };
   }, [id, refetchHistory]);
 
+
+    const handleFinalizeFromWishlist = (formData: Partial<CandidateFormData>) => {
+    setIsWishlistModalOpen(false); // Close the modal
+    setPrefilledData(formData);    // Set the data, which opens the AiCandidateFinalizeDrawer
+    toast.info("Please review and complete the candidate's details to add them to this job.");
+  };
+
   // --- HANDLER FUNCTIONS ---
   const handleManualCandidateAdded = () => {
     setIsAddCandidateDrawerOpen(false);
@@ -161,6 +170,7 @@ const JobView = () => {
     refetchCandidates();
     toast.success("AI-scanned candidate has been added!");
   };
+  
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('en-US', {
@@ -204,48 +214,24 @@ const JobView = () => {
         {/* Action Buttons */}
         <div className="flex gap-2">
 
+            <Button 
+            variant="outline" 
+            onClick={() => setIsWishlistModalOpen(true)} 
+            className="flex items-center gap-2"
+          >
+            <Bookmark size={16} className="text-indigo-600" />
+            <span>My Shortlist</span>
+          </Button>
+
             {/* Main Dropdown for All Candidate Actions */}
           <DropdownMenu>
-<DropdownMenuTrigger asChild>
-  <Button
-    variant="default"
-    className="
-      relative overflow-hidden
-      w-[350px] px-10 py-4 text-lg font-semibold text-white
-      rounded-xl border border-white/10
-      bg-gradient-to-r from-purple-500 via-rose-600 to-violet-600
-      bg-[length:200%_200%] bg-[position:0%_50%]
-      transition-all duration-500 ease-out
-      shadow-lg shadow-zinc-600 hover:shadow-2xl hover:shadow-purple-500/40
-      hover:-translate-y-1 hover:scale-[1.01]
-      hover:bg-[position:100%_50%]
-      group
-    "
-  >
-    {/* Shiny overlay on hover */}
-    <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent 
-      transition-transform duration-700 ease-out 
-      group-hover:translate-x-full pointer-events-none" 
-    />
-
-    {/* Letter-by-letter animation */}
-    <span className="relative z-10 flex gap-[1px] items-center">
-      {"Analyse with AI".split("").map((char, i) => (
-        <span
-          key={i}
-          className="inline-block opacity-0 animate-text-reveal"
-          style={{ animationDelay: `${i * 0.05}s` }}
-        >
-          {char === " " ? "\u00A0" : char}
-        </span>
-      ))}
-      
-      <ChevronDown className="ml-3 h-5 w-5 relative z-10 opacity-80 
-        transition-transform duration-300 group-hover:rotate-180" 
-      />
-    </span>
-  </Button>
-</DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild>
+              <Button className="h-10 px-6 font-semibold text-white whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200 flex items-center gap-2">
+                <Sparkles size={18} />
+                <span>Analyse with AI</span>
+                <ChevronDown className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
 
 
 
@@ -326,6 +312,14 @@ const JobView = () => {
           job={job}
         />
       )}
+
+      {/* WishlistModal now gets the new prop */}
+      <WishlistModal 
+        isOpen={isWishlistModalOpen}
+        onClose={() => setIsWishlistModalOpen(false)}
+        jobId={id}
+        onInitiateFinalize={handleFinalizeFromWishlist}
+      />
       {/* 3. AI Finalize Drawer - Simplified Logic */}
       {/*
         This is the key change. The drawer's visibility is now directly controlled

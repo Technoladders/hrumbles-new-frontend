@@ -181,6 +181,8 @@ const AiCandidateFinalizeDrawer = ({ job, initialData, open, onOpenChange, onCan
     onOpenChange(false);
   };
 
+  console.log("Basic Info Form Values:", basicInfoForm.getValues());
+
   // --- SAVE LOGIC ---
   // This logic is mostly copied, but simplified since we know we are always creating.
 

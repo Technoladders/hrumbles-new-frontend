@@ -4,6 +4,7 @@ import { useParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { Candidate, DocumentState, ResumeAnalysis } from "@/components/MagicLinkView/types"; // Assuming types are in lib/types.ts
+import { getAuthDataFromLocalStorage } from '@/utils/localstorage';
 
 interface UseEmployeeProfileReturn {
   candidate: Candidate | null;
@@ -100,10 +101,18 @@ export const useEmployeeProfile = (
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+// hooks/useEmployeeProfile.ts
+
+useEffect(() => {
     const fetchProfileData = async () => {
       setLoading(true);
       setError(null);
+
+      const authData = getAuthDataFromLocalStorage();
+          if (!authData) {
+            throw new Error('Failed to retrieve authentication data');
+          }
+          const { organization_id, userId } = authData;
       try {
         let candidateData: Candidate | null = null;
         let uanVerificationData: any = null;
@@ -121,8 +130,6 @@ export const useEmployeeProfile = (
 
           if (data && isValidCandidate(data.candidate)) {
             candidateData = data.candidate;
-            // setSharedDataOptions(data.data_options as DataSharingOptions); // This needs to be handled by parent or a separate hook
-            // setCurrentDataOptions(data.data_options as DataSharingOptions); // This too
           } else {
             throw new Error("Invalid shared data or link.");
           }
@@ -173,7 +180,6 @@ export const useEmployeeProfile = (
               "Supabase Dual UAN verification fetch error:",
               verificationError
             );
-            // Don't throw fatal error for UAN, just log
           } else if (verificationData) {
             uanVerificationData = verificationData;
           }
@@ -204,24 +210,69 @@ export const useEmployeeProfile = (
           },
         }));
 
-        // Fetch resume analysis if not in share mode or allowed by options
+        // --- MODIFIED SECTION: Fetch resume analysis with fallback ---
+ // --- START OF REVISED SECTION WITH DEBUGGING ---
         if (!shareMode && jobId && candidateData?.id) {
-          const { data: resumeData, error: resumeError } = await supabase
+          console.log("%c[Debug] Starting resume analysis fetch...", "color: blue; font-weight: bold;");
+
+          // 1. Primary Query
+          const { data: primaryDataArray, error: primaryResumeError } = await supabase
             .from("candidate_resume_analysis")
             .select("*")
             .eq("candidate_id", candidateData.id)
-            .eq("job_id", jobId)
-            .single();
+            .eq("job_id", jobId);
 
-          if (resumeError && resumeError.code !== "PGRST116") {
-            console.warn(
-              "No resume analysis found for candidate and job:",
-              resumeError?.message
-            );
-          } else if (resumeData) {
-            setResumeAnalysis(resumeData as ResumeAnalysis);
+          console.log("[Debug] Primary query to 'candidate_resume_analysis' returned:", {
+            data: primaryDataArray,
+            error: primaryResumeError,
+          });
+
+          // 2. The crucial check: Is the result array empty or null?
+          if (primaryDataArray && primaryDataArray.length > 0) {
+            console.log("%c[Debug] Found data in primary table. Setting state.", "color: green;");
+            setResumeAnalysis(primaryDataArray[0] as ResumeAnalysis);
+          } else {
+            // 3. This block now correctly runs if the primary query returns [] or null.
+            console.log("%c[Debug] Primary check failed. Attempting fallback.", "color: orange;");
+
+            // Add a specific log to check the exact values being used for the fallback condition.
+            console.log("[Debug] Checking fallback conditions with:", {
+                email: candidateData.email,
+                organization_id: candidateData.organization_id,
+            });
+
+            if (candidateData.email && organization_id) {
+              console.log(`[Debug] Fallback triggered: Searching 'resume_analysis' for email: ${candidateData.email}`);
+
+              // 4. Fallback Query
+              const { data: fallbackResumeData, error: fallbackResumeError } = await supabase
+                .from("resume_analysis")
+                .select("*")
+                .eq("job_id", jobId)
+                .eq("organization_id", organization_id)
+                .eq("email", candidateData.email)
+                .order("updated_at", { ascending: false })
+  .limit(1)
+  .maybeSingle();
+
+              console.log("[Debug] Fallback query to 'resume_analysis' returned:", {
+                  data: fallbackResumeData,
+                  error: fallbackResumeError,
+              });
+
+              if (fallbackResumeData) {
+                console.log("%c[Debug] Found data in fallback table. Setting state.", "color: green;");
+                setResumeAnalysis(fallbackResumeData as ResumeAnalysis);
+              } else {
+                console.log("[Debug] No data found in fallback table.");
+              }
+            } else {
+              console.log("%c[Debug] Fallback skipped: Candidate is missing email or organization_id.", "color: red;");
+            }
           }
         }
+        // --- END OF REVISED SECTION ---
+
       } catch (err: any) {
         console.error("Error fetching employee profile:", err);
         setError(err.message || "Failed to load employee data.");
@@ -236,7 +287,7 @@ export const useEmployeeProfile = (
     };
 
     fetchProfileData();
-  }, [candidateId, jobId, shareMode, shareId, location.state, toast]);
+}, [candidateId, jobId, shareMode, shareId, location.state, toast]);
 
   return { candidate, documents, resumeAnalysis, loading, error, setDocuments, setCandidate };
 };

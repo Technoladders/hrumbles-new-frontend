@@ -30,7 +30,10 @@ import { CandidateFormData } from "@/components/jobs/job/candidate/AddCandidateD
 
 
 
-const transformAnalysisToFormData = (analysis: ParsedCandidateProfile): Partial<CandidateFormData> => {
+const transformAnalysisToFormData = (
+  analysis: ParsedCandidateProfile,
+  talentPoolCandidate?: { resume_path?: string }
+): Partial<CandidateFormData> => {
     if (!analysis) { // Safety check
         toast.error("Analysis data is missing.");
         return {};
@@ -38,7 +41,7 @@ const transformAnalysisToFormData = (analysis: ParsedCandidateProfile): Partial<
     const [firstName, ...lastNameParts] = (analysis.candidate_name || "").split(" ");
     const lastName = lastNameParts.join(" ");
     const totalExperience = analysis.experience_years ? parseInt(analysis.experience_years, 10) : undefined;
-
+console.log("analysis", analysis)
     return {
         firstName: firstName || "",
         lastName: lastName || "",
@@ -48,7 +51,9 @@ const transformAnalysisToFormData = (analysis: ParsedCandidateProfile): Partial<
         preferredLocations: [],
         totalExperience: isNaN(totalExperience) ? undefined : totalExperience,
         totalExperienceMonths: 0,
-        resume: analysis.resume_url || null,
+        resume: talentPoolCandidate?.resume_path 
+            || analysis.resume_url 
+            || null,
         skills: analysis.top_skills?.map(skill => ({
             name: skill,
             rating: 0,
@@ -159,7 +164,7 @@ const handleProceedWithAssignment = () => {
     }
 
     // 1. Transform the analysis data
-    const formData = transformAnalysisToFormData(analysis);
+    const formData = transformAnalysisToFormData(analysis, talentPoolCandidate);
     
     // 2. Save the data to sessionStorage. The key is important.
     sessionStorage.setItem('aiCandidateForFinalize', JSON.stringify(formData));

@@ -530,100 +530,164 @@ const InterviewDetailsCell: React.FC<InterviewDetailsCellProps> = ({ candidate }
 
 useEffect(() => {
   const checkAnalysisData = async () => {
-    if (!jobId) return;
-    
-    const { data, error } = await supabase
+    if (!jobId || candidatesData.length === 0) return;
+
+    // --- Primary Fetch from candidate_resume_analysis ---
+    const { data: primaryResults, error: primaryError } = await supabase
       .from("candidate_resume_analysis")
-      // 1. Add report_url to the query
-      .select("candidate_id, summary, overall_score, report_url") 
+      .select("candidate_id, summary, overall_score, report_url")
       .eq("job_id", jobId)
+      .in("candidate_id", candidatesData.map(c => c.id))
       .not("summary", "is", null);
 
-    if (error) {
-      console.error("Error checking analysis data:", error);
-      return;
+    if (primaryError) {
+      console.error("Error checking primary analysis data:", primaryError);
+    }
+    
+    const finalAnalysisData = new Map();
+    const foundCandidateIds = new Set();
+
+    if (primaryResults) {
+        primaryResults.forEach((item) => {
+            finalAnalysisData.set(item.candidate_id, {
+                overall_score: item.overall_score,
+                report_url: item.report_url
+            });
+            foundCandidateIds.add(item.candidate_id);
+        });
     }
 
+    // --- Fallback Fetch for remaining candidates from resume_analysis ---
+    const candidatesForFallback = candidatesData.filter(c => !foundCandidateIds.has(c.id) && c.email);
+    const fallbackEmails = candidatesForFallback.map(c => c.email);
+
+    if (fallbackEmails.length > 0) {
+        const { data: fallbackResults, error: fallbackError } = await supabase
+            .from("resume_analysis")
+            .select("email, overall_score, resume_url")
+            .eq("job_id", jobId)
+            .eq("organization_id", organizationId)
+            .in("email", fallbackEmails);
+
+        if (fallbackError) {
+            console.error("Error checking fallback analysis data:", fallbackError);
+        }
+
+        if (fallbackResults) {
+            // Create a map from email to candidate ID for efficient lookup
+            const emailToCandidateIdMap = new Map(candidatesForFallback.map(c => [c.email, c.id]));
+            
+            fallbackResults.forEach(item => {
+                const candidateId = emailToCandidateIdMap.get(item.email);
+                if (candidateId && !finalAnalysisData.has(candidateId)) {
+                    finalAnalysisData.set(candidateId, {
+                        overall_score: item.overall_score,
+                        report_url: item.resume_url
+                    });
+                }
+            });
+        }
+    }
+    
+    // --- Update State with Merged Results ---
     const availableData: { [key: string]: boolean } = {};
     const analysisDataTemp: { [key: string]: any } = {};
-    data.forEach((item) => {
-      availableData[item.candidate_id] = true;
-      // 2. Add the report_url to the data we store
-      analysisDataTemp[item.candidate_id] = { 
-        overall_score: item.overall_score,
-        report_url: item.report_url 
-      };
+
+    finalAnalysisData.forEach((value, key) => {
+        availableData[key] = true;
+        analysisDataTemp[key] = value;
     });
 
     setAnalysisDataAvailable(availableData);
     setCandidateAnalysisData(prevData => {
-      const hasNewData = Object.keys(analysisDataTemp).some(key => 
-        !prevData[key] || 
-        prevData[key].overall_score !== analysisDataTemp[key].overall_score ||
-        prevData[key].report_url !== analysisDataTemp[key].report_url
-      );
-      if (hasNewData) {
-        return { ...prevData, ...analysisDataTemp };
-      }
-      return prevData;
+        const hasNewData = Object.keys(analysisDataTemp).some(key => 
+            !prevData[key] || 
+            prevData[key].overall_score !== analysisDataTemp[key].overall_score ||
+            prevData[key].report_url !== analysisDataTemp[key].report_url
+        );
+        if (hasNewData) {
+            return { ...prevData, ...analysisDataTemp };
+        }
+        return prevData;
     });
   };
 
   checkAnalysisData();
-}, [candidatesData, jobId]); 
+}, [candidatesData, jobId, organizationId]); // <-- Add organizationId to dependency array
 
- const fetchAnalysisData = async (candidateId: string) => {
+const fetchAnalysisData = async (candidate: Candidate) => { // <-- Changed to accept the full candidate object
   try {
-    const { data, error } = await supabase
+    // 1. First, try the primary analysis table using candidate_id
+    const { data: primaryData, error: primaryError } = await supabase
       .from("candidate_resume_analysis")
       .select("overall_score, summary, top_skills, missing_or_weak_areas, candidate_name, report_url")
       .eq("job_id", jobId)
-      .eq("candidate_id", candidateId)
+      .eq("candidate_id", candidate.id) // <-- Use candidate.id
       .single();
 
-    if (error) throw error;
+    let analysisResult = primaryData;
 
-    // Console log the fetched data
-    console.log(`fetchAnalysisData for candidate ${candidateId}:`, data);
+    // 2. If no data is found in the primary table, attempt a fallback to resume_analysis using email
+    if (!analysisResult && candidate.email) {
+      console.log(`Fallback: Searching resume_analysis for email: ${candidate.email}`);
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from("resume_analysis") // <-- The fallback table
+        .select("overall_score, summary, top_skills, missing_or_weak_areas, candidate_name, resume_url as report_url") // <-- Note: aliasing resume_url to report_url
+        .eq("job_id", jobId)
+        .eq("organization_id", organizationId) // <-- Add organization_id for specificity
+        .eq("email", candidate.email) // <-- Use email for the lookup
+        .maybeSingle(); // Use maybeSingle to avoid errors if not found
 
+        if (fallbackError) {
+            console.error("Fallback query error:", fallbackError);
+        }
+        
+      analysisResult = fallbackData;
+    }
+
+    if (!analysisResult) {
+        throw new Error("No analysis data found for this candidate in either table.");
+    }
+    
+    // 3. Set the state with the data from whichever source was successful
     setAnalysisData({
-      overall_score: data.overall_score || 0,
-      summary: data.summary || "",
-      top_skills: data.top_skills || [],
-      missing_or_weak_areas: data.missing_or_weak_areas || [],
-      report_url: data.report_url ?? null,
-      candidate_name: data.candidate_name ?? null,
+      overall_score: analysisResult.overall_score || 0,
+      summary: analysisResult.summary || "",
+      top_skills: analysisResult.top_skills || [],
+      missing_or_weak_areas: analysisResult.missing_or_weak_areas || [],
+      report_url: analysisResult.report_url ?? null,
+      candidate_name: analysisResult.candidate_name ?? null,
     });
     setCandidateAnalysisData((prev) => ({
       ...prev,
-      [candidateId]: {
-        overall_score: data.overall_score || 0,
-        summary: data.summary || "",
-        top_skills: data.top_skills || [],
-        missing_or_weak_areas: data.missing_or_weak_areas || [],
-        report_url: data.report_url ?? null,
-        candidate_name: data.candidate_name ?? null,
+      [candidate.id]: {
+        overall_score: analysisResult.overall_score || 0,
+        summary: analysisResult.summary || "",
+        top_skills: analysisResult.top_skills || [],
+        missing_or_weak_areas: analysisResult.missing_or_weak_areas || [],
+        report_url: analysisResult.report_url ?? null,
+        candidate_name: analysisResult.candidate_name ?? null,
       },
     }));
     setAnalysisDataAvailable((prev) => ({
       ...prev,
-      [candidateId]: true,
+      [candidate.id]: true,
     }));
     setIsSummaryModalOpen(true);
   } catch (error) {
     console.error("Error fetching analysis data:", error);
-    // Console log the error details
-    console.log(`fetchAnalysisData error for candidate ${candidateId}:`, error);
     toast.error("Failed to fetch candidate analysis.");
     setAnalysisDataAvailable((prev) => ({
       ...prev,
-      [candidateId]: false,
+      [candidate.id]: false,
     }));
   }
 };
 
   // Static USD to INR conversion rate
 const USD_TO_INR_RATE = 84;
+
+console.log("Analysis Data:", candidateAnalysisData);
 
 
 
@@ -2022,7 +2086,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
     return <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>;
   }
 
-  if (isValidated && score != null) {
+  if ( score != null) {
     return (
       <div className="relative flex items-center justify-center">
         {/* The 3D Score Circle */}
@@ -2183,7 +2247,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
             candidateId={candidate.id}
             hasSummary={!!candidateAnalysisData[candidate.id]}
             onValidate={handleValidateResume}
-            onViewSummary={fetchAnalysisData}
+            onViewSummary={() => fetchAnalysisData(candidate)} // From fetchAnalysisData to () => fetchAnalysisData(candidate)
             reportUrl={candidateAnalysisData[candidate.id]?.report_url}
           />
         </TableCell>
@@ -2668,3 +2732,5 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
 });
 
 export default CandidatesList;
+
+// resume_analysis
