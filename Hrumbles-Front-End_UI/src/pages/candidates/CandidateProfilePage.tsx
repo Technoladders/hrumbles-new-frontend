@@ -77,6 +77,10 @@ const CandidateProfilePage = () => {
     enabled: !!candidateId,
   });
 
+  console.log("candidatetalent", candidate);
+
+  const resumeFileName = candidate?.resume_path?.split('/').pop() || 'resume';
+
   const topSkills = useMemo(
     () => parseJsonArray(candidate?.top_skills),
     [candidate]
@@ -404,6 +408,15 @@ const CandidateProfilePage = () => {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+             {candidate.resume_path && (
+                  <a href={candidate.resume_path} download={resumeFileName} className="w-full">
+                    <Button size="sm" variant="datepicker" className="w-full flex items-center justify-center gap-2">
+                        <Download size={16} />
+                        <span>View CV</span>
+                    </Button>
+                  </a>
+                )}
+            
           </div>
         </div>
 

@@ -6,6 +6,7 @@ import AddCandidateModal from "./AddCandidateModal";
 import JobOverviewCard from "./cards/JobOverviewCard";
 import SubmissionOverviewCard from "./cards/SubmissionOverviewCard";
 import RecentActivityCard from "./cards/RecentActivityCard";
+import TopCandidatesCard from "./cards/TopCandidatesCard";
 import CandidatesTabsSection from "./sections/CandidatesTabsSection";
 
 
@@ -31,12 +32,14 @@ const JobDetailView = ({ job, candidates, onCandidateAdded }: JobDetailViewProps
 
       {/* Submission Overview Card */}
       <SubmissionOverviewCard job={job} candidates={candidates} />
+      
+      <TopCandidatesCard jobId={job.id} />
 
       {/* Recent Activity Card */}
-      <RecentActivityCard 
+      {/* <RecentActivityCard 
         candidates={candidates} 
         onAddCandidate={handleOpenCandidateModal} 
-      />
+      /> */}
 
       {/* Candidates Tabs */}
       <CandidatesTabsSection 

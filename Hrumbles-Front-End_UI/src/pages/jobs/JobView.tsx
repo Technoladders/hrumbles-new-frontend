@@ -2,8 +2,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Sparkles, Bookmark } from "lucide-react"; // Changed from Heart to Bookmark
-
+import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Bookmark, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,10 +16,9 @@ import { getJobById } from "@/services/jobService";
 import { getCandidatesByJobId } from "@/services/candidateService";
 import JobDetailView from "@/components/jobs/job/JobDetailView";
 import { Candidate } from "@/lib/types";
-import AddCandidateDrawer from "@/components/jobs/job/candidate/AddCandidateDrawer";
+import AddCandidateDrawer, { CandidateFormData } from "@/components/jobs/job/candidate/AddCandidateDrawer";
 import Modal from 'react-modal';
-
-import AddCandidateModal from '@/components/candidates/talent-pool/AddCandidateModal'; 
+import AiCandidateFinalizeDrawer from "@/components/jobs/job/candidate/AiCandidateFinalizeDrawer";
 import ResumeUploadModal from '@/components/ui/ResumeUploadModal'; 
 import WishlistModal from '@/components/candidates/talent-pool/WishlistModal';
 
@@ -28,12 +26,18 @@ const JobView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // --- STATE MANAGEMENT ---
-  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  // --- SIMPLIFIED STATE MANAGEMENT ---
+  // For the manual "Add Candidate" drawer
   const [isAddCandidateDrawerOpen, setIsAddCandidateDrawerOpen] = useState(false);
-  const [isAddTalentPoolModalOpen, setIsAddTalentPoolModalOpen] = useState(false);
+ 
+  // For the AI "Resume Upload" modal
+  const [isResumeUploadModalOpen, setIsResumeUploadModalOpen] = useState(false);
   const [isWishlistModalOpen, setIsWishlistModalOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+ 
+  // --- SINGLE STATE FOR AI-TO-DRAWER FLOW ---
+  // This state will hold the data. If it has data, the finalize drawer will open. If it's null, the drawer is closed.
+  const [prefilledData, setPrefilledData] = useState<Partial<CandidateFormData> | null>(null);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
   // --- DATA FETCHING ---
   const { 
@@ -95,7 +99,26 @@ const JobView = () => {
     skills: candidate.skills || []
   }));
 
-  // --- REAL-TIME SUBSCRIPTIONS ---
+  // --- useEffect TO CHECK sessionStorage ---
+  useEffect(() => {
+    const dataFromAnalysisPage = sessionStorage.getItem('aiCandidateForFinalize');
+
+    if (dataFromAnalysisPage) {
+      try {
+        const parsedData: Partial<CandidateFormData> = JSON.parse(dataFromAnalysisPage);
+        // Directly set the data. This will trigger the drawer to open in the JSX.
+        setPrefilledData(parsedData);
+      } catch (e) {
+        console.error("Failed to parse candidate data from session storage:", e);
+        toast.error("Could not load candidate data from analysis page.");
+      } finally {
+        // IMPORTANT: Clear the data from storage so it doesn't trigger again on a page refresh
+        sessionStorage.removeItem('aiCandidateForFinalize');
+      }
+    }
+  }, []); // Run only on mount
+
+  // --- REAL-TIME SUBSCRIPTIONS (useEffect) ---
   useEffect(() => {
     if (!id) return;
     const channel = supabase.channel('job-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'hr_jobs', filter: `id=eq.${id}` }, () => { refetchJob(); }).subscribe();
@@ -114,18 +137,37 @@ const JobView = () => {
     return () => { supabase.removeChannel(channel); };
   }, [id, refetchHistory]);
 
-  // --- HANDLER FUNCTIONS ---
-  const handleTalentPoolCandidateAdded = () => {
-    setIsAddTalentPoolModalOpen(false);
-    refetchCandidates();
-    toast.success("Candidate processed and added to Talent Pool!");
+
+    const handleFinalizeFromWishlist = (formData: Partial<CandidateFormData>) => {
+    setIsWishlistModalOpen(false); // Close the modal
+    setPrefilledData(formData);    // Set the data, which opens the AiCandidateFinalizeDrawer
+    toast.info("Please review and complete the candidate's details to add them to this job.");
   };
 
+  // --- HANDLER FUNCTIONS ---
   const handleManualCandidateAdded = () => {
     setIsAddCandidateDrawerOpen(false);
     refetchCandidates();
     toast.success("Candidate added successfully");
   };
+
+  // This handler is for BOTH flows now (from modal or from redirect)
+  const handleInitiateAddFromAnalysis = (formData: Partial<CandidateFormData>) => {
+    setPrefilledData(formData);
+    setIsResumeUploadModalOpen(false); // Ensure modal is closed
+  };
+
+  // This handler is called when the finalize drawer successfully saves OR is cancelled
+  const handleFinalizeDrawerClose = () => {
+    setPrefilledData(null); // Just clear the data to close the drawer
+  };
+ 
+  const handleFinalizeCandidateAdded = () => {
+    handleFinalizeDrawerClose(); // Close the drawer
+    refetchCandidates();
+    toast.success("AI-scanned candidate has been added!");
+  };
+  
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('en-US', {
@@ -167,9 +209,8 @@ const JobView = () => {
         
         {/* Action Buttons */}
         <div className="flex gap-2">
-          
-          {/* My Shortlist Button - Updated Icon */}
-          <Button 
+
+            <Button 
             variant="outline" 
             onClick={() => setIsWishlistModalOpen(true)} 
             className="flex items-center gap-2"
@@ -178,7 +219,7 @@ const JobView = () => {
             <span>My Shortlist</span>
           </Button>
 
-          {/* Analyse with AI Dropdown */}
+            {/* Main Dropdown for All Candidate Actions */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button className="h-10 px-6 font-semibold text-white whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200 flex items-center gap-2">
@@ -187,22 +228,27 @@ const JobView = () => {
                 <ChevronDown className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
+
+
+
             
             <DropdownMenuContent 
               align="end" 
               className="w-64 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-700 shadow-2xl rounded-xl p-2"
             >
               <DropdownMenuItem 
-                onSelect={() => setIsAddTalentPoolModalOpen(true)}
-                disabled={jobLoading || !job} 
-                className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
-              >
-                <FileText className="h-5 w-5 mt-1 text-blue-500" />
-                <div>
-                  <p className="font-semibold text-slate-800 dark:text-slate-100">Analyse Resume</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Paste or upload resumes for AI parsing.</p>
-                </div>
-              </DropdownMenuItem>
+ onSelect={() => setIsResumeUploadModalOpen(true)}
+  // --- THIS IS THE FIX ---
+  // This disables the button if the job is loading or has no skills
+  disabled={jobLoading || !job} 
+  className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
+>
+  <FileText className="h-5 w-5 mt-1 text-blue-500" />
+  <div>
+    <p className="font-semibold text-slate-800 dark:text-slate-100">Analyse Resume</p>
+    <p className="text-xs text-slate-500 dark:text-slate-400">Paste or upload resumes for AI parsing.</p>
+  </div>
+</DropdownMenuItem>
               
               <DropdownMenuItem 
                 onSelect={() => setIsHistoryModalOpen(true)}
@@ -245,21 +291,41 @@ const JobView = () => {
         onOpenChange={setIsAddCandidateDrawerOpen}
       />
       
-      {isAddTalentPoolModalOpen && job && (
+      {isResumeUploadModalOpen && job && (
         <ResumeUploadModal
-          isOpen={isAddTalentPoolModalOpen}
-          onClose={() => setIsAddTalentPoolModalOpen(false)}
-          onCandidateAdded={handleTalentPoolCandidateAdded}
+          isOpen={isResumeUploadModalOpen}
+          onClose={() => setIsResumeUploadModalOpen(false)}
+          onInitiateCandidateAdd={handleInitiateAddFromAnalysis}
           job={job}
         />
       )}
 
-      {/* Wishlist Modal - Filter by Job ID */}
+      {/* WishlistModal now gets the new prop */}
       <WishlistModal 
         isOpen={isWishlistModalOpen}
         onClose={() => setIsWishlistModalOpen(false)}
         jobId={id}
+        onInitiateFinalize={handleFinalizeFromWishlist}
       />
+      {/* 3. AI Finalize Drawer - Simplified Logic */}
+      {/*
+        This is the key change. The drawer's visibility is now directly controlled
+        by whether `prefilledData` exists. No separate `isFinalizeDrawerOpen` state is needed.
+      */}
+      {prefilledData && (
+        <AiCandidateFinalizeDrawer
+          job={job}
+          open={!!prefilledData} // Drawer is open if prefilledData is not null
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              handleFinalizeDrawerClose(); // If user closes it, clear the data
+            }
+          }}
+          initialData={prefilledData}
+          onCandidateAdded={handleFinalizeCandidateAdded}
+        />
+      )}
+      
 
       {isHistoryModalOpen && (
         <Modal 

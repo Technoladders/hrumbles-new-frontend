@@ -1,19 +1,22 @@
+// src/components/candidates/talent-pool/WishlistModal.tsx
 import { FC } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Bookmark, ExternalLink, Trash2 } from 'lucide-react'; // Changed from Heart to Bookmark
-import { Link } from 'react-router-dom';
-import { toast } from 'sonner';
+import { Bookmark, ExternalLink, Trash2, UserPlus } from 'lucide-react';
+import { CandidateFormData } from '@/components/jobs/job/candidate/AddCandidateDrawer';
 
 interface WishlistModalProps {
   isOpen: boolean;
   onClose: () => void;
   jobId?: string;
+  onInitiateFinalize?: (formData: Partial<CandidateFormData>) => void;
 }
 
 interface WishlistItem {
@@ -28,14 +31,21 @@ interface WishlistItem {
     email: string;
     phone: string;
     suggested_title: string;
+    resume_path?: string;
+    linkedin_url?: string;
+    current_location?: string;
+    total_experience?: string;
+    top_skills?: string[];
   };
   job: {
+    id: string;
     title: string;
   };
 }
 
-const WishlistModal: FC<WishlistModalProps> = ({ isOpen, onClose, jobId }) => {
+const WishlistModal: FC<WishlistModalProps> = ({ isOpen, onClose, jobId, onInitiateFinalize }) => {
   const user = useSelector((state: any) => state.auth.user);
+  const navigate = useNavigate();
 
   const { data: wishlistItems, isLoading, refetch } = useQuery({
     queryKey: ['wishlistItems', user?.id, jobId],
@@ -55,9 +65,15 @@ const WishlistModal: FC<WishlistModalProps> = ({ isOpen, onClose, jobId }) => {
             candidate_name,
             email,
             phone,
-            suggested_title
+            suggested_title,
+            resume_path,
+            linkedin_url,
+            current_location,
+            total_experience,
+            top_skills
           ),
           job:hr_jobs!hr_talent_wishlist_hr_job_id_fkey (
+            id,
             title
           )
         `)
@@ -101,6 +117,55 @@ const WishlistModal: FC<WishlistModalProps> = ({ isOpen, onClose, jobId }) => {
     if (score >= 80) return 'text-green-600 bg-green-100';
     if (score >= 70) return 'text-yellow-600 bg-yellow-100';
     return 'text-red-600 bg-red-100';
+  };
+
+  const transformWishlistItemToFormData = (item: WishlistItem): Partial<CandidateFormData> => {
+    const analysis = item.talent;
+    const [firstName, ...lastNameParts] = (analysis.candidate_name || "").split(" ");
+    const lastName = lastNameParts.join(" ");
+    const totalExperience = analysis.total_experience ? parseInt(analysis.total_experience, 10) : undefined;
+    console.log("analysis", item)
+    return {
+      firstName: firstName || "",
+      lastName: lastName || "",
+      email: analysis.email || "",
+      phone: analysis.phone || "", // Leave blank for manual entry
+      currentLocation: analysis.current_location || "",
+      preferredLocations: [],
+      totalExperience: isNaN(totalExperience) ? undefined : totalExperience,
+      totalExperienceMonths: 0,
+      resume: item.talent.resume_path || null,
+      skills: analysis.top_skills?.map(skill => ({
+        name: skill,
+        rating: 0,
+        experienceYears: 0,
+        experienceMonths: 0,
+      })) || [],
+      linkedInId: analysis.linkedin_url || "",
+      currentSalary: undefined,
+      expectedSalary: undefined,
+    };
+  };
+
+  const handleAddToJobClick = (item: WishlistItem) => {
+    if (!item || !item.talent) {
+      toast.error("Analysis data is missing.");
+      return;
+    }
+
+    const formData = transformWishlistItemToFormData(item);
+
+    // Case 1: Called from JobView (parent component context exists)
+    if (jobId && onInitiateFinalize) {
+      onInitiateFinalize(formData);
+    }
+    // Case 2: Called from TalentPoolPage (use the associated job)
+    else {
+      sessionStorage.setItem('aiCandidateForFinalize', JSON.stringify(formData));
+      toast.info("Redirecting to finalize candidate details...");
+      onClose();
+      navigate(`/jobs/${item.job.id}`);
+    }
   };
 
   return (
@@ -159,11 +224,20 @@ const WishlistModal: FC<WishlistModalProps> = ({ isOpen, onClose, jobId }) => {
                     )}
                   </div>
                   
-                  <div className="flex flex-col gap-2 ml-4">
-                    <Link to={`/talent-pool/${item.hr_talent_id}`} target="_blank">
+                  <div className="flex flex-col gap-2 ml-4 w-36">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => handleAddToJobClick(item)}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700"
+                    >
+                      <UserPlus className="h-4 w-4 mr-1" />
+                      Add to Job
+                    </Button>
+                    <Link to={`/talent-pool/${item.hr_talent_id}`}>
                       <Button variant="outline" size="sm" className="w-full">
                         <ExternalLink className="h-4 w-4 mr-1" />
-                        View
+                        View Profile
                       </Button>
                     </Link>
                     <Button

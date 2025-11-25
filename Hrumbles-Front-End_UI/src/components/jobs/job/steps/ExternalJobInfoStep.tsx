@@ -5,12 +5,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LocationSelector from "../LocationSelector";
 import ExperienceSelector from "./experience-skills/ExperienceSelector";
-
-// --- 1. Import BOTH of your existing components ---
 import ClientInformationFields from "./client-details/ClientInformationFields"; 
-import BudgetField from "./client-details/BudgetField"; // Add this import
+import BudgetField from "./client-details/BudgetField";
 
-// This interface combines all the fields for the step.
+// The interface is updated to include hiringMode
 interface ExternalJobInfoData {
   clientName: string;
   pointOfContact: string;
@@ -18,6 +16,7 @@ interface ExternalJobInfoData {
   clientBudget: string;
   currency_type: string;
   budget_type: string;
+  hiringMode: string; // <-- ADDED
   jobId: string;
   jobTitle: string;
   numberOfCandidates: number;
@@ -35,9 +34,18 @@ interface ExternalJobInfoStepProps {
 }
 
 const ExternalJobInfoStep = ({ data, onChange }: ExternalJobInfoStepProps) => {
-  // This component now becomes much simpler. It just passes data down.
   const handleFieldChange = (field: keyof ExternalJobInfoData, value: any) => {
     onChange({ ...data, [field]: value });
+  };
+
+  // Options for the new Hiring Mode dropdown
+  const getHiringModeOptions = () => {
+    return [
+      { value: "Full Time", label: "Full-Time" },
+      { value: "Contract", label: "Contract" },
+      { value: "Part Time", label: "Part-Time" },
+      { value: "Intern", label: "Intern" }
+    ];
   };
 
   return (
@@ -50,31 +58,36 @@ const ExternalJobInfoStep = ({ data, onChange }: ExternalJobInfoStepProps) => {
           <p className="text-sm text-gray-500">Enter details about the client for this job posting.</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
-          {/* Renders Client Name, End Client, and Point of Contact */}
           <ClientInformationFields
             data={data as any}
             onChange={onChange}
           />
-
-          {/* --- 2. Use the existing BudgetField component here --- */}
-          {/* It now correctly renders your custom budget input. */}
-          {/* <div className="col-span-full">
-            <BudgetField
-              data={data as any}
-              onChange={onChange}
-            />
-          </div> */}
         </div>
       </div>
 
-      {/* --- Job Information Section (No changes) --- */}
+      {/* --- Job Information Section --- */}
       <div className="space-y-6">
          <div>
-              <h3 className="text-lg text-purple-600 pfont-medium">Job Information</h3>
+              <h3 className="text-lg text-purple-600 font-medium">Job Information</h3>
               <p className="text-sm text-gray-500">Enter the basic information about the job posting.</p>
          </div>
          <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              {/* --- NEW HIRING MODE FIELD --- */}
+              <div className="space-y-1">
+                <Label htmlFor="hiringMode">Hiring Mode <span className="text-red-500">*</span></Label>
+                <Select 
+                  value={data.hiringMode || ""} 
+                  onValueChange={(value) => handleFieldChange('hiringMode', value)}
+                >
+                  <SelectTrigger id="hiringMode"><SelectValue placeholder="Select hiring mode" /></SelectTrigger>
+                  <SelectContent>
+                    {getHiringModeOptions().map(option => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* --- END NEW HIRING MODE FIELD --- */}
               <div className="space-y-2">
                 <Label htmlFor="jobId">Job ID <span className="text-red-500">*</span></Label>
                 <Input id="jobId" value={data.jobId || ''} onChange={(e) => handleFieldChange('jobId', e.target.value)} />
@@ -87,7 +100,7 @@ const ExternalJobInfoStep = ({ data, onChange }: ExternalJobInfoStepProps) => {
                 <Label htmlFor="numberOfCandidates">Number of Position <span className="text-red-500">*</span></Label>
                 <Input id="numberOfCandidates" type="number" value={data.numberOfCandidates || 1} onChange={(e) => handleFieldChange('numberOfCandidates', parseInt(e.target.value))} />
               </div>
-      <div className="space-y-2">
+              <div className="space-y-2">
                 <Label htmlFor="noticePeriod">Notice Period</Label>
                 <Select value={data.noticePeriod || ''} onValueChange={(value) => handleFieldChange('noticePeriod', value)}>
                     <SelectTrigger><SelectValue placeholder="Select notice period" /></SelectTrigger>
@@ -106,11 +119,11 @@ const ExternalJobInfoStep = ({ data, onChange }: ExternalJobInfoStepProps) => {
               </div>
 
                <div className="space-y-2 col-span-2">
-            <BudgetField
-              data={data as any}
-              onChange={onChange}
-            />
-          </div>
+                <BudgetField
+                  data={data as any}
+                  onChange={onChange}
+                />
+              </div>
          </div>
       </div>
       

@@ -13,6 +13,16 @@ export const ResumeAnalysisSection: React.FC<ResumeAnalysisSectionProps> = ({
   resumeAnalysis,
 }) => {
 
+  const sectionWise = Array.isArray(resumeAnalysis.section_wise_scoring)
+  ? resumeAnalysis.section_wise_scoring
+  : Object.entries(resumeAnalysis.section_wise_scoring || {}).map(
+      ([sectionName, data]) => ({
+        section: sectionName,
+        ...data,
+      })
+    );
+
+
   console.log("resumeAnalysis", resumeAnalysis);
   return (
     <div className="space-y-6">
@@ -134,7 +144,8 @@ export const ResumeAnalysisSection: React.FC<ResumeAnalysisSectionProps> = ({
         <CardContent className="p-4">
           <p className="text-sm font-medium">Section-Wise Scoring</p>
           <div className="space-y-4 mt-2">
-            {resumeAnalysis.section_wise_scoring.map((section, index) => (
+            {sectionWise.map((section, index) => (
+
               <div key={index} className="border rounded-lg p-4 bg-gray-50">
                 <p className="text-sm font-medium">
                   {section.section} (Weightage: {section.weightage}%)

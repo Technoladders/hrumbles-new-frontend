@@ -23,8 +23,48 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { toast } from "@/components/ui/use-toast";
 import { useSelector } from "react-redux";
+import { toast } from "sonner"; 
+// --- NEW IMPORT ---
+import { CandidateFormData } from "@/components/jobs/job/candidate/AddCandidateDrawer"; 
+
+
+
+const transformAnalysisToFormData = (
+  analysis: ParsedCandidateProfile,
+  talentPoolCandidate?: { resume_path?: string }
+): Partial<CandidateFormData> => {
+    if (!analysis) { // Safety check
+        toast.error("Analysis data is missing.");
+        return {};
+    }
+    const [firstName, ...lastNameParts] = (analysis.candidate_name || "").split(" ");
+    const lastName = lastNameParts.join(" ");
+    const totalExperience = analysis.experience_years ? parseInt(analysis.experience_years, 10) : undefined;
+console.log("analysis", analysis)
+    return {
+        firstName: firstName || "",
+        lastName: lastName || "",
+        email: analysis.email || "",
+        phone: "", // Leave blank for manual entry
+        currentLocation: analysis.location || "",
+        preferredLocations: [],
+        totalExperience: isNaN(totalExperience) ? undefined : totalExperience,
+        totalExperienceMonths: 0,
+        resume: talentPoolCandidate?.resume_path 
+            || analysis.resume_url 
+            || null,
+        skills: analysis.top_skills?.map(skill => ({
+            name: skill,
+            rating: 0,
+            experienceYears: 0,
+            experienceMonths: 0,
+        })) || [],
+        linkedInId: analysis.linkedin || "",
+        currentSalary: undefined,
+        expectedSalary: undefined,
+    };
+};
 
 const ResumeAnalysisDetailView = () => {
   const { jobId, candidateId } = useParams<{ jobId: string, candidateId: string }>();
@@ -113,86 +153,29 @@ const ResumeAnalysisDetailView = () => {
     const currentJob = jobs?.find((job) => job.id === analysis?.job_id); // Compare with hr_jobs.id (UUID)
     const otherJobs = jobs?.filter((job) => job.id !== analysis?.job_id) || [];
    
-    // Mutation to assign candidate to a job
-const assignJobMutation = useMutation({
-  mutationFn: async (jobId: string) => {
-    const appliedFrom = user?.user_metadata
-      ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
-      : 'Unknown';
-    const createdBy = user?.id;
-
-   
-    const isTalentContext = !!talentId;
-
-    const payload: any = {
-      job_id: jobId, // UUID from hr_jobs.id
-      name: analysis?.candidate_name || 'Unknown Candidate', // Mandatory
-      email: analysis?.email || null,
-      github: analysis?.github || null,
-      linkedin: analysis?.linkedin || null,
-      skills: analysis?.top_skills || [], // text[] from top_skills
-      overall_score: analysis?.overall_score || null,
-      applied_from: appliedFrom,
-      created_by: createdBy,
-      has_validated_resume: false,
-      main_status_id: '0dcd262f-f307-4179-ac79-d7465c51a9a0',
-      sub_status_id: 'aaebf9b9-58eb-498c-8b87-1d2c5b1d1e54',
-      organization_id: organization_id, // Set to organization_id
-    };
-
-  if (isTalentContext) {
-      payload.talent_id = talentId;
-      payload.candidate_id = null;
-       if (talentPoolCandidate?.resume_path) {
-          payload.resume_url = talentPoolCandidate.resume_path;
-        }
-    } else {
-      payload.candidate_id = null;
-      payload.talent_id = null;
+const handleProceedWithAssignment = () => {
+    if (!selectedJobId) {
+      toast.error("Please select a job to assign the candidate to.");
+      return;
+    }
+    if (!analysis) {
+      toast.error("Analysis data is missing.");
+      return;
     }
 
-    console.log('Inserting into hr_job_candidates:', JSON.stringify(payload, null, 2));
+    // 1. Transform the analysis data
+    const formData = transformAnalysisToFormData(analysis, talentPoolCandidate);
+    
+    // 2. Save the data to sessionStorage. The key is important.
+    sessionStorage.setItem('aiCandidateForFinalize', JSON.stringify(formData));
 
-    const { error } = await supabase.from('hr_job_candidates').insert(payload);
-
-    if (error) {
-      if (error.code === '23505') {
-        throw new Error('Candidate is already assigned to this job');
-      }
-      if (error.code === '23503') {
-        throw new Error('Invalid Job ID or Talent ID not found in talent pool');
-      }
-      throw error;
-    }
-
-    return { jobId };
-  },
-  onSuccess: (data) => {
-     const assignedJobId = data.jobId;
-    toast({
-      title: 'Success',
-      description: 'Candidate assigned to job successfully',
-    });
+    // 3. Close the modal and navigate to the selected job's page
     setIsAssignModalOpen(false);
-    setOpenCombobox(false);
-    queryClient.invalidateQueries({ queryKey: ['job-candidates', assignedJobId] });
-      queryClient.invalidateQueries({ queryKey: ['job', assignedJobId] });
-     navigate(`/jobs/${assignedJobId}`);
-  },
-  onError: (error: any) => {
-    toast({
-      title: 'Error',
-      description: error.message || 'Failed to assign candidate to job',
-      variant: 'destructive',
-    });
-  },
-});
+    toast.info("Redirecting to job page to finalize candidate details...");
+    navigate(`/jobs/${selectedJobId}`);
+  };
    
-    const handleAssignJob = () => {
-      if (selectedJobId) {
-        assignJobMutation.mutate(selectedJobId);
-      }
-    };
+
 
   if (isLoading) {
     return (
@@ -241,10 +224,7 @@ const assignJobMutation = useMutation({
                 <p className="text-lg font-semibold text-purple-800">Overall Score</p>
                 <p className="text-2xl font-bold text-purple-700">{analysis.overall_score}%</p>
               </div>
-              <Button
-                onClick={() => setIsAssignModalOpen(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white"
-              >
+               <Button onClick={() => setIsAssignModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white">
                 Assign to Job
               </Button>
             </div>
@@ -482,12 +462,12 @@ const assignJobMutation = useMutation({
         Cancel
       </Button>
       <Button
-        onClick={handleAssignJob}
-        disabled={!selectedJobId || assignJobMutation.isPending}
-        className="bg-purple-600 hover:bg-purple-700"
-      >
-        {assignJobMutation.isPending ? "Assigning..." : "Assign"}
-      </Button>
+                  onClick={handleProceedWithAssignment}
+                  disabled={!selectedJobId || isJobsLoading} 
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  Proceed to Add
+                </Button>
     </DialogFooter>
   </DialogContent>
 </Dialog>

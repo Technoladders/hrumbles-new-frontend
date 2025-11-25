@@ -3,8 +3,9 @@ import { useSelector } from "react-redux";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Filter, X, Zap, Mail, User } from "lucide-react";
+import { Filter, X, Zap, Mail, User, Search } from "lucide-react";
 import CandidatesList from "../CandidatesList";
 import { Candidate } from "@/lib/types";
 import StatusSettings from "@/pages/jobs/StatusSettings";
@@ -48,6 +49,7 @@ const CandidatesTabsSection = ({
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [localCandidates, setLocalCandidates] = useState<Candidate[]>([]);
   const [candidateFilter, setCandidateFilter] = useState<"All" | "Yours">("All");
+    const [searchTerm, setSearchTerm] = useState("");
   
   // --- ADDED: State for the new score filter ---
   const [scoreFilter, setScoreFilter] = useState("all");
@@ -95,7 +97,7 @@ const CandidatesTabsSection = ({
         <div className="relative z-10">
           <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
             {/* Score Filter */}
-            <div className="flex-shrink-0 order-1 w-full sm:w-[180px] min-w-0 overflow-hidden">
+            <div className="flex-shrink-0 order-3 w-full sm:w-[180px] min-w-0 overflow-hidden">
               <Select value={scoreFilter} onValueChange={setScoreFilter}>
                 <SelectTrigger className="group w-full rounded-full justify-start h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 hover:text-white shadow-inner text-sm relative z-0">
                   <Filter size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
@@ -129,6 +131,19 @@ const CandidatesTabsSection = ({
   </div>
 )}
 
+<div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] w-full sm:w-auto">
+              <Search
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                size={18}
+              />
+              <Input
+                placeholder="Search by Name, Email, or Phone"
+                className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
             {/* Bulk Share Button (Conditional) */}
             {(scoreFilter === 'shortlisted' || scoreFilter === 'not_shortlisted') && (
               <Tooltip>
@@ -137,7 +152,7 @@ const CandidatesTabsSection = ({
                     variant="outline" 
                     onClick={handleBulkShareClick} 
                     size="sm" 
-                    className="flex-shrink-0 order-3 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500"
+                    className="flex-shrink-0 order-5 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500"
                   >
                     <Mail className="w-4 h-4 mr-2" /> 
                     Send Mail to All
@@ -175,7 +190,7 @@ const CandidatesTabsSection = ({
                     onClick={() => setShowStatusDialog(true)} 
                     size="sm" 
                     variant="outline"
-                    className="flex-shrink-0 order-5 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500"
+                    className="flex-shrink-0 order-6 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500"
                   >
                     <Filter size={16} className="mr-2" />
                     Status Settings
@@ -197,6 +212,7 @@ const CandidatesTabsSection = ({
           onRefresh={fetchCandidates}
           scoreFilter={scoreFilter} // Pass the filter down
           candidateFilter={candidateFilter}
+          searchTerm={searchTerm}
         />
 
         <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
