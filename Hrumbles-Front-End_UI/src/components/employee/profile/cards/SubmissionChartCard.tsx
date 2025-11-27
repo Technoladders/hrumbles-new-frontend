@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { BarChart2, Users } from "lucide-react";
 import { ComposedChart, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { MiniDateRangePicker } from "@/components/ui/MiniDateRangePicker";
+import { EnhancedDateRangeSelector } from "@/components/ui/EnhancedDateRangeSelector";
 
 interface CombinedChartCardProps {
   employeeId: string;
@@ -210,9 +210,9 @@ export const CombinedSubmissionOnboardingChart: React.FC<CombinedChartCardProps>
     </TabsList>
   </Tabs>
 </div>
-           <MiniDateRangePicker
-              dateRange={dateRange}
-              onDateRangeChange={setDateRange}
+           <EnhancedDateRangeSelector
+              value={dateRange}
+              onChange={setDateRange}
               onApply={() => {}}
             />
         </div>

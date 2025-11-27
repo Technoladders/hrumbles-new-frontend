@@ -20,8 +20,6 @@ import { CgOrganisation } from "react-icons/cg";
 
 import { BarChart3, TrendingUp, LayoutDashboard } from 'lucide-react';
 
-
-
 const ITECH_ORGANIZATION_ID = [
   "1961d419-1272-4371-8dc7-63a4ec71be83",
   "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
@@ -29,6 +27,14 @@ const ITECH_ORGANIZATION_ID = [
 const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
 const DEMO_ORGANIZATION_ID = "53989f03-bdc9-439a-901c-45b274eff506";
 const RECRUITMENT_FIRM_ID = "87fd4bb2-dbaf-4775-954a-eb82f70ac961";
+
+// Helper function to filter items
+const filterRestrictedItems = (items, isPurelyPermanentOrg) => {
+  if (!isPurelyPermanentOrg) return items;
+  const restrictedLabels = ["Bench Pool", "Projects"];
+  return items.filter(item => !restrictedLabels.includes(item.label));
+};
+
 
 // --- START: organization_superadmin categorization logic ---
 
@@ -96,7 +102,7 @@ const iTechOrgSuperAdminMenu = [
 const demoOrgSuperAdminMenu = [
     {
         title: "HIRING SUITE",
-        icon: MdPeopleAlt, // Using the same icon for consistency
+        icon: MdPeopleAlt, 
         items: [
            { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
   { icon: FiUsers, label: "Employees", path: "/employee" },
@@ -136,14 +142,14 @@ const demoOrgSuperAdminMenu = [
     },
     {
         title: "PROJECT SUITE",
-        icon: CgOrganisation, // Using the same icon for consistency
+        icon: CgOrganisation, 
         items: [  { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" }, 
         ],
     },
     {
         title: "VERIFICATION SUITE",
-        icon: BsShieldCheck, // Using the same icon for consistency
+        icon: BsShieldCheck, 
         items: [
             { icon: LuUserSearch, label: "Verification", path: "/all-candidates" },
         ],
@@ -153,7 +159,7 @@ const demoOrgSuperAdminMenu = [
 const recruitmentFirmOrgSuperAdminMenu = [
     {
         title: "HIRING SUITE",
-        icon: MdPeopleAlt, // Using the same icon for consistency
+        icon: MdPeopleAlt, 
         items: [
            { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
   { icon: FiUsers, label: "Employees", path: "/employee" },
@@ -191,14 +197,14 @@ const recruitmentFirmOrgSuperAdminMenu = [
     },
     {
         title: "PROJECT SUITE",
-        icon: CgOrganisation, // Using the same icon for consistency
+        icon: CgOrganisation, 
         items: [  { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" }, 
         ],
     },
     {
         title: "VERIFICATION SUITE",
-        icon: BsShieldCheck, // Using the same icon for consistency
+        icon: BsShieldCheck, 
         items: [
             { icon: LuUserSearch, label: "Verification", path: "/all-candidates" },
         ],
@@ -208,7 +214,7 @@ const recruitmentFirmOrgSuperAdminMenu = [
 const AscendionOrgSuperAdminMenu = [
     {
         title: "HIRING SUITE",
-        icon: MdPeopleAlt, // Using the same icon for consistency
+        icon: MdPeopleAlt, 
         items: [
            { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
            
@@ -220,7 +226,7 @@ const AscendionOrgSuperAdminMenu = [
     },
     {
         title: "VERIFICATION SUITE",
-        icon: BsShieldCheck, // Using the same icon for consistency
+        icon: BsShieldCheck, 
         items: [
             { icon: LuUserSearch, label: "Verification", path: "/all-candidates" },
         ],
@@ -243,33 +249,33 @@ const hrSuiteItems = orgSuperAdminAllItems.filter(
 );
 
 // 4. Structure the final menu data with categories AND ICONS
-const categorizedOrgSuperAdminMenu = [
+const getCategorizedOrgSuperAdminMenu = (isPurelyPermanentOrg) => [
     {
         title: "HIRING SUITE",
         icon: MdPeopleAlt,
-        items: hrSuiteItems,
+        items: filterRestrictedItems(hrSuiteItems, isPurelyPermanentOrg),
     },
     {
         title: "PROJECT SUITE",
         icon: CgOrganisation,
-        items: projectSuiteItems,
+        items: filterRestrictedItems(projectSuiteItems, isPurelyPermanentOrg),
     },
     {
         title: "VERIFICATION SUITE",
         icon: BsShieldCheck,
-        items: verificationSuiteItems,
+        items: filterRestrictedItems(verificationSuiteItems, isPurelyPermanentOrg),
     },
     {
         title: "SALES SUITE",
         icon: RiCustomerService2Fill,
-        items: salesSuiteItems,
+        items: filterRestrictedItems(salesSuiteItems, isPurelyPermanentOrg),
     },
     {
         title: "FINANCE SUITE",
         icon: MdOutlineAccountBalance,
-        items: financeSuiteItems,
+        items: filterRestrictedItems(financeSuiteItems, isPurelyPermanentOrg),
     }
-];
+].filter(suite => suite.items.length > 0); // Remove empty suites
 // --- END: organization_superadmin logic ---
 
 
@@ -325,17 +331,20 @@ const adminSalesSuiteLabels = ["Companies", "People", "Lists", "Kanban"];
 const adminFinanceSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll"];
 
 // 3. Create a function to generate the categorized menu for an Admin
-const createCategorizedAdminMenu = (departmentName) => {
+const createCategorizedAdminMenu = (departmentName, isPurelyPermanentOrg) => {
     // A. Filter the master list to get only items visible to this department
     const visibleItems = adminAllItems.filter(item =>
         !item.department || item.department === departmentName
     );
 
+    // Apply strict filtering
+    const filteredVisibleItems = filterRestrictedItems(visibleItems, isPurelyPermanentOrg);
+
     // B. Group the visible items into their respective suites
-    const hrItems = visibleItems.filter(item => adminHrSuiteLabels.includes(item.label));
-    const projectItems = visibleItems.filter(item => adminProjectSuiteLabels.includes(item.label));
-    const salesItems = visibleItems.filter(item => adminSalesSuiteLabels.includes(item.label));
-    const financeItems = visibleItems.filter(item => adminFinanceSuiteLabels.includes(item.label));
+    const hrItems = filteredVisibleItems.filter(item => adminHrSuiteLabels.includes(item.label));
+    const projectItems = filteredVisibleItems.filter(item => adminProjectSuiteLabels.includes(item.label));
+    const salesItems = filteredVisibleItems.filter(item => adminSalesSuiteLabels.includes(item.label));
+    const financeItems = filteredVisibleItems.filter(item => adminFinanceSuiteLabels.includes(item.label));
 
     // C. Build the final categorized menu, only including suites that have items
     const categorizedMenu = [];
@@ -392,24 +401,38 @@ export const menuItemsByRole = {
   },
     { icon: FiSettings, label: "Settings", path: "/settings" },
   ],
-organization_superadmin: (organizationId, organization) => {
+organization_superadmin: (organizationId, organization, isPurelyPermanentOrg) => {
 
    if (organization.is_recruitment_firm) {
-      return recruitmentFirmOrgSuperAdminMenu;
+      // Need to apply filter to the predefined array
+      const hireSuite = recruitmentFirmOrgSuperAdminMenu.find(s => s.title === "HIRING SUITE");
+      if (hireSuite) hireSuite.items = filterRestrictedItems(hireSuite.items, isPurelyPermanentOrg);
+      
+      const projectSuite = recruitmentFirmOrgSuperAdminMenu.find(s => s.title === "PROJECT SUITE");
+      if (projectSuite) projectSuite.items = filterRestrictedItems(projectSuite.items, isPurelyPermanentOrg);
+
+      return recruitmentFirmOrgSuperAdminMenu.filter(suite => suite.items.length > 0);
     }
    if (ITECH_ORGANIZATION_ID.includes(organizationId)) {
-      return iTechOrgSuperAdminMenu; // Return the simple menu for iTech
+      return filterRestrictedItems(iTechOrgSuperAdminMenu, isPurelyPermanentOrg); // Return the simple menu for iTech
     } else if (organizationId === ASCENDION_ORGANIZATION_ID) {
       return AscendionOrgSuperAdminMenu; // Return the simple menu for Ascendion
     }
     else if (organizationId === DEMO_ORGANIZATION_ID) {
-      return demoOrgSuperAdminMenu; // Return the simple menu for demo
+        // Apply logic to demo
+        const hireSuite = demoOrgSuperAdminMenu.find(s => s.title === "HIRING SUITE");
+        if(hireSuite) hireSuite.items = filterRestrictedItems(hireSuite.items, isPurelyPermanentOrg);
+
+        const projectSuite = demoOrgSuperAdminMenu.find(s => s.title === "PROJECT SUITE");
+        if(projectSuite) projectSuite.items = filterRestrictedItems(projectSuite.items, isPurelyPermanentOrg);
+
+      return demoOrgSuperAdminMenu.filter(suite => suite.items.length > 0); 
     }
    
-    return categorizedOrgSuperAdminMenu; // Return the standard suite menu for everyone else
+    return getCategorizedOrgSuperAdminMenu(isPurelyPermanentOrg); // Return the standard suite menu for everyone else
   },
-  admin: (departmentName) => createCategorizedAdminMenu(departmentName), // Use the new categorized function
-employee: (departmentName, designationName, userId) => {
+  admin: (departmentName, isPurelyPermanentOrg) => createCategorizedAdminMenu(departmentName, isPurelyPermanentOrg), // Use the new categorized function
+employee: (departmentName, designationName, userId, isPurelyPermanentOrg) => {
     // MODIFIED: Centralized definitions for menu item groups for reusability
 
     const SPECIAL_USER_ID = '00c22bbb-9781-44bc-9973-c53bd08c9da2';
@@ -428,12 +451,15 @@ employee: (departmentName, designationName, userId) => {
       { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
       { icon: AiOutlineProfile, label: "My Submission", path: "/my-submission" },
       { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
-  { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
+      { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
       { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", beta: true },
       { icon: GoGoal, label: "Goals", path: "/goalsview" },
       { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
     ];
     
+    // Filter hrSpecificItems
+    const filteredHrItems = filterRestrictedItems(hrSpecificItems, isPurelyPermanentOrg);
+
     const salesSuiteItems = [
       { icon: GoOrganization, label: "Companies", path: "/companies" },
       { icon: VscOrganization, label: "People", path: "/contacts" },
@@ -452,7 +478,7 @@ employee: (departmentName, designationName, userId) => {
           items: [
              // Manually order items for the suite view
             { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
-            ...hrSpecificItems,
+            ...filteredHrItems,
             ...coreEmployeeItems.filter(item => item.label !== "Dashboard") // Add rest of core items
           ],
         },
@@ -471,7 +497,7 @@ employee: (departmentName, designationName, userId) => {
 
     if (departmentName === "Human Resource") {
       // Insert HR-specific items after "Dashboard"
-      baseMenu.splice(1, 0, ...hrSpecificItems);
+      baseMenu.splice(1, 0, ...filteredHrItems);
     }
 
     if (departmentName === "Sales & Marketing" && designationName === "Consultant") {

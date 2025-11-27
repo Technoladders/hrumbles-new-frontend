@@ -24,6 +24,7 @@ import { ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
 import { menuItemsByRole } from "./SidebarMenuItem";
 import { ArrowRightFromLine, ArrowLeftToLine, BarChart3, TrendingUp } from 'lucide-react';
 import supabase from "../../config/supabaseClient";
+import { is } from "date-fns/locale";
 
 const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownToggle }) => {
   const { icon, label, path, dropdown } = item;
@@ -160,8 +161,9 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const organizationId = useSelector((state) => state.auth.organization_id);
 
     const [organizationDetails, setOrganizationDetails] = useState(null);
+     const [isPurelyPermanentOrg, setIsPurelyPermanentOrg] = useState(false);
 
-    console.log("organizationDetails", organizationDetails);
+    console.log("organizationDetails", isPurelyPermanentOrg);
 
   const [departmentName, setDepartmentName] = useState("Unknown Department");
   const [designationName, setDesignationName] = useState("Unknown Designation"); // New state for designation
@@ -209,17 +211,79 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   }, [role, organizationId]); // Re-run if role or organizationId changes
   // --- END: New useEffect ---
 
+  // --- START: Fetch Organization Details ---
+  useEffect(() => {
+    const fetchOrganizationDetails = async () => {
+      if (role === 'organization_superadmin' && organizationId) {
+        try {
+          const { data, error } = await supabase
+            .from('hr_organizations')
+            .select('id, is_recruitment_firm')
+            .eq('id', organizationId)
+            .single();
+
+          if (error) throw error;
+          setOrganizationDetails(data);
+        } catch (error) {
+          console.error("Error fetching organization details:", error.message);
+          setOrganizationDetails(null);
+        }
+      }
+    };
+    fetchOrganizationDetails();
+  }, [role, organizationId]);
+  // --- END: Fetch Organization Details ---
+
+  // --- START: Check Client Service Types ---
+  useEffect(() => {
+    const checkClientServiceTypes = async () => {
+      if (!organizationId) return;
+
+      try {
+        const { data: clients, error } = await supabase
+          .from('hr_clients')
+          .select('service_type')
+          .eq('organization_id', organizationId);
+
+        if (error) throw error;
+
+        if (clients && clients.length > 0) {
+          // Logic: Check if EVERY client has EXACTLY ["permanent"]
+          const allPermanent = clients.every(client => 
+            Array.isArray(client.service_type) &&
+            client.service_type.length === 1 &&
+            client.service_type[0] === 'permanent'
+          );
+          setIsPurelyPermanentOrg(allPermanent);
+        } else {
+          // If no clients, we don't restrict the menu (default behavior)
+          setIsPurelyPermanentOrg(false);
+        }
+
+      } catch (error) {
+        console.error("Error checking client service types:", error.message);
+        setIsPurelyPermanentOrg(false);
+      }
+    };
+
+    // Only run for roles that see these menus
+    if (organizationId) {
+        checkClientServiceTypes();
+    }
+  }, [organizationId]);
+  // --- END: Check Client Service Types ---
+
   const menuConfig = (() => {
     const menuSource = menuItemsByRole[role];
     if (!menuSource) return [];
 
     switch (role) {
       case 'organization_superadmin':
-       return organizationDetails ? menuSource(organizationId ,organizationDetails) : [];
+       return organizationDetails ? menuSource(organizationId ,organizationDetails, isPurelyPermanentOrg) : [];
       case 'admin':
-        return menuSource(departmentName);
+        return menuSource(departmentName, isPurelyPermanentOrg);
       case 'employee':
-        return menuSource(departmentName, designationName, user?.id);
+        return menuSource(departmentName, designationName, user?.id, isPurelyPermanentOrg);
       default:
         return menuSource;
     }

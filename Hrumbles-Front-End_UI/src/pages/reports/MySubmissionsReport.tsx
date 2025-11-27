@@ -259,8 +259,9 @@ const [recruiterFilter, setRecruiterFilter] = useState<string[]>([]);
       setIsLoading(true);
       setError(null);
      try {
+    // 1. ADDED 'email' to the selectFields
    const selectFields = `
-    id, name, created_at, updated_at, main_status_id, sub_status_id, 
+    id, name, email, created_at, updated_at, main_status_id, sub_status_id, 
     current_salary, expected_salary, location, notice_period, overall_score, 
     job_id, interview_date, interview_time, interview_feedback, metadata,
     job:hr_jobs!hr_job_candidates_job_id_fkey(title, client_details, job_type, job_id),
@@ -289,7 +290,44 @@ const [recruiterFilter, setRecruiterFilter] = useState<string[]>([]);
         if (candidatesResponse.error) throw candidatesResponse.error;
         if (statusesResponse.error) throw statusesResponse.error;
         
-const formattedCandidates: Candidate[] = candidatesResponse.data.map((c: any) => {
+        // --- FALLBACK LOGIC FOR AI SCORES ---
+        const rawCandidates = candidatesResponse.data || [];
+        
+        // Find candidates who do NOT have a score in candidate_resume_analysis but DO have an email
+        const fallbackEmails = [
+            ...new Set(
+                rawCandidates
+                .filter((c: any) => 
+                    (!c.candidate_resume_analysis || c.candidate_resume_analysis.length === 0) && c.email
+                )
+                .map((c: any) => c.email)
+            )
+        ];
+
+        const fallbackScoreMap = new Map<string, number>();
+
+        if (fallbackEmails.length > 0) {
+            const { data: fallbackResults, error: fallbackError } = await supabase
+                .from("resume_analysis")
+                .select("email, overall_score, job_id")
+                .eq("organization_id", organizationId)
+                .in("email", fallbackEmails); // Optimization: Filter by found emails
+
+            if (!fallbackError && fallbackResults) {
+                // Map by Email + JobID because a candidate can apply to multiple jobs
+                fallbackResults.forEach(item => {
+                    if (item.email && item.job_id) {
+                        fallbackScoreMap.set(`${item.email}_${item.job_id}`, item.overall_score);
+                    }
+                });
+            } else if (fallbackError) {
+                console.error("Error fetching fallback scores:", fallbackError);
+            }
+        }
+        // -------------------------------------
+
+
+const formattedCandidates: Candidate[] = rawCandidates.map((c: any) => {
     const combineDateTime = (dateStr: string, timeStr: string): string | null => {
         if (!dateStr || !timeStr) return null;
         const combined = new Date(`${dateStr}T${timeStr}`);
@@ -300,11 +338,22 @@ const formattedCandidates: Candidate[] = candidatesResponse.data.map((c: any) =>
     const scheduleDateTime = combineDateTime(c.interview_date, c.interview_time);
     const metadata = c.metadata || {};
 
-                const analysisRecord = c.candidate_resume_analysis && c.candidate_resume_analysis.length > 0
+            // 1. Try Primary Source
+            let overallScore = null;
+            const primaryRecord = c.candidate_resume_analysis && c.candidate_resume_analysis.length > 0
                 ? c.candidate_resume_analysis[0]
                 : null;
             
-            const overallScore = analysisRecord ? analysisRecord.overall_score : null;
+            if (primaryRecord) {
+                overallScore = primaryRecord.overall_score;
+            } 
+            // 2. Try Fallback Source (if primary is missing)
+            else if (c.email && c.job_id) {
+                const fallbackKey = `${c.email}_${c.job_id}`;
+                if (fallbackScoreMap.has(fallbackKey)) {
+                    overallScore = fallbackScoreMap.get(fallbackKey);
+                }
+            }
 
     return {
         id: c.id,
@@ -323,7 +372,7 @@ const formattedCandidates: Candidate[] = candidatesResponse.data.map((c: any) =>
         expected_salary: c.expected_salary ?? metadata.expectedSalary,
         location: c.location ?? metadata.currentLocation,
         notice_period: c.notice_period ?? metadata.noticePeriod,
-        overall_score: overallScore, // <-- FIX APPLIED HERE
+        overall_score: overallScore, // <-- UPDATED LOGIC HERE
         schedule_date_time: scheduleDateTime,
         rejection_reason: c.interview_feedback,
     };

@@ -140,21 +140,7 @@ useEffect(() => {
           } else {
             const { data, error: candidateError } = await supabase
   .from("hr_job_candidates")
-  .select(`
-    id, 
-    name, 
-    email, 
-    phone, 
-    experience, 
-    status, 
-    metadata, 
-    appliedDate, 
-    resume, 
-    skill_ratings, 
-    consent_status,
-    current_salary,
-    expected_salary
-  `) // <-- Replace "*" with this explicit list
+  .select(`*`) // <-- Replace "*" with this explicit list
   .eq("id", candidateId)
   .single();
 

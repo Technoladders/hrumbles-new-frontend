@@ -887,7 +887,7 @@ return (
 {/* Basic Information Card */}
           <Card className="rounded-2xl shadow-lg border-none relative">
             <div className="absolute top-4 right-4">
-             <Button onClick={() => navigate(`/employee/${employee.id}`)} variant="outline" size="icon" className="bg-gray-100 dark:bg-gray-700 rounded-full h-8 w-8 hover:bg-gray-200">
+             <Button onClick={() => navigate(`/profile/edit/${employee.id}`)} variant="outline" size="icon" className="bg-gray-100 dark:bg-gray-700 rounded-full h-8 w-8 hover:bg-gray-200">
                 <Pencil className="h-4 w-4 text-gray-700 dark:text-gray-300" />
               </Button>
             </div>
