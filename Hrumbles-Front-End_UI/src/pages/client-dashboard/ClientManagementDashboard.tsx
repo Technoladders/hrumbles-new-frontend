@@ -340,7 +340,7 @@ const calculateEmployeeRevenue = (employee: Employee, projectId: string, clientC
     const totalPages = Math.ceil(processedClients.length / itemsPerPage);
 
     // --- Event Handlers ---
-    const handleClientClick = (clientName: string) => navigate(`/client-dashboard/${encodeURIComponent(clientName)}/candidates`);
+    const handleClientClick = (clientName: string) => navigate(`/clients/${encodeURIComponent(clientName)}/candidates`);
     const handleClientAdded = () => fetchAllData();
     const getStatusBadgeColor = (status: string) => {
         switch (status?.toLowerCase()) {

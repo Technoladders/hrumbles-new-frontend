@@ -663,7 +663,7 @@ const fetchMetrics = async () => {
   };
 
   const handleClientClick = (clientName: string) => {
-    navigate(`/client-dashboard/${encodeURIComponent(clientName)}/candidates`);
+    navigate(`/clients/${encodeURIComponent(clientName)}/candidates`);
   };
 
   const handleClientAdded = () => {

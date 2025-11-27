@@ -360,7 +360,7 @@ const ClientMetricsDashboard = () => {
   };
 
   const goBack = () => {
-    navigate("/client-dashboard");
+    navigate("/clients");
   };
 
   useEffect(() => {

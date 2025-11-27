@@ -971,7 +971,7 @@ console.log("return data", paginatedData)
                     <TableRow key={candidate!.id} className="hover:bg-gray-50 transition group">
                         {/* CHANGE: Added group-hover:bg-gray-50 and shadow */}
                         <TableCell className="sticky left-0 bg-white group-hover:bg-gray-50 z-10 font-medium text-gray-800 px-4 py-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                            <Link to={ candidate!.job_id ? `/employee/${candidate!.id}/${candidate!.job_id}` : `/jobs/unassigned/candidate/${candidate!.id}/bgv` } className="text-indigo-600 hover:underline hover:text-indigo-800" >
+                            <Link to={ candidate!.job_id ? `/jobs/candidateprofile/${candidate!.id}/${candidate!.job_id}` : `/jobs/unassigned/candidate/${candidate!.id}/bgv` } className="text-indigo-600 hover:underline hover:text-indigo-800" >
                                 {candidate!.name}
                             </Link>
                         </TableCell>

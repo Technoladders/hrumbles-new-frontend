@@ -786,7 +786,7 @@ return (
                                     
                                     {/* Candidate */}
 <div className="col-span-full lg:col-span-3">
-    <Link to={ candidate!.job_id ? `/employee/${candidate!.id}/${candidate!.job_id}` : `/jobs/unassigned/candidate/${candidate!.id}/bgv` } className="font-semibold text-indigo-600 hover:underline truncate" title={candidate.name}>
+    <Link to={ candidate!.job_id ? `/jobs/candidateprofile/${candidate!.id}/${candidate!.job_id}` : `/jobs/unassigned/candidate/${candidate!.id}/bgv` } className="font-semibold text-indigo-600 hover:underline truncate" title={candidate.name}>
         {candidate.name}
     </Link>
     {/* MODIFIED: Added min-w-0 to the flex container to allow shrinking */}

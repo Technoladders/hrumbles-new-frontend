@@ -13,6 +13,8 @@ import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { GreetingSlide, EventsSlide, CelebrationsSlide } from './DashboardCarouselSlides';
 import { DashboardHeroCarousel } from './DashboardHeroCarousel';
 import CombinedSubmissionOnboardingChart from '@/components/employee/profile/cards/SubmissionChartCard';
+import { ClientWorkflowChart } from '@/components/dashboard/chart/ClientWorkflowChart';
+import { OrgGoalDashboardChart } from "@/components/dashboard/chart/OrgGoalDashboardChart";
 
 
 // --- Reusable Component for Chart Cards ---
@@ -313,12 +315,25 @@ const HiringSuiteDashboard = ({ employeeId }: { employeeId: string; role: string
         
         </div>
       </div>
-        <div className="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-1 gap-4 sm:gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-1 gap-4 sm:gap-6">
+
+      <div className="w-full  mt-5">
+                <ClientWorkflowChart organizationId={organizationId} />
+                {/* <OnboardingChartCard employeeId={employeeId} role={role} /> */}
+              </div>
+              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-1 gap-1 sm:gap-1">
 
       <div className="w-full h-[300px] md:h-[325px] lg:h-[300px] mt-5">
                 <SubmissionChartCard employeeId={employeeId} role={role} organizationId={organizationId} />
                 {/* <OnboardingChartCard employeeId={employeeId} role={role} /> */}
               </div>
+
+               <div className="w-full h-[300px] md:h-[325px] lg:h-[300px] ">
+        <OrgGoalDashboardChart organizationId={organizationId} />
+    <div className="h-8 lg:h-12" />
+
+    </div>
               </div>
     </div>
   );

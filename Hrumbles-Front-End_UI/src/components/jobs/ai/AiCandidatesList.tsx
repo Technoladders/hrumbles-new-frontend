@@ -191,6 +191,7 @@ export const AiCandidatesList = ({ job, candidates, onCandidateUpdate }: Props) 
       setActiveTab(mainStatuses[0].id);
     }
     
+    
     // Check for existing analysis data when candidates load
     const checkAnalysisData = async () => {
       const { data } = await supabase

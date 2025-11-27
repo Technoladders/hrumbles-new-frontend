@@ -954,7 +954,7 @@ console.log("pagiodkmndndu", assignEmployee)
     if (calculationMode === "actual" && dateRange.startDate && dateRange.endDate) {
       // Pass projectId, employeeId, and the current dateRange to the new page
       navigate(
-        `/project/${id}/employee/${employee.assign_employee}/details?startDate=${dateRange.startDate.toISOString()}&endDate=${dateRange.endDate.toISOString()}`
+        `/projects/${id}/employee/${employee.assign_employee}/details?startDate=${dateRange.startDate.toISOString()}&endDate=${dateRange.endDate.toISOString()}`
       );
     }
   }}>

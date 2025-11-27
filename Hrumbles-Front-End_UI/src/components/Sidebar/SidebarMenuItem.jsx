@@ -51,7 +51,7 @@ const orgSuperAdminAllItems = [
             { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices",  },
             { icon: FaSackDollar, label: "Expenses", path: "/accounts/expenses",  },
             { icon: FiBriefcase, label: "Payroll", path: "/payroll",  },
-            { icon: FaFileLines, label: "Bank Statement", path: "/finance/bank-statement" },
+            { icon: FaFileLines, label: "Bank Statement", path: "/bank-statement" },
   {
     icon: TbCheckbox,
     label: "Approvals",
@@ -66,7 +66,7 @@ const orgSuperAdminAllItems = [
   { icon: GoOrganization, label: "Companies", path: "/companies" },
   { icon: VscOrganization, label: "People", path: "/contacts" },
   { icon: FiList, label: "Lists", path: "/lists" },
-  { icon: FaDropbox, label: "Kanban", path: "/contacts/kanban" },
+  { icon: FaDropbox, label: "Kanban", path: "/sales/kanban" },
   {
     icon: FiSettings,
     label: "Settings",
@@ -298,7 +298,7 @@ const adminAllItems = [
     { icon: GoOrganization, label: "Companies", path: "/companies", department: "Sales & Marketing" },
     { icon: VscOrganization, label: "People", path: "/contacts", department: "Sales & Marketing" },
     { icon: FiList, label: "Lists", path: "/lists", department: "Sales & Marketing" },
-    { icon: FaDropbox, label: "Kanban", path: "/contacts/kanban", department: "Sales & Marketing" },
+    { icon: FaDropbox, label: "Kanban", path: "/sales/kanban", department: "Sales & Marketing" },
             { icon: MdOutlineAccountBalance, label: "Finance", path: "/finance",  department: "Human Resource", },
   
             { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices",  department: "Human Resource", },
@@ -438,7 +438,7 @@ employee: (departmentName, designationName, userId) => {
       { icon: GoOrganization, label: "Companies", path: "/companies" },
       { icon: VscOrganization, label: "People", path: "/contacts" },
       { icon: FiList, label: "Lists", path: "/lists" },
-      { icon: RiCustomerService2Fill, label: "Kanban", path: "/contacts/kanban" }
+      { icon: RiCustomerService2Fill, label: "Kanban", path: "/sales/kanban" }
     ];
 
     // --- NEW: Logic for the special user to get a categorized/suite menu ---

@@ -27,8 +27,37 @@ import supabase from "../../config/supabaseClient";
 
 const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownToggle }) => {
   const { icon, label, path, dropdown } = item;
-  const isActive = location.pathname === path || (dropdown && dropdown.some(sub => location.pathname.startsWith(sub.path)));
+  // const isActive = location.pathname === path || (dropdown && dropdown.some(sub => location.pathname.startsWith(sub.path)));
   const isDropdownOpen = openDropdown === label;
+
+  const getIsActive = () => {
+    // 1. Base Logic: Handles exact matches and nested routes.
+    //    - Example: Activates "Employees" for "/employee" and "/employee/new".
+    //    - The (path !== '/') check prevents the root Dashboard from always being active.
+    if (location.pathname === path || (path !== '/' && location.pathname.startsWith(`${path}/`))) {
+      return true;
+    }
+
+    // 2. Special Case Logic: Handles non-nested routes that are conceptually related.
+    //    - Example: Activates "Jobs" for "/resume-analysis/..."
+    if (path === '/jobs') {
+      const jobRelatedPrefixes = ['/resume-analysis', '/jobstatuses'];
+      const employeeJobRouteRegex = /^\/jobs\/[^/]+\/[^/]+$/; // For /employee/:candidateId/:jobId
+
+      if (jobRelatedPrefixes.some(prefix => location.pathname.startsWith(prefix)) || employeeJobRouteRegex.test(location.pathname)) {
+        return true;
+      }
+    }
+
+    // 3. Dropdown Logic: Checks if any dropdown sub-item's path matches.
+    if (dropdown && dropdown.some(sub => location.pathname.startsWith(sub.path))) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const isActive = getIsActive();
 
   const hoverBg = "#b9b7f8ff";
   const activeBg = "#7B43F1";
@@ -198,17 +227,35 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
 
     const isCategorized = Array.isArray(menuConfig) && menuConfig.length > 0 && menuConfig[0].hasOwnProperty('title');
 
+// In NewSidebar.jsx
+
   const findSuiteForPath = (pathname) => {
     if (!isCategorized) return null;
     for (const suite of menuConfig) {
+      // === MODIFICATION START ===
       const hasMatchingItem = suite.items.some(
         item =>
-          item.path === pathname ||
+          // This logic now mirrors the `getIsActive` logic, understanding nested routes.
+          pathname === item.path ||
+          (item.path !== '/' && pathname.startsWith(`${item.path}/`)) ||
           (item.dropdown && item.dropdown.some(subItem => pathname.startsWith(subItem.path)))
       );
+      // === MODIFICATION END ===
+
       if (hasMatchingItem) return suite.title;
     }
-    return menuConfig[0]?.title || null;
+    
+    // Add special case for job-related routes that are not nested
+    const jobRelatedPrefixes = ['/resume-analysis', '/jobstatuses'];
+    const employeeJobRouteRegex = /^\/jobs\/[^/]+\/[^/]+$/;
+    
+    if (jobRelatedPrefixes.some(prefix => pathname.startsWith(prefix)) || employeeJobRouteRegex.test(pathname)) {
+        // Find the suite that contains the "Jobs" menu item
+        const hiringSuite = menuConfig.find(suite => suite.items.some(item => item.path === '/jobs'));
+        if (hiringSuite) return hiringSuite.title;
+    }
+
+    return null;
   };
 
   const getDefaultPathForSuite = (suiteTitle) => {

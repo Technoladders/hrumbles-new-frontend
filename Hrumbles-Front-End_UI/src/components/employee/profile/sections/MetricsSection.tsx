@@ -7,6 +7,8 @@ import { OnboardingChartCard } from "../cards/OnboardingChartCard";
 import { DashboardHeroCarousel } from "@/components/dashboard/DashboardHeroCarousel";
 import { QuickActionsCard } from "@/components/dashboard/QuickActionsCard";
 import CombinedSubmissionOnboardingChart from '@/components/employee/profile/cards/SubmissionChartCard';
+import { ClientWorkflowChart } from "@/components/dashboard/chart/ClientWorkflowChart";
+import { GoalPerformanceChart } from "@/components/dashboard/chart/GoalPerformanceChart";
 
 interface MetricsSectionProps {
   employeeId: string;
@@ -75,6 +77,24 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, depa
         </div>
         
       </div>
+
+      {showRecruitingWidgets && (
+        <div className="w-full h-[400px]"> {/* Increased height to 400px to match the new chart height */}
+          
+          {/* 
+             Pass the employeeId to filter by logged-in user.
+             If role is 'admin' and you want them to see EVERYTHING, 
+             you can conditionally pass employeeId based on role.
+             
+             Current logic: filtered for the specific user (recruiter).
+          */}
+          <ClientWorkflowChart 
+             organizationId={organizationId} 
+             employeeId={employeeId} 
+          />
+          
+        </div>
+      )}
       
       {/* ROW 3: Conditional Charts for HR/Admins */}
       {/* The charts will also correctly hide based on the new flag */}
@@ -84,6 +104,17 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, depa
           {/* <OnboardingChartCard employeeId={employeeId} role={role} /> */}
         </div>
       )}
+
+     
+  <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 mt-6">
+ 
+      <div className="h-[400px]">
+         <GoalPerformanceChart organizationId={organizationId} employeeId={employeeId} />
+    <div className="h-8 lg:h-12" />
+
+      </div>
+  </div>
+
     </div>
   );
 };

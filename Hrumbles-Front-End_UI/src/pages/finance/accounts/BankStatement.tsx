@@ -203,7 +203,7 @@ const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     <tr key={statement.id} className="border-b hover:bg-blue-50">
       <td className="px-4 py-4 text-sm font-medium text-blue-600 hover:underline">
         {/* This link to the detail page still works */}
-        <Link to={`/finance/accounts/${statement.id}`}>{statement.account_holder_name || '—'}</Link>
+        <Link to={`/bank-statement/accounts/${statement.id}`}>{statement.account_holder_name || '—'}</Link>
       </td>
       <td className="px-4 py-4 text-sm font-mono">{statement.account_number || '—'}</td>
       <td className="px-4 py-4 text-sm">{statement.bank_name || '—'}</td>

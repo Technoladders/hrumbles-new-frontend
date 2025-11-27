@@ -489,7 +489,7 @@ useEffect(() => {
                   const { candidate, statusName } = row;
                   return (
                     <TableRow key={candidate!.id} className="hover:bg-gray-50">
-                      <TableCell className="font-medium"><Link to={`/candidates/${candidate!.id}/${candidate!.job_id}`} className="text-purple-600 hover:underline">{candidate!.name}</Link></TableCell>
+                      <TableCell className="font-medium"><Link to={`/jobs/candidateprofile/${candidate!.id}/${candidate!.job_id}`} className="text-purple-600 hover:underline">{candidate!.name}</Link></TableCell>
                       <TableCell>
                         <StatusCell candidate={candidate!} statusName={statusName!} />
                       </TableCell>

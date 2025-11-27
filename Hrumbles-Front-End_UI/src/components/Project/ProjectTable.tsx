@@ -187,7 +187,7 @@ const ProjectTable = ({ projectFinancials, setAddProjectOpen, setEditingProject,
                 <tr key={project.id} className="hover:bg-gray-50 transition">
                   <td className="px-4 py-2">
                     <div className="flex flex-col">
-                      <Link to={`/project/${project.id}?client_id=${project.client_id}`} className="font-medium text-blue-600 hover:underline">
+                      <Link to={`/projects/${project.id}?client_id=${project.client_id}`} className="font-medium text-blue-600 hover:underline">
                         {project.name || "N/A"}
                       </Link>
                       <span className="text-xs text-gray-500">{project.hr_clients?.display_name || "N/A"}</span>
@@ -219,7 +219,7 @@ const ProjectTable = ({ projectFinancials, setAddProjectOpen, setEditingProject,
                   <td className="px-4 py-2">
                     <div className="flex space-x-1">
                       <TooltipProvider><Tooltip><TooltipTrigger asChild>
-                        <Link to={`/project/${project.id}?client_id=${project.client_id}`}>
+                        <Link to={`/projects/${project.id}?client_id=${project.client_id}`}>
                           <Button variant="ghost" size="icon" className="h-8 w-8"><Eye className="h-4 w-4" /></Button>
                         </Link>
                       </TooltipTrigger><TooltipContent><p>View Dashboard</p></TooltipContent></Tooltip></TooltipProvider>

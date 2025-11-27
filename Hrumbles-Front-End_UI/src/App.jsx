@@ -331,9 +331,9 @@ function AppContent() {
               
               <Route path="/projects" element={<ProjectManagement />} />
               <Route path="/client/:id" element={<ClientDashboard />} />
-              <Route path="/project/:id" element={<ProjectDashboard />} />
+              <Route path="/projects/:id" element={<ProjectDashboard />} />
               <Route
-                path="/project/:projectId/employee/:employeeId/details"
+                path="/projects/:projectId/employee/:employeeId/details"
                 element={<EmployeeProjectLogDetails />}
               />
 
@@ -351,7 +351,7 @@ function AppContent() {
               {/* Clients */}
               {/* Client Dashboard (New) */}
               <Route path="/clients" element={<ClientManagementDashboard />} />
-              <Route path="/client-dashboard/:clientName/candidates" element={<ClientNew />} />
+              <Route path="/clients/:clientName/candidates" element={<ClientNew />} />
               <Route path="/client-metrics" element={<ClientMetricsDashboard />} />
 
               {/* Goals */}
@@ -369,7 +369,7 @@ function AppContent() {
               <Route path="/jobs/:id/description" element={<JobDescription />} />
               <Route path="/jobs/edit/:id" element={<JobDescription />} />
               <Route path="/jobstatuses" element={<StatusSettings />} />
-              <Route path="/employee/:candidateId/:jobId" element={<EmployeeProfilePage />} />
+              <Route path="/jobs/candidateprofile/:candidateId/:jobId" element={<EmployeeProfilePage />} />
 
               <Route path="/jobs/:jobId/candidate/:candidateId/bgv" element={<CandidateBgvProfilePage />} />
               <Route path="/all-candidates" element={<AllCandidatesPage />} /> 
@@ -402,20 +402,20 @@ function AppContent() {
               <Route path="/payroll/:year/:month" element={<PayrollDetails />} />
               <Route path="/payroll/history/:year/:month" element={<PayrollHistoryDetails />} />
               <Route path="/payroll/terminated/:year/:month/:employeeId" element={<TerminatedEmployeesPayroll />} />
-              <Route path="/finance/bank-statement" element={<BankStatement />} />
-              <Route path="/finance/accounts/:statementId" element={<StatementDetailPage />} />
+              <Route path="/bank-statement" element={<BankStatement />} />
+              <Route path="/bank-statement/accounts/:statementId" element={<StatementDetailPage />} />
               <Route path="/accounts/reconciliation" element={<ReconciliationPage />} />
 
 
               {/* Sales Companies and Contacts */}
               <Route path="/companies" element={<CompaniesPage />} />
-              <Route path="/companies/file/:fileId" element={<CompaniesPage />} />
+              <Route path="/lists/file/:fileId" element={<CompaniesPage />} />
               <Route path="/contacts" element={<TanstackContactsPage />} />
-              <Route path="/contacts/kanban" element={<KanbanView />} />
+              <Route path="/sales/kanban" element={<KanbanView />} />
               <Route path="/companies/:id" element={<CompanyDetail />} />
               <Route path="/companies/:id/edit" element={<CompanyEdit />} />
               <Route path="/lists" element={<ListsPage />} />
-              <Route path="/contacts/file/:fileId" element={<TanstackContactsPage />} />
+              <Route path="/lists/file/:fileId" element={<TanstackContactsPage />} />
 
               {/* TimeTracker, Timesheet, Attendance and Leave */}
               {/* Employee routes */}

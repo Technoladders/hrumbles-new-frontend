@@ -122,7 +122,7 @@ const CandidatesTab: React.FC<CandidatesTabProps> = ({ candidates, loading, onUp
                     <tbody className="bg-white divide-y divide-gray-200">
                         {sortedCandidates.length > 0 ? sortedCandidates.map(c => (
                         <tr key={c.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm"><Link to={`/employee/${c.id}/${c.job_id}`} className="font-medium text-blue-600 hover:underline">{c.name}</Link></td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm"><Link to={`/jobs/candidateprofile/${c.id}/${c.job_id}`} className="font-medium text-blue-600 hover:underline">{c.name}</Link></td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm"><HiddenContactCell email={c.email} phone={c.phone} candidateId={c.id} /></td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm"><Link to={`/jobs/${c.job_id}`} className="font-medium text-blue-600 hover:underline">{c.job_title}</Link></td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm hidden lg:table-cell">{c.experience || "-"}</td>

@@ -125,7 +125,7 @@ useEffect(() => {
 
               return (
                 <Link
-                  to={`/employee/${interview.candidate_id}/${interview.job_id}`}>
+                  to={`/jobs/candidateprofile/${interview.candidate_id}/${interview.job_id}`}>
                 <div
                   key={index}
                   className={cn(
