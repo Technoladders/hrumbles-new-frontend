@@ -246,141 +246,167 @@ const StatusSettings: React.FC<StatusSettingsProps> = ({ onStatusChange }) => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-5 mt-5 h-90">
         <h2 className="text-2xl font-bold">Status Management</h2>
-        <div className="space-x-2">
-          <Button onClick={() => setIsModalOpen(true)}>Add Main Status</Button>
-          <Button onClick={() => setIsSubModalOpen(true)}>Add Sub Status</Button>
+ <div className="space-x-2">
+          <Button 
+            onClick={() => setIsModalOpen(true)}
+            className="bg-[#7731E8] hover:bg-[#6528cc] text-white rounded-full transition-colors shadow-md"
+          >
+            Add Main Status
+          </Button>
+          <Button 
+            onClick={() => setIsSubModalOpen(true)}
+            className="bg-[#7731E8] hover:bg-[#6528cc] text-white rounded-full transition-colors shadow-md"
+          >
+            Add Sub Status
+          </Button>
         </div>
       </div>
  
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="main">Main Statuses</TabsTrigger>
-          <TabsTrigger value="sub">Sub Statuses</TabsTrigger>
+   <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 p-1.5 shadow-inner mb-6">
+          <TabsTrigger 
+            value="main"
+            className="rounded-full px-6 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#7731E8] data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            Main Statuses
+          </TabsTrigger>
+          <TabsTrigger 
+            value="sub"
+            className="rounded-full px-6 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#7731E8] data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            Sub Statuses
+          </TabsTrigger>
         </TabsList>
        
-        <TabsContent value="main" >
-          <div className='max-h-[60vh] overflow-y-auto'>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Color</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Display Order</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody >
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-4">Loading...</TableCell>
+     <TabsContent value="main">
+          <div className='max-h-[60vh] overflow-y-auto rounded-xl border shadow-sm'>
+            <Table>
+              <TableHeader className="bg-gradient-to-r from-[#7731E8] to-violet-600">
+                <TableRow className="hover:bg-transparent border-none">
+                  <TableHead className="text-white font-bold">Name</TableHead>
+                  <TableHead className="text-white font-bold">Color</TableHead>
+                  <TableHead className="text-white font-bold">Description</TableHead>
+                  <TableHead className="text-white font-bold">Display Order</TableHead>
+                  <TableHead className="text-white font-bold text-right w-20 px-7 ">Actions</TableHead>
                 </TableRow>
-              ) : statuses.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-4">No statuses found</TableCell>
-                </TableRow>
-              ) : (
-                statuses.map((status) => (
-                  <TableRow key={status.id}>
-                    <TableCell className="font-medium">{status.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center">
-                        <div
-                          className="w-4 h-4 rounded-full mr-2"
-                          style={{ backgroundColor: status.color }}
-                        />
-                        {status.color}
-                      </div>
-                    </TableCell>
-                    <TableCell>{status.description || "N/A"}</TableCell>
-                    <TableCell>{status.display_order || 0}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditMainStatus(status)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteStatus(status.id)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-4">Loading...</TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-          </div>
-        </TabsContent>
-       
-        <TabsContent value="sub" >
-        <div className='max-h-[60vh] overflow-y-auto'>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Parent Status</TableHead>
-                <TableHead>Color</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Display Order</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody >
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-4">Loading...</TableCell>
-                </TableRow>
-              ) : (
-                statuses.flatMap(mainStatus =>
-                  mainStatus.subStatuses ? mainStatus.subStatuses.map(subStatus => (
-                    <TableRow key={subStatus.id}>
-                      <TableCell className="font-medium">{subStatus.name}</TableCell>
-                      <TableCell>{mainStatus.name}</TableCell>
+                ) : statuses.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-4">No statuses found</TableCell>
+                  </TableRow>
+                ) : (
+                  statuses.map((status) => (
+                    <TableRow key={status.id} className="hover:bg-gray-50 transition-colors">
+                      <TableCell className="font-medium">{status.name}</TableCell>
                       <TableCell>
                         <div className="flex items-center">
                           <div
-                            className="w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: subStatus.color }}
+                            className="w-4 h-4 rounded-full mr-2 border border-gray-200"
+                            style={{ backgroundColor: status.color }}
                           />
-                          {subStatus.color}
+                          {status.color}
                         </div>
                       </TableCell>
-                      <TableCell>{subStatus.description || "N/A"}</TableCell>
-                      <TableCell>{subStatus.display_order || 0}</TableCell>
+                      <TableCell>{status.description || "N/A"}</TableCell>
+                      <TableCell>{status.display_order || 0}</TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditSubStatus(subStatus)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteStatus(subStatus.id)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                        <div className="flex justify-end">
+                          <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-sm border border-slate-200">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-full text-slate-500 hover:bg-[#7731E8] hover:text-white transition-colors"
+                              onClick={() => handleEditMainStatus(status)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-full text-slate-500 hover:bg-red-600 hover:text-white transition-colors"
+                              onClick={() => handleDeleteStatus(status.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </div>
                       </TableCell>
                     </TableRow>
-                  )) : []
-                )
-              )}
-            </TableBody>
-          </Table>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+       
+       <TabsContent value="sub">
+          <div className='max-h-[60vh] overflow-y-auto rounded-xl border shadow-sm'>
+            <Table>
+              <TableHeader className="bg-gradient-to-r from-[#7731E8] to-violet-600">
+                <TableRow className="hover:bg-transparent border-none">
+                  <TableHead className="text-white font-bold">Name</TableHead>
+                  <TableHead className="text-white font-bold">Parent Status</TableHead>
+                  <TableHead className="text-white font-bold">Color</TableHead>
+                  <TableHead className="text-white font-bold">Description</TableHead>
+                  <TableHead className="text-white font-bold">Display Order</TableHead>
+                  <TableHead className="text-white font-bold w-20 px-7 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-4">Loading...</TableCell>
+                  </TableRow>
+                ) : (
+                  statuses.flatMap(mainStatus =>
+                    mainStatus.subStatuses ? mainStatus.subStatuses.map(subStatus => (
+                      <TableRow key={subStatus.id} className="hover:bg-gray-50 transition-colors">
+                        <TableCell className="font-medium">{subStatus.name}</TableCell>
+                        <TableCell>{mainStatus.name}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center">
+                            <div
+                              className="w-4 h-4 rounded-full mr-2 border border-gray-200"
+                              style={{ backgroundColor: subStatus.color }}
+                            />
+                            {subStatus.color}
+                          </div>
+                        </TableCell>
+                        <TableCell>{subStatus.description || "N/A"}</TableCell>
+                        <TableCell>{subStatus.display_order || 0}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end">
+                            <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-sm border border-slate-200">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 rounded-full text-slate-500 hover:bg-[#7731E8] hover:text-white transition-colors"
+                                onClick={() => handleEditSubStatus(subStatus)}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 rounded-full text-slate-500 hover:bg-red-600 hover:text-white transition-colors"
+                                onClick={() => handleDeleteStatus(subStatus.id)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )) : []
+                  )
+                )}
+              </TableBody>
+            </Table>
           </div>
         </TabsContent>
       </Tabs>

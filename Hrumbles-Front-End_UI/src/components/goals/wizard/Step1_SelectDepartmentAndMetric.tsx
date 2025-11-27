@@ -10,9 +10,10 @@ import { SectorType } from '@/types/goal';
 import { cn } from '@/lib/utils';
 import { AUTOMATION_SOURCES } from '@/lib/goalAutomationConfig';
 
+// CHANGE 1: Renamed onClose to onCancel in the interface
 interface Step1Props {
   onNext: (department: string, metric: string) => void;
-  onClose: () => void;
+  onCancel: () => void;
 }
 
 const SelectionCard = ({ label, icon, onClick, isSelected, disabled = false, description }: { label: string; icon: React.ReactNode; onClick: () => void; isSelected: boolean; disabled?: boolean; description?: string; }) => (
@@ -36,12 +37,12 @@ const SelectionCard = ({ label, icon, onClick, isSelected, disabled = false, des
   </motion.button>
 );
 
-const Step1_SelectDepartmentAndMetric: React.FC<Step1Props> = ({ onNext, onClose }) => {
+// CHANGE 2: Destructure onCancel instead of onClose
+const Step1_SelectDepartmentAndMetric: React.FC<Step1Props> = ({ onNext, onCancel }) => {
   const [selectedDepartment, setSelectedDepartment] = useState<SectorType | ''>('');
   const [selectedMetric, setSelectedMetric] = useState<string>('');
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: async () => (await supabase.from('hr_departments').select('id, name')).data || [] });
  
-  // Define which departments are enabled for goal creation.
   const ENABLED_DEPARTMENTS = ['Human Resource', 'Sales & Marketing'];
   
   const handleDepartmentSelect = (dept: SectorType) => {
@@ -130,7 +131,8 @@ const Step1_SelectDepartmentAndMetric: React.FC<Step1Props> = ({ onNext, onClose
         )}
       </div>
       <DialogFooter className="pt-8">
-        <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
+        {/* CHANGE 3: Use onCancel here */}
+        <Button variant="outline" type="button" onClick={onCancel}>Cancel</Button>
         <Button 
           type="button"
           onClick={() => onNext(selectedDepartment, selectedMetric)} 

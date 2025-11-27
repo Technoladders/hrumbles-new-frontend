@@ -9,12 +9,13 @@ import { InterviewsList } from './calendar/InterviewsList';
 import { CalendarDay } from './calendar/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { motion, AnimatePresence } from "framer-motion";
 
 interface CalendarCardProps {
   employeeId: string;
   isHumanResourceEmployee: boolean;
-  role?: string; // Add role prop
-   organizationId?: string;
+  role?: string;
+  organizationId?: string;
 }
 
 interface Holiday {
@@ -29,7 +30,7 @@ interface LeaveRequest {
   end_date: string;
   status: 'approved' | 'pending' | 'rejected' | 'cancelled';
   notes: string | null;
-  employee_id?: string; // Include employee_id for superadmin
+  employee_id?: string;
 }
 
 const mockHolidays: Holiday[] = [
@@ -38,13 +39,11 @@ const mockHolidays: Holiday[] = [
   { date: '2025-08-15', localName: 'Independence Day', name: 'Independence Day' },
   { date: '2025-10-02', localName: 'Gandhi Jayanti', name: 'Gandhi Jayanti' },
   { date: '2025-12-25', localName: 'Christmas Day', name: 'Christmas Day' },
-  { date: '2025-06-01', localName: 'Test Holiday 1', name: 'Test 1' },
-  { date: '2025-06-02', localName: 'Test Holiday 2', name: 'Test 2' },
-  { date: '2025-06-03', localName: 'Test Holiday 3', name: 'Test 3' }
 ];
 
 const mockLeaves: LeaveRequest[] = [];
 
+// --- SUB-COMPONENT: Holidays List ---
 const HolidaysList: React.FC<{ holidays: Holiday[], leaves: LeaveRequest[], selectedDate: Date }> = ({ holidays, leaves, selectedDate }) => {
   const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
   const filteredHolidays = holidays.filter(holiday => holiday.date === selectedDateString);
@@ -74,9 +73,9 @@ const HolidaysList: React.FC<{ holidays: Holiday[], leaves: LeaveRequest[], sele
     <div className="overflow-y-auto max-h-[250px] pr-2 overflow-x-hidden">
       <h4 className="text-[10px] font-semibold mb-2">Festivals & Leaves for {format(selectedDate, 'MMMM d, yyyy')}</h4>
       {filteredHolidays.length === 0 && filteredLeaves.length === 0 ? (
-       <div className="mb-10 p-3 bg-red-50 rounded-lg">
-              <p className="text-[10px] italic text-gray-600">No Festivals or leaves on this date</p>
-            </div>
+       <div className="mb-4 p-3 bg-red-50 rounded-lg">
+          <p className="text-[10px] italic text-gray-600">No Festivals or leaves on this date</p>
+        </div>
       ) : (
         <>
           {filteredHolidays.map((holiday, index) => (
@@ -120,12 +119,13 @@ const HolidaysList: React.FC<{ holidays: Holiday[], leaves: LeaveRequest[], sele
           ))}
         </>
       ) : (
-        <div className="text-gray-500 italic">No upcoming festivals or leaves</div>
+        <div className="text-gray-500 italic text-[10px]">No upcoming festivals or leaves</div>
       )}
     </div>
   );
 };
 
+// --- SUB-COMPONENT: All Events List ---
 const AllEventsList: React.FC<{ interviewDates: string[], holidays: Holiday[], leaves: LeaveRequest[], selectedDate: Date, isHumanResourceEmployee: boolean }> = ({ interviewDates, holidays, leaves, selectedDate, isHumanResourceEmployee }) => {
   const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
   const hasInterviews = isHumanResourceEmployee && interviewDates.includes(selectedDateString);
@@ -190,9 +190,9 @@ const AllEventsList: React.FC<{ interviewDates: string[], holidays: Holiday[], l
           ))}
         </>
       ) : (
-         <div className="mb-12 p-3 bg-red-50 rounded-lg">
-              <p className="text-[10px] italic text-gray-600">No events on this date</p>
-            </div>
+         <div className="mb-4 p-3 bg-red-50 rounded-lg">
+          <p className="text-[10px] italic text-gray-600">No events on this date</p>
+        </div>
       )}
       <h4 className="text-[10px] font-semibold mb-2">Upcoming Events (Next 30 Days)</h4>
       {upcomingInterviews.length > 0 || upcomingHolidays.length > 0 || upcomingLeaves.length > 0 ? (
@@ -222,12 +222,13 @@ const AllEventsList: React.FC<{ interviewDates: string[], holidays: Holiday[], l
           ))}
         </>
       ) : (
-        <div className="text-gray-500 italic">No upcoming events</div>
+        <div className="text-gray-500 italic text-[10px]">No upcoming events</div>
       )}
     </div>
   );
 };
 
+// --- MAIN COMPONENT ---
 export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanResourceEmployee, role, organizationId }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -239,7 +240,6 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
 
   useEffect(() => {
     const fetchData = async () => {
-      // Ensure we don't run if the organizationId is not yet available
       if (!organizationId) {
         setIsLoading(false);
         return;
@@ -263,28 +263,24 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
           fullName = `${employeeData.first_name} ${employeeData.last_name}`;
         }
 
-        // Fetch interview dates dynamically
+        // Fetch interview dates
         if (isHumanResourceEmployee || role === 'organization_superadmin') {
-          // 1. Fetch the dynamic status ID for "Interview" for the current organization
           const { data: statusData, error: statusError } = await supabase
             .from("job_statuses")
             .select("id")
             .eq("organization_id", organizationId)
-            .in("name", ["Interview", "Interviews"]) // Handles both singular and plural names
+            .in("name", ["Interview", "Interviews"])
             .single();
 
           if (statusError) {
-            // It's better to log a warning and continue than to crash the whole component
             console.warn("Could not find the interview status for this organization.", statusError);
-            setInterviewDates([]); // Set to empty and proceed
+            setInterviewDates([]); 
           } else if (statusData) {
             const interviewStatusId = statusData.id;
-
-            // 2. Build the main query using the dynamic status ID
             const query = supabase
               .from('hr_job_candidates')
               .select('interview_date')
-              .eq('main_status_id', interviewStatusId) // <-- USE THE DYNAMIC ID HERE
+              .eq('main_status_id', interviewStatusId)
               .not('interview_date', 'is', null)
               .eq('organization_id', organizationId);
 
@@ -293,11 +289,8 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
             }
 
             const { data: candidatesData, error: candidatesError } = await query;
-
-            if (candidatesError) {
-              throw new Error(`Candidates fetch failed: ${candidatesError.message}`);
-            }
-
+            if (candidatesError) throw new Error(`Candidates fetch failed: ${candidatesError.message}`);
+            
             const interviewDatesData = candidatesData.map(candidate => candidate.interview_date);
             setInterviewDates(interviewDatesData);
           }
@@ -305,7 +298,7 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
           setInterviewDates([]);
         }
 
-        // Fetch public holidays from Google Calendar API
+        // Fetch holidays
         const year = 2025;
         const apiKey = import.meta.env.VITE_GOOGLE_CALENDAR_KEY;
         const calendarId = 'in.indian%23holiday@group.v.calendar.google.com';
@@ -316,12 +309,8 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
             `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?` +
             `timeMin=${timeMin}&timeMax=${timeMax}&key=${apiKey}`
           );
-          console.log('Google Calendar API Response Status:', response.status, response.statusText);
-          if (!response.ok) {
-            throw new Error(`Google Calendar API failed: ${response.statusText}`);
-          }
+          if (!response.ok) throw new Error(`Google Calendar API failed: ${response.statusText}`);
           const data = await response.json();
-          console.log('Google Calendar API Response:', data);
           const holidayData = data.items
             .filter((event: any) => event.start?.date && event.summary)
             .map((event: any) => ({
@@ -329,16 +318,13 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
               localName: event.summary,
               name: event.summary,
             }));
-          console.log('Parsed Holidays:', holidayData);
           setHolidays(holidayData.length > 0 ? holidayData : mockHolidays);
         } catch (holidayError: any) {
           console.error('Holiday fetch error:', holidayError.message);
-          console.log('Falling back to mock holidays');
           setHolidays(mockHolidays);
         }
 
         // Fetch leave requests
-        console.log('Fetching leave requests for:', role === 'organization_superadmin' ? 'all employees' : `employeeId: ${employeeId}`);
         const leaveQuery = supabase
           .from('leave_requests')
           .select('id, start_date, end_date, status, notes, employee_id')
@@ -349,15 +335,11 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
         }
 
         const { data: leaveData, error: leaveError } = await leaveQuery;
-
-        if (leaveError) {
-          throw new Error(`Leave requests fetch failed: ${leaveError.message}`);
-        }
-
-        console.log('Leave Requests:', leaveData);
+        if (leaveError) throw new Error(`Leave requests fetch failed: ${leaveError.message}`);
         setLeaves(leaveData.length > 0 ? leaveData : mockLeaves);
+
       } catch (error: any) {
-        console.error('Failed to fetch data:', error.message, error.stack);
+        console.error('Failed to fetch data:', error.message);
         toast.error(`Failed to load calendar data: ${error.message}`);
         setInterviewDates([]);
         setHolidays(mockHolidays);
@@ -454,40 +436,109 @@ export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanR
         
         <div className="bg-white/80 backdrop-blur-sm rounded-lg p-2 flex flex-col h-full min-w-0">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-            <TabsList className={`grid ${isHumanResourceEmployee || role === 'organization_superadmin' ? 'grid-cols-3' : 'grid-cols-2'} mb-1.5`}>
-              <TabsTrigger value="events" className="flex items-center gap-1 text-xs">
-                <Calendar className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">All Events</span>
-              </TabsTrigger>
-              <TabsTrigger value="holidays" className="flex items-center gap-1 text-xs">
-                <Sun className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">Festivals</span>
-              </TabsTrigger>
-              {(isHumanResourceEmployee || role === 'organization_superadmin') && (
-                <TabsTrigger value="interviews" className="flex items-center gap-1 text-xs">
-                  <Users className="w-3 h-3 flex-shrink-0" />
-                  <span className="truncate">Interviews</span>
-                </TabsTrigger>
-              )}
-            </TabsList>
             
-            <TabsContent value="events" className="flex-1">
-              <AllEventsList 
-                interviewDates={interviewDates}
-                holidays={holidays}
-                leaves={leaves}
-                selectedDate={selectedDate}
-                isHumanResourceEmployee={isHumanResourceEmployee || role === 'organization_superadmin'}
-              />
-            </TabsContent>
-            <TabsContent value="holidays" className="flex-1">
-              <HolidaysList holidays={holidays} leaves={leaves} selectedDate={selectedDate} />
-            </TabsContent>
-            {(isHumanResourceEmployee || role === 'organization_superadmin') && (
-              <TabsContent value="interviews" className="flex-1">
-                <InterviewsList employeeId={employeeId} selectedDate={selectedDate} role={role} organizationId={organizationId} />
+<TabsList className={`grid ${isHumanResourceEmployee || role === 'organization_superadmin' ? 'grid-cols-3' : 'grid-cols-2'} gap-1 bg-purple-50/50 p-1 rounded-xl mb-2 relative`}>
+  
+  {/* --- EVENTS TAB --- */}
+  <TabsTrigger 
+    value="events" 
+    className="relative z-10 flex items-center justify-center gap-1.5 text-xs font-medium h-9 rounded-lg transition-colors duration-200 text-gray-500 hover:text-purple-700 data-[state=active]:text-white data-[state=active]:bg-transparent shadow-none data-[state=active]:shadow-none border-none outline-none"
+  >
+    {activeTab === "events" && (
+      <motion.div
+        layoutId="active-tab-indicator"
+        className="absolute inset-0 bg-purple-600 rounded-lg shadow-sm -z-10"
+        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+      />
+    )}
+    <Calendar className="w-3.5 h-3.5 flex-shrink-0 relative z-20" />
+    <span className="truncate relative z-20">All Events</span>
+  </TabsTrigger>
+  
+  {/* --- FESTIVALS TAB (Fixed the line issue here) --- */}
+  <TabsTrigger 
+    value="holidays" 
+    className="relative z-10 flex items-center justify-center gap-1.5 text-xs font-medium h-9 rounded-lg transition-colors duration-200 text-gray-500 hover:text-purple-700 data-[state=active]:text-white data-[state=active]:bg-transparent shadow-none data-[state=active]:shadow-none border-none outline-none"
+  >
+    {activeTab === "holidays" && (
+      <motion.div
+        layoutId="active-tab-indicator"
+        className="absolute inset-0 bg-purple-600 rounded-lg shadow-sm -z-10"
+        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+      />
+    )}
+    <Sun className="w-3.5 h-3.5 flex-shrink-0 relative z-20" />
+    <span className="truncate relative z-20">Festivals</span>
+  </TabsTrigger>
+  
+  {/* --- INTERVIEWS TAB --- */}
+  {(isHumanResourceEmployee || role === 'organization_superadmin') && (
+    <TabsTrigger 
+      value="interviews" 
+      className="relative z-10 flex items-center justify-center gap-1.5 text-xs font-medium h-9 rounded-lg transition-colors duration-200 text-gray-500 hover:text-purple-700 data-[state=active]:text-white data-[state=active]:bg-transparent shadow-none data-[state=active]:shadow-none border-none outline-none"
+    >
+      {activeTab === "interviews" && (
+        <motion.div
+          layoutId="active-tab-indicator"
+          className="absolute inset-0 bg-purple-600 rounded-lg shadow-sm -z-10"
+          transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+        />
+      )}
+      <Users className="w-3.5 h-3.5 flex-shrink-0 relative z-20" />
+      <span className="truncate relative z-20">Interviews</span>
+    </TabsTrigger>
+  )}
+
+</TabsList>
+            
+            {/* --- SMOOTH CONTENT TRANSITIONS --- */}
+            <div className="flex-1 overflow-hidden mt-2">
+              
+              <TabsContent value="events" className="h-full mt-0 outline-none data-[state=inactive]:hidden">
+                <motion.div
+                  key="events"
+                  initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.3, ease: "easeOut" }}
+                  className="h-full"
+                >
+                  <AllEventsList 
+                    interviewDates={interviewDates}
+                    holidays={holidays}
+                    leaves={leaves}
+                    selectedDate={selectedDate}
+                    isHumanResourceEmployee={isHumanResourceEmployee || role === 'organization_superadmin'}
+                  />
+                </motion.div>
               </TabsContent>
-            )}
+
+              <TabsContent value="holidays" className="h-full mt-0 outline-none data-[state=inactive]:hidden">
+                <motion.div
+                  key="holidays"
+                  initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.3, ease: "easeOut" }}
+                  className="h-full"
+                >
+                  <HolidaysList holidays={holidays} leaves={leaves} selectedDate={selectedDate} />
+                </motion.div>
+              </TabsContent>
+
+              {(isHumanResourceEmployee || role === 'organization_superadmin') && (
+                <TabsContent value="interviews" className="h-full mt-0 outline-none data-[state=inactive]:hidden">
+                  <motion.div
+                    key="interviews"
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    className="h-full"
+                  >
+                    <InterviewsList employeeId={employeeId} selectedDate={selectedDate} role={role} organizationId={organizationId} />
+                  </motion.div>
+                </TabsContent>
+              )}
+            </div>
+
           </Tabs>
         </div>
       </div>

@@ -1,8 +1,8 @@
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom"; 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Bookmark, Sparkles } from "lucide-react";
+import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Bookmark, Sparkles, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,6 +22,8 @@ import AiCandidateFinalizeDrawer from "@/components/jobs/job/candidate/AiCandida
 import ResumeUploadModal from '@/components/ui/ResumeUploadModal'; 
 import WishlistModal from '@/components/candidates/talent-pool/WishlistModal';
 
+
+
 const JobView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -39,8 +41,8 @@ const JobView = () => {
   const [prefilledData, setPrefilledData] = useState<Partial<CandidateFormData> | null>(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
-  // --- DATA FETCHING (tanstack/react-query) ---
-  // Fetch job details
+
+  // --- DATA FETCHING ---
   const { 
     data: job, 
     isLoading: jobLoading, 
@@ -52,7 +54,6 @@ const JobView = () => {
     enabled: !!id,
   });
   
-  // Fetch candidates associated with this job
   const { 
     data: candidatesData = [],
     refetch: refetchCandidates
@@ -62,7 +63,6 @@ const JobView = () => {
     enabled: !!id,
   });
 
-  // Fetch analysis history data for the history modal
   const { 
     data: historyData = [],
     isLoading: historyLoading,
@@ -200,30 +200,35 @@ const JobView = () => {
     );
   }
   
-   return (
+// --- TAB STATE LOGIC ---
+  const location = useLocation();
+  const isJobDescriptionActive = location.pathname.includes(`/jobs/${id}/description`);
+  // If the Wishlist modal is open, we treat the Shortlist tab as "Active"
+  const isShortlistActive = isWishlistModalOpen;
+
+  // Tab Styles
+  const baseTabStyle = "flex items-center gap-2 px-6 py-1.5 rounded-full text-sm font-medium transition-all duration-200";
+  // Hover = White with Shadow (Depth)
+  const inactiveTabStyle = "text-gray-600 hover:bg-white hover:shadow-sm hover:text-gray-900";
+  // Active = Purple Background
+  const activeTabStyle = "bg-[#7731E8] text-white shadow-md";
+
+  return (
     <div className="space-y-6 py-4">
       <div className="flex items-center justify-between mb-4">
-        {/* Header: Back Button and Job Title */}
         <div className="flex items-center gap-2">
-           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-gray-500 hover:text-gray-700">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-gray-500 hover:text-gray-700">
             <ArrowLeft size={20} />
           </Button>
           <h1 className="text-xl font-semibold">{job.title}</h1>
         </div>
         
         {/* Action Buttons */}
-        <div className="flex gap-2">
 
-            <Button 
-            variant="outline" 
-            onClick={() => setIsWishlistModalOpen(true)} 
-            className="flex items-center gap-2"
-          >
-            <Bookmark size={16} className="text-indigo-600" />
-            <span>My Shortlist</span>
-          </Button>
-
-            {/* Main Dropdown for All Candidate Actions */}
+       {/* --- ACTION BUTTONS & TABS --- */}
+        <div className="flex items-center gap-3">
+          
+          {/* 1. Analyse with AI Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button className="h-10 px-6 font-semibold text-white whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200 flex items-center gap-2">
@@ -232,30 +237,21 @@ const JobView = () => {
                 <ChevronDown className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
-
-
-
-            
             <DropdownMenuContent 
               align="end" 
               className="w-64 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-700 shadow-2xl rounded-xl p-2"
             >
-            
-
               <DropdownMenuItem 
- onSelect={() => setIsResumeUploadModalOpen(true)}
-  // --- THIS IS THE FIX ---
-  // This disables the button if the job is loading or has no skills
-  disabled={jobLoading || !job} 
-  className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
->
-  <FileText className="h-5 w-5 mt-1 text-blue-500" />
-  <div>
-    <p className="font-semibold text-slate-800 dark:text-slate-100">Analyse Resume</p>
-    <p className="text-xs text-slate-500 dark:text-slate-400">Paste or upload resumes for AI parsing.</p>
-  </div>
-</DropdownMenuItem>
-              
+                onSelect={() => setIsResumeUploadModalOpen(true)}
+                disabled={jobLoading || !job} 
+                className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
+              >
+                <FileText className="h-5 w-5 mt-1 text-blue-500" />
+                <div>
+                  <p className="font-semibold text-slate-800 dark:text-slate-100">Analyse Resume</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Paste or upload resumes for AI parsing.</p>
+                </div>
+              </DropdownMenuItem>
               <DropdownMenuItem 
                 onSelect={() => setIsHistoryModalOpen(true)}
                 className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 dark:focus:bg-slate-800"
@@ -269,26 +265,65 @@ const JobView = () => {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Link to={`/jobs/${job.id}/description`}>
-            <Button variant="outline" className="flex items-center gap-2">
-              <FileText size={16} />
-              <span className="hidden sm:inline">Job Description</span>
-            </Button>
-          </Link>
+{/* 2. Middle Tab Group (Shortlist + Job Desc) */}
+          <div className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1.5 shadow-inner">
+            {/* My Shortlist Button */}
+            <button
+              onClick={() => setIsWishlistModalOpen(true)}
+              className={`
+                group flex items-center gap-2 px-6 py-1 rounded-full text-sm font-semibold transition-all duration-200
+                ${isShortlistActive 
+                  ? "bg-[#7731E8] text-white shadow-md" // Active: Purple & White
+                  : "text-gray-500 hover:bg-gray hover:text-[#7731E8] hover:shadow-sm" // Inactive: Gray -> Hover: White BG + Purple Text
+                }
+              `}
+            >
+              <Bookmark size={16} className={isShortlistActive ? "text-white" : "text-gray-500 group-hover:text-[#7731E8]"} />
+              <span>My Shortlists</span>
+            </button>
 
-          <Button
+            {/* Job Description Button */}
+            <Link to={`/jobs/${id}/description`}>
+              <button 
+                className={`
+                  group flex items-center gap-2 px-6 py-1.5 rounded-full text-sm font-semibold transition-all duration-200
+                  ${isJobDescriptionActive 
+                    ? "bg-[#7731E8] text-white shadow-md" // Active: Purple & White
+                    : "text-gray-500 hover:bg-gray hover:text-[#7731E8] hover:shadow-sm" // Inactive: Gray -> Hover: White BG + Purple Text
+                  }
+                `}
+              >
+                <FileText size={16} className={isJobDescriptionActive ? "text-white" : "text-gray-500 group-hover:text-[#7731E8]"} />
+                <span className="hidden sm:inline">Job Description</span>
+              </button>
+            </Link>
+          </div>
+
+          {/* 3. Add Candidate Button (3D Style) */}
+          <button
             onClick={() => setIsAddCandidateDrawerOpen(true)}
-            className="gap-2"
+            className="flex items-center gap-3 pl-1.5 pr-6 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 group h-10"
           >
-            <UserPlus size={16} />
-            Add Candidate
-          </Button>
-
-        
+            <div className="relative flex items-center justify-center w-7 h-7 mr-1">
+              <div className="absolute inset-0 bg-white blur-md scale-110 opacity-50 animate-pulse"></div>
+              <div className="relative w-full h-full rounded-full flex items-center justify-center z-10 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.2)]" style={{ background: 'radial-gradient(circle at 30% 30%, #ffffff, #f1f5f9)' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className="w-5 h-5" style={{ filter: 'drop-shadow(0 2px 2px rgba(119,49,232,0.3))' }}>
+                  <defs>
+                    <linearGradient id="purpleIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#9d5cff" />
+                      <stop offset="100%" stopColor="#5b21b6" />
+                    </linearGradient>
+                  </defs>
+                  <circle cx="12" cy="8" r="4.5" fill="url(#purpleIconGrad)" />
+                  <path d="M20 21v-1.5a4.5 4.5 0 0 0-4.5-4.5H8.5A4.5 4.5 0 0 0 4 19.5V21" fill="url(#purpleIconGrad)" />
+                </svg>
+              </div>
+            </div>
+            <span className="tracking-wide text-sm relative z-10">Add Candidate</span>
+          </button>
         </div>
       </div>
-
-      {/* Main Content: Job Details and Candidate List */}
+ 
       <JobDetailView 
         job={job} 
         candidates={candidates} 
@@ -296,7 +331,6 @@ const JobView = () => {
       />
       
       {/* --- MODALS & DRAWERS --- */}
-
       <AddCandidateDrawer 
         job={job} 
         onCandidateAdded={handleManualCandidateAdded}
@@ -353,8 +387,8 @@ const JobView = () => {
               zIndex: 1000,
             },
             overlay: {
-        zIndex: 999, // Overlay just below content
-      } 
+              zIndex: 999,
+            } 
           }}
         >
           <div className="p-4">

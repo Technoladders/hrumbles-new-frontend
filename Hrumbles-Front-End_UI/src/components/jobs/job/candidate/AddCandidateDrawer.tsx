@@ -490,19 +490,41 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
           <SheetTitle>Add New Candidate</SheetTitle>
         </SheetHeader>
         
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="basic-info">Basic Information</TabsTrigger>
-            <TabsTrigger 
-              value="skills-info" 
-              disabled={!candidateId}
-            >
-              Skill Information
-            </TabsTrigger>
-            <TabsTrigger value="proof-id" disabled={!candidateId}>
-              Proof ID
-            </TabsTrigger>
-          </TabsList>
+<Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          {/* Tabs List Container */}
+          <div className="flex justify-center mb-6">
+            <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 p-1.5 shadow-inner">
+              
+              <TabsTrigger 
+                value="basic-info"
+                className="rounded-full px-6 py-1.5 text-sm font-medium text-gray-600 transition-all 
+                           data-[state=active]:bg-[#7731E8] data-[state=active]:text-white data-[state=active]:shadow-md"
+              >
+                Basic Information
+              </TabsTrigger>
+
+              <TabsTrigger 
+                value="skills-info" 
+                disabled={!candidateId}
+                className="rounded-full px-6 py-1.5 text-sm font-medium text-gray-600 transition-all 
+                           data-[state=active]:bg-[#7731E8] data-[state=active]:text-white data-[state=active]:shadow-md
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Skill Information
+              </TabsTrigger>
+
+              <TabsTrigger 
+                value="proof-id" 
+                disabled={!candidateId}
+                className="rounded-full px-6 py-1.5 text-sm font-medium text-gray-600 transition-all 
+                           data-[state=active]:bg-[#7731E8] data-[state=active]:text-white data-[state=active]:shadow-md
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Proof ID
+              </TabsTrigger>
+
+            </TabsList>
+          </div>
           
           <TabsContent value="basic-info">
             <BasicInformationTab 

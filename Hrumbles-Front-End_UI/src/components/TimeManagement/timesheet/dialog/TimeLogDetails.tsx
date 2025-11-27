@@ -99,14 +99,96 @@ interface TimeLogDetailsProps {
 }
 
 // Updated component to render the recruiter's detailed report with TABLE inside each job card
+// Updated component to render the recruiter's detailed report with TABLE inside each job card
 const RecruiterReportView = ({ log }: { log: TimeLog }) => {
+  const [candidatesWithDetails, setCandidatesWithDetails] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch candidate details including status and CTC
+  useEffect(() => {
+    const fetchCandidateDetails = async () => {
+      if (!log.recruiter_report_data || !Array.isArray(log.recruiter_report_data)) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const jobLogs = log.recruiter_report_data as JobLog[];
+        const updatedJobLogs = await Promise.all(
+          jobLogs.map(async (jobLog) => {
+            if (!jobLog.candidates || jobLog.candidates.length === 0) {
+              return jobLog;
+            }
+
+            // Get all candidate IDs for this job
+            const candidateIds = jobLog.candidates.map(c => c.id);
+
+            // Fetch candidate details from database
+// Fetch candidate details from database
+            const { data: candidateDetails, error } = await supabase
+              .from('hr_job_candidates')
+              .select(`
+                id,
+                name,
+                current_salary,
+                expected_salary,
+                main_status_id,
+                sub_status_id,
+                status:job_statuses!hr_job_candidates_main_status_id_fkey(name),
+                sub_status:job_statuses!hr_job_candidates_sub_status_id_fkey(name)
+              `)
+              .in('id', candidateIds);
+
+            if (error) {
+              console.error('Error fetching candidate details:', error);
+              return jobLog;
+            }
+
+            // Merge the fetched details with existing candidate data
+   const enrichedCandidates = jobLog.candidates.map(candidate => {
+              const details = candidateDetails?.find(d => d.id === candidate.id);
+              return {
+                ...candidate,
+                current_ctc: details?.current_salary,
+                expected_ctc: details?.expected_salary,
+                mainStatus: details?.status?.name || 'N/A',
+                subStatus: details?.sub_status?.name || 'N/A',
+              };
+            });
+
+            return {
+              ...jobLog,
+              candidates: enrichedCandidates,
+            };
+          })
+        );
+
+        setCandidatesWithDetails(updatedJobLogs);
+      } catch (error) {
+        console.error('Error enriching candidate data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCandidateDetails();
+  }, [log.recruiter_report_data]);
+
   // Sanitize and parse the overall summary
   const sanitizedSummary = log.notes ? DOMPurify.sanitize(log.notes) : '';
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
       {/* --- Detailed Job Report Section --- */}
-      {log.recruiter_report_data && Array.isArray(log.recruiter_report_data) && log.recruiter_report_data.length > 0 && (
+      {candidatesWithDetails && candidatesWithDetails.length > 0 && (
         <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-4 rounded-lg border border-purple-100">
           <div className="flex items-center gap-2 mb-3">
             <div className="p-2 bg-purple-600 rounded-lg">
@@ -117,19 +199,7 @@ const RecruiterReportView = ({ log }: { log: TimeLog }) => {
           
           {/* Individual Job Cards with TABLE inside */}
           <div className="space-y-3">
-            {(log.recruiter_report_data as JobLog[]).map((jobLog, index) => {
-
-              // --- TOTAL TIME CALCULATION ---
-              const totalMinutesForJob = jobLog.candidates?.reduce((sum, candidate) => {
-                const hoursInMinutes = (candidate.hours || 0) * 60;
-                const minutes = (candidate.minutes || 0);
-                return sum + hoursInMinutes + minutes;
-              }, 0) || 0;
-
-              const totalHours = Math.floor(totalMinutesForJob / 60);
-              const remainingMinutes = totalMinutesForJob % 60;
-              // --- END OF CALCULATION ---
-
+            {candidatesWithDetails.map((jobLog, index) => {
               return (
                 <div key={index} className="bg-white/90 p-3 rounded-md shadow-sm border">
                   <div className="flex justify-between items-start mb-2">
@@ -137,10 +207,6 @@ const RecruiterReportView = ({ log }: { log: TimeLog }) => {
                       <p className="font-semibold text-sm text-gray-800">{jobLog.jobTitle}</p>
                       <p className="text-xs text-gray-500">{jobLog.clientName}</p>
                     </div>
-                    <span className="text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-                      {/* --- DISPLAY THE CALCULATED TIME --- */}
-                      {totalHours}h {remainingMinutes}m
-                    </span>
                   </div>
                   
                   {/* TABLE for Profiles Submitted */}
@@ -153,17 +219,34 @@ const RecruiterReportView = ({ log }: { log: TimeLog }) => {
                             <tr>
                               <th className="text-left">Candidate Name</th>
                               <th className="text-left">Client</th>
-                              <th className="text-left">Time Spent</th>
+                              <th className="text-left">Status</th>
+                              <th className="text-left">Current CTC</th>
+                              <th className="text-left">Expected CTC</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {jobLog.candidates.map((candidate) => (
-                              <tr key={candidate.id}>
-                                <td className="font-medium text-gray-900">{candidate.name}</td>
-                                <td className="text-gray-600">{jobLog.clientName}</td>
-                                <td className="font-semibold text-blue-600">{candidate.hours}h {candidate.minutes}m</td>
-                              </tr>
-                            ))}
+                            {jobLog.candidates.map((candidate: any) => {
+                              // Format status: "MainStatus (SubStatus)" or just status if only one exists
+                              // Display only Sub Status (fallback to Main Status only if Sub is missing/N/A)
+const statusDisplay = 
+  candidate.subStatus && candidate.subStatus !== 'N/A'
+    ? candidate.subStatus
+    : candidate.mainStatus || 'N/A';
+
+                              return (
+                                <tr key={candidate.id}>
+                                  <td className="font-medium text-gray-900">{candidate.name}</td>
+                                  <td className="text-gray-600">{jobLog.clientName}</td>
+                                  <td className="font-semibold text-purple-600">{statusDisplay}</td>
+                                  <td className="text-gray-700">
+                                    {candidate.current_ctc ? `₹${candidate.current_ctc.toLocaleString()}` : 'N/A'}
+                                  </td>
+                                  <td className="text-gray-700">
+                                    {candidate.expected_ctc ? `₹${candidate.expected_ctc.toLocaleString()}` : 'N/A'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -197,6 +280,7 @@ const RecruiterReportView = ({ log }: { log: TimeLog }) => {
     </div>
   );
 };
+
 
 export const TimeLogDetails = ({
   timeLog,

@@ -49,8 +49,23 @@ const Step3_AssignEmployees: React.FC<Step3Props> = ({ goalDefinition, departmen
     setEmployeeTargets(prev => { const newMap = new Map(prev); newMap.delete(employeeId); return newMap; });
   };
 
-  const handleTargetChange = (employeeId: string, value: string) => {
-    setEmployeeTargets(prev => new Map(prev.set(employeeId, parseFloat(value) || 0)));
+const handleTargetChange = (employeeId: string, value: string) => {
+    // FIX: Check if the value is empty string first
+    if (value === "") {
+      setEmployeeTargets(prev => {
+        const newMap = new Map(prev);
+        newMap.set(employeeId, undefined); // Set to undefined so input acts empty
+        return newMap;
+      });
+      return;
+    }
+
+    const numValue = parseFloat(value);
+    
+    // FIX: Only update if it is a valid number (removed the "|| 0")
+    if (!isNaN(numValue)) {
+      setEmployeeTargets(prev => new Map(prev.set(employeeId, numValue)));
+    }
   };
 
  const assignGoalsMutation = useMutation({
@@ -113,7 +128,11 @@ const Step3_AssignEmployees: React.FC<Step3Props> = ({ goalDefinition, departmen
             {selectedEmployees.map(employee => (
               <div key={employee.id} className="grid grid-cols-2 gap-4 items-center">
                 <p>{employee.name}</p>
-                <Input type="number" value={employeeTargets.get(employee.id) ?? ""} placeholder={`Default: ${goalDefinition.targetValue || 0}`} onChange={e => handleTargetChange(employee.id, e.target.value)} />
+<Input 
+  type="number" 
+  value={employeeTargets.get(employee.id) ?? ""} 
+  onChange={e => handleTargetChange(employee.id, e.target.value)} 
+/>
               </div>
             ))}
           </div>

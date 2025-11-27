@@ -99,18 +99,28 @@ const CandidatesTabsSection = ({
             {/* Score Filter */}
             <div className="flex-shrink-0 order-3 w-full sm:w-[180px] min-w-0 overflow-hidden">
               <Select value={scoreFilter} onValueChange={setScoreFilter}>
-                <SelectTrigger className="group w-full rounded-full justify-start h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 hover:text-white shadow-inner text-sm relative z-0">
+            <SelectTrigger className="group w-full rounded-full justify-start h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-[#7731E8] hover:text-white shadow-inner text-sm relative z-0 transition-all duration-200">
                   <Filter size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
                   <div className="truncate min-w-0">
                     <SelectValue placeholder="Categorize by Score" />
                   </div>
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Scores</SelectItem>
-                  <SelectItem value="shortlisted">Shortlisted (&gt; 80)</SelectItem>
-                  <SelectItem value="review">Review (= 80)</SelectItem>
-                  <SelectItem value="not_shortlisted">Not Shortlisted (&lt; 80)</SelectItem>
-                  <SelectItem value="not_validated">Not Validated</SelectItem>
+              <SelectContent>
+                  <SelectItem value="all" className="focus:bg-[#7731E8] focus:text-white cursor-pointer transition-colors">
+                    All Scores
+                  </SelectItem>
+                  <SelectItem value="shortlisted" className="focus:bg-[#7731E8] focus:text-white cursor-pointer transition-colors">
+                    Shortlisted (&gt; 80)
+                  </SelectItem>
+                  <SelectItem value="review" className="focus:bg-[#7731E8] focus:text-white cursor-pointer transition-colors">
+                    Review (= 80)
+                  </SelectItem>
+                  <SelectItem value="not_shortlisted" className="focus:bg-[#7731E8] focus:text-white cursor-pointer transition-colors">
+                    Not Shortlisted (&lt; 80)
+                  </SelectItem>
+                  <SelectItem value="not_validated" className="focus:bg-[#7731E8] focus:text-white cursor-pointer transition-colors">
+                    Not Validated
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -136,24 +146,24 @@ const CandidatesTabsSection = ({
                 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
                 size={18}
               />
-              <Input
-                placeholder="Search by Name, Email, or Phone"
-                className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+           <Input
+  placeholder="Search by Name, Email, or Phone"
+  className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm transition-all duration-200 focus-visible:ring-[#7731E8] hover:ring-1 hover:ring-[#7731E8]"
+  value={searchTerm}
+  onChange={(e) => setSearchTerm(e.target.value)}
+/>
             </div>
 
             {/* Bulk Share Button (Conditional) */}
             {(scoreFilter === 'shortlisted' || scoreFilter === 'not_shortlisted') && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    onClick={handleBulkShareClick} 
-                    size="sm" 
-                    className="flex-shrink-0 order-5 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500"
-                  >
+          <Button 
+  variant="outline" 
+  onClick={handleBulkShareClick} 
+  size="sm" 
+  className="flex-shrink-0 order-5 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-[#7731E8] hover:text-white border-transparent transition-all duration-200"
+>
                     <Mail className="w-4 h-4 mr-2" /> 
                     Send Mail to All
                   </Button>
@@ -167,12 +177,12 @@ const CandidatesTabsSection = ({
             {/* Batch Validate Button */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button 
-                  onClick={handleBatchValidateClick} 
-                  size="sm" 
-                  variant="outline"
-                  className="flex-shrink-0 order-4 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500"
-                >
+       <Button 
+  onClick={handleBatchValidateClick} 
+  size="sm" 
+  variant="outline"
+  className="flex-shrink-0 order-4 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-[#7731E8] hover:text-white border-transparent transition-all duration-200"
+>
                   <Zap size={16} className="mr-2" />
                   Batch Validate All
                 </Button>
@@ -186,12 +196,12 @@ const CandidatesTabsSection = ({
             {!ITECH_ORGANIZATION_ID.includes(organization_id) && organization_id !== ASCENDION_ORGANIZATION_ID && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
-                    onClick={() => setShowStatusDialog(true)} 
-                    size="sm" 
-                    variant="outline"
-                    className="flex-shrink-0 order-6 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500"
-                  >
+                <Button 
+  onClick={() => setShowStatusDialog(true)} 
+  size="sm" 
+  variant="outline"
+  className="flex-shrink-0 order-6 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-[#7731E8] hover:text-white border-transparent transition-all duration-200"
+>
                     <Filter size={16} className="mr-2" />
                     Status Settings
                   </Button>

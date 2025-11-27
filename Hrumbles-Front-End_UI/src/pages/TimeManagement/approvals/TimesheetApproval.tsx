@@ -99,81 +99,81 @@ const TimesheetApproval = () => {
   const filterControls = (
     <div className="flex justify-between items-center flex-wrap gap-4 mb-6">
        <h2 className="text-xl font-semibold capitalize">{activeTab} Timesheets</h2>
-<div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
-  {/* Search */}
-  <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
-    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-    <Input
-      type="search"
-      placeholder="Search employees..."
-      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm"
-      value={searchTerm}
-      onChange={(e) => setSearchTerm(e.target.value)}
-    />
-  </div>
+      <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+        {/* Search */}
+        <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+          <Input
+            type="search"
+            placeholder="Search employees..."
+            className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm focus-visible:ring-[#7731E8]"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
 
-  {/* Status Filter (Conditional) */}
-  {activeTab === 'pending' && (
-    <div className="flex-shrink-0 order-2 w-full sm:w-[180px]">
-      <Select value={statusFilter} onValueChange={setStatusFilter}>
-        <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
-          <SelectValue placeholder="Filter by status" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Statuses</SelectItem>
-          <SelectItem value="normal">Normal</SelectItem>
-          <SelectItem value="auto_terminated">Auto Terminated</SelectItem>
-        </SelectContent>
-      </Select>
+        {/* Status Filter (Conditional) */}
+        {activeTab === 'pending' && (
+          <div className="flex-shrink-0 order-2 w-full sm:w-[180px]">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-[#7731E8] hover:text-white transition-colors">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="focus:bg-[#7731E8] focus:text-white cursor-pointer">All Statuses</SelectItem>
+                <SelectItem value="normal" className="focus:bg-[#7731E8] focus:text-white cursor-pointer">Normal</SelectItem>
+                <SelectItem value="auto_terminated" className="focus:bg-[#7731E8] focus:text-white cursor-pointer">Auto Terminated</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Department Filter */}
+        <div className="flex-shrink-0 order-3 w-full sm:w-[180px]">
+          <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+            <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-[#7731E8] hover:text-white transition-colors">
+              <SelectValue placeholder="Filter by department" />
+            </SelectTrigger>
+            <SelectContent>
+              {departments.map((dept) => (
+                <SelectItem key={dept} value={dept} className="focus:bg-[#7731E8] focus:text-white cursor-pointer">
+                  {dept === "all" ? "All Departments" : dept}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Employee Filter */}
+        <div className="flex-shrink-0 order-4 w-full sm:w-[180px]">
+          <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+            <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-[#7731E8] hover:text-white transition-colors">
+              <SelectValue placeholder="Filter by employee" />
+            </SelectTrigger>
+            <SelectContent>
+              {employees.map((emp) => (
+                <SelectItem key={emp} value={emp} className="focus:bg-[#7731E8] focus:text-white cursor-pointer">
+                  {emp === "all" ? "All Employees" : emp}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Refresh Button */}
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={handleRefresh} 
+          disabled={isRefreshing}
+          className="flex-shrink-0 order-5 rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-[#7731E8] hover:text-white hover:border-[#7731E8] transition-colors"
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      </div>
     </div>
-  )}
-
-  {/* Department Filter */}
-  <div className="flex-shrink-0 order-3 w-full sm:w-[180px]">
-    <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-      <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
-        <SelectValue placeholder="Filter by department" />
-      </SelectTrigger>
-      <SelectContent>
-        {departments.map((dept) => (
-          <SelectItem key={dept} value={dept}>
-            {dept === "all" ? "All Departments" : dept}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
-
-  {/* Employee Filter */}
-  <div className="flex-shrink-0 order-4 w-full sm:w-[180px]">
-    <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
-      <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
-        <SelectValue placeholder="Filter by employee" />
-      </SelectTrigger>
-      <SelectContent>
-        {employees.map((emp) => (
-          <SelectItem key={emp} value={emp}>
-            {emp === "all" ? "All Employees" : emp}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
-
-  {/* Refresh Button */}
-  <Button 
-    variant="outline" 
-    size="sm" 
-    onClick={handleRefresh} 
-    disabled={isRefreshing}
-    className="flex-shrink-0 order-5 rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm"
-  >
-    <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-    Refresh
-  </Button>
-</div>
-    </div>
- );
+  );
   
   return (
     <div className="content-area">
@@ -186,14 +186,14 @@ const TimesheetApproval = () => {
 
       <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab}>
 <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
-      <TabsTrigger
+     <TabsTrigger
         value="pending"
         className="relative px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
           data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all flex items-center"
       >
         Pending Approvals
         {getPendingCount() > 0 && (
-          <span className="ml-2 bg-primary rounded-full px-2 py-1 text-xs text-white">
+          <span className="ml-2 bg-violet-700 text-white rounded-full px-2 py-0.5 text-xs font-bold shadow-sm border border-violet-400/30">
             {getPendingCount()}
           </span>
         )}

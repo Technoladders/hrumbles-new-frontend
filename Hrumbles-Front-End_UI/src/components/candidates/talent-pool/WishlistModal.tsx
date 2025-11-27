@@ -174,7 +174,7 @@ const WishlistModal: FC<WishlistModalProps> = ({ isOpen, onClose, jobId, onIniti
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Bookmark className="h-5 w-5 text-indigo-600" />
-            {jobId ? 'Job Shortlist' : 'My Shortlist'}
+            {jobId ? 'My Shortlists' : 'My Shortlists'}
           </DialogTitle>
         </DialogHeader>
 

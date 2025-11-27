@@ -459,18 +459,27 @@ if (isLoading) {
       <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm animate-scale-in">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="sticky left-0 z-20 bg-gray-50 table-header-cell"><div className="flex items-center gap-1">Job Title<ArrowUpDown size={14} /></div></th>
-                {!ITECH_ORGANIZATION_ID.includes(organization_id) && <th scope="col" className="table-header-cell">Client</th>}
-                <th scope="col" className="table-header-cell">Created Date</th>
-                <th scope="col" className="table-header-cell">No. of Candidates</th>
-                <th scope="col" className="table-header-cell">Status</th>
-                <th scope="col" className="table-header-cell">Posted By</th>
-                {!ITECH_ORGANIZATION_ID.includes(organization_id) && <th scope="col" className="table-header-cell">Assigned To</th>}
-                <th scope="col" className="table-header-cell text-center">Actions</th>
-              </tr>
-            </thead>
+    <thead className="bg-gradient-to-r from-purple-600 to-violet-600">
+  <tr>
+    <th scope="col" className="sticky left-0 z-20 bg-gradient-to-r from-purple-600 to-violet-600 table-header-cell text-white">
+      <div className="flex items-center gap-1 text-white">
+        Job Title
+        <ArrowUpDown size={14} className="text-white" />
+      </div>
+    </th>
+    {!ITECH_ORGANIZATION_ID.includes(organization_id) && 
+      <th scope="col" className="table-header-cell text-white">Client</th>
+    }
+    <th scope="col" className="table-header-cell text-white">Created Date</th>
+    <th scope="col" className="table-header-cell text-white">No. of Candidates</th>
+    <th scope="col" className="table-header-cell text-white">Status</th>
+    <th scope="col" className="table-header-cell text-white">Posted By</th>
+    {!ITECH_ORGANIZATION_ID.includes(organization_id) && 
+      <th scope="col" className="table-header-cell text-white">Assigned To</th>
+    }
+    <th scope="col" className="table-header-cell text-center text-white">Actions</th>
+  </tr>
+</thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {jobsToRender.map((job) => (
                 // --- MODIFICATION: Added hover animation and styling to the table row ---
@@ -632,12 +641,52 @@ if (isLoading) {
           <h1 className="text-3xl font-bold mb-1">Job Dashboard</h1>
           <p className="text-gray-500">Manage and track all job postings</p>
         </div>
-        {!isEmployee && <Button 
-          onClick={() => {
-    console.log("%c[DEBUG] Create button clicked → setting isCreateModalOpen = true", "color: green; font-weight: bold");
-    setIsCreateModalOpen(true);
-  }}
-         className="flex items-center gap-2"><Plus size={16} /><span>Create New Job</span></Button>}
+  {!isEmployee && (
+          <button
+            onClick={() => {
+              console.log("%c[DEBUG] Create button clicked", "color: green; font-weight: bold");
+              setIsCreateModalOpen(true);
+            }}
+            className="flex items-center gap-3 pl-1.5 pr-6 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 group h-10"
+          >
+            {/* The "Card" Inside (White 3D Bubble) */}
+            <div className="relative flex items-center justify-center w-7 h-7 mr-1">
+              {/* 1. Glow behind the white card */}
+              <div className="absolute inset-0 bg-white blur-md scale-110 opacity-50 animate-pulse"></div>
+              
+              {/* 2. The White 3D Sphere Container */}
+              <div className="relative w-full h-full rounded-full flex items-center justify-center z-10 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.2)]"
+                   style={{ background: 'radial-gradient(circle at 30% 30%, #ffffff, #f1f5f9)' }}
+              >
+                {/* 3. The Purple Gradient Plus Icon */}
+                <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    className="w-5 h-5"
+                    style={{ filter: 'drop-shadow(0 2px 2px rgba(119,49,232,0.3))' }}
+                >
+                    <defs>
+                        <linearGradient id="purpleIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#9d5cff" />
+                            <stop offset="100%" stopColor="#5b21b6" />
+                        </linearGradient>
+                    </defs>
+                    <path 
+                        d="M12 6V18M6 12H18" 
+                        stroke="url(#purpleIconGrad)" 
+                        strokeWidth="3" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                    />
+                </svg>
+              </div>
+            </div>
+            
+            {/* Button Text */}
+            <span className="tracking-wide text-sm relative z-10">Create New Job</span>
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -708,56 +757,84 @@ if (isLoading) {
     </div>
   )}
 
-  {/* Status Filter */}
-  {!isEmployee && (
-    <div className="flex-shrink-0 order-3 w-full sm:w-[150px]">
-      <Select
-        value={selectedStatus}
-        onValueChange={(value) => {
-          setSelectedStatus(value);
-          setCurrentPage(1);
-        }}
-      >
-        <SelectTrigger className="w-full rounded-full text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
-          <SelectValue placeholder="Status" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Status</SelectItem>
-          <SelectItem value="open">Open</SelectItem>
-          <SelectItem value="hold">On Hold</SelectItem>
-          <SelectItem value="closed">Closed</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-  )}
+{/* Status Filter */}
+{!isEmployee && (
+  <div className="flex-shrink-0 order-3 w-full sm:w-[150px]">
+    <Select
+      value={selectedStatus}
+      onValueChange={(value) => {
+        setSelectedStatus(value);
+        setCurrentPage(1);
+      }}
+    >
+      <SelectTrigger className="w-full rounded-full text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+        <SelectValue placeholder="Status" />
+      </SelectTrigger>
+      <SelectContent>
+        {/* Added purple focus classes to SelectItems */}
+        <SelectItem 
+          value="all" 
+          className="focus:bg-[#7731E8] focus:text-white cursor-pointer"
+        >
+          All Status
+        </SelectItem>
+        <SelectItem 
+          value="open" 
+          className="focus:bg-[#7731E8] focus:text-white cursor-pointer"
+        >
+          Open
+        </SelectItem>
+        <SelectItem 
+          value="hold" 
+          className="focus:bg-[#7731E8] focus:text-white cursor-pointer"
+        >
+          On Hold
+        </SelectItem>
+        <SelectItem 
+          value="closed" 
+          className="focus:bg-[#7731E8] focus:text-white cursor-pointer"
+        >
+          Closed
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  </div>
+)}
 
-  {/* Client Filter */}
-  {!isEmployee && (
-    <div className="flex-shrink-0 order-4 w-full sm:w-[150px]">
-      <Select
-        value={selectedClient}
-        onValueChange={(value) => {
-          setSelectedClient(value);
-          setCurrentPage(1);
-        }}
-      >
-        <SelectTrigger className="w-full rounded-full text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
-          <SelectValue placeholder="Client" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Clients</SelectItem>
-          {clientList.map((clientName) => (
-            <SelectItem key={clientName} value={clientName}>
-              {clientName}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  )}
+{/* Client Filter */}
+{!isEmployee && (
+  <div className="flex-shrink-0 order-4 w-full sm:w-[150px]">
+    <Select
+      value={selectedClient}
+      onValueChange={(value) => {
+        setSelectedClient(value);
+        setCurrentPage(1);
+      }}
+    >
+      <SelectTrigger className="w-full rounded-full text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+        <SelectValue placeholder="Client" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem 
+          value="all" 
+          className="focus:bg-[#7731E8] focus:text-white cursor-pointer"
+        >
+          All Clients
+        </SelectItem>
+        {clientList.map((clientName) => (
+          <SelectItem 
+            key={clientName} 
+            value={clientName}
+            className="focus:bg-[#7731E8] focus:text-white cursor-pointer"
+          >
+            {clientName}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+)}
 </div>
-
-
 
       {renderTable(paginatedJobs)}
       

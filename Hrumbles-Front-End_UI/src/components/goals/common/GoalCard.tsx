@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -152,18 +152,61 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
             <Link to={`/goals/${goal.id}/${selectedGoalType}`} className={cn("block pr-4", className)}>
               <CardTitle className="text-lg font-bold hover:text-primary transition-colors">{goal.name}</CardTitle>
             </Link>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setIsEditDialogOpen(true)}>
-                  <Edit className="h-4 w-4 mr-2" />Edit / Assign
+<DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 flex-shrink-0 text-gray-400 hover:text-gray-700 data-[state=open]:bg-gray-100 transition-colors"
+                >
+                  <MoreHorizontal className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              
+              <DropdownMenuContent align="end" className="w-64 p-2 rounded-xl shadow-xl border-gray-100">
+                <DropdownMenuLabel className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1.5 mb-1">
+                  Actions
+                </DropdownMenuLabel>
+                
+                {/* Edit Option */}
+                <DropdownMenuItem 
+                  onClick={() => setIsEditDialogOpen(true)}
+                  className="cursor-pointer group flex items-start gap-3 p-2.5 rounded-lg focus:bg-violet-50 focus:text-violet-900 data-[highlighted]:bg-violet-50 outline-none transition-all duration-200"
+                >
+                  <div className="mt-0.5 flex items-center justify-center h-8 w-8 rounded-md bg-violet-100 text-violet-600 group-hover:bg-violet-200 transition-colors">
+                    <Edit className="h-4 w-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-sm text-gray-700 group-focus:text-violet-900">Edit / Assign</span>
+                    <span className="text-[11px] text-gray-500 group-focus:text-violet-700/80">Modify targets, period & team</span>
+                  </div>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setIsInstancesDialogOpen(true)}>
-                  <List className="h-4 w-4 mr-2" />View All Instances
+
+                {/* View Instances Option */}
+                <DropdownMenuItem 
+                  onClick={() => setIsInstancesDialogOpen(true)}
+                  className="cursor-pointer group flex items-start gap-3 p-2.5 rounded-lg focus:bg-blue-50 focus:text-blue-900 data-[highlighted]:bg-blue-50 outline-none mt-1 transition-all duration-200"
+                >
+                  <div className="mt-0.5 flex items-center justify-center h-8 w-8 rounded-md bg-blue-100 text-blue-600 group-hover:bg-blue-200 transition-colors">
+                    <List className="h-4 w-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-sm text-gray-700 group-focus:text-blue-900">View History</span>
+                    <span className="text-[11px] text-gray-500 group-focus:text-blue-700/80">Check past performance logs</span>
+                  </div>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setIsDeleteDialogOpen(true)} className="text-red-600">
-                  <Trash2 className="h-4 w-4 mr-2" />Delete Goal
+
+                <DropdownMenuSeparator className="my-2 bg-gray-100" />
+
+                {/* Delete Option */}
+                <DropdownMenuItem 
+                  onClick={() => setIsDeleteDialogOpen(true)} 
+                  className="cursor-pointer group flex items-center gap-3 p-2.5 rounded-lg focus:bg-red-50 focus:text-red-700 data-[highlighted]:bg-red-50 outline-none transition-all duration-200"
+                >
+                  <div className="flex items-center justify-center h-8 w-8 rounded-md bg-red-100 text-red-500 group-hover:bg-red-200 transition-colors">
+                    <Trash2 className="h-4 w-4" />
+                  </div>
+                  <span className="font-semibold text-sm text-red-600 group-focus:text-red-700">Delete Goal</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

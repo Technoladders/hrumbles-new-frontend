@@ -525,7 +525,7 @@ const ResumeUploadModal = ({ isOpen, onClose, onInitiateCandidateAdd,job }: any)
   
   const [view, setView] = useState<'input' | 'detail' | 'compare'>('input');
   const [singleAnalysisResult, setSingleAnalysisResult] = useState<ParsedCandidateProfile | null>(null);
-  const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'bulk'>('paste');
+const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'bulk'>('upload');  // ✅ Correct - 'upload' is now default
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [parsedCandidates, setParsedCandidates] = useState<ParsedCandidateProfile[]>([]);
@@ -726,11 +726,29 @@ const ResumeUploadModal = ({ isOpen, onClose, onInitiateCandidateAdd,job }: any)
             </div>
             <div className="flex-grow bg-white">
               <div className="flex justify-center p-4">
-                <div className="bg-gray-100 rounded-lg p-1 flex items-center space-x-1">
-                  <button onClick={() => setActiveTab('paste')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'paste' ? 'bg-purple-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Paste Resume</button>
-                  <button onClick={() => setActiveTab('upload')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'upload' ? 'bg-purple-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Upload Single</button>
-                  <button onClick={() => setActiveTab('bulk')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'bulk' ? 'bg-purple-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Bulk Upload</button>
-                </div>
+               <div className="flex bg-gray-100 p-1 rounded-lg w-fit">
+  <button 
+    onClick={() => setActiveTab('upload')} 
+    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+      activeTab === 'upload' 
+        ? 'bg-[#7731E8] text-white shadow' 
+        : 'text-gray-600 hover:bg-gray-200'
+    }`}
+  >
+    Upload Single
+  </button>
+  
+  <button 
+    onClick={() => setActiveTab('bulk')} 
+    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+      activeTab === 'bulk' 
+        ? 'bg-[#7731E8] text-white shadow' 
+        : 'text-gray-600 hover:bg-gray-200'
+    }`}
+  >
+    Bulk Upload
+  </button>
+</div>
               </div>
               <div className="p-6">
                 {activeTab === 'paste' && (

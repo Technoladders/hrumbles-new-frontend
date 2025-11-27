@@ -732,13 +732,13 @@ return (
             {/* NEW ANIMATED LIST CONTAINER */}
             <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm animate-scale-in">
                 {/* MODIFIED HEADER */}
-                <div className="hidden lg:grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50/70 border-b border-gray-200">
-                    <div className="col-span-1 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">AI Score</div>
-                    <div className="col-span-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Applied On</div>
-                    <div className="col-span-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Candidate</div>
-                    <div className="col-span-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Job Title</div>
-                    <div className="col-span-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</div>
-                </div>
+           <div className="hidden lg:grid grid-cols-12 gap-4 px-4 py-3 bg-gradient-to-r from-purple-600 to-violet-600 border-b border-purple-700">
+    <div className="col-span-1 text-center text-xs font-bold text-white uppercase tracking-wider">AI Score</div>
+    <div className="col-span-2 text-xs font-bold text-white uppercase tracking-wider">Applied On</div>
+    <div className="col-span-3 text-xs font-bold text-white uppercase tracking-wider">Candidate</div>
+    <div className="col-span-4 text-xs font-bold text-white uppercase tracking-wider">Job Title</div>
+    <div className="col-span-2 text-xs font-bold text-white uppercase tracking-wider">Status</div>
+</div>
 
                 {/* List of Animated Rows */}
                 <div className="divide-y divide-gray-200">
