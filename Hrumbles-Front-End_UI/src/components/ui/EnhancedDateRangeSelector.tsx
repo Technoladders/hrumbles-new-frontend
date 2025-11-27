@@ -369,17 +369,36 @@ export const EnhancedDateRangeSelector: React.FC<EnhancedDateRangeSelectorProps>
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="datepicker" className="w-fit justify-start text-left text-sm font-normal h-8 px-2 py-1 rounded-full shadow-inner">
-          <CalendarIcon className="mr-0 h-4 w-4 text-white" />
-          {value?.startDate && value?.endDate ? (
-            <>
-              {format(value.startDate, 'MMM dd, yy')} - {format(value.endDate, 'MMM dd, yy')}
-            </>
-          ) : (
-            <span className="text-white justify-center text-xs">Select range</span>
-          )}
-        </Button>
+    <PopoverTrigger asChild>
+        <button
+          className="flex items-center gap-2 pl-1 pr-4 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 group h-8"
+        >
+          {/* The "Card" Inside (White 3D Bubble) */}
+          <div className="relative flex items-center justify-center w-6 h-6">
+            {/* 1. Glow behind the white card */}
+            <div className="absolute inset-0 bg-white blur-md scale-110 opacity-50 animate-pulse"></div>
+            
+            {/* 2. The White 3D Sphere Container */}
+            <div className="relative w-full h-full rounded-full flex items-center justify-center z-10 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.2)]"
+                 style={{ background: 'radial-gradient(circle at 30% 30%, #ffffff, #f1f5f9)' }}
+            >
+               {/* 3. The Purple Calendar Icon */}
+               <CalendarIcon 
+                  className="w-3.5 h-3.5 text-[#7731E8]" 
+                  style={{ filter: 'drop-shadow(0 2px 2px rgba(119,49,232,0.3))' }} 
+               />
+            </div>
+          </div>
+          
+          {/* Button Text (Dynamic Date Range) */}
+          <span className="text-xs font-semibold tracking-wide whitespace-nowrap">
+             {value?.startDate && value?.endDate ? (
+                `${format(value.startDate, 'MMM dd, yy')} - ${format(value.endDate, 'MMM dd, yy')}`
+              ) : (
+                "Select range"
+              )}
+          </span>
+        </button>
       </PopoverTrigger>
       <PopoverContent className="p-0 w-auto shadow-xl rounded-xl overflow-hidden animate-slideUp" align="start">
         {/* Range display */}

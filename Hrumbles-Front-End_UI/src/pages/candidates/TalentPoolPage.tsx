@@ -370,14 +370,15 @@ const TalentPoolPage: FC = () => {
     if (isLoading) {
       return (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="grid grid-cols-12 gap-3 px-4 py-3 bg-gray-50/80 border-b border-gray-200">
-            <div className="col-span-3"><Skeleton className="h-4 w-16" /></div>
-            <div className="col-span-2 text-center"><Skeleton className="h-4 w-12 mx-auto" /></div>
-            <div className="col-span-1"><Skeleton className="h-4 w-10" /></div>
-            <div className="col-span-1"><Skeleton className="h-4 w-12" /></div>
-            <div className="col-span-2"><Skeleton className="h-4 w-20" /></div>
-            <div className="col-span-3"><Skeleton className="h-4 w-16" /></div>
-          </div>
+     {/* TALENT POOL HEADER - PURPLE GRADIENT */}
+<div className="grid grid-cols-12 gap-3 px-4 py-3 bg-gradient-to-r from-purple-600 to-violet-600 border-b border-purple-700">
+  <div className="col-span-3 text-xs font-semibold text-white uppercase tracking-wider">Candidate</div>
+  <div className="col-span-2 text-xs font-semibold text-white uppercase tracking-wider text-center">Actions</div>
+  <div className="col-span-1 text-xs font-semibold text-white uppercase tracking-wider">Salary</div>
+  <div className="col-span-1 text-xs font-semibold text-white uppercase tracking-wider">Location</div>
+  <div className="col-span-2 text-xs font-semibold text-white uppercase tracking-wider">Suggested Title</div>
+  <div className="col-span-3 text-xs font-semibold text-white uppercase tracking-wider">Added By</div>
+</div>
           <div className="divide-y divide-gray-200/80">
             {Array.from({ length: 10 }).map((_, index) => (
               <div key={index} className="grid grid-cols-12 gap-3 items-center px-4 py-4">
@@ -403,16 +404,16 @@ const TalentPoolPage: FC = () => {
       );
     }
     
-    return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="grid grid-cols-12 gap-3 px-4 py-3 bg-gray-50/80 border-b border-gray-200">
-          <div className="col-span-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Candidate</div>
-          <div className="col-span-2 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Actions</div>
-          <div className="col-span-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">Salary</div>
-          <div className="col-span-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">Location</div>
-          <div className="col-span-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Suggested Title</div>
-          <div className="col-span-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Added By</div>
-        </div>
+return (
+  <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    <div className="grid grid-cols-12 gap-3 px-4 py-3 bg-gradient-to-r from-purple-600 to-violet-600 border-b border-purple-700">
+      <div className="col-span-3 text-xs font-semibold text-white uppercase tracking-wider">Candidate</div>
+      <div className="col-span-2 text-xs font-semibold text-white uppercase tracking-wider text-center">Actions</div>
+      <div className="col-span-1 text-xs font-semibold text-white uppercase tracking-wider">Salary</div>
+      <div className="col-span-1 text-xs font-semibold text-white uppercase tracking-wider">Location</div>
+      <div className="col-span-2 text-xs font-semibold text-white uppercase tracking-wider">Suggested Title</div>
+      <div className="col-span-3 text-xs font-semibold text-white uppercase tracking-wider">Added By</div>
+    </div>
 
         <div className="divide-y divide-gray-200/80">
           {paginatedCandidates.map((candidate) => {
@@ -498,16 +499,44 @@ const TalentPoolPage: FC = () => {
       <div className="space-y-8 animate-fade-in p-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div><h1 className="text-3xl font-bold mb-1">Talent Pool</h1><p className="text-gray-500">Search and manage your organization's candidates.</p></div>
-          <div className="flex items-center gap-2">
-           
-<Button variant="outline" onClick={() => setIsWishlistModalOpen(true)} className="flex items-center gap-2">
-  <Bookmark size={16} className="text-indigo-600" />
-  <span>My Shortlist</span>
-</Button>
-            <Button onClick={() => setAddModalOpen(true)} className="flex items-center gap-2">
-              <UserPlus size={16} />
-              <span>Add Candidate</span>
+<div className="flex items-center gap-3">
+            
+            {/* My Shortlist Button (Clean Outline Style) */}
+            <Button 
+              variant="outline" 
+              onClick={() => setIsWishlistModalOpen(true)} 
+              className="flex items-center gap-2 rounded-full border-gray-300 text-gray-600 hover:bg-[#7731E8] hover:text-white hover:border-[#7731E8] transition-colors duration-200 h-10 px-5"
+            >
+              <Bookmark size={16} />
+              <span>My Shortlist</span>
             </Button>
+
+            {/* Add Candidate Button (3D Purple Bubble Style) */}
+            <button
+              onClick={() => setAddModalOpen(true)}
+              className="flex items-center gap-3 pl-1.5 pr-6 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 group h-10"
+            >
+              {/* The "Card" Inside (White 3D Bubble) */}
+              <div className="relative flex items-center justify-center w-7 h-7 mr-1">
+                {/* 1. Glow behind the white card */}
+                <div className="absolute inset-0 bg-white blur-md scale-110 opacity-50 animate-pulse"></div>
+                
+                {/* 2. The White 3D Sphere Container */}
+                <div className="relative w-full h-full rounded-full flex items-center justify-center z-10 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.2)]"
+                     style={{ background: 'radial-gradient(circle at 30% 30%, #ffffff, #f1f5f9)' }}
+                >
+                  {/* 3. The Purple User Plus Icon */}
+                  <UserPlus 
+                      className="w-4 h-4 text-[#7731E8]" 
+                      style={{ filter: 'drop-shadow(0 2px 2px rgba(119,49,232,0.3))' }}
+                  />
+                </div>
+              </div>
+              
+              {/* Button Text */}
+              <span className="tracking-wide text-sm relative z-10">Add Candidate</span>
+            </button>
+
           </div>
         </div>
 
@@ -522,7 +551,12 @@ const TalentPoolPage: FC = () => {
           <div className="relative flex-grow min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]"><Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} /><Input placeholder="Search by name, email or phone..." className="pl-12 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm placeholder:text-sm" value={searchTerm} onChange={handleSearchChange} disabled={!!selectedJob} /></div>
           <Popover open={isJobPopoverOpen} onOpenChange={setJobPopoverOpen}>
             <PopoverTrigger asChild><Button className="h-10 px-6 font-semibold text-white whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200 flex items-center gap-2"><Sparkles size={18} /><span>Match with Job</span></Button></PopoverTrigger>
-            <PopoverContent className="w-[360px] p-4 bg-white rounded-2xl shadow-2xl border-none mt-2" align="end"><Command className="bg-transparent"><CommandInput placeholder="Search for a job..." value={jobSearchTerm} onValueChange={setJobSearchTerm} className="w-full h-12 px-4 bg-purple-50 border border-purple-200 rounded-xl text-purple-900 placeholder:text-purple-400 focus:ring-2 focus:ring-purple-400 focus:ring-offset-2" /><CommandList className="mt-4 max-h-[300px]"><CommandEmpty>{isLoadingJobs ? 'Loading...' : 'No jobs found.'}</CommandEmpty><CommandGroup>{jobs?.map((job) => (<CommandItem key={job.id} onSelect={() => handleJobSelect(job)} className="flex justify-between items-center p-3 my-1 text-base font-medium text-gray-800 rounded-lg cursor-pointer transition-colors duration-150 hover:bg-purple-100 data-[selected=true]:bg-purple-600 data-[selected=true]:text-white aria-selected:bg-purple-600 aria-selected:text-white"><span>{job.title}</span><ChevronRight className="h-5 w-5 text-purple-500 opacity-0 transition-opacity aria-selected:opacity-100" /></CommandItem>))}</CommandGroup></CommandList></Command></PopoverContent>
+            <PopoverContent className="w-[360px] p-4 bg-white rounded-2xl shadow-2xl border-none mt-2" align="end"><Command className="bg-transparent"><CommandInput 
+  placeholder="Search for a job..." 
+  value={jobSearchTerm} 
+  onValueChange={setJobSearchTerm} 
+  className="w-full mt-2 h-10 px-3 text-sm bg-purple-50 border border-purple-200 rounded-xl text-purple-900 placeholder:text-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-0" 
+/><CommandList className="mt-4 max-h-[300px]"><CommandEmpty>{isLoadingJobs ? 'Loading...' : 'No jobs found.'}</CommandEmpty><CommandGroup>{jobs?.map((job) => (<CommandItem key={job.id} onSelect={() => handleJobSelect(job)} className="flex justify-between items-center p-3 my-1 text-base font-medium text-gray-800 rounded-lg cursor-pointer transition-colors duration-150 hover:bg-purple-100 data-[selected=true]:bg-purple-600 data-[selected=true]:text-white aria-selected:bg-purple-600 aria-selected:text-white"><span>{job.title}</span><ChevronRight className="h-5 w-5 text-purple-500 opacity-0 transition-opacity aria-selected:opacity-100" /></CommandItem>))}</CommandGroup></CommandList></Command></PopoverContent>
           </Popover>
         </div>
 

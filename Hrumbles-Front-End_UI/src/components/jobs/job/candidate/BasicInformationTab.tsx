@@ -25,7 +25,11 @@ import MultiLocationSelector from "./MultiLocationSelector";
 import SingleLocationSelector from "./SingleLocationSelector";
 import { CandidateFormData } from "./AddCandidateDrawer";
 import { supabase } from "@/integrations/supabase/client";
-import { FileText, Loader2, User, Mail, Phone, MapPin, Briefcase, DollarSign, Clock, Link as LinkIcon, CalendarDays, Paperclip, UploadCloud } from "lucide-react";
+import { 
+  FileText, Loader2, User, Mail, Phone, MapPin, Briefcase, 
+  DollarSign, Clock, Link as LinkIcon, CalendarDays, Paperclip, 
+  UploadCloud, Trash2 
+} from "lucide-react";
 import PhoneInput from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 import { toast } from "sonner";
@@ -286,6 +290,22 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete, c
 
   console.log("BasicInformationTab",candidate)
 
+const getFileNameFromUrl = (url: string) => {
+  if (!url) return "";
+  try {
+    const parts = url.split('/');
+    const fullName = parts[parts.length - 1];
+    // Remove the timestamp prefix if your upload logic adds one (e.g., 123456_name.pdf)
+    const cleanName = fullName.replace(/^\d+_/, ''); 
+    return decodeURIComponent(cleanName);
+  } catch (e) {
+    return "Uploaded Resume";
+  }
+};
+
+
+
+
   const currentSalary = form.watch("currentSalary");
   const expectedSalary = form.watch("expectedSalary");
   const hasOffers = form.watch("hasOffers");
@@ -295,48 +315,173 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete, c
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSaveAndNext)} className="space-y-8 py-4">
         {/* --- Section 1: Resume Upload --- */}
-        <motion.div
-          variants={sectionVariants}
-          initial="hidden"
-          animate="visible"
-          className="p-6 bg-white rounded-xl shadow-lg border border-gray-100"
-        >
-          <motion.h3 variants={itemVariants} className="text-xl font-bold mb-4 text-gray-800">Start with the Resume</motion.h3>
-          <motion.div variants={itemVariants}>
-            <FormField
-              control={form.control}
-              name="resume"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Upload Resume for AI Parsing <span className="text-red-500">*</span>
-                  </FormLabel>
-                  <FormControl>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="file"
-                        accept=".pdf,.docx"
-                        onChange={handleFileChange}
-                        disabled={isParsing}
-                        className="flex-1"
-                      />
-                      {isParsing && <Loader2 className="h-5 w-5 animate-spin text-purple-600" />}
+     <motion.div
+  variants={sectionVariants}
+  initial="hidden"
+  animate="visible"
+  className="p-5 bg-white rounded-xl shadow-lg border border-gray-100"
+>
+  <motion.h3 variants={itemVariants} className="text-xl font-bold mb-4 text-gray-800">
+    Start with the Resume
+  </motion.h3>
+  
+  <motion.div variants={itemVariants}>
+    <FormField
+      control={form.control}
+      name="resume"
+      render={({ field }) => (
+        <FormItem>
+          {/* Hidden Label for screen readers, visual label is below */}
+          <FormLabel className="sr-only">Upload Resume</FormLabel>
+          
+          <FormControl>
+            <div className="w-full">
+              {/* HIDDEN INPUT - Triggered by the label or replace button */}
+              <Input
+                id="resume-upload-input"
+                type="file"
+                accept=".pdf,.docx,.doc,.rtf"
+                onChange={handleFileChange}
+                disabled={isParsing}
+                className="hidden" 
+              />
+
+              {/* STATE 1: NO FILE SELECTED (UPLOAD BUTTON) */}
+{/* STATE 1: NO FILE SELECTED (UPLOAD BUTTON) */}
+              {!field.value && !isParsing && (
+                <div className="flex items-center gap-4">
+                  <label
+                    htmlFor="resume-upload-input"
+                    className="flex items-center gap-3 pl-1.5 pr-6 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 group h-10 cursor-pointer w-fit"
+                  >
+                    {/* The "Card" Inside (White 3D Bubble) */}
+                    <div className="relative flex items-center justify-center w-7 h-7 mr-1">
+                      {/* 1. Glow behind the white card */}
+                      <div className="absolute inset-0 bg-white blur-md scale-110 opacity-50 animate-pulse"></div>
+
+                      {/* 2. The White 3D Sphere Container */}
+                      <div
+                        className="relative w-full h-full rounded-full flex items-center justify-center z-10 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.2)]"
+                        style={{
+                          background:
+                            "radial-gradient(circle at 30% 30%, #ffffff, #f1f5f9)",
+                        }}
+                      >
+                        {/* 3. The Purple Gradient Upload Icon */}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          className="w-4 h-4"
+                          style={{
+                            filter: "drop-shadow(0 2px 2px rgba(119,49,232,0.3))",
+                          }}
+                        >
+                          <defs>
+                            <linearGradient
+                              id="purpleIconGrad"
+                              x1="0%"
+                              y1="0%"
+                              x2="100%"
+                              y2="100%"
+                            >
+                              <stop offset="0%" stopColor="#9d5cff" />
+                              <stop offset="100%" stopColor="#5b21b6" />
+                            </linearGradient>
+                          </defs>
+                          {/* Upload Arrow Path */}
+                          <path
+                            d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"
+                            stroke="url(#purpleIconGrad)"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
                     </div>
-                  </FormControl>
-                  {field.value && !isParsing && (
-                    <div className="flex items-center text-sm mt-1 gap-1">
-                      <FileText size={16} className="text-purple-600" />
-                      <a href={field.value} target="_blank" rel="noopener noreferrer" className="text-purple-600 underline">
-                        View Uploaded Resume
-                      </a>
-                    </div>
-                  )}
-                  <FormMessage />
-                </FormItem>
+
+                    {/* Button Text */}
+                    <span className="tracking-wide text-sm relative z-10">
+                      Upload Resume
+                    </span>
+                  </label>
+                  
+                  {/* Helper Text (Moved outside the button for cleaner look) */}
+                  <span className="hidden sm:block text-xs text-gray-400 font-medium">
+                    DOC, DOCx, PDF | Max: 2 MB
+                  </span>
+                </div>
               )}
-            />
-          </motion.div>
-        </motion.div>
+
+              {/* STATE 2: PARSING LOADER */}
+              {isParsing && (
+                <div className="flex items-center gap-3 p-4 border border-purple-100 bg-purple-50 rounded-xl max-w-xl">
+                  <Loader2 className="h-6 w-6 animate-spin text-[#7731E8]" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-700">Analyzing Resume...</span>
+                    <span className="text-xs text-gray-500">Extracting details with AI</span>
+                  </div>
+                </div>
+              )}
+
+              {/* STATE 3: FILE UPLOADED (PREVIEW CARD) */}
+              {field.value && !isParsing && (
+                <div className="flex items-center justify-between p-3 border border-gray-200 rounded-2xl bg-white max-w-xl shadow-sm">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    {/* Icon Circle */}
+                    <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                      <Paperclip className="h-5 w-5 text-gray-500" />
+                    </div>
+                    
+                    {/* File Name */}
+                    <div className="flex flex-col overflow-hidden">
+                      <a 
+                        href={field.value} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-sm font-medium text-gray-700 truncate hover:text-[#7731E8] transition-colors"
+                      >
+                        {getFileNameFromUrl(field.value)}
+                      </a>
+                      {/* Placeholder size/date since we only have URL here */}
+                      <span className="text-xs text-gray-400">Uploaded Successfully</span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-4 pr-2">
+                    {/* Replace Button */}
+                    <label 
+                      htmlFor="resume-upload-input" 
+                      className="text-sm font-bold text-blue-600 hover:text-blue-700 cursor-pointer transition-colors"
+                    >
+                      Replace
+                    </label>
+
+                    {/* Delete Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        form.setValue("resume", "", { shouldDirty: true });
+                        // Optional: Reset other fields if you want
+                        toast.info("Resume removed");
+                      }}
+                      className="h-8 w-8 flex items-center justify-center rounded-full bg-blue-50 hover:bg-red-50 text-blue-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  </motion.div>
+</motion.div>
 
         {/* --- Section 2: Personal & Contact Details --- */}
         <motion.div 
@@ -965,7 +1110,8 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete, c
             </Button>
           </motion.div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button type="submit" disabled={isParsing} className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/50">
+            <Button type="submit" disabled={isParsing} className="bg-[#7731E8] hover:bg-[#6528cc] text-white shadow-md transition-all duration-200 px-6"
+                  >
               {isParsing ? (
                 <div className="flex items-center gap-2">
                   <Loader2 className="animate-spin h-4 w-4" />

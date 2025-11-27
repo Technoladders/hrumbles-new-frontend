@@ -139,7 +139,6 @@ export function DigitalTimeDisplay({
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        // CHANGED: Reduced padding from p-3 to p-2.5 to make card smaller
         className="relative overflow-hidden rounded-xl bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-2.5 shadow-lg border border-indigo-100 h-full flex flex-col justify-between"
       >
         {/* Animated Background Gradient */}
@@ -161,7 +160,6 @@ export function DigitalTimeDisplay({
 
         {/* Header with Date */}
         <motion.div 
-          // CHANGED: Reduced margin from mb-3 to mb-2
           className="flex items-center justify-between mb-2 relative z-10"
           initial={{ x: -20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
@@ -197,7 +195,6 @@ export function DigitalTimeDisplay({
           <motion.div
             whileHover={{ scale: 1.05, rotateY: 5 }}
             style={{ transformStyle: 'preserve-3d' }}
-            // CHANGED: Reduced padding to p-2
             className={`relative rounded-lg p-2 transition-all duration-300 ${
               clockInTime 
                 ? 'bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 shadow-md' 
@@ -217,7 +214,6 @@ export function DigitalTimeDisplay({
               <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wide">Clock In</p>
             </div>
             <motion.p 
-              // CHANGED: Reduced font from text-xl to text-lg
               className={`text-lg font-bold truncate ${clockInTime ? 'text-green-700' : 'text-gray-400'}`}
               animate={showClockInAnimation ? { scale: [1, 1.2, 1] } : {}}
             >
@@ -237,7 +233,6 @@ export function DigitalTimeDisplay({
           <motion.div
             whileHover={{ scale: 1.05, rotateY: -5 }}
             style={{ transformStyle: 'preserve-3d' }}
-            // CHANGED: Reduced padding to p-2
             className={`relative rounded-lg p-2 transition-all duration-300 ${
               clockOutTime 
                 ? 'bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 shadow-md' 
@@ -257,7 +252,6 @@ export function DigitalTimeDisplay({
               <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wide">Clock Out</p>
             </div>
             <motion.p 
-              // CHANGED: Reduced font from text-xl to text-lg
               className={`text-lg font-bold truncate ${clockOutTime ? 'text-amber-700' : 'text-gray-400'}`}
               animate={showClockOutAnimation ? { scale: [1, 1.2, 1] } : {}}
             >
@@ -277,7 +271,6 @@ export function DigitalTimeDisplay({
 
         {/* Live Tracker Label */}
         <motion.div 
-          // CHANGED: Reduced margin from mb-3 to mb-1.5
           className="text-center mb-1.5 relative z-10"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -290,87 +283,64 @@ export function DigitalTimeDisplay({
           </div>
         </motion.div>
 
-        {/* Duration Display Cards with 3D Flip */}
+{/* Duration Display Cards (Compact & Minimal Border) */}
         <div className="grid grid-cols-2 gap-2 relative z-10">
+          
+          {/* Session Duration - Purple Border Only */}
           <motion.div
-            whileHover={{ 
-              scale: 1.05,
-              rotateX: 5,
-              rotateY: -5,
-            }}
-            style={{ transformStyle: 'preserve-3d' }}
-            // CHANGED: Reduced padding to p-2.5
-            className="bg-gradient-to-br from-purple-400 to-purple-700 rounded-lg p-2.5 shadow-lg text-white"
+            whileHover={{ scale: 1.02 }}
+            className="rounded-lg p-1.5 border border-purple-200 bg-white shadow-sm"
           >
             <motion.div
-              animate={{ 
-                scale: isClockedIn ? [1, 1.02, 1] : 1,
-              }}
-              transition={{ 
-                duration: 2, 
-                repeat: isClockedIn ? Infinity : 0 
-              }}
+              animate={{ scale: isClockedIn ? [1, 1.02, 1] : 1 }}
+              transition={{ duration: 2, repeat: isClockedIn ? Infinity : 0 }}
+              className="flex flex-col items-center justify-center h-full"
             >
-              {/* CHANGED: Reduced font from text-2xl to text-xl */}
-              <p className="text-xl font-mono font-bold tracking-tight mb-0.5">
+              <p className="text-sm font-mono font-bold text-gray-800 leading-none">
                 {sessionDurationDisplay}
               </p>
-              <div className="flex items-center gap-1">
-                <Clock className="h-3 w-3 opacity-80" />
-                <p className="text-[9px] font-medium opacity-90 uppercase">Session Duration</p>
+              <div className="flex items-center gap-1 mt-1">
+                <Clock className="h-2.5 w-2.5 text-purple-500" />
+                <p className="text-[8px] font-bold text-purple-600 uppercase tracking-wider">Session</p>
               </div>
             </motion.div>
           </motion.div>
 
+          {/* Total Break - Orange Border (Active) or Gray Border (Inactive) */}
           <motion.div
-            whileHover={{ 
-              scale: 1.05,
-              rotateX: 5,
-              rotateY: 5,
-            }}
-            style={{ transformStyle: 'preserve-3d' }}
-            // CHANGED: Reduced padding to p-2.5
-className={`rounded-lg p-2.5 shadow-lg text-white transition-all duration-300 ${
-  isOnBreak 
-    ? 'bg-gradient-to-br from-cyan-400 to-teal-500' 
-    : 'bg-gradient-to-br from-blue-500 to-blue-600' // <--- CHANGED THIS
-}`}
+            whileHover={{ scale: 1.02 }}
+            className={`rounded-lg p-1.5 border bg-white shadow-sm transition-colors duration-300 ${
+              isOnBreak ? 'border-orange-300' : 'border-slate-200'
+            }`}
           >
             <motion.div
-              animate={{ 
-                scale: isOnBreak ? [1, 1.02, 1] : 1,
-              }}
-              transition={{ 
-                duration: 2, 
-                repeat: isOnBreak ? Infinity : 0 
-              }}
+              animate={{ scale: isOnBreak ? [1, 1.02, 1] : 1 }}
+              transition={{ duration: 2, repeat: isOnBreak ? Infinity : 0 }}
+              className="flex flex-col items-center justify-center h-full"
             >
-               {/* CHANGED: Reduced font from text-2xl to text-xl */}
-              <p className="text-xl font-mono font-bold tracking-tight mb-0.5">
+              <p className="text-sm font-mono font-bold text-gray-800 leading-none">
                 {isOnBreak ? breakTime : totalBreakTimeDisplay}
               </p>
-              <div className="flex items-center gap-1">
-                <Coffee className="h-3 w-3 opacity-80" />
-                <p className="text-[9px] font-medium opacity-90 uppercase">
-                  {isOnBreak ? 'Current Break' : 'Total Break'}
+              <div className="flex items-center gap-1 mt-1">
+                <Coffee className={`h-2.5 w-2.5 ${isOnBreak ? 'text-orange-500' : 'text-slate-400'}`} />
+                <p className={`text-[8px] font-bold uppercase tracking-wider ${isOnBreak ? 'text-orange-600' : 'text-slate-500'}`}>
+                  {isOnBreak ? 'On Break' : 'Total Break'}
                 </p>
               </div>
             </motion.div>
           </motion.div>
+          
         </div>
-
         {/* Status Indicator */}
         {isClockedIn && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            // CHANGED: Reduced margin from mt-3 to mt-2
             className="mt-2 text-center relative z-10"
           >
             <motion.div
               animate={{ opacity: [0.5, 1, 0.5] }}
               transition={{ duration: 2, repeat: Infinity }}
-              // CHANGED: Reduced padding
               className="inline-flex items-center gap-1.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-3 py-1 rounded-full text-[10px] font-semibold shadow-md"
             >
               <motion.div

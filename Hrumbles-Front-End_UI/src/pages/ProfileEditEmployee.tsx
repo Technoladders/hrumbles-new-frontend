@@ -301,7 +301,7 @@ interface FormErrors {
   salary_type?: string;
 }
 
-const EmployeeOnboard = () => {
+const ProfileEditEmployee = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState("personal");
@@ -322,7 +322,8 @@ const [isSameAsPresent, setIsSameAsPresent] = useState(false);
   const [isVerifyingIfsc, setIsVerifyingIfsc] = useState(false);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
 
-  const [noAadhar, setNoAadhar] = useState(false); // ✅ ADD THIS
+  const [showAdditionalDocs, setShowAdditionalDocs] = useState(false);
+
 
 
  const isAlternativeDocValid = (type: string, number: string): boolean => {
@@ -1401,34 +1402,30 @@ case 'bank-details':
 // Find the `validateTab` function and REPLACE the `case 'documents':` block with this
 
 case 'documents':
-    // --- VALIDATE AADHAR ONLY IF THE TOGGLE IS OFF ---
-    if (!noAadhar) {
+        // --- AADHAR IS NOW MANDATORY ---
         if (!formData.aadharNumber.trim() || !VALIDATIONS.aadhar.test(formData.aadharNumber)) {
             newErrors.aadharNumber = "A valid 12-digit Aadhar number is required.";
         }
         if (!formData.aadharUrl.trim()) {
             toast.error("Please upload your Aadhar document.");
         }
-    }
-    // If noAadhar is true, we simply skip the validation for Aadhar and alternatives.
 
-    // --- ALWAYS VALIDATE PAN (MANDATORY) ---
-    if (!formData.panNumber.trim() || !VALIDATIONS.pan.test(formData.panNumber)) {
-        newErrors.panNumber = "A valid PAN number is required.";
-    }
-    if (!formData.panUrl.trim()) {
-        toast.error("Please upload your PAN document.");
-    }
-    
-    // Validate optional statutory docs only if user has entered text
-    if (formData.esicNumber.trim() && !VALIDATIONS.esic.test(formData.esicNumber)) {
-        newErrors.esicNumber = "The ESIC number format is incorrect.";
-    }
-    if (formData.uanNumber.trim() && !VALIDATIONS.uan.test(formData.uanNumber)) {
-        newErrors.uanNumber = "A valid 12-digit UAN number is required.";
-    }
-    
-    break;
+        // --- PAN IS MANDATORY ---
+        if (!formData.panNumber.trim() || !VALIDATIONS.pan.test(formData.panNumber)) {
+            newErrors.panNumber = "A valid PAN number is required.";
+        }
+        if (!formData.panUrl.trim()) {
+            toast.error("Please upload your PAN document.");
+        }
+        
+        // Validate optional statutory docs only if user has entered text
+        if (formData.esicNumber.trim() && !VALIDATIONS.esic.test(formData.esicNumber)) {
+            newErrors.esicNumber = "The ESIC number format is incorrect.";
+        }
+        if (formData.uanNumber.trim() && !VALIDATIONS.uan.test(formData.uanNumber)) {
+            newErrors.uanNumber = "A valid 12-digit UAN number is required.";
+        }
+        break;
     }
     
     setFormErrors(newErrors);
@@ -1487,11 +1484,12 @@ if (!validateTab(activeTab)) {
         // =============================================
         
         // Aadhar fields are saved only if the "I don't have this" toggle is OFF
-        aadhar_number: !noAadhar ? formData.aadharNumber || null : null,
-        aadhar_url: !noAadhar ? formData.aadharUrl || null : null,
+   aadhar_number: formData.aadharNumber || null,
+        aadhar_url: formData.aadharUrl || null,
 
         // PAN is always saved
-        pan_number: formData.panNumber || null,
+         pan_number: formData.panNumber || null,
+
         pan_url: formData.panUrl || null,
         
         // Save alternative documents directly to their specific database columns
@@ -1807,6 +1805,282 @@ const bloodGroupOptions = [
   "Bombay (hh)", "Unknown", ""
 ];
 
+// --- HELPER: Extract Filename from URL ---
+  const getFileNameFromUrl = (url: string) => {
+    if (!url) return "Document";
+    try {
+      const parts = url.split('/');
+      const name = decodeURIComponent(parts[parts.length - 1]);
+      // Remove timestamp prefix if present (optional, based on your upload logic)
+      return name.length > 25 ? name.substring(0, 25) + "..." : name;
+    } catch (e) {
+      return "Document";
+    }
+  };
+
+  // --- HELPER: Reusable Upload UI Component ---
+  // --- HELPER: Reusable Upload UI Component (UPDATED TO PURPLE) ---
+  const renderDocumentUpload = (
+    label: string,
+    fieldName: string,
+    fileUrl: string,
+    mandatory: boolean = false,
+    isDisabled: boolean = false
+  ) => (
+    <div className="form-3d-input">
+      <Label className="form-3d-label">
+        {label} {mandatory && !isDisabled && <span className="text-red-500">*</span>}
+      </Label>
+      
+      <div className="w-full">
+        <input
+          type="file"
+          id={fieldName}
+          className="sr-only"
+          onChange={(e) => handleDocumentUpload(e, fieldName)}
+          disabled={isDisabled || uploadingFile === fieldName}
+          accept=".pdf,.png,.jpg,.jpeg"
+        />
+
+        {!fileUrl ? (
+          <label
+            htmlFor={fieldName}
+            className={cn(
+              "group cursor-pointer flex items-center w-full border border-gray-200 rounded-full bg-white shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden max-w-xl",
+              isDisabled && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            {/* The Purple Button Part (CHANGED FROM ORANGE) */}
+            <div className={cn(
+              "text-white px-6 py-2.5 font-bold text-sm flex items-center justify-center transition-colors min-w-[140px]",
+              uploadingFile === fieldName ? "bg-gray-400" : "bg-[#7731E8] hover:bg-[#6528cc]"
+            )}>
+              {uploadingFile === fieldName ? (
+                <span className="flex items-center gap-2"><Loader2 className="animate-spin h-4 w-4" /> Uploading</span>
+              ) : (
+                "Upload File"
+              )}
+            </div>
+            
+            {/* The Info Text Part */}
+            <div className="px-5 text-gray-400 text-xs font-medium flex-1 truncate">
+              PDF, PNG, JPG | Max: 5 MB
+            </div>
+          </label>
+        ) : (
+          <div className="flex items-center justify-between p-3 border border-gray-200 rounded-2xl bg-white shadow-sm max-w-xl">
+            <div className="flex items-center gap-3 overflow-hidden">
+              {/* Icon Circle (CHANGED FROM ORANGE) */}
+              <div className="h-10 w-10 rounded-full bg-purple-50 flex items-center justify-center flex-shrink-0">
+                <FileText className="h-5 w-5 text-[#7731E8]" />
+              </div>
+              {/* File Info */}
+              <div className="flex flex-col overflow-hidden">
+                <a 
+                  href={fileUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-sm font-medium text-gray-700 truncate hover:text-[#7731E8] transition-colors"
+                >
+                  {getFileNameFromUrl(fileUrl)}
+                </a>
+                <span className="text-xs text-gray-400">Uploaded Successfully</span>
+              </div>
+            </div>
+            {/* Actions */}
+            <div className="flex items-center gap-3 pr-2">
+              <label 
+                htmlFor={fieldName} 
+                className="text-sm font-bold text-blue-600 hover:text-blue-700 cursor-pointer transition-colors"
+              >
+                Replace
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+
+// --- HELPER: Purple Style Upload (For Education & Experience) ---
+  // --- PASTE THIS BEFORE THE 'return (' STATEMENT ---
+
+  // Helper: Purple Style Upload (For Education & Experience)
+  const renderPurpleDocumentUpload = (
+    label: string,
+    inputId: string,
+    fileUrl: string,
+    uploadingKey: string,
+    onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void,
+    mandatory: boolean = false
+  ) => (
+    <div className="form-3d-input w-full">
+      <Label className="form-3d-label">
+        {label} {mandatory && <span className="text-red-500">*</span>}
+      </Label>
+      
+      <div className="w-full">
+        <input
+          type="file"
+          id={inputId}
+          className="sr-only"
+          accept=".pdf,.png,.jpg,.jpeg"
+          disabled={uploadingFile === uploadingKey}
+          onChange={onUpload}
+        />
+
+        {!fileUrl ? (
+          <label
+            htmlFor={inputId}
+            className={cn(
+              "group cursor-pointer flex items-center w-full border border-gray-200 rounded-full bg-white shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden max-w-xl",
+              uploadingFile === uploadingKey && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            {/* The Purple Button Part */}
+            <div className={cn(
+              "text-white px-6 py-2.5 font-bold text-sm flex items-center justify-center transition-colors min-w-[140px]",
+              uploadingFile === uploadingKey ? "bg-gray-400" : "bg-[#7731E8] hover:bg-[#6528cc]"
+            )}>
+              {uploadingFile === uploadingKey ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="animate-spin h-4 w-4" /> Uploading
+                </span>
+              ) : (
+                "Upload File"
+              )}
+            </div>
+            
+            {/* The Info Text Part */}
+            <div className="px-5 text-gray-400 text-xs font-medium flex-1 truncate">
+              PDF, PNG, JPG | Max: 5 MB
+            </div>
+          </label>
+        ) : (
+          <div className="flex items-center justify-between p-3 border border-gray-200 rounded-2xl bg-white shadow-sm max-w-xl">
+            <div className="flex items-center gap-3 overflow-hidden">
+              {/* Icon Circle */}
+              <div className="h-10 w-10 rounded-full bg-purple-50 flex items-center justify-center flex-shrink-0">
+                <FileText className="h-5 w-5 text-[#7731E8]" />
+              </div>
+              {/* File Info */}
+              <div className="flex flex-col overflow-hidden">
+                <a 
+                  href={fileUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-sm font-medium text-gray-700 truncate hover:text-[#7731E8] transition-colors"
+                >
+                  {getFileNameFromUrl(fileUrl)}
+                </a>
+                <span className="text-xs text-gray-400">Uploaded Successfully</span>
+              </div>
+            </div>
+            {/* Actions */}
+            <div className="flex items-center gap-3 pr-2">
+              <label 
+                htmlFor={inputId} 
+                className="text-sm font-bold text-blue-600 hover:text-blue-700 cursor-pointer transition-colors"
+              >
+                Replace
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+
+  // --- HELPER: Orange/Red Style Upload for Education ---
+  const renderEducationUploadUI = (index: number, currentUrl: string) => {
+    const fieldId = `education-${index}`;
+    const isUploading = uploadingFile === fieldId;
+
+    return (
+      <div className="form-3d-input w-full">
+        <Label className="form-3d-label">Document</Label>
+        
+        <div className="w-full">
+          <input
+            type="file"
+            id={fieldId}
+            className="sr-only"
+            accept=".pdf,.png,.jpg,.jpeg"
+            disabled={isUploading}
+            onChange={(e) => handleEducationUpload(e, index)}
+          />
+
+          {!currentUrl ? (
+            <label
+              htmlFor={fieldId}
+              className={cn(
+                "group cursor-pointer flex items-center w-full border border-gray-200 rounded-full bg-white shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden max-w-xl",
+                isUploading && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              {/* The Orange/Red Button Part */}
+              <div className={cn(
+                "text-white px-6 py-2.5 font-bold text-sm flex items-center justify-center transition-colors min-w-[140px]",
+                isUploading ? "bg-gray-400" : "bg-[#EA580C] hover:bg-[#c2410c]"
+              )}>
+                {isUploading ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="animate-spin h-4 w-4" /> Uploading
+                  </span>
+                ) : (
+                  "Upload File"
+                )}
+              </div>
+              
+              {/* The Info Text Part */}
+              <div className="px-5 text-gray-400 text-xs font-medium flex-1 truncate">
+                PDF, PNG, JPG | Max: 5 MB
+              </div>
+            </label>
+          ) : (
+            <div className="flex items-center justify-between p-3 border border-gray-200 rounded-2xl bg-white shadow-sm max-w-xl">
+              <div className="flex items-center gap-3 overflow-hidden">
+                {/* Icon Circle */}
+                <div className="h-10 w-10 rounded-full bg-orange-50 flex items-center justify-center flex-shrink-0">
+                  <FileText className="h-5 w-5 text-[#EA580C]" />
+                </div>
+                {/* File Info */}
+                <div className="flex flex-col overflow-hidden">
+                  <a 
+                    href={currentUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-sm font-medium text-gray-700 truncate hover:text-[#EA580C] transition-colors"
+                  >
+                    {getFileNameFromUrl(currentUrl)}
+                  </a>
+                  <span className="text-xs text-gray-400">Uploaded Successfully</span>
+                </div>
+              </div>
+              {/* Actions */}
+              <div className="flex items-center gap-3 pr-2">
+                <label 
+                  htmlFor={fieldId} 
+                  className="text-sm font-bold text-blue-600 hover:text-blue-700 cursor-pointer transition-colors"
+                >
+                  Replace
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+
+ 
+
+
+
+
   return (
     <div className="container mx-auto p-6 max-w-8xl">
       <style>{`
@@ -2029,28 +2303,45 @@ const bloodGroupOptions = [
             </div>
           ) : (
             <Tabs value={activeTab} onValueChange={handleTabChange}>
-              <div className="flex justify-center">
-              <TabsList className="animated-tabs-list mb-8">
-                <TabsTrigger value="personal" className="animated-tab-trigger">
-                  {/* <User className="h-3.5 w-3.5 mr-1.5" /> */}
-                  Personal
-                </TabsTrigger>
-                <TabsTrigger value="address" className="animated-tab-trigger">
-                  Address
-                </TabsTrigger>
-                <TabsTrigger value="contact" className="animated-tab-trigger">
-                  Contact
-                </TabsTrigger>
-                <TabsTrigger value="education" className="animated-tab-trigger">
-                  Education
-                </TabsTrigger>
-                <TabsTrigger value="bank-details" className="animated-tab-trigger">
-                  Bank Details
-                </TabsTrigger>
-                <TabsTrigger value="documents" className="animated-tab-trigger">
-                  Documents
-                </TabsTrigger>
-              </TabsList>
+<div className="flex justify-center mb-8">
+                <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 p-1.5 shadow-inner h-auto flex-wrap gap-1 sm:gap-0">
+                  <TabsTrigger
+                    value="personal"
+                    className="rounded-full px-4 sm:px-6 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#7731E8] data-[state=active]:text-white data-[state=active]:shadow-md"
+                  >
+                    Personal
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="address"
+                    className="rounded-full px-4 sm:px-6 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#7731E8] data-[state=active]:text-white data-[state=active]:shadow-md"
+                  >
+                    Address
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="contact"
+                    className="rounded-full px-4 sm:px-6 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#7731E8] data-[state=active]:text-white data-[state=active]:shadow-md"
+                  >
+                    Contact
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="education"
+                    className="rounded-full px-4 sm:px-6 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#7731E8] data-[state=active]:text-white data-[state=active]:shadow-md"
+                  >
+                    Education
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="bank-details"
+                    className="rounded-full px-4 sm:px-6 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#7731E8] data-[state=active]:text-white data-[state=active]:shadow-md"
+                  >
+                    Bank Details
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="documents"
+                    className="rounded-full px-4 sm:px-6 py-1.5 text-sm font-medium text-gray-600 transition-all data-[state=active]:bg-[#7731E8] data-[state=active]:text-white data-[state=active]:shadow-md"
+                  >
+                    Documents
+                  </TabsTrigger>
+                </TabsList>
               </div>
 
               <form onSubmit={handleSubmit}>
@@ -2868,13 +3159,15 @@ const bloodGroupOptions = [
 </Button>
                 </TabsContent>
 
-                <TabsContent value="education" className="animated-tab-content space-y-6">
+             <TabsContent value="education" className="animated-tab-content space-y-6">
                   <h2 className="section-header-3d">Education Details</h2>
 
                   {formData.education.map((edu, index) => (
-                    <div key={index} className={`p-6 rounded-xl space-y-4 ${educationColors[index]}`}>
+                    <div key={index} className={`p-6 rounded-xl space-y-4 ${educationColors[index] || 'bg-gray-50'}`}>
                       <h3 className="font-semibold text-gray-700 mb-4">{edu.type}</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Institute Name Input */}
                         <div className="form-3d-input">
                           <Label className="form-3d-label">Institute Name</Label>
                           <Input
@@ -2886,6 +3179,7 @@ const bloodGroupOptions = [
                           />
                         </div>
 
+                        {/* Year Completed Input */}
                         <div className="form-3d-input">
                           <Label className="form-3d-label">Year Completed</Label>
                           <Input
@@ -2897,42 +3191,15 @@ const bloodGroupOptions = [
                           />
                         </div>
 
-                        <div className="form-3d-input">
-                          <Label className="form-3d-label">Document</Label>
-                          <div className="flex gap-3 items-center">
-                            <input
-                              type="file"
-                              id={`education-${index}`}
-                              className="sr-only"
-                              accept=".pdf,.png,.jpg,.jpeg"
-                              disabled={uploadingFile !== null}
-                              onChange={(event) => handleEducationUpload(event, index)}
-                            />
-                            <Label
-                              htmlFor={`education-${index}`}
-                              className={cn(
-                                "cursor-pointer text-purple-600 hover:underline",
-                                uploadingFile && "opacity-50 cursor-not-allowed"
-                              )}
-                            >
-                              {uploadingFile === `education-${index}` ? (
-                                <span className="flex items-center gap-1">
-                                  <Loader2 className="animate-spin w-4 h-4" /> Uploading...
-                                </span>
-                              ) : (
-                                "+ Upload File"
-                              )}
-                            </Label>
-                            {edu.documentUrl && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(edu.documentUrl, "_blank")}
-                              >
-                                <FileText className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
+                        {/* Document Upload - SWITCHED TO PURPLE PILL STYLE */}
+                        <div className="w-full">
+                          {renderPurpleDocumentUpload(
+                            "Document",
+                            `education-${index}`,
+                            edu.documentUrl || "",
+                            `education-${index}`,
+                            (e) => handleEducationUpload(e, index)
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2940,9 +3207,11 @@ const bloodGroupOptions = [
 
                   <Separator className="separator-3d" />
 
+                  {/* Work Experience List View */}
                   <h3 className="text-lg font-semibold text-gray-700">Work Experience</h3>
+                  
                   {formData.experiences.map((exp, index) => (
-                    <div key={exp.id || index} className="relative border-2 border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all overflow-hidden">
+                    <div key={exp.id || index} className="relative border-2 border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all overflow-hidden mb-4">
                       {/* Delete Button */}
                       <Button
                         type="button"
@@ -2998,175 +3267,65 @@ const bloodGroupOptions = [
                         </div>
                       </div>
 
-                      {/* Documents Section */}
+                      {/* Documents Status View */}
                       <div className="p-4 space-y-3">
                         <h5 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                           <FileText className="w-4 h-4" />
                           Documents Status
                         </h5>
                         
-                        <div className="grid grid-cols-1 gap-2">
-                          {/* Offer Letter */}
-                          <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                            <div className="flex items-center gap-2">
-                              <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                exp.offerLetterUrl ? "bg-green-500" : "bg-gray-300"
-                              )} />
-                              <span className="text-sm font-medium text-gray-700">Offer Letter</span>
-                              <span className="text-red-500 text-xs">*</span>
-                            </div>
-                            {exp.offerLetterUrl ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(exp.offerLetterUrl, "_blank")}
-                                className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
-                              >
-                                <Eye className="w-3 h-3 mr-1" />
-                                View
-                              </Button>
-                            ) : (
-                              <span className="text-xs text-gray-500 italic">Nil</span>
-                            )}
-                          </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                           {/* Offer Letter */}
+                           <div className="flex items-center justify-between p-2.5 rounded-lg border border-gray-100 bg-gray-50">
+                              <div className="flex flex-col">
+                                <span className="text-xs font-medium text-gray-500">Offer Letter</span>
+                                <div className="flex items-center gap-1">
+                                  {exp.offerLetterUrl ? (
+                                    <span className="text-sm font-semibold text-green-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Uploaded</span>
+                                  ) : (
+                                    <span className="text-sm text-gray-400">Pending</span>
+                                  )}
+                                </div>
+                              </div>
+                              {exp.offerLetterUrl && (
+                                <Button variant="ghost" size="sm" onClick={() => window.open(exp.offerLetterUrl, "_blank")} className="text-purple-600 hover:bg-purple-50">
+                                  View
+                                </Button>
+                              )}
+                           </div>
 
-                          {/* Separation Letter */}
-                          <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                            <div className="flex items-center gap-2">
-                              <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                exp.separationLetterUrl ? "bg-green-500" : "bg-gray-300"
-                              )} />
-                              <span className="text-sm font-medium text-gray-700">Separation Letter</span>
-                            </div>
-                            {exp.separationLetterUrl ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(exp.separationLetterUrl, "_blank")}
-                                className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
-                              >
-                                <Eye className="w-3 h-3 mr-1" />
-                                View
-                              </Button>
-                            ) : exp.noSeparationLetterReason ? (
-                              <span className="text-xs text-amber-600 italic">{exp.noSeparationLetterReason}</span>
-                            ) : (
-                              <span className="text-xs text-gray-500 italic">Nil</span>
-                            )}
-                          </div>
-
-                          {/* Payslip 1 */}
-                          <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                            <div className="flex items-center gap-2">
-                              <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                exp.payslip_1_url ? "bg-green-500" : "bg-gray-300"
-                              )} />
-                              <span className="text-sm font-medium text-gray-700">Payslip 1</span>
-                              <span className="text-red-500 text-xs">*</span>
-                            </div>
-                            {exp.payslip_1_url ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(exp.payslip_1_url, "_blank")}
-                                className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
-                              >
-                                <Eye className="w-3 h-3 mr-1" />
-                                View
-                              </Button>
-                            ) : exp.noPayslipReason ? (
-                              <span className="text-xs text-amber-600 italic">{exp.noPayslipReason}</span>
-                            ) : (
-                              <span className="text-xs text-gray-500 italic">Nil</span>
-                            )}
-                          </div>
-
-                          {/* Payslip 2 */}
-                          <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                            <div className="flex items-center gap-2">
-                              <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                exp.payslip_2_url ? "bg-green-500" : "bg-gray-300"
-                              )} />
-                              <span className="text-sm font-medium text-gray-700">Payslip 2</span>
-                              <span className="text-red-500 text-xs">*</span>
-                            </div>
-                            {exp.payslip_2_url ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(exp.payslip_2_url, "_blank")}
-                                className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
-                              >
-                                <Eye className="w-3 h-3 mr-1" />
-                                View
-                              </Button>
-                            ) : exp.noPayslipReason ? (
-                              <span className="text-xs text-amber-600 italic">{exp.noPayslipReason}</span>
-                            ) : (
-                              <span className="text-xs text-gray-500 italic">Nil</span>
-                            )}
-                          </div>
-
-                          {/* Payslip 3 */}
-                          <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                            <div className="flex items-center gap-2">
-                              <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                exp.payslip_3_url ? "bg-green-500" : "bg-gray-300"
-                              )} />
-                              <span className="text-sm font-medium text-gray-700">Payslip 3</span>
-                              <span className="text-red-500 text-xs">*</span>
-                            </div>
-                            {exp.payslip_3_url ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(exp.payslip_3_url, "_blank")}
-                                className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
-                              >
-                                <Eye className="w-3 h-3 mr-1" />
-                                View
-                              </Button>
-                            ) : exp.noPayslipReason ? (
-                              <span className="text-xs text-amber-600 italic">{exp.noPayslipReason}</span>
-                            ) : (
-                              <span className="text-xs text-gray-500 italic">Nil</span>
-                            )}
-                          </div>
-
-                          {/* Hike Letter */}
-                          <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                            <div className="flex items-center gap-2">
-                              <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                exp.hikeLetterUrl ? "bg-green-500" : "bg-gray-300"
-                              )} />
-                              <span className="text-sm font-medium text-gray-700">Hike Letter</span>
-                            </div>
-                            {exp.hikeLetterUrl ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(exp.hikeLetterUrl, "_blank")}
-                                className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
-                              >
-                                <Eye className="w-3 h-3 mr-1" />
-                                View
-                              </Button>
-                            ) : (
-                              <span className="text-xs text-gray-500 italic">N/A</span>
-                            )}
-                          </div>
+                           {/* Separation Letter */}
+                           <div className="flex items-center justify-between p-2.5 rounded-lg border border-gray-100 bg-gray-50">
+                              <div className="flex flex-col">
+                                <span className="text-xs font-medium text-gray-500">Separation Letter</span>
+                                {exp.separationLetterUrl ? (
+                                    <span className="text-sm font-semibold text-green-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Uploaded</span>
+                                  ) : exp.noSeparationLetterReason ? (
+                                    <span className="text-xs font-medium text-amber-600">N/A: {exp.noSeparationLetterReason.substring(0,15)}...</span>
+                                  ) : (
+                                    <span className="text-sm text-gray-400">Pending</span>
+                                  )}
+                              </div>
+                              {exp.separationLetterUrl && (
+                                <Button variant="ghost" size="sm" onClick={() => window.open(exp.separationLetterUrl, "_blank")} className="text-purple-600 hover:bg-purple-50">
+                                  View
+                                </Button>
+                              )}
+                           </div>
+                           
+                           {/* Payslips Summary */}
+                           <div className="flex items-center justify-between p-2.5 rounded-lg border border-gray-100 bg-gray-50 md:col-span-2">
+                              <div className="flex flex-col">
+                                <span className="text-xs font-medium text-gray-500">Payslips</span>
+                                <div className="flex gap-2 mt-1">
+                                  {[exp.payslip_1_url, exp.payslip_2_url, exp.payslip_3_url].map((url, i) => (
+                                    <span key={i} className={cn("text-xs px-2 py-0.5 rounded", url ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400")}>
+                                      {url ? `Slip ${i+1} ✓` : `Slip ${i+1}`}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                           </div>
                         </div>
                       </div>
 
@@ -3185,329 +3344,18 @@ const bloodGroupOptions = [
                     </div>
                   ))}
 
-                <Button
-  type="button"
-  onClick={() => openExperienceModal()}
-  variant="link"
-  className="text-purple-600 p-0 h-auto"
->
-  <Plus className="h-4 w-4 mr-2" />
-  Add Work Experience
-</Button>
-
-
-
-                </TabsContent>
-                {/* ================================================================= */}
-{/* PASTE THIS BLOCK INSIDE TabsContent value="education"             */}
-{/* RIGHT AFTER THE "Add Work Experience" BUTTON                      */}
-{/* ================================================================= */}
-
-{showExperienceModal && (
-  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-      
-      {/* 1. Modal Header */}
-      <div className="p-6 border-b sticky top-0 bg-white z-10 flex justify-between items-center">
-        <h2 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-          {editingExperienceIndex !== null ? "Edit Experience" : "Add Experience"}
-        </h2>
-        <Button variant="ghost" size="icon" onClick={() => setShowExperienceModal(false)}>
-          <X className="h-5 w-5 text-gray-500" />
-        </Button>
-      </div>
-
-      <div className="p-6 space-y-6">
-        
-        {/* 2. Form Fields (Job Type, Company, Position, Location, Dates) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div className="compact-input-wrapper">
-            <Label className="compact-label">Job Type</Label>
-            <Select
-              value={currentExperience.jobType}
-              onValueChange={(value: any) => handleExperienceChange("jobType", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Full Time">Full Time</SelectItem>
-                <SelectItem value="Part Time">Part Time</SelectItem>
-                <SelectItem value="Internship">Internship</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="compact-input-wrapper">
-            <Label className="compact-label">Company Name</Label>
-            <Input
-              value={currentExperience.company}
-              onChange={(e) => handleExperienceChange("company", e.target.value)}
-              placeholder="Enter company name"
-            />
-          </div>
-
-          <div className="compact-input-wrapper">
-            <Label className="compact-label">Position</Label>
-            <Input
-              value={currentExperience.position}
-              onChange={(e) => handleExperienceChange("position", e.target.value)}
-              placeholder="Enter position"
-            />
-          </div>
-
-          <div className="compact-input-wrapper">
-            <Label className="compact-label">Location</Label>
-            <Input
-              value={currentExperience.location || ""}
-              onChange={(e) => handleExperienceChange("location", e.target.value)}
-              placeholder="Enter location"
-            />
-          </div>
-
-          <div className="compact-input-wrapper">
-            <Label className="compact-label">Start Date</Label>
-            <Input
-              type="date"
-              value={currentExperience.startDate || ""}
-              onChange={(e) => handleExperienceChange("startDate", e.target.value)}
-            />
-          </div>
-
-          <div className="compact-input-wrapper">
-            <Label className="compact-label">End Date</Label>
-            <Input
-              type="date"
-              value={currentExperience.endDate || ""}
-              onChange={(e) => handleExperienceChange("endDate", e.target.value)}
-            />
-          </div>
-        </div>
-
-        {/* 3. Document Uploads (Offer Letter, Separation, Payslips, Hike) */}
-        <div className="space-y-6 pt-4">
-          
-          {/* --- A. Offer Letter (Mandatory) --- */}
-          <div className="space-y-2">
-            <Label className="compact-label text-gray-700">Offer Letter <span className="text-red-500">*</span></Label>
-            {/* Upload Container */}
-            <div className={cn(
-              "relative border-2 border-dashed rounded-xl p-6 text-center transition-all",
-              currentExperience.offerLetterUrl ? "border-green-500 bg-green-50" : "border-purple-200 bg-purple-50 hover:bg-purple-100",
-              uploadingFile === "offerLetter" && "opacity-70 cursor-wait"
-            )}>
-              <input
-                type="file"
-                id="offerLetter"
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                accept=".pdf,.png,.jpg,.jpeg"
-                disabled={uploadingFile !== null}
-                onChange={(e) => handleExpUpload(e, "offerLetter", currentExperience.id)}
-              />
-              
-              {uploadingFile === "offerLetter" ? (
-                <div className="flex flex-col items-center gap-2">
-                  <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-                  <span className="text-sm font-medium text-purple-600">Uploading...</span>
-                </div>
-              ) : currentExperience.offerLetterUrl ? (
-                <div className="flex items-center justify-between relative z-10">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-green-500 rounded-full p-1.5"><CheckCircle2 className="h-5 w-5 text-white" /></div>
-                    <div className="text-left">
-                      <p className="text-sm font-bold text-green-700">File uploaded successfully</p>
-                      <p className="text-xs text-green-600">Click anywhere to replace</p>
-                    </div>
-                  </div>
-                  <button
+                  <Button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); window.open(currentExperience.offerLetterUrl, "_blank"); }}
-                    className="p-2 bg-white rounded-lg shadow-sm hover:bg-gray-50 text-green-600 z-20"
+                    onClick={() => openExperienceModal()}
+                    variant="link"
+                    className="text-purple-600 p-0 h-auto"
                   >
-                    <FileText className="h-5 w-5" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <div className="p-3 bg-purple-100 text-purple-600 rounded-full"><Upload className="h-6 w-6" /></div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-700">Click to upload or drag and drop</p>
-                    <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Work Experience
+                  </Button>
+                </TabsContent>
 
-          {/* --- B. Separation Letter Toggle --- */}
-          <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <Label className="text-sm font-bold text-gray-800">Do you have a Separation Letter?</Label>
-                <p className="text-xs text-gray-500">Toggle on if you have a separation letter</p>
-              </div>
-              <Switch
-                checked={!noSeparationLetter}
-                onCheckedChange={(checked) => {
-                  setNoSeparationLetter(!checked);
-                  if (!checked) handleExperienceChange("separationLetterUrl", "");
-                }}
-              />
-            </div>
-            
-            {!noSeparationLetter ? (
-               <div className={cn(
-                "relative border-2 border-dashed rounded-xl p-6 text-center transition-all",
-                currentExperience.separationLetterUrl ? "border-green-500 bg-green-50" : "border-gray-300 bg-white hover:border-purple-400",
-                uploadingFile === "separationLetter" && "opacity-70 cursor-wait"
-              )}>
-                <input
-                  type="file"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={(e) => handleExpUpload(e, "separationLetter", currentExperience.id)}
-                />
-                {uploadingFile === "separationLetter" ? (
-                  <div className="flex items-center justify-center gap-2"><Loader2 className="h-6 w-6 animate-spin text-purple-600" /> Uploading...</div>
-                ) : currentExperience.separationLetterUrl ? (
-                  <div className="flex items-center justify-between relative z-10">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-green-500 rounded-full p-1"><CheckCircle2 className="h-4 w-4 text-white" /></div>
-                      <span className="text-sm font-bold text-green-700">Uploaded Successfully</span>
-                    </div>
-                    <button type="button" onClick={(e) => {e.stopPropagation(); e.preventDefault(); window.open(currentExperience.separationLetterUrl, "_blank")}} className="text-green-600 hover:underline text-xs flex items-center gap-1"><FileText className="h-3 w-3" /> View</button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="p-2 bg-purple-100 text-purple-600 rounded-full"><Upload className="h-5 w-5" /></div>
-                    <span className="text-sm font-semibold text-gray-600">Click to upload Separation Letter</span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Input
-                placeholder="Reason for not having separation letter"
-                value={currentExperience.noSeparationLetterReason || ""}
-                onChange={(e) => handleExperienceChange("noSeparationLetterReason", e.target.value)}
-              />
-            )}
-          </div>
 
-          {/* --- C. Payslips Toggle --- */}
-          <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <Label className="text-sm font-bold text-gray-800">Do you have Payslips?</Label>
-                <p className="text-xs text-gray-500">Toggle on if you have payslips (min 3 required)</p>
-              </div>
-              <Switch
-                checked={!noPayslip}
-                onCheckedChange={(checked) => {
-                  setNoPayslip(!checked);
-                  if (!checked) {
-                    handleExperienceChange("payslip_1_url", "");
-                    handleExperienceChange("payslip_2_url", "");
-                    handleExperienceChange("payslip_3_url", "");
-                  }
-                }}
-              />
-            </div>
-
-            {!noPayslip ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((num) => {
-                  const key = `payslip_${num}_url` as keyof Experience;
-                  const uploadKey = `payslip${num}`;
-                  const url = currentExperience[key] as string;
-                  
-                  return (
-                    <div key={num} className={cn(
-                      "relative border-2 border-dashed rounded-lg p-3 flex items-center justify-center text-center transition-all",
-                      url ? "border-green-500 bg-green-50" : "border-gray-300 bg-white hover:border-purple-400"
-                    )}>
-                      <input
-                        type="file"
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        accept=".pdf,.png,.jpg,.jpeg"
-                        onChange={(e) => handleExpUpload(e, uploadKey, currentExperience.id)}
-                      />
-                      {uploadingFile === uploadKey ? (
-                         <div className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin text-purple-600" /> <span className="text-xs">Uploading Payslip {num}...</span></div>
-                      ) : url ? (
-                        <div className="flex items-center justify-between w-full px-2 relative z-10">
-                           <div className="flex items-center gap-2">
-                             <CheckCircle2 className="h-4 w-4 text-green-600" />
-                             <span className="text-xs font-bold text-green-700">Payslip {num} Uploaded</span>
-                           </div>
-                           <button type="button" onClick={(e) => {e.stopPropagation(); e.preventDefault(); window.open(url, "_blank")}} className="text-xs text-green-600 underline">View</button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <Upload className="h-4 w-4 text-purple-600" />
-                          <span className="text-xs font-semibold text-gray-600">Upload Payslip {num}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <Input
-                placeholder="Reason for not having payslips"
-                value={currentExperience.noPayslipReason || ""}
-                onChange={(e) => handleExperienceChange("noPayslipReason", e.target.value)}
-              />
-            )}
-          </div>
-
-          {/* --- D. Hike Letter (Optional) --- */}
-          <div className="space-y-2">
-            <Label className="compact-label text-gray-700">Hike Letter (Optional)</Label>
-            <div className={cn(
-              "relative border-2 border-dashed rounded-xl p-4 text-center transition-all",
-              currentExperience.hikeLetterUrl ? "border-green-500 bg-green-50" : "border-gray-300 bg-white hover:border-purple-400"
-            )}>
-                <input
-                  type="file"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={(e) => handleExpUpload(e, "hikeLetter", currentExperience.id)}
-                />
-                {uploadingFile === "hikeLetter" ? (
-                  <div className="flex items-center justify-center gap-2"><Loader2 className="h-5 w-5 animate-spin text-purple-600" /> Uploading...</div>
-                ) : currentExperience.hikeLetterUrl ? (
-                  <div className="flex items-center justify-between relative z-10 px-2">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-5 w-5 text-green-600" />
-                      <span className="text-sm font-bold text-green-700">Hike Letter Uploaded</span>
-                    </div>
-                    <button type="button" onClick={(e) => {e.stopPropagation(); e.preventDefault(); window.open(currentExperience.hikeLetterUrl, "_blank")}} className="text-green-600 underline text-xs">View</button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="p-1.5 bg-purple-100 text-purple-600 rounded-full"><Upload className="h-4 w-4" /></div>
-                    <span className="text-sm font-medium text-gray-600">Click to upload Hike Letter</span>
-                  </div>
-                )}
-            </div>
-          </div>
-
-        </div>
-
-        {/* 4. Footer Buttons */}
-        <div className="flex justify-end gap-3 pt-4 border-t">
-          <Button variant="outline" onClick={() => setShowExperienceModal(false)}>
-            Cancel
-          </Button>
-          <Button onClick={saveExperience} className="bg-purple-600 hover:bg-purple-700 text-white">
-            Save Experience
-          </Button>
-        </div>
-
-      </div>
-    </div>
-  </div>
-)}
 
                 <TabsContent value="bank-details" className="animated-tab-content space-y-6">
                   <h2 className="section-header-3d">Bank Details</h2>
@@ -3692,42 +3540,78 @@ const bloodGroupOptions = [
                       />
                     </div>
 
-                    <div className="form-3d-input md:col-span-2">
-                      <Label className="form-3d-label">Bank Document (Passbook/Cancelled Cheque)</Label>
-                      <div className="flex gap-3 items-center">
+               <div className="form-3d-input md:col-span-2">
+                      <Label className="form-3d-label">
+                        Bank Document (Passbook/Cancelled Cheque) <span className="text-red-500">*</span>
+                      </Label>
+                      
+                      <div className="w-full">
                         <input
                           type="file"
                           id="bankDocument"
                           className="sr-only"
                           accept=".pdf,.png,.jpg,.jpeg"
-                          disabled={uploadingFile !== null}
+                          disabled={uploadingFile === "bankDocument"}
                           onChange={handleBankDocumentUpload}
                         />
-                        <Label
-                          htmlFor="bankDocument"
-                          className={cn(
-                            "cursor-pointer text-purple-600 hover:underline",
-                            uploadingFile && "opacity-50 cursor-not-allowed"
-                          )}
-                        >
-                          {uploadingFile === "bankDocument" ? (
-                            <span className="flex items-center gap-1">
-                              <Loader2 className="animate-spin w-4 w-4" /> Uploading...
-                            </span>
-                          ) : (
-                            "+ Upload File"
-                          )}
-                        </Label>
-                        {formData.bankDetails.documentUrl && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              window.open(formData.bankDetails.documentUrl, "_blank")
-                            }
+
+                        {!formData.bankDetails.documentUrl ? (
+                          <label
+                            htmlFor="bankDocument"
+                            className={cn(
+                              "group cursor-pointer flex items-center w-full border border-gray-200 rounded-full bg-white shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden max-w-xl",
+                              uploadingFile === "bankDocument" && "opacity-50 cursor-not-allowed"
+                            )}
                           >
-                            <FileText className="h-4 w-4" />
-                          </Button>
+                            {/* The Purple Button Part */}
+                            <div className={cn(
+                              "text-white px-6 py-2.5 font-bold text-sm flex items-center justify-center transition-colors min-w-[140px]",
+                              uploadingFile === "bankDocument" ? "bg-gray-400" : "bg-[#7731E8] hover:bg-[#6528cc]"
+                            )}>
+                              {uploadingFile === "bankDocument" ? (
+                                <span className="flex items-center gap-2">
+                                  <Loader2 className="animate-spin h-4 w-4" /> Uploading
+                                </span>
+                              ) : (
+                                "Upload File"
+                              )}
+                            </div>
+                            
+                            {/* The Info Text Part */}
+                            <div className="px-5 text-gray-400 text-xs font-medium flex-1 truncate">
+                              PDF, PNG, JPG | Max: 5 MB
+                            </div>
+                          </label>
+                        ) : (
+                          <div className="flex items-center justify-between p-3 border border-gray-200 rounded-2xl bg-white shadow-sm max-w-xl">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                              {/* Icon Circle */}
+                              <div className="h-10 w-10 rounded-full bg-purple-50 flex items-center justify-center flex-shrink-0">
+                                <FileText className="h-5 w-5 text-[#7731E8]" />
+                              </div>
+                              {/* File Info */}
+                              <div className="flex flex-col overflow-hidden">
+                                <a 
+                                  href={formData.bankDetails.documentUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="text-sm font-medium text-gray-700 truncate hover:text-[#7731E8] transition-colors"
+                                >
+                                  {getFileNameFromUrl(formData.bankDetails.documentUrl)}
+                                </a>
+                                <span className="text-xs text-gray-400">Uploaded Successfully</span>
+                              </div>
+                            </div>
+                            {/* Actions */}
+                            <div className="flex items-center gap-3 pr-2">
+                              <label 
+                                htmlFor="bankDocument" 
+                                className="text-sm font-bold text-blue-600 hover:text-blue-700 cursor-pointer transition-colors"
+                              >
+                                Replace
+                              </label>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -3737,200 +3621,208 @@ const bloodGroupOptions = [
  <TabsContent value="documents" className="animated-tab-content space-y-6">
   <h2 className="section-header-3d">Identity Documents</h2>
 
-  {/* ==================== AADHAR SECTION ==================== */}
+  {/* ==================== AADHAR SECTION (MANDATORY) ==================== */}
   <div className="p-4 border rounded-lg bg-gray-50">
-    <div className="flex items-center justify-between mb-4">
-      <Label className="font-semibold text-lg text-gray-800">Aadhar Details</Label>
-      <div className="flex items-center gap-2">
-        <Label htmlFor="noAadharSwitch" className="text-sm">I don't have this</Label>
-        <Switch id="noAadharSwitch" checked={noAadhar} onCheckedChange={setNoAadhar} />
-      </div>
-    </div>
+    <Label className="font-semibold text-lg text-gray-800 mb-4 block">Aadhar Details</Label>
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div className="form-3d-input">
         <Label className="form-3d-label">
-          Aadhar Number
-          {/* Mandatory star appears only if the toggle is OFF */}
-          {!noAadhar && <span className="text-red-500">*</span>}
+          Aadhar Number <span className="text-red-500">*</span>
         </Label>
         <Input
           value={formData.aadharNumber}
           onChange={(e) => handleInputChange("aadharNumber", e.target.value)}
           placeholder="Enter 12-digit Aadhar number"
           maxLength={12}
-          disabled={noAadhar} // Field is disabled when toggle is ON
         />
-        {formErrors.aadharNumber && !noAadhar && <span className="form-error">{formErrors.aadharNumber}</span>}
-        {VALIDATIONS.aadhar.test(formData.aadharNumber) && !noAadhar && <div className="flex items-center gap-1 text-green-600 text-xs mt-1"><CheckCircle2 className="h-3 w-3" />Verified</div>}
+        {formErrors.aadharNumber && <span className="form-error">{formErrors.aadharNumber}</span>}
+        {VALIDATIONS.aadhar.test(formData.aadharNumber) && (
+          <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
+            <CheckCircle2 className="h-3 w-3" /> Verified
+          </div>
+        )}
       </div>
-      <div className="form-3d-input">
-        <Label className="form-3d-label">
-          Aadhar Document
-          {!noAadhar && <span className="text-red-500">*</span>}
-        </Label>
-        <div className="flex gap-3 items-center">
-          <input type="file" id="aadharUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "aadharUrl")} disabled={noAadhar} />
-          <Label htmlFor="aadharUrl" className={cn("cursor-pointer text-purple-600 hover:underline", noAadhar && "opacity-50 cursor-not-allowed")}>
-            {uploadingFile === "aadharUrl" ? "Uploading..." : "+ Upload File"}
-          </Label>
-          {formData.aadharUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.aadharUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
-        </div>
-      </div>
+      
+      {/* REPLACED UPLOAD BUTTON */}
+      {renderDocumentUpload("Aadhar Document", "aadharUrl", formData.aadharUrl, true)}
     </div>
   </div>
 
-
-  {/* ==================== ALTERNATIVE DOCUMENTS (Appear if no Aadhar) ==================== */}
-  {noAadhar && (
-    <div className="space-y-4">
-      <p className="text-sm font-semibold text-center text-gray-600 p-2 bg-blue-50 rounded-md">You can provide any of the following documents as an alternative.</p>
-      
-      {/* --- Voter ID --- */}
-      <div className="p-4 border rounded-lg">
-        <Label className="font-semibold text-gray-800 mb-4 block">Voter ID Card</Label>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="form-3d-input">
-            <Label className="form-3d-label">Voter ID Number</Label>
-            <Input value={formData.voterIdNumber} onChange={(e) => handleInputChange("voterIdNumber", e.target.value.toUpperCase())} />
-          </div>
-          <div className="form-3d-input">
-            <Label className="form-3d-label">Voter ID Document</Label>
-            <div className="flex gap-3 items-center">
-              <input type="file" id="voterIdUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "voterIdUrl")} />
-              <Label htmlFor="voterIdUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "voterIdUrl" ? "Uploading..." : "+ Upload File"}</Label>
-              {formData.voterIdUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.voterIdUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* --- Driving License --- */}
-      <div className="p-4 border rounded-lg">
-        <Label className="font-semibold text-gray-800 mb-4 block">Driving License</Label>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="form-3d-input">
-            <Label className="form-3d-label">Driving License Number</Label>
-            <Input value={formData.drivingLicenseNumber} onChange={(e) => handleInputChange("drivingLicenseNumber", e.target.value.toUpperCase())} />
-          </div>
-          <div className="form-3d-input">
-            <Label className="form-3d-label">Driving License Document</Label>
-            <div className="flex gap-3 items-center">
-              <input type="file" id="drivingLicenseUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "drivingLicenseUrl")} />
-              <Label htmlFor="drivingLicenseUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "drivingLicenseUrl" ? "Uploading..." : "+ Upload File"}</Label>
-              {formData.drivingLicenseUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.drivingLicenseUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* --- Passport --- */}
-      <div className="p-4 border rounded-lg">
-        <Label className="font-semibold text-gray-800 mb-4 block">Passport</Label>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="form-3d-input">
-            <Label className="form-3d-label">Passport Number</Label>
-            <Input value={formData.passportNumber} onChange={(e) => handleInputChange("passportNumber", e.target.value.toUpperCase())} />
-          </div>
-          <div className="form-3d-input">
-            <Label className="form-3d-label">Passport Document</Label>
-            <div className="flex gap-3 items-center">
-              <input type="file" id="passportUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "passportUrl")} />
-              <Label htmlFor="passportUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "passportUrl" ? "Uploading..." : "+ Upload File"}</Label>
-              {formData.passportUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.passportUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
-            </div>
-          </div>
-        </div>
-      </div>
-
-       {/* --- Other Document --- */}
-       <div className="p-4 border rounded-lg">
-        <Label className="font-semibold text-gray-800 mb-4 block">Other Document</Label>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="form-3d-input">
-            <Label className="form-3d-label">Document Name</Label>
-            <Input value={formData.otherIdName} onChange={(e) => handleInputChange("otherIdName", e.target.value)} placeholder="e.g., Ration Card" />
-          </div>
-          <div className="form-3d-input">
-            <Label className="form-3d-label">Document Number</Label>
-            <Input value={formData.otherIdNumber} onChange={(e) => handleInputChange("otherIdNumber", e.target.value.toUpperCase())} />
-          </div>
-          <div className="form-3d-input">
-            <Label className="form-3d-label">Upload Document</Label>
-            <div className="flex gap-3 items-center">
-              <input type="file" id="otherIdUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "otherIdUrl")} />
-              <Label htmlFor="otherIdUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "otherIdUrl" ? "Uploading..." : "+ Upload File"}</Label>
-              {formData.otherIdUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.otherIdUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
-            </div>
-          </div>
-        </div>
-      </div>
-    
-
-      {/* ==================== PAN SECTION (Always Mandatory) ==================== */}
+  {/* ==================== PAN SECTION (MANDATORY) ==================== */}
   <div className="p-4 border rounded-lg bg-gray-50">
     <Label className="font-semibold text-lg text-gray-800 mb-4 block">PAN Details</Label>
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div className="form-3d-input">
-        <Label className="form-3d-label">PAN Number <span className="text-red-500">*</span></Label>
-        <Input value={formData.panNumber} onChange={(e) => handleInputChange("panNumber", e.target.value.toUpperCase())} placeholder="Enter PAN number" maxLength={10} />
-        {formErrors.panNumber ? <span className="form-error">{formErrors.panNumber}</span> : (formData.panNumber && VALIDATIONS.pan.test(formData.panNumber)) && <div className="flex items-center gap-1 text-green-600 text-xs mt-1"><CheckCircle2 className="h-3 w-3" />Verified</div>}
+        <Label className="form-3d-label">
+          PAN Number <span className="text-red-500">*</span>
+        </Label>
+        <Input
+          value={formData.panNumber}
+          onChange={(e) => handleInputChange("panNumber", e.target.value.toUpperCase())}
+          placeholder="Enter PAN number"
+          maxLength={10}
+        />
+        {formErrors.panNumber ? (
+          <span className="form-error">{formErrors.panNumber}</span>
+        ) : (
+          formData.panNumber && VALIDATIONS.pan.test(formData.panNumber) && (
+            <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
+              <CheckCircle2 className="h-3 w-3" /> Verified
+            </div>
+          )
+        )}
       </div>
-      <div className="form-3d-input">
-        <Label className="form-3d-label">PAN Document <span className="text-red-500">*</span></Label>
-        <div className="flex gap-3 items-center">
-          <input type="file" id="panUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "panUrl")} />
-          <Label htmlFor="panUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "panUrl" ? "Uploading..." : "+ Upload File"}</Label>
-          {formData.panUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.panUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
-        </div>
-      </div>
+
+      {/* REPLACED UPLOAD BUTTON */}
+      {renderDocumentUpload("PAN Document", "panUrl", formData.panUrl, true)}
     </div>
   </div>
 
-</div>
-  )}
+  {/* ==================== ADDITIONAL DOCUMENTS TOGGLE ==================== */}
+  <div className="p-4 border rounded-lg bg-white">
+    <div className="flex items-center justify-between">
+      <div className="space-y-0.5">
+        <Label className="text-base font-semibold text-gray-800">Additional Documents (Optional)</Label>
+        <p className="text-sm text-gray-500">Upload Voter ID, Passport, Driving License, etc.</p>
+      </div>
+      <Switch
+        checked={showAdditionalDocs}
+        onCheckedChange={setShowAdditionalDocs}
+        className="data-[state=checked]:bg-purple-600"
+      />
+    </div>
+
+    {/* ==================== ADDITIONAL DOCUMENTS CONTENT ==================== */}
+    {showAdditionalDocs && (
+      <div className="mt-6 space-y-6 animate-in slide-in-from-top-4 duration-300">
+        <Separator />
+        
+        {/* --- Voter ID --- */}
+        <div className="p-4 border rounded-lg bg-gray-50/50">
+          <Label className="font-semibold text-gray-800 mb-4 block">Voter ID Card</Label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="form-3d-input">
+              <Label className="form-3d-label">Voter ID Number</Label>
+              <Input
+                value={formData.voterIdNumber}
+                onChange={(e) => handleInputChange("voterIdNumber", e.target.value.toUpperCase())}
+              />
+            </div>
+            {renderDocumentUpload("Voter ID Document", "voterIdUrl", formData.voterIdUrl)}
+          </div>
+        </div>
+
+        {/* --- Driving License --- */}
+        <div className="p-4 border rounded-lg bg-gray-50/50">
+          <Label className="font-semibold text-gray-800 mb-4 block">Driving License</Label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="form-3d-input">
+              <Label className="form-3d-label">Driving License Number</Label>
+              <Input
+                value={formData.drivingLicenseNumber}
+                onChange={(e) => handleInputChange("drivingLicenseNumber", e.target.value.toUpperCase())}
+              />
+            </div>
+            {renderDocumentUpload("Driving License Document", "drivingLicenseUrl", formData.drivingLicenseUrl)}
+          </div>
+        </div>
+
+        {/* --- Passport --- */}
+        <div className="p-4 border rounded-lg bg-gray-50/50">
+          <Label className="font-semibold text-gray-800 mb-4 block">Passport</Label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="form-3d-input">
+              <Label className="form-3d-label">Passport Number</Label>
+              <Input
+                value={formData.passportNumber}
+                onChange={(e) => handleInputChange("passportNumber", e.target.value.toUpperCase())}
+              />
+            </div>
+            {renderDocumentUpload("Passport Document", "passportUrl", formData.passportUrl)}
+          </div>
+        </div>
+
+        {/* --- Other Document --- */}
+        <div className="p-4 border rounded-lg bg-gray-50/50">
+          <Label className="font-semibold text-gray-800 mb-4 block">Other Document</Label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="form-3d-input">
+              <Label className="form-3d-label">Document Name</Label>
+              <Input
+                value={formData.otherIdName}
+                onChange={(e) => handleInputChange("otherIdName", e.target.value)}
+                placeholder="e.g., Ration Card"
+              />
+            </div>
+            <div className="form-3d-input">
+              <Label className="form-3d-label">Document Number</Label>
+              <Input
+                value={formData.otherIdNumber}
+                onChange={(e) => handleInputChange("otherIdNumber", e.target.value.toUpperCase())}
+              />
+            </div>
+            {/* Note: renderDocumentUpload wraps its own div, so we use it directly in the grid */}
+            <div className="col-span-1">
+               {renderDocumentUpload("Upload Document", "otherIdUrl", formData.otherIdUrl)}
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
 
   {/* ==================== STATUTORY SECTION (Optional) ==================== */}
   <Separator className="my-6" />
   <h2 className="section-header-3d">Statutory Documents (Optional)</h2>
 
-  {/* --- ESIC & UAN remain the same --- */}
   {/* --- ESIC --- */}
-    <div className="p-4 border rounded-lg">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="form-3d-input">
-                <Label className="form-3d-label">ESIC Number</Label>
-                <Input value={formData.esicNumber} onChange={(e) => handleInputChange("esicNumber", e.target.value)} placeholder="Enter ESIC number" />
-                {formErrors.esicNumber ? <span className="form-error">{formErrors.esicNumber}</span> : (formData.esicNumber && VALIDATIONS.esic.test(formData.esicNumber)) && <div className="flex items-center gap-1 text-green-600 text-xs mt-1"><CheckCircle2 className="h-3 w-3" />Verified</div>}
+  <div className="p-4 border rounded-lg">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="form-3d-input">
+        <Label className="form-3d-label">ESIC Number</Label>
+        <Input
+          value={formData.esicNumber}
+          onChange={(e) => handleInputChange("esicNumber", e.target.value)}
+          placeholder="Enter ESIC number"
+        />
+        {formErrors.esicNumber ? (
+          <span className="form-error">{formErrors.esicNumber}</span>
+        ) : (
+          formData.esicNumber && VALIDATIONS.esic.test(formData.esicNumber) && (
+            <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
+              <CheckCircle2 className="h-3 w-3" /> Verified
             </div>
-            <div className="form-3d-input">
-                <Label className="form-3d-label">ESIC Document</Label>
-                <div className="flex gap-3 items-center">
-                    <input type="file" id="esicUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "esicUrl")} />
-                    <Label htmlFor="esicUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "esicUrl" ? "Uploading..." : "+ Upload File"}</Label>
-                    {formData.esicUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.esicUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
-                </div>
-            </div>
-        </div>
+          )
+        )}
+      </div>
+      {renderDocumentUpload("ESIC Document", "esicUrl", formData.esicUrl)}
     </div>
+  </div>
 
-    {/* --- UAN --- */}
-    <div className="p-4 border rounded-lg">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="form-3d-input">
-                <Label className="form-3d-label">UAN Number</Label>
-                <Input value={formData.uanNumber} onChange={(e) => handleInputChange("uanNumber", e.target.value)} placeholder="Enter 12-digit UAN number" maxLength={12} />
-                {formErrors.uanNumber ? <span className="form-error">{formErrors.uanNumber}</span> : (formData.uanNumber && VALIDATIONS.uan.test(formData.uanNumber)) && <div className="flex items-center gap-1 text-green-600 text-xs mt-1"><CheckCircle2 className="h-3 w-3" />Verified</div>}
+  {/* --- UAN --- */}
+  <div className="p-4 border rounded-lg">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="form-3d-input">
+        <Label className="form-3d-label">UAN Number</Label>
+        <Input
+          value={formData.uanNumber}
+          onChange={(e) => handleInputChange("uanNumber", e.target.value)}
+          placeholder="Enter 12-digit UAN number"
+          maxLength={12}
+        />
+        {formErrors.uanNumber ? (
+          <span className="form-error">{formErrors.uanNumber}</span>
+        ) : (
+          formData.uanNumber && VALIDATIONS.uan.test(formData.uanNumber) && (
+            <div className="flex items-center gap-1 text-green-600 text-xs mt-1">
+              <CheckCircle2 className="h-3 w-3" /> Verified
             </div>
-            <div className="form-3d-input">
-                <Label className="form-3d-label">UAN Document</Label>
-                <div className="flex gap-3 items-center">
-                    <input type="file" id="uanUrl" className="sr-only" onChange={(e) => handleDocumentUpload(e, "uanUrl")} />
-                    <Label htmlFor="uanUrl" className="cursor-pointer text-purple-600 hover:underline">{uploadingFile === "uanUrl" ? "Uploading..." : "+ Upload File"}</Label>
-                    {formData.uanUrl && <Button variant="ghost" size="sm" onClick={() => window.open(formData.uanUrl, "_blank")}><FileText className="h-4 w-4" /></Button>}
-                </div>
-            </div>
-        </div>
+          )
+        )}
+      </div>
+      {renderDocumentUpload("UAN Document", "uanUrl", formData.uanUrl)}
     </div>
+  </div>
 </TabsContent>
                 {/* Experience Modal - keeping original functionality */}
                 {showExperienceModal && (
@@ -4016,80 +3908,17 @@ const bloodGroupOptions = [
                             />
                           </div>
                         </div>
-
-                        {/* Document uploads - MODERN UI */}
+{/* Document uploads - UPDATED PURPLE UI */}
                         <div className="space-y-6">
-                          {/* Offer Letter - Always shown */}
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium">
-                              Offer Letter<span className="text-red-500 ml-1">*</span>
-                            </Label>
-                            <div
-                              className={cn(
-                                "relative border-2 border-dashed rounded-lg p-4 transition-all",
-                                currentExperience.offerLetterUrl
-                                  ? "border-green-500 bg-green-50"
-                                  : "border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50",
-                                uploadingFile === "offerLetter" && "border-blue-400 bg-blue-50"
-                              )}
-                            >
-                              <input
-                                type="file"
-                                id="offerLetter"
-                                className="sr-only"
-                                accept=".pdf,.png,.jpg,.jpeg"
-                                disabled={uploadingFile !== null}
-                                onChange={(event) =>
-                                  handleExpUpload(event, "offerLetter", currentExperience.id)
-                                }
-                              />
-
-                              {uploadingFile === "offerLetter" ? (
-                                <div className="flex items-center justify-center gap-3 py-2">
-                                  <Loader2 className="animate-spin w-5 h-5 text-blue-600" />
-                                  <span className="text-sm font-medium text-blue-600">Uploading...</span>
-                                </div>
-                              ) : currentExperience.offerLetterUrl ? (
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-3 flex-1">
-                                    <div className="bg-green-600 rounded-full p-2">
-                                      <CheckCircle2 className="w-5 h-5 text-white" />
-                                    </div>
-                                    <div className="flex-1">
-                                      <p className="text-sm font-medium text-green-700">File uploaded successfully</p>
-                                      <p className="text-xs text-gray-500">Click to view or upload new file</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => window.open(currentExperience.offerLetterUrl, "_blank")}
-                                      className="hover:bg-green-100"
-                                    >
-                                      <FileText className="h-4 w-4 text-green-600" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <Label
-                                  htmlFor="offerLetter"
-                                  className="flex items-center justify-center gap-3 cursor-pointer py-2"
-                                >
-                                  <div className="bg-purple-600 rounded-full p-2">
-                                    <Upload className="w-5 h-5 text-white" />
-                                  </div>
-                                  <div className="text-left">
-                                    <p className="text-sm font-medium text-gray-700">
-                                      Click to upload or drag and drop
-                                    </p>
-                                    <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
-                                  </div>
-                                </Label>
-                              )}
-                            </div>
-                          </div>
+                          {/* Offer Letter */}
+                          {renderPurpleDocumentUpload(
+                            "Offer Letter",
+                            "offerLetter",
+                            currentExperience.offerLetterUrl || "",
+                            "offerLetter",
+                            (e) => handleExpUpload(e, "offerLetter", currentExperience.id),
+                            true // Mandatory
+                          )}
 
                           {/* Separation Letter Toggle */}
                           <div className="space-y-4">
@@ -4112,86 +3941,22 @@ const bloodGroupOptions = [
                             </div>
 
                             {!noSeparationLetter ? (
-                              <div className="space-y-2">
-                                <Label className="text-sm font-medium">Separation Letter</Label>
-                                <div
-                                  className={cn(
-                                    "relative border-2 border-dashed rounded-lg p-4 transition-all",
-                                    currentExperience.separationLetterUrl
-                                      ? "border-green-500 bg-green-50"
-                                      : "border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50",
-                                    uploadingFile === "separationLetter" && "border-blue-400 bg-blue-50"
-                                  )}
-                                >
-                                  <input
-                                    type="file"
-                                    id="separationLetter"
-                                    className="sr-only"
-                                    accept=".pdf,.png,.jpg,.jpeg"
-                                    disabled={uploadingFile !== null}
-                                    onChange={(event) =>
-                                      handleExpUpload(event, "separationLetter", currentExperience.id)
-                                    }
-                                  />
-
-                                  {uploadingFile === "separationLetter" ? (
-                                    <div className="flex items-center justify-center gap-3 py-2">
-                                      <Loader2 className="animate-spin w-5 h-5 text-blue-600" />
-                                      <span className="text-sm font-medium text-blue-600">Uploading...</span>
-                                    </div>
-                                  ) : currentExperience.separationLetterUrl ? (
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className="flex items-center gap-3 flex-1">
-                                        <div className="bg-green-600 rounded-full p-2">
-                                          <CheckCircle2 className="w-5 h-5 text-white" />
-                                        </div>
-                                        <div className="flex-1">
-                                          <p className="text-sm font-medium text-green-700">File uploaded successfully</p>
-                                          <p className="text-xs text-gray-500">Click to view or upload new file</p>
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => window.open(currentExperience.separationLetterUrl, "_blank")}
-                                          className="hover:bg-green-100"
-                                        >
-                                          <FileText className="h-4 w-4 text-green-600" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <Label
-                                      htmlFor="separationLetter"
-                                      className="flex items-center justify-center gap-3 cursor-pointer py-2"
-                                    >
-                                      <div className="bg-purple-600 rounded-full p-2">
-                                        <Upload className="w-5 h-5 text-white" />
-                                      </div>
-                                      <div className="text-left">
-                                        <p className="text-sm font-medium text-gray-700">
-                                          Click to upload or drag and drop
-                                        </p>
-                                        <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
-                                      </div>
-                                    </Label>
-                                  )}
-                                </div>
-                              </div>
+                              renderPurpleDocumentUpload(
+                                "Separation Letter",
+                                "separationLetter",
+                                currentExperience.separationLetterUrl || "",
+                                "separationLetter",
+                                (e) => handleExpUpload(e, "separationLetter", currentExperience.id)
+                              )
                             ) : (
-                              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                                <Label className="text-sm font-medium text-amber-800">
-                                  Reason for not having Separation Letter
-                                </Label>
+                              <div className="form-3d-input">
+                                <Label className="form-3d-label">Reason for not having Separation Letter</Label>
                                 <Input
                                   value={currentExperience.noSeparationLetterReason || ""}
                                   onChange={(e) =>
                                     handleExperienceChange("noSeparationLetterReason", e.target.value)
                                   }
-                                  placeholder="e.g., Still employed, Letter not provided, etc."
-                                  className="mt-2 border-amber-300 focus:border-amber-500"
+                                  placeholder="e.g., Still employed, Letter not provided"
                                 />
                               </div>
                             )}
@@ -4220,307 +3985,54 @@ const bloodGroupOptions = [
                             </div>
 
                             {!noPayslip ? (
-                              <>
-                                {/* Payslip 1 */}
-                                <div className="space-y-2">
-                                  <Label className="text-sm font-medium">
-                                    Payslip 1<span className="text-red-500 ml-1">*</span>
-                                  </Label>
-                                  <div
-                                    className={cn(
-                                      "relative border-2 border-dashed rounded-lg p-4 transition-all",
-                                      currentExperience.payslip_1_url
-                                        ? "border-green-500 bg-green-50"
-                                        : "border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50",
-                                      uploadingFile === "payslip1" && "border-blue-400 bg-blue-50"
-                                    )}
-                                  >
-                                    <input
-                                      type="file"
-                                      id="payslip1"
-                                      className="sr-only"
-                                      accept=".pdf,.png,.jpg,.jpeg"
-                                      disabled={uploadingFile !== null}
-                                      onChange={(event) =>
-                                        handleExpUpload(event, "payslip1", currentExperience.id)
-                                      }
-                                    />
-
-                                    {uploadingFile === "payslip1" ? (
-                                      <div className="flex items-center justify-center gap-3 py-2">
-                                        <Loader2 className="animate-spin w-5 h-5 text-blue-600" />
-                                        <span className="text-sm font-medium text-blue-600">Uploading...</span>
-                                      </div>
-                                    ) : currentExperience.payslip_1_url ? (
-                                      <div className="flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-3 flex-1">
-                                          <div className="bg-green-600 rounded-full p-2">
-                                            <CheckCircle2 className="w-5 h-5 text-white" />
-                                          </div>
-                                          <div className="flex-1">
-                                            <p className="text-sm font-medium text-green-700">File uploaded successfully</p>
-                                            <p className="text-xs text-gray-500">Click to view or upload new file</p>
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => window.open(currentExperience.payslip_1_url, "_blank")}
-                                            className="hover:bg-green-100"
-                                          >
-                                            <FileText className="h-4 w-4 text-green-600" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <Label
-                                        htmlFor="payslip1"
-                                        className="flex items-center justify-center gap-3 cursor-pointer py-2"
-                                      >
-                                        <div className="bg-purple-600 rounded-full p-2">
-                                          <Upload className="w-5 h-5 text-white" />
-                                        </div>
-                                        <div className="text-left">
-                                          <p className="text-sm font-medium text-gray-700">
-                                            Click to upload or drag and drop
-                                          </p>
-                                          <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
-                                        </div>
-                                      </Label>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Payslip 2 */}
-                                <div className="space-y-2">
-                                  <Label className="text-sm font-medium">
-                                    Payslip 2<span className="text-red-500 ml-1">*</span>
-                                  </Label>
-                                  <div
-                                    className={cn(
-                                      "relative border-2 border-dashed rounded-lg p-4 transition-all",
-                                      currentExperience.payslip_2_url
-                                        ? "border-green-500 bg-green-50"
-                                        : "border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50",
-                                      uploadingFile === "payslip2" && "border-blue-400 bg-blue-50"
-                                    )}
-                                  >
-                                    <input
-                                      type="file"
-                                      id="payslip2"
-                                      className="sr-only"
-                                      accept=".pdf,.png,.jpg,.jpeg"
-                                      disabled={uploadingFile !== null}
-                                      onChange={(event) =>
-                                        handleExpUpload(event, "payslip2", currentExperience.id)
-                                      }
-                                    />
-
-                                    {uploadingFile === "payslip2" ? (
-                                      <div className="flex items-center justify-center gap-3 py-2">
-                                        <Loader2 className="animate-spin w-5 h-5 text-blue-600" />
-                                        <span className="text-sm font-medium text-blue-600">Uploading...</span>
-                                      </div>
-                                    ) : currentExperience.payslip_2_url ? (
-                                      <div className="flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-3 flex-1">
-                                          <div className="bg-green-600 rounded-full p-2">
-                                            <CheckCircle2 className="w-5 h-5 text-white" />
-                                          </div>
-                                          <div className="flex-1">
-                                            <p className="text-sm font-medium text-green-700">File uploaded successfully</p>
-                                            <p className="text-xs text-gray-500">Click to view or upload new file</p>
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => window.open(currentExperience.payslip_2_url, "_blank")}
-                                            className="hover:bg-green-100"
-                                          >
-                                            <FileText className="h-4 w-4 text-green-600" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <Label
-                                        htmlFor="payslip2"
-                                        className="flex items-center justify-center gap-3 cursor-pointer py-2"
-                                      >
-                                        <div className="bg-purple-600 rounded-full p-2">
-                                          <Upload className="w-5 h-5 text-white" />
-                                        </div>
-                                        <div className="text-left">
-                                          <p className="text-sm font-medium text-gray-700">
-                                            Click to upload or drag and drop
-                                          </p>
-                                          <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
-                                        </div>
-                                      </Label>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Payslip 3 */}
-                                <div className="space-y-2">
-                                  <Label className="text-sm font-medium">
-                                    Payslip 3<span className="text-red-500 ml-1">*</span>
-                                  </Label>
-                                  <div
-                                    className={cn(
-                                      "relative border-2 border-dashed rounded-lg p-4 transition-all",
-                                      currentExperience.payslip_3_url
-                                        ? "border-green-500 bg-green-50"
-                                        : "border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50",
-                                      uploadingFile === "payslip3" && "border-blue-400 bg-blue-50"
-                                    )}
-                                  >
-                                    <input
-                                      type="file"
-                                      id="payslip3"
-                                      className="sr-only"
-                                      accept=".pdf,.png,.jpg,.jpeg"
-                                      disabled={uploadingFile !== null}
-                                      onChange={(event) =>
-                                        handleExpUpload(event, "payslip3", currentExperience.id)
-                                      }
-                                    />
-
-                                    {uploadingFile === "payslip3" ? (
-                                      <div className="flex items-center justify-center gap-3 py-2">
-                                        <Loader2 className="animate-spin w-5 h-5 text-blue-600" />
-                                        <span className="text-sm font-medium text-blue-600">Uploading...</span>
-                                      </div>
-                                    ) : currentExperience.payslip_3_url ? (
-                                      <div className="flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-3 flex-1">
-                                          <div className="bg-green-600 rounded-full p-2">
-                                            <CheckCircle2 className="w-5 h-5 text-white" />
-                                          </div>
-                                          <div className="flex-1">
-                                            <p className="text-sm font-medium text-green-700">File uploaded successfully</p>
-                                            <p className="text-xs text-gray-500">Click to view or upload new file</p>
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => window.open(currentExperience.payslip_3_url, "_blank")}
-                                            className="hover:bg-green-100"
-                                          >
-                                            <FileText className="h-4 w-4 text-green-600" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <Label
-                                        htmlFor="payslip3"
-                                        className="flex items-center justify-center gap-3 cursor-pointer py-2"
-                                      >
-                                        <div className="bg-purple-600 rounded-full p-2">
-                                          <Upload className="w-5 h-5 text-white" />
-                                        </div>
-                                        <div className="text-left">
-                                          <p className="text-sm font-medium text-gray-700">
-                                            Click to upload or drag and drop
-                                          </p>
-                                          <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
-                                        </div>
-                                      </Label>
-                                    )}
-                                  </div>
-                                </div>
-                              </>
+                              <div className="space-y-4">
+                                {renderPurpleDocumentUpload(
+                                  "Payslip 1",
+                                  "payslip1",
+                                  currentExperience.payslip_1_url || "",
+                                  "payslip1",
+                                  (e) => handleExpUpload(e, "payslip1", currentExperience.id),
+                                  true
+                                )}
+                                {renderPurpleDocumentUpload(
+                                  "Payslip 2",
+                                  "payslip2",
+                                  currentExperience.payslip_2_url || "",
+                                  "payslip2",
+                                  (e) => handleExpUpload(e, "payslip2", currentExperience.id),
+                                  true
+                                )}
+                                {renderPurpleDocumentUpload(
+                                  "Payslip 3",
+                                  "payslip3",
+                                  currentExperience.payslip_3_url || "",
+                                  "payslip3",
+                                  (e) => handleExpUpload(e, "payslip3", currentExperience.id),
+                                  true
+                                )}
+                              </div>
                             ) : (
-                              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                                <Label className="text-sm font-medium text-amber-800">
-                                  Reason for not having Payslips
-                                </Label>
+                              <div className="form-3d-input">
+                                <Label className="form-3d-label">Reason for not having Payslips</Label>
                                 <Input
                                   value={currentExperience.noPayslipReason || ""}
                                   onChange={(e) => handleExperienceChange("noPayslipReason", e.target.value)}
-                                  placeholder="e.g., Cash payment, Contractor role, etc."
-                                  className="mt-2 border-amber-300 focus:border-amber-500"
+                                  placeholder="e.g., Cash payment, Contractor role"
                                 />
                               </div>
                             )}
                           </div>
 
-                          {/* Hike Letter - Optional */}
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium">Hike Letter (Optional)</Label>
-                            <div
-                              className={cn(
-                                "relative border-2 border-dashed rounded-lg p-4 transition-all",
-                                currentExperience.hikeLetterUrl
-                                  ? "border-green-500 bg-green-50"
-                                  : "border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50",
-                                uploadingFile === "hikeLetter" && "border-blue-400 bg-blue-50"
-                              )}
-                            >
-                              <input
-                                type="file"
-                                id="hikeLetter"
-                                className="sr-only"
-                                accept=".pdf,.png,.jpg,.jpeg"
-                                disabled={uploadingFile !== null}
-                                onChange={(event) =>
-                                  handleExpUpload(event, "hikeLetter", currentExperience.id)
-                                }
-                              />
-
-                              {uploadingFile === "hikeLetter" ? (
-                                <div className="flex items-center justify-center gap-3 py-2">
-                                  <Loader2 className="animate-spin w-5 h-5 text-blue-600" />
-                                  <span className="text-sm font-medium text-blue-600">Uploading...</span>
-                                </div>
-                              ) : currentExperience.hikeLetterUrl ? (
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-3 flex-1">
-                                    <div className="bg-green-600 rounded-full p-2">
-                                      <CheckCircle2 className="w-5 h-5 text-white" />
-                                    </div>
-                                    <div className="flex-1">
-                                      <p className="text-sm font-medium text-green-700">File uploaded successfully</p>
-                                      <p className="text-xs text-gray-500">Click to view or upload new file</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => window.open(currentExperience.hikeLetterUrl, "_blank")}
-                                      className="hover:bg-green-100"
-                                    >
-                                      <FileText className="h-4 w-4 text-green-600" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <Label
-                                  htmlFor="hikeLetter"
-                                  className="flex items-center justify-center gap-3 cursor-pointer py-2"
-                                >
-                                  <div className="bg-purple-600 rounded-full p-2">
-                                    <Upload className="w-5 h-5 text-white" />
-                                  </div>
-                                  <div className="text-left">
-                                    <p className="text-sm font-medium text-gray-700">
-                                      Click to upload or drag and drop
-                                    </p>
-                                    <p className="text-xs text-gray-500">PDF, PNG, JPG or JPEG (Max 10MB)</p>
-                                  </div>
-                                </Label>
-                              )}
-                            </div>
-                          </div>
+                          {/* Hike Letter */}
+                          {renderPurpleDocumentUpload(
+                            "Hike Letter (Optional)",
+                            "hikeLetter",
+                            currentExperience.hikeLetterUrl || "",
+                            "hikeLetter",
+                            (e) => handleExpUpload(e, "hikeLetter", currentExperience.id)
+                          )}
+                        
+                  
                         </div>
                       </div>
 
@@ -4563,4 +4075,5 @@ const bloodGroupOptions = [
   );
 };
 
-export default EmployeeOnboard;
+
+export default ProfileEditEmployee;

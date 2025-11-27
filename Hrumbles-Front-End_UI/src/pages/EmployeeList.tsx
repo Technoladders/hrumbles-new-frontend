@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   Plus, Search, Edit, Trash2, ChevronLeft, ChevronRight, Users, UserCheck, 
-  PieChart, HandCoins
+  PieChart, HandCoins,  Download 
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -21,6 +21,12 @@ import autoTable from 'jspdf-autotable';
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import HiddenContactCell from "@/components/ui/HiddenContactCell";
 import EmployeesPayrollDrawer from './EmployeesPayrollDrawer';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Register Chart.js components
 ChartJS.register(ArcElement, Tooltip, Legend);
@@ -267,7 +273,49 @@ const EmployeeList = () => {
     <div className=" mx-auto py-4 px-4 sm:px-6 lg:px-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl font-bold">Employees</h1>
-        <Button onClick={onOpen}>+ Add Employee</Button>
+   <button
+          onClick={onOpen}
+          className="flex items-center gap-3 pl-1.5 pr-6 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 group h-10"
+        >
+          {/* The "Card" Inside (White 3D Bubble) */}
+          <div className="relative flex items-center justify-center w-7 h-7 mr-1">
+            {/* 1. Glow behind the white card */}
+            <div className="absolute inset-0 bg-white blur-md scale-110 opacity-50 animate-pulse"></div>
+            
+            {/* 2. The White 3D Sphere Container */}
+            <div className="relative w-full h-full rounded-full flex items-center justify-center z-10 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.2)]"
+                 style={{ background: 'radial-gradient(circle at 30% 30%, #ffffff, #f1f5f9)' }}
+            >
+              {/* 3. The Purple Gradient Plus Icon */}
+              <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  className="w-5 h-5"
+                  style={{ filter: 'drop-shadow(0 2px 2px rgba(119,49,232,0.3))' }}
+              >
+                  <defs>
+                      <linearGradient id="purpleIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#9d5cff" />
+                          <stop offset="100%" stopColor="#5b21b6" />
+                      </linearGradient>
+                  </defs>
+                  <path 
+                      d="M12 6V18M6 12H18" 
+                      stroke="url(#purpleIconGrad)" 
+                      strokeWidth="3" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                  />
+              </svg>
+            </div>
+          </div>
+          
+          {/* Button Text */}
+          <span className="tracking-wide text-sm relative z-10">Add Employee</span>
+        </button>
+        {/* --- REPLACED BUTTON END --- */}
+
         <AddEmployeeModal isOpen={isOpen} onClose={onClose} onEmployeeAdded={handleEmployeeAdded} />
       </div>
       
@@ -313,25 +361,56 @@ const EmployeeList = () => {
       </div>
 
       <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <div className="relative w-64">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+<CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            
+            {/* Search Bar (Rounded & Gray Style) */}
+            <div className="relative w-full sm:w-[320px]">
+              <Search
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                size={18}
+              />
               <Input
                 placeholder="Search employees..."
-                className="pl-8"
+                className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm transition-all focus-visible:ring-[#7731E8]"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+
+{/* Download Button with Dropdown (Clean Style) */}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={downloadCSV}>
-                Download CSV
-              </Button>
-              <Button variant="outline" onClick={downloadPDF}>
-                Download PDF
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-2 px-6 py-2 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-md hover:shadow-lg transition-all duration-200 outline-none h-10">
+                    <Download className="w-4 h-4" />
+                    <span>Download</span>
+                  </button>
+                </DropdownMenuTrigger>
+                
+                {/* Dropdown Content */}
+                <DropdownMenuContent align="end" className="w-48 rounded-2xl p-2 shadow-xl border-purple-100 bg-white/95 backdrop-blur-sm mt-2">
+                  
+                  {/* CSV Option */}
+                  <DropdownMenuItem 
+                    onClick={downloadCSV} 
+                    className="cursor-pointer rounded-xl text-gray-700 font-medium py-2.5 px-3 mb-1 transition-colors hover:bg-[#7731E8] hover:text-white focus:bg-[#7731E8] focus:text-white outline-none"
+                  >
+                    Download CSV
+                  </DropdownMenuItem>
+                  
+                  {/* PDF Option */}
+                  <DropdownMenuItem 
+                    onClick={downloadPDF} 
+                    className="cursor-pointer rounded-xl text-gray-700 font-medium py-2.5 px-3 transition-colors hover:bg-[#7731E8] hover:text-white focus:bg-[#7731E8] focus:text-white outline-none"
+                  >
+                    Download PDF
+                  </DropdownMenuItem>
+                  
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
+            
           </div>
         </CardHeader>
         <CardContent>
@@ -340,13 +419,13 @@ const EmployeeList = () => {
           ) : (
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+<TableHeader className="bg-gradient-to-r from-purple-600 to-violet-600">
+                  <TableRow className="hover:bg-transparent border-none">
+                    <TableHead className="text-white font-bold">Employee</TableHead>
+                    <TableHead className="text-white font-bold">Contact</TableHead>
+                    <TableHead className="text-white font-bold">Department</TableHead>
+                    <TableHead className="text-white font-bold">Status</TableHead>
+                    <TableHead className="text-right w-20 px-10 text-white font-bold">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -425,37 +504,51 @@ const EmployeeList = () => {
                           </span>
                         </TableCell>
           
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewDetails(employee);
-                            }}
-                          >
-                            <HandCoins className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/employee/${employee.id}`);
-                            }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(employee.id);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
+                   <TableCell className="text-right">
+                          <div className="flex justify-end">
+                            <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-sm border border-slate-200">
+                              
+                              {/* Payroll/Details Button */}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 rounded-full text-slate-500 hover:bg-[#7731E8] hover:text-white transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewDetails(employee);
+                                }}
+                              >
+                                <HandCoins className="h-3.5 w-3.5" />
+                              </Button>
+
+                              {/* Edit Button */}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 rounded-full text-slate-500 hover:bg-[#7731E8] hover:text-white transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/employee/${employee.id}`);
+                                }}
+                              >
+                                <Edit className="h-3.5 w-3.5" />
+                              </Button>
+
+                              {/* Delete Button */}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 rounded-full text-slate-500 hover:bg-red-600 hover:text-white transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(employee.id);
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                              
+                            </div>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))

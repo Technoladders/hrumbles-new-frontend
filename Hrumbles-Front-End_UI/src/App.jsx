@@ -67,7 +67,7 @@ import GoalDetail from "./pages/goals/GoalDetail";
 import EmployeeGoalView from "./components/goals/employee/EmployeeGoalDashboard"
 import GoalDetailView from "./components/goals/dashboard/GoalDetailView";
 import EmployeeGoalDetail from "./pages/goals/EmployeeGoalDetail";
-
+import ProfileEditEmployee from "./pages/ProfileEditEmployee";
 import MySubmissionsReport from "./pages/reports/MySubmissionsReport";
 
 // New CLients
@@ -312,7 +312,8 @@ function AppContent() {
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
-
+                // Change this line:
+                   <Route path="profile/edit/:id" element={<ProfileEditEmployee />} />
               {/* Password Change */}
               <Route path="/password" element={<PasswordChange />} />
 
