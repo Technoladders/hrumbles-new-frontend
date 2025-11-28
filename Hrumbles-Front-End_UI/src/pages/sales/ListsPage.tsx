@@ -26,7 +26,7 @@ const WorkspaceSection = ({ workspace, files, recordCounts, onEdit, onDelete, on
     const navigate = useNavigate();
     
     const handleFileNavigation = (file: WorkspaceFile) => {
-        const path = file.type === 'people' ? `/lists/file/${file.id}` : `/lists/file/${file.id}`;
+        const path = file.type === 'people' ? `/lists/contacts/file/${file.id}` : `/lists/companies/file/${file.id}`;
         navigate(path);
     };
 

@@ -39,17 +39,23 @@ const JobDescriptionStep = ({ data, onChange }: JobDescriptionStepProps) => {
       });
       if (error) throw error;
       
-      const { full_description, technical_skills, methodologies, related_skills } = responseData;
-      const allSkills = [...(technical_skills || []), ...(methodologies || []), ...(related_skills || [])];
+      // --- FIX: Updated destructuring to match actual backend response ---
+      const { full_description, primary_skills, secondary_skills } = responseData;
+      
+      // Combine primary and secondary skills
+      const allSkills = [...(primary_skills || []), ...(secondary_skills || [])];
+      
+      // If the backend happens to return strings (old format) or mixed, handle cleanly
       const uniqueSkills = Array.from(new Set(allSkills));
 
-      const skillObjects: Skill[] = uniqueSkills.map(name => ({
-        category: ["Agile", "Scrum", "CI/CD", "MLOps"].includes(name) ? "Non-IT" : "IT",
-        name
+      const skillObjects: Skill[] = uniqueSkills.map((name: any) => ({
+        // Basic heuristic for category, or default to IT since backend doesn't provide category
+        category: ["Agile", "Scrum", "CI/CD", "MLOps", "Communication", "Leadership"].includes(name) ? "Non-IT" : "IT",
+        name: String(name)
       }));
 
-      setDescription(full_description);
-      onChange({ description: full_description, skills: skillObjects });
+      setDescription(full_description || description); // Fallback to current description if full_description is missing
+      onChange({ description: full_description || description, skills: skillObjects });
 
     } catch (err) {
       console.error("JD processing failed:", err);
@@ -119,17 +125,6 @@ const JobDescriptionStep = ({ data, onChange }: JobDescriptionStepProps) => {
               )) : <p className="text-xs text-gray-400 text-center py-4">No IT skills found.</p>}
             </div>
           </div>
-          {/* <div className="space-y-2"> */}
-            {/* <h4 className="font-semibold text-gray-700">Business & Other Skills (Non-IT)</h4>
-            <div className="p-3 border rounded-lg space-y-2 bg-gray-50/50 min-h-[120px]">
-              {nonItSkills.length > 0 ? nonItSkills.map((skill) => (
-                <div key={skill.name} className="flex items-center justify-between bg-white p-2 rounded shadow-sm text-sm">
-                  <span>{skill.name}</span>
-                  <button onClick={() => handleRemoveSkill(skill)} className="text-gray-400 hover:text-red-500"><X size={16} /></button>
-                </div>
-              )) : <p className="text-xs text-gray-400 text-center py-4">No Non-IT skills found.</p>}
-            </div> */}
-          {/* </div> */}
         </div>
         <div className="pt-4 border-t">
           <Label htmlFor="manualSkill" className="font-semibold">Add a Missing Skill</Label>

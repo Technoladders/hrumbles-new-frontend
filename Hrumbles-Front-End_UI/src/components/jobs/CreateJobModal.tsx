@@ -13,6 +13,7 @@ import {
 import { Briefcase, Building, UserCheck, ArrowLeft, Users, ChevronRight } from "lucide-react";
 import { JobStepperForm } from "./job/JobStepperForm";
 import { JobData } from "@/lib/types";
+import { supabase } from "@/integrations/supabase/client";
 import { useSelector } from "react-redux";
 
 interface CreateJobModalProps {
@@ -35,12 +36,47 @@ export const CreateJobModal = ({ isOpen, onClose, editJob = null, onSave }: Crea
   const [internalType, setInternalType] = useState<"Inhouse" | "Client Side" | null>(null);
 
   const organizationId = useSelector((state: any) => state.auth.organization_id);
+   const [isPurelyPermanentOrg, setIsPurelyPermanentOrg] = useState(false);
 
   const fullReset = useCallback(() => {
     setView('SELECT_JOB_TYPE');
     setJobType(null);
     setInternalType(null);
   }, []);
+
+   // --- NEW EFFECT: Check Client Service Types ---
+  useEffect(() => {
+    const checkClientServiceTypes = async () => {
+      if (!organizationId) return;
+
+      try {
+        const { data: clients, error } = await supabase
+          .from('hr_clients')
+          .select('service_type')
+          .eq('organization_id', organizationId);
+
+        if (error) throw error;
+
+        if (clients && clients.length > 0) {
+          // Logic: Check if EVERY client has EXACTLY ["permanent"]
+          const allPermanent = clients.every(client => 
+            Array.isArray(client.service_type) &&
+            client.service_type.length === 1 &&
+            client.service_type[0] === 'permanent'
+          );
+          setIsPurelyPermanentOrg(allPermanent);
+        } else {
+          setIsPurelyPermanentOrg(false);
+        }
+
+      } catch (error: any) {
+        console.error("Error checking client service types:", error.message);
+        setIsPurelyPermanentOrg(false);
+      }
+    };
+
+    checkClientServiceTypes();
+  }, [organizationId]);
 
   useEffect(() => {
     if (isOpen) {
@@ -68,7 +104,19 @@ export const CreateJobModal = ({ isOpen, onClose, editJob = null, onSave }: Crea
 
   const handleJobTypeSelect = (type: "Internal" | "External") => {
     setJobType(type);
-    setView(type === 'Internal' ? 'SELECT_INTERNAL_TYPE' : 'SHOW_STEPPER');
+    
+    if (type === 'Internal') {
+      // --- MODIFIED LOGIC ---
+      // If organization only has permanent clients, skip selection and go straight to Inhouse
+      if (isPurelyPermanentOrg) {
+        setInternalType("Inhouse");
+        setView('SHOW_STEPPER');
+      } else {
+        setView('SELECT_INTERNAL_TYPE');
+      }
+    } else {
+      setView('SHOW_STEPPER');
+    }
   };
 
   const handleInternalTypeSelect = (type: "Inhouse" | "Client Side") => {
@@ -83,8 +131,15 @@ export const CreateJobModal = ({ isOpen, onClose, editJob = null, onSave }: Crea
     }
   };
 
-  const handleBackFromStepper = () => {
-    setView(jobType === 'Internal' ? 'SELECT_INTERNAL_TYPE' : 'SELECT_JOB_TYPE');
+const handleBackFromStepper = () => {
+    // --- MODIFIED LOGIC ---
+    // If we skipped the Internal Type selection due to restriction, go back to main menu
+    if (jobType === 'Internal' && isPurelyPermanentOrg) {
+       setView('SELECT_JOB_TYPE');
+       setJobType(null); 
+    } else {
+       setView(jobType === 'Internal' ? 'SELECT_INTERNAL_TYPE' : 'SELECT_JOB_TYPE');
+    }
   };
   
   const handleSaveJob = (job: JobData) => {

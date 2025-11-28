@@ -410,13 +410,13 @@ function AppContent() {
 
               {/* Sales Companies and Contacts */}
               <Route path="/companies" element={<CompaniesPage />} />
-              <Route path="/lists/file/:fileId" element={<CompaniesPage />} />
+              <Route path="/lists/companies/file/:fileId" element={<CompaniesPage />} />
               <Route path="/contacts" element={<TanstackContactsPage />} />
               <Route path="/sales/kanban" element={<KanbanView />} />
               <Route path="/companies/:id" element={<CompanyDetail />} />
               <Route path="/companies/:id/edit" element={<CompanyEdit />} />
               <Route path="/lists" element={<ListsPage />} />
-              <Route path="/lists/file/:fileId" element={<TanstackContactsPage />} />
+              <Route path="/lists/contacts/file/:fileId" element={<TanstackContactsPage />} />
 
               {/* TimeTracker, Timesheet, Attendance and Leave */}
               {/* Employee routes */}
