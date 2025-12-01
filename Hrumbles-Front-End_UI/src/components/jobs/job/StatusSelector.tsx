@@ -102,8 +102,16 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
     let baseOptions: SubStatus[] = [];
   
     // --- Start of Your Original Logic (modified to populate baseOptions) ---
-    if (selectedMainStatus.name === 'New Applicants' && mainStatus.name === 'Processed') {
-      baseOptions = mainStatus.subStatuses.filter(s => s.name === 'Processed (Internal)' || s.name === 'Future Fit');
+    if (selectedMainStatus.name === 'New Applicants') {
+      if (mainStatus.name === 'Processed') {
+        // Transition to Processed
+        baseOptions = mainStatus.subStatuses.filter(s => s.name === 'Processed (Internal)');
+      } else if (mainStatus.name === 'New Applicants') {
+        // Stay in New Applicants (Current + Not a fit)
+        baseOptions = mainStatus.subStatuses.filter(s => s.id === selectedSubStatus.id || s.name === 'Future Fit' || s.name === 'Not a fit');
+      }
+
+    // 2. Logic for PROCESSED group
     } else if ((selectedSubStatus.name === 'Processed (Internal)' || selectedSubStatus.name === 'Future Fit' || selectedSubStatus.name === 'Internal Reject' || selectedSubStatus.name === 'Internal Hold' || selectedSubStatus.name === 'Candidate on hold') && mainStatus.name === 'Processed') {
       baseOptions = mainStatus.subStatuses.filter(s => ['Processed (Client)', 'Future Fit', 'Duplicate (Internal)', 'Internal Reject', 'Internal Hold'].includes(s.name));
     } else if (selectedSubStatus.name === 'Processed (Client)' || selectedSubStatus.name === 'Client Hold' || selectedSubStatus.name === 'Candidate on hold') {

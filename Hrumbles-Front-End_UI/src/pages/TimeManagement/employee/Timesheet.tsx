@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { TimeLog } from "@/types/time-tracker-types";
 import { CreateTimesheetDialog } from "@/components/TimeManagement/timesheet/CreateTimesheetDialog";
 import { ViewTimesheetDialog } from "@/components/TimeManagement/timesheet/ViewTimesheetDialog";
+import { TaskupViewTimesheetDialog } from "@/components/TimeManagement/timesheet/TaskupViewTimesheetDialog";
 import { TimesheetClarificationDialog } from "@/components/TimeManagement/timesheet/TimesheetClarificationDialog";
 import { TimesheetHeader } from "@/components/TimeManagement/timesheet/TimesheetHeader";
 import { TimesheetContent } from "@/components/TimeManagement/timesheet/TimesheetContent";
@@ -15,6 +16,8 @@ import { useTimesheetStore } from '@/stores/timesheetStore';
 // ULTRA-AGGRESSIVE FIX: Enum for dialog state
 // ===============================================
 type ActiveDialogType = 'NONE' | 'CREATE' | 'VIEW' | 'CLARIFICATION';
+
+const TASKUP_ORG_ID = "0e4318d8-b1a5-4606-b311-c56d7eec47ce";
 
 const Timesheet = () => {
   const [activeTab, setActiveTab] = useState("pending");
@@ -29,6 +32,7 @@ const Timesheet = () => {
 
   const { isSubmissionModalOpen, submissionTarget, closeSubmissionModal } = useTimesheetStore();
   const user = useSelector((state: any) => state.auth.user);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
   const employeeId = user?.id || "";
 
   const {
@@ -156,21 +160,41 @@ const Timesheet = () => {
       ) : null}
       
       {/* VIEW DIALOG */}
+ {/* VIEW DIALOG (CONDITIONAL RENDERING) */}
       {activeDialogType === 'VIEW' && activeTimesheet ? (
-        <ViewTimesheetDialog 
-          key={`view-${dialogKey}`}
-          open={true}
-          onOpenChange={(open) => {
-            if (!open) handleCloseAllDialogs();
-          }}
-          timesheet={activeTimesheet}
-          finalDurationMinutes={submissionTarget?.finalDurationMinutes}
-          onSubmitTimesheet={() => {
-            fetchTimesheetData();
-            handleCloseAllDialogs();
-          }}
-          employeeHasProjects={employeeHasProjects}
-        />
+        organizationId === TASKUP_ORG_ID ? (
+          // TASKUP VIEW DIALOG
+          <TaskupViewTimesheetDialog 
+            key={`view-taskup-${dialogKey}`}
+            open={true}
+            onOpenChange={(open) => {
+              if (!open) handleCloseAllDialogs();
+            }}
+            timesheet={activeTimesheet}
+            finalDurationMinutes={submissionTarget?.finalDurationMinutes}
+            onSubmitTimesheet={() => {
+              fetchTimesheetData();
+              handleCloseAllDialogs();
+            }}
+            employeeHasProjects={employeeHasProjects}
+          />
+        ) : (
+          // STANDARD VIEW DIALOG
+          <ViewTimesheetDialog 
+            key={`view-${dialogKey}`}
+            open={true}
+            onOpenChange={(open) => {
+              if (!open) handleCloseAllDialogs();
+            }}
+            timesheet={activeTimesheet}
+            finalDurationMinutes={submissionTarget?.finalDurationMinutes}
+            onSubmitTimesheet={() => {
+              fetchTimesheetData();
+              handleCloseAllDialogs();
+            }}
+            employeeHasProjects={employeeHasProjects}
+          />
+        )
       ) : null}
       
       {/* CLARIFICATION DIALOG */}

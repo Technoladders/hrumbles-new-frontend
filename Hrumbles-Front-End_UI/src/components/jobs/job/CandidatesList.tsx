@@ -1364,14 +1364,17 @@ const candidates = useMemo(() => {
       });
     }
     
-    // Tab and status filtering logic
+    // --- UPDATED LOGIC STARTS HERE ---
     if (activeTab === "All Candidates") {
-      filtered = filtered.filter(c => c.main_status?.name !== "Applied" || c.created_by);
+      // Exclude "New Applicants" from the "All Candidates" tab
+      filtered = filtered.filter(c => c.main_status?.name !== "New Applicants");
     } else if (activeTab === "Applied") {
       filtered = appliedCandidates;
     } else {
+      // This handles specific tabs (e.g., clicking "New Applicants" shows only those candidates)
       filtered = filtered.filter(c => c.main_status?.name === activeTab);
     }
+    // --- UPDATED LOGIC ENDS HERE ---
     
     if (statusFilters && statusFilters.length > 0) {
       filtered = filtered.filter(c => 
@@ -1813,9 +1816,16 @@ if (candidateFilter === "Yours") { // Use prop directly
     );
   }
 
-  const getTabCount = (tabName: string) => {
-    if (tabName === "All Candidates") return candidates.filter(c => c.main_status?.name !== "Applied" || c.created_by).length;
+const getTabCount = (tabName: string) => {
+    // --- UPDATED LOGIC: Don't count "New Applicants" in the "All Candidates" badge
+    if (tabName === "All Candidates") {
+      return candidates.filter(c => c.main_status?.name !== "New Applicants").length;
+    }
+    // --- END UPDATE
+    
     if (tabName === "Applied") return appliedCandidates.length;
+    
+    // This counts correctly for specific tabs (including "New Applicants" tab itself)
     return candidates.filter(c => c.main_status?.name === tabName).length;
   };
 
