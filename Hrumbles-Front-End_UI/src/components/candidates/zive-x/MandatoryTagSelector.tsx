@@ -71,17 +71,42 @@ export const MandatoryTagSelector: FC<MandatoryTagSelectorProps> = ({ value, onC
       <Popover open={!disableSuggestions && isOpen && suggestions.length > 0} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <div 
-            className="flex flex-wrap items-center gap-2 p-2 min-h-[40px] border border-gray-300 rounded-md bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500"
+            // ✅ REMOVED: border, rounded-md, bg-white, focus-within styles
+            // ✅ Parent .mandatory-tag-wrapper handles ALL borders and focus
+            className="flex flex-wrap items-center gap-2 p-2 min-h-[40px] bg-transparent"
             onClick={() => inputRef.current?.focus()}
           >
             {value.map(tag => (
-              <Badge key={tag.value} variant="secondary" className="flex items-center gap-1.5 py-1 px-2 text-sm bg-indigo-100 text-indigo-800">
-                <button type="button" onClick={() => handleToggleMandatory(tag.value)} aria-label={`Mark ${tag.value} as mandatory`}>
-                  <Star className={cn("h-4 w-4 transition-colors", tag.mandatory ? 'fill-yellow-400 text-yellow-500' : 'text-gray-400 hover:text-yellow-500')} />
+              <Badge 
+                key={tag.value} 
+                variant="secondary" 
+                // ✅ CHANGED: indigo → purple colors
+                className="flex items-center gap-1.5 py-1 px-2 text-sm bg-purple-100 text-purple-800 border border-purple-200"
+              >
+                <button 
+                  type="button" 
+                  onClick={() => handleToggleMandatory(tag.value)} 
+                  aria-label={`Mark ${tag.value} as mandatory`}
+                  className="focus:outline-none"
+                >
+                  <Star 
+                    className={cn(
+                      "h-4 w-4 transition-colors", 
+                      tag.mandatory 
+                        ? 'fill-yellow-400 text-yellow-500' 
+                        : 'text-gray-400 hover:text-yellow-500'
+                    )} 
+                  />
                 </button>
                 <span className="font-medium">{tag.value}</span>
-                <button type="button" onClick={() => handleRemove(tag.value)} aria-label={`Remove ${tag.value}`}>
-                  <X className="h-3 w-3 text-indigo-600" />
+                <button 
+                  type="button" 
+                  onClick={() => handleRemove(tag.value)} 
+                  aria-label={`Remove ${tag.value}`}
+                  className="focus:outline-none hover:bg-purple-200 rounded"
+                >
+                  {/* ✅ CHANGED: indigo-600 → purple-700 */}
+                  <X className="h-3 w-3 text-purple-700" />
                 </button>
               </Badge>
             ))}
@@ -92,19 +117,41 @@ export const MandatoryTagSelector: FC<MandatoryTagSelectorProps> = ({ value, onC
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               onFocus={() => setIsOpen(true)}
-              onBlur={() => setTimeout(() => setIsOpen(false), 150)} // Delay to allow click
+              onBlur={() => setTimeout(() => setIsOpen(false), 150)} 
               placeholder={value.length === 0 ? placeholder : ''}
-              className="flex-grow bg-transparent focus:outline-none text-sm p-0.5"
+              // ✅ CRITICAL: Remove ALL borders, outlines, shadows from input
+              className="flex-grow bg-transparent focus:outline-none focus:ring-0 focus:border-0 text-sm p-0.5 border-0 outline-none"
+              style={{ 
+                boxShadow: 'none',
+                outline: 'none',
+                border: 'none'
+              }}
             />
           </div>
         </PopoverTrigger>
-        <PopoverContent className="w-[--radix-popover-trigger-width] p-0 mt-1" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <PopoverContent 
+          className="w-[--radix-popover-trigger-width] p-0 mt-1" 
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <Command shouldFilter={false}>
-            <CommandEmpty>{isLoading ? 'Searching...' : 'No results found.'}</CommandEmpty>
+            <CommandEmpty>
+              {isLoading ? 'Searching...' : 'No results found.'}
+            </CommandEmpty>
             <CommandGroup>
               {suggestions.map(suggestion => (
-                <CommandItem key={suggestion} value={suggestion} onSelect={() => handleSelect(suggestion)} className="cursor-pointer">
-                  <Check className={cn("mr-2 h-4 w-4", selectedValues.has(suggestion) ? "opacity-100" : "opacity-0")} />
+            <CommandItem 
+  key={suggestion} 
+  value={suggestion} 
+  onSelect={() => handleSelect(suggestion)} 
+  className="cursor-pointer aria-selected:bg-[#7731E8] aria-selected:text-white data-[selected=true]:bg-[#7731E8] data-[selected=true]:text-white"
+>
+                  {/* ✅ ADDED: Purple checkmark color */}
+                  <Check 
+                    className={cn(
+                      "mr-2 h-4 w-4 text-[#7731E8]", 
+                      selectedValues.has(suggestion) ? "opacity-100" : "opacity-0"
+                    )} 
+                  />
                   {suggestion}
                 </CommandItem>
               ))}

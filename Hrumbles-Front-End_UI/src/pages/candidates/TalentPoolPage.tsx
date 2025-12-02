@@ -129,6 +129,9 @@ const TalentPoolPage: FC = () => {
   const [historyCandidate, setHistoryCandidate] = useState<TalentPoolCandidate | null>(null);
   const [enrichCandidate, setEnrichCandidate] = useState<TalentPoolCandidate | null>(null);
 
+// Add this near your other state definitions
+const [debouncedJobSearchTerm] = useDebounce(jobSearchTerm, 500);
+
   const [copiedValue, setCopiedValue] = useState<'email' | 'phone' | null>(null);
 
   useEffect(() => {
@@ -207,27 +210,28 @@ const TalentPoolPage: FC = () => {
     enabled: !!user && !!organizationId,
   });
 
-  const { data: jobs, isLoading: isLoadingJobs } = useQuery({
-    queryKey: ['jobsForMatching', organizationId, jobSearchTerm],
-    queryFn: async () => {
-      if (!organizationId) return [];
-      let query = supabase
-        .from('hr_jobs')
-        .select('id, title, skills, primary_skills, description, experience, location')
-        .eq('organization_id', organizationId)
-        .order('created_at', { ascending: false });
+const { data: jobs, isLoading: isLoadingJobs } = useQuery({
+  // Use debouncedJobSearchTerm in the key instead of jobSearchTerm
+  queryKey: ['jobsForMatching', organizationId, debouncedJobSearchTerm], 
+  queryFn: async () => {
+    if (!organizationId) return [];
+    let query = supabase
+      .from('hr_jobs')
+      .select('id, title, skills, primary_skills, description, experience, location')
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: false });
 
-      if (jobSearchTerm) {
-        query = query.ilike('title', `%${jobSearchTerm}%`);
-      }
-      
-      const { data, error } = await query.limit(50);
-      if (error) throw new Error(error.message);
-      return data as Job[];
-    },
-    enabled: !!organizationId && isJobPopoverOpen,
-  });
-
+    // Use debouncedJobSearchTerm for the query
+    if (debouncedJobSearchTerm) {
+      query = query.ilike('title', `%${debouncedJobSearchTerm}%`);
+    }
+    
+    const { data, error } = await query.limit(50);
+    if (error) throw new Error(error.message);
+    return data as Job[];
+  },
+  enabled: !!organizationId && isJobPopoverOpen,
+});
   const { data: totalPoolData } = useQuery({
       queryKey: ['totalTalentPoolCount', organizationId],
       queryFn: async () => {
@@ -551,12 +555,35 @@ return (
           <div className="relative flex-grow min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]"><Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} /><Input placeholder="Search by name, email or phone..." className="pl-12 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm placeholder:text-sm" value={searchTerm} onChange={handleSearchChange} disabled={!!selectedJob} /></div>
           <Popover open={isJobPopoverOpen} onOpenChange={setJobPopoverOpen}>
             <PopoverTrigger asChild><Button className="h-10 px-6 font-semibold text-white whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200 flex items-center gap-2"><Sparkles size={18} /><span>Match with Job</span></Button></PopoverTrigger>
-            <PopoverContent className="w-[360px] p-4 bg-white rounded-2xl shadow-2xl border-none mt-2" align="end"><Command className="bg-transparent"><CommandInput 
-  placeholder="Search for a job..." 
-  value={jobSearchTerm} 
-  onValueChange={setJobSearchTerm} 
-  className="w-full mt-2 h-10 px-3 text-sm bg-purple-50 border border-purple-200 rounded-xl text-purple-900 placeholder:text-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-0" 
-/><CommandList className="mt-4 max-h-[300px]"><CommandEmpty>{isLoadingJobs ? 'Loading...' : 'No jobs found.'}</CommandEmpty><CommandGroup>{jobs?.map((job) => (<CommandItem key={job.id} onSelect={() => handleJobSelect(job)} className="flex justify-between items-center p-3 my-1 text-base font-medium text-gray-800 rounded-lg cursor-pointer transition-colors duration-150 hover:bg-purple-100 data-[selected=true]:bg-purple-600 data-[selected=true]:text-white aria-selected:bg-purple-600 aria-selected:text-white"><span>{job.title}</span><ChevronRight className="h-5 w-5 text-purple-500 opacity-0 transition-opacity aria-selected:opacity-100" /></CommandItem>))}</CommandGroup></CommandList></Command></PopoverContent>
+          <PopoverContent className="w-[360px] p-4 bg-white rounded-2xl shadow-2xl border-none mt-2" align="end">
+  {/* Add shouldFilter={false} here */}
+  <Command className="bg-transparent" shouldFilter={false}> 
+    <CommandInput 
+      placeholder="Search for a job..." 
+      value={jobSearchTerm} 
+      onValueChange={setJobSearchTerm} 
+      className="w-full mt-2 h-10 px-3 text-sm bg-purple-50 border border-purple-200 rounded-xl text-purple-900 placeholder:text-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-0" 
+    />
+    <CommandList className="mt-4 max-h-[300px]">
+      <CommandEmpty>
+        {isLoadingJobs ? 'Loading...' : 'No jobs found.'}
+      </CommandEmpty>
+      <CommandGroup>
+        {jobs?.map((job) => (
+          <CommandItem 
+            key={job.id} 
+            value={job.title} // It is good practice to explicitly set the value
+            onSelect={() => handleJobSelect(job)} 
+            className="flex justify-between items-center p-3 my-1 text-base font-medium text-gray-800 rounded-lg cursor-pointer transition-colors duration-150 hover:bg-purple-100 data-[selected=true]:bg-purple-600 data-[selected=true]:text-white aria-selected:bg-purple-600 aria-selected:text-white"
+          >
+            <span>{job.title}</span>
+            <ChevronRight className="h-5 w-5 text-purple-500 opacity-0 transition-opacity aria-selected:opacity-100" />
+          </CommandItem>
+        ))}
+      </CommandGroup>
+    </CommandList>
+  </Command>
+</PopoverContent>
           </Popover>
         </div>
 

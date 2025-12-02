@@ -396,9 +396,9 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
             <>
               <div className="absolute top-4 right-4 z-20"><Button variant="ghost" size="icon" onClick={onComplete} className="rounded-full bg-white/80 hover:bg-white shadow-sm"><X className="h-4 w-4" /></Button></div>
               <div className="relative z-10 flex flex-col items-center p-8 text-center">
-                <div className="relative mb-4 grid h-24 w-24 place-items-center rounded-full bg-gradient-to-br from-green-500 to-teal-500 text-white shadow-lg">
-                    <span className="text-5xl font-bold">{candidatesWithSkillAnalysis.length}</span>
-                </div>
+            <div className="relative mb-4 grid h-32 w-32 place-items-center rounded-full bg-gradient-to-br from-green-500 to-teal-500 text-white shadow-lg">
+    <span className="text-5xl font-bold">{candidatesWithSkillAnalysis.length}</span>
+</div>
                 <h2 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-teal-600 bg-clip-text text-transparent mb-2">
                   Matches Found
                 </h2>
@@ -530,12 +530,53 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
                   );
                 })
                 ) : (
-                  <div className="text-center py-12 text-gray-500">
-                    <Frown className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-700">No Matches Found</h3>
-                    <p>There were no candidates in the talent pool with skills matching this job.</p>
-                  </div>
-                )}
+  <div className="flex flex-col items-center justify-center py-12 px-4 animate-fade-in">
+    {/* Icon Bubble */}
+    <div className="bg-gray-100 rounded-full p-6 mb-4 shadow-inner">
+      <SearchCode className="h-12 w-12 text-gray-400" />
+    </div>
+
+    <h3 className="text-xl font-bold text-gray-800 mb-2">No Candidates Found</h3>
+    
+    <p className="text-gray-500 mb-6 max-w-sm text-center">
+      We couldn't identify any matches in your current talent pool.
+    </p>
+
+    {/* The Reasons Box */}
+    <div className="w-full max-w-3xl  bg-purple-50 border border-purple-100 rounded-xl p-8 text-left shadow-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <Lightbulb className="h-4 w-4 text-purple-600" />
+        <span className="text-sm font-bold text-purple-800">Why is this list empty?</span>
+      </div>
+      
+      <ul className="space-y-3">
+        {/* DYNAMIC REASON: Short JD */}
+        {jobData?.description && jobData.description.length < 200 && (
+          <li className="flex items-start gap-2 text-sm text-red-800 bg-red-50 p-2 rounded border border-red-100">
+            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-red-500 flex-shrink-0" />
+            <span>
+              <strong>Job Description is too short.</strong> The AI struggles to match candidates when the JD is only 1-2 lines. Try adding more details.
+            </span>
+          </li>
+        )}
+
+        {/* STATIC REASON: No Match */}
+        <li className="flex items-start gap-2 text-sm text-gray-700">
+          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />
+          <span>No candidates in the talent pool matched perfectly with this Job Description.</span>
+        </li>
+
+        {/* STATIC REASON: Skill Threshold */}
+        <li className="flex items-start gap-2 text-sm text-gray-700">
+          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />
+          <span>
+            System only displays candidates who match <strong>more than 4 primary skills</strong>.
+          </span>
+        </li>
+      </ul>
+    </div>
+  </div>
+)}
               </div>
               <div className="relative z-10 p-4"><Button onClick={onComplete} className="w-full h-12 text-base font-semibold bg-purple-600 hover:bg-purple-700 text-white">Close and View in Talent Pool</Button></div>
             </>

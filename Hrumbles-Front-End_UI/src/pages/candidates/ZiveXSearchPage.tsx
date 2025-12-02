@@ -58,7 +58,7 @@ const ZiveXSearchPage: FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-8xl mx-auto">
+      <div className="max-w-9xl mx-auto">
         <div className="mb-6"><h1 className="text-4xl font-bold text-gray-600">Find Top Talent</h1></div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-xl p-8">

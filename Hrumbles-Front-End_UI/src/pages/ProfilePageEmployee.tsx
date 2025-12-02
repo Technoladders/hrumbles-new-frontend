@@ -562,7 +562,7 @@ onClick={() => navigate(`/profile/edit/${userId}`)} variant="outline" size="icon
             <TabsContent value="personal" className="mt-6 space-y-8">
               <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
                 <CardContent className="p-8">
-                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Identity Documents</h3>
+                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Ideny Documents</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Aadhar Card */}
                     <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
