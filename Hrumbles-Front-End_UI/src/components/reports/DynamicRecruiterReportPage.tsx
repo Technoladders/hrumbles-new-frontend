@@ -12,8 +12,8 @@ interface DateRange {
 
 const DynamicRecruiterReportPage: React.FC = () => {
   const [dateRange, setDateRange] = useState<DateRange>({
-    startDate: startOfMonth(new Date()),
-    endDate: endOfMonth(new Date()),
+    startDate: new Date(new Date().getFullYear(), 0, 1),
+    endDate: new Date(),
   });
   const [data, setData] = useState<DynamicRecruiterPerformanceData[]>([]);
   const { isLoading, error, fetchReportData } = useDynamicRecruiterReport();

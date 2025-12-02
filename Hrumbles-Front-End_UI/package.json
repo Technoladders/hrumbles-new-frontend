@@ -13,7 +13,8 @@
     "build": "npm run set-version && vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest"
   },
   "dependencies": {
     "@chakra-ui/icons": "^2.2.4",
@@ -145,6 +146,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -153,6 +155,7 @@
     "@types/busboy": "^1.5.4",
     "@types/json2csv": "^5.0.7",
     "@types/lodash.merge": "^4.6.9",
+    "@types/node": "^24.10.1",
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^18.3.18",
     "@types/react-dnd": "^2.0.36",
