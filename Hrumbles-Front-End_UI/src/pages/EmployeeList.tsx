@@ -526,10 +526,7 @@ const EmployeeList = () => {
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7 rounded-full text-slate-500 hover:bg-[#7731E8] hover:text-white transition-colors"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/employee/${employee.id}`);
-                                }}
+                                onClick={() => navigate(`/profile/edit/${employee.id}`)}
                               >
                                 <Edit className="h-3.5 w-3.5" />
                               </Button>

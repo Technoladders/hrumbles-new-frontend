@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { Input } from '@/components/ui/input';
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Edit, Mail, Phone, Globe, User, MoreVertical, Activity, Clock, FileText, Home, Eye, Pencil, Users, UserCircle, Building2, BadgeCheck, Cog, MessageCircle, Fingerprint, CreditCard, Download, Copy, Briefcase, ShieldCheck, ShieldAlert, Loader2, CalendarDays, Heart, Droplet, CalendarPlus, IndianRupee, Timer, Hourglass, ClipboardList, Upload, Trash2, Paperclip, X } from "lucide-react";
+import { Edit, Mail, Phone, Globe, User, MoreVertical, Activity, Clock,   FileText, Home, Eye, Pencil, Users, UserCircle, Building2, BadgeCheck, Cog, MessageCircle, Fingerprint, CreditCard, Download, Copy, Briefcase, ShieldCheck, ShieldAlert, Loader2, CalendarDays, Heart, Droplet, CalendarPlus, IndianRupee, Timer, Hourglass, ClipboardList, Upload, Trash2, Paperclip, X, TrendingUp,  TrendingDown,Wallet  } from "lucide-react";
 import { useSelector } from "react-redux";
 
 interface PaymentEarning {
@@ -1232,301 +1232,927 @@ const EmployeeProfile = () => {
                 </TabsTrigger>
               </TabsList>
             </div>
+            {/* ✅ ENHANCED PERSONAL TAB WITHOUT SECTION HEADER ICONS */}
+<TabsContent value="personal" className="mt-6 space-y-6">
+  {/* 🎨 IDENTITY DOCUMENTS - Enhanced Card Design */}
+  <Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
+    <CardContent className="p-8">
+      {/* Section Header WITHOUT Icon */}
+      <div className="mb-6">
+        <h3 className="font-bold text-2xl text-gray-800 dark:text-gray-100">Identity Documents</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Official identification documents</p>
+      </div>
 
-            {/* ✅ COMPLETE PERSONAL TAB */}
-            <TabsContent value="personal" className="mt-6 space-y-8">
-              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
-                <CardContent className="p-8">
-                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Identity Documents</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
-                      <div className="flex items-center gap-3">
-                        <Fingerprint className="h-8 w-8 text-purple-600 flex-shrink-0" />
-                        <div>
-                          <h4 className="font-semibold">Aadhar Card</h4>
-                          <p className="text-sm text-gray-500">{employee.aadhar_number || 'Not provided'}</p>
-                        </div>
-                      </div>
-                      {employee.aadhar_url && (
-                        <div className="flex items-center gap-1 mt-3">
-                          <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
-                            <a href={employee.aadhar_url} target="_blank" rel="noopener noreferrer">
-                              <Eye className="h-4 w-4 mr-2" />View
-                            </a>
-                          </Button>
-                          <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
-                            <a href={`${employee.aadhar_url}?download=`} download>
-                              <Download className="h-4 w-4 mr-2" />Download
-                            </a>
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                    <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
-                      <div className="flex items-center gap-3">
-                        <CreditCard className="h-8 w-8 text-purple-600 flex-shrink-0" />
-                        <div>
-                          <h4 className="font-semibold">PAN Card</h4>
-                          <p className="text-sm text-gray-500">{employee.pan_number || 'Not provided'}</p>
-                        </div>
-                      </div>
-                      {employee.pan_url && (
-                        <div className="flex items-center gap-1 mt-3">
-                          <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
-                            <a href={employee.pan_url} target="_blank" rel="noopener noreferrer">
-                              <Eye className="h-4 w-4 mr-2" />View
-                            </a>
-                          </Button>
-                          <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
-                            <a href={`${employee.pan_url}?download=`} download>
-                              <Download className="h-4 w-4 mr-2" />Download
-                            </a>
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                    <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col justify-between">
-                      <div className="flex items-center gap-3">
-                        <Briefcase className="h-8 w-8 text-purple-600 flex-shrink-0" />
-                        <div>
-                          <h4 className="font-semibold">ESIC</h4>
-                          <p className="text-sm text-gray-500">{employee.esic_number || 'Not provided'}</p>
-                        </div>
-                      </div>
-                      {employee.esic_url && (
-                        <div className="flex items-center gap-1 mt-3">
-                          <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
-                            <a href={employee.esic_url} target="_blank" rel="noopener noreferrer">
-                              <Eye className="h-4 w-4 mr-2" />View
-                            </a>
-                          </Button>
-                          <Button variant="ghost" size="sm" className="w-full justify-center" asChild>
-                            <a href={`${employee.esic_url}?download=`} download>
-                              <Download className="h-4 w-4 mr-2" />Download
-                            </a>
-                          </Button>
-                        </div>
-                      )}
-                    </div>
+      {/* Document Cards Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Aadhar Card */}
+        <div className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+          {/* Decorative Top Border */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-purple-600 rounded-t-2xl"></div>
+          
+          <div className="flex items-start justify-between gap-4">
+            {/* Left Content */}
+            <div className="flex items-start gap-4 flex-1 min-w-0">
+              {/* Icon with Gradient Background */}
+              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900/40 dark:to-purple-800/40 flex items-center justify-center flex-shrink-0 shadow-sm">
+                <Fingerprint className="h-7 w-7 text-purple-600 dark:text-purple-400" />
+              </div>
+              
+              {/* Text Content */}
+              <div className="min-w-0 flex-1">
+                <h4 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">
+                  Aadhar Card
+                </h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-mono tracking-wide">
+                  {employee.aadhar_number || (
+                    <span className="text-gray-400 dark:text-gray-500 italic font-sans">Not provided</span>
+                  )}
+                </p>
+                {employee.aadhar_number && (
+                  <div className="flex items-center gap-1 mt-2">
+                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">Verified</span>
                   </div>
-                </CardContent>
-              </Card>
+                )}
+              </div>
+            </div>
 
-              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
-                <CardContent className="p-8">
-                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Addresses</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div>
-                      <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-4">Current Address</h4>
-                      <div className="space-y-3 text-sm">
-                        <div className="flex justify-between items-center"><span className="text-gray-500">Address</span><span className="font-medium text-right">{employee.address?.address_line1 || 'Not provided'}</span></div>
-                        <div className="flex justify-between items-center"><span className="text-gray-500">City</span><span className="font-medium text-right">{employee.address?.city || 'Not provided'}</span></div>
-                        <div className="flex justify-between items-center"><span className="text-gray-500">State</span><span className="font-medium text-right">{employee.address?.state || 'Not provided'}</span></div>
-                        <div className="flex justify-between items-center"><span className="text-gray-500">Postal Code</span><span className="font-medium text-right">{employee.address?.zip_code || 'Not provided'}</span></div>
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-4">Permanent Address</h4>
-                      <div className="space-y-3 text-sm">
-                        <div className="flex justify-between items-center"><span className="text-gray-500">Address</span><span className="font-medium text-right">{employee.permanent_address?.address_line1 || 'Not provided'}</span></div>
-                        <div className="flex justify-between items-center"><span className="text-gray-500">City</span><span className="font-medium text-right">{employee.permanent_address?.city || 'Not provided'}</span></div>
-                        <div className="flex justify-between items-center"><span className="text-gray-500">State</span><span className="font-medium text-right">{employee.permanent_address?.state || 'Not provided'}</span></div>
-                        <div className="flex justify-between items-center"><span className="text-gray-500">Postal Code</span><span className="font-medium text-right">{employee.permanent_address?.zip_code || 'Not provided'}</span></div>
-                      </div>
-                    </div>
+            {/* Action Buttons */}
+            {employee.aadhar_url && (
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-10 w-10 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-600 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors"
+                  onClick={() => window.open(employee.aadhar_url, '_blank')}
+                  title="View Document"
+                >
+                  <Eye className="h-5 w-5" />
+                </Button>
+                <a href={`${employee.aadhar_url}?download=`} download>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-10 w-10 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-600 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors"
+                    title="Download"
+                  >
+                    <Download className="h-5 w-5" />
+                  </Button>
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* PAN Card */}
+        <div className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+          {/* Decorative Top Border */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-2xl"></div>
+          
+          <div className="flex items-start justify-between gap-4">
+            {/* Left Content */}
+            <div className="flex items-start gap-4 flex-1 min-w-0">
+              {/* Icon with Gradient Background */}
+              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/40 dark:to-blue-800/40 flex items-center justify-center flex-shrink-0 shadow-sm">
+                <CreditCard className="h-7 w-7 text-blue-600 dark:text-blue-400" />
+              </div>
+              
+              {/* Text Content */}
+              <div className="min-w-0 flex-1">
+                <h4 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">
+                  PAN Card
+                </h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-mono tracking-wide uppercase">
+                  {employee.pan_number || (
+                    <span className="text-gray-400 dark:text-gray-500 italic font-sans normal-case">Not provided</span>
+                  )}
+                </p>
+                {employee.pan_number && (
+                  <div className="flex items-center gap-1 mt-2">
+                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">Verified</span>
                   </div>
-                </CardContent>
-              </Card>
+                )}
+              </div>
+            </div>
 
-              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
-                <CardContent className="p-8">
-                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Education</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {['SSC', 'HSC/Diploma', 'Degree'].map(type => {
-                      const edu = employee.education?.find(e => e.type === type);
-                      const fileName = edu?.document_url ? edu.document_url.split('/').pop().split('?')[0] : '';
-                      return (
-                        <div key={type} className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg text-center flex flex-col">
-                          <div className="flex-grow">
-                            <h4 className="font-semibold text-gray-600 dark:text-gray-400">{type}</h4>
-                            <p className="font-bold mt-1 break-words text-gray-800 dark:text-gray-200">{edu?.institute || 'N/A'}</p>
-                            <p className="text-xs text-gray-500">
-                              {edu?.year_completed
-                                ? new Date(edu.year_completed).getFullYear()
-                                : 'N/A'}
-                            </p>
-                          </div>
-                          {edu?.document_url && (
-                            <div className="flex items-center justify-center gap-1 border-t dark:border-gray-600 pt-2 mt-2">
-                              <Button variant="ghost" size="sm" asChild>
-                                <a href={edu.document_url} target="_blank" rel="noopener noreferrer">
-                                  <Eye className="h-4 w-4 mr-2" />View
-                                </a>
-                              </Button>
-                              <Button variant="ghost" size="sm" asChild>
-                                <a
-                                  href={`${edu.document_url}?download=`}
-                                  download={fileName}
-                                >
-                                  <Download className="h-4 w-4 mr-2" />Download
-                                </a>
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+            {/* Action Buttons */}
+            {employee.pan_url && (
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-10 w-10 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
+                  onClick={() => window.open(employee.pan_url, '_blank')}
+                  title="View Document"
+                >
+                  <Eye className="h-5 w-5" />
+                </Button>
+                <a href={`${employee.pan_url}?download=`} download>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-10 w-10 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
+                    title="Download"
+                  >
+                    <Download className="h-5 w-5" />
+                  </Button>
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ESIC */}
+        <div className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+          {/* Decorative Top Border */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-green-600 rounded-t-2xl"></div>
+          
+          <div className="flex items-start justify-between gap-4">
+            {/* Left Content */}
+            <div className="flex items-start gap-4 flex-1 min-w-0">
+              {/* Icon with Gradient Background */}
+              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900/40 dark:to-green-800/40 flex items-center justify-center flex-shrink-0 shadow-sm">
+                <Briefcase className="h-7 w-7 text-green-600 dark:text-green-400" />
+              </div>
+              
+              {/* Text Content */}
+              <div className="min-w-0 flex-1">
+                <h4 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">
+                  ESIC
+                </h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-mono tracking-wide">
+                  {employee.esic_number || (
+                    <span className="text-gray-400 dark:text-gray-500 italic font-sans">Not provided</span>
+                  )}
+                </p>
+                {employee.esic_number && (
+                  <div className="flex items-center gap-1 mt-2">
+                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">Verified</span>
                   </div>
-                </CardContent>
-              </Card>
+                )}
+              </div>
+            </div>
 
-              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
-                <CardContent className="p-8">
-                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Bank Details</h3>
-                  {employee.bankDetails ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 text-sm">
-                      <div><h4 className="text-gray-500 mb-1">Account Holder</h4><p className="font-medium text-gray-800 dark:text-gray-200">{employee.bankDetails.account_holder_name}</p></div>
-                      <div><h4 className="text-gray-500 mb-1">Bank Name</h4><p className="font-medium text-gray-800 dark:text-gray-200">{employee.bankDetails.bank_name}</p></div>
-                      <div>
-                        <h4 className="text-gray-500 mb-1">Account Number</h4>
-                        <div className="flex items-center">
-                          <p className="font-medium mr-2 text-gray-800 dark:text-gray-200">{showFullAccountNumber ? employee.bankDetails.account_number : `**** **** ${employee.bankDetails.account_number.slice(-4)}`}</p>
-                          <Eye className="h-4 w-4 text-gray-400 cursor-pointer hover:text-purple-500" onClick={() => setShowFullAccountNumber(!showFullAccountNumber)} />
-                        </div>
-                      </div>
-                      <div><h4 className="text-gray-500 mb-1">IFSC Code</h4><p className="font-medium text-gray-800 dark:text-gray-200">{employee.bankDetails.ifsc_code}</p></div>
-                      <div><h4 className="text-gray-500 mb-1">Branch Name</h4><p className="font-medium text-gray-800 dark:text-gray-200">{employee.bankDetails.branch_name}</p></div>
+            {/* Action Buttons */}
+            {employee.esic_url && (
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-10 w-10 rounded-xl hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-600 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 transition-colors"
+                  onClick={() => window.open(employee.esic_url, '_blank')}
+                  title="View Document"
+                >
+                  <Eye className="h-5 w-5" />
+                </Button>
+                <a href={`${employee.esic_url}?download=`} download>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-10 w-10 rounded-xl hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-600 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 transition-colors"
+                    title="Download"
+                  >
+                    <Download className="h-5 w-5" />
+                  </Button>
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+
+  {/* 🏠 ADDRESSES - Enhanced Design WITHOUT Header Icon */}
+  <Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
+    <CardContent className="p-8">
+      {/* Section Header WITHOUT Icon */}
+      <div className="mb-6">
+        <h3 className="font-bold text-2xl text-gray-800 dark:text-gray-100">Addresses</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Residential information</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Current Address */}
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-lg transition-shadow">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-100 to-indigo-200 dark:from-indigo-900/40 dark:to-indigo-800/40 flex items-center justify-center">
+              <Home className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <h4 className="font-bold text-lg text-gray-800 dark:text-gray-100">Current Address</h4>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="min-w-[100px] text-sm text-gray-500 dark:text-gray-400 font-medium">Address</div>
+              <div className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200 text-right break-words">
+                {employee.address?.address_line1 || <span className="text-gray-400 italic">Not provided</span>}
+              </div>
+            </div>
+            <div className="h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-gray-700 to-transparent"></div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">City</span>
+              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                {employee.address?.city || <span className="text-gray-400 italic">Not provided</span>}
+              </span>
+            </div>
+            <div className="h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-gray-700 to-transparent"></div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">State</span>
+              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                {employee.address?.state || <span className="text-gray-400 italic">Not provided</span>}
+              </span>
+            </div>
+            <div className="h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-gray-700 to-transparent"></div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">Postal Code</span>
+              <span className="text-sm font-mono font-semibold text-gray-800 dark:text-gray-200">
+                {employee.address?.zip_code || <span className="text-gray-400 italic font-sans">Not provided</span>}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Permanent Address */}
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-lg transition-shadow">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-100 to-violet-200 dark:from-violet-900/40 dark:to-violet-800/40 flex items-center justify-center">
+              <Home className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+            </div>
+            <h4 className="font-bold text-lg text-gray-800 dark:text-gray-100">Permanent Address</h4>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="min-w-[100px] text-sm text-gray-500 dark:text-gray-400 font-medium">Address</div>
+              <div className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200 text-right break-words">
+                {employee.permanent_address?.address_line1 || <span className="text-gray-400 italic">Not provided</span>}
+              </div>
+            </div>
+            <div className="h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-gray-700 to-transparent"></div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">City</span>
+              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                {employee.permanent_address?.city || <span className="text-gray-400 italic">Not provided</span>}
+              </span>
+            </div>
+            <div className="h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-gray-700 to-transparent"></div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">State</span>
+              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                {employee.permanent_address?.state || <span className="text-gray-400 italic">Not provided</span>}
+              </span>
+            </div>
+            <div className="h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-gray-700 to-transparent"></div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">Postal Code</span>
+              <span className="text-sm font-mono font-semibold text-gray-800 dark:text-gray-200">
+                {employee.permanent_address?.zip_code || <span className="text-gray-400 italic font-sans">Not provided</span>}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+
+  {/* 🎓 EDUCATION - Compact Card Design (Matching Identity Documents) */}
+<Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
+  <CardContent className="p-8">
+    {/* Section Header WITHOUT Icon */}
+    <div className="mb-6">
+      <h3 className="font-bold text-2xl text-gray-800 dark:text-gray-100">Education</h3>
+      <p className="text-sm text-gray-500 dark:text-gray-400">Academic qualifications</p>
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {['SSC', 'HSC/Diploma', 'Degree'].map((type, index) => {
+        const edu = employee.education?.find(e => e.type === type);
+        const fileName = edu?.document_url ? edu.document_url.split('/').pop().split('?')[0] : '';
+        
+        // Dynamic styling with gradient backgrounds
+        let iconBg = "bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900/40 dark:to-purple-800/40";
+        let iconColor = "text-purple-600 dark:text-purple-400";
+        let hoverBg = "hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:text-purple-600 dark:hover:text-purple-400";
+        let borderGradient = "from-purple-500 to-purple-600";
+        let yearBadgeBg = "bg-purple-500";
+        
+        if (index === 1) {
+          iconBg = "bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/40 dark:to-blue-800/40";
+          iconColor = "text-blue-600 dark:text-blue-400";
+          hoverBg = "hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400";
+          borderGradient = "from-blue-500 to-blue-600";
+          yearBadgeBg = "bg-blue-500";
+        } else if (index === 2) {
+          iconBg = "bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900/40 dark:to-green-800/40";
+          iconColor = "text-green-600 dark:text-green-400";
+          hoverBg = "hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-600 dark:hover:text-green-400";
+          borderGradient = "from-green-500 to-green-600";
+          yearBadgeBg = "bg-green-500";
+        }
+
+        return (
+          <div key={type} className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+            {/* Decorative Top Border */}
+            <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${borderGradient} rounded-t-2xl`}></div>
+            
+            <div className="flex items-start justify-between gap-4">
+              {/* Left Content */}
+              <div className="flex items-start gap-4 flex-1 min-w-0">
+                {/* Icon with Gradient Background */}
+                <div className={`h-14 w-14 rounded-xl ${iconBg} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+                  <BadgeCheck className={`h-7 w-7 ${iconColor}`} />
+                </div>
+                
+                {/* Text Content */}
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">
+                    {type}
+                  </h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 leading-tight mb-2">
+                    {edu?.institute || <span className="italic">Not provided</span>}
+                  </p>
+                  
+                  {/* Year Badge - Inline */}
+                  {edu?.year_completed ? (
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${yearBadgeBg}`}>
+                      <CalendarDays className="h-3 w-3 text-white" />
+                      <span className="text-xs font-semibold text-white">
+                        {new Date(edu.year_completed).getFullYear()}
+                      </span>
                     </div>
                   ) : (
-                    <p className="text-sm text-center text-gray-500 dark:text-gray-400 py-4">No bank details have been provided.</p>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 italic">Year: N/A</span>
                   )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+                </div>
+              </div>
 
-            {/* ✅ COMPLETE PROFESSIONAL TAB */}
-            <TabsContent value="professional" className="mt-6 space-y-8">
-              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
-                <CardContent className="p-8">
-                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Work Experience</h3>
-                  <div className="space-y-6">
-                    {employee.experiences && employee.experiences.length > 0 ? (
-                      employee.experiences.map(exp => {
-                        const documents = [
-                          { label: 'Offer Letter', url: exp.offerLetter },
-                          { label: 'Separation Letter', url: exp.seperationLetter },
-                          { label: 'Hike Letter', url: exp.hikeLetter },
-                          { label: 'Payslip 1', url: exp.payslip1 },
-                          { label: 'Payslip 2', url: exp.payslip2 },
-                          { label: 'Payslip 3', url: exp.payslip3 },
-                        ];
-                        const availableDocuments = documents.filter(doc => doc.url);
-                        return (
-                          <div key={exp.id} className="p-4 rounded-lg border dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
-                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">{exp.position}</h4>
-                            <p className="text-sm text-purple-600 dark:text-purple-400 font-medium">{exp.company}</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              {formatDate(exp.start_date)} - {exp.end_date ? formatDate(exp.end_date) : 'Present'}
-                            </p>
-                            {availableDocuments.length > 0 && (
-                              <div className="mt-4 border-t dark:border-gray-600 pt-3">
-                                <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                                  <FileText className="h-4 w-4" />
-                                  Attached Documents
-                                </h5>
-                                <div className="space-y-1">
-                                  {availableDocuments.map(doc => {
-                                    const fileName = doc.url.split('/').pop().split('?')[0];
-                                    return (
-                                      <div key={doc.label} className="flex items-center justify-between p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
-                                        <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                                          {doc.label}
-                                        </p>
-                                        <div className="flex items-center gap-1">
-                                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild>
-                                            <a href={doc.url} target="_blank" rel="noopener noreferrer" title="View">
-                                              <Eye className="h-4 w-4" />
-                                            </a>
-                                          </Button>
-                                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild>
-                                            <a
-                                              href={`${doc.url}?download=`}
-                                              download={fileName}
-                                              title="Download"
-                                            >
-                                              <Download className="h-4 w-4" />
-                                            </a>
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
+              {/* Action Buttons */}
+              {edu?.document_url && (
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-10 w-10 rounded-xl text-gray-600 dark:text-gray-400 transition-colors ${hoverBg}`}
+                    onClick={() => window.open(edu.document_url, '_blank')}
+                    title="View Document"
+                  >
+                    <Eye className="h-5 w-5" />
+                  </Button>
+                  <a href={`${edu.document_url}?download=`} download={fileName}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-10 w-10 rounded-xl text-gray-600 dark:text-gray-400 transition-colors ${hoverBg}`}
+                      title="Download"
+                    >
+                      <Download className="h-5 w-5" />
+                    </Button>
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </CardContent>
+</Card>
+
+  {/* 🏦 BANK DETAILS - Enhanced Design WITHOUT Header Icon */}
+  <Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
+    <CardContent className="p-8">
+      {/* Section Header WITHOUT Icon */}
+      <div className="mb-6">
+        <h3 className="font-bold text-2xl text-gray-800 dark:text-gray-100">Bank Details</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Payment information</p>
+      </div>
+
+      {employee.bankDetails ? (
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+            {/* Account Holder */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 font-medium">
+                <User className="h-4 w-4" />
+                Account Holder
+              </div>
+              <p className="text-base font-bold text-gray-800 dark:text-gray-100 pl-6">
+                {employee.bankDetails.account_holder_name}
+              </p>
+            </div>
+
+            {/* Bank Name */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 font-medium">
+                <Building2 className="h-4 w-4" />
+                Bank Name
+              </div>
+              <p className="text-base font-bold text-gray-800 dark:text-gray-100 pl-6">
+                {employee.bankDetails.bank_name}
+              </p>
+            </div>
+
+            {/* Account Number */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 font-medium">
+                <CreditCard className="h-4 w-4" />
+                Account Number
+              </div>
+              <div className="flex items-center gap-3 pl-6">
+                <p className="text-base font-mono font-bold text-gray-800 dark:text-gray-100">
+                  {showFullAccountNumber 
+                    ? employee.bankDetails.account_number 
+                    : `•••• •••• ${employee.bankDetails.account_number.slice(-4)}`
+                  }
+                </p>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                  onClick={() => setShowFullAccountNumber(!showFullAccountNumber)}
+                >
+                  <Eye className={`h-4 w-4 transition-colors ${
+                    showFullAccountNumber 
+                      ? 'text-purple-600 dark:text-purple-400' 
+                      : 'text-gray-400 dark:text-gray-500'
+                  }`} />
+                </Button>
+              </div>
+            </div>
+
+            {/* IFSC Code */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 font-medium">
+                <BadgeCheck className="h-4 w-4" />
+                IFSC Code
+              </div>
+              <div className="flex items-center gap-2 pl-6">
+                <p className="text-base font-mono font-bold text-gray-800 dark:text-gray-100">
+                  {employee.bankDetails.ifsc_code}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                  onClick={() => copyToClipboard(employee.bankDetails.ifsc_code, 'IFSC Code')}
+                >
+                  <Copy className="h-3.5 w-3.5 text-gray-400 hover:text-purple-600" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Branch Name */}
+            <div className="space-y-2 md:col-span-2">
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 font-medium">
+                <Home className="h-4 w-4" />
+                Branch Name
+              </div>
+              <p className="text-base font-bold text-gray-800 dark:text-gray-100 pl-6">
+                {employee.bankDetails.branch_name}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-12 px-4">
+          <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+            <CreditCard className="h-10 w-10 text-gray-400 dark:text-gray-600" />
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 italic text-center">
+            No bank details have been provided yet
+          </p>
+        </div>
+      )}
+    </CardContent>
+  </Card>
+</TabsContent>
+          {/* ✅ ENHANCED PROFESSIONAL TAB */}
+<TabsContent value="professional" className="mt-6 space-y-6">
+  <Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
+    <CardContent className="p-8">
+      {/* Section Header */}
+      <div className="mb-6">
+        <h3 className="font-bold text-2xl text-gray-800 dark:text-gray-100">Work Experience</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Professional background and employment history</p>
+      </div>
+
+      <div className="space-y-5">
+        {employee.experiences && employee.experiences.length > 0 ? (
+          employee.experiences.map((exp, index) => {
+            const documents = [
+              { label: 'Offer Letter', url: exp.offerLetter, icon: FileText },
+              { label: 'Separation Letter', url: exp.seperationLetter, icon: FileText },
+              { label: 'Hike Letter', url: exp.hikeLetter, icon: FileText },
+              { label: 'Payslip 1', url: exp.payslip1, icon: FileText },
+              { label: 'Payslip 2', url: exp.payslip2, icon: FileText },
+              { label: 'Payslip 3', url: exp.payslip3, icon: FileText },
+            ];
+            const availableDocuments = documents.filter(doc => doc.url);
+
+            // Color scheme rotation for multiple experiences
+            const colorSchemes = [
+              {
+                gradient: 'from-purple-500 to-purple-600',
+                iconBg: 'from-purple-100 to-purple-200 dark:from-purple-900/40 dark:to-purple-800/40',
+                iconColor: 'text-purple-600 dark:text-purple-400',
+                badgeBg: 'bg-purple-100 dark:bg-purple-900/30',
+                badgeText: 'text-purple-700 dark:text-purple-300',
+              },
+              {
+                gradient: 'from-blue-500 to-blue-600',
+                iconBg: 'from-blue-100 to-blue-200 dark:from-blue-900/40 dark:to-blue-800/40',
+                iconColor: 'text-blue-600 dark:text-blue-400',
+                badgeBg: 'bg-blue-100 dark:bg-blue-900/30',
+                badgeText: 'text-blue-700 dark:text-blue-300',
+              },
+              {
+                gradient: 'from-green-500 to-green-600',
+                iconBg: 'from-green-100 to-green-200 dark:from-green-900/40 dark:to-green-800/40',
+                iconColor: 'text-green-600 dark:text-green-400',
+                badgeBg: 'bg-green-100 dark:bg-green-900/30',
+                badgeText: 'text-green-700 dark:text-green-300',
+              },
+            ];
+
+            const colorScheme = colorSchemes[index % colorSchemes.length];
+
+            return (
+              <div 
+                key={exp.id} 
+                className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden"
+              >
+                {/* Decorative Top Border */}
+                <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${colorScheme.gradient}`}></div>
+
+                <div className="p-6">
+                  {/* Header Section */}
+                  <div className="flex items-start gap-4 mb-4">
+                    {/* Company Icon */}
+                    <div className={`h-14 w-14 rounded-xl bg-gradient-to-br ${colorScheme.iconBg} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+                      <Briefcase className={`h-7 w-7 ${colorScheme.iconColor}`} />
+                    </div>
+
+                    {/* Job Details */}
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-lg text-gray-800 dark:text-gray-100 mb-1">
+                        {exp.position}
+                      </h4>
+                      <p className="text-base text-purple-600 dark:text-purple-400 font-semibold mb-2">
+                        {exp.company}
+                      </p>
+                      
+                      {/* Duration & Location */}
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                        <div className="flex items-center gap-1.5">
+                          <CalendarDays className="h-4 w-4" />
+                          <span>
+                            {formatDate(exp.start_date)} - {exp.end_date ? formatDate(exp.end_date) : (
+                              <span className={`font-semibold ${colorScheme.badgeText}`}>Present</span>
+                            )}
+                          </span>
+                        </div>
+                        
+                        {exp.location && (
+                          <div className="flex items-center gap-1.5">
+                            <Globe className="h-4 w-4" />
+                            <span>{exp.location}</span>
+                          </div>
+                        )}
+
+                        {exp.employment_type && (
+                          <div className={`px-3 py-1 rounded-full ${colorScheme.badgeBg}`}>
+                            <span className={`text-xs font-semibold ${colorScheme.badgeText}`}>
+                              {exp.employment_type}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Attached Documents Section */}
+                  {availableDocuments.length > 0 && (
+                    <div className="mt-5 pt-5 border-t border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Paperclip className={`h-4 w-4 ${colorScheme.iconColor}`} />
+                        <h5 className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                          Attached Documents ({availableDocuments.length})
+                        </h5>
+                      </div>
+
+                      {/* Documents Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {availableDocuments.map(doc => {
+                          const fileName = doc.url.split('/').pop().split('?')[0];
+                          return (
+                            <div 
+                              key={doc.label} 
+                              className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 hover:shadow-md transition-all group/doc"
+                            >
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${colorScheme.iconBg} flex items-center justify-center flex-shrink-0`}>
+                                  <FileText className={`h-5 w-5 ${colorScheme.iconColor}`} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
+                                    {doc.label}
+                                  </p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                    {fileName}
+                                  </p>
                                 </div>
                               </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <p className="text-sm text-center text-gray-500 dark:text-gray-400 py-4">No work experience available.</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
 
+                              {/* Action Buttons */}
+                              <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-9 w-9 rounded-lg hover:bg-white dark:hover:bg-gray-600" 
+                                  asChild
+                                >
+                                  <a href={doc.url} target="_blank" rel="noopener noreferrer" title="View">
+                                    <Eye className="h-4 w-4" />
+                                  </a>
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-9 w-9 rounded-lg hover:bg-white dark:hover:bg-gray-600" 
+                                  asChild
+                                >
+                                  <a href={`${doc.url}?download=`} download={fileName} title="Download">
+                                    <Download className="h-4 w-4" />
+                                  </a>
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16 px-4">
+            <div className="h-24 w-24 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+              <Briefcase className="h-12 w-12 text-gray-400 dark:text-gray-600" />
+            </div>
+            <p className="text-base font-medium text-gray-500 dark:text-gray-400 text-center">
+              No work experience available
+            </p>
+            <p className="text-sm text-gray-400 dark:text-gray-500 text-center mt-1">
+              Employment history will appear here once added
+            </p>
+          </div>
+        )}
+      </div>
+    </CardContent>
+  </Card>
+</TabsContent>
             {/* ✅ COMPLETE SALARY TAB WITH INSTANT UPLOAD */}
             <TabsContent value="salary" className="mt-6 space-y-8">
-              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
-                <CardContent className="p-8">
-                  {currentSalaryRecord ? (
-                    <>
-                      <div className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b dark:border-gray-700">
-                        <h3 className="font-bold text-xl text-gray-800 dark:text-gray-200">
-                          Salary Details - {formatDate(currentSalaryRecord.payment_date)}
-                        </h3>
-                        <div className="flex items-center space-x-4 mt-2 sm:mt-0">
-                          <div className="flex items-center">
-                            <span className="text-sm text-gray-500 dark:text-gray-400 mr-2">Status:</span>
-                            <span className={`w-2 h-2 rounded-full mr-2 ${currentSalaryRecord.status === 'Success' ? 'bg-green-500' : currentSalaryRecord.status === 'Pending' ? 'bg-yellow-500' : 'bg-red-500'}`}></span>
-                            <span className="font-medium text-gray-800 dark:text-gray-200">{currentSalaryRecord.status}</span>
-                          </div>
-                          <div>
-                            <span className="text-sm text-gray-500 dark:text-gray-400 mr-2">Net Pay:</span>
-                            <span className="font-medium text-green-600 dark:text-green-400">{formatCurrency(currentSalaryRecord.payment_amount)}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div>
-                          <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">Earnings</h5>
-                          <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 space-y-2">
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Basic Salary</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.earnings?.basic_salary || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">House Rent Allowance</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.earnings?.house_rent_allowance || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Conveyance Allowance</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.earnings?.conveyance_allowance || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Fixed Allowance</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.earnings?.fixed_allowance || 0)}</span></div>
-                            <div className="border-t pt-2 mt-2 flex justify-between"><span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Earnings</span><span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.earnings?.total_earnings || 0)}</span></div>
-                          </div>
-                        </div>
-                        <div>
-                          <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">Deductions</h5>
-                          <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 space-y-2">
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Provident Fund</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.deductions?.provident_fund || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Professional Tax</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.deductions?.professional_tax || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Income Tax</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.deductions?.income_tax || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Loan Deduction</span><span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.deductions?.loan_deduction || 0)}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">Paid Days</span><span className="font-medium text-gray-800 dark:text-gray-200">{currentSalaryRecord.deductions?.paid_days || 0}</span></div>
-                            <div className="flex justify-between"><span className="text-sm text-gray-600 dark:text-gray-400">LOP Days</span><span className="font-medium text-gray-800 dark:text-gray-200">{currentSalaryRecord.deductions?.lop_days || 0}</span></div>
-                            <div className="border-t pt-2 mt-2 flex justify-between"><span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Deductions</span><span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(currentSalaryRecord.deductions?.total_deductions || 0)}</span></div>
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-sm text-center text-gray-500 py-4">No salary information available.</p>
-                  )}
-                </CardContent>
-              </Card>
+{/* ✅ COMPACT MINIMAL SALARY DETAILS SECTION */}
+<Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
+  <CardContent className="p-6">
+    {currentSalaryRecord ? (
+      <>
+        {/* Compact Header */}
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
+          {/* Title */}
+          <div>
+            <h3 className="font-bold text-xl text-gray-800 dark:text-gray-100">Salary Details</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {formatDate(currentSalaryRecord.payment_date)}
+            </p>
+          </div>
+
+          {/* Compact Badges */}
+          <div className="flex items-center gap-2">
+            {/* Status Badge */}
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
+              currentSalaryRecord.status === 'Success' 
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' 
+                : currentSalaryRecord.status === 'Pending' 
+                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' 
+                : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+            }`}>
+              <div className={`h-1.5 w-1.5 rounded-full ${
+                currentSalaryRecord.status === 'Success' 
+                  ? 'bg-green-500' 
+                  : currentSalaryRecord.status === 'Pending' 
+                  ? 'bg-yellow-500' 
+                  : 'bg-red-500'
+              }`}></div>
+              {currentSalaryRecord.status}
+            </div>
+
+            {/* Net Pay Badge */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-green-500 to-green-600 shadow-sm">
+              <IndianRupee className="h-3 w-3 text-white" />
+              <span className="text-sm font-bold text-white">
+                {formatCurrency(currentSalaryRecord.payment_amount)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Compact Earnings & Deductions Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          {/* Compact Earnings Card */}
+          <div className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 to-green-600"></div>
+            
+            <div className="p-4">
+              {/* Compact Header */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900/40 dark:to-green-800/40 flex items-center justify-center">
+                  <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
+                </div>
+                <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Earnings</h5>
+              </div>
+
+              {/* Compact Earnings List */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">Basic Salary</span>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    {formatCurrency(currentSalaryRecord.earnings?.basic_salary || 0)}
+                  </span>
+                </div>
+                <div className="h-px bg-gray-200 dark:bg-gray-700"></div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">HRA</span>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    {formatCurrency(currentSalaryRecord.earnings?.house_rent_allowance || 0)}
+                  </span>
+                </div>
+                <div className="h-px bg-gray-200 dark:bg-gray-700"></div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">Conveyance</span>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    {formatCurrency(currentSalaryRecord.earnings?.conveyance_allowance || 0)}
+                  </span>
+                </div>
+                <div className="h-px bg-gray-200 dark:bg-gray-700"></div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">Fixed Allowance</span>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    {formatCurrency(currentSalaryRecord.earnings?.fixed_allowance || 0)}
+                  </span>
+                </div>
+
+                {/* Compact Total */}
+                <div className="pt-2 mt-2 border-t-2 border-green-200 dark:border-green-800">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-bold text-gray-800 dark:text-gray-100">Total</span>
+                    <span className="text-base font-bold text-green-600 dark:text-green-400">
+                      {formatCurrency(currentSalaryRecord.earnings?.total_earnings || 0)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Compact Deductions Card */}
+          <div className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-red-500 to-red-600"></div>
+            
+            <div className="p-4">
+              {/* Compact Header */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-red-100 to-red-200 dark:from-red-900/40 dark:to-red-800/40 flex items-center justify-center">
+                  <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />
+                </div>
+                <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Deductions</h5>
+              </div>
+
+              {/* Compact Deductions List */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">Provident Fund</span>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    {formatCurrency(currentSalaryRecord.deductions?.provident_fund || 0)}
+                  </span>
+                </div>
+                <div className="h-px bg-gray-200 dark:bg-gray-700"></div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">Professional Tax</span>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    {formatCurrency(currentSalaryRecord.deductions?.professional_tax || 0)}
+                  </span>
+                </div>
+                <div className="h-px bg-gray-200 dark:bg-gray-700"></div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">Income Tax</span>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    {formatCurrency(currentSalaryRecord.deductions?.income_tax || 0)}
+                  </span>
+                </div>
+                <div className="h-px bg-gray-200 dark:bg-gray-700"></div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">Loan Deduction</span>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    {formatCurrency(currentSalaryRecord.deductions?.loan_deduction || 0)}
+                  </span>
+                </div>
+                <div className="h-px bg-gray-200 dark:bg-gray-700"></div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">Paid Days</span>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    {currentSalaryRecord.deductions?.paid_days || 0}
+                  </span>
+                </div>
+                <div className="h-px bg-gray-200 dark:bg-gray-700"></div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">LOP Days</span>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    {currentSalaryRecord.deductions?.lop_days || 0}
+                  </span>
+                </div>
+
+                {/* Compact Total */}
+                <div className="pt-2 mt-2 border-t-2 border-red-200 dark:border-red-800">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-bold text-gray-800 dark:text-gray-100">Total</span>
+                    <span className="text-base font-bold text-red-600 dark:text-red-400">
+                      {formatCurrency(currentSalaryRecord.deductions?.total_deductions || 0)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Compact Net Salary Banner */}
+        <div className="relative bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-4">
+            <div className="flex flex-wrap justify-between items-center gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                  <Wallet className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-xs text-purple-100 font-medium">Net Salary (Take Home)</p>
+                  <p className="text-xl font-bold text-white">
+                    {formatCurrency(currentSalaryRecord.payment_amount)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 text-white text-sm">
+                <div>
+                  <p className="text-xs text-purple-100">Gross</p>
+                  <p className="font-bold">
+                    {formatCurrency(currentSalaryRecord.earnings?.total_earnings || 0)}
+                  </p>
+                </div>
+                <div className="h-8 w-px bg-white/30"></div>
+                <div>
+                  <p className="text-xs text-purple-100">Deductions</p>
+                  <p className="font-bold">
+                    {formatCurrency(currentSalaryRecord.deductions?.total_deductions || 0)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    ) : (
+      <div className="flex flex-col items-center justify-center py-12 px-4">
+        <div className="h-16 w-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-3">
+          <IndianRupee className="h-8 w-8 text-gray-400 dark:text-gray-600" />
+        </div>
+        <p className="text-sm font-medium text-gray-500 dark:text-gray-400 text-center">
+          No salary information available
+        </p>
+      </div>
+    )}
+  </CardContent>
+</Card>
 
               {/* ✅ SALARY DOCUMENTS WITH INSTANT UPLOAD */}
               <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
@@ -1790,7 +2416,7 @@ const EmployeeProfile = () => {
                   <Button
   onClick={() => document.getElementById('upload-Payslips')?.click()}
   disabled={payslipsUploading}
-  className="bg-[#7731E8] text-white hover:bg-[#6220C7] rounded-lg"
+  className="bg-[#7731E8] text-white hover:bg-[#6220C7] rounded-full px-4 py-2"
 >
                             {payslipsUploading ? (
                               <>
