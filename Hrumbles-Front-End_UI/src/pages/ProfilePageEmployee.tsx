@@ -12,7 +12,7 @@ import {
   Users, ShieldAlert, Clock, Pencil, Home, FileText, Fingerprint, CreditCard,  Building2,
   BadgeCheck,
   Cog,
-  MessageCircle, CalendarDays, Heart, Droplet, CalendarPlus, IndianRupee, Timer, Hourglass, ClipboardList
+  MessageCircle, CalendarDays, Heart, Droplet, CalendarPlus, IndianRupee, Timer, Hourglass, ClipboardList, Paperclip
 } from "lucide-react";
 import { useSelector } from "react-redux";
 import {
@@ -74,6 +74,19 @@ interface AppraisalRecord {
   last_updated_by: string;
   paymentRecord?: PaymentRecord;
 }
+
+interface SalaryDocument {
+  id: string;
+  employee_id: string;
+  organization_id: string;
+  document_type: string;
+  document_name: string;
+  document_url: string;
+  month: string;
+  year: number;
+  created_at: string;
+  updated_at: string;
+}
  
 interface EmployeeDetail {
     id: string;
@@ -130,6 +143,7 @@ interface EmployeeDetail {
     bankDetails?: { account_holder_name: string; account_number: string; bank_name: string; branch_name: string; ifsc_code: string; branch_address?: string; city?: string; };
     latestPaymentRecord?: PaymentRecord;
     appraisalHistory?: AppraisalRecord[];
+    salaryDocuments?: SalaryDocument[];
 }
 
 
@@ -173,6 +187,14 @@ const ProfilePageEmployee = () => {
       country: addr.country || '',
       zip_code: addr.zip_code || addr.zipCode || '',
     };
+  };
+
+  const getUploadedDocument = (docType: string) => {
+    return employee?.salaryDocuments?.find(doc => doc.document_type === docType);
+  };
+
+  const getUploadedPayslips = () => {
+    return employee?.salaryDocuments?.filter(doc => doc.document_type === 'Payslips') || [];
   };
   
   // All data fetching logic updated to match EmployeeProfile.
@@ -264,6 +286,15 @@ const ProfilePageEmployee = () => {
           return appraisal;
         })
       ) : [];
+
+      // ✅ FETCH SALARY DOCUMENTS
+      const { data: salaryDocsData, error: salaryDocsError } = await supabase
+        .from('hr_salary_details_documents')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .order('created_at', { ascending: false });
+
+      if (salaryDocsError) console.error("Error fetching salary docs:", salaryDocsError);
      
       const mappedExperiences = experiencesData ? experiencesData.map(exp => ({
         id: exp.id, company: exp.company, position: exp.job_title, location: exp.location, start_date: exp.start_date, end_date: exp.end_date, employment_type: exp.employment_type, offerLetter: exp.offer_letter_url, seperationLetter: exp.separation_letter_url, hikeLetter: exp.hike_letter_url, payslip1: exp.payslip_1_url, payslip2: exp.payslip_2_url, payslip3: exp.payslip_3_url,
@@ -288,6 +319,7 @@ const ProfilePageEmployee = () => {
         bankDetails: bankData || undefined,
         latestPaymentRecord,
         appraisalHistory: enrichedAppraisalHistory,
+        salaryDocuments: salaryDocsData || [],
       };
      
       setEmployee(completeEmployeeData);
@@ -356,6 +388,19 @@ const ProfilePageEmployee = () => {
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied to clipboard!`);
+  };
+
+
+// Helper to handle viewing documents based on file type
+  const handleViewDocument = (url: string) => {
+    const extension = url.split('.').pop()?.toLowerCase();
+    const officeExtensions = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
+
+    if (officeExtensions.includes(extension || '')) {
+      window.open(`https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`, '_blank');
+    } else {
+      window.open(url, '_blank');
+    }
   };
 
   // Compute current salary record using latest appraisal if available
@@ -847,45 +892,137 @@ onClick={() => navigate(`/profile/edit/${userId}`)} variant="outline" size="icon
                       No salary information available.
                     </p>
                   )}
-
-                  {/* Appraisal History Section */}
-                  {/* {employee.appraisalHistory && employee.appraisalHistory.length > 0 ? (
-                    <div className="mt-6">
-                      <h4 className="font-bold text-lg mb-4 pt-4 border-t dark:border-gray-700">Appraisal History</h4>
-                      {employee.appraisalHistory.map((record) => (
-                        <div key={record.id} className="mb-4 border-b pb-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center">
-                              <h4 className="font-semibold text-gray-800 dark:text-gray-200">
-                                Appraisal - {formatDate(record.appraisal_date)}
-                              </h4>
-                              {isNewAppraisal(record) && <Badge variant="secondary" className="ml-2">New</Badge>}
-                            </div>
-                            <div className="flex items-center space-x-4 text-sm">
-                              <div className="flex items-center">
-                                <span className="text-gray-500 mr-2">Status:</span>
-                                <span className={`w-2 h-2 rounded-full mr-2 ${record.status === 'Success' ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                <span className="font-medium">{record.status}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-500 mr-2">Previous Pay:</span>
-                                <span className="font-medium">{formatCurrency(record.previous_payment_amount)}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-500 mr-2">New Pay:</span>
-                                <span className="font-medium text-green-600">{formatCurrency(record.new_payment_amount)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="pt-4 mt-4 border-t dark:border-gray-700">
-                      <p className="text-sm text-gray-500">No appraisal history available.</p>
-                    </div>
-                  )} */}
                 </CardContent> 
+              </Card>
+
+              {/* ✅ SALARY DOCUMENTS SECTION - READ ONLY */}
+              <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
+                <CardContent className="p-8">
+                  <h3 className="font-bold text-xl mb-6 text-gray-800 dark:text-gray-200">Salary Documents</h3>
+
+                  <div className="space-y-6">
+                    {/* OFFER LETTER, HIKE LETTER, SEPARATION LETTER - HORIZONTAL CARDS */}
+                    {['Offer Letter', 'Increase/Hike Letter', 'Separation Letter'].map((docType) => {
+                      const uploadedDoc = getUploadedDocument(docType);
+
+                      return (
+                        <div key={docType} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/30">
+                          <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">{docType}</h4>
+
+                          {uploadedDoc ? (
+                            <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
+                              <div className="flex items-center gap-3">
+                                <Paperclip className="h-5 w-5 text-[#7731E8] flex-shrink-0" />
+                                <div>
+                                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                                    {uploadedDoc.document_name.length > 30
+                                      ? uploadedDoc.document_name.substring(0, 30) + '...'
+                                      : uploadedDoc.document_name}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {uploadedDoc.month} {uploadedDoc.year}
+                                  </p>
+                                </div>
+                              </div>
+                      <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-[#7731E8] border-[#7731E8] hover:bg-purple-50"
+                                  onClick={() => handleViewDocument(uploadedDoc.document_url)}
+                                >
+                                  <Eye className="h-4 w-4 mr-1" /> View
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-[#7731E8] border-[#7731E8] hover:bg-purple-50"
+                                  asChild
+                                >
+                                  <a href={`${uploadedDoc.document_url}?download=`} download={uploadedDoc.document_name}>
+                                    <Download className="h-4 w-4 mr-1" /> Download
+                                  </a>
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">No document uploaded</p>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* ✅ PAYSLIPS - TABLE FORMAT */}
+                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/30">
+                      <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">Payslips</h4>
+
+                      {getUploadedPayslips().length > 0 ? (
+                        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden">
+                          <table className="w-full">
+                            <thead className="bg-gray-50 dark:bg-gray-700">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                  Document Type
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                  Month
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                  Year
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                  View
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                  Download
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                              {getUploadedPayslips().map((payslip) => (
+                                <tr key={payslip.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                  <td className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200">
+                                    Payslip
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200">
+                                    {payslip.month}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200">
+                                    {payslip.year}
+                                  </td>
+                     <td className="px-4 py-3">
+                                    <Button
+                                      variant="link"
+                                      size="sm"
+                                      className="text-[#7731E8] hover:text-[#6220C7] p-0"
+                                      onClick={() => handleViewDocument(payslip.document_url)}
+                                    >
+                                      <Eye className="h-4 w-4 mr-1" /> View
+                                    </Button>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Button
+                                      variant="link"
+                                      size="sm"
+                                      className="text-[#7731E8] hover:text-[#6220C7] p-0"
+                                      asChild
+                                    >
+                                      <a href={`${payslip.document_url}?download=`} download={payslip.document_name}>
+                                        <Download className="h-4 w-4 mr-1" /> Download
+                                      </a>
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">No payslips uploaded</p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
               </Card>
             </TabsContent>
           </Tabs>

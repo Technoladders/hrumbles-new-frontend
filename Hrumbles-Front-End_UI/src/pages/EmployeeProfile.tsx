@@ -1234,196 +1234,132 @@ const EmployeeProfile = () => {
             </div>
             {/* ✅ ENHANCED PERSONAL TAB WITHOUT SECTION HEADER ICONS */}
 <TabsContent value="personal" className="mt-6 space-y-6">
-  {/* 🎨 IDENTITY DOCUMENTS - Enhanced Card Design */}
-  <Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
+{/* IDENTITY DOCUMENTS */}
+  <Card className="rounded-2xl shadow-md border-none bg-white dark:bg-gray-800">
     <CardContent className="p-8">
-      {/* Section Header WITHOUT Icon */}
       <div className="mb-6">
-        <h3 className="font-bold text-2xl text-gray-800 dark:text-gray-100">Identity Documents</h3>
+        <h3 className="font-bold text-xl text-gray-800 dark:text-gray-200">Identity Documents</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400">Official identification documents</p>
       </div>
-
-      {/* Document Cards Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+ 
+      {/* FIXED: Changed 'lg:grid-cols-3' to 'md:grid-cols-3' to keep layout stable on smaller screens */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
         {/* Aadhar Card */}
-        <div className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-          {/* Decorative Top Border */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-purple-600 rounded-t-2xl"></div>
-          
-          <div className="flex items-start justify-between gap-4">
-            {/* Left Content */}
-            <div className="flex items-start gap-4 flex-1 min-w-0">
-              {/* Icon with Gradient Background */}
-              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900/40 dark:to-purple-800/40 flex items-center justify-center flex-shrink-0 shadow-sm">
-                <Fingerprint className="h-7 w-7 text-purple-600 dark:text-purple-400" />
-              </div>
-              
-              {/* Text Content */}
-              <div className="min-w-0 flex-1">
-                <h4 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">
-                  Aadhar Card
-                </h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-mono tracking-wide">
-                  {employee.aadhar_number || (
-                    <span className="text-gray-400 dark:text-gray-500 italic font-sans">Not provided</span>
-                  )}
-                </p>
-                {employee.aadhar_number && (
-                  <div className="flex items-center gap-1 mt-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">Verified</span>
-                  </div>
-                )}
-              </div>
+        <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 rounded-xl flex items-center justify-between shadow-sm hover:shadow-md transition-all">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-10 w-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
+              <Fingerprint className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             </div>
-
-            {/* Action Buttons */}
-            {employee.aadhar_url && (
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-10 w-10 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-600 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors"
-                  onClick={() => window.open(employee.aadhar_url, '_blank')}
-                  title="View Document"
-                >
-                  <Eye className="h-5 w-5" />
-                </Button>
-                <a href={`${employee.aadhar_url}?download=`} download>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-10 w-10 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-600 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors"
-                    title="Download"
-                  >
-                    <Download className="h-5 w-5" />
-                  </Button>
-                </a>
-              </div>
-            )}
+            <div className="min-w-0 flex-1">
+              <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-sm truncate">Aadhar Card</h4>
+              <p className="text-xs text-gray-500 truncate">{employee?.aadhar_number || 'Not provided'}</p>
+            </div>
           </div>
+          
+          {employee?.aadhar_url && (
+            <div className="flex items-center space-x-1 rounded-full bg-slate-100 dark:bg-slate-700 p-1 shadow-sm border border-slate-200 dark:border-slate-600 ml-2 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-full text-slate-500 hover:bg-[#7731E8] hover:text-white transition-colors dark:text-slate-300 dark:hover:bg-[#7731E8]"
+                onClick={() => window.open(employee.aadhar_url, '_blank')}
+                title="View"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </Button>
+              <a href={`${employee.aadhar_url}?download=`} download>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full text-slate-500 hover:bg-[#7731E8] hover:text-white transition-colors dark:text-slate-300 dark:hover:bg-[#7731E8]"
+                  title="Download"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </Button>
+              </a>
+            </div>
+          )}
         </div>
-
+ 
         {/* PAN Card */}
-        <div className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-          {/* Decorative Top Border */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-2xl"></div>
-          
-          <div className="flex items-start justify-between gap-4">
-            {/* Left Content */}
-            <div className="flex items-start gap-4 flex-1 min-w-0">
-              {/* Icon with Gradient Background */}
-              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/40 dark:to-blue-800/40 flex items-center justify-center flex-shrink-0 shadow-sm">
-                <CreditCard className="h-7 w-7 text-blue-600 dark:text-blue-400" />
-              </div>
-              
-              {/* Text Content */}
-              <div className="min-w-0 flex-1">
-                <h4 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">
-                  PAN Card
-                </h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-mono tracking-wide uppercase">
-                  {employee.pan_number || (
-                    <span className="text-gray-400 dark:text-gray-500 italic font-sans normal-case">Not provided</span>
-                  )}
-                </p>
-                {employee.pan_number && (
-                  <div className="flex items-center gap-1 mt-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">Verified</span>
-                  </div>
-                )}
-              </div>
+        <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 rounded-xl flex items-center justify-between shadow-sm hover:shadow-md transition-all">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <CreditCard className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
-
-            {/* Action Buttons */}
-            {employee.pan_url && (
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-10 w-10 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
-                  onClick={() => window.open(employee.pan_url, '_blank')}
-                  title="View Document"
-                >
-                  <Eye className="h-5 w-5" />
-                </Button>
-                <a href={`${employee.pan_url}?download=`} download>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-10 w-10 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
-                    title="Download"
-                  >
-                    <Download className="h-5 w-5" />
-                  </Button>
-                </a>
-              </div>
-            )}
+            <div className="min-w-0 flex-1">
+              <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-sm truncate">PAN Card</h4>
+              <p className="text-xs text-gray-500 truncate">{employee?.pan_number || 'Not provided'}</p>
+            </div>
           </div>
+ 
+          {employee?.pan_url && (
+            <div className="flex items-center space-x-1 rounded-full bg-slate-100 dark:bg-slate-700 p-1 shadow-sm border border-slate-200 dark:border-slate-600 ml-2 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-full text-slate-500 hover:bg-[#7731E8] hover:text-white transition-colors dark:text-slate-300 dark:hover:bg-[#7731E8]"
+                onClick={() => window.open(employee.pan_url, '_blank')}
+                title="View"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </Button>
+              <a href={`${employee.pan_url}?download=`} download>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full text-slate-500 hover:bg-[#7731E8] hover:text-white transition-colors dark:text-slate-300 dark:hover:bg-[#7731E8]"
+                  title="Download"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </Button>
+              </a>
+            </div>
+          )}
         </div>
-
+ 
         {/* ESIC */}
-        <div className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-          {/* Decorative Top Border */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-green-600 rounded-t-2xl"></div>
-          
-          <div className="flex items-start justify-between gap-4">
-            {/* Left Content */}
-            <div className="flex items-start gap-4 flex-1 min-w-0">
-              {/* Icon with Gradient Background */}
-              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900/40 dark:to-green-800/40 flex items-center justify-center flex-shrink-0 shadow-sm">
-                <Briefcase className="h-7 w-7 text-green-600 dark:text-green-400" />
-              </div>
-              
-              {/* Text Content */}
-              <div className="min-w-0 flex-1">
-                <h4 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">
-                  ESIC
-                </h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-mono tracking-wide">
-                  {employee.esic_number || (
-                    <span className="text-gray-400 dark:text-gray-500 italic font-sans">Not provided</span>
-                  )}
-                </p>
-                {employee.esic_number && (
-                  <div className="flex items-center gap-1 mt-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">Verified</span>
-                  </div>
-                )}
-              </div>
+        <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 rounded-xl flex items-center justify-between shadow-sm hover:shadow-md transition-all">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <Briefcase className="h-5 w-5 text-green-600 dark:text-green-400" />
             </div>
-
-            {/* Action Buttons */}
-            {employee.esic_url && (
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-10 w-10 rounded-xl hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-600 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 transition-colors"
-                  onClick={() => window.open(employee.esic_url, '_blank')}
-                  title="View Document"
-                >
-                  <Eye className="h-5 w-5" />
-                </Button>
-                <a href={`${employee.esic_url}?download=`} download>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-10 w-10 rounded-xl hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-600 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 transition-colors"
-                    title="Download"
-                  >
-                    <Download className="h-5 w-5" />
-                  </Button>
-                </a>
-              </div>
-            )}
+            <div className="min-w-0 flex-1">
+              <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-sm truncate">ESIC</h4>
+              <p className="text-xs text-gray-500 truncate">{employee?.esic_number || 'Not provided'}</p>
+            </div>
           </div>
+ 
+          {employee?.esic_url && (
+            <div className="flex items-center space-x-1 rounded-full bg-slate-100 dark:bg-slate-700 p-1 shadow-sm border border-slate-200 dark:border-slate-600 ml-2 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-full text-slate-500 hover:bg-[#7731E8] hover:text-white transition-colors dark:text-slate-300 dark:hover:bg-[#7731E8]"
+                onClick={() => window.open(employee.esic_url, '_blank')}
+                title="View"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </Button>
+              <a href={`${employee.esic_url}?download=`} download>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full text-slate-500 hover:bg-[#7731E8] hover:text-white transition-colors dark:text-slate-300 dark:hover:bg-[#7731E8]"
+                  title="Download"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </Button>
+              </a>
+            </div>
+          )}
         </div>
+ 
       </div>
     </CardContent>
   </Card>
+ 
 
   {/* 🏠 ADDRESSES - Enhanced Design WITHOUT Header Icon */}
   <Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
