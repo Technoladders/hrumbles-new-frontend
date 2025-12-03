@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { SearchFilters } from '@/types/candidateSearch';
+import { SearchFilters, SearchHistory } from '@/types/candidateSearch';
 import { City } from 'country-state-city';
 // Added 'Send', 'Bot', 'User', 'SkipForward' icons
 import { ChevronDown, ChevronUp, Info, Sparkles, X, Loader2, Check, Send, Bot, User, SkipForward, ArrowLeft } from 'lucide-react';
@@ -82,9 +82,10 @@ interface CandidateSearchFiltersProps {
   isSearching: boolean;
   initialFilters?: Partial<SearchFilters>;
   organizationId: string;
+  searchHistory?: SearchHistory | null;
 }
 
-const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({ onSearch, isSearching, initialFilters, organizationId }) => {
+const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({ onSearch, isSearching, initialFilters, organizationId, searchHistory }) => {
   // Existing States
   const [name, setName] = useState<SearchTag[]>([]);
   const [email, setEmail] = useState<SearchTag[]>([]);
@@ -184,26 +185,76 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({ onSearch, isS
     enabled: !!organizationId,
   });
 
+useEffect(() => {
+  setName(initialFilters?.name || []);
+  setEmail(initialFilters?.email || []);
+  setKeywords(initialFilters?.keywords || []);
+  setSelectedBooleanPatterns([]);
+  setSkills(initialFilters?.skills || []);
+  setPastCompanies(initialFilters?.companies || []);
+  setEducations(initialFilters?.educations || []);
+  setLocations(initialFilters?.locations || []);
+  setCurrentCompany(initialFilters?.current_company || '');
+  setCurrentDesignation(initialFilters?.current_designation || '');
+  setMinExp(initialFilters?.min_exp?.toString() || '');
+  setMaxExp(initialFilters?.max_exp?.toString() || '');
+  setMinCurrentSalary(initialFilters?.min_current_salary?.toString() || '');
+  setMaxCurrentSalary(initialFilters?.max_current_salary?.toString() || '');
+  setMinExpectedSalary(initialFilters?.min_expected_salary?.toString() || '');
+  setMaxExpectedSalary(initialFilters?.max_expected_salary?.toString() || '');
+  setNoticePeriod(initialFilters?.notice_periods || []);
+  setDatePosted(initialFilters?.date_posted || 'all_time');
+  
+  // LOAD JD METADATA FROM INITIAL FILTERS
+  if (initialFilters?.jd_text) {
+    setJdText(initialFilters.jd_text);
+    setAiSuggestedJobTitle(initialFilters.jd_job_title || '');
+    setSelectedJobId(initialFilters.jd_selected_job_id || '');
+    if (initialFilters.jd_generated_keywords) {
+      setAiSuggestedTags(initialFilters.jd_generated_keywords);
+      setVisibleKeywordsCount(initialFilters.jd_generated_keywords.length);
+    }
+    setIsBooleanKeywords(initialFilters.jd_is_boolean_mode || false);
+  }
+}, [initialFilters]);
+
+
+// --- LOAD FROM SEARCH HISTORY ---
   useEffect(() => {
-    setName(initialFilters?.name || []);
-    setEmail(initialFilters?.email || []);
-    setKeywords(initialFilters?.keywords || []);
-    setSelectedBooleanPatterns([]); // Reset Boolean patterns on filter change
-    setSkills(initialFilters?.skills || []);
-    setPastCompanies(initialFilters?.companies || []);
-    setEducations(initialFilters?.educations || []);
-    setLocations(initialFilters?.locations || []);
-    setCurrentCompany(initialFilters?.current_company || '');
-    setCurrentDesignation(initialFilters?.current_designation || '');
-    setMinExp(initialFilters?.min_exp?.toString() || '');
-    setMaxExp(initialFilters?.max_exp?.toString() || '');
-    setMinCurrentSalary(initialFilters?.min_current_salary?.toString() || '');
-    setMaxCurrentSalary(initialFilters?.max_current_salary?.toString() || '');
-    setMinExpectedSalary(initialFilters?.min_expected_salary?.toString() || '');
-    setMaxExpectedSalary(initialFilters?.max_expected_salary?.toString() || '');
-    setNoticePeriod(initialFilters?.notice_periods || []);
-    setDatePosted(initialFilters?.date_posted || 'all_time');
-  }, [initialFilters]);
+    if (searchHistory) {
+      // Load JD and keywords from history
+      setJdText(searchHistory.jd_text);
+      setAiSuggestedJobTitle(searchHistory.job_title || '');
+      setSelectedJobId(searchHistory.selected_job_id || '');
+      setAiSuggestedTags(searchHistory.generated_keywords);
+      setIsBooleanKeywords(searchHistory.is_boolean_mode);
+      
+      // Show all keywords immediately (no animation)
+      setVisibleKeywordsCount(searchHistory.generated_keywords.length);
+      setShowStages(false);
+      setAnalysisStages([]);
+      
+      // If there were saved filters, load them too
+      if (searchHistory.search_filters) {
+        const filters = searchHistory.search_filters;
+        setKeywords(filters.keywords || []);
+        setSkills(filters.skills || []);
+        setPastCompanies(filters.companies || []);
+        setEducations(filters.educations || []);
+        setLocations(filters.locations || []);
+        setCurrentCompany(filters.current_company || '');
+        setCurrentDesignation(filters.current_designation || '');
+        setMinExp(filters.min_exp?.toString() || '');
+        setMaxExp(filters.max_exp?.toString() || '');
+        setMinCurrentSalary(filters.min_current_salary?.toString() || '');
+        setMaxCurrentSalary(filters.max_current_salary?.toString() || '');
+        setMinExpectedSalary(filters.min_expected_salary?.toString() || '');
+        setMaxExpectedSalary(filters.max_expected_salary?.toString() || '');
+        setNoticePeriod(filters.notice_periods || []);
+        setDatePosted(filters.date_posted || 'all_time');
+      }
+    }
+  }, [searchHistory]);
 
   // Re-animate when boolean mode changes and we have existing suggestions
   useEffect(() => {
@@ -257,6 +308,31 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({ onSearch, isS
     if (query.length < 2) return [];
     return allIndianCities.filter(c => c.toLowerCase().includes(query.toLowerCase())).slice(0, 10);
   }, [allIndianCities]);
+
+
+// --- SAVE SEARCH HISTORY TO DATABASE ---
+  const saveSearchHistory = async (keywords: string[]) => {
+    if (!jdText.trim() || keywords.length === 0) return;
+    
+    try {
+      const { data, error } = await supabase.rpc('save_candidate_search_history', {
+        p_organization_id: organizationId,
+        p_job_title: aiSuggestedJobTitle || (selectedJobId 
+          ? jobs.find(j => j.id === selectedJobId)?.title 
+          : null),
+        p_jd_text: jdText,
+        p_selected_job_id: selectedJobId || null,
+        p_generated_keywords: keywords,
+        p_is_boolean_mode: isBooleanKeywords,
+        p_search_filters: null
+      });
+      
+      if (error) throw error;
+      console.log('Search history saved:', data);
+    } catch (error) {
+      console.error('Error saving search history:', error);
+    }
+  };
 
   // --- HANDLE JOB SELECTION ---
   const handleJobSelect = (jobId: string) => {
@@ -574,12 +650,12 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({ onSearch, isS
   };
 
   // --- AI GENERATION LOGIC ---
-  const handleGenerateBoolean = async () => {
+const handleGenerateBoolean = async () => {
     if (!jdText.trim()) return;
     setIsGeneratingBoolean(true);
-    setAnimatedTags([]); // Clear previous animation
-    setAiSuggestedTags([]); // Clear previous tags
-    setAnalysisStages([]); // Clear previous stages
+    setAnimatedTags([]);
+    setAiSuggestedTags([]);
+    setAnalysisStages([]);
     setCurrentStageIndex(-1);
     setShowStages(true);
     setVisibleKeywordsCount(0);
@@ -591,15 +667,15 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({ onSearch, isS
       
       if (error) throw error;
       
-      // Expecting array: ["Python", "Django", "AWS", "Rest API"]
       const generatedTags = data.keywords || []; 
       setAiSuggestedTags(generatedTags);
       
-      // Run multi-stage analysis animation
+      // Save to history after successful generation
+      await saveSearchHistory(generatedTags);
+      
       setIsAnimating(true);
       await runAnalysisStages(generatedTags);
       
-      // After stages complete and disappear, show keywords one by one
       await showKeywordsSequentially(generatedTags);
       setIsAnimating(false);
       
@@ -643,51 +719,57 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({ onSearch, isS
     setAiSuggestedTags(prev => prev.filter(t => t !== tagToAdd));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+const handleSubmit = (e: React.FormEvent) => {
+  e.preventDefault();
 
-    let finalKeywords = keywords;
-    if (isBooleanKeywords) {
-      // When Boolean mode is ON, use selected Boolean patterns
-      if (selectedBooleanPatterns.length > 0) {
-        // If multiple patterns selected, combine them with OR
-        if (selectedBooleanPatterns.length === 1) {
-          finalKeywords = [{ value: selectedBooleanPatterns[0].value, mandatory: true }];
-        } else {
-          // Combine multiple Boolean patterns with OR logic
-          const combinedPattern = selectedBooleanPatterns
-            .map(p => `(${p.value})`)
-            .join(' OR ');
-          finalKeywords = [{ value: combinedPattern, mandatory: true }];
-        }
-      } else if (booleanKeywords.trim()) {
-        // Fallback: if manual text was entered in text field (backward compatibility)
-        finalKeywords = [{ value: booleanKeywords, mandatory: true }];
+  let finalKeywords = keywords;
+  if (isBooleanKeywords) {
+    // When Boolean mode is ON, use selected Boolean patterns
+    if (selectedBooleanPatterns.length > 0) {
+      // If multiple patterns selected, combine them with OR
+      if (selectedBooleanPatterns.length === 1) {
+        finalKeywords = [{ value: selectedBooleanPatterns[0].value, mandatory: true }];
+      } else {
+        // Combine multiple Boolean patterns with OR logic
+        const combinedPattern = selectedBooleanPatterns
+          .map(p => `(${p.value})`)
+          .join(' OR ');
+        finalKeywords = [{ value: combinedPattern, mandatory: true }];
       }
+    } else if (booleanKeywords.trim()) {
+      // Fallback: if manual text was entered in text field (backward compatibility)
+      finalKeywords = [{ value: booleanKeywords, mandatory: true }];
     }
+  }
 
-    let finalDesignation = currentDesignation;
-    if (isBooleanDesignation && booleanDesignation.trim()) {
-        finalDesignation = booleanDesignation;
-    }
+  let finalDesignation = currentDesignation;
+  if (isBooleanDesignation && booleanDesignation.trim()) {
+      finalDesignation = booleanDesignation;
+  }
 
-    onSearch({
-      name, email, 
-      keywords: finalKeywords, 
-      skills, educations, locations,
-      companies: pastCompanies,
-      current_company: currentCompany,
-      current_designation: finalDesignation,
-      min_exp: minExp ? parseInt(minExp) : null,
-      max_exp: maxExp ? parseInt(maxExp) : null,
-      min_current_salary: minCurrentSalary ? parseFloat(minCurrentSalary) : null,
-      max_current_salary: maxCurrentSalary ? parseFloat(maxCurrentSalary) : null,
-      min_expected_salary: minExpectedSalary ? parseFloat(minExpectedSalary) : null,
-      max_expected_salary: maxExpectedSalary ? parseFloat(maxExpectedSalary) : null,
-      notice_periods: noticePeriod,
-      date_posted: datePosted,
-    });
-  };
+  onSearch({
+    name, email, 
+    keywords: finalKeywords, 
+    skills, educations, locations,
+    companies: pastCompanies,
+    current_company: currentCompany,
+    current_designation: finalDesignation,
+    min_exp: minExp ? parseInt(minExp) : null,
+    max_exp: maxExp ? parseInt(maxExp) : null,
+    min_current_salary: minCurrentSalary ? parseFloat(minCurrentSalary) : null,
+    max_current_salary: maxCurrentSalary ? parseFloat(maxCurrentSalary) : null,
+    min_expected_salary: minExpectedSalary ? parseFloat(minExpectedSalary) : null,
+    max_expected_salary: maxExpectedSalary ? parseFloat(maxExpectedSalary) : null,
+    notice_periods: noticePeriod,
+    date_posted: datePosted,
+    // Add JD-related metadata
+    jd_text: jdText,
+    jd_job_title: aiSuggestedJobTitle,
+    jd_selected_job_id: selectedJobId,
+    jd_generated_keywords: aiSuggestedTags,
+    jd_is_boolean_mode: isBooleanKeywords,
+  });
+};
 
   // --- Compute display tags based on boolean mode and visible count ---
   const displayTags = useMemo(() => {
@@ -701,6 +783,7 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({ onSearch, isS
     // Return only the visible keywords (for sequential animation)
     return tagsToShow.slice(0, visibleKeywordsCount);
   }, [aiSuggestedTags, isBooleanKeywords, visibleKeywordsCount]);
+
 
   return (
     <form onSubmit={handleSubmit} className="max-w-full zive-x-filters-container relative">

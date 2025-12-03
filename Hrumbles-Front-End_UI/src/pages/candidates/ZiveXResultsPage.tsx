@@ -15,34 +15,48 @@ const ZiveXResultsPage: FC = () => {
   const navigate = useNavigate();
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
-  const filters: SearchFilters = useMemo(() => {
-    const getTags = (key: string): SearchTag[] => {
-      const mandatory = searchParams.get(`mandatory_${key}`)?.split(',') || [];
-      const optional = searchParams.get(`optional_${key}`)?.split(',') || [];
-      return [
-        ...mandatory.filter(Boolean).map(v => ({ value: v, mandatory: true })),
-        ...optional.filter(Boolean).map(v => ({ value: v, mandatory: false }))
-      ];
-    };
-    return {
-      keywords: getTags('keywords'),
-      skills: getTags('skills'),
-      educations: getTags('educations'),
-      locations: getTags('locations'),
-      industries: getTags('industries'),
-      companies: getTags('companies'),
-      current_company: searchParams.get('current_company') || '',
-      current_designation: searchParams.get('current_designation') || '',
-      min_exp: searchParams.get('min_exp') ? parseInt(searchParams.get('min_exp')!) : null,
-      max_exp: searchParams.get('max_exp') ? parseInt(searchParams.get('max_exp')!) : null,
-      min_current_salary: searchParams.get('min_current_salary') ? parseFloat(searchParams.get('min_current_salary')!) : null,
-      max_current_salary: searchParams.get('max_current_salary') ? parseFloat(searchParams.get('max_current_salary')!) : null,
-      min_expected_salary: searchParams.get('min_expected_salary') ? parseFloat(searchParams.get('min_expected_salary')!) : null,
-      max_expected_salary: searchParams.get('max_expected_salary') ? parseFloat(searchParams.get('max_expected_salary')!) : null,
-      notice_periods: searchParams.get('notice_periods')?.split(',') || [],
-      date_posted: searchParams.get('date_posted') || 'all_time',
-    };
-  }, [searchParams]);
+const filters: SearchFilters = useMemo(() => {
+  const getTags = (key: string): SearchTag[] => {
+    const mandatory = searchParams.get(`mandatory_${key}`)?.split(',') || [];
+    const optional = searchParams.get(`optional_${key}`)?.split(',') || [];
+    return [
+      ...mandatory.filter(Boolean).map(v => ({ value: v, mandatory: true })),
+      ...optional.filter(Boolean).map(v => ({ value: v, mandatory: false }))
+    ];
+  };
+  
+  // Parse JD metadata from URL
+  const jdText = searchParams.get('jd_text') ? decodeURIComponent(searchParams.get('jd_text')!) : undefined;
+  const jdJobTitle = searchParams.get('jd_job_title') || undefined;
+  const jdSelectedJobId = searchParams.get('jd_selected_job_id') || undefined;
+  const jdGeneratedKeywords = searchParams.get('jd_generated_keywords')?.split('|||').filter(Boolean) || undefined;
+  const jdIsBooleanMode = searchParams.get('jd_is_boolean_mode') === 'true';
+  
+  return {
+    keywords: getTags('keywords'),
+    skills: getTags('skills'),
+    educations: getTags('educations'),
+    locations: getTags('locations'),
+    industries: getTags('industries'),
+    companies: getTags('companies'),
+    current_company: searchParams.get('current_company') || '',
+    current_designation: searchParams.get('current_designation') || '',
+    min_exp: searchParams.get('min_exp') ? parseInt(searchParams.get('min_exp')!) : null,
+    max_exp: searchParams.get('max_exp') ? parseInt(searchParams.get('max_exp')!) : null,
+    min_current_salary: searchParams.get('min_current_salary') ? parseFloat(searchParams.get('min_current_salary')!) : null,
+    max_current_salary: searchParams.get('max_current_salary') ? parseFloat(searchParams.get('max_current_salary')!) : null,
+    min_expected_salary: searchParams.get('min_expected_salary') ? parseFloat(searchParams.get('min_expected_salary')!) : null,
+    max_expected_salary: searchParams.get('max_expected_salary') ? parseFloat(searchParams.get('max_expected_salary')!) : null,
+    notice_periods: searchParams.get('notice_periods')?.split(',') || [],
+    date_posted: searchParams.get('date_posted') || 'all_time',
+    // ADD JD METADATA
+    jd_text: jdText,
+    jd_job_title: jdJobTitle,
+    jd_selected_job_id: jdSelectedJobId,
+    jd_generated_keywords: jdGeneratedKeywords,
+    jd_is_boolean_mode: jdIsBooleanMode,
+  };
+}, [searchParams]);
 
   const { data: searchResults = [], isLoading } = useQuery<CandidateSearchResult[]>({
     queryKey: ['candidateSearchResults', organizationId, filters],
@@ -85,15 +99,24 @@ const ZiveXResultsPage: FC = () => {
     },
   });
 
-  const handleSearch = (newFilters: SearchFilters) => {
-    const params = new URLSearchParams();
-    const processTags = (key: string, tags: SearchTag[] = []) => {
-      const mandatory = tags.filter(t => t.mandatory).map(t => t.value);
-      const optional = tags.filter(t => !t.mandatory).map(t => t.value);
-      if (mandatory.length) params.append(`mandatory_${key}`, mandatory.join(','));
-      if (optional.length) params.append(`optional_${key}`, optional.join(','));
-    };
-    
+const handleSearch = (newFilters: SearchFilters) => {
+  const params = new URLSearchParams();
+  
+  // Helper to wrap multi-word phrases in quotes for exact matching
+  const wrapMultiWordPhrases = (value: string): string => {
+    // If it contains spaces and isn't already quoted, wrap it
+    if (value.includes(' ') && !value.startsWith('"')) {
+      return `"${value}"`;
+    }
+    return value;
+  };
+  
+  const processTags = (key: string, tags: SearchTag[] = []) => {
+    const mandatory = tags.filter(t => t.mandatory).map(t => wrapMultiWordPhrases(t.value));
+    const optional = tags.filter(t => !t.mandatory).map(t => wrapMultiWordPhrases(t.value));
+    if (mandatory.length) params.append(`mandatory_${key}`, mandatory.join(','));
+    if (optional.length) params.append(`optional_${key}`, optional.join(','));
+  };
     processTags('keywords', newFilters.keywords);
     processTags('skills', newFilters.skills);
     processTags('companies', newFilters.companies);

@@ -1,135 +1,94 @@
-// tests/login.spec.ts
+// tests/auth-flow-real.spec.ts
 import { test, expect } from '@playwright/test';
 
 const SUBDOMAIN = 'demo';
 const BASE_URL = `http://${SUBDOMAIN}.localhost:8081`;
+const ROOT_URL = BASE_URL;                    // → http://demo.localhost:8081/
+const LOGIN_URL = `${BASE_URL}/login`;
 
-test.describe('Login Page Flow', () => {
-  test.beforeEach(async ({ page }) => {
-    // 1. MOCK ORGANIZATION LOOKUP (happens immediately on LoginPage mount)
-    await page.route('**/rest/v1/hr_organizations?subdomain=eq.**', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          id: 'org-123',
-          name: 'Demo Org',
-          subdomain: SUBDOMAIN,
-        }),
-      });
-    });
+const VALID_USER = {
+  email: 'demo@hrumbles.com',
+  password: 'Demo@9091',
+};
 
-    // 2. MOCK ALL OTHER hr_organizations calls (fallback)
-    await page.route('**/rest/v1/hr_organizations**', async (route) => {
-      await route.fulfill({ status: 404, body: '[]' });
-    });
+const INACTIVE_USER = {
+  email: 'inactive@hrumbles.com',  // ← must exist + status = 'inactive'inactive'
+  password: 'Demo@9091',
+};
 
-    // 3. Go directly to login (subdomain already set)
-    await page.goto(`${BASE_URL}/login`);
+test.describe('Authentication Flow – 100% Real Supabase (No Mocks)', () => {
 
-    // Wait for page to be ready
-    await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
-  });
+test('1. Successful login → dashboard → logout → back to root', async ({ page }) => {
+  await page.goto(LOGIN_URL);
+  await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
 
-  test('Successful login redirects to dashboard', async ({ page }) => {
-    // 1. Mock Auth Login
-    await page.route('**/auth/v1/token**', route => route.fulfill({
-      status: 200,
-      json: {
-        access_token: 'fake-jwt',
-        refresh_token: 'fake-refresh',
-        expires_in: 3600,
-        user: {
-          id: 'user-123',
-          email: 'demo@hrumbles.com',
-          aud: 'authenticated',
-          role: 'authenticated',
-        },
-        session: { user: { id: 'user-123' } }
-      }
-    }));
+//   await expect(page).toHaveScreenshot('login-clean.png', { fullPage: true });
 
-    // 2. Mock User Profile
-    await page.route('**/rest/v1/hr_employees?id=eq.user-123**', route => route.fulfill({
-      json: {
-        id: 'user-123',
-        organization_id: 'org-123',
-        role_id: 'role-admin',
-        department_id: 'dept-eng',
-        status: 'active',
-        first_name: 'John',
-        last_name: 'Doe',
-      }
-    }));
+  // Login
+  await page.getByPlaceholder('john@gmail.com').fill(VALID_USER.email);
+  await page.getByPlaceholder('••••••••').fill(VALID_USER.password);
+  await page.getByRole('button', { name: 'Login' }).click();
 
-    // 3. Mock Role & Department names
-    await page.route('**/rest/v1/hr_roles**', route => route.fulfill({ json: { name: 'admin' } }));
-    await page.route('**/rest/v1/hr_departments**', route => route.fulfill({ json: { name: 'Engineering' } }));
+  await expect(page).toHaveURL(`${BASE_URL}/dashboard`, { timeout: 15000 });
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(3000); // let dashboard settle
 
-    // 4. MOCK fetchUserSession() — THIS IS THE KILLER ONE
-    await page.route('**/auth/v1/user', route => route.fulfill({
-      json: { id: 'user-123', email: 'john@gmail.com' }
-    }));
+  // PROOF: User is logged in
+  await expect(page.getByRole('heading', { name: /Good (Morning|Afternoon|Evening), Kamesh!/ })).toBeVisible();
 
-    await page.route('**/rest/v1/hr_employees?select=*&id=eq.user-123**', route => route.fulfill({
-      json: [{
-        role_id: 'role-admin',
-        organization_id: 'org-123'
-      }]
-    }));
 
-    await page.route('**/rest/v1/hr_roles?id=eq.role-admin**', route => route.fulfill({
-      json: [{ name: 'admin' }]
-    }));
+  // === RELIABLE LOGOUT USING EXACT CHAKRA SELECTORS ===
+  await page.getByRole('button', { name: `${VALID_USER.email}` }).click();
+  // OR fallback: click avatar button by position
+  // await page.locator('header').getByRole('button').nth(2).click();
 
-    await page.route('**/rest/v1/hr_role_permissions**', route => route.fulfill({ json: [] }));
-    await page.route('**/rest/v1/hr_permissions**', route => route.fulfill({ json: [] }));
+  // Click "Logout" — use text + force because it's in portal
+  await page.getByText('Logout', { exact: true }).click({ force: true });
 
-    // 5. Fill and submit
-    await page.getByPlaceholder('john@gmail.com').fill('john@gmail.com');
-    await page.getByPlaceholder('••••••••').fill('Demo@9091');
-    await page.getByRole('button', { name: 'Login' }).click();
+  // Should redirect to root (your app behavior)
+  await expect(page).toHaveURL(ROOT_URL, { timeout: 10000 });
 
-    // SUCCESS: Should redirect
-    await expect(page).toHaveURL(`${BASE_URL}/dashboard`, { timeout: 10000 });
-  });
+//   await expect(page).toHaveScreenshot('after-logout-root-page.png', { fullPage: true });
 
-  test('Inactive user sees error', async ({ page }) => {
-    await page.route('**/auth/v1/token**', route => route.fulfill({
-      json: {
-        access_token: 'fake',
-        user: { id: 'user-inactive', email: 'inactive@gmail.com' }
-      }
-    }));
+  console.log('Full login → dashboard → logout flow passed!');
+});
 
-    await page.route('**/rest/v1/hr_employees?id=eq.user-inactive**', route => route.fulfill({
-      json: {
-        status: 'inactive',
-        organization_id: 'org-123'
-      }
-    }));
+  test('2. Invalid credentials → real error message', async ({ page }) => {
+    await page.goto(LOGIN_URL);
 
-    await page.getByPlaceholder('john@gmail.com').fill('inactive@gmail.com');
-    await page.getByPlaceholder('••••••••').fill('secret123');
-    await page.getByRole('button', { name: 'Login' }).click();
-
-    await expect(page.getByText('Your account is not active')).toBeVisible();
-    await expect(page).toHaveURL(`${BASE_URL}/login`);
-  });
-
-  test('Invalid credentials show error', async ({ page }) => {
-    await page.route('**/auth/v1/token**', route => route.fulfill({
-      status: 400,
-      json: {
-        error: 'invalid_grant',
-        error_description: 'Invalid login credentials'
-      }
-    }));
-
-    await page.getByPlaceholder('john@gmail.com').fill('wrong@gmail.com');
+    await page.getByPlaceholder('john@gmail.com').fill('wrong@hrumbles.com');
     await page.getByPlaceholder('••••••••').fill('wrongpass');
-    await page.getByRole('button', { name: 'Login' }).click();
+
+    const [response] = await Promise.all([
+      page.waitForResponse(r => r.url().includes('/auth/v1/token') && r.status() === 400),
+      page.getByRole('button', { name: 'Login' }).click(),
+    ]);
+
+    expect(response.status()).toBe(400);
 
     await expect(page.getByText('Invalid login credentials')).toBeVisible();
+    await expect(page).toHaveScreenshot('invalid-credentials-error.png');
+    await expect(page).toHaveURL(LOGIN_URL);
   });
+
+  test('3. Inactive user → "Your account is not active"', async ({ page }) => {
+    await page.goto(LOGIN_URL);
+
+    await page.getByPlaceholder('john@gmail.com').fill('onboard@gmail.com');
+    await page.getByPlaceholder('••••••••').fill('Demo@123');
+
+    await page.getByRole('button', { name: 'Login' }).click();
+
+    await expect(page.getByText('Your account is not active')).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveScreenshot('inactive-user-error.png');
+    await expect(page).toHaveURL(LOGIN_URL);
+  });
+
+  test('4. Wrong subdomain → shows organization not found', async ({ page }) => {
+    await page.goto('http://nonexistent.localhost:8081/login');
+
+    await expect(page.getByText(/organization|domain|not found/i, { timeout: 15000 })).toBeVisible();
+    await expect(page).toHaveScreenshot('wrong-subdomain.png', { fullPage: true });
+  });
+
 });

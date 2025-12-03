@@ -22,7 +22,12 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  reporter: [ ['html'], ['list'] ],
+
+    timeout: 120_000, // Global timeout per test
+  expect: {
+    timeout: 15_000,
+  },
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */
@@ -43,7 +48,7 @@ export default defineConfig({
         // 2. Public Tests (No Auth, No Setup Dependency)
     {
       name: 'public', // 👈 New project for Domain Verification
-      testMatch: ['**/domain-verification.spec.ts', '**/login.spec.ts'], // Only run specific files
+      testMatch: ['**/domain-verification.spec.ts', '**/login.spec.ts','**/dashboard-routing.spec.ts'], // Only run specific files
       use: { 
         ...devices['Desktop Chrome'],
         // No storageState here!
