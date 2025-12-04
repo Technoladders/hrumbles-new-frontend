@@ -1,5 +1,5 @@
 // src/components/jobs/job/steps/ExternalJobInfoStep.tsx
-
+import { useSelector } from "react-redux";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,6 +7,12 @@ import LocationSelector from "../LocationSelector";
 import ExperienceSelector from "./experience-skills/ExperienceSelector";
 import ClientInformationFields from "./client-details/ClientInformationFields"; 
 import BudgetField from "./client-details/BudgetField";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar"; // Ensure you have this shadcn component
+import { Calendar as CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils"
 
 // The interface is updated to include hiringMode
 interface ExternalJobInfoData {
@@ -33,7 +39,13 @@ interface ExternalJobInfoStepProps {
   onChange: (data: Partial<ExternalJobInfoData>) => void;
 }
 
+const TUP_ORG_ID = "0e4318d8-b1a5-4606-b311-c56d7eec47ce";
+
 const ExternalJobInfoStep = ({ data, onChange }: ExternalJobInfoStepProps) => {
+
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
+  const isTupOrg = organizationId === TUP_ORG_ID;
+
   const handleFieldChange = (field: keyof ExternalJobInfoData, value: any) => {
     onChange({ ...data, [field]: value });
   };
@@ -46,6 +58,18 @@ const ExternalJobInfoStep = ({ data, onChange }: ExternalJobInfoStepProps) => {
       { value: "Part Time", label: "Part-Time" },
       { value: "Intern", label: "Intern" }
     ];
+  };
+
+
+   // Logic to get 'Tomorrow' in Asia/Kolkata timezone
+  const getMinDate = () => {
+    const now = new Date();
+    // Get current time in Kolkata
+    const kolkataTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    // Add 1 day
+    kolkataTime.setDate(kolkataTime.getDate() + 1);
+    kolkataTime.setHours(0, 0, 0, 0);
+    return kolkataTime;
   };
 
   return (
@@ -90,8 +114,47 @@ const ExternalJobInfoStep = ({ data, onChange }: ExternalJobInfoStepProps) => {
               {/* --- END NEW HIRING MODE FIELD --- */}
               <div className="space-y-2">
                 <Label htmlFor="jobId">Job ID <span className="text-red-500">*</span></Label>
-                <Input id="jobId" value={data.jobId || ''} onChange={(e) => handleFieldChange('jobId', e.target.value)} />
+                  <Input 
+              id="jobId" 
+              placeholder="Enter job ID" 
+              value={data.jobId || ""} 
+              onChange={(e) => handleFieldChange('jobId', e.target.value)} 
+              // DISABLE IF TUP ORG
+              disabled={isTupOrg}
+              className={isTupOrg ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}
+            />
               </div>
+
+               {/* NEW DUE DATE PICKER - ONLY FOR TUP ORG */}
+          {isTupOrg && (
+            <div className="space-y-2">
+              <Label>Job Due Date <span className="text-red-500">*</span></Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={"outline"}
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !data.dueDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {data.dueDate ? format(new Date(data.dueDate), "PPP") : <span>Pick a date</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={data.dueDate ? new Date(data.dueDate) : undefined}
+                    onSelect={(date) => handleFieldChange('dueDate', date ? date.toISOString() : null)}
+                    disabled={(date) => date < getMinDate()}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              {/* <p className="text-[10px] text-gray-400">Asia/Kolkata Timezone</p> */}
+            </div>
+          )}
               <div className="space-y-2">
                 <Label htmlFor="jobTitle">Job Title <span className="text-red-500">*</span></Label>
                 <Input id="jobTitle" value={data.jobTitle || ''} onChange={(e) => handleFieldChange('jobTitle', e.target.value)} />
@@ -113,7 +176,7 @@ const ExternalJobInfoStep = ({ data, onChange }: ExternalJobInfoStepProps) => {
                     </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2 col-span-2">
+              <div className="space-y-2 ">
                 <Label htmlFor="jobLocation">Job Location <span className="text-red-500">*</span></Label>
                 <LocationSelector selectedLocations={data.jobLocation || []} onChange={(locations) => handleFieldChange('jobLocation', locations)} />
               </div>

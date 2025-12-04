@@ -43,6 +43,7 @@ export const mapFormDataToJobData = (
     hiring_mode: formData.jobInformation.hiringMode,
     notice_period: formData.jobInformation.noticePeriod,
     number_of_candidates: formData.jobInformation.numberOfCandidates,
+    due_date: formData.jobInformation.dueDate,
     
     // --- Data from Job Description (Step 2) ---
     description: formData.jobDescription.description,

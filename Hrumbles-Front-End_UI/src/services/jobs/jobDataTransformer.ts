@@ -53,7 +53,7 @@ export const transformToDbJob = (job: JobData): Record<string, any> => {
     status: job.status,
     posted_date: job.postedDate,
     applications: job.applications,
-    due_date: job.dueDate,
+    due_date: job.dueDate || null,
     client_owner: job.clientOwner,
     hiring_mode: job.hiringMode,
     submission_type: job.submissionType,

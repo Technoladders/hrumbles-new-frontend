@@ -45,7 +45,7 @@ const workflowMap: Record<string, string[]> = {
   'Offer Released': ['Joined', 'Offer Declined by Candidate'],
 
   // Joined Flow
-  'Joined': ['Completed 1 Month', 'Did Not Complete 1 Month'],
+  'Joined': ['Completed 1 Month', 'Did Not Complete 1 Month', 'Candidate Backout'],
   'Completed 1 Month': ['Billing Completed', 'Billing Pending'],
 
   // --- RE-ENGAGEMENT PATHS FOR FORMER "END STATES" ---
@@ -61,6 +61,7 @@ const workflowMap: Record<string, string[]> = {
   'Offer Declined by Candidate': ['Offer Released', 'Interested & Proceeding'], // Re-offer or step back
   'Not Interested': ['Interested & Proceeding'], // Candidate changed their mind
   'Did Not Complete 1 Month': ['Completed 1 Month'], // Path to correct a mistake
+  'Candidate Backout': ['Completed 1 Month', 'Did Not Complete 1 Month'], // Path to correct a mistake
   'Billing Completed': ['Billing Pending'], // Path to correct a mistake
   'Billing Pending': ['Billing Completed'], // Path to complete billing
 };

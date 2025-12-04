@@ -2,6 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { JobData } from "@/lib/types";
+import { getLastJobIdForOrg } from "@/services/jobs/supabaseQueries";
+import { getAuthDataFromLocalStorage } from '@/utils/localstorage';
+
+
+
+const TUP_ORG_ID = "0e4318d8-b1a5-4606-b311-c56d7eec47ce";
 
 // ==================================================================
 // 1. TYPE DEFINITIONS
@@ -23,6 +29,7 @@ export interface JobInformationData {
   minimumMonth: number;
   maximumYear: number;
   maximumMonth: number;
+  dueDate: string | null;
 }
 
 export interface ExperienceSkillsData {
@@ -62,6 +69,15 @@ interface UseJobFormStateProps {
 // ==================================================================
 
 export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
+  const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id, userId } = authData;
+
+    const organizationId = organization_id;
+
+
   const [formData, setFormData] = useState<JobFormData>({
     jobInformation: {
       hiringMode: jobType === "Internal" ? "Full Time" : "",
@@ -74,6 +90,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
       minimumMonth: 0,
       maximumYear: 0,
       maximumMonth: 0,
+      dueDate: null,
     },
     experienceSkills: {
       skills: [],
@@ -112,6 +129,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
           minimumMonth: editJob.experience?.min?.months || 0,
           maximumYear: editJob.experience?.max?.years || 0,
           maximumMonth: editJob.experience?.max?.months || 0,
+          dueDate: editJob.dueDate || null,
         },
         experienceSkills: {
           skills: editJob.skills || [],
@@ -135,6 +153,55 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
       setFormData(initialFormData);
     }
   }, [editJob, jobType]);
+
+    // 2. Handle Auto-ID Generation (Only for TUP Org & New Jobs)
+  useEffect(() => {
+    const generateTupId = async () => {
+      if (!editJob && organizationId === TUP_ORG_ID) {
+        
+        const lastId = await getLastJobIdForOrg(TUP_ORG_ID);
+        let nextId = "TUP001"; // Default start
+
+        if (lastId) {
+          // Extract numeric part
+          const match = lastId.match(/^TUP(\d+)$/);
+          if (match) {
+            const numStr = match[1];
+            const currentLength = numStr.length;
+            const currentVal = parseInt(numStr, 10);
+            
+            // Calculate max value for current digit length (e.g., 999 for length 3)
+            const maxVal = Math.pow(10, currentLength) - 1;
+            
+            let nextValString = "";
+            let nextPrefixLength = currentLength;
+
+            if (currentVal >= maxVal) {
+               // Expand digits: 999 -> 0001
+               nextPrefixLength = currentLength + 1;
+               nextValString = "1".padStart(nextPrefixLength, "0");
+            } else {
+               // Standard increment
+               nextValString = (currentVal + 1).toString().padStart(currentLength, "0");
+            }
+            
+            nextId = `TUP${nextValString}`;
+          }
+        }
+
+        setFormData(prev => ({
+          ...prev,
+          jobInformation: {
+            ...prev.jobInformation,
+            jobId: nextId
+          }
+        }));
+      }
+    };
+
+    generateTupId();
+  }, [organizationId, editJob]);
+
 
   const updateFormData = (step: keyof JobFormData, data: any) => {
     setFormData(prev => ({

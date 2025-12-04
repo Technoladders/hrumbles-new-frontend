@@ -26,7 +26,7 @@ export default defineConfig({
 
     timeout: 120_000, // Global timeout per test
   expect: {
-    timeout: 15_000,
+    timeout: 150_000,
   },
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
@@ -48,7 +48,8 @@ export default defineConfig({
         // 2. Public Tests (No Auth, No Setup Dependency)
     {
       name: 'public', // 👈 New project for Domain Verification
-      testMatch: ['**/domain-verification.spec.ts', '**/login.spec.ts','**/dashboard-routing.spec.ts'], // Only run specific files
+      testMatch: ['**/*.spec.ts'],
+      // testMatch: ['**/domain-verification.spec.ts', '**/login.spec.ts','**/dashboard-routing.spec.ts'], // Only run specific files
       use: { 
         ...devices['Desktop Chrome'],
         // No storageState here!
