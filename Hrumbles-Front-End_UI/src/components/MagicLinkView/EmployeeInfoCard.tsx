@@ -69,6 +69,7 @@ interface EmployeeInfo {
   expectedSalary: string;
   linkedInId: string;
   noticePeriod: string;
+  lastWorkingDay?: string;
   hasOffers: string;
   offerDetails: string;
   consentStatus: string;
@@ -249,9 +250,10 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
         return <Badge variant="outline">Consent Not Requested</Badge>;
     }
   };
+
  
   return (
-    <Card className="bg-white w-full overflow-hidden border-none shadow-xl rounded-2xl">
+   <Card className="bg-white w-full border-none shadow-xl rounded-2xl">
       <div className="p-6 border-b border-gray-200">
         <div className="flex flex-wrap items-center justify-between gap-4">
          
@@ -371,13 +373,19 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
                 <p className="text-sm font-medium text-gray-800">{employee.experience}</p>
               </div>
             </div>
-            <div className="flex items-center">
-              <Star className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
-              <div>
-                <p className="text-xs text-gray-500 uppercase">Relevant Experience</p>
-                <p className="text-sm font-medium text-gray-800">N/A</p>
-              </div>
-            </div>
+              <div className="flex items-center">
+  <Star className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+  <div>
+    <p className="text-xs text-gray-500 uppercase">Relevant Experience</p>
+    <p className="text-sm font-medium text-gray-800">
+      {/* Logic to combine years and months, filtering out "N/A" */}
+      {[
+        employee.relvantExpyears && employee.relvantExpyears !== "N/A" ? `${employee.relvantExpyears} Years` : "",
+        employee.relvantExpmonths && employee.relvantExpmonths !== "N/A" ? `${employee.relvantExpmonths} Months` : ""
+      ].filter(Boolean).join(" ") || "N/A"}
+    </p>
+  </div>
+</div>
             <div className="flex items-center">
               <MapPin className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
               <div>
@@ -406,12 +414,26 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
                 <p className="text-sm font-medium text-gray-800">{formatINR(employee.expectedSalary)} LPA</p>
               </div>
             </div>
-            <div className="flex items-center">
+        <div className="flex items-center relative group cursor-help">
               <Calendar className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
               <div>
                 <p className="text-xs text-gray-500 uppercase">Notice Period</p>
-                <p className="text-sm font-medium text-gray-800">{employee.noticePeriod} </p>
+                <p className={`text-sm font-medium text-gray-800 ${employee.lastWorkingDay ? 'border-b border-dotted border-gray-400 w-fit' : ''}`}>
+                  {employee.noticePeriod || "N/A"} 
+                </p>
               </div>
+
+              {/* Tooltip for Last Working Day */}
+              {employee.lastWorkingDay && (
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap">
+                  <div className="flex flex-col items-center">
+                    <span className="font-semibold text-gray-300 mb-0.5 uppercase text-[10px]">Last Working Day</span>
+                    <span className="font-bold text-white">{employee.lastWorkingDay}</span>
+                  </div>
+                  {/* Tooltip Arrow */}
+                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                </div>
+              )}
             </div>
             <div className="flex items-center">
               <UserCheck className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />

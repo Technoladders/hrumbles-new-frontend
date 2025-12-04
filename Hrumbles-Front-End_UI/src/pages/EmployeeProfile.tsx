@@ -207,6 +207,9 @@ const EmployeeProfile = () => {
   const [payslipsYear, setPayslipsYear] = useState<string>('');
   const [payslipsUploading, setPayslipsUploading] = useState(false);
 
+
+  const [isHikeLettersExpanded, setIsHikeLettersExpanded] = useState(false);
+
   const [hikeLetterMonth, setHikeLetterMonth] = useState<string>('');
   const [hikeLetterYear, setHikeLetterYear] = useState<string>('');
   const [hikeLetterUploading, setHikeLetterUploading] = useState(false);
@@ -669,119 +672,186 @@ const EmployeeProfile = () => {
   };
 
   // ✅ FIXED: NO PAGE REFRESH - Updates state directly
-  const handleDocumentUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-    docType: string,
-    month: string,
-    year: string,
-    setUploading: (val: boolean) => void
-  ) => {
-    if (!event.target.files || event.target.files.length === 0 || !employee) return;
+const handleDocumentUpload = async (
+  event: React.ChangeEvent<HTMLInputElement>,
+  docType: string,
+  month: string,
+  year: string,
+  setUploading: (val: boolean) => void
+) => {
+  if (!event.target.files || event.target.files.length === 0 || !employee) return;
 
-    if (!month || !year) {
-      toast.error('Please select Month and Year before uploading.');
+  if (!month || !year) {
+    toast.error('Please select Month and Year before uploading.');
+    return;
+  }
+
+  const file = event.target.files[0];
+
+
+  // ✅ For non-Payslips: Check if document exists in DATABASE
+// ✅ For Offer Letter and Separation Letter ONLY: Check if document exists in DATABASE
+if (docType !== 'Payslips' && docType !== 'Increase/Hike Letter') {
+  const existingDoc = employee.salaryDocuments?.find(
+    doc => doc.document_type === docType && doc.month === month && doc.year === parseInt(year)
+  );
+
+  if (existingDoc) {
+    toast.error('This document already exists. Please delete it first, then upload again.');
+    event.target.value = '';
+    return;
+  }
+}
+
+  const fileExt = file.name.split('.').pop();
+  const employeeName = `${employee.first_name}_${employee.last_name}`.replace(/\s+/g, '_');
+  
+  // ✅ For Payslips, add timestamp to allow multiple uploads
+const timestamp = (docType === 'Payslips' || docType === 'Increase/Hike Letter') ? `_${Date.now()}` : '';
+  const fileName = `${employeeName}_${month}_${year}${timestamp}.${fileExt}`;
+  const filePath = `${organizationId}/${employee.id}/salary_docs/${fileName}`;
+
+  setUploading(true);
+
+try {
+  console.log('📤 Upload Details:', {
+    bucket: 'salary_documents',
+    filePath: filePath,
+    fileType: file.type,
+    fileName: file.name,
+    organizationId: organizationId,
+    employeeId: employee.id
+  });
+
+  // ✅ CRITICAL FIX: Add upsert: true to overwrite existing files
+  const { data: uploadData, error: uploadError } = await supabase.storage
+    .from('salary_documents')
+    .upload(filePath, file, {
+      upsert: true,  // ⭐ This allows overwriting if file exists
+      contentType: file.type
+    });
+
+  console.log('✅ Upload Response:', { uploadData, uploadError });
+
+  if (uploadError) {
+    console.error('❌ Upload error details:', {
+      message: uploadError.message,
+      statusCode: uploadError.statusCode,
+      error: uploadError
+    });
+    throw uploadError;
+  }
+    const { data: { publicUrl } } = supabase.storage
+      .from('salary_documents')
+      .getPublicUrl(filePath);
+
+    const { data: insertedDoc, error: dbError } = await supabase
+      .from('hr_salary_details_documents')
+      .insert({
+        employee_id: employee.id,
+        organization_id: organizationId,
+        document_type: docType,
+        document_name: fileName,
+        document_url: publicUrl,
+        month: month,
+        year: parseInt(year),
+        created_by: employee.id,
+        updated_by: employee.id,
+      })
+      .select()
+      .single();
+
+    if (dbError) {
+      console.error('Database insert error:', dbError);
+      throw dbError;
+    }
+
+    toast.success('Document uploaded successfully.');
+
+    // ✅ Update state instantly
+    setEmployee(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        salaryDocuments: [insertedDoc, ...(prev.salaryDocuments || [])]
+      };
+    });
+
+    event.target.value = '';
+  } catch (error: any) {
+    console.error('Upload failed:', error);
+    toast.error(`Upload failed: ${error.message}`);
+  } finally {
+    setUploading(false);
+  }
+};
+
+const handleDeleteDocument = async (docId: string) => {
+  if (!employee) return;
+
+  try {
+    // ✅ STEP 1: Find the document to delete
+    const docToDelete = employee.salaryDocuments?.find(doc => doc.id === docId);
+    
+    if (!docToDelete) {
+      toast.error('Document not found.');
       return;
     }
 
-    const file = event.target.files[0];
+    console.log('Deleting document:', docToDelete); // Debug log
 
-    // ✅ FIX: Allow multiple Payslips per month/year, but prevent duplicates for other documents
-    if (docType !== 'Payslips') {
-      const isDuplicate = employee.salaryDocuments?.some(
-        doc => doc.document_type === docType && doc.month === month && doc.year === parseInt(year)
-      );
-
-      if (isDuplicate) {
-        toast.error('This document already exists for this employee. Please check and upload again.');
-        event.target.value = '';
-        return;
-      }
-    }
-
-    const fileExt = file.name.split('.').pop();
-    const employeeName = `${employee.first_name}_${employee.last_name}`.replace(/\s+/g, '_');
+    // ✅ STEP 2: Extract file path from URL
+    // Example URL: https://xxx.supabase.co/storage/v1/object/public/salary_documents/org_id/emp_id/salary_docs/filename.pdf
+    const urlParts = docToDelete.document_url.split('/salary_documents/');
     
-    // ✅ For Payslips, add timestamp to filename to allow multiple uploads
-    const timestamp = docType === 'Payslips' ? `_${Date.now()}` : '';
-    const fileName = `${employeeName}_${month}_${year}${timestamp}.${fileExt}`;
-    const filePath = `${organizationId}/${employee.id}/salary_docs/${fileName}`;
-
-    setUploading(true);
-
-    try {
-      const { error: uploadError } = await supabase.storage
-        .from('salary_documents')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('salary_documents')
-        .getPublicUrl(filePath);
-
-      const { data: insertedDoc, error: dbError } = await supabase
-        .from('hr_salary_details_documents')
-        .insert({
-          employee_id: employee.id,
-          organization_id: organizationId,
-          document_type: docType,
-          document_name: fileName,
-          document_url: publicUrl,
-          month: month,
-          year: parseInt(year),
-          created_by: employee.id,
-          updated_by: employee.id,
-        })
-        .select()
-        .single();
-
-      if (dbError) throw dbError;
-
-      toast.success('Document uploaded successfully.');
-
-      // ✅ CRITICAL FIX: Update state directly instead of refetching everything
-      setEmployee(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          salaryDocuments: [insertedDoc, ...(prev.salaryDocuments || [])]
-        };
-      });
-
-      event.target.value = '';
-    } catch (error: any) {
-      console.error('Upload failed:', error);
-      toast.error(`Upload failed: ${error.message}`);
-    } finally {
-      setUploading(false);
+    if (urlParts.length < 2) {
+      console.error('Invalid document URL format:', docToDelete.document_url);
+      toast.error('Invalid document URL format.');
+      return;
     }
-  };
 
-  const handleDeleteDocument = async (docId: string) => {
-    if (!employee) return;
+    const filePath = urlParts[1].split('?')[0]; // Remove query parameters if any
+    console.log('File path to delete:', filePath); // Debug log
 
-    try {
-      const { error } = await supabase
-        .from('hr_salary_details_documents')
-        .delete()
-        .eq('id', docId);
+    // ✅ STEP 3: Delete from Supabase Storage
+    const { data: deleteData, error: storageError } = await supabase.storage
+      .from('salary_documents')
+      .remove([filePath]);
 
-      if (error) throw error;
-
-      toast.success('Document deleted successfully.');
-
-      setEmployee(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          salaryDocuments: prev.salaryDocuments?.filter(doc => doc.id !== docId) || []
-        };
-      });
-    } catch (error: any) {
-      console.error('Delete failed:', error);
-      toast.error(`Delete failed: ${error.message}`);
+    if (storageError) {
+      console.error('Storage deletion error:', storageError);
+      toast.error(`Failed to delete file from storage: ${storageError.message}`);
+      return; // ⚠️ Don't continue if storage deletion fails
     }
-  };
+
+    console.log('Storage deletion result:', deleteData); // Debug log
+
+    // ✅ STEP 4: Delete from Database
+    const { error: dbError } = await supabase
+      .from('hr_salary_details_documents')
+      .delete()
+      .eq('id', docId);
+
+    if (dbError) {
+      console.error('Database deletion error:', dbError);
+      throw dbError;
+    }
+
+    toast.success('Document deleted successfully from storage and database.');
+
+    // ✅ STEP 5: Update state
+    setEmployee(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        salaryDocuments: prev.salaryDocuments?.filter(doc => doc.id !== docId) || []
+      };
+    });
+  } catch (error: any) {
+    console.error('Delete operation failed:', error);
+    toast.error(`Delete failed: ${error.message}`);
+  }
+};
 
   const getUploadedDocument = (docType: string) => {
     return employee?.salaryDocuments?.find(doc => doc.document_type === docType);
@@ -790,6 +860,10 @@ const EmployeeProfile = () => {
   const getUploadedPayslips = () => {
     return employee?.salaryDocuments?.filter(doc => doc.document_type === 'Payslips') || [];
   };
+
+  const getUploadedHikeLetters = () => {
+  return employee?.salaryDocuments?.filter(doc => doc.document_type === 'Increase/Hike Letter') || [];
+};
 
   const getAge = (dateOfBirth?: string) => {
     if (!dateOfBirth) return "N/A";
@@ -1108,13 +1182,31 @@ const EmployeeProfile = () => {
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                     {employee.designation_name || "Test account"} ({employee.employee_id || "Test001"})
                   </p>
-                  <div className="mt-2 flex items-center gap-3">
-                    <span className={`font-semibold rounded-full px-2 py-1 text-xs flex items-center gap-2 ${employee.employment_status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                      <span className={`w-2 h-2 rounded-full ${employee.employment_status === 'Active' ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                      {employee.employment_status || "Not provided"}
-                    </span>
-                    <p className="font-medium text-gray-500 dark:text-gray-400 text-xs">{employee.hire_type || "Not provided"}</p>
-                  </div>
+                 <div className="mt-2 flex items-center gap-3">
+  {/* Update 1: Check lowercase status for the container background/text color */}
+  <span 
+    className={`font-semibold rounded-full px-2 py-1 text-xs flex items-center gap-2 ${
+      employee.employment_status?.toLowerCase() === 'active' 
+      ? 'bg-green-100 text-green-800' 
+      : 'bg-red-100 text-red-800'
+    }`}
+  >
+    {/* Update 2: Check lowercase status for the dot color */}
+    <span 
+      className={`w-2 h-2 rounded-full ${
+        employee.employment_status?.toLowerCase() === 'active' 
+        ? 'bg-green-500' 
+        : 'bg-red-500'
+      }`}
+    ></span>
+    
+    {/* This displays the actual text exactly as it comes from the database */}
+    {employee.employment_status || "Not provided"}
+  </span>
+  <p className="font-medium text-gray-500 dark:text-gray-400 text-xs">
+    {employee.hire_type || "Not provided"}
+  </p>
+</div>
                 </div>
               </div>
               <div className="mt-8">
@@ -1235,196 +1327,160 @@ const EmployeeProfile = () => {
             {/* ✅ ENHANCED PERSONAL TAB WITHOUT SECTION HEADER ICONS */}
 <TabsContent value="personal" className="mt-6 space-y-6">
   {/* 🎨 IDENTITY DOCUMENTS - Enhanced Card Design */}
-  <Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
-    <CardContent className="p-8">
-      {/* Section Header WITHOUT Icon */}
-      <div className="mb-6">
-        <h3 className="font-bold text-2xl text-gray-800 dark:text-gray-100">Identity Documents</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Official identification documents</p>
-      </div>
+ <Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
+  <CardContent className="p-6">
+    <div className="mb-4">
+      <h3 className="font-bold text-xl text-gray-800 dark:text-gray-100">Identity Documents</h3>
+      <p className="text-xs text-gray-500 dark:text-gray-400">Official identification documents</p>
+    </div>
 
-      {/* Document Cards Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Aadhar Card */}
-        <div className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-          {/* Decorative Top Border */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-purple-600 rounded-t-2xl"></div>
-          
-          <div className="flex items-start justify-between gap-4">
-            {/* Left Content */}
-            <div className="flex items-start gap-4 flex-1 min-w-0">
-              {/* Icon with Gradient Background */}
-              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900/40 dark:to-purple-800/40 flex items-center justify-center flex-shrink-0 shadow-sm">
-                <Fingerprint className="h-7 w-7 text-purple-600 dark:text-purple-400" />
-              </div>
-              
-              {/* Text Content */}
-              <div className="min-w-0 flex-1">
-                <h4 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">
-                  Aadhar Card
-                </h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-mono tracking-wide">
-                  {employee.aadhar_number || (
-                    <span className="text-gray-400 dark:text-gray-500 italic font-sans">Not provided</span>
-                  )}
-                </p>
-                {employee.aadhar_number && (
-                  <div className="flex items-center gap-1 mt-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">Verified</span>
-                  </div>
-                )}
-              </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* Aadhar Card */}
+      <div className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 min-h-[80px]">
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-purple-600 rounded-t-xl"></div>
+        
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="h-10 w-10 min-w-[40px] rounded-lg bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900/40 dark:to-purple-800/40 flex items-center justify-center flex-shrink-0">
+              <Fingerprint className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             </div>
+            
+            <div className="min-w-0 flex-1">
+              <h4 className="font-bold text-gray-800 dark:text-gray-100 text-sm mb-1">
+                Aadhar Card
+              </h4>
+              <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 font-mono whitespace-nowrap tracking-tighter">
+                {employee.aadhar_number || (
+                  <span className="text-gray-400 dark:text-gray-500 italic font-sans tracking-normal">Not provided</span>
+                )}
+              </p>
+            </div>
+          </div>
 
-            {/* Action Buttons */}
-            {employee.aadhar_url && (
-              <div className="flex items-center gap-2 flex-shrink-0">
+          {employee.aadhar_url && (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-7 w-7 min-w-[28px] rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-600 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400"
+                onClick={() => window.open(employee.aadhar_url, '_blank')}
+                title="View"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </Button>
+              <a href={`${employee.aadhar_url}?download=`} download>
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="h-10 w-10 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-600 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors"
-                  onClick={() => window.open(employee.aadhar_url, '_blank')}
-                  title="View Document"
+                  className="h-7 w-7 min-w-[28px] rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-600 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400"
+                  title="Download"
                 >
-                  <Eye className="h-5 w-5" />
+                  <Download className="h-3.5 w-3.5" />
                 </Button>
-                <a href={`${employee.aadhar_url}?download=`} download>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-10 w-10 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-600 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors"
-                    title="Download"
-                  >
-                    <Download className="h-5 w-5" />
-                  </Button>
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* PAN Card */}
-        <div className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-          {/* Decorative Top Border */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-2xl"></div>
-          
-          <div className="flex items-start justify-between gap-4">
-            {/* Left Content */}
-            <div className="flex items-start gap-4 flex-1 min-w-0">
-              {/* Icon with Gradient Background */}
-              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/40 dark:to-blue-800/40 flex items-center justify-center flex-shrink-0 shadow-sm">
-                <CreditCard className="h-7 w-7 text-blue-600 dark:text-blue-400" />
-              </div>
-              
-              {/* Text Content */}
-              <div className="min-w-0 flex-1">
-                <h4 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">
-                  PAN Card
-                </h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-mono tracking-wide uppercase">
-                  {employee.pan_number || (
-                    <span className="text-gray-400 dark:text-gray-500 italic font-sans normal-case">Not provided</span>
-                  )}
-                </p>
-                {employee.pan_number && (
-                  <div className="flex items-center gap-1 mt-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">Verified</span>
-                  </div>
-                )}
-              </div>
+              </a>
             </div>
-
-            {/* Action Buttons */}
-            {employee.pan_url && (
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-10 w-10 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
-                  onClick={() => window.open(employee.pan_url, '_blank')}
-                  title="View Document"
-                >
-                  <Eye className="h-5 w-5" />
-                </Button>
-                <a href={`${employee.pan_url}?download=`} download>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-10 w-10 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
-                    title="Download"
-                  >
-                    <Download className="h-5 w-5" />
-                  </Button>
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ESIC */}
-        <div className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-          {/* Decorative Top Border */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-green-600 rounded-t-2xl"></div>
-          
-          <div className="flex items-start justify-between gap-4">
-            {/* Left Content */}
-            <div className="flex items-start gap-4 flex-1 min-w-0">
-              {/* Icon with Gradient Background */}
-              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900/40 dark:to-green-800/40 flex items-center justify-center flex-shrink-0 shadow-sm">
-                <Briefcase className="h-7 w-7 text-green-600 dark:text-green-400" />
-              </div>
-              
-              {/* Text Content */}
-              <div className="min-w-0 flex-1">
-                <h4 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">
-                  ESIC
-                </h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-mono tracking-wide">
-                  {employee.esic_number || (
-                    <span className="text-gray-400 dark:text-gray-500 italic font-sans">Not provided</span>
-                  )}
-                </p>
-                {employee.esic_number && (
-                  <div className="flex items-center gap-1 mt-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">Verified</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            {employee.esic_url && (
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-10 w-10 rounded-xl hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-600 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 transition-colors"
-                  onClick={() => window.open(employee.esic_url, '_blank')}
-                  title="View Document"
-                >
-                  <Eye className="h-5 w-5" />
-                </Button>
-                <a href={`${employee.esic_url}?download=`} download>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-10 w-10 rounded-xl hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-600 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 transition-colors"
-                    title="Download"
-                  >
-                    <Download className="h-5 w-5" />
-                  </Button>
-                </a>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
-    </CardContent>
-  </Card>
 
+      {/* PAN Card */}
+      <div className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 min-h-[80px]">
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-xl"></div>
+        
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="h-10 w-10 min-w-[40px] rounded-lg bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/40 dark:to-blue-800/40 flex items-center justify-center flex-shrink-0">
+              <CreditCard className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            
+            <div className="min-w-0 flex-1">
+              <h4 className="font-bold text-gray-800 dark:text-gray-100 text-sm mb-1">
+                PAN Card
+              </h4>
+              <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 font-mono uppercase whitespace-nowrap tracking-tighter">
+                {employee.pan_number || (
+                  <span className="text-gray-400 dark:text-gray-500 italic font-sans normal-case tracking-normal">Not provided</span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {employee.pan_url && (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-7 w-7 min-w-[28px] rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
+                onClick={() => window.open(employee.pan_url, '_blank')}
+                title="View"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </Button>
+              <a href={`${employee.pan_url}?download=`} download>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-7 w-7 min-w-[28px] rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
+                  title="Download"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </Button>
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ESIC */}
+      <div className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 min-h-[80px]">
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 to-green-600 rounded-t-xl"></div>
+        
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="h-10 w-10 min-w-[40px] rounded-lg bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900/40 dark:to-green-800/40 flex items-center justify-center flex-shrink-0">
+              <Briefcase className="h-5 w-5 text-green-600 dark:text-green-400" />
+            </div>
+            
+            <div className="min-w-0 flex-1">
+              <h4 className="font-bold text-gray-800 dark:text-gray-100 text-sm mb-1">
+                ESIC
+              </h4>
+              <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 font-mono whitespace-nowrap tracking-tighter">
+                {employee.esic_number || (
+                  <span className="text-gray-400 dark:text-gray-500 italic font-sans tracking-normal">Not provided</span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {employee.esic_url && (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-7 w-7 min-w-[28px] rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-600 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400"
+                onClick={() => window.open(employee.esic_url, '_blank')}
+                title="View"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </Button>
+              <a href={`${employee.esic_url}?download=`} download>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-7 w-7 min-w-[28px] rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-600 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400"
+                  title="Download"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </Button>
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </CardContent>
+</Card>
   {/* 🏠 ADDRESSES - Enhanced Design WITHOUT Header Icon */}
   <Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
     <CardContent className="p-8">
@@ -1526,19 +1582,20 @@ const EmployeeProfile = () => {
 
   {/* 🎓 EDUCATION - Compact Card Design (Matching Identity Documents) */}
 <Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
-  <CardContent className="p-8">
-    {/* Section Header WITHOUT Icon */}
-    <div className="mb-6">
-      <h3 className="font-bold text-2xl text-gray-800 dark:text-gray-100">Education</h3>
-      <p className="text-sm text-gray-500 dark:text-gray-400">Academic qualifications</p>
+  <CardContent className="p-6">
+    {/* Section Header */}
+    <div className="mb-4">
+      <h3 className="font-bold text-xl text-gray-800 dark:text-gray-100">Education</h3>
+      <p className="text-xs text-gray-500 dark:text-gray-400">Academic qualifications</p>
     </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+    {/* RESPONSIVE GRID - NO SCROLL, FILLS WIDTH */}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
       {['SSC', 'HSC/Diploma', 'Degree'].map((type, index) => {
         const edu = employee.education?.find(e => e.type === type);
         const fileName = edu?.document_url ? edu.document_url.split('/').pop().split('?')[0] : '';
         
-        // Dynamic styling with gradient backgrounds
+        // Dynamic styling
         let iconBg = "bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900/40 dark:to-purple-800/40";
         let iconColor = "text-purple-600 dark:text-purple-400";
         let hoverBg = "hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:text-purple-600 dark:hover:text-purple-400";
@@ -1560,61 +1617,64 @@ const EmployeeProfile = () => {
         }
 
         return (
-          <div key={type} className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+          <div 
+            key={type} 
+            className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 min-h-[110px]"
+          >
             {/* Decorative Top Border */}
-            <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${borderGradient} rounded-t-2xl`}></div>
+            <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${borderGradient} rounded-t-xl`}></div>
             
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start justify-between gap-3">
               {/* Left Content */}
-              <div className="flex items-start gap-4 flex-1 min-w-0">
-                {/* Icon with Gradient Background */}
-                <div className={`h-14 w-14 rounded-xl ${iconBg} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-                  <BadgeCheck className={`h-7 w-7 ${iconColor}`} />
+              <div className="flex items-start gap-3 flex-1 min-w-0">
+                {/* Icon */}
+                <div className={`h-10 w-10 min-w-[40px] rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0`}>
+                  <BadgeCheck className={`h-5 w-5 ${iconColor}`} />
                 </div>
                 
                 {/* Text Content */}
                 <div className="min-w-0 flex-1">
-                  <h4 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-1">
+                  <h4 className="font-bold text-gray-800 dark:text-gray-100 text-sm mb-0.5 line-clamp-1">
                     {type}
                   </h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 leading-tight mb-2">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 leading-tight mb-1.5">
                     {edu?.institute || <span className="italic">Not provided</span>}
                   </p>
                   
-                  {/* Year Badge - Inline */}
+                  {/* Year Badge */}
                   {edu?.year_completed ? (
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${yearBadgeBg}`}>
-                      <CalendarDays className="h-3 w-3 text-white" />
-                      <span className="text-xs font-semibold text-white">
+                    <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${yearBadgeBg}`}>
+                      <CalendarDays className="h-2.5 w-2.5 text-white" />
+                      <span className="text-[10px] font-semibold text-white">
                         {new Date(edu.year_completed).getFullYear()}
                       </span>
                     </div>
                   ) : (
-                    <span className="text-xs text-gray-400 dark:text-gray-500 italic">Year: N/A</span>
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 italic">Year: N/A</span>
                   )}
                 </div>
               </div>
 
-              {/* Action Buttons */}
+              {/* Action Buttons - EXTRA SMALL */}
               {edu?.document_url && (
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-1 flex-shrink-0">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={`h-10 w-10 rounded-xl text-gray-600 dark:text-gray-400 transition-colors ${hoverBg}`}
+                    className={`h-7 w-7 min-w-[28px] rounded-lg text-gray-600 dark:text-gray-400 ${hoverBg}`}
                     onClick={() => window.open(edu.document_url, '_blank')}
-                    title="View Document"
+                    title="View"
                   >
-                    <Eye className="h-5 w-5" />
+                    <Eye className="h-3.5 w-3.5" />
                   </Button>
                   <a href={`${edu.document_url}?download=`} download={fileName}>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className={`h-10 w-10 rounded-xl text-gray-600 dark:text-gray-400 transition-colors ${hoverBg}`}
+                      className={`h-7 w-7 min-w-[28px] rounded-lg text-gray-600 dark:text-gray-400 ${hoverBg}`}
                       title="Download"
                     >
-                      <Download className="h-5 w-5" />
+                      <Download className="h-3.5 w-3.5" />
                     </Button>
                   </a>
                 </div>
@@ -1627,113 +1687,6 @@ const EmployeeProfile = () => {
   </CardContent>
 </Card>
 
-  {/* 🏦 BANK DETAILS - Enhanced Design WITHOUT Header Icon */}
-  <Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
-    <CardContent className="p-8">
-      {/* Section Header WITHOUT Icon */}
-      <div className="mb-6">
-        <h3 className="font-bold text-2xl text-gray-800 dark:text-gray-100">Bank Details</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Payment information</p>
-      </div>
-
-      {employee.bankDetails ? (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl shadow-sm">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-            {/* Account Holder */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 font-medium">
-                <User className="h-4 w-4" />
-                Account Holder
-              </div>
-              <p className="text-base font-bold text-gray-800 dark:text-gray-100 pl-6">
-                {employee.bankDetails.account_holder_name}
-              </p>
-            </div>
-
-            {/* Bank Name */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 font-medium">
-                <Building2 className="h-4 w-4" />
-                Bank Name
-              </div>
-              <p className="text-base font-bold text-gray-800 dark:text-gray-100 pl-6">
-                {employee.bankDetails.bank_name}
-              </p>
-            </div>
-
-            {/* Account Number */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 font-medium">
-                <CreditCard className="h-4 w-4" />
-                Account Number
-              </div>
-              <div className="flex items-center gap-3 pl-6">
-                <p className="text-base font-mono font-bold text-gray-800 dark:text-gray-100">
-                  {showFullAccountNumber 
-                    ? employee.bankDetails.account_number 
-                    : `•••• •••• ${employee.bankDetails.account_number.slice(-4)}`
-                  }
-                </p>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                  onClick={() => setShowFullAccountNumber(!showFullAccountNumber)}
-                >
-                  <Eye className={`h-4 w-4 transition-colors ${
-                    showFullAccountNumber 
-                      ? 'text-purple-600 dark:text-purple-400' 
-                      : 'text-gray-400 dark:text-gray-500'
-                  }`} />
-                </Button>
-              </div>
-            </div>
-
-            {/* IFSC Code */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 font-medium">
-                <BadgeCheck className="h-4 w-4" />
-                IFSC Code
-              </div>
-              <div className="flex items-center gap-2 pl-6">
-                <p className="text-base font-mono font-bold text-gray-800 dark:text-gray-100">
-                  {employee.bankDetails.ifsc_code}
-                </p>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                  onClick={() => copyToClipboard(employee.bankDetails.ifsc_code, 'IFSC Code')}
-                >
-                  <Copy className="h-3.5 w-3.5 text-gray-400 hover:text-purple-600" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Branch Name */}
-            <div className="space-y-2 md:col-span-2">
-              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 font-medium">
-                <Home className="h-4 w-4" />
-                Branch Name
-              </div>
-              <p className="text-base font-bold text-gray-800 dark:text-gray-100 pl-6">
-                {employee.bankDetails.branch_name}
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-12 px-4">
-          <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
-            <CreditCard className="h-10 w-10 text-gray-400 dark:text-gray-600" />
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 italic text-center">
-            No bank details have been provided yet
-          </p>
-        </div>
-      )}
-    </CardContent>
-  </Card>
 </TabsContent>
           {/* ✅ ENHANCED PROFESSIONAL TAB */}
 <TabsContent value="professional" className="mt-6 space-y-6">
@@ -2161,7 +2114,7 @@ const EmployeeProfile = () => {
 
                   <div className="space-y-6">
                     {/* OFFER LETTER, HIKE LETTER, SEPARATION LETTER */}
-                    {['Offer Letter', 'Increase/Hike Letter', 'Separation Letter'].map((docType) => {
+                   {['Offer Letter', 'Separation Letter'].map((docType) => {
                       const uploadedDoc = getUploadedDocument(docType);
                       const isOfferLetter = docType === 'Offer Letter';
                       const isHikeLetter = docType === 'Increase/Hike Letter';
@@ -2196,62 +2149,61 @@ const EmployeeProfile = () => {
                           <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">{docType}</h4>
 
                           {!uploadedDoc ? (
-                            <div className="flex flex-wrap items-end gap-4">
-                              <div className="flex-shrink-0">
-                                <input
-                                  type="file"
-                                  id={`upload-${docType}`}
-                                  className="hidden"
-                                  accept=".pdf,.doc,.docx"
-                                  onChange={(e) => handleDocumentUpload(e, docType, currentMonth, currentYear, setUploading)}
-                                  disabled={isUploading}
-                                />
-<Button
-  onClick={() => document.getElementById(`upload-${docType}`)?.click()}
-  disabled={isUploading}
-  className="bg-[#7731E8] text-white hover:bg-[#6220C7] rounded-full px-4 py-2"
->
-  {isUploading ? (
-    <>
-      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading...
-    </>
-  ) : (
-    <>
-      <Upload className="h-4 w-4 mr-2" /> Upload
-    </>
-  )}
-</Button>
+                         <div className="flex flex-wrap items-end gap-4">
+  <div className="w-40">
+    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Month</label>
+    <Select value={currentMonth} onValueChange={setCurrentMonth}>
+      <SelectTrigger>
+        <SelectValue placeholder="Select Month" />
+      </SelectTrigger>
+      <SelectContent>
+        {months.map(month => (
+          <SelectItem key={month} value={month}>{month}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
 
-                              </div>
+  <div className="w-32">
+    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Year</label>
+    <Select value={currentYear} onValueChange={setCurrentYear}>
+      <SelectTrigger>
+        <SelectValue placeholder="Select Year" />
+      </SelectTrigger>
+      <SelectContent>
+        {years.map(year => (
+          <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
 
-                              <div className="w-40">
-                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Month</label>
-                                <Select value={currentMonth} onValueChange={setCurrentMonth}>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select Month" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {months.map(month => (
-                                      <SelectItem key={month} value={month}>{month}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-
-                              <div className="w-32">
-                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Year</label>
-                                <Select value={currentYear} onValueChange={setCurrentYear}>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select Year" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {years.map(year => (
-                                      <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
+  <div className="flex-shrink-0">
+    <input
+      type="file"
+      id={`upload-${docType}`}
+      className="hidden"
+      accept=".pdf,.doc,.docx"
+      onChange={(e) => handleDocumentUpload(e, docType, currentMonth, currentYear, setUploading)}
+      disabled={isUploading}
+    />
+    <Button
+      onClick={() => document.getElementById(`upload-${docType}`)?.click()}
+      disabled={isUploading}
+      className="bg-[#7731E8] text-white hover:bg-[#6220C7] rounded-full px-4 py-2"
+    >
+      {isUploading ? (
+        <>
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading...
+        </>
+      ) : (
+        <>
+          <Upload className="h-4 w-4 mr-2" /> Upload
+        </>
+      )}
+    </Button>
+  </div>
+</div>
                           ) : (
                             <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
                               <div className="flex items-center gap-3">
@@ -2308,6 +2260,180 @@ const EmployeeProfile = () => {
                         </div>
                       );
                     })}
+
+                        <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/30">
+                      <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">Increase/Hike Letter</h4>
+
+                      {/* COLLAPSIBLE TABLE OF UPLOADED HIKE LETTERS */}
+                      {getUploadedHikeLetters().length > 0 && (
+                        <div className="mb-6">
+                          {/* Dropdown Toggle Button */}
+                          <button
+                            onClick={() => setIsHikeLettersExpanded(!isHikeLettersExpanded)}
+                            className="w-full flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors mb-2"
+                          >
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-[#7731E8]" />
+                              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                                Uploaded Hike Letters ({getUploadedHikeLetters().length})
+                              </span>
+                            </div>
+                            <div className={`transform transition-transform ${isHikeLettersExpanded ? 'rotate-180' : ''}`}>
+                              <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </button>
+
+                          {/* Collapsible Table */}
+                          {isHikeLettersExpanded && (
+                            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden">
+                              <table className="w-full">
+                                <thead className="bg-gray-50 dark:bg-gray-700">
+                                  <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Employee Name
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Document Type
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Month
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Year
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      View
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Download
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      Delete
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                                  {getUploadedHikeLetters().map((hikeLetter) => (
+                                    <tr key={hikeLetter.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                      <td className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200">
+                                        {employee.first_name} {employee.last_name}
+                                      </td>
+                                      <td className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200">
+                                        Hike Letter
+                                      </td>
+                                      <td className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200">
+                                        {hikeLetter.month}
+                                      </td>
+                                      <td className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200">
+                                        {hikeLetter.year}
+                                      </td>
+                                      
+                                      {/* View Button */}
+                                      <td className="px-4 py-3">
+                                        <Button
+                                          variant="link"
+                                          size="sm"
+                                          className="text-[#7731E8] hover:text-[#6220C7] p-0"
+                                          onClick={() => handleViewDocument(hikeLetter.document_url)}
+                                        >
+                                          <Eye className="h-4 w-4 mr-1" /> View
+                                        </Button>
+                                      </td>
+
+                                      {/* Download Button */}
+                                      <td className="px-4 py-3">
+                                        <Button
+                                          variant="link"
+                                          size="sm"
+                                          className="text-[#7731E8] hover:text-[#6220C7] p-0"
+                                          asChild
+                                        >
+                                          <a href={`${hikeLetter.document_url}?download=`} download={hikeLetter.document_name}>
+                                            <Download className="h-4 w-4 mr-1"/> Download
+                                          </a>
+                                        </Button>
+                                      </td>
+
+                                      {/* Delete Button */}
+                                      <td className="px-4 py-3">
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => handleDeleteDocument(hikeLetter.id)}
+                                          className="h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* UPLOAD NEW HIKE LETTER */}
+   {/* UPLOAD NEW HIKE LETTER */}
+<div className="flex flex-wrap items-end gap-4">
+  <div className="w-40">
+    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Month</label>
+    <Select value={hikeLetterMonth} onValueChange={setHikeLetterMonth}>
+      <SelectTrigger>
+        <SelectValue placeholder="Select Month" />
+      </SelectTrigger>
+      <SelectContent>
+        {months.map(month => (
+          <SelectItem key={month} value={month}>{month}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+
+  <div className="w-32">
+    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Year</label>
+    <Select value={hikeLetterYear} onValueChange={setHikeLetterYear}>
+      <SelectTrigger>
+        <SelectValue placeholder="Select Year" />
+      </SelectTrigger>
+      <SelectContent>
+        {years.map(year => (
+          <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+
+  <div className="flex-shrink-0">
+    <input
+      type="file"
+      id="upload-Increase/Hike Letter"
+      className="hidden"
+      accept=".pdf,.doc,.docx"
+      onChange={(e) => handleDocumentUpload(e, 'Increase/Hike Letter', hikeLetterMonth, hikeLetterYear, setHikeLetterUploading)}
+      disabled={hikeLetterUploading}
+    />
+    <Button
+      onClick={() => document.getElementById('upload-Increase/Hike Letter')?.click()}
+      disabled={hikeLetterUploading}
+      className="bg-[#7731E8] text-white hover:bg-[#6220C7] rounded-full px-4 py-2"
+    >
+      {hikeLetterUploading ? (
+        <>
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading...
+        </>
+      ) : (
+        <>
+          <Upload className="h-4 w-4 mr-2" /> Upload
+        </>
+      )}
+    </Button>
+  </div>
+</div>
+                    </div>
 
                     {/* ✅ PAYSLIPS - ALLOWS MULTIPLE UPLOADS WITH INSTANT DISPLAY */}
                     <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/30">
@@ -2403,61 +2529,62 @@ const EmployeeProfile = () => {
                       )}
 
                       {/* UPLOAD NEW PAYSLIP */}
-                      <div className="flex flex-wrap items-end gap-4">
-                        <div className="flex-shrink-0">
-                          <input
-                            type="file"
-                            id="upload-Payslips"
-                            className="hidden"
-                            accept=".pdf,.doc,.docx"
-                            onChange={(e) => handleDocumentUpload(e, 'Payslips', payslipsMonth, payslipsYear, setPayslipsUploading)}
-                            disabled={payslipsUploading}
-                          />
-                  <Button
-  onClick={() => document.getElementById('upload-Payslips')?.click()}
-  disabled={payslipsUploading}
-  className="bg-[#7731E8] text-white hover:bg-[#6220C7] rounded-full px-4 py-2"
->
-                            {payslipsUploading ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading...
-                              </>
-                            ) : (
-                              <>
-                                <Upload className="h-4 w-4 mr-2" /> Upload
-                              </>
-                            )}
-                          </Button>
-                        </div>
+{/* UPLOAD NEW PAYSLIP */}
+<div className="flex flex-wrap items-end gap-4">
+  <div className="w-40">
+    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Month</label>
+    <Select value={payslipsMonth} onValueChange={setPayslipsMonth}>
+      <SelectTrigger>
+        <SelectValue placeholder="Select Month" />
+      </SelectTrigger>
+      <SelectContent>
+        {months.map(month => (
+          <SelectItem key={month} value={month}>{month}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
 
-                        <div className="w-40">
-                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Month</label>
-                          <Select value={payslipsMonth} onValueChange={setPayslipsMonth}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select Month" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {months.map(month => (
-                                <SelectItem key={month} value={month}>{month}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+  <div className="w-32">
+    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Year</label>
+    <Select value={payslipsYear} onValueChange={setPayslipsYear}>
+      <SelectTrigger>
+        <SelectValue placeholder="Select Year" />
+      </SelectTrigger>
+      <SelectContent>
+        {years.map(year => (
+          <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
 
-                        <div className="w-32">
-                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Year</label>
-                          <Select value={payslipsYear} onValueChange={setPayslipsYear}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select Year" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {years.map(year => (
-                                <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
+  <div className="flex-shrink-0">
+    <input
+      type="file"
+      id="upload-Payslips"
+      className="hidden"
+      accept=".pdf,.doc,.docx"
+      onChange={(e) => handleDocumentUpload(e, 'Payslips', payslipsMonth, payslipsYear, setPayslipsUploading)}
+      disabled={payslipsUploading}
+    />
+    <Button
+      onClick={() => document.getElementById('upload-Payslips')?.click()}
+      disabled={payslipsUploading}
+      className="bg-[#7731E8] text-white hover:bg-[#6220C7] rounded-full px-4 py-2"
+    >
+      {payslipsUploading ? (
+        <>
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading...
+        </>
+      ) : (
+        <>
+          <Upload className="h-4 w-4 mr-2" /> Upload
+        </>
+      )}
+    </Button>
+  </div>
+</div>
                     </div>
                   </div>
                 </CardContent>

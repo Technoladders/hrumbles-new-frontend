@@ -186,6 +186,7 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
         expectedSalary: candidate.expectedSalary || candidate.metadata?.expectedSalary || "N/A",
         linkedInId: candidate.metadata?.linkedInId || "N/A",
         noticePeriod: candidate.metadata?.noticePeriod || "N/A",
+        lastWorkingDay: candidate.metadata?.lastWorkingDay, 
         hasOffers: candidate.metadata?.hasOffers || "N/A",
         offerDetails: candidate.metadata?.offerDetails || "N/A",
         consentStatus: candidate.consent_status || 'not_requested',
@@ -227,6 +228,7 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
         expectedSalary: currentDataOptions?.personalInfo && candidate?.expectedSalary ? candidate.expectedSalary : "N/A",
         linkedInId: currentDataOptions?.contactInfo && candidate?.metadata?.linkedInId ? candidate.metadata.linkedInId : "N/A",
         noticePeriod: currentDataOptions?.personalInfo && candidate?.metadata?.noticePeriod ? candidate.metadata.noticePeriod : "N/A",
+       lastWorkingDay: currentDataOptions?.personalInfo ? candidate?.metadata?.lastWorkingDay : undefined,
         hasOffers: currentDataOptions?.personalInfo && candidate?.metadata?.hasOffers ? candidate.metadata.hasOffers : "N/A",
         offerDetails: currentDataOptions?.personalInfo && candidate?.metadata?.offerDetails ? candidate.metadata.offerDetails : "N/A",
       }

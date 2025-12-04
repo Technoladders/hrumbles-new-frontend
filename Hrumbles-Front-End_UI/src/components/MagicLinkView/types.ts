@@ -28,6 +28,7 @@ export interface Candidate {
     esicNumber?: string;
     role?: string;
     department?: string;
+    lastWorkingDay?: string;
     tags?: string[];
     profileImage?: string;
     currentLocation?: string;
