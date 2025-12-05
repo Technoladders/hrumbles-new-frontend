@@ -326,52 +326,44 @@ export const useStatusReport = () => {
     }
   };
 
-  const fetchRecruiterReport = async (startDate: Date, endDate: Date): Promise<RecruiterPerformanceData[]> => {
+const fetchRecruiterReport = async (startDate: Date, endDate: Date): Promise<RecruiterPerformanceData[]> => {
     console.log('Starting fetchRecruiterReport with dates:', { startDate, endDate });
     setIsLoading(true);
     setError(null);
   
     try {
-      // Fetch recruiters from hr_jobs for jobs_assigned
-      console.log('Fetching recruiters from hr_jobs...');
+      // 1. Fetch recruiters from hr_jobs
+      // We map ID -> Name here so we can display the name later, but we calculate using ID.
       const { data: recruitersData, error: recruitersError } = await supabase
         .from('hr_jobs')
         .select('assigned_to')
         .gte('created_at', startDate.toISOString())
         .lte('created_at', endDate.toISOString());
   
-      if (recruitersError) {
-        console.error('Recruiters fetch error:', recruitersError);
-        throw recruitersError;
-      }
-      console.log('Recruiters data:', recruitersData);
+      if (recruitersError) throw recruitersError;
   
-      const recruiters = new Map<string, string>(); // Map<recruiterId, recruiterName>
+      const recruiters = new Map<string, string>(); // Map<RecruiterID, RecruiterName>
       recruitersData?.forEach(job => {
         const assignedTo = job.assigned_to as { id: string, name: string, type: string } | null;
         if (!assignedTo?.id) {
-          recruiters.set('unassigned', 'Unassigned');
-          return;
+          // You can handle unassigned if needed, but usually we skip or handle separately
+          return; 
         }
         const ids = assignedTo.id.split(',').map(id => id.trim());
         const names = assignedTo.name.split(',').map(name => name.trim());
   
-        if (ids.length !== names.length) {
-          console.warn('Mismatch between ids and names for assigned_to:', assignedTo);
-          return;
-        }
-  
         ids.forEach((id, index) => {
+          // Store the mapping. If duplicates exist, the last name found for the ID is used.
           recruiters.set(id, names[index]);
         });
       });
-      console.log('Unique recruiters:', Array.from(recruiters.entries()));
   
-      // Fetch status changes with created_by
+      // 2. Fetch status changes
       const { data: statusChanges, error: statusError } = await supabase
         .from('hr_status_change_counts')
         .select(`
           count,
+          job_id,
           candidate_id,
           main_status_id,
           sub_status_id,
@@ -391,197 +383,103 @@ export const useStatusReport = () => {
         .not('candidate_id', 'is', null)
         .not('hr_job_candidates.created_by', 'is', null);
   
-      if (statusError) {
-        console.error('Status fetch error:', statusError);
-        throw statusError;
-      }
-      console.log('All status changes:', statusChanges);
+      if (statusError) throw statusError;
   
-      // Debug: Fetch raw status changes for Processed (Internal)
-      const { data: rawStatusChanges } = await supabase
-        .from('hr_status_change_counts')
-        .select(`
-          count,
-          candidate_id,
-          main_status:job_statuses!hr_status_change_counts_main_status_id_fkey(name),
-          sub_status:job_statuses!hr_status_change_counts_sub_status_id_fkey(name)
-        `)
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString())
-        .eq('main_status.name', 'Processed')
-        .eq('sub_status.name', 'Processed (Internal)');
+      // --- CHANGE START: Use ID based Maps instead of Name based Maps ---
+      
+      const profilesSubmittedByRecruiterId = new Map<string, number>();
+      const uniqueSubmissions = new Set<string>(); // Tracks `${candidateId}_${jobId}`
   
-      console.log('Raw status changes for Processed (Internal):', rawStatusChanges);
-      const totalProfilesSubmitted = rawStatusChanges?.reduce((sum, status) => sum + (status.count || 0), 0) || 0;
-      console.log('Total profiles_submitted count (global):', totalProfilesSubmitted);
-      const uniqueCandidatesGlobal = new Set(rawStatusChanges?.map(status => status.candidate_id)).size;
-      console.log('Unique candidates with Processed (Internal) (global):', uniqueCandidatesGlobal);
+      // Helper maps for other metrics (Key = Recruiter ID)
+      const internalRejectById = new Map<string, number>();
+      const internalHoldById = new Map<string, number>();
+      const sentToClientById = new Map<string, number>();
+      const clientRejectById = new Map<string, number>();
+      const clientHoldById = new Map<string, number>();
+      const clientDuplicateById = new Map<string, number>();
+      const interviewsTechnicalById = new Map<string, number>();
+      const interviewsTechnicalSelectedById = new Map<string, number>();
+      const interviewsTechnicalRejectById = new Map<string, number>();
+      const interviewsL1ById = new Map<string, number>();
+      const interviewsL1SelectedById = new Map<string, number>();
+      const interviewsL1RejectById = new Map<string, number>();
+      const interviewsL2ById = new Map<string, number>();
+      const interviewsL2RejectById = new Map<string, number>();
+      const interviewsEndClientById = new Map<string, number>();
+      const interviewsEndClientRejectById = new Map<string, number>();
+      const offersMadeById = new Map<string, number>();
+      const offersAcceptedById = new Map<string, number>(); // This is usually "joined" or "offer accepted"
+      const offersRejectedById = new Map<string, number>();
+      const joiningJoinedById = new Map<string, number>();
+      const joiningNoShowById = new Map<string, number>();
   
-      // Deduplicate by candidate_id for profiles_submitted
-      const profilesSubmittedByRecruiter = new Map<string, number>();
-      const candidateToRecruiter = new Map<string, string>(); // Map<candidate_id, recruiterName>
+      // 3. Process Data
       statusChanges?.forEach(row => {
-        const recruiterName = `${row.hr_job_candidates.hr_employees.first_name} ${row.hr_job_candidates.hr_employees.last_name}`;
+        // IMPORTANT: Use the ID, not the name string
+        const recruiterId = row.hr_job_candidates.created_by; 
+        
         const candidateId = row.candidate_id;
-        const mainStatus = row.main_status?.name?.toLowerCase() || '';
-        const subStatus = row.sub_status?.name?.toLowerCase() || '';
-        const updatedAt = new Date(row.updated_at || row.created_at).getTime();
-  
-        if (mainStatus === 'processed' && subStatus === 'processed (internal)') {
-          if (!candidateToRecruiter.has(candidateId)) {
-            candidateToRecruiter.set(candidateId, recruiterName);
-            profilesSubmittedByRecruiter.set(recruiterName, (profilesSubmittedByRecruiter.get(recruiterName) || 0) + (row.count || 1));
-          } else {
-            const existingRecruiter = candidateToRecruiter.get(candidateId);
-            if (existingRecruiter === recruiterName) {
-              // Update count if same recruiter
-              profilesSubmittedByRecruiter.set(recruiterName, (profilesSubmittedByRecruiter.get(recruiterName) || 0) + (row.count || 1));
-            }
-            // Ignore if different recruiter to avoid double-counting
-          }
-        }
-      });
-      console.log('Profiles submitted by recruiter:', Object.fromEntries(profilesSubmittedByRecruiter));
-      console.log('Unique candidates assigned:', candidateToRecruiter.size);
-  
-      // Initialize Maps for other status metrics
-      const internalRejectByRecruiter = new Map<string, number>();
-      const internalHoldByRecruiter = new Map<string, number>();
-      const sentToClientByRecruiter = new Map<string, number>();
-      const clientRejectByRecruiter = new Map<string, number>();
-      const clientHoldByRecruiter = new Map<string, number>();
-      const clientDuplicateByRecruiter = new Map<string, number>();
-      const interviewsTechnicalByRecruiter = new Map<string, number>();
-      const interviewsTechnicalSelectedByRecruiter = new Map<string, number>();
-      const interviewsTechnicalRejectByRecruiter = new Map<string, number>();
-      const interviewsL1ByRecruiter = new Map<string, number>();
-      const interviewsL1SelectedByRecruiter = new Map<string, number>();
-      const interviewsL1RejectByRecruiter = new Map<string, number>();
-      const interviewsL2ByRecruiter = new Map<string, number>();
-      const interviewsL2RejectByRecruiter = new Map<string, number>();
-      const interviewsEndClientByRecruiter = new Map<string, number>();
-      const interviewsEndClientRejectByRecruiter = new Map<string, number>();
-      const offersMadeByRecruiter = new Map<string, number>();
-      const offersAcceptedByRecruiter = new Map<string, number>();
-      const offersRejectedByRecruiter = new Map<string, number>();
-      const joiningJoinedByRecruiter = new Map<string, number>();
-      const joiningNoShowByRecruiter = new Map<string, number>();
-  
-      // Calculate counts for other statuses
-      statusChanges?.forEach(row => {
-        const recruiterName = `${row.hr_job_candidates.hr_employees.first_name} ${row.hr_job_candidates.hr_employees.last_name}`;
+        const jobId = row.job_id;
         const mainStatus = row.main_status?.name?.toLowerCase() || '';
         const subStatus = row.sub_status?.name?.toLowerCase() || '';
         const count = row.count || 1;
   
-        const incrementMap = (map: Map<string, number>, key: string, value: number) => {
-          map.set(key, (map.get(key) || 0) + value);
+        // Deduplicated Submission Logic
+        if (mainStatus === 'processed' && subStatus === 'processed (internal)') {
+          const uniqueKey = `${candidateId}_${jobId}`;
+          if (!uniqueSubmissions.has(uniqueKey)) {
+            uniqueSubmissions.add(uniqueKey);
+            profilesSubmittedByRecruiterId.set(recruiterId, (profilesSubmittedByRecruiterId.get(recruiterId) || 0) + 1);
+          }
+        }
+  
+        // Helper to increment ID-based maps
+        const incrementMap = (map: Map<string, number>, key: string, val: number) => {
+          map.set(key, (map.get(key) || 0) + val);
         };
   
+        // Categorize other statuses
         switch (mainStatus) {
           case 'processed':
-            if (subStatus === 'internal reject') {
-              incrementMap(internalRejectByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'candidate on hold') {
-              incrementMap(internalHoldByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'processed (client)') {
-              incrementMap(sentToClientByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'client reject') {
-              incrementMap(clientRejectByRecruiter, recruiterName, count);
-            }
+            if (subStatus === 'internal reject') incrementMap(internalRejectById, recruiterId, count);
+            if (subStatus === 'candidate on hold') incrementMap(internalHoldById, recruiterId, count);
+            if (subStatus === 'processed (client)') incrementMap(sentToClientById, recruiterId, count);
+            if (subStatus === 'client reject') incrementMap(clientRejectById, recruiterId, count);
             if (subStatus === 'duplicate (client)' || subStatus === 'duplicate (internal)') {
-              incrementMap(clientDuplicateByRecruiter, recruiterName, count);
+              incrementMap(clientDuplicateById, recruiterId, count);
             }
             break;
           case 'interview':
-            if (subStatus === 'technical assessment') {
-              incrementMap(interviewsTechnicalByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'technical assessment selected') {
-              incrementMap(interviewsTechnicalSelectedByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'technical assessment rejected') {
-              incrementMap(interviewsTechnicalRejectByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'l1') {
-              incrementMap(interviewsL1ByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'l1 selected') {
-              incrementMap(interviewsL1SelectedByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'l1 rejected') {
-              incrementMap(interviewsL1RejectByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'l2') {
-              incrementMap(interviewsL2ByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'l2 rejected') {
-              incrementMap(interviewsL2RejectByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'l3' || subStatus === 'end client round') {
-              incrementMap(interviewsEndClientByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'l3 rejected' || subStatus === 'end client rejected') {
-              incrementMap(interviewsEndClientRejectByRecruiter, recruiterName, count);
-            }
+            if (subStatus === 'technical assessment') incrementMap(interviewsTechnicalById, recruiterId, count);
+            if (subStatus === 'technical assessment selected') incrementMap(interviewsTechnicalSelectedById, recruiterId, count);
+            if (subStatus === 'technical assessment rejected') incrementMap(interviewsTechnicalRejectById, recruiterId, count);
+            if (subStatus === 'l1') incrementMap(interviewsL1ById, recruiterId, count);
+            if (subStatus === 'l1 selected') incrementMap(interviewsL1SelectedById, recruiterId, count);
+            if (subStatus === 'l1 rejected') incrementMap(interviewsL1RejectById, recruiterId, count);
+            if (subStatus === 'l2') incrementMap(interviewsL2ById, recruiterId, count);
+            if (subStatus === 'l2 rejected') incrementMap(interviewsL2RejectById, recruiterId, count);
+            if (subStatus === 'l3' || subStatus === 'end client round') incrementMap(interviewsEndClientById, recruiterId, count);
+            if (subStatus === 'l3 rejected' || subStatus === 'end client rejected') incrementMap(interviewsEndClientRejectById, recruiterId, count);
             break;
           case 'offered':
-            if (subStatus === 'offer issued') {
-              incrementMap(offersMadeByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'offer on hold') {
-              incrementMap(offersAcceptedByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'offer rejected') {
-              incrementMap(offersRejectedByRecruiter, recruiterName, count);
-            }
+            if (subStatus === 'offer issued') incrementMap(offersMadeById, recruiterId, count);
+            if (subStatus === 'offer on hold') incrementMap(offersAcceptedById, recruiterId, count);
+            if (subStatus === 'offer rejected') incrementMap(offersRejectedById, recruiterId, count);
             break;
           case 'joined':
-            if (subStatus === 'joined') {
-              incrementMap(joiningJoinedByRecruiter, recruiterName, count);
-            }
-            if (subStatus === 'no show') {
-              incrementMap(joiningNoShowByRecruiter, recruiterName, count);
-            }
+            if (subStatus === 'joined') incrementMap(joiningJoinedById, recruiterId, count);
+            if (subStatus === 'no show') incrementMap(joiningNoShowById, recruiterId, count);
             break;
         }
       });
   
-      // Log all counts for debugging
-      console.log('Status counts by recruiter:', {
-        profiles_submitted: Object.fromEntries(profilesSubmittedByRecruiter),
-        internal_reject: Object.fromEntries(internalRejectByRecruiter),
-        internal_hold: Object.fromEntries(internalHoldByRecruiter),
-        sent_to_client: Object.fromEntries(sentToClientByRecruiter),
-        client_reject: Object.fromEntries(clientRejectByRecruiter),
-        client_hold: Object.fromEntries(clientHoldByRecruiter),
-        client_duplicate: Object.fromEntries(clientDuplicateByRecruiter),
-        interviews_technical: Object.fromEntries(interviewsTechnicalByRecruiter),
-        interviews_technical_selected: Object.fromEntries(interviewsTechnicalSelectedByRecruiter),
-        interviews_technical_reject: Object.fromEntries(interviewsTechnicalRejectByRecruiter),
-        interviews_l1: Object.fromEntries(interviewsL1ByRecruiter),
-        interviews_l1_selected: Object.fromEntries(interviewsL1SelectedByRecruiter),
-        interviews_l1_reject: Object.fromEntries(interviewsL1RejectByRecruiter),
-        interviews_l2: Object.fromEntries(interviewsL2ByRecruiter),
-        interviews_l2_reject: Object.fromEntries(interviewsL2RejectByRecruiter),
-        interviews_end_client: Object.fromEntries(interviewsEndClientByRecruiter),
-        interviews_end_client_reject: Object.fromEntries(interviewsEndClientRejectByRecruiter),
-        offers_made: Object.fromEntries(offersMadeByRecruiter),
-        offers_accepted: Object.fromEntries(joiningJoinedByRecruiter),
-        offers_rejected: Object.fromEntries(offersRejectedByRecruiter),
-        joining_joined: Object.fromEntries(joiningJoinedByRecruiter),
-        joining_no_show: Object.fromEntries(joiningNoShowByRecruiter)
-      });
-  
+      // 4. Build Final Result
       const recruiterPerformanceData: RecruiterPerformanceData[] = [];
   
+      // Iterate through the recruiters found in hr_jobs (or you could iterate through all keys in the data maps if you want to include people not currently assigned to jobs)
       for (const [recruiterId, recruiterName] of recruiters) {
-        console.log('Processing recruiter:', { id: recruiterId, name: recruiterName });
-  
-        // Count jobs assigned
+        
+        // Count jobs assigned (Exact Match on ID)
         const { count: jobsAssigned, error: jobsError } = await supabase
           .from('hr_jobs')
           .select('id, assigned_to', { count: 'exact' })
@@ -589,67 +487,54 @@ export const useStatusReport = () => {
           .gte('created_at', startDate.toISOString())
           .lte('created_at', endDate.toISOString());
   
-        if (jobsError) {
-          console.error(`Jobs fetch error for ${recruiterName}:`, jobsError);
-          throw jobsError;
-        }
-        console.log(`Jobs assigned count for ${recruiterName}:`, jobsAssigned);
+        if (jobsError) throw jobsError;
   
+        // Lookup data using ID
         const performanceData: RecruiterPerformanceData = {
-          recruiter: recruiterName,
+          recruiter: recruiterName, // Display Name
           jobs_assigned: jobsAssigned || 0,
-          profiles_submitted: profilesSubmittedByRecruiter.get(recruiterName) || 0,
-          internal_reject: internalRejectByRecruiter.get(recruiterName) || 0,
-          internal_hold: internalHoldByRecruiter.get(recruiterName) || 0,
-          sent_to_client: sentToClientByRecruiter.get(recruiterName) || 0,
-          client_reject: clientRejectByRecruiter.get(recruiterName) || 0,
-          client_hold: clientHoldByRecruiter.get(recruiterName) || 0,
-          client_duplicate: clientDuplicateByRecruiter.get(recruiterName) || 0,
+          profiles_submitted: profilesSubmittedByRecruiterId.get(recruiterId) || 0,
+          internal_reject: internalRejectById.get(recruiterId) || 0,
+          internal_hold: internalHoldById.get(recruiterId) || 0,
+          sent_to_client: sentToClientById.get(recruiterId) || 0,
+          client_reject: clientRejectById.get(recruiterId) || 0,
+          client_hold: clientHoldById.get(recruiterId) || 0,
+          client_duplicate: clientDuplicateById.get(recruiterId) || 0,
           interviews: {
-            technical: interviewsTechnicalByRecruiter.get(recruiterName) || 0,
-            technical_selected: interviewsTechnicalSelectedByRecruiter.get(recruiterName) || 0,
-            technical_reject: interviewsTechnicalRejectByRecruiter.get(recruiterName) || 0,
-            l1: interviewsL1ByRecruiter.get(recruiterName) || 0,
-            l1_selected: interviewsL1SelectedByRecruiter.get(recruiterName) || 0,
-            l1_reject: interviewsL1RejectByRecruiter.get(recruiterName) || 0,
-            l2: interviewsL2ByRecruiter.get(recruiterName) || 0,
-            l2_reject: interviewsL2RejectByRecruiter.get(recruiterName) || 0,
-            end_client: interviewsEndClientByRecruiter.get(recruiterName) || 0,
-            end_client_reject: interviewsEndClientRejectByRecruiter.get(recruiterName) || 0
+            technical: interviewsTechnicalById.get(recruiterId) || 0,
+            technical_selected: interviewsTechnicalSelectedById.get(recruiterId) || 0,
+            technical_reject: interviewsTechnicalRejectById.get(recruiterId) || 0,
+            l1: interviewsL1ById.get(recruiterId) || 0,
+            l1_selected: interviewsL1SelectedById.get(recruiterId) || 0,
+            l1_reject: interviewsL1RejectById.get(recruiterId) || 0,
+            l2: interviewsL2ById.get(recruiterId) || 0,
+            l2_reject: interviewsL2RejectById.get(recruiterId) || 0,
+            end_client: interviewsEndClientById.get(recruiterId) || 0,
+            end_client_reject: interviewsEndClientRejectById.get(recruiterId) || 0
           },
           offers: {
-            made: offersMadeByRecruiter.get(recruiterName) || 0,
-            accepted: joiningJoinedByRecruiter.get(recruiterName) || 0,
-            rejected: offersRejectedByRecruiter.get(recruiterName) || 0
+            made: offersMadeById.get(recruiterId) || 0,
+            accepted: joiningJoinedById.get(recruiterId) || 0, 
+            rejected: offersRejectedById.get(recruiterId) || 0
           },
           joining: {
-            joined: joiningJoinedByRecruiter.get(recruiterName) || 0,
-            no_show: joiningNoShowByRecruiter.get(recruiterName) || 0
+            joined: joiningJoinedById.get(recruiterId) || 0,
+            no_show: joiningNoShowById.get(recruiterId) || 0
           }
         };
   
-        console.log(`Performance data for ${recruiterName}:`, performanceData);
         recruiterPerformanceData.push(performanceData);
-      }
-  
-      console.log('Final recruiter performance data:', recruiterPerformanceData);
-      const totalSubmitted = recruiterPerformanceData.reduce((sum, rec) => sum + rec.profiles_submitted, 0);
-      console.log('Total profiles_submitted across recruiters:', totalSubmitted);
-      if (totalSubmitted !== uniqueCandidatesGlobal) {
-        console.warn(`Total profiles_submitted (${totalSubmitted}) does not match unique candidates (${uniqueCandidatesGlobal}). Check deduplication logic.`);
       }
   
       return recruiterPerformanceData;
     } catch (err) {
       console.error('Error in fetchRecruiterReport:', err);
-      setError(err.message || 'Failed to fetch recruiter report');
+      setError(err instanceof Error ? err.message : 'Failed to fetch recruiter report');
       return [];
     } finally {
-      console.log('fetchRecruiterReport completed, isLoading set to false');
       setIsLoading(false);
     }
   };
-
   return {
     isLoading,
     error,

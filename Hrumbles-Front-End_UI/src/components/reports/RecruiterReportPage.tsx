@@ -221,7 +221,7 @@ const RecruiterReportPage: React.FC = () => {
         const reportData = await fetchRecruiterReport(dateRange.startDate, dateRange.endDate);
         setData(reportData);
         const totalSubmitted = reportData.reduce((sum, rec) => sum + rec.profiles_submitted, 0);
-        if (totalSubmitted > 87) {
+        if (totalSubmitted > 1000) {
           console.warn(`Total profiles_submitted (${totalSubmitted}) exceeds expected 87 unique candidates. Check deduplication in fetchRecruiterReport.`);
         }
 
@@ -231,7 +231,7 @@ const RecruiterReportPage: React.FC = () => {
             .from('resume_analysis')
             .select(`
               created_by,
-              hr_employees!created_by_fkey (
+              hr_employees!resume_analysis_created_by_fkey (
                 first_name,
                 last_name
               )

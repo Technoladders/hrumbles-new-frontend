@@ -21,7 +21,11 @@ import AttendanceReportsPage from '@/components/reports/attendance/AttendanceRep
 import ContactStatusReport from '@/components/reports/ContactsStatusReport';
 import CompaniesStatusReport from '@/components/reports/CompaniesStatusReport';
 import UserActivityReportPage from '@/components/reports/UserActivityReportPage';
+
+// Taskup dynamic report imports
 import DynamicRecruiterReportPage from '@/components/reports/DynamicRecruiterReportPage';
+import DynamicIndividualReport from '@/components/reports/DynamicIndividualReport';
+import DynamicClientWiseReport from '@/components/reports/DynamicClientWiseReport';
 import { LoadingSpinner } from '@/components/ui/loading-spinner'; // NEW: Import a loading spinner
 
 const ITECH_ORGANIZATION_ID = [
@@ -119,8 +123,16 @@ const ReportIndex: React.FC = () => {
   const renderReportContent = () => {
     if (!selectedReportType) return null;
     switch (selectedReportType) {
-      case 'client': return <ClientWiseReport />;
-      case 'individual': return <IndividualReport />;
+      case 'client': 
+        if (organizationId === DYNAMIC_REPORT_ORG_ID) {
+          return <DynamicClientWiseReport />;
+        }
+        return <ClientWiseReport />;
+   case 'individual': 
+        if (organizationId === DYNAMIC_REPORT_ORG_ID) {
+          return <DynamicIndividualReport />;
+        }
+        return <IndividualReport />;
       case 'recruiter':  if (organizationId === DYNAMIC_REPORT_ORG_ID) {
           return <DynamicRecruiterReportPage />;
         }

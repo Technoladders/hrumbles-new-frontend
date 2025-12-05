@@ -136,6 +136,9 @@ const employeeTabs = [
   { id: 'earnings_deductions', label: 'Earnings & Deductions' },
 ];
 
+console.log("Selected Employee:", selectedEmployee);
+console.log("previousPaymentAmount", previousPaymentAmount)
+
   useEffect(() => {
     if (isOpen && selectedEmployee) {
       setPaymentRecord({
@@ -726,7 +729,7 @@ const employeeTabs = [
             updated_at: currentTimestamp,
             last_updated_by: "EmployeesPayrollDrawer",
             source: "EmployeesPayrollDrawer",
-            orangization_id: organization_id,
+            organization_id: organization_id,
           })
           .select()
           .single();
@@ -896,7 +899,7 @@ const employeeTabs = [
               Earnings & Deductions
             </TabsTrigger>
           </TabsList>
-ew
+
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
             <TabsContent value="details" className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

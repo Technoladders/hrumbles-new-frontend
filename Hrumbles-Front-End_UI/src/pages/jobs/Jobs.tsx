@@ -19,6 +19,8 @@ import {
   Trash2,
   Loader2,
   HousePlus,
+  CalendarDays,
+  AlertCircle, // Added for Overdue Card
 } from "lucide-react";
 import { Button } from "@/components/jobs/ui/button";
 import { Input } from "@/components/jobs/ui/input";
@@ -96,6 +98,11 @@ const ITECH_ORGANIZATION_ID = [
   "1961d419-1272-4371-8dc7-63a4ec71be83",
   "4d57d118-d3a2-493c-8c3f-2cf1f3113fe9",
 ];
+
+// Taskup Organization ID
+const TUP_ORG_ID = "0e4318d8-b1a5-4606-b311-c56d7eec47ce"; 
+// demo org id for check
+const TUP_ORG_CHECK = "53989f03-bdc9-439a-901c-45b274eff506";
 
 const AvatarGroup = ({
   children,
@@ -180,10 +187,15 @@ const Jobs = () => {
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   
   const isEmployee = userRole === "employee" && user?.id !== "0fa0aa1b-9cb3-482f-b679-5bd8fa355a6e";
-
-
-
   
+  // Check if current org is TUP
+  // const isTupOrg = organization_id === TUP_ORG_CHECK || organization_id === TUP_ORG_ID;
+
+  // Check for single
+  const isTupOrg = organization_id === TUP_ORG_ID;
+
+
+
   // ⛔ FIX: Prevent URL updates while modal is open — otherwise modal state resets
 useEffect(() => {
   if (isCreateModalOpen) {
@@ -249,12 +261,29 @@ useEffect(() => {
   const pendingJobsCount = useMemo(() => jobs.filter(job => job.status === "Pending" || job.status === "HOLD").length, [jobs]);
   const completedJobsCount = useMemo(() => jobs.filter(job => job.status === "Completed" || job.status === "CLOSE").length, [jobs]);
 
+  // --- NEW: Calculate Overdue Jobs Count based on IST ---
+  const overdueJobsCount = useMemo(() => jobs.filter(job => {
+    // Ignore closed/completed jobs
+    if (job.status === "Completed" || job.status === "CLOSE") return false;
+    if (!job.dueDate) return false;
+
+    // Current Date in IST
+    const todayIST = moment().utcOffset("+05:30").startOf('day');
+    // Due Date (parsed as IST start of day for comparison)
+    const dueDate = moment(job.dueDate).utcOffset("+05:30").startOf('day');
+
+    return dueDate.isBefore(todayIST);
+  }).length, [jobs]);
+
+
   const handleCardClick = (status: string) => {
+    // If overdue is clicked, we might want to filter (logic not fully implemented in filter section yet, 
+    // defaulting to 'all' or you can add a 'overdue' filter logic later)
     setSelectedStatus(status === 'all' ? "all" : status);
     setCurrentPage(1);
   };
 
-  const filteredJobs = useMemo(() => jobs.filter((job) => {
+const filteredJobs = useMemo(() => jobs.filter((job) => {
     const lowercasedSearchTerm = searchTerm.toLowerCase();
     const matchesSearch =
       job.title.toLowerCase().includes(lowercasedSearchTerm) ||
@@ -275,6 +304,22 @@ useEffect(() => {
       if (selectedStatus === "open") return job.status === "OPEN" || job.status === "Active";
       if (selectedStatus === "hold") return job.status === "HOLD" || job.status === "Pending";
       if (selectedStatus === "closed") return job.status === "CLOSE" || job.status === "Completed";
+      
+      // --- NEW LOGIC FOR OVERDUE FILTER ---
+      if (selectedStatus === "overdue") {
+        // 1. Don't show jobs that are already closed/completed
+        if (job.status === "Completed" || job.status === "CLOSE") return false;
+        // 2. Must have a due date
+        if (!job.dueDate) return false;
+
+        // 3. Compare dates in IST
+        const todayIST = moment().utcOffset("+05:30").startOf('day');
+        const dueDate = moment(job.dueDate).utcOffset("+05:30").startOf('day');
+        
+        return dueDate.isBefore(todayIST);
+      }
+      // ------------------------------------
+
       return true;
     })();
 
@@ -300,10 +345,6 @@ useEffect(() => {
     setCurrentPage(1);
   };
 
-  const activeJobs = useMemo(() => filteredJobs.filter((job) => job.status === "Active" || job.status === "OPEN").length, [filteredJobs]);
-  const pendingJobs = useMemo(() => filteredJobs.filter((job) => job.status === "Pending" || job.status === "HOLD").length, [filteredJobs]);
-  const completedJobs = useMemo(() => filteredJobs.filter((job) => job.status === "Completed" || job.status === "CLOSE").length, [filteredJobs]);
-  
   const handleAssignJob = (job: JobData) => {
     setSelectedJob(job);
     setIsAssignModalOpen(true);
@@ -392,6 +433,47 @@ useEffect(() => {
     }
   };
 
+  // Helper to render due date cell with IST logic
+  const DueDateCell = ({ dueDate, status }: { dueDate: string | null | undefined, status: string }) => {
+    if (!dueDate) return <span className="text-gray-400 text-sm">-</span>;
+    if (status === 'CLOSE' || status === 'Completed') return <span className="text-gray-400 text-sm">Closed</span>;
+
+    // Use moment with IST offset
+    const today = moment().utcOffset("+05:30").startOf('day');
+    const due = moment(dueDate).utcOffset("+05:30").startOf('day');
+    
+    // Formatted display
+    const formattedDate = moment(dueDate).format("DD MMM YYYY");
+
+    // Calculate difference in days
+    const diffDays = due.diff(today, 'days');
+
+    let statusText = "";
+    let statusClass = "";
+
+    if (diffDays < 0) {
+        // PAST DUE
+        statusText = `Overdue ${Math.abs(diffDays)} days ago`;
+        statusClass = "text-red-600 font-bold";
+    } else {
+        // FUTURE or TODAY
+        statusText = diffDays === 0 ? "Due Today" : `${diffDays} days to due`;
+        
+        if (diffDays <= 10) {
+            statusClass = "text-amber-600 font-semibold"; // Warning color for nearing due
+        } else {
+            statusClass = "text-green-600 font-medium"; // Safe color
+        }
+    }
+
+    return (
+        <div className="flex flex-col">
+            <span className="text-gray-800 text-sm font-medium">{formattedDate}</span>
+            <span className={`text-[11px] ${statusClass}`}>{statusText}</span>
+        </div>
+    );
+  };
+
 if (isLoading) {
     return <div className="flex items-center justify-center h-[80vh]"><Loader size={60} className="border-[6px]" /></div>;
   }
@@ -471,6 +553,10 @@ if (isLoading) {
       <th scope="col" className="table-header-cell text-white">Client</th>
     }
     <th scope="col" className="table-header-cell text-white">Created Date</th>
+    {/* NEW DUE DATE COLUMN HEADER */}
+    {isTupOrg && (
+       <th scope="col" className="table-header-cell text-white">Due Date</th>
+    )}
     <th scope="col" className="table-header-cell text-white">No. of Candidates</th>
     <th scope="col" className="table-header-cell text-white">Status</th>
     <th scope="col" className="table-header-cell text-white">Posted By</th>
@@ -511,6 +597,13 @@ if (isLoading) {
                     <span className="text-gray-400 text-xs ml-6">({moment(job.createdAt).fromNow()})</span>
                   </td>
 
+                  {/* NEW DUE DATE COLUMN CELL */}
+                  {isTupOrg && (
+                    <td className="table-cell">
+                       <DueDateCell dueDate={job.dueDate} status={job.status} />
+                    </td>
+                  )}
+
                   {/* --- MODIFICATION: Added Users Icon --- */}
                   <td className={`table-cell font-medium`}>
                     <div className="flex items-center gap-2">
@@ -522,8 +615,11 @@ if (isLoading) {
                   </td>
                   <td className="table-cell">
                     {isEmployee ? (
-                      <Badge variant="outline" className={getStatusBadgeClass(job.status)}>{job.status === "Active" ? "OPEN" : job.status}</Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className={getStatusBadgeClass(job.status)}>{job.status === "Active" ? "OPEN" : job.status}</Badge>
+                      </div>
                     ) : (
+                      <div className="flex items-center gap-2">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="transparent" className="h-8 px-2 py-0 hover:bg-gray-100">
@@ -536,6 +632,7 @@ if (isLoading) {
                           <DropdownMenuItem className="text-blue-600 focus:text-blue-600" onClick={() => handleStatusChange(job.id, "CLOSE")}>CLOSE</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                    </div>
                     )}
                   </td>
                   <td className="table-cell">
@@ -689,11 +786,27 @@ if (isLoading) {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${isTupOrg ? 'lg:grid-cols-3 xl:grid-cols-5' : 'lg:grid-cols-4'}`}>
           <Card onClick={() => handleCardClick('all')} className="p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">Total Jobs</p><h3 className="text-3xl font-bold">{totalJobsCount}</h3></div><div className="p-2 bg-blue-100 rounded-lg"><Briefcase className="text-blue-600" size={22} /></div></Card>
           <Card onClick={() => handleCardClick('open')} className="p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">Active Jobs</p><h3 className="text-3xl font-bold">{activeJobsCount}</h3></div><div className="p-2 bg-green-100 rounded-lg"><Calendar className="text-green-600" size={22} /></div></Card>
           <Card onClick={() => handleCardClick('hold')} className="p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">On Hold</p><h3 className="text-3xl font-bold">{pendingJobsCount}</h3></div><div className="p-2 bg-yellow-100 rounded-lg"><Clock className="text-yellow-600" size={22} /></div></Card>
           <Card onClick={() => handleCardClick('closed')} className="p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">Closed Jobs</p><h3 className="text-3xl font-bold">{completedJobsCount}</h3></div><div className="p-2 bg-purple-100 rounded-lg"><CheckCircle className="text-purple-600" size={22} /></div></Card>
+          
+          {/* NEW OVERDUE CARD - ONLY FOR TUP ORG */}
+          {isTupOrg && (
+            <Card
+              onClick={() => handleCardClick('overdue')}
+              className="p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow border-red-100 bg-red-50/50"
+            >
+               <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-500">Overdue Jobs</p>
+                  <h3 className="text-3xl font-bold text-red-600">{overdueJobsCount}</h3>
+               </div>
+               <div className="p-2 bg-red-100 rounded-lg">
+                  <AlertCircle className="text-red-600" size={22} />
+               </div>
+            </Card>
+          )}
       </div>
 
 <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full">

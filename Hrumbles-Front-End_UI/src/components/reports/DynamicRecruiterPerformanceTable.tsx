@@ -49,7 +49,7 @@ const DynamicRecruiterPerformanceTable: React.FC<Props> = ({ data }) => {
   };
 
   const exportToCSV = () => {
-    let csv = "Recruiter,Sourced,Screened,Submitted to Client,Interviews,Offers,Joined,Screen Rejections,Client Rejections,Candidate Rejections,Sourced → Screened,Screened → Submitted,Submitted → Interview\n";
+    let csv = "Recruiter,Sourced,Fwd. by CHRO,Submitted to Client,Interviews,Offers,Joined,CHRO Rejections,Client Rejections,Candidate Rejections,Sourced to CHRO,CHRO to Client Submission,Client Submission to Interview\n";
     sortedData.forEach((recruiter) => {
       const sourcedToScreened = recruiter.sourced > 0 ? recruiter.screened / recruiter.sourced : 0;
       const screenedToSubmitted = recruiter.screened > 0 ? recruiter.submitted_to_client / recruiter.screened : 0;
@@ -90,17 +90,17 @@ const DynamicRecruiterPerformanceTable: React.FC<Props> = ({ data }) => {
     const headers = [
       "Recruiter",
       "Sourced",
-      "Screened",
-      "Submitted",
+      "Fwd. by CHRO",
+      "Submitted to Client",
       "Interviews",
       "Offers",
       "Joined",
-      "Screen Rej.",
+      "CHRO Rej.",
       "Client Rej.",
       "Candidate Rej.",
-      "Sourced to Screened",
-      "Screened to Submitted",
-      "Submitted to Interview",
+      "Sourced to CHRO",
+      "CHRO to Client Submission",
+      "Client Submission to Interview",
     ];
     (doc as any).autoTable({
       head: [headers],
@@ -182,8 +182,9 @@ const DynamicRecruiterPerformanceTable: React.FC<Props> = ({ data }) => {
       <CardContent className="p-0">
         <div className="overflow-x-auto">
           <Table className="w-full">
-            <TableHeader>
-              <TableRow className="bg-indigo-50 border-b border-indigo-100">
+            <TableHeader >
+              <TableRow className="bg-indigo-50 border-b border-indigo-100 whitespace-nowrap">
+                <TableHead className="sticky left-0 z-30 bg-indigo-50">
                 <SortableHeader
                   column="recruiter"
                   title={
@@ -194,20 +195,21 @@ const DynamicRecruiterPerformanceTable: React.FC<Props> = ({ data }) => {
                   }
                   tooltipText="Recruiter name"
                 />
-                <SortableHeader column="sourced" title="Sourced" tooltipText="Total profiles sourced" />
-                <SortableHeader column="screened" title="Screened" tooltipText="Profiles screened internally" />
+                </TableHead>
+                <SortableHeader column="sourced" title="Sourced" tooltipText="Total profiles sourced by the recruiter" />
+                <SortableHeader column="screened" title="Fwd. by CHRO" tooltipText="Profiles screened & forwarded internally by the CHRO" />
                 <SortableHeader column="submitted_to_client" title="Submitted to Client" tooltipText="Profiles sent to client" />
-                <SortableHeader column="interviews" title="Interviews" tooltipText="Total interviews conducted" />
+                <SortableHeader column="interviews" title="Interviews" tooltipText="Total number of interviews across all stages: Interview, Round, L1, L2, L3, Telephonic, Virtual, Face-to-Face." />
                 <SortableHeader column="offers" title="Offers" tooltipText="Offers extended" />
                 <SortableHeader column="joined" title="Joined" tooltipText="Candidates who joined" />
                 <TableHead className="text-right text-indigo-900 font-semibold py-4">
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span>Sourced → Screened</span>
+                        <span>Sourced → CHRO</span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="text-xs">Sourcing to screening conversion rate</p>
+                        <p className="text-xs">Sourcing to Forwarded by CHRO conversion rate</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -216,10 +218,10 @@ const DynamicRecruiterPerformanceTable: React.FC<Props> = ({ data }) => {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span>Screened → Submitted</span>
+                        <span>CHRO → Submitted to Client</span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="text-xs">Screening to client submission rate</p>
+                        <p className="text-xs">Forwarded by CHRO to client submission rate</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -228,7 +230,7 @@ const DynamicRecruiterPerformanceTable: React.FC<Props> = ({ data }) => {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span>Submitted → Interview</span>
+                        <span>Submitted to Client → Interview</span>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="text-xs">Submission to interview conversion rate</p>
@@ -236,9 +238,9 @@ const DynamicRecruiterPerformanceTable: React.FC<Props> = ({ data }) => {
                     </Tooltip>
                   </TooltipProvider>
                 </TableHead>
-                <SortableHeader column="screen_rejections" title="Screen Rejects" tooltipText="Internal screening rejections" />
-                <SortableHeader column="client_rejections" title="Client Rejects" tooltipText="Client-side rejections" />
-                <SortableHeader column="candidate_rejections" title="Candidate Rej." tooltipText="Candidate rejections" />
+                <SortableHeader column="screen_rejections" title="CHRO Rejects" tooltipText="Profiles rejected during CHRO screening." />
+                <SortableHeader column="client_rejections" title="Client Rejects" tooltipText="Profiles rejected by the client." />
+                <SortableHeader column="candidate_rejections" title="Candidate Rej." tooltipText="Rejections initiated by the candidate: Offer Declined, Withdrew, Not Interested." />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -246,7 +248,7 @@ const DynamicRecruiterPerformanceTable: React.FC<Props> = ({ data }) => {
                 sortedData.map((recruiter, index) => (
                   <TableRow
                     key={recruiter.recruiter}
-                    className={`border-b border-gray-100 hover:bg-indigo-50/50 transition-colors duration-200 ${index % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+                    className={`border-b border-gray-100 hover:bg-indigo-50/50 transition-colors text-center duration-200 ${index % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
                   >
                     <TableCell className="font-medium text-gray-900 sticky left-0 bg-white whitespace-nowrap">{recruiter.recruiter}</TableCell>
                     <TableCell className="text-gray-700">{recruiter.sourced}</TableCell>
@@ -255,13 +257,13 @@ const DynamicRecruiterPerformanceTable: React.FC<Props> = ({ data }) => {
                     <TableCell className="text-gray-700">{recruiter.interviews}</TableCell>
                     <TableCell className="text-gray-700">{recruiter.offers}</TableCell>
                     <TableCell className="text-gray-700">{recruiter.joined}</TableCell>
-                    <TableCell className={`text-right font-medium ${getPercentageColor(recruiter.sourced > 0 ? recruiter.screened / recruiter.sourced : 0)}`}>
+                    <TableCell className={`font-medium ${getPercentageColor(recruiter.sourced > 0 ? recruiter.screened / recruiter.sourced : 0)}`}>
                       {formatRatio(recruiter.screened, recruiter.sourced)}
                     </TableCell>
-                    <TableCell className={`text-right font-medium ${getPercentageColor(recruiter.screened > 0 ? recruiter.submitted_to_client / recruiter.screened : 0)}`}>
+                    <TableCell className={`font-medium ${getPercentageColor(recruiter.screened > 0 ? recruiter.submitted_to_client / recruiter.screened : 0)}`}>
                       {formatRatio(recruiter.submitted_to_client, recruiter.screened)}
                     </TableCell>
-                    <TableCell className={`text-right font-medium ${getPercentageColor(recruiter.submitted_to_client > 0 ? recruiter.interviews / recruiter.submitted_to_client : 0)}`}>
+                    <TableCell className={`font-medium ${getPercentageColor(recruiter.submitted_to_client > 0 ? recruiter.interviews / recruiter.submitted_to_client : 0)}`}>
                       {formatRatio(recruiter.interviews, recruiter.submitted_to_client)}
                     </TableCell>
                     <TableCell className="text-rose-600 font-medium">{recruiter.screen_rejections}</TableCell>

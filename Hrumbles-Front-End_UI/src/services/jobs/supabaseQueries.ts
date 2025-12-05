@@ -186,3 +186,20 @@ export const fetchEmployeesByIds = async (employeeIds: string[]) => {
 
   return { data, error };
 };
+
+export const getLastJobIdForOrg = async (organizationId: string) => {
+  const { data, error } = await supabase
+    .from("hr_jobs")
+    .select("job_id")
+    .eq("organization_id", organizationId)
+    .ilike("job_id", "TUP%") 
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching last job ID:", error);
+    return null;
+  }
+  return data?.job_id;
+};

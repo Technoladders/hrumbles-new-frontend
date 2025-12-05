@@ -549,39 +549,31 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
         <span className="text-sm font-bold text-purple-800">Why is this list empty?</span>
       </div>
       
-{/* ... inside the No Candidates Found section ... */}
+      <ul className="space-y-3">
+        {/* DYNAMIC REASON: Short JD */}
+        {jobData?.description && jobData.description.length < 200 && (
+          <li className="flex items-start gap-2 text-sm text-red-800 bg-red-50 p-2 rounded border border-red-100">
+            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-red-500 flex-shrink-0" />
+            <span>
+              <strong>Job Description is too short.</strong> The AI struggles to match candidates when the JD is only 1-2 lines. Try adding more details.
+            </span>
+          </li>
+        )}
 
-<ul className="space-y-3">
-  {/* DYNAMIC REASON: Short JD (Keep this) */}
-  {jobData?.description && jobData.description.length < 200 && (
-    <li className="flex items-start gap-2 text-sm text-red-800 bg-red-50 p-2 rounded border border-red-100">
-      <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-red-500 flex-shrink-0" />
-      <span>
-        <strong>Job Description is too short.</strong> The AI struggles to match candidates when the JD is only 1-2 lines. Try adding more details.
-      </span>
-    </li>
-  )}
+        {/* STATIC REASON: No Match */}
+        <li className="flex items-start gap-2 text-sm text-gray-700">
+          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />
+          <span>No candidates in the talent pool matched perfectly with this Job Description.</span>
+        </li>
 
-  {/* STATIC REASON: No Match (Keep this) */}
-  <li className="flex items-start gap-2 text-sm text-gray-700">
-    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />
-    <span>No candidates in the talent pool matched perfectly with this Job Description.</span>
-  </li>
-
-  {/* UPDATED REASON: Dynamic Threshold */}
-  <li className="flex items-start gap-2 text-sm text-gray-700">
-    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />
-    <span>
-       {/* Changed text to reflect new logic */}
-       System displays candidates who match <strong>at least 1-2 primary skills</strong> depending on job complexity.
-    </span>
-  </li>
-  
-  <li className="flex items-start gap-2 text-sm text-gray-700">
-    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />
-    <span>Ensure candidate profiles have skills listed in their "Top Skills" section.</span>
-  </li>
-</ul>
+        {/* STATIC REASON: Skill Threshold */}
+        <li className="flex items-start gap-2 text-sm text-gray-700">
+          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />
+          <span>
+            System only displays candidates who match <strong>more than 4 primary skills</strong>.
+          </span>
+        </li>
+      </ul>
     </div>
   </div>
 )}
