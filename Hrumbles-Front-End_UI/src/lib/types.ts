@@ -166,7 +166,9 @@ export interface JobData {
   };
   candidate_count?: { count: number } | null;
   hr_budget?: string;          
-  hr_budget_type?: string;    
+  hr_budget_type?: string; 
+  closedDate?: string | null;
+  closedBy?: string | null;   
   hr_job_candidates: { name: string }[];  
 }
 

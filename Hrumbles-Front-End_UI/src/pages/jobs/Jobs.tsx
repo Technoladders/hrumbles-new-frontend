@@ -20,7 +20,7 @@ import {
   Loader2,
   HousePlus,
   CalendarDays,
-  AlertCircle, // Added for Overdue Card
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/jobs/ui/button";
 import { Input } from "@/components/jobs/ui/input";
@@ -84,7 +84,6 @@ import moment from "moment";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/jobs/ui/avatar";
 import { fetchEmployeesByIds } from "@/services/jobs/supabaseQueries";
 import Loader from "@/components/ui/Loader";
-// Goal: Import the new DateRangePickerField component
 import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
 import { CompactDateRangeSelector } from "@/components/ui/CompactDateRangeSelector";
 import { EnhancedDateRangeSelector } from "@/components/ui/EnhancedDateRangeSelector";
@@ -191,9 +190,8 @@ const Jobs = () => {
   // Check if current org is TUP
   // const isTupOrg = organization_id === TUP_ORG_CHECK || organization_id === TUP_ORG_ID;
 
-  // Check for single
+  // check for taskup alone
   const isTupOrg = organization_id === TUP_ORG_ID;
-
 
 
   // ⛔ FIX: Prevent URL updates while modal is open — otherwise modal state resets
@@ -277,8 +275,6 @@ useEffect(() => {
 
 
   const handleCardClick = (status: string) => {
-    // If overdue is clicked, we might want to filter (logic not fully implemented in filter section yet, 
-    // defaulting to 'all' or you can add a 'overdue' filter logic later)
     setSelectedStatus(status === 'all' ? "all" : status);
     setCurrentPage(1);
   };
@@ -307,19 +303,12 @@ const filteredJobs = useMemo(() => jobs.filter((job) => {
       
       // --- NEW LOGIC FOR OVERDUE FILTER ---
       if (selectedStatus === "overdue") {
-        // 1. Don't show jobs that are already closed/completed
         if (job.status === "Completed" || job.status === "CLOSE") return false;
-        // 2. Must have a due date
         if (!job.dueDate) return false;
-
-        // 3. Compare dates in IST
         const todayIST = moment().utcOffset("+05:30").startOf('day');
         const dueDate = moment(job.dueDate).utcOffset("+05:30").startOf('day');
-        
         return dueDate.isBefore(todayIST);
       }
-      // ------------------------------------
-
       return true;
     })();
 
@@ -332,7 +321,6 @@ const filteredJobs = useMemo(() => jobs.filter((job) => {
     return matchesSearch && matchesDate && matchesClient && matchesTab && matchesStatus;
   }), [jobs, searchTerm, dateRange, selectedClient, activeTab, organization_id, selectedStatus]);
   
-  // --- FIX: startIndex is defined here ---
   const startIndex = (currentPage - 1) * itemsPerPage;
   const totalPages = Math.ceil(filteredJobs.length / itemsPerPage);
   
@@ -363,10 +351,27 @@ const filteredJobs = useMemo(() => jobs.filter((job) => {
   const handleStatusChange = async (jobId: string, newStatus: string) => {
     setStatusUpdateLoading(jobId);
     try {
-      await updateJobStatus(jobId, newStatus);
+      let extraFields = {};
+
+      if (isTupOrg) {
+        if (newStatus === "CLOSE" || newStatus === "Completed") {
+          extraFields = {
+            closed_date: new Date().toISOString(),
+            closed_by: user.id
+          };
+        } else {
+          extraFields = {
+            closed_date: null,
+            closed_by: null
+          };
+        }
+      }
+
+      await updateJobStatus(jobId, newStatus, extraFields);
       refetch();
       toast.success(`Job status updated to ${newStatus}`);
     } catch (err) {
+      console.error(err);
       toast.error("Failed to update job status.");
     } finally {
       setStatusUpdateLoading(null);
@@ -434,36 +439,67 @@ const filteredJobs = useMemo(() => jobs.filter((job) => {
   };
 
   // Helper to render due date cell with IST logic
-  const DueDateCell = ({ dueDate, status }: { dueDate: string | null | undefined, status: string }) => {
+  const DueDateCell = ({ 
+    dueDate, 
+    status, 
+    closedDate 
+  }: { 
+    dueDate: string | null | undefined, 
+    status: string, 
+    closedDate?: string | null 
+  }) => {
     if (!dueDate) return <span className="text-gray-400 text-sm">-</span>;
-    if (status === 'CLOSE' || status === 'Completed') return <span className="text-gray-400 text-sm">Closed</span>;
 
-    // Use moment with IST offset
+    // --- CLOSED STATE LOGIC ---
+    if (status === 'CLOSE' || status === 'Completed') {
+        if (!closedDate) return <span className="text-gray-500 text-sm">Closed</span>;
+
+        // Force both to Start of Day (Calendar date comparison)
+        const dueMoment = moment(dueDate).utcOffset("+05:30").startOf('day');
+        const closedMoment = moment(closedDate).utcOffset("+05:30").startOf('day');
+        const formattedClosedDate = moment(closedDate).format("DD MMM YYYY");
+        const formattedDueDate = moment(dueDate).format("DD MMM YYYY");
+
+
+        // Positive = Closed BEFORE/ON due date (Safe)
+        // Negative = Closed AFTER due date (Late)
+        const diffDays = dueMoment.diff(closedMoment, 'days');
+
+        let subText = "";
+        let subClass = "";
+
+        if (diffDays >= 0) {
+            subText = diffDays === 0 ? "Closed on due date" : `Closed ${diffDays} days before due`;
+            subClass = "text-green-600 font-medium";
+        } else {
+            subText = `Closed ${Math.abs(diffDays)} days after due`;
+            subClass = "text-red-600 font-medium";
+        }
+
+        return (
+            <div className="flex flex-col">
+                <span className="text-gray-800 text-sm font-medium">Closed {formattedClosedDate}</span>
+                <span className={`text-[10px] ${subClass}`}>{subText} ({formattedDueDate})</span>
+                {/* <span className="text-gray-800 text-[10px]">Due {formattedDueDate}</span> */}
+            </div>
+        );
+    }
+
+    // --- ACTIVE/OPEN STATE LOGIC ---
     const today = moment().utcOffset("+05:30").startOf('day');
     const due = moment(dueDate).utcOffset("+05:30").startOf('day');
-    
-    // Formatted display
     const formattedDate = moment(dueDate).format("DD MMM YYYY");
-
-    // Calculate difference in days
     const diffDays = due.diff(today, 'days');
 
     let statusText = "";
     let statusClass = "";
 
     if (diffDays < 0) {
-        // PAST DUE
         statusText = `Overdue ${Math.abs(diffDays)} days ago`;
         statusClass = "text-red-600 font-bold";
     } else {
-        // FUTURE or TODAY
         statusText = diffDays === 0 ? "Due Today" : `${diffDays} days to due`;
-        
-        if (diffDays <= 10) {
-            statusClass = "text-amber-600 font-semibold"; // Warning color for nearing due
-        } else {
-            statusClass = "text-green-600 font-medium"; // Safe color
-        }
+        statusClass = diffDays <= 10 ? "text-amber-600 font-semibold" : "text-green-600 font-medium";
     }
 
     return (
@@ -473,6 +509,7 @@ const filteredJobs = useMemo(() => jobs.filter((job) => {
         </div>
     );
   };
+
 
 if (isLoading) {
     return <div className="flex items-center justify-center h-[80vh]"><Loader size={60} className="border-[6px]" /></div>;
@@ -600,7 +637,11 @@ if (isLoading) {
                   {/* NEW DUE DATE COLUMN CELL */}
                   {isTupOrg && (
                     <td className="table-cell">
-                       <DueDateCell dueDate={job.dueDate} status={job.status} />
+                       <DueDateCell 
+                         dueDate={job.dueDate} 
+                         status={job.status} 
+                         closedDate={job.closedDate} 
+                       />
                     </td>
                   )}
 

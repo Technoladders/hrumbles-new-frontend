@@ -8,14 +8,14 @@ import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { 
-  CheckCircle2, FileText, Filter, Loader2, SearchCode, Brain, Zap, Target, Activity, 
+import {
+  CheckCircle2, FileText, Filter, Loader2, SearchCode, Brain, Zap, Target, Activity,
   Sparkles, X, TrendingUp, Users, Award, ChevronDown, BrainCircuit, Lightbulb, Frown, Bookmark
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSelector } from 'react-redux';
 import { supabase } from '@/integrations/supabase/client';
-
+ 
 // --- INTERFACES ---
 interface MatchedCandidate {
   id: string;
@@ -23,7 +23,7 @@ interface MatchedCandidate {
   suggested_title?: string;
   matching_skill_count?: number;
   matching_skills?: string[];
-  unmatched_skills?: string[]; 
+  unmatched_skills?: string[];
   created_by: { first_name: string; last_name: string; } | null;
   created_at: string;
   email?: string;
@@ -47,12 +47,12 @@ interface AnalysisResult {
   summary?: string;
   report_url?: string;
 }
-
+ 
 // --- HELPER FUNCTION: Typewriter ---
 const Typewriter: FC<{ text: string; speed?: number; }> = ({ text, speed = 20 }) => {
   const [displayText, setDisplayText] = useState('');
   useEffect(() => {
-    setDisplayText(''); 
+    setDisplayText('');
     let i = 0;
     const typingInterval = setInterval(() => {
       if (i < text.length) {
@@ -66,7 +66,7 @@ const Typewriter: FC<{ text: string; speed?: number; }> = ({ text, speed = 20 })
   }, [text, speed]);
   return <p className="text-xs font-mono text-purple-600 leading-relaxed">{displayText}</p>;
 };
-
+ 
 // --- HELPER FUNCTION: generateDynamicSubSteps ---
 const generateDynamicSubSteps = (jobData: JobData, phase: string): string[] => {
   const { skills, experience, location } = jobData;
@@ -80,7 +80,7 @@ const generateDynamicSubSteps = (jobData: JobData, phase: string): string[] => {
     default: return [];
   }
 };
-
+ 
 // --- HELPER FUNCTION: generateDynamicLogs ---
 const generateDynamicLogs = (jobData: JobData, totalCandidates: number, matchCount: number): any[] => {
   const { skills, title } = jobData;
@@ -95,7 +95,7 @@ const generateDynamicLogs = (jobData: JobData, totalCandidates: number, matchCou
     { id: 5, icon: Zap, title: 'Final Optimization', message: `AI has ranked the top ${matchCount} matches based on over 11 compatibility factors.` },
   ];
 };
-
+ 
 // --- COMPONENT PROPS ---
 interface JobMatchLoaderProps {
   jobId: string;
@@ -107,12 +107,12 @@ interface JobMatchLoaderProps {
   matchedCandidates: MatchedCandidate[];
   jobSkills: string[];
 }
-
+ 
 // --- MAIN COMPONENT ---
-const JobMatchLoader: FC<JobMatchLoaderProps> = ({ 
+const JobMatchLoader: FC<JobMatchLoaderProps> = ({
   jobId,
-  jobTitle, 
-  totalCandidatesInPool, 
+  jobTitle,
+  totalCandidatesInPool,
   expectedMatches = 5,
   jobData,
   onComplete,
@@ -138,7 +138,7 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
   const user = useSelector((state: any) => state.auth.user);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const queryClient = useQueryClient();
-
+ 
   const { data: existingAnalyses, isLoading: isLoadingExisting } = useQuery({
     queryKey: ['existingAnalysesForJobMatch', jobId, matchedCandidates],
     queryFn: async () => {
@@ -154,7 +154,7 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
     },
     enabled: !!jobId && matchedCandidates.length > 0,
   });
-
+ 
   // Check which candidates are already in wishlist
   const { data: existingWishlist } = useQuery({
     queryKey: ['existingWishlistForJobMatch', jobId, user?.id],
@@ -170,7 +170,7 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
     },
     enabled: !!jobId && !!user?.id,
   });
-
+ 
   useEffect(() => {
     if (existingAnalyses) {
         const emailToTalentIdMap = new Map(matchedCandidates.map(c => [c.email, c.id]));
@@ -184,14 +184,14 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
         setAnalysisScores(prev => ({...prev, ...initialScores}));
     }
   }, [existingAnalyses, matchedCandidates]);
-
+ 
   useEffect(() => {
     if (existingWishlist) {
       setSavedCandidates(existingWishlist);
     }
   }, [existingWishlist]);
-
-  const trulyMatchedCandidates = useMemo(() => 
+ 
+  const trulyMatchedCandidates = useMemo(() =>
     matchedCandidates.filter(c => c.matching_skill_count && c.matching_skill_count > 0),
     [matchedCandidates]
   );
@@ -209,7 +209,7 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
       setCandidatesWithSkillAnalysis(trulyMatchedCandidates);
     }
   }, [trulyMatchedCandidates, jobSkills]);
-
+ 
   useEffect(() => { if (jobData) { const logs = generateDynamicLogs(jobData, totalCandidatesInPool, expectedMatches || 0); setDynamicLogs(logs); } }, [jobData, totalCandidatesInPool, expectedMatches]);
   useEffect(() => { if (isComplete) return; const phaseDurations = [2500, 2500, 3500, 2000]; const advancePhase = () => { if (currentPhase < 3) { setCurrentPhase(prev => prev + 1); setCurrentSubStep(0); } else { setIsComplete(true); setTimeout(() => setShowResults(true), 1000); } }; const phaseTimer = setTimeout(advancePhase, phaseDurations[currentPhase]); return () => clearTimeout(phaseTimer); }, [currentPhase, isComplete]);
   useEffect(() => { if (isComplete || !jobData) return; const phaseDurations = [2500, 2500, 3500, 2000]; const currentPhaseData = { subSteps: generateDynamicSubSteps(jobData, phases[currentPhase]) }; const subDuration = (phaseDurations[currentPhase] || 2000) / currentPhaseData.subSteps.length; const subTimer = setTimeout(() => { if (currentSubStep < currentPhaseData.subSteps.length - 1) { setCurrentSubStep(prev => prev + 1); } }, subDuration); return () => clearTimeout(subTimer); }, [currentPhase, currentSubStep, jobData, isComplete]);
@@ -217,9 +217,9 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
   useEffect(() => { if (currentPhase >= 2) { const timer = setInterval(() => { setDisplayMatches(prev => { if (prev < (expectedMatches || 0)) return prev + 1; clearInterval(timer); return prev; }); }, 400); return () => clearInterval(timer); } }, [currentPhase, expectedMatches]);
   useEffect(() => { if (displayScanned > 0) { setMatchRate(Math.round((displayMatches / displayScanned) * 10000) / 100); } }, [displayMatches, displayScanned]);
   useEffect(() => { const logInterval = setInterval(() => { setVisibleLogs(prev => Math.min(prev + 1, dynamicLogs.length)); }, 1500); return () => clearInterval(logInterval); }, [dynamicLogs.length]);
-
+ 
   const phases = ['Understanding Your Needs', 'Smart Criteria Building', 'Intelligent Talent Search', 'Precision Ranking'];
-
+ 
   const handleToggleExpand = (candidateId: string) => { setExpandedCandidateId(prevId => (prevId === candidateId ? null : candidateId)); };
   
   // Function to run analysis only (without saving to wishlist)
@@ -243,17 +243,17 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
       if (talentError || !talentData?.resume_text) {
         throw new Error("Resume text not found for this candidate.");
       }
-
+ 
       // Call the edge function for AI analysis
       const { data: functionData, error: functionError } = await supabase.functions.invoke(
-        'initial-analysis-4o', { 
-          body: { 
+        'initial-analysis-4o', {
+          body: {
             type: 'initial',
-            payload: { 
-              jobDescription: jobData.description, 
-              resumeText: talentData.resume_text 
-            } 
-          } 
+            payload: {
+              jobDescription: jobData.description,
+              resumeText: talentData.resume_text
+            }
+          }
         }
       );
       
@@ -265,7 +265,7 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
       if (!result || typeof result.overall_match_score === 'undefined') {
         throw new Error("AI did not return a valid analysis with 'overall_match_score'.");
       }
-
+ 
       // Get or create the main candidate record
       let { data: mainCandidate } = await supabase
         .from('hr_candidates')
@@ -277,9 +277,9 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
         const { data: newMainCandidate, error: createError } = await supabase
           .from('hr_candidates')
           .insert({
-            name: candidateData.candidate_name, 
-            email: candidateData.email, 
-            phone_number: candidateData.phone, 
+            name: candidateData.candidate_name,
+            email: candidateData.email,
+            phone_number: candidateData.phone,
             organization_id: organizationId,
           })
           .select('id')
@@ -308,25 +308,25 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
       // Upsert into resume_analysis table
       const { error: analysisSaveError } = await supabase
         .from('resume_analysis')
-        .upsert(finalPayload, { 
-          onConflict: 'job_id, candidate_id' 
+        .upsert(finalPayload, {
+          onConflict: 'job_id, candidate_id'
         });
       
       if (analysisSaveError) {
         throw new Error(`DB Error (save analysis): ${analysisSaveError.message}`);
       }
-
+ 
       // Update UI state
-      setAnalysisScores(prev => ({ 
-        ...prev, 
-        [candidateId]: { 
-          score: overall_match_score, 
-          summary: result.summary 
-        } 
+      setAnalysisScores(prev => ({
+        ...prev,
+        [candidateId]: {
+          score: overall_match_score,
+          summary: result.summary
+        }
       }));
       
       toast.success(`Analysis complete! Score: ${overall_match_score}%`, { id: toastId });
-
+ 
     } catch (error: any) {
       console.error('Analysis Error:', error);
       toast.error(`Failed: ${error.message}`, { id: toastId });
@@ -334,7 +334,7 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
       setValidatingIds(prev => prev.filter(id => id !== candidateId));
     }
   };
-
+ 
   // Function to save to wishlist
   const handleSaveToWishlist = async (candidateId: string, event: React.MouseEvent) => {
     event.stopPropagation();
@@ -345,7 +345,7 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
       toast.error("Please run analysis first before saving to wishlist.");
       return;
     }
-
+ 
     setSavingToWishlistIds(prev => [...prev, candidateId]);
     const toastId = toast.loading('Saving to wishlist...');
     
@@ -363,14 +363,14 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
         }, {
           onConflict: 'created_by, hr_talent_id, hr_job_id'
         });
-
+ 
       if (wishlistError) {
         throw new Error(`Failed to save to wishlist: ${wishlistError.message}`);
       }
-
+ 
       setSavedCandidates(prev => [...new Set([...prev, candidateId])]);
       toast.success('Saved to wishlist!', { id: toastId });
-
+ 
     } catch (error: any) {
       console.error('Wishlist Error:', error);
       toast.error(`Failed: ${error.message}`, { id: toastId });
@@ -378,14 +378,14 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
       setSavingToWishlistIds(prev => prev.filter(id => id !== candidateId));
     }
   };
-
+ 
   const getScoreColor = (score: number | null | undefined): string => {
     if (score == null) return 'text-gray-600';
     if (score > 80) return 'text-green-600';
     if (score >= 75) return 'text-yellow-600';
     return 'text-red-600';
   };
-
+ 
   return (
     <TooltipProvider>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
@@ -413,7 +413,7 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
                   <div className="col-span-2 text-center">AI Score</div>
                   <div className="col-span-2 text-center">Actions</div>
                 </div>
-
+ 
                 {candidatesWithSkillAnalysis.length > 0 ? (
                   candidatesWithSkillAnalysis.map((candidate) => {
                     const analysisResult = analysisScores[candidate.id];
@@ -422,7 +422,7 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
                     const isSavingToWishlist = savingToWishlistIds.includes(candidate.id);
                     return (
                     <Fragment key={candidate.id}>
-                      <div 
+                      <div
                         className="grid grid-cols-12 gap-4 items-center p-3 bg-white/80 backdrop-blur-sm border border-gray-200/50 rounded-xl shadow-sm animate-slide-in cursor-pointer hover:bg-purple-50/50 transition-colors"
                         onClick={() => handleToggleExpand(candidate.id)}
                       >
@@ -439,7 +439,7 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
                         </div>
                         <div className="col-span-2 text-center flex items-center justify-center gap-1">
                           {analysisResult && !isSaved && (
-                            <Button 
+                            <Button
                               variant="default"
                               size="sm"
                               className="bg-indigo-600 hover:bg-indigo-700 text-white"
@@ -460,7 +460,7 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
                             </Button>
                           )}
                           {isSaved && (
-                            <Button 
+                            <Button
                               variant="secondary"
                               size="sm"
                               className="bg-indigo-100 text-indigo-700 cursor-not-allowed"
@@ -501,7 +501,7 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
                                   </div>
                                 ) : (
                                   <div className="text-center">
-                                    <Button 
+                                    <Button
                                       onClick={(e) => handleRunAnalysis(candidate.id, e)}
                                       disabled={isAnalyzing}
                                       className="bg-purple-600 hover:bg-purple-700 text-white"
@@ -535,13 +535,13 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
     <div className="bg-gray-100 rounded-full p-6 mb-4 shadow-inner">
       <SearchCode className="h-12 w-12 text-gray-400" />
     </div>
-
+ 
     <h3 className="text-xl font-bold text-gray-800 mb-2">No Candidates Found</h3>
     
     <p className="text-gray-500 mb-6 max-w-sm text-center">
       We couldn't identify any matches in your current talent pool.
     </p>
-
+ 
     {/* The Reasons Box */}
     <div className="w-full max-w-3xl  bg-purple-50 border border-purple-100 rounded-xl p-8 text-left shadow-sm">
       <div className="flex items-center gap-2 mb-3">
@@ -549,31 +549,39 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
         <span className="text-sm font-bold text-purple-800">Why is this list empty?</span>
       </div>
       
-      <ul className="space-y-3">
-        {/* DYNAMIC REASON: Short JD */}
-        {jobData?.description && jobData.description.length < 200 && (
-          <li className="flex items-start gap-2 text-sm text-red-800 bg-red-50 p-2 rounded border border-red-100">
-            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-red-500 flex-shrink-0" />
-            <span>
-              <strong>Job Description is too short.</strong> The AI struggles to match candidates when the JD is only 1-2 lines. Try adding more details.
-            </span>
-          </li>
-        )}
-
-        {/* STATIC REASON: No Match */}
-        <li className="flex items-start gap-2 text-sm text-gray-700">
-          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />
-          <span>No candidates in the talent pool matched perfectly with this Job Description.</span>
-        </li>
-
-        {/* STATIC REASON: Skill Threshold */}
-        <li className="flex items-start gap-2 text-sm text-gray-700">
-          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />
-          <span>
-            System only displays candidates who match <strong>more than 4 primary skills</strong>.
-          </span>
-        </li>
-      </ul>
+{/* ... inside the No Candidates Found section ... */}
+ 
+<ul className="space-y-3">
+  {/* DYNAMIC REASON: Short JD (Keep this) */}
+  {jobData?.description && jobData.description.length < 200 && (
+    <li className="flex items-start gap-2 text-sm text-red-800 bg-red-50 p-2 rounded border border-red-100">
+      <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-red-500 flex-shrink-0" />
+      <span>
+        <strong>Job Description is too short.</strong> The AI struggles to match candidates when the JD is only 1-2 lines. Try adding more details.
+      </span>
+    </li>
+  )}
+ 
+  {/* STATIC REASON: No Match (Keep this) */}
+  <li className="flex items-start gap-2 text-sm text-gray-700">
+    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />
+    <span>No candidates in the talent pool matched perfectly with this Job Description.</span>
+  </li>
+ 
+  {/* UPDATED REASON: Dynamic Threshold */}
+  <li className="flex items-start gap-2 text-sm text-gray-700">
+    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />
+    <span>
+       {/* Changed text to reflect new logic */}
+       System displays candidates who match <strong>at least 1-2 primary skills</strong> depending on job complexity.
+    </span>
+  </li>
+  
+  <li className="flex items-start gap-2 text-sm text-gray-700">
+    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />
+    <span>Ensure candidate profiles have skills listed in their "Top Skills" section.</span>
+  </li>
+</ul>
     </div>
   </div>
 )}
@@ -620,17 +628,17 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
                 <div className="bg-white/80 backdrop-blur rounded-xl p-6 border border-gray-200/50 shadow-sm">
                   <div className="flex items-center gap-3 mb-4"><div className="p-2 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg"><Sparkles className="h-4 w-4 text-white" /></div><h3 className="font-semibold text-gray-800">AI Analysis Insights</h3><Badge className="ml-auto text-xs bg-purple-100 text-purple-700 border-0">Real-time</Badge></div>
                   <div className="space-y-3">
-                    {dynamicLogs.slice(0, visibleLogs).map((entry, index) => { 
-                      const Icon = entry.icon; 
-                      return ( 
+                    {dynamicLogs.slice(0, visibleLogs).map((entry, index) => {
+                      const Icon = entry.icon;
+                      return (
                         <div key={entry.id} className="flex gap-3 p-3 rounded-lg border bg-purple-50/50 border-purple-200/60 animate-slide-in" style={{ animationDelay: `${index * 100}ms` }}>
                           <div className="flex-shrink-0 text-purple-500 pt-0.5"><Icon className="h-5 w-5" /></div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1"><span className="font-semibold text-sm text-purple-800">{entry.title}</span></div>
                             <Typewriter text={entry.message} />
                           </div>
-                        </div> 
-                      ); 
+                        </div>
+                      );
                     })}
                     {visibleLogs < dynamicLogs.length && ( <div className="flex items-center justify-center py-4"><div className="flex items-center gap-2 text-purple-600"><Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm font-medium">Analyzing more insights...</span></div></div> )}
                   </div>
@@ -646,5 +654,5 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
     </TooltipProvider>
   );
 };
-
+ 
 export default JobMatchLoader;

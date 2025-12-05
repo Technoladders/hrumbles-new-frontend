@@ -125,10 +125,13 @@ export const updateJobRecord = async (id: string, jobData: Record<string, any>) 
   return { data, error };
 };
 
-export const updateJobStatusRecord = async (jobId: string, status: string) => {
+export const updateJobStatusRecord = async (jobId: string, status: string, extraFields: any = {}) => {
   const { data, error } = await supabase
     .from("hr_jobs")
-    .update({ status })
+    .update({ 
+      status, 
+      ...extraFields 
+    })
     .eq("id", jobId)
     .select("*")
     .single();

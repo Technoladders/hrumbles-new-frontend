@@ -10,7 +10,7 @@ import {
   Award,
   Mail,
   Phone,
-  Linkedin,
+  Linkedin, // Use Lucide Linkedin instead of FaLinkedin for consistency
   Download,
   Info,
   Lightbulb,
@@ -25,7 +25,16 @@ import {
   Clock,
   ChevronRight,
   TrendingUp,
+   ChevronLeft,
+  Eye,  
+  FileText,     // Add this
+  Banknote,  // Add this
+  Star,      // Add this
+  UserCheck, // Add this
 } from "lucide-react";
+import { Separator } from "@/components/ui/separator"; 
+import { useToast } from "@/hooks/use-toast";
+import { useSearchParams } from "react-router-dom";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +48,35 @@ import CompareWithJobDialog from "@/components/candidates/talent-pool/CompareWit
 import AnalysisHistoryDialog from "@/components/candidates/AnalysisHistoryDialog";
 import EnrichDataDialog from "@/components/candidates/talent-pool/EnrichDataDialog";
 import { generateDocx, generatePdf } from "@/utils/cvGenerator";
+
+
+// Highlight Component - Same as in search results
+const escapeRegExp = (string: string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+const Highlight: FC<{ text: string; query: string[] }> = ({ text, query }) => {
+  if (!query.length || !text) {
+    return <span>{text}</span>;
+  }
+  const escapedQuery = query.map(term => escapeRegExp(term));
+  const regex = new RegExp(`(${escapedQuery.join('|')})`, 'gi');
+  
+  const parts = text.split(regex);
+  return (
+    <span>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <mark key={i} className="bg-yellow-200 text-black px-1 rounded-sm">
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      )}
+    </span>
+  );
+};
 
 // Helper to safely parse JSON arrays from the database
 const parseJsonArray = (data: any) => {
@@ -56,6 +94,7 @@ const parseJsonArray = (data: any) => {
 
 const CandidateProfilePage = () => {
   const { candidateId } = useParams<{ candidateId: string }>();
+  const [searchParams] = useSearchParams(); // ADD THIS LINE
   const [isCompareModalOpen, setCompareModalOpen] = useState(false);
   const [isHistoryModalOpen, setHistoryModalOpen] = useState(false);
   const [isEnrichModalOpen, setEnrichModalOpen] = useState(false);
@@ -63,6 +102,12 @@ const CandidateProfilePage = () => {
     (state: any) => state.auth.organization_id
   );
 
+
+const highlightQuery = useMemo(() => {
+  const keywords = searchParams.get('keywords');
+  return keywords ? keywords.split(',').filter(Boolean) : [];
+}, [searchParams]);
+  
   const { data: candidate, isLoading } = useQuery({
     queryKey: ["talentPoolCandidate", candidateId],
     queryFn: async () => {
@@ -253,6 +298,52 @@ const CandidateProfilePage = () => {
     });
   }, [candidate]);
 
+
+// ... (after sortedWorkExperience useMemo block)
+
+  // --- START NEW WORK HISTORY LOGIC ---
+  const [currentWorkPage, setCurrentWorkPage] = useState(0);
+  const ITEMS_PER_PAGE = 4;
+  
+  const workExpTotalPages = Math.ceil(sortedWorkExperience.length / ITEMS_PER_PAGE);
+  const showWorkExpNavigation = workExpTotalPages > 1;
+  
+  const currentWorkItems = sortedWorkExperience.slice(
+    currentWorkPage * ITEMS_PER_PAGE,
+    (currentWorkPage + 1) * ITEMS_PER_PAGE
+  );
+
+  const handleWorkPrev = () => {
+    setCurrentWorkPage((prev) => Math.max(prev - 1, 0));
+  };
+
+  const handleWorkNext = () => {
+    setCurrentWorkPage((prev) => Math.min(prev + 1, workExpTotalPages - 1));
+  };
+
+  const getGridColsClass = (itemCount: number) => {
+    switch (itemCount) {
+      case 1: return "grid-cols-1";
+      case 2: return "grid-cols-2";
+      case 3: return "grid-cols-3";
+      default: return "grid-cols-4";
+    }
+  };
+  const gridColsClass = getGridColsClass(currentWorkItems.length);
+
+  // Animation style for the "Next" button
+  const solidPurpleBounceAnimation = `
+    @keyframes solid-purple-bounce {
+      0%, 100% { transform: translateX(0) scale(1); background-color: #7E22CE; animation-timing-function: cubic-bezier(0.8, 0, 1, 1); }
+      50% { transform: translateX(6px) scale(1.05); background-color: #7E22CE; animation-timing-function: cubic-bezier(0, 0, 0.2, 1); }
+    }
+  `;
+
+  const nextButtonStyle = {
+    animation: currentWorkPage === workExpTotalPages - 1 ? "none" : "solid-purple-bounce 1.75s infinite",
+  };
+  // --- END NEW WORK HISTORY LOGIC ---
+
   const keyDetails = useMemo(() => {
     if (!candidate) return [];
 
@@ -325,6 +416,50 @@ const CandidateProfilePage = () => {
     );
   };
 
+
+// ... existing code ...
+
+  const renderResumeEmbed = () => {
+    if (!candidate?.resume_path) return null;
+
+    const fileUrl = candidate.resume_path;
+    // Get file extension (handle query params if presigned url)
+    const extension = fileUrl.split(/[#?]/)[0].split('.').pop().trim().toLowerCase();
+    
+    // 1. If PDF, render native iframe
+    if (extension === 'pdf') {
+      return (
+        <iframe 
+          src={`${fileUrl}#toolbar=0`} 
+          className="w-full h-[800px] rounded-md border border-slate-200"
+          title="Resume PDF"
+        />
+      );
+    } 
+    
+    // 2. If Image, render img tag
+    if (['jpg', 'jpeg', 'png'].includes(extension)) {
+      return (
+        <img 
+          src={fileUrl} 
+          alt="Resume" 
+          className="w-full h-auto rounded-md border border-slate-200"
+        />
+      );
+    }
+
+    // 3. If DOC/DOCX/Other, use Google Docs Viewer (Standard way to embed docs in web)
+    // Note: URL must be publicly accessible for Google Docs Viewer to work.
+    return (
+      <iframe 
+        src={`https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`}
+        className="w-full h-[800px] rounded-md border border-slate-200"
+        title="Resume Document"
+      />
+    );
+  };
+
+
   // Enhanced projects processing
   const processedProjects = useMemo(() => {
     const rawProjects = parseJsonArray(candidate?.projects);
@@ -360,29 +495,43 @@ const CandidateProfilePage = () => {
     );
   }
 
-  return (
+// Helper to format currency
+  const formatINR = (amount: number | string) => {
+    const num = typeof amount === "string" ? parseFloat(amount) : amount;
+    return isNaN(num)
+      ? "N/A"
+      : new Intl.NumberFormat("en-IN", {
+          style: "currency",
+          currency: "INR",
+          maximumFractionDigits: 0,
+        }).format(num);
+  };
+
+
+
+return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       <div className="mx-auto max-w-screen-8xl px-4 py-6 sm:px-6 lg:px-8">
         {/* Header - STICKY */}
         <div className="sticky top-0 z-20 bg-white border-b border-slate-200 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 mb-6 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-2">
-         <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => window.history.back()}
-                className="h-8 w-8 rounded-full"
-              >
-                <ArrowLeft className="h-4 w-4 text-slate-600" />
-              </Button>
-              <div>
-                <p className="text-xs font-semibold text-slate-800">
-                  {candidate.candidate_name}
-                </p>
-                <p className="text-xs text-slate-500 -mt-0.5">
-                  {candidate.suggested_title}
-                </p>
-              </div>
-              </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => window.history.back()}
+              className="h-8 w-8 rounded-full"
+            >
+              <ArrowLeft className="h-4 w-4 text-slate-600" />
+            </Button>
+            <div>
+              <p className="text-xs font-semibold text-slate-800">
+                {candidate.candidate_name}
+              </p>
+              <p className="text-xs text-slate-500 -mt-0.5">
+                {candidate.suggested_title}
+              </p>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -427,101 +576,325 @@ const CandidateProfilePage = () => {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-             {candidate.resume_path && (
-                  <a href={!hasExportPermission ? candidate.resume_path : '#'} 
-      download={!hasExportPermission ? resumeFileName : undefined}
-      className={hasExportPermission ? 'pointer-events-none' : ''} className="w-full">
-                    <Button size="sm" variant="datepicker" className="w-full flex items-center justify-center gap-2" disabled={hasExportPermission}>
-                        <Download size={16} />
-                        <span>View CV</span>
-                    </Button>
-                  </a>
-                )}
-            
+            {/* {candidate.resume_path && (
+              <a href={!hasExportPermission ? candidate.resume_path : '#'}
+                download={!hasExportPermission ? resumeFileName : undefined}
+                className={hasExportPermission ? 'pointer-events-none' : ''} className="w-full">
+                <Button size="sm" variant="datepicker" className="w-full flex items-center justify-center gap-2" disabled={hasExportPermission}>
+                  <Download size={16} />
+                  <span>View CV</span>
+                </Button>
+              </a>
+            )} */}
+
           </div>
         </div>
 
-        {/* Candidate Card */}
-        <Card className="border-slate-200 bg-white shadow-md mb-8">
-          <CardContent className="p-6">
-            <div className="flex gap-6">
-              <div className="grid h-20 w-20 flex-shrink-0 place-items-center rounded-full bg-gradient-to-br from-purple-500 to-purple-600 text-3xl font-bold text-white shadow-lg">
-                {candidate.candidate_name?.charAt(0)}
+        {/* --- REMOVED THE OLD CANDIDATE CARD HERE --- */}
+
+        {/* New Candidate Info Card */}
+        <Card className="bg-white w-full border-none shadow-xl rounded-2xl mb-8">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-3xl font-extrabold tracking-tight text-purple-700">
+                  {candidate.candidate_name}
+                </h2>
+             <p className="text-sm text-gray-500 mt-1">
+  <Highlight text={candidate.suggested_title || ''} query={highlightQuery} />
+</p>
               </div>
-              <div className="flex-grow">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h1 className="text-2xl font-bold text-slate-900">
-                      {candidate.candidate_name}
-                    </h1>
-                    <p className="mt-1 text-base text-slate-600">
-                      {candidate.suggested_title}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600">
-                  {candidate.email && (
+
+              <div className="flex items-center gap-3">
+                {candidate.resume_path && (
+                  <Button
+                    size="sm"
+                    className="flex items-center space-x-2 px-3 h-9 bg-purple-600 text-white shadow-lg hover:bg-purple-700"
+                    disabled={hasExportPermission}
+                  >
+                    <span className="text-sm font-medium">Resume</span>
+                    <Separator orientation="vertical" className="h-4 bg-white/30" />
                     <a
-                      href={`mailto:${candidate.email}`}
-                      className="flex items-center gap-1.5 hover:text-purple-600 transition-colors"
-                    >
-                      <Mail className="h-4 w-4" />
-                      {candidate.email}
-                    </a>
-                  )}
-                  {candidate.phone && (
-                    <a
-                      href={`tel:${candidate.phone}`}
-                      className="flex items-center gap-1.5 hover:text-purple-600 transition-colors"
-                    >
-                      <Phone className="h-4 w-4" />
-                      {candidate.phone}
-                    </a>
-                  )}
-                  {candidate.linkedin_url && (
-                    <a
-                      href={candidate.linkedin_url}
+                      href={candidate.resume_path}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 hover:text-purple-600 transition-colors"
+                      className="flex items-center justify-center"
                     >
-                      <Linkedin className="h-4 w-4" />
-                      LinkedIn Profile
+                      <Eye className="w-4 h-4 cursor-pointer" title="View Resume" />
                     </a>
-                  )}
-                </div>
+
+                    {!hasExportPermission && (
+                      <Download
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const link = document.createElement("a");
+                          link.href = candidate.resume_path;
+                          link.download = resumeFileName;
+                          link.click();
+                        }}
+                        className="w-4 h-4 cursor-pointer ml-2"
+                        title="Download Resume"
+                      />
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
+          </div>
 
-            {/* Details in single long box */}
-            <div className="mt-6 border border-slate-200 rounded-lg bg-slate-50/30 p-4">
-              <div className="flex flex-wrap gap-x-8 gap-y-3">
-                {keyDetails.map((detail, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-2"
-                  >
-                    <div className="rounded-md bg-white p-1.5 text-slate-600 shadow-sm">
-                      <detail.icon className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-slate-500">
-                        {detail.label}
-                      </p>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {detail.value}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+          <CardContent className="p-6">
+            {/* Contact Info - Simple Line by Line */}
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-3 mb-6">
+              {candidate.email && (
+                <div
+                  className="relative flex items-center cursor-pointer group"
+                  onClick={() => {
+                    navigator.clipboard.writeText(candidate.email);
+                    // toast({ title: "Email Copied!" }); // Uncomment if you have toast
+                  }}
+                >
+                  <Mail className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+                  <span className="text-sm text-gray-700 group-hover:text-purple-700 transition-colors">
+                    {candidate.email}
+                  </span>
+                </div>
+              )}
+
+              {candidate.phone && (
+                <div
+                  className="relative flex items-center cursor-pointer group"
+                  onClick={() => {
+                    navigator.clipboard.writeText(candidate.phone);
+                    // toast({ title: "Phone Copied!" }); // Uncomment if you have toast
+                  }}
+                >
+                  <Phone className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+                  <span className="text-sm text-gray-700 group-hover:text-purple-700 transition-colors">
+                    {candidate.phone}
+                  </span>
+                </div>
+              )}
+
+              {candidate.linkedin_url && (
+                <a
+                  href={candidate.linkedin_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center group"
+                >
+                  <Linkedin className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+                  <span className="text-sm text-purple-700 group-hover:underline">
+                    LinkedIn Profile
+                  </span>
+                </a>
+              )}
+            </div>
+
+            <Separator className="my-6" />
+
+            {/* Info Grid - Simple Line by Line */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-6">
+              {/* Total Experience */}
+              <div className="flex items-center">
+                <Briefcase className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Total Experience</p>
+                  <p className="text-sm font-medium text-gray-800">
+                    {candidate.total_experience || "N/A"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Relevant Experience */}
+              <div className="flex items-center">
+                <Star className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Relevant Experience</p>
+                  <p className="text-sm font-medium text-gray-800">
+                    {/* Assuming relevant_experience exists in your DB, otherwise fallsback to Total or N/A */}
+                    {candidate.relevant_experience || candidate.total_experience || "N/A"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Current Location */}
+              <div className="flex items-center">
+                <MapPin className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Current Location</p>
+                  <p className="text-sm font-medium text-gray-800">
+                    {candidate.current_location || "N/A"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Preferred Location */}
+              <div className="flex items-center">
+                <Building className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Preferred Location</p>
+                  <p className="text-sm font-medium text-gray-800">
+                    {parseJsonArray(candidate.preferred_locations).join(", ") || "N/A"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Current Salary */}
+              <div className="flex items-center">
+                <Banknote className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Current Salary</p>
+                  <p className="text-sm font-medium text-gray-800">
+                    {candidate.current_salary ? `${formatINR(candidate.current_salary)}` : "N/A"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Expected Salary */}
+              <div className="flex items-center">
+                <Banknote className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Expected Salary</p>
+                  <p className="text-sm font-medium text-gray-800">
+                    {candidate.expected_salary ? `${formatINR(candidate.expected_salary)}` : "N/A"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Notice Period */}
+              <div className="flex items-center relative group">
+                <Calendar className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Notice Period</p>
+                  <p className="text-sm font-medium text-gray-800">
+                    {candidate.notice_period || "N/A"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Has Offers */}
+              <div className="flex items-center">
+                <UserCheck className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Has Offers</p>
+                  <p className="text-sm font-medium text-gray-800">
+                    {candidate.has_offers === true || candidate.has_offers === "yes" ? "Yes" : "No"}
+                  </p>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
+
+{/* Work History - Horizontal Timeline */}
+            {sortedWorkExperience.length > 0 && (
+              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                <style>{solidPurpleBounceAnimation}</style>
+                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                  <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                    <div className="rounded-lg bg-purple-100 p-2">
+                      <Briefcase className="h-5 w-5 text-purple-600" />
+                    </div>
+                    Work Experience
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 relative">
+                  
+                  <div className="relative px-8">
+                     {/* Left Navigation Button */}
+                     {showWorkExpNavigation && (
+                      <button
+                        onClick={handleWorkPrev}
+                        disabled={currentWorkPage === 0}
+                        className={`absolute left-0 top-[40px] transform -translate-y-1/2 z-20 w-8 h-8 rounded-full flex items-center justify-center transition-all
+                          ${
+                            currentWorkPage === 0
+                              ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                              : "bg-[#7E22CE] text-white hover:bg-[#6B21A8] shadow-lg"
+                          }`}
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                    )}
+
+                    {/* Right Navigation Button */}
+                    {showWorkExpNavigation && (
+                      <button
+                        onClick={handleWorkNext}
+                        disabled={currentWorkPage === workExpTotalPages - 1}
+                        style={nextButtonStyle}
+                        className={`absolute right-0 top-[40px] transform -translate-y-1/2 z-20 w-8 h-8 rounded-full flex items-center justify-center transition-all
+                          ${
+                            currentWorkPage === workExpTotalPages - 1
+                              ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                              : "bg-[#7E22CE] text-white hover:bg-[#6B21A8] shadow-lg"
+                          }`}
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    )}
+
+                    {/* Timeline Grid */}
+                    <div className="relative py-2 mt-2">
+                       {/* Purple Connecting Line */}
+                       <div className="absolute top-4 left-0 w-full h-0.5 bg-purple-200"></div>
+
+                       <div className={`grid ${gridColsClass} gap-4 relative`}>
+                          {currentWorkItems.map((exp: any, index: number) => {
+                             const title = exp.designation || exp.title;
+                             const company = exp.company;
+                             const duration = exp.duration || 
+                               (exp.start_date && exp.end_date 
+                                 ? `${exp.start_date} - ${exp.end_date}`
+                                 : exp.start_date || exp.end_date || "N/A");
+
+                             return (
+                               <div key={index} className="flex flex-col items-center group w-full">
+                                  {/* Dot */}
+                                  <div className="relative z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 border-3 border-white shadow-md flex items-center justify-center mb-2 transition-all">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-white"></div>
+                                  </div>
+
+                                  {/* Company Name */}
+                                  <div className="text-center px-1 w-full ">
+                                 <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-tight">
+  <Highlight text={company || ''} query={highlightQuery} />
+</p>
+                                  </div>
+
+                                  {/* Designation */}
+                                  <div className="text-center px-1 w-full mt-0.5">
+                         <p className="text-xs font-semibold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 line-clamp-2">
+  <Highlight text={title || ''} query={highlightQuery} />
+</p>
+                                  </div>
+
+                                   {/* Duration */}
+                                   <div className="text-center px-1 w-full mb-1">
+                                    <p className="text-xs text-gray-500">
+                                      {duration}
+                                    </p>
+                                  </div>
+                               </div>
+                             );
+                          })}
+                       </div>
+                    </div>
+                  </div>
+                  
+                  {showWorkExpNavigation && (
+                    <p className="text-xs text-gray-400 text-center mt-6">
+                      Page {currentWorkPage + 1} of {workExpTotalPages}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
         {/* IMPROVED SECTIONS START HERE */}
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left Column - Main Content (2/3 width) */}
+
           <div className="space-y-6 lg:col-span-2">
             {/* Top Skills Section - COMPACT TABLE WITH NEW UI */}
             <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
@@ -587,12 +960,12 @@ const CandidateProfilePage = () => {
                                       key={skill.name}
                                       className="relative group"
                                     >
-                                      <Badge
-                                        variant="secondary"
-                                        className="cursor-help px-2 py-0.5 text-xs font-medium bg-purple-500 text-white border-0 shadow-sm hover:shadow hover:bg-purple-400 transition-all duration-200"
-                                      >
-                                        {skill.name}
-                                      </Badge>
+                                 <Badge
+  variant="secondary"
+  className="cursor-help px-2 py-0.5 text-xs font-medium bg-purple-500 text-white border-0 shadow-sm hover:shadow hover:bg-purple-400 transition-all duration-200"
+>
+  <Highlight text={skill.name} query={highlightQuery} />
+</Badge>
                                       {skill.description && skill.description !== "No description available." && (
                                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-max max-w-xs p-2 rounded-md bg-slate-800 text-white text-xs shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10 pointer-events-none whitespace-pre-wrap">
                                           <p className="leading-tight">
@@ -642,200 +1015,123 @@ const CandidateProfilePage = () => {
               </CardContent>
             </Card>
 
-            {/* Work Experience - IMPROVED */}
-            {sortedWorkExperience.length > 0 && (
-                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                      <div className="rounded-lg bg-green-100 p-2">
-                        <Briefcase className="h-5 w-5 text-green-600" />
-                      </div>
-                      Work Experience
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-5">
-                    <div className="relative pl-8">
-                      {/* Timeline line */}
-                      <div className="absolute left-4 top-3 h-[calc(100%-24px)] w-0.5 bg-gradient-to-b from-slate-300 via-slate-200 to-transparent" />
-                      
-                      <div className="space-y-6">
-                        {sortedWorkExperience.map((exp: any, index: number) => {
-                          const title = exp.designation || exp.title;
-                          const company = exp.company;
-                          const duration = exp.duration || 
-                            (exp.start_date && exp.end_date 
-                              ? `${exp.start_date} - ${exp.end_date}`
-                              : exp.start_date || exp.end_date || "");
-                          const responsibilities = parseJsonArray(exp.responsibilities);
-                          const description = exp.description;
-                          
-                          return (
-                            <div key={index} className="relative group/exp">
-                              {/* Timeline dot */}
-                              <div className="absolute -left-8 top-1.5 h-4 w-4 rounded-full bg-white border-2 border-purple-500 shadow-sm group-hover/exp:border-purple-600 group-hover/exp:shadow-md transition-all duration-200"></div>
-                              
-                              <div className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-4 hover:border-purple-200 hover:shadow-sm transition-all duration-200">
-                                <div className="flex items-start justify-between gap-4">
-                                  <div className="flex-grow">
-                                    <h3 className="text-base font-bold text-slate-900">
-                                      {title}
-                                    </h3>
-                                    <p className="mt-1 text-sm font-medium text-purple-600 flex items-center gap-1">
-                                      <Building className="h-3.5 w-3.5" />
-                                      {company}
-                                    </p>
-                                  </div>
-                                  {duration && (
-                                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
-                                      <Calendar className="h-3.5 w-3.5" />
-                                      <span>{duration}</span>
-                                    </div>
-                                  )}
-                                </div>
-                                
-                                {/* Show responsibilities as bullet points if available */}
-                                {responsibilities.length > 0 && (
-                                  <ul className="mt-3 list-disc pl-5 text-sm text-slate-600 space-y-1.5 leading-relaxed">
-                                    {responsibilities.map((resp: string, i: number) => (
-                                      <li key={i}>{resp}</li>
-                                    ))}
-                                  </ul>
-                                )}
-                                
-                                {/* Show description as paragraph if available and no responsibilities */}
-                                {!responsibilities.length && description && (
-                                  <p className="mt-3 text-sm text-slate-600 leading-relaxed">
-                                    {description}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+
 
             {/* Education - IMPROVED */}
-            {candidate.education &&
-              parseJsonArray(candidate.education).length > 0 && (
-                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                      <div className="rounded-lg bg-indigo-100 p-2">
-                        <GraduationCap className="h-5 w-5 text-indigo-600" />
-                      </div>
-                      Education
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-5">
-                    <div className="space-y-4">
-                      {parseJsonArray(candidate.education).map(
-                        (edu: any, index: number) => (
-                          <div
-                            key={index}
-                            className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-4 hover:border-indigo-200 hover:shadow-sm transition-all duration-200"
-                          >
-                            <h3 className="text-base font-bold text-slate-900">
-                              {edu.degree}
-                            </h3>
-                            <p className="mt-1 text-sm font-medium text-indigo-600">
-                              {edu.institution}
-                            </p>
-                            {edu.year && (
-                              <p className="mt-1 text-xs text-slate-500 flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {edu.year}
-                              </p>
-                            )}
-                          </div>
-                        )
-                      )}
+        {/* Education - COMPACT & CLEAN */}
+            {candidate.education && parseJsonArray(candidate.education).length > 0 && (
+              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-4">
+                  <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <div className="rounded-md bg-indigo-50 p-1.5">
+                      <GraduationCap className="h-4 w-4 text-indigo-600" />
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-
-            {/* Certifications - IMPROVED */}
-            {candidate.certifications &&
-              parseJsonArray(candidate.certifications).length > 0 && (
-                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                      <div className="rounded-lg bg-amber-100 p-2">
-                        <Award className="h-5 w-5 text-amber-600" />
-                      </div>
-                      Certifications
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-5">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {parseJsonArray(candidate.certifications).map(
-                        (cert: string, index: number) => (
-                          <div
-                            key={index}
-                            className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-amber-50/30 p-3 hover:border-amber-200 hover:shadow-sm transition-all duration-200"
-                          >
-                            <div className="flex items-start gap-2">
-                              <Award className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                              <p className="text-sm font-medium text-slate-800 leading-relaxed">
-                                {cert}
-                              </p>
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-            {/* Projects - IMPROVED */}
-            {processedProjects.length > 0 && (
-                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                      <div className="rounded-lg bg-teal-100 p-2">
-                        <Lightbulb className="h-5 w-5 text-teal-600" />
-                      </div>
-                      Projects
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-5">
-                    <div className="space-y-4">
-                      {processedProjects.map((proj: any, index: number) => (
-                        <div
-                          key={index}
-                          className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-4 hover:border-teal-200 hover:shadow-sm transition-all duration-200"
-                        >
-                          <h3 className="text-base font-bold text-slate-900">
-                            {proj.name}
-                          </h3>
-                          {proj.description && (
-                            <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-                              {proj.description}
+                    Education
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="relative border-l border-slate-200 ml-2 space-y-5 my-1">
+                    {parseJsonArray(candidate.education).map(
+                      (edu: any, index: number) => (
+                        <div key={index} className="relative pl-5">
+                          {/* Timeline Dot */}
+                          <div className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-indigo-500 shadow-sm"></div>
+                          
+            <h3 className="text-sm font-bold text-slate-800 leading-tight">
+  <Highlight text={edu.degree || ''} query={highlightQuery} />
+</h3>
+<p className="text-xs font-medium text-indigo-600 mt-0.5">
+  <Highlight text={edu.institution || ''} query={highlightQuery} />
+</p>
+                          {edu.year && (
+                            <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                              <Calendar className="h-2.5 w-2.5" />
+                              {edu.year}
                             </p>
-                          )}
-                          {proj.technologies && proj.technologies.length > 0 && (
-                            <div className="mt-3">
-                              <p className="text-xs font-medium text-slate-500 mb-2">Technologies:</p>
-                              <div className="flex flex-wrap gap-1">
-                                {proj.technologies.map((tech: string, techIdx: number) => (
-                                  <Badge key={techIdx} variant="secondary" className="text-xs">
-                                    {tech}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
                           )}
                         </div>
-                      ))}
+                      )
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Certifications - COMPACT LIST */}
+            {candidate.certifications && parseJsonArray(candidate.certifications).length > 0 && (
+              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-4">
+                  <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <div className="rounded-md bg-amber-50 p-1.5">
+                      <Award className="h-4 w-4 text-amber-600" />
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                    Certifications
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                    {parseJsonArray(candidate.certifications).map(
+                      (cert: string, index: number) => (
+                        <div
+                          key={index}
+                          className="flex items-start gap-2 group"
+                        >
+                          <Award className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                          <p className="text-xs font-medium text-slate-700 leading-snug group-hover:text-amber-700 transition-colors">
+                            {cert}
+                          </p>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Projects - IMPROVED */}
+            {/* {processedProjects.length > 0 && (
+              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                  <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                    <div className="rounded-lg bg-teal-100 p-2">
+                      <Lightbulb className="h-5 w-5 text-teal-600" />
+                    </div>
+                    Projects
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-5">
+                  <div className="space-y-4">
+                    {processedProjects.map((proj: any, index: number) => (
+                      <div
+                        key={index}
+                        className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-4 hover:border-teal-200 hover:shadow-sm transition-all duration-200"
+                      >
+                        <h3 className="text-base font-bold text-slate-900">
+                          {proj.name}
+                        </h3>
+                        {proj.description && (
+                          <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+                            {proj.description}
+                          </p>
+                        )}
+                        {proj.technologies && proj.technologies.length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-xs font-medium text-slate-500 mb-2">Technologies:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {proj.technologies.map((tech: string, techIdx: number) => (
+                                <Badge key={techIdx} variant="secondary" className="text-xs">
+                                  {tech}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )} */}
 
             {/* Other Details - IMPROVED */}
             {candidate.other_details &&
@@ -874,141 +1170,174 @@ const CandidateProfilePage = () => {
                   </CardContent>
                 </Card>
               )}
+
+                          {candidate.resume_path && (
+              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                      <div className="rounded-lg bg-pink-100 p-2">
+                        <FileText className="h-5 w-5 text-pink-600" /> 
+                        {/* Make sure to import FileText from lucide-react */}
+                      </div>
+                      Resume / CV
+                    </CardTitle>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="gap-2"
+                      onClick={() => window.open(candidate.resume_path, '_blank')}
+                    >
+                      <Download className="h-4 w-4" />
+                      Download Original
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-5">
+                  <div className="bg-slate-50 rounded-lg p-1">
+                     {renderResumeEmbed()}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+          
+
           </div>
 
           {/* Right Column - Sidebar (1/3 width) */}
           <div className="space-y-6">
-                         {/* Candidate Timeline - IMPROVED */}
+            {/* Candidate Timeline - IMPROVED */}
             {(isLoadingTimeline ||
               (timelineEvents && timelineEvents.length > 0)) && (
-              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                  <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                    <div className="rounded-lg bg-orange-100 p-2">
-                      <History className="h-5 w-5 text-orange-600" />
-                    </div>
-                    Candidate Timeline
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-5">
-                  {isLoadingTimeline ? (
-                    <div className="space-y-4">
-                      {[...Array(2)].map((_, i) => (
-                        <div key={i} className="flex gap-3">
-                          <div className="h-10 w-10 rounded-full bg-slate-100 animate-pulse flex-shrink-0"></div>
-                          <div className="flex-grow space-y-2">
-                            <div className="h-3 w-3/4 rounded bg-slate-100 animate-pulse"></div>
-                            <div className="h-2.5 w-1/2 rounded bg-slate-100 animate-pulse"></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <div className="absolute left-5 top-5 h-[calc(100%-40px)] w-0.5 bg-gradient-to-b from-orange-200 via-orange-100 to-transparent" />
-                      <div className="space-y-5">
-                        {timelineEvents.map((event, index) => (
-                          <div key={event.id} className="relative pl-12">
-                            <div className="absolute left-0 top-0.5 grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-orange-100 to-orange-50 text-orange-600 ring-4 ring-white shadow-sm">
-                              <Clock className="h-4 w-4" />
-                            </div>
-                            <div className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-3 hover:border-orange-200 hover:shadow-sm transition-all duration-200">
-                              <p className="font-semibold text-sm text-slate-900">
-                                {event.event_type}
-                              </p>
-                              <p className="text-xs text-slate-500 mt-1">
-                                by{" "}
-                                <span className="font-medium text-slate-700">
-                                  {event.changed_by_user
-                                    ? `${event.changed_by_user.first_name} ${event.changed_by_user.last_name}`
-                                    : "System"}
-                                </span>
-                              </p>
-                              <p className="text-xs text-slate-400 mt-1.5 flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {new Date(event.changed_at).toLocaleString()}
-                              </p>
+                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                      <div className="rounded-lg bg-orange-100 p-2">
+                        <History className="h-5 w-5 text-orange-600" />
+                      </div>
+                      Candidate Timeline
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    {isLoadingTimeline ? (
+                      <div className="space-y-4">
+                        {[...Array(2)].map((_, i) => (
+                          <div key={i} className="flex gap-3">
+                            <div className="h-10 w-10 rounded-full bg-slate-100 animate-pulse flex-shrink-0"></div>
+                            <div className="flex-grow space-y-2">
+                              <div className="h-3 w-3/4 rounded bg-slate-100 animate-pulse"></div>
+                              <div className="h-2.5 w-1/2 rounded bg-slate-100 animate-pulse"></div>
                             </div>
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                    ) : (
+                      <div className="relative">
+                        <div className="absolute left-5 top-5 h-[calc(100%-40px)] w-0.5 bg-gradient-to-b from-orange-200 via-orange-100 to-transparent" />
+                        <div className="space-y-5">
+                          {timelineEvents.map((event, index) => (
+                            <div key={event.id} className="relative pl-12">
+                              <div className="absolute left-0 top-0.5 grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-orange-100 to-orange-50 text-orange-600 ring-4 ring-white shadow-sm">
+                                <Clock className="h-4 w-4" />
+                              </div>
+                              <div className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-3 hover:border-orange-200 hover:shadow-sm transition-all duration-200">
+                                <p className="font-semibold text-sm text-slate-900">
+                                  {event.event_type}
+                                </p>
+                                <p className="text-xs text-slate-500 mt-1">
+                                  by{" "}
+                                  <span className="font-medium text-slate-700">
+                                    {event.changed_by_user
+                                      ? `${event.changed_by_user.first_name} ${event.changed_by_user.last_name}`
+                                      : "System"}
+                                  </span>
+                                </p>
+                                <p className="text-xs text-slate-400 mt-1.5 flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {new Date(event.changed_at).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
             {/* Related Candidates - IMPROVED */}
             {(isLoadingRelated ||
               (relatedCandidates && relatedCandidates.length > 0)) && (
-              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200 sticky top-6">
-                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                  <CardTitle className="text-lg font-bold text-slate-900">
-                    Related Candidates
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3">
-                  {isLoadingRelated ? (
-                    <div className="space-y-3">
-                      {[...Array(3)].map((_, i) => (
-                        <div key={i} className="flex items-center gap-3 p-3">
-                          <div className="h-10 w-10 rounded-full bg-slate-100 animate-pulse"></div>
-                          <div className="flex-grow space-y-2">
-                            <div className="h-3 w-3/4 rounded bg-slate-100 animate-pulse"></div>
-                            <div className="h-2.5 w-1/2 rounded bg-slate-100 animate-pulse"></div>
+                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200 sticky top-6">
+                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+                    <CardTitle className="text-lg font-bold text-slate-900">
+                      Related Candidates
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3">
+                    {isLoadingRelated ? (
+                      <div className="space-y-3">
+                        {[...Array(3)].map((_, i) => (
+                          <div key={i} className="flex items-center gap-3 p-3">
+                            <div className="h-10 w-10 rounded-full bg-slate-100 animate-pulse"></div>
+                            <div className="flex-grow space-y-2">
+                              <div className="h-3 w-3/4 rounded bg-slate-100 animate-pulse"></div>
+                              <div className="h-2.5 w-1/2 rounded bg-slate-100 animate-pulse"></div>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      {relatedCandidates.map((rel_candidate) => (
-                        <div key={rel_candidate.id} className="relative group/candidate">
-                          <Link
-                            to={`/talent-pool/${rel_candidate.id}`}
-                            className="flex items-center gap-3 rounded-lg p-3 transition-all hover:bg-gradient-to-r hover:from-purple-50 hover:to-transparent border border-transparent hover:border-purple-100"
-                          >
-                            <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-full bg-gradient-to-br from-purple-100 to-purple-50 text-sm font-bold text-purple-700 shadow-sm">
-                              {rel_candidate.candidate_name?.charAt(0)}
-                            </div>
-                            <div className="flex-grow overflow-hidden">
-                              <p className="truncate text-sm font-semibold text-slate-900 group-hover/candidate:text-purple-700 transition-colors">
-                                {rel_candidate.candidate_name}
-                              </p>
-                              <p className="truncate text-xs text-slate-500 mt-0.5">
-                                {rel_candidate.suggested_title}
-                              </p>
-                            </div>
-                            <Badge
-                              variant="secondary"
-                              className="bg-purple-100 text-purple-700 text-[10px] h-5 px-2 font-semibold shrink-0"
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {relatedCandidates.map((rel_candidate) => (
+                          <div key={rel_candidate.id} className="relative group/candidate">
+                            <Link
+                              to={`/talent-pool/${rel_candidate.id}`}
+                              className="flex items-center gap-3 rounded-lg p-3 transition-all hover:bg-gradient-to-r hover:from-purple-50 hover:to-transparent border border-transparent hover:border-purple-100"
                             >
-                              {rel_candidate.matching_skill_count}
-                            </Badge>
-                          </Link>
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs p-3 rounded-lg bg-slate-900 text-white text-xs shadow-xl opacity-0 group-hover/candidate:opacity-100 transition-opacity duration-200 z-30 pointer-events-none">
-                            <p className="font-semibold mb-2 border-b border-slate-700 pb-1.5 text-center">
-                              Matched Skills
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {rel_candidate.matching_skills?.map((skill) => (
-                                <span
-                                  key={skill}
-                                  className="bg-slate-700 px-2 py-1 rounded text-[10px] font-medium"
-                                >
-                                  {skill}
-                                </span>
-                              ))}
+                              <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-full bg-gradient-to-br from-purple-100 to-purple-50 text-sm font-bold text-purple-700 shadow-sm">
+                                {rel_candidate.candidate_name?.charAt(0)}
+                              </div>
+                              <div className="flex-grow overflow-hidden">
+                                <p className="truncate text-sm font-semibold text-slate-900 group-hover/candidate:text-purple-700 transition-colors">
+                                  {rel_candidate.candidate_name}
+                                </p>
+                                <p className="truncate text-xs text-slate-500 mt-0.5">
+                                  {rel_candidate.suggested_title}
+                                </p>
+                              </div>
+                              <Badge
+                                variant="secondary"
+                                className="bg-purple-100 text-purple-700 text-[10px] h-5 px-2 font-semibold shrink-0"
+                              >
+                                {rel_candidate.matching_skill_count}
+                              </Badge>
+                            </Link>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs p-3 rounded-lg bg-slate-900 text-white text-xs shadow-xl opacity-0 group-hover/candidate:opacity-100 transition-opacity duration-200 z-30 pointer-events-none">
+                              <p className="font-semibold mb-2 border-b border-slate-700 pb-1.5 text-center">
+                                Matched Skills
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {rel_candidate.matching_skills?.map((skill) => (
+                                  <span
+                                    key={skill}
+                                    className="bg-slate-700 px-2 py-1 rounded text-[10px] font-medium"
+                                  >
+                                    {skill}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="absolute left-1/2 -translate-x-1/2 bottom-[-4px] h-2 w-2 bg-slate-900 rotate-45"></div>
                             </div>
-                            <div className="absolute left-1/2 -translate-x-1/2 bottom-[-4px] h-2 w-2 bg-slate-900 rotate-45"></div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
 
           </div>
