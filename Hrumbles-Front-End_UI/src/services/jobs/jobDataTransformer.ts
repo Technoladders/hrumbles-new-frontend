@@ -30,6 +30,8 @@ export const transformToJobData = (jobRecord: any): JobData => {
     numberOfCandidates: jobRecord.number_of_candidates || 0,
     organization: jobRecord.organization_id,
     createdBy: jobRecord.created_by,
+    closedDate: jobRecord.closed_date,
+    closedBy: jobRecord.closed_by,
     assigned_to: jobRecord.assigned_to || null, 
     candidate_count: jobRecord.candidate_count,
     hr_budget: jobRecord.budget,
@@ -67,6 +69,8 @@ export const transformToDbJob = (job: JobData): Record<string, any> => {
     number_of_candidates: job.numberOfCandidates || 0,
     organization_id: job.organization,
     created_at: job.createdAt,
+    closed_date: job.closedDate,
+    closed_by: job.closedBy
     // hr_job_candidates: job.hr_job_candidates
   };
 };

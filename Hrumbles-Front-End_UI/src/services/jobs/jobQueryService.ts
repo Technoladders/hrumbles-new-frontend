@@ -106,9 +106,10 @@ export const updateAssociate = async (id: string, job: JobData, updated_by: stri
   }
 };
 // Update job status
-export const updateJobStatus = async (jobId: string, status: string): Promise<JobData> => {
+// Update the service to pass the extra fields
+export const updateJobStatus = async (jobId: string, status: string, extraFields: any = {}): Promise<JobData> => {
   try {
-    const { data } = await updateJobStatusRecord(jobId, status);
+    const { data } = await updateJobStatusRecord(jobId, status, extraFields);
     return transformToJobData(data);
   } catch (error) {
     console.error(`Failed to update job status for job ${jobId}:`, error);

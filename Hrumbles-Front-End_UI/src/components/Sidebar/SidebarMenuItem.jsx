@@ -10,7 +10,7 @@ import { TbCheckbox } from "react-icons/tb";
 import { GoOrganization } from "react-icons/go";
 import { VscOrganization } from "react-icons/vsc";
 import { GrDocumentTime } from "react-icons/gr";
-import { LuCalendarPlus, LuUserSearch } from "react-icons/lu";
+import { LuCalendarPlus, LuUserSearch, LuCalendarCog } from "react-icons/lu";
 import { BsShieldLock, BsShieldCheck, BsPin } from "react-icons/bs";
 import { FaUserShield, FaProjectDiagram, FaUserTie } from 'react-icons/fa';
 import { RiCustomerService2Fill } from 'react-icons/ri';
@@ -65,8 +65,18 @@ const orgSuperAdminAllItems = [
     dropdown: [
       { icon: TbCheckbox, label: "Timesheet", path: "/approvals/timesheet" },
       { icon: TbCheckbox, label: "Regularization", path: "/approvals/regularization" },
-      { icon: TbCheckbox , label:"Leave", path: "/approvals/leave"},
-      { icon: TbCheckbox, label: "Auto-Terminated Timesheets", path: "/approvals/auto-terminated" },
+      // { icon: TbCheckbox , label:"Leave", path: "/approvals/leave"},
+      // { icon: TbCheckbox, label: "Auto-Terminated Timesheets", path: "/approvals/auto-terminated" },
+    ],
+  },
+  {
+    icon: LuCalendarCog,
+    label: "Leave Management",
+    path: "#",
+    dropdown: [
+      { icon: TbCheckbox , label:"Leave Approval", path: "/approvals/leave"},
+      { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies" },
+
     ],
   },
   { icon: GoOrganization, label: "Companies", path: "/companies" },
@@ -78,7 +88,6 @@ const orgSuperAdminAllItems = [
     label: "Settings",
     path: "#",
     dropdown: [
-      { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies" },
       { icon: IoCalendarNumberOutline, label: "Official Holidays", path: "/admin/holidays" },
       { icon: BsShieldLock, label: "Password", path: "/password" },
     ],
@@ -122,8 +131,17 @@ const demoOrgSuperAdminMenu = [
     dropdown: [
       { icon: TbCheckbox, label: "Timesheet", path: "/approvals/timesheet" },
       { icon: TbCheckbox, label: "Regularization", path: "/approvals/regularization" },
-      { icon: TbCheckbox , label:"Leave", path: "/approvals/leave"},
-      { icon: TbCheckbox, label: "Auto-Terminated Timesheets", path: "/approvals/auto-terminated" },
+      // { icon: TbCheckbox, label: "Auto-Terminated Timesheets", path: "/approvals/auto-terminated" },
+    ],
+  },
+  {
+    icon: LuCalendarCog,
+    label: "Leave Management",
+    path: "#",
+    dropdown: [
+      { icon: TbCheckbox , label:"Leave Approval", path: "/approvals/leave"},
+      { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies" },
+
     ],
   },
   {
@@ -179,7 +197,18 @@ const recruitmentFirmOrgSuperAdminMenu = [
     dropdown: [
       { icon: TbCheckbox, label: "Timesheet", path: "/approvals/timesheet" },
       { icon: TbCheckbox, label: "Regularization", path: "/approvals/regularization" },
-      { icon: TbCheckbox , label:"Leave", path: "/approvals/leave"},
+      // { icon: TbCheckbox , label:"Leave", path: "/approvals/leave"},
+    ],
+  },
+  {
+    icon: LuCalendarCog,
+    label: "Leave Management",
+    path: "#",
+    dropdown: [
+      { icon: TbCheckbox , label:"Leave Approval", path: "/approvals/leave"},
+      { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies" },
+      // { icon: IoCalendarNumberOutline, label: "Official Holidays", path: "/admin/holidays" },
+
     ],
   },
   // {

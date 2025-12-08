@@ -188,8 +188,17 @@ const [debouncedJobSearchTerm] = useDebounce(jobSearchTerm, 500);
             query = query.eq('organization_id', organizationId);
         }
 
-        if (role === '' && user?.id) {
-          query = query.eq('created_by', user.id);
+        const TASKUP_ORG_ID = '0e4318d8-b1a5-4606-b311-c56d7eec47ce';
+
+     if (user?.id) {
+          // Case A: Existing logic (if role is empty)
+          if (role === '') {
+            query = query.eq('created_by', user.id);
+          }
+          // Case B: Specific Taskup Logic (Org matches AND role is employee)
+          else if (organizationId === TASKUP_ORG_ID && role === 'employee') {
+            query = query.eq('created_by', user.id);
+          }
         }
 
         if (debouncedSearchTerm) {
