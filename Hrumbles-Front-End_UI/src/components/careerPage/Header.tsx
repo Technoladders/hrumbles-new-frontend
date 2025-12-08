@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import TechnoladdersLogo from '../../assets/technoladders Logo.png';
 import { Button } from '@/components/careerPage/ui/button';
 import { X, Menu } from 'lucide-react';
 import '../../careerpage.css'
@@ -28,20 +27,14 @@ const Header: React.FC = () => {
         scrolled ? 'py-3 glass shadow-sm' : 'py-5 bg-transparent'
       }`}
     >
-      <div className=" flex items-center justify-between">
-        <div className="flex items-center gap-2 transition-transform duration-300 hover:scale-105">
-          <img
-            src={TechnoladdersLogo}
-            alt="Technoladders Logo"
-            width="230"
-            height="180"
-            className="object-contain"
-          />
-          {/* Optional: Add text like the original if desired */}
-          {/* <span className="font-semibold text-lg tracking-tight">Technoladders</span> */}
+      <div className="flex items-center justify-between px-4">
+        {/* Logo removed - you can add company name here if needed */}
+        <div className="flex items-center gap-2">
+          {/* Optional: Add dynamic company name */}
+          {/* <span className="font-semibold text-lg tracking-tight">Company Name</span> */}
         </div>
 
-        {/* Mobile Menu Button - keeping the button for UI consistency */}
+        {/* Mobile Menu Button */}
         <Button
           variant="ghost"
           size="icon"
@@ -51,11 +44,11 @@ const Header: React.FC = () => {
           {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
         </Button>
 
-        {/* Mobile Navigation - empty but keeping for UI consistency */}
+        {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <div className="fixed inset-0 top-[60px] glass z-40 md:hidden animate-fade-in">
             <nav className="flex flex-col items-center gap-6 p-8">
-              {/* Navigation items removed as requested */}
+              {/* Navigation items can be added here if needed */}
             </nav>
           </div>
         )}

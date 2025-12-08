@@ -342,7 +342,7 @@ const AiJobsDashboard = () => {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold mb-1">Job Dashboard</h1>
-                    <p className="text-gray-500">Manage and track all job postings</p>
+                    <p className="text-gray-500">Manage and track all job </p>
                 </div>
                 <Button onClick={() => setIsChoiceModalOpen(true)} className="flex items-center gap-2">
                     <Plus size={16} />

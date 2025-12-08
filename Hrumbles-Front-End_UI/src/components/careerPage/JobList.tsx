@@ -22,7 +22,7 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchFilters }) => {
     jobType: 'all',
     sortBy: 'newest',
   });
-
+ 
   // Update local filters when props change
   useEffect(() => {
     setLocalFilters(prev => ({
@@ -119,10 +119,11 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchFilters }) => {
               onChange={(e) => handleFilterChange('location', e.target.value)}
             />
           </div>
-          <div className="relative md:col-span-3">
-            <Briefcase className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+  <div className="relative md:col-span-3">
+            {/* Icon removed here */}
             <select 
-              className="w-full h-9 pl-9 pr-4 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="w-full h-9 pl-3 pr-4 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" 
+              // Changed pl-9 to pl-3 above
               value={localFilters.jobType}
               onChange={(e) => handleFilterChange('jobType', e.target.value)}
             >

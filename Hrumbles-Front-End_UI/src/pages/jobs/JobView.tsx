@@ -1,8 +1,9 @@
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom"; 
 import { useEffect, useState } from "react";
+import { useSelector } from "react-redux";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Bookmark, Sparkles, Plus } from "lucide-react";
+import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Bookmark, Sparkles, Plus, Edit, Share2, Copy, Check, Link as LinkIcon, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,7 +13,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
-import { getJobById } from "@/services/jobService";
+import { getJobById, updateJob } from "@/services/jobService";
 import { getCandidatesByJobId } from "@/services/candidateService";
 import JobDetailView from "@/components/jobs/job/JobDetailView";
 import { Candidate } from "@/lib/types";
@@ -21,13 +22,141 @@ import Modal from 'react-modal';
 import AiCandidateFinalizeDrawer from "@/components/jobs/job/candidate/AiCandidateFinalizeDrawer";
 import ResumeUploadModal from '@/components/ui/ResumeUploadModal'; 
 import WishlistModal from '@/components/candidates/talent-pool/WishlistModal';
-
+import { CreateJobModal } from "@/components/jobs/CreateJobModal";
+import { Input } from "@/components/ui/input"; 
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { shareJob } from "@/services/jobs/supabaseQueries";
 
 
 const JobView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+
+  // --- NEW LOGIC FOR ICONS ---
+  const user = useSelector((state: any) => state.auth.user);
+  const userRole = useSelector((state: any) => state.auth.role);
+  const isEmployee = userRole === "employee";
+  
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+   const [hasCopied, setHasCopied] = useState(false);
+
+   // Define the missing state here
+   const [isShared, setIsShared] = useState(false);
+ const [sharedByName, setSharedByName] = useState<string | null>(null);
+
+useEffect(() => {
+    const fetchSharedStatus = async () => {
+      if (!id) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('shared_jobs')
+          .select(`
+            job_id, 
+            created_by,
+            hr_employees!shared_jobs_created_by_fkey (
+              first_name,
+              last_name
+            )
+          `)
+          .eq('job_id', id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error fetching shared status:', error);
+          return;
+        }
+
+        if (data) {
+          setIsShared(true);
+
+          // --- FIX IS HERE ---
+          // 1. Cast to any to bypass TypeScript strictness
+          const rawData = data as any;
+          
+          // 2. Get the employee data
+          let emp = rawData.hr_employees;
+
+          // 3. CRITICAL: Check if it's an Array (Supabase often returns arrays for joins)
+          if (Array.isArray(emp)) {
+            emp = emp[0]; // Take the first item
+          }
+
+          // 4. Safely extract names
+          if (emp) {
+            const fName = emp.first_name || '';
+            const lName = emp.last_name || '';
+            const fullName = `${fName} ${lName}`.trim();
+            
+            // 5. If name is empty, show a fallback
+            setSharedByName(fullName || "Unknown User");
+          } else {
+            setSharedByName("Unknown User");
+          }
+        }
+      } catch (err) {
+        console.error('Unexpected error checking shared status:', err);
+      }
+    };
+
+    fetchSharedStatus();
+  }, [id]);
+
+
+  const handleSaveJob = async (updatedJobData: any) => {
+    if (!job || !user?.id) return;
+    try {
+      await updateJob(job.id.toString(), updatedJobData, user.id);
+      toast.success("Job updated successfully");
+      setIsEditModalOpen(false);
+      refetchJob();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update job");
+    }
+  };
+
+// 1. Logic for "Link with Copy Icon"
+  const handleCopyOnly = () => {
+    const link = `${window.location.origin}/job/${id}`;
+    navigator.clipboard.writeText(link);
+    setHasCopied(true);
+    toast.success("Link copied to clipboard");
+    setTimeout(() => setHasCopied(false), 2000);
+  };
+
+  // 2. Logic for "Share to Career page"
+  const handleShareToCareer = async () => {
+    if (!id) return;
+
+    if (isShared) {
+      toast.info(`Already shared to Career Page by ${sharedByName || 'someone'}`);
+      return;
+    }
+
+    try {
+      const response = await shareJob(id, user?.id);
+      
+      if (response.success) {
+        setIsShared(true);
+        const currentUserName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
+        setSharedByName(currentUserName || "Me");
+        toast.success("Shared to Career page successfully!");
+      } else {
+        if (response.error?.message?.includes("unique") || response.error?.message?.includes("duplicate")) {
+           setIsShared(true);
+           toast.info("Already shared to Career Page");
+        } else {
+           toast.error("Failed to share job");
+        }
+      }
+    } catch (error) {
+      console.error("Share error:", error);
+      toast.error("An error occurred");
+    }
+  };
   // --- SIMPLIFIED STATE MANAGEMENT ---
   // For the manual "Add Candidate" drawer
   const [isAddCandidateDrawerOpen, setIsAddCandidateDrawerOpen] = useState(false);
@@ -221,6 +350,116 @@ const JobView = () => {
             <ArrowLeft size={20} />
           </Button>
           <h1 className="text-xl font-semibold">{job.title}</h1>
+{/* --- UPDATED ICONS SECTION --- */}
+       {/* --- MODERN ACTION BUTTONS --- */}
+           <div className="inline-flex items-center gap-2 ml-4 bg-gray-100 dark:bg-gray-800 p-1.5 rounded-full shadow-inner">
+             
+             {/* 1. View Button - Pill Style */}
+             <Link to={`/jobs/${id}/description`}>
+               <button 
+                 className="group flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 text-gray-600 hover:bg-white hover:text-[#7731E8] hover:shadow-sm"
+               >
+                 <Eye size={16} className="text-gray-500 group-hover:text-[#7731E8]" />
+                 <span className="hidden sm:inline">View</span>
+               </button>
+             </Link>
+
+             {/* 2. Edit Button - Pill Style */}
+             {!isEmployee && (
+               <button 
+                 onClick={() => setIsEditModalOpen(true)}
+                 className="group flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 text-gray-600 hover:bg-white hover:text-[#7731E8] hover:shadow-sm"
+               >
+                 <Edit size={16} className="text-gray-500 group-hover:text-[#7731E8]" />
+                 <span className="hidden sm:inline">Edit</span>
+               </button>
+             )}
+
+             {/* 3. Share Button - Pill Style with Dropdown */}
+             <DropdownMenu>
+               <DropdownMenuTrigger asChild>
+                 <button 
+                   className={`
+                     group flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200
+                     ${isShared 
+                       ? 'bg-emerald-50 text-emerald-600 shadow-sm hover:bg-emerald-100' 
+                       : 'text-gray-600 hover:bg-white hover:text-[#7731E8] hover:shadow-sm'
+                     }
+                   `}
+                 >
+                   {isShared ? (
+                     <>
+                       <Check size={16} strokeWidth={2.5} className="text-emerald-600" />
+                       <span className="hidden sm:inline font-semibold">Shared</span>
+                     </>
+                   ) : (
+                     <>
+                       <Share2 size={16} className="text-gray-500 group-hover:text-[#7731E8]" />
+                       <span className="hidden sm:inline">Share</span>
+                     </>
+                   )}
+                 </button>
+               </DropdownMenuTrigger>
+               
+               <DropdownMenuContent align="end" className="w-72 p-3 rounded-xl shadow-xl border-gray-200">
+                 
+                 <div className="text-xs font-semibold text-gray-500 mb-2 px-1 uppercase tracking-wider">
+                   Share Options
+                 </div>
+
+                 {/* Option 1: Link with Copy Icon */}
+                 <div className="flex items-center justify-between p-2 bg-gray-50 border border-gray-100 rounded-lg mb-2 group hover:border-purple-200 transition-colors">
+                   <div className="flex items-center gap-2 overflow-hidden">
+                     <div className="p-1.5 bg-white rounded-md shadow-sm text-gray-500">
+                        <LinkIcon size={14} />
+                     </div>
+                     <div className="flex flex-col">
+                        <span className="text-xs font-medium text-gray-700">Job Link</span>
+                        <span className="text-[10px] text-gray-400 truncate max-w-[140px]">
+                          {`${window.location.origin}/job/${id}`}
+                        </span>
+                     </div>
+                   </div>
+                   <Button 
+                     size="icon" 
+                     variant="ghost" 
+                     onClick={handleCopyOnly}
+                     className="h-8 w-8 text-gray-500 hover:text-purple-600 hover:bg-white rounded-full"
+                     title="Copy Link"
+                   >
+                     {hasCopied ? <Check size={14} className="text-green-500"/> : <Copy size={14}/>}
+                   </Button>
+                 </div>
+
+                 {/* Option 2: Share to Career Page */}
+                 <Button 
+                   variant="ghost" 
+                   onClick={handleShareToCareer}
+                   disabled={isShared}
+                   className={`w-full justify-start h-auto py-2.5 px-3 rounded-lg border transition-all
+                     ${isShared 
+                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 cursor-default opacity-100' 
+                       : 'bg-white text-gray-700 border-gray-200 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-200'
+                     }
+                   `}
+                 >
+                   <div className={`p-1.5 rounded-md shadow-sm mr-3 ${isShared ? 'bg-white text-emerald-600' : 'bg-gray-100 text-gray-500 group-hover:bg-white'}`}>
+                      <Globe size={14} />
+                   </div>
+                   <div className="flex flex-col items-start">
+                      <span className="text-xs font-bold">
+                        {isShared ? "Shared to Career page" : "Share to Career page"}
+                      </span>
+                      <span className="text-[10px] opacity-80">
+                        {isShared ? `By ${sharedByName || 'Me'}` : "Click to publish publicly"}
+                      </span>
+                   </div>
+                   {isShared && <Check size={14} className="ml-auto text-emerald-600" />}
+                 </Button>
+
+               </DropdownMenuContent>
+             </DropdownMenu>
+           </div>
         </div>
         
         {/* Action Buttons */}
@@ -330,6 +569,15 @@ const JobView = () => {
         onCandidateAdded={handleManualCandidateAdded} 
       />
       
+      {job && (
+        <CreateJobModal 
+          isOpen={isEditModalOpen} 
+          onClose={() => setIsEditModalOpen(false)} 
+          onSave={handleSaveJob} 
+          editJob={job} 
+        />
+      )}
+
       {/* --- MODALS & DRAWERS --- */}
       <AddCandidateDrawer 
         job={job} 

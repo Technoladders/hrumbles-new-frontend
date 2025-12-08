@@ -1778,12 +1778,12 @@ const handleSubmit = (e: React.FormEvent) => {
       </div>
 
       {/* Education Details Section */}
-      <div className="naukri-section">
+      <div className="naukri-section">         
         <div className="naukri-section-header" onClick={() => setShowEducation(!showEducation)}>
           <h3>Education Details</h3>
           {showEducation ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
         </div>
-        
+                      
         {showEducation && (
           <div className="naukri-section-content">
             <div className="group">
@@ -1869,7 +1869,7 @@ const handleSubmit = (e: React.FormEvent) => {
               </div>
               
               {/* Date Posted */}
-              <div>
+              {/* <div>
                 <label className="naukri-label">Active in</label>
                 <ToggleGroup 
                   type="single" 
@@ -1894,7 +1894,7 @@ const handleSubmit = (e: React.FormEvent) => {
                     30d
                   </ToggleGroupItem>
                 </ToggleGroup>
-              </div>
+              </div> */}
             </div>
           </div>
         )}

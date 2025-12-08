@@ -156,16 +156,27 @@ export const deleteJobRecord = async (id: string): Promise<void> => {
   }
 };
 
-export const shareJob = async (jobId) => {
-
+export const shareJob = async (jobId: string, explicitUserId?: string) => {
+  
   const authData = getAuthDataFromLocalStorage();
-    if (!authData) {
-      throw new Error('Failed to retrieve authentication data');
-    }
-    const { organization_id, userId } = authData;
+  if (!authData) {
+    throw new Error('Failed to retrieve authentication data');
+  }
+
+  const { organization_id, userId } = authData;
+
+  // Use the explicitly passed ID (from React) or fallback to LocalStorage ID
+  const finalUserId = explicitUserId || userId;
+
   const { data, error } = await supabase
     .from("shared_jobs")
-    .insert([{ job_id: jobId, organization_id }]);
+    .insert([
+      { 
+        job_id: jobId, 
+        organization_id,
+        created_by: finalUserId // <--- THIS WAS MISSING
+      }
+    ]);
 
   if (error) {
     console.error("Error sharing job:", error);
