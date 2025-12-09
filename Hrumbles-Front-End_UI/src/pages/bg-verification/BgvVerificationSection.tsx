@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { useSelector } from 'react-redux';
+import { useQuery } from '@tanstack/react-query'; // Import useQuery
+import { supabase } from '@/integrations/supabase/client'; // Import Supabase client
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Candidate } from '@/lib/types';
 import { useBgvVerifications } from '@/hooks/bg-verification/useBgvVerifications';
@@ -9,8 +11,6 @@ import { VerificationMenuList } from './VerificationMenuList';
 import { VerificationInputForm } from './VerificationInputForm';
 import { isVerificationSuccessful } from '@/components/jobs/ai/utils/bgvUtils';
 import { AllResultsDisplay } from './results/AllResultsDisplay';
-
-const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
 
 const baseVerificationConfig = {
   fetchUan: {
@@ -61,24 +61,48 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
 
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
+  // --- NEW: Fetch Organization Verification Configuration ---
+  const { data: orgConfig } = useQuery({
+    queryKey: ['org-verification-config', organizationId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('hr_organizations')
+        .select('verification_check')
+        .eq('id', organizationId)
+        .single();
+      
+      if (error) {
+        console.error("Error fetching org config:", error);
+        return { verification_check: 'truthscreen' }; // Default fallback
+      }
+      return data;
+    },
+    enabled: !!organizationId,
+    staleTime: 1000 * 60 * 30, // Cache for 30 minutes
+  });
+
   const dynamicVerificationConfig = useMemo(() => {
     const orderedConfig: any = { // Use 'any' for easier dynamic insertion
       fetchUan: baseVerificationConfig.fetchUan,
       fetchLatestUan: baseVerificationConfig.fetchLatestUan,
     };
 
-    if (organizationId === ASCENDION_ORGANIZATION_ID) {
+    // --- DYNAMIC LOGIC BASED ON DB CONFIG ---
+    const provider = orgConfig?.verification_check || 'truthscreen';
+    console.log("provider:", provider)
+
+    if (provider === 'gridlines') {
       orderedConfig.fetchHistory = {
         label: 'Fetch Employment History',
         isDirect: true,
-        method: 'uan_full_history_gl',
+        method: 'uan_full_history_gl', // Gridlines Method
         inputs: [{ name: 'uan', placeholder: 'Enter 12-digit UAN', label: 'UAN Number' }]
       };
     } else {
       orderedConfig.fetchHistory = {
         label: 'Fetch Employment History',
         isDirect: true,
-        method: 'uan_full_history',
+        method: 'uan_full_history', // TruthScreen Method
         inputs: [{ name: 'uan', placeholder: 'Enter 12-digit UAN', label: 'UAN Number' }]
       };
     }
@@ -88,7 +112,7 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
     orderedConfig.viewAll = baseVerificationConfig.viewAll;
     
     return orderedConfig;
-  }, [organizationId]);
+  }, [orgConfig]); // Re-calculate when config loads
 
 
   const { state, handleInputChange, handleVerify } = useBgvVerifications(candidate);

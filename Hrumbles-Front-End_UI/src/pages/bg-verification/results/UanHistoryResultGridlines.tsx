@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { History, Download } from 'lucide-react';
+import { History, Download, User, Users } from 'lucide-react';
 import { generateUanHistoryPdfGridlines } from '@/lib/generateUanHistoryPdfGridlines'; // We will create this next
 import { toast } from 'sonner';
 import { Candidate } from '@/lib/types';
@@ -35,6 +35,10 @@ export const UanHistoryResultGridlines = ({ result, meta, candidate }: UanHistor
     return <p className="text-gray-500">{message}</p>;
   }
 
+   const candidateName = history[0]?.name || 'N/A';
+  const guardianName = history[0]?.guardian_name || 'N/A';
+  
+
   const handleDownloadPdf = () => {
     try {
       generateUanHistoryPdfGridlines(candidate, result, meta);
@@ -53,6 +57,19 @@ export const UanHistoryResultGridlines = ({ result, meta, candidate }: UanHistor
             <History size={18} className="text-gray-600"/>
             Employment History
           </CardTitle>
+           {/* Candidate Name & Guardian Name */}
+            <div className="space-y-1 text-sm mt-2">
+              <p className="flex items-center gap-2 text-gray-700">
+                <User size={14} className="text-gray-500" />
+                <span className="font-medium">Name:</span> {candidateName}
+              </p>
+              {guardianName !== 'N/A' && (
+                <p className="flex items-center gap-2 text-gray-700">
+                  <Users size={14} className="text-gray-500" />
+                  <span className="font-medium">Guardian Name:</span> {guardianName}
+                </p>
+              )}
+            </div>
           <CardDescription className="text-xs text-gray-500 mt-1">
             Verified using UAN: {meta.inputValue}
           </CardDescription>
@@ -77,3 +94,5 @@ export const UanHistoryResultGridlines = ({ result, meta, candidate }: UanHistor
     </Card>
   );
 };
+
+// --- NEW: UanHistoryResultTruthscreen.tsx ---

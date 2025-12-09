@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Candidate } from '@/lib/types';
 
@@ -27,6 +28,26 @@ const sanitizeMobile = (phone: string): string => {
 export const useBgvVerifications = (candidate: Candidate) => {
   const user = useSelector((state: any) => state.auth.user);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
+
+  // --- NEW: Fetch Organization Verification Configuration ---
+  const { data: orgConfig } = useQuery({
+    queryKey: ['org-verification-config', organizationId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('hr_organizations')
+        .select('verification_check')
+        .eq('id', organizationId)
+        .single();
+      
+      if (error) {
+        console.error("Error fetching org config:", error);
+        return { verification_check: 'truthscreen' }; // Default fallback
+      }
+      return data;
+    },
+    enabled: !!organizationId,
+    staleTime: 1000 * 60 * 30, // Cache for 30 minutes
+  });
 
   const [state, setState] = useState<BGVState>({
     inputs: { 
@@ -94,13 +115,10 @@ export const useBgvVerifications = (candidate: Candidate) => {
 
     try {
       // --- KEY CHANGE: Determine which Edge Function to call ---
-      const isGridlinesCheck = [
-          'latest_employment_mobile', 
-          'latest_passbook_mobile',
-          'latest_employment_uan',
-           'uan_full_history_gl'
-      ].includes(verificationType);
-      const functionName = isGridlinesCheck ? 'run-gridlines-check' : 'run-bgv-check';
+       const preferredProvider = orgConfig?.verification_check || 'truthscreen';
+      
+      // 2. Decide function name based on provider
+      let functionName = preferredProvider === 'gridlines' ? 'run-gridlines-check' : 'run-bgv-check';
       
       const payload = {
         candidate,

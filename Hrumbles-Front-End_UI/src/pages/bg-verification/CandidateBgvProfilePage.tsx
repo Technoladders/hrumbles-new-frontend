@@ -71,22 +71,52 @@ const CandidateBgvProfilePage = () => {
     enabled: !!candidateId,
   });
 
-   // --- NEW LOGIC to determine available tabs and find UAN history ---
- const { hasAnyResults, verifiedUanHistory } = useMemo(() => {
-    if (!bgvState.results || Object.keys(bgvState.results).length === 0) {
-      return { hasAnyResults: false, verifiedUanHistory: null };
+const { hasAnyResults, verifiedUanHistory } = useMemo(() => {
+  if (!bgvState.results || Object.keys(bgvState.results).length === 0) {
+    return { hasAnyResults: false, verifiedUanHistory: null };
+  }
+
+  const hasResults = Object.values(bgvState.results).some(arr => arr && arr.length > 0);
+
+  // Collect all employment records from ALL uan_full_history entries
+  const allEmploymentRecords: any[] = [];
+
+  const uanHistoryResults = [
+    ...(bgvState.results['uan_full_history_gl'] || []),
+    ...(bgvState.results['uan_full_history'] || []),
+
+  ];
+
+  uanHistoryResults.forEach((entry) => {
+    if (!entry || entry.status !== 'completed') return;
+
+    const data = entry.data;
+
+    // Case 1: GL Provider format
+    if (data?.data?.employment_data) {
+      allEmploymentRecords.push(...data.data.employment_data);
     }
-    const hasResults = Object.values(bgvState.results).some(arr => arr && arr.length > 0);
-    const glHistory = bgvState.results['uan_full_history_gl'];
-    const tsHistory = bgvState.results['uan_full_history'];
-    let history = null;
-    if (glHistory?.[0]?.data?.data?.employment_data) {
-        history = glHistory[0].data.data.employment_data;
-    } else if (tsHistory?.[0]?.data?.msg) {
-        history = tsHistory[0].data.msg;
+
+    // Case 2: TS Provider format (msg array with Doj, DateOfExitEpf, etc.)
+    else if (data?.msg && Array.isArray(data.msg)) {
+      allEmploymentRecords.push(...data.msg);
     }
-    return { hasAnyResults: hasResults, verifiedUanHistory: history };
-  }, [bgvState.results]);
+  });
+
+  // Optional: Sort by most recent Doj (or DateOfExitEpf if available)
+  allEmploymentRecords.sort((a, b) => {
+    const dateA = new Date(a.Doj || a.date_of_joining || '').getTime();
+    const dateB = new Date(b.Doj || b.date_of_joining || '').getTime();
+    return dateB - dateA; // Descending: newest first
+  });
+
+  return {
+    hasAnyResults: hasResults || allEmploymentRecords.length > 0,
+    verifiedUanHistory: allEmploymentRecords.length > 0 ? allEmploymentRecords : null,
+  };
+}, [bgvState.results]);
+
+  console.log("verifiedUanHistory:", verifiedUanHistory)
 
   // --- NEW: Effect to fetch and update missing career experience ---
   useEffect(() => {

@@ -36,7 +36,7 @@ if (verificationType === 'latest_employment_uan') {
   // --- TruthScreen Success Check ---
   // Successful TruthScreen lookups have a top-level `status` of 1 or 0.
   if (['mobile_to_uan', 'pan_to_uan', 'uan_full_history', 'mobile', 'pan'].includes(verificationType)) {
-    return resultData.status === 1 || resultData.status === 0;
+    return resultData.status === 1 || resultData.status === 0 || resultData.data?.code === '1016' || resultData.data?.code === '1029';
   }
 
   // Default to false if the type is unknown
