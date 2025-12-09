@@ -6,7 +6,7 @@ import { BGVState } from '@/hooks/bg-verification/useBgvVerifications';
 import { Candidate } from '@/lib/types';
 import { VerificationResultDisplay } from '../VerificationResultDisplay';
 import { isVerificationSuccessful } from '@/components/jobs/ai/utils/bgvUtils';
-import { generateComprehensiveReport } from '@/lib/generateComprehensiveReport'; // We will create this next
+import { generateComprehensiveReport } from '@/lib/generateComprehensiveReport';
 
 interface Props {
   candidate: Candidate;
@@ -20,6 +20,7 @@ const resultOrder = [
     'latest_employment_uan',
     'latest_employment_mobile',
     'uan_full_history',
+    'uan_full_history_gl', // Added gridlines history key just in case
     'latest_passbook_mobile',
 ];
 
@@ -29,14 +30,24 @@ const resultTitles: { [key: string]: string } = {
     latest_employment_uan: 'Latest Employment (UAN)',
     latest_employment_mobile: 'Latest Employment (Mobile/PAN)',
     uan_full_history: 'Full Employment History (UAN)',
+    uan_full_history_gl: 'Full Employment History (UAN - GL)',
     latest_passbook_mobile: 'EPFO Passbook',
 };
 
-
 export const AllResultsDisplay = ({ candidate, results, onBack }: Props) => {
-    const successfulResults = resultOrder.filter(key => 
-        results[key] && isVerificationSuccessful(results[key].data, key)
-    );
+    
+    // 1. UPDATED FILTER LOGIC:
+    // Iterate through the array of results for each key.
+    // Return true if ANY item in the array is successful.
+    const successfulResults = resultOrder.filter(key => {
+        const resultItems = results[key];
+        if (!Array.isArray(resultItems) || resultItems.length === 0) return false;
+        
+        // check if at least one item in the array has successful data
+        return resultItems.some(item => isVerificationSuccessful(item.data, key));
+    });
+
+    console.log("Debug - successfulResults keys:", successfulResults);
 
     const handleDownload = () => {
         generateComprehensiveReport(candidate, results);
@@ -59,10 +70,18 @@ export const AllResultsDisplay = ({ candidate, results, onBack }: Props) => {
                 <div className="space-y-8">
                     {successfulResults.map(key => (
                         <div key={key}>
-                            <h4 className="text-lg font-bold text-indigo-700 mb-2 pb-1 border-b-2 border-indigo-200">{resultTitles[key]}</h4>
+                            <h4 className="text-lg font-bold text-indigo-700 mb-2 pb-1 border-b-2 border-indigo-200">
+                                {resultTitles[key] || key}
+                            </h4>
+                            
+                            {/* 2. UPDATED PROP PASSING: 
+                                Pass the full array (results[key]) directly.
+                                Added 'candidate' prop which is required by VerificationResultDisplay. 
+                            */}
                             <VerificationResultDisplay 
-                                resultData={results[key].data}
+                                resultData={results[key]} 
                                 verificationType={key}
+                                candidate={candidate}
                             />
                         </div>
                     ))}

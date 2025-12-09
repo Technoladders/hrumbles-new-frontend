@@ -75,6 +75,40 @@ const createEmployee = createAsyncThunk("employees/createEmployee", async (emplo
     }
   });
 
+  const createEmployeeRecord = createAsyncThunk("employees/createEmployeeRecord", async (employeeData, { rejectWithValue }) => {
+  try {
+    // 1️⃣ ✅ Get Role ID (defaults to 'employee')
+    const role_id = await getRoleId("employee");
+
+    // 2️⃣ ✅ Insert directly into hr_employees
+    // Note: We do NOT send an 'id'. We let the database auto-generate the UUID.
+    // Ensure your hr_employees table has 'id' set to 'default gen_random_uuid()' or similar.
+    const { data, error } = await supabase.from("hr_employees").insert({
+      organization_id: employeeData.organization_id,
+      first_name: employeeData.firstName,
+      last_name: employeeData.lastName,
+      email: employeeData.email,
+      employee_id: employeeData.employee_id,
+      phone: employeeData.phone,
+      department_id: employeeData.department_id,
+      designation_id: employeeData.designation_id,
+      role_id: role_id,
+      hire_type: employeeData.hire_type,
+      salary: Number(employeeData.salary),
+      salary_type: employeeData.salary_type,
+      joining_date: employeeData.joining_date,
+      // We set a flag or status indicating this is a record only, if needed
+      employment_status: 'Active' 
+    }).select();
+
+    if (error) return rejectWithValue(error.message);
+    return data;
+
+  } catch (error) {
+    return rejectWithValue(error.message);
+  }
+});
+
 // ✅ Update Employee Role (Fix Duplicate Export)
 const updateEmployeeRole = createAsyncThunk("employees/updateEmployeeRole", async ({ id, newRole }) => {
   const roleId = await getRoleId(newRole);
@@ -134,4 +168,4 @@ const employeeSlice = createSlice({
 });
 
 export default employeeSlice.reducer;
-export { fetchEmployees, createEmployee, updateEmployeeRole, fetchEmployeesByDepartment, fetchEmployeesByDesignation }; // ✅ Ensure Single Export
+export { fetchEmployees, createEmployee, createEmployeeRecord, updateEmployeeRole, fetchEmployeesByDepartment, fetchEmployeesByDesignation }; // ✅ Ensure Single Export

@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { History, Download } from 'lucide-react';
+import { History, Download, User, Users } from 'lucide-react';
 import { generateUanHistoryPdf } from '@/lib/generateUanHistoryPdf';
 import { toast } from 'sonner';
 import { Candidate } from '@/lib/types';
@@ -33,6 +33,12 @@ export const UanHistoryResult = ({ result, meta, candidate }: UanHistoryResultPr
     return <p className="text-gray-500">No employment history found for this UAN.</p>;
   }
 
+  console.log("candidatehstdior:", history )
+  console.log("meta", meta)
+
+  const candidateName = history[0]?.name || 'N/A';
+  const fatherHusbandName = history[0]?.['father or Husband Name'] || 'N/A';
+
   const handleDownloadPdf = () => {
     try {
       generateUanHistoryPdf(candidate, result);
@@ -54,6 +60,20 @@ export const UanHistoryResult = ({ result, meta, candidate }: UanHistoryResultPr
           <CardDescription className="text-xs text-gray-500 mt-1">
             Verified using UAN: {meta.inputValue}
           </CardDescription>
+
+          {/* Candidate Name & Father/Husband Name */}
+            <div className="space-y-1 text-sm mt-2">
+              <p className="flex items-center gap-2 text-gray-700">
+                <User size={14} className="text-gray-500" />
+                <span className="font-medium">Name:</span> {candidateName}
+              </p>
+              {fatherHusbandName !== 'N/A' && (
+                <p className="flex items-center gap-2 text-gray-700">
+                  <Users size={14} className="text-gray-500" />
+                  <span className="font-medium">Father or Husband Name:</span> {fatherHusbandName}
+                </p>
+              )}
+            </div>
         </div>
         <Button variant="outline" size="sm" onClick={handleDownloadPdf} className="bg-white">
           <Download size={16} className="mr-2" />

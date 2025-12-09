@@ -52,6 +52,8 @@ const CandidateExperienceCard: React.FC<CandidateExperienceCardProps> = ({ candi
     setCurrentExperiences(candidate.career_experience || []);
   }, [candidate.career_experience]);
 
+  console.log("uanHistory:", uanHistory)
+
  const verifiedExperiences = useMemo(() => {
     if (!uanHistory) return null;
     const experiences = currentExperiences || [];

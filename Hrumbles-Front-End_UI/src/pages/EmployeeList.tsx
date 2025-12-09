@@ -6,11 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   Plus, Search, Edit, Trash2, ChevronLeft, ChevronRight, Users, UserCheck, 
-  PieChart, HandCoins,  Download 
+  PieChart, HandCoins, Download, ChevronDown, UserPlus, FileText
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import AddEmployeeModal from "../components/Employee1/AddEmployeeModal";
+import AddRecordsModal from "../components/Employee1/AddRecordsModal"; // ✅ Import New Modal
 import { useSelector } from "react-redux";
 import { useDisclosure } from "@chakra-ui/react";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
@@ -18,7 +19,6 @@ import { Pie } from 'react-chartjs-2';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; 
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import HiddenContactCell from "@/components/ui/HiddenContactCell";
 import EmployeesPayrollDrawer from './EmployeesPayrollDrawer';
 import {
@@ -26,6 +26,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 
 // Register Chart.js components
@@ -52,7 +54,11 @@ const EmployeeList = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  
+  // Modal States
+  const { isOpen, onOpen, onClose } = useDisclosure(); // Original (With Auth)
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false); // ✅ New (Record Only)
+
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   
   const [currentPage, setCurrentPage] = useState(1);
@@ -116,7 +122,8 @@ const EmployeeList = () => {
       setLoading(false);
     }
   };
-    const handleEmployeeAdded = () => {
+  
+  const handleEmployeeAdded = () => {
     fetchEmployees();
   };
 
@@ -273,50 +280,95 @@ const EmployeeList = () => {
     <div className=" mx-auto py-4 px-4 sm:px-6 lg:px-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl font-bold">Employees</h1>
-   <button
-          onClick={onOpen}
-          className="flex items-center gap-3 pl-1.5 pr-6 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 group h-10"
-        >
-          {/* The "Card" Inside (White 3D Bubble) */}
-          <div className="relative flex items-center justify-center w-7 h-7 mr-1">
-            {/* 1. Glow behind the white card */}
-            <div className="absolute inset-0 bg-white blur-md scale-110 opacity-50 animate-pulse"></div>
-            
-            {/* 2. The White 3D Sphere Container */}
-            <div className="relative w-full h-full rounded-full flex items-center justify-center z-10 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.2)]"
-                 style={{ background: 'radial-gradient(circle at 30% 30%, #ffffff, #f1f5f9)' }}
+        
+        {/* ✅ NEW: Dropdown Menu for Adding Employees */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="flex items-center gap-3 pl-1.5 pr-6 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 group h-10 outline-none"
             >
-              {/* 3. The Purple Gradient Plus Icon */}
-              <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  className="w-5 h-5"
-                  style={{ filter: 'drop-shadow(0 2px 2px rgba(119,49,232,0.3))' }}
-              >
-                  <defs>
-                      <linearGradient id="purpleIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#9d5cff" />
-                          <stop offset="100%" stopColor="#5b21b6" />
-                      </linearGradient>
-                  </defs>
-                  <path 
-                      d="M12 6V18M6 12H18" 
-                      stroke="url(#purpleIconGrad)" 
-                      strokeWidth="3" 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round" 
-                  />
-              </svg>
-            </div>
-          </div>
+              {/* The "Card" Inside (White 3D Bubble) */}
+              <div className="relative flex items-center justify-center w-7 h-7 mr-1">
+                {/* 1. Glow behind the white card */}
+                <div className="absolute inset-0 bg-white blur-md scale-110 opacity-50 animate-pulse"></div>
+                
+                {/* 2. The White 3D Sphere Container */}
+                <div className="relative w-full h-full rounded-full flex items-center justify-center z-10 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.2)]"
+                     style={{ background: 'radial-gradient(circle at 30% 30%, #ffffff, #f1f5f9)' }}
+                >
+                  {/* 3. The Purple Gradient Plus Icon */}
+                  <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      className="w-5 h-5"
+                      style={{ filter: 'drop-shadow(0 2px 2px rgba(119,49,232,0.3))' }}
+                  >
+                      <defs>
+                          <linearGradient id="purpleIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#9d5cff" />
+                              <stop offset="100%" stopColor="#5b21b6" />
+                          </linearGradient>
+                      </defs>
+                      <path 
+                          d="M12 6V18M6 12H18" 
+                          stroke="url(#purpleIconGrad)" 
+                          strokeWidth="3" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round" 
+                      />
+                  </svg>
+                </div>
+              </div>
+              
+              {/* Button Text with Chevron */}
+              <span className="tracking-wide text-sm relative z-10 flex items-center gap-2">
+                Add Employee <ChevronDown className="w-4 h-4 opacity-80" />
+              </span>
+            </button>
+          </DropdownMenuTrigger>
           
-          {/* Button Text */}
-          <span className="tracking-wide text-sm relative z-10">Add Employee</span>
-        </button>
-        {/* --- REPLACED BUTTON END --- */}
+          <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 shadow-xl border-purple-100 mt-2">
+            <DropdownMenuLabel className="text-xs text-gray-500 font-normal uppercase tracking-wider pl-2">
+              Add Method
+            </DropdownMenuLabel>
+            
+            <DropdownMenuItem 
+              onClick={onOpen} // Opens Original Modal
+              className="cursor-pointer rounded-lg py-2.5 px-3 mb-1 focus:bg-purple-50 group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="bg-purple-100 text-purple-600 p-1.5 rounded-md group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-700">Create User Account</div>
+                  <div className="text-[10px] text-gray-500 leading-tight">Can login to portal</div>
+                </div>
+              </div>
+            </DropdownMenuItem>
 
+            <DropdownMenuItem 
+              onClick={() => setIsRecordModalOpen(true)} // Opens New Modal
+              className="cursor-pointer rounded-lg py-2.5 px-3 focus:bg-purple-50 group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-100 text-blue-600 p-1.5 rounded-md group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-700">Add Record Only</div>
+                  <div className="text-[10px] text-gray-500 leading-tight">No login access</div>
+                </div>
+              </div>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* ✅ Render Both Modals */}
         <AddEmployeeModal isOpen={isOpen} onClose={onClose} onEmployeeAdded={handleEmployeeAdded} />
+        <AddRecordsModal isOpen={isRecordModalOpen} onClose={() => setIsRecordModalOpen(false)} onRecordAdded={handleEmployeeAdded} />
+        
       </div>
       
       {/* Dashboard Cards */}
@@ -361,7 +413,7 @@ const EmployeeList = () => {
       </div>
 
       <Card>
-<CardHeader>
+        <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             
             {/* Search Bar (Rounded & Gray Style) */}
@@ -378,7 +430,7 @@ const EmployeeList = () => {
               />
             </div>
 
-{/* Download Button with Dropdown (Clean Style) */}
+            {/* Download Button with Dropdown (Clean Style) */}
             <div className="flex gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -419,7 +471,7 @@ const EmployeeList = () => {
           ) : (
             <div className="overflow-x-auto">
               <Table>
-<TableHeader className="bg-gradient-to-r from-purple-600 to-violet-600">
+                <TableHeader className="bg-gradient-to-r from-purple-600 to-violet-600">
                   <TableRow className="hover:bg-transparent border-none">
                     <TableHead className="text-white font-bold">Employee</TableHead>
                     <TableHead className="text-white font-bold">Contact</TableHead>
@@ -504,7 +556,7 @@ const EmployeeList = () => {
                           </span>
                         </TableCell>
           
-                   <TableCell className="text-right">
+                        <TableCell className="text-right">
                           <div className="flex justify-end">
                             <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-sm border border-slate-200">
                               
