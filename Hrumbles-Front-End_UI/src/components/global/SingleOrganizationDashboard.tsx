@@ -11,8 +11,9 @@ import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import moment from 'moment';
 import {
     ArrowLeft, Users, FileText, BrainCircuit, ListChecks,
-    Clock, ArrowRight, Loader2, BriefcaseBusiness, Building2
+    Clock, ArrowRight, Loader2, BriefcaseBusiness, Building2, Coins
 } from 'lucide-react';
+import { ManageVerificationPricingModal } from "./OrganizationManagement/ManageVerificationPricingModal";
 import TrialSubscriptionCard from "./OrganizationManagement/TrialSubscriptionCard";
 import ManualSubscriptionForm from "./OrganizationManagement/ManualSubscriptionForm";
 import { Button } from "@/components/ui/button"; // Make sure Button is imported if you use it for the trigger
@@ -86,6 +87,7 @@ const SingleOrganizationDashboard: FC = () => {
 
      // --- NEW STATE FOR MODAL ---
     const [isManageSubscriptionModalOpen, setIsManageSubscriptionModalOpen] = useState(false);
+    const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
     // --- END NEW STATE ---
 
 
@@ -195,11 +197,19 @@ const handleExtendTrialClick = async (orgId: string) => {
 
     return (
         <div className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-8 space-y-6">
-            <div className="max-w-9xl mx-auto">
-                <RouterLink to="/organization" className="inline-flex items-center text-sm font-medium text-gray-600 hover:text-gray-900 mb-4">
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back to All Organizations
-                </RouterLink>
+           <div className="max-w-9xl mx-auto">
+                <div className="flex justify-between items-center mb-4">
+                    <RouterLink to="/organization" className="inline-flex items-center text-sm font-medium text-gray-600 hover:text-gray-900">
+                        <ArrowLeft className="h-4 w-4 mr-2" />
+                        Back to All Organizations
+                    </RouterLink>
+                    
+                    {/* --- NEW BUTTON: Manage Verification Credits --- */}
+                    <Button variant="outline" className="gap-2" onClick={() => setIsPricingModalOpen(true)}>
+                        <Coins className="h-4 w-4 text-yellow-600" />
+                        Manage Credits & Pricing
+                    </Button>
+                </div>
 
                 <h1 className="text-3xl font-bold text-gray-800 tracking-tight">{details.name}</h1>
                 {/* --- NEW: Trial/Subscription Status Card --- */}
@@ -353,12 +363,20 @@ const handleExtendTrialClick = async (orgId: string) => {
 
      {/* --- NEW: Manual Subscription Management Modal (rendered conditionally) --- */}
      {organizationId && ( // Only render if organizationId is available
+     <>
        <ManualSubscriptionForm
          organizationId={organizationId}
          onUpdateSuccess={detailsRefetch}
          isOpen={isManageSubscriptionModalOpen}
          onClose={() => setIsManageSubscriptionModalOpen(false)}
        />
+
+       <ManageVerificationPricingModal 
+                    organizationId={organizationId}
+                    isOpen={isPricingModalOpen}
+                    onClose={() => setIsPricingModalOpen(false)}
+                />
+                </>
      )}
      {/* --- END NEW MODAL --- */}
 

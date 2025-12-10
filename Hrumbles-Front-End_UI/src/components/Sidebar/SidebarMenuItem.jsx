@@ -170,6 +170,8 @@ const demoOrgSuperAdminMenu = [
         icon: BsShieldCheck, 
         items: [
             { icon: LuUserSearch, label: "Verification", path: "/all-candidates" },
+            { icon: LuUserSearch, label: "Analytics", path: "/bg-verification/analytics" },
+
         ],
     }
 ];
@@ -419,6 +421,8 @@ export const menuItemsByRole = {
     { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
     { icon: SiAwsorganizations, label: "Organization", path: "/organization" },
      { icon: BsShieldCheck, label: "Verifications", path: "/verifications" },
+     { icon: FaFileInvoiceDollar, label: "Invoices", path: "/organization/invoices" },
+
      {
     icon: BarChart3, // Using BarChart3 from lucide-react
     label: "Reports",

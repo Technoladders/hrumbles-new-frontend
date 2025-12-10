@@ -1,15 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Invoice, InvoiceStatus, useAccountsStore } from '@/lib/accounts-data';
 import { Button } from '@/components/ui/button';
-import { formatINR } from '@/utils/currency';
 import {
   Download, CheckCircle, FileText, AlertTriangle,
-  Clock, IndianRupee, Loader2
+  Clock, Loader2, Globe, Mail, Phone, MapPin
 } from 'lucide-react';
-import {
-  Table, TableBody, TableCell, TableHead,
-  TableHeader, TableRow
-} from '@/components/ui/table';
 import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue
@@ -17,7 +12,7 @@ import {
 import { toast } from 'sonner';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import TechnoladdersLogo from '../../../public/hrumbles_logo2.png';
+import { Separator } from '@/components/ui/separator';
 
 const USD_TO_INR_RATE = 84;
 
@@ -32,9 +27,14 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
   onStatusChange,
   onClose
 }) => {
-  const { exportInvoice } = useAccountsStore();
+  const { exportInvoice, fetchOrganizationProfile, organizationProfile } = useAccountsStore();
   const [isExporting, setIsExporting] = useState(false);
   const invoiceRef = useRef<HTMLDivElement>(null);
+
+  // Fetch Organization Profile on mount
+  useEffect(() => {
+    fetchOrganizationProfile();
+  }, [fetchOrganizationProfile]);
 
   const convertToINR = (amount: number) => {
     return invoice.currency === 'USD' ? amount * USD_TO_INR_RATE : amount;
@@ -49,11 +49,11 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
   const formatAmountWithTooltip = (amount: number) => {
     const inrAmount = convertToINR(amount);
     return (
-      <div className="group relative">
+      <div className="group relative inline-block">
         {invoice.currency === 'USD' ? (
           <>
             <span>{formatAmount(amount)}</span>
-            <div className="absolute hidden group-hover:block bg-gray-800 text-white text-xs rounded p-2 z-10">
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-50 shadow-xl">
               ₹ {inrAmount.toLocaleString('en-IN')}
             </div>
           </>
@@ -64,19 +64,29 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
     );
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'paid':
-        return <CheckCircle className="h-3 w-3 text-success" />;
-      case 'unpaid':
-        return <Clock className="h-3 w-3 text-warning" />;
-      case 'overdue':
-        return <AlertTriangle className="h-3 w-3 text-danger" />;
-      case 'draft':
-        return <FileText className="h-3 w-3 text-gray-500" />;
-      default:
-        return null;
-    }
+  const getStatusBadge = (status: string) => {
+    const styles = {
+      Paid: "bg-emerald-100 text-emerald-700 border-emerald-200",
+      Unpaid: "bg-amber-100 text-amber-700 border-amber-200",
+      Overdue: "bg-rose-100 text-rose-700 border-rose-200",
+      Draft: "bg-slate-100 text-slate-700 border-slate-200"
+    };
+    
+    const icons = {
+      Paid: <CheckCircle className="h-3.5 w-3.5 mr-1.5" />,
+      Unpaid: <Clock className="h-3.5 w-3.5 mr-1.5" />,
+      Overdue: <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />,
+      Draft: <FileText className="h-3.5 w-3.5 mr-1.5" />
+    };
+
+    const key = status as keyof typeof styles;
+
+    return (
+      <div className={`flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${styles[key] || styles.Draft}`}>
+        {icons[key]}
+        {status.toUpperCase()}
+      </div>
+    );
   };
 
   const handleExport = async (format: 'pdf' | 'csv') => {
@@ -92,11 +102,14 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
     toast.info(`Generating PDF for Invoice #${invoice.invoiceNumber}...`);
 
     try {
-      const canvas = await html2canvas(invoiceRef.current, {
+      const element = invoiceRef.current;
+      const canvas = await html2canvas(element, {
         scale: 2,
-        logging: false,
         useCORS: true,
-        allowTaint: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
       });
 
       const imgData = canvas.toDataURL('image/png');
@@ -110,7 +123,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
       pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-      pdf.save(`Invoice-${invoice.invoiceNumber}-${invoice.invoiceDate.replace(/\s+/g, '-')}.pdf`);
+      pdf.save(`Invoice-${invoice.invoiceNumber}.pdf`);
       toast.success('Invoice PDF generated successfully');
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -120,216 +133,229 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
     }
   };
 
-  return (
-    <div className="max-w-[1200px] mx-auto p-6">
-      <div className="mb-6 flex justify-between items-center">
-        <Button
-          variant="ghost"
-          onClick={onClose}
-          className="mb-2 text-sm"
-        >
-          <span className="mr-1">←</span>
-          Back to Invoices
-        </Button>
-        <div className={`flex items-center gap-1 px-2 py-1 rounded ${
-            invoice.status === 'Paid' ? 'bg-green-100' :
-            invoice.status === 'Unpaid' ? 'bg-yellow-100' :
-            invoice.status === 'Overdue' ? 'bg-red-100' :
-            'bg-gray-50'
-          }`}>
-            {getStatusIcon(invoice.status)}
-            <span
-              className={`text-sm font-semibold ${
-                invoice.status === 'Paid' ? 'text-success-dark' :
-                invoice.status === 'Unpaid' ? 'text-warning-dark' :
-                invoice.status === 'Overdue' ? 'text-danger-dark' :
-                'text-gray-500'
-              }`}
-            >
-              {invoice.status}
-            </span>
-          </div>
+  // Fallback if profile isn't loaded yet or missing
+  const orgName = organizationProfile?.companyName || "Organization Name";
+  const orgAddress = organizationProfile ? (
+    <>
+      {organizationProfile.addressLine1}<br />
+      {organizationProfile.addressLine2 && <>{organizationProfile.addressLine2}<br /></>}
+      {organizationProfile.city}, {organizationProfile.state} - {organizationProfile.zipCode}<br />
+      {organizationProfile.country}
+    </>
+  ) : "Loading address...";
 
-        <div className="flex gap-1">
+  return (
+    <div className="max-w-5xl mx-auto p-4 md:p-6 bg-gray-50/50 min-h-screen">
+      {/* Header Actions */}
+      <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+        <Button variant="ghost" onClick={onClose} className="text-slate-600 hover:text-slate-900 hover:bg-slate-100">
+          ← Back
+        </Button>
+        
+        <div className="flex items-center gap-3">
+          {getStatusBadge(invoice.status)}
+          
           <Select
             value={invoice.status}
             onValueChange={(value) => onStatusChange(invoice.id, value as InvoiceStatus)}
           >
-            <SelectTrigger className="w-[150px] text-sm">
-              <SelectValue placeholder="Change status" />
+            <SelectTrigger className="w-[140px] h-9 text-sm">
+              <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Paid">Mark as Paid</SelectItem>
-              <SelectItem value="Unpaid">Mark as Unpaid</SelectItem>
-              <SelectItem value="Overdue">Mark as Overdue</SelectItem>
-              <SelectItem value="Draft">Mark as Draft</SelectItem>
+              <SelectItem value="Paid">Mark Paid</SelectItem>
+              <SelectItem value="Unpaid">Mark Unpaid</SelectItem>
+              <SelectItem value="Overdue">Mark Overdue</SelectItem>
+              <SelectItem value="Draft">Mark Draft</SelectItem>
             </SelectContent>
           </Select>
 
-          <Button
-            variant="outline"
-            onClick={() => handleExport('csv')}
-            disabled={isExporting}
-            className="text-sm py-1 px-2"
-          >
-            <FileText className="h-3 w-3 mr-1" />
-            Export CSV
+          <div className="h-6 w-px bg-gray-200 mx-1"></div>
+
+          <Button variant="outline" size="sm" onClick={() => handleExport('csv')} disabled={isExporting}>
+            <FileText className="h-4 w-4 mr-2" /> CSV
           </Button>
-          <Button
-            onClick={() => handleExport('pdf')}
-            disabled={isExporting}
-            className="text-sm py-1 px-2"
-          >
-            {isExporting ? (
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-            ) : (
-              <Download className="h-3 w-3 mr-1" />
-            )}
-            Download PDF
+          <Button size="sm" onClick={() => handleExport('pdf')} disabled={isExporting} className="bg-slate-900 hover:bg-slate-800 text-white">
+            {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+            PDF
           </Button>
         </div>
       </div>
 
-      <div ref={invoiceRef} className="bg-white border rounded-lg shadow-sm p-8 print:shadow-none print:border-none">
-        <div className="flex items-start justify-between border-b pb-6 mb-6">
-          <div className="flex gap-4">
-            <div className="w-20 h-14 flex-shrink-0 pt-7">
-              <img src={TechnoladdersLogo} alt="Company Logo" className="w-full" />
-            </div>
-            <div className="max-w-md">
-              <h1 className="text-xl font-bold">Technoladders Solutions Private Limited</h1>
-              <p className="text-sm text-gray-600 whitespace-normal break-words">
-                Tidel Park, 1st Floor D Block, Module 115, D North Block, 1st Floor, No.4 Rajiv Gandhi Salai, Taramani Chennai Tamil Nadu 600113 India.
-              </p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-600">Invoice</p>
-            <h2 className="text-1xl font-bold">#{invoice.invoiceNumber}</h2>
-            <p className="text-sm text-gray-600 mt-1">Issued on: {invoice.invoiceDate}</p>
-            <p className="text-sm text-gray-600">Due on: {invoice.dueDate}</p>
-            {invoice.status === 'Paid' && invoice.paymentDate && (
-              <p className="text-sm text-gray-600">Paid on: {invoice.paymentDate}</p>
-            )}
-          </div>
-        </div>
+      {/* Invoice Document */}
+      <div className="flex justify-center">
+        <div 
+          ref={invoiceRef} 
+          className="w-full max-w-[210mm] bg-white shadow-lg print:shadow-none overflow-hidden rounded-sm"
+          style={{ minHeight: '297mm' }} // A4 aspect ratio approximation
+        >
+          {/* Top Banner Color Strip */}
+          <div className="h-3 bg-gradient-to-r from-purple-600 to-violet-600 w-full"></div>
 
-        <h2 className="text-gray-700 font-bold mb-4 uppercase">INVOICE SUMMARY</h2>
-        <div className="flex mb-6">
-          <div className="w-2/3 pr-4">
-            <div className="grid grid-cols-[1fr_auto_1fr] gap-x-2 gap-y-3">
-              <div className="text-gray-600">Client Name</div>
-              <div className="text-center">:</div>
-              <div>{invoice.clientName}</div>
-
-              <div className="text-gray-600">Invoice Number</div>
-              <div className="text-center">:</div>
-              <div>#{invoice.invoiceNumber}</div>
-
-              <div className="text-gray-600">Issue Date</div>
-              <div className="text-center">:</div>
-              <div>{invoice.invoiceDate}</div>
-
-              <div className="text-gray-600">Due Date</div>
-              <div className="text-center">:</div>
-              <div>{invoice.dueDate}</div>
-
-              {invoice.status === 'Paid' && invoice.paymentDate && (
-                <>
-                  <div className="text-gray-600">Payment Date</div>
-                  <div className="text-center">:</div>
-                  <div>{invoice.paymentDate}</div>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="w-1/3">
-            <div className="h-full border rounded-lg bg-green-50 flex flex-col items-center justify-center p-6">
-              <p className="text-4xl font-bold text-gray-800">
-                {formatAmountWithTooltip(invoice.totalAmount)}
-              </p>
-              <p className="text-sm text-gray-600 mt-1">Invoice Total</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="mb-6 border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="text-left p-3 w-1/2 uppercase font-bold">DESCRIPTION</th>
-                <th className="text-right p-3 w-1/6 uppercase font-bold">QUANTITY</th>
-                <th className="text-right p-3 w-1/6 uppercase font-bold">RATE</th>
-                <th className="text-right p-3 w-1/6 uppercase font-bold">AMOUNT</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.items.map((item) => (
-                <tr key={item.id} className="border-t">
-                  <td className="p-3">{item.description}</td>
-                  <td className="p-3 text-right font-mono">{item.quantity}</td>
-                  <td className="p-3 text-right font-mono">
-                    {formatAmountWithTooltip(item.rate)}
-                  </td>
-                  <td className="p-3 text-right font-mono">
-                    {formatAmountWithTooltip(item.amount)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="border rounded-lg p-4 mb-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="font-bold uppercase text-lg">TOTAL AMOUNT</div>
-              <div className="text-sm text-gray-600">Subtotal + Tax</div>
-            </div>
-            <div className="text-right bg-green-50 p-4 rounded">
-              <div className="font-bold text-2xl">{formatAmountWithTooltip(invoice.totalAmount)}</div>
-            </div>
-          </div>
-          <div className="mt-4 space-y-2">
-            <div className="flex justify-between">
-              <span className="font-medium">Subtotal:</span>
-              <span className="font-mono">{formatAmountWithTooltip(invoice.subtotal || 0)}</span>
-            </div>
-            {invoice.currency === 'INR' && invoice.taxRate && (
-              <div className="flex justify-between">
-                <span className="font-medium">Tax ({invoice.taxRate || 0}%):</span>
-                <span className="font-mono">{formatAmountWithTooltip(invoice.taxAmount || 0)}</span>
+          <div className="p-10 space-y-8">
+            {/* Header: Logo & Invoice Title */}
+            <div className="flex justify-between items-start">
+              <div className="w-1/2">
+                {organizationProfile?.logoUrl ? (
+                  <img 
+                    src={organizationProfile.logoUrl} 
+                    alt="Logo" 
+                    className="h-16 w-auto object-contain mb-4" 
+                    crossOrigin="anonymous" // Important for html2canvas
+                  />
+                ) : (
+                   <div className="h-16 w-16 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 text-xs mb-4">No Logo</div>
+                )}
+                <h1 className="text-xl font-bold text-slate-800">{orgName}</h1>
               </div>
-            )}
-            {invoice.status === 'Paid' && (
-              <div className="flex justify-between">
-                <span className="font-medium">Paid Amount:</span>
-                <span className="font-mono">{formatAmountWithTooltip(invoice.paidAmount || invoice.totalAmount)}</span>
+              <div className="text-right">
+                <h2 className="text-4xl font-light text-slate-300 tracking-wider">INVOICE</h2>
+                <p className="text-slate-500 font-medium mt-1">#{invoice.invoiceNumber}</p>
               </div>
-            )}
-          </div>
-        </div>
+            </div>
 
-        {(invoice.notes || invoice.terms) && (
-          <div className="mb-6 text-sm">
-            {invoice.notes && (
-              <div className="mb-2">
-                <span className="text-gray-600">Notes: </span>
-                <span className="font-medium">{invoice.notes}</span>
-              </div>
-            )}
-            {invoice.terms && (
+            <Separator />
+
+            {/* Bill To / From Grid */}
+            <div className="grid grid-cols-2 gap-12">
               <div>
-                <span className="text-gray-600">Terms & Conditions: </span>
-                <span className="font-medium">{invoice.terms}</span>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Billed From</p>
+                <div className="text-sm text-slate-700 leading-relaxed">
+                  <p className="font-medium text-slate-900 mb-1">{orgName}</p>
+                  <p className="text-slate-500">{orgAddress}</p>
+                  
+                  <div className="mt-4 space-y-1 text-slate-500">
+                    {organizationProfile?.email && (
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-3 w-3" /> {organizationProfile.email}
+                      </div>
+                    )}
+                    {organizationProfile?.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-3 w-3" /> {organizationProfile.phone}
+                      </div>
+                    )}
+                    {organizationProfile?.taxId && (
+                      <div className="flex items-center gap-2 mt-2 font-medium">
+                        GSTIN/Tax ID: {organizationProfile.taxId}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-        )}
 
-        <div className="text-center text-xs text-gray-500 mt-10 pt-4 border-t">
-          <p>-- This is a system-generated document. --</p>
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Billed To</p>
+                <div className="text-sm text-slate-700 leading-relaxed">
+                  <p className="font-medium text-slate-900 text-lg mb-1">{invoice.clientName}</p>
+                  {/* Client address would go here if available in Invoice object */}
+                  {/* <p className="text-slate-500">Client ID: {invoice.clientId}</p> */}
+                </div>
+
+                <div className="mt-6 grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
+                   <div>
+                      <p className="text-xs text-slate-400 uppercase">Issue Date</p>
+                      <p className="text-sm font-semibold text-slate-700">{invoice.invoiceDate}</p>
+                   </div>
+                   <div>
+                      <p className="text-xs text-slate-400 uppercase">Due Date</p>
+                      <p className="text-sm font-semibold text-slate-700">{invoice.dueDate}</p>
+                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Items Table */}
+            <div className="mt-8">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-800 text-white text-xs uppercase tracking-wider">
+                    <th className="py-3 px-4 text-left rounded-l-md w-1/2">Description</th>
+                    <th className="py-3 px-4 text-right">Qty</th>
+                    <th className="py-3 px-4 text-right">Price</th>
+                    <th className="py-3 px-4 text-right rounded-r-md">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm divide-y divide-slate-100">
+                  {invoice.items.map((item, index) => (
+                    <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                      <td className="py-4 px-4 text-slate-700 font-medium">
+                        {item.description}
+                      </td>
+                      <td className="py-4 px-4 text-right text-slate-500">{item.quantity}</td>
+                      <td className="py-4 px-4 text-right text-slate-500">
+                        {formatAmountWithTooltip(item.rate)}
+                      </td>
+                      <td className="py-4 px-4 text-right text-slate-800 font-semibold">
+                        {formatAmountWithTooltip(item.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Financial Summary */}
+            <div className="flex justify-end mt-6">
+              <div className="w-full md:w-5/12 space-y-3">
+                <div className="flex justify-between text-sm text-slate-600">
+                  <span>Subtotal</span>
+                  <span>{formatAmountWithTooltip(invoice.subtotal || 0)}</span>
+                </div>
+                
+                {(invoice.taxRate || 0) > 0 && (
+                  <div className="flex justify-between text-sm text-slate-600">
+                    <span>Tax ({invoice.taxRate}%)</span>
+                    <span>{formatAmountWithTooltip(invoice.taxAmount || 0)}</span>
+                  </div>
+                )}
+                
+                <Separator className="my-2" />
+                
+                <div className="flex justify-between items-center p-3 bg-slate-900 text-white rounded-lg shadow-md">
+                  <span className="font-semibold uppercase text-xs tracking-wider">Grand Total</span>
+                  <span className="text-xl font-bold">{formatAmountWithTooltip(invoice.totalAmount)}</span>
+                </div>
+
+                {invoice.status === 'Paid' && (
+                   <div className="flex justify-between text-sm text-emerald-600 font-medium pt-1">
+                    <span>Amount Paid</span>
+                    <span>{formatAmountWithTooltip(invoice.paidAmount || invoice.totalAmount)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer / Notes */}
+            <div className="pt-8 mt-8 border-t border-dashed border-gray-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {(invoice.notes) && (
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Notes</h4>
+                    <p className="text-xs text-slate-600 bg-yellow-50 p-3 rounded border border-yellow-100">
+                      {invoice.notes}
+                    </p>
+                  </div>
+                )}
+                
+                {(invoice.terms) && (
+                  <div>
+                     <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Terms & Conditions</h4>
+                     <p className="text-xs text-slate-500 whitespace-pre-line">
+                       {invoice.terms}
+                     </p>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* System Footer */}
+            <div className="text-center pt-10 pb-4">
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest">
+                System Generated Invoice • {organizationProfile?.website || 'Technoladders Solutions'}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -21,6 +21,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; 
 import HiddenContactCell from "@/components/ui/HiddenContactCell";
 import EmployeesPayrollDrawer from './EmployeesPayrollDrawer';
+import EmployeeSalaryStructureDrawer from '@/pages/salary-breakup/EmployeeSalaryStructureDrawer';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -648,7 +649,7 @@ const EmployeeList = () => {
       </Card>
 
       {/* Drawer for Adding Payment */}
-      <EmployeesPayrollDrawer
+      <EmployeeSalaryStructureDrawer
         isOpen={isDrawerOpen}
         onOpenChange={setIsDrawerOpen}
         selectedEmployee={selectedEmployee}

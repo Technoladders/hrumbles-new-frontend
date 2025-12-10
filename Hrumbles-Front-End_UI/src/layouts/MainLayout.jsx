@@ -10,6 +10,7 @@ import { useActivityTracker } from "../hooks/useActivityTracker";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isSameDay } from "date-fns";
+import { CreditBalanceDisplay } from "./CreditBalanceDisplay";
 
 const MainLayout = () => {
   const { colorMode, toggleColorMode } = useColorMode();
@@ -362,7 +363,7 @@ const MainLayout = () => {
 
           <Flex align="center" gap={4}>
 
-            
+           {role === 'organization_superadmin' && <CreditBalanceDisplay />}
             <Menu>
               <MenuButton
                 as={IconButton}

@@ -31,34 +31,69 @@ interface Props {
 export const VerificationMenuList = ({ title, items, onSelect, onBack, results, config, parentKey }: Props) => {
 
   // --- THIS FUNCTION IS NOW FULLY CORRECTED ---
-  const isItemVerified = (itemKey: string): boolean => {
-    // This is a sub-menu item (e.g., 'mobile_to_uan')
+ const isItemVerified = (itemKey: string): boolean => {
+    // --- Submenu Item ---
     if (parentKey) {
-      const resultArray = results[itemKey]; // This is now an array
-      // Check if the array exists and if ANY item in it is successful
-      return Array.isArray(resultArray) && resultArray.some(item => isVerificationSuccessful(item.data, itemKey));
+        // Need to check the config of this specific method to see if it has a legacyKey
+        // config[parentKey] is the category. config[parentKey].methods[itemKey] is the method config.
+        const methodConfig = config[parentKey]?.methods?.[itemKey];
+        const legacyKey = methodConfig?.legacyKey;
+
+        const resultArray = results[itemKey];
+        const hasNew = Array.isArray(resultArray) && resultArray.some(item => isVerificationSuccessful(item.data, itemKey));
+        
+        if (hasNew) return true;
+
+        if (legacyKey) {
+            const legacyArray = results[legacyKey];
+            const hasOld = Array.isArray(legacyArray) && legacyArray.some(item => isVerificationSuccessful(item.data, legacyKey));
+            if (hasOld) return true;
+        }
+        return false;
     }
     
+    // --- Main Menu Item ---
     const categoryConfig = config[itemKey];
-    // This is for special, non-verification items like "View All Results"
     if (!categoryConfig) return false;
 
-    // This is a main menu category item that has a direct method
+    // Direct Method (e.g. Fetch History)
     if (categoryConfig.isDirect) {
-      const resultArray = results[categoryConfig.method]; // This is now an array
-      // Check if the array exists and if ANY item in it is successful
-      return Array.isArray(resultArray) && resultArray.some(item => isVerificationSuccessful(item.data, categoryConfig.method));
+      const methodKey = categoryConfig.method;
+      const legacyKey = categoryConfig.legacyKey;
+
+      const resultArray = results[methodKey];
+      const hasNew = Array.isArray(resultArray) && resultArray.some(item => isVerificationSuccessful(item.data, methodKey));
+      
+      if (hasNew) return true;
+
+      if (legacyKey) {
+          const legacyArray = results[legacyKey];
+          const hasOld = Array.isArray(legacyArray) && legacyArray.some(item => isVerificationSuccessful(item.data, legacyKey));
+          if (hasOld) return true;
+      }
+      return false;
     } 
-    // This is a main menu category item that has sub-methods (e.g., 'Fetch UAN')
+    
+    // Category with Sub-methods (e.g. Fetch UAN -> Mobile/PAN)
     else {
-      // Check if ANY sub-method under this category has ANY successful verification
       return Object.keys(categoryConfig.methods).some(methodKey => {
-        const resultArray = results[methodKey]; // This is now an array
-        return Array.isArray(resultArray) && resultArray.some(item => isVerificationSuccessful(item.data, methodKey));
+        const methodConfig = categoryConfig.methods[methodKey];
+        const legacyKey = methodConfig.legacyKey;
+
+        const resultArray = results[methodKey]; 
+        const hasNew = Array.isArray(resultArray) && resultArray.some(item => isVerificationSuccessful(item.data, methodKey));
+        
+        if (hasNew) return true;
+
+        if (legacyKey) {
+             const legacyArray = results[legacyKey];
+             const hasOld = Array.isArray(legacyArray) && legacyArray.some(item => isVerificationSuccessful(item.data, legacyKey));
+             if (hasOld) return true;
+        }
+        return false;
       });
     }
   };
-
   return (
     <div>
       <div className="flex items-center mb-6">

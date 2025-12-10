@@ -415,7 +415,11 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onClose }) => {
                 <Select value={taxRate.toString()} onValueChange={(value) => setTaxRate(Number(value))}>
                   <SelectTrigger><SelectValue placeholder="Select tax rate" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="0">0%</SelectItem><SelectItem value="5">5%</SelectItem><SelectItem value="12">12%</SelectItem><SelectItem value="18">18%</SelectItem><SelectItem value="28">28%</SelectItem>
+                    <SelectItem value="0">0%</SelectItem>
+                    <SelectItem value="5">5%</SelectItem>
+                    <SelectItem value="12">12%</SelectItem>
+                    <SelectItem value="18">18%</SelectItem>
+                    <SelectItem value="28">28%</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

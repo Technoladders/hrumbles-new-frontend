@@ -93,6 +93,23 @@ export interface AccountsStats {
   };
 }
 
+export interface OrganizationProfile {
+  id: string;
+  organizationId: string;
+  companyName: string;
+  logoUrl?: string;
+  website?: string;
+  email?: string;
+  phone?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+  taxId?: string;
+}
+
 interface AccountsState {
   invoices: Invoice[];
   expenses: Expense[];
@@ -100,6 +117,7 @@ interface AccountsState {
   stats: AccountsStats;
   selectedInvoice: Invoice | null;
   selectedExpense: Expense | null;
+  organizationProfile: OrganizationProfile | null;
 
   // Invoice actions
   fetchInvoices: (timeFilter?: string) => Promise<void>;
@@ -113,6 +131,7 @@ interface AccountsState {
 
   // Expense actions
   fetchExpenses: (timeFilter?: string) => Promise<void>;
+  fetchOrganizationProfile: () => Promise<void>;
   addExpense: (expense: Partial<Omit<Expense, 'id'>>) => Promise<void>;
   updateExpense: (id: string, data: Partial<Expense>, receiptFile?: File) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
@@ -123,6 +142,7 @@ interface AccountsState {
   generateReport: (type: 'invoices' | 'expenses', dateRange: { start: string; end: string }) => void;
   exportData: (type: 'invoices' | 'expenses', format: 'csv') => void;
 }
+
 
 // Helper function to format USD amounts
 const formatUSD = (amount: number): string => {
@@ -209,6 +229,50 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
   },
   selectedInvoice: null,
   selectedExpense: null,
+  organizationProfile: null,
+
+   // ADD THIS NEW FUNCTION
+  fetchOrganizationProfile: async () => {
+    try {
+      const authData = getAuthDataFromLocalStorage();
+      if (!authData) return;
+      const { organization_id } = authData;
+
+      const { data, error } = await supabase
+        .from('hr_organization_profile')
+        .select('*')
+        .eq('organization_id', organization_id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // Ignore 'not found' errors initially
+        console.error('Error fetching org profile:', error);
+        return;
+      }
+
+      if (data) {
+        set({
+          organizationProfile: {
+            id: data.id,
+            organizationId: data.organization_id,
+            companyName: data.company_name,
+            logoUrl: data.logo_url,
+            website: data.website,
+            email: data.email,
+            phone: data.phone,
+            addressLine1: data.address_line1,
+            addressLine2: data.address_line2,
+            city: data.city,
+            state: data.state,
+            zipCode: data.zip_code,
+            country: data.country,
+            taxId: data.tax_id,
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error in fetchOrganizationProfile:', error);
+    }
+  },
 
   fetchClients: async () => {
     try {

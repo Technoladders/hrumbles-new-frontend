@@ -36,6 +36,7 @@ import VerificationTypeDashboardPage from "./pages/verifications/VerificationTyp
 import OrganizationVerificationReportPage from "./pages/verifications/OrganizationVerificationReportPage";
 import DetailedResourceView from './components/global/DetailedResourceView';
 import OrganizationTalentTrendsReport from "./components/global/OrganizationManagement/OrganizationTalentTrendsReport";
+import GlobalInvoicesPage from "./components/global/invoices/GlobalInvoicesPage";
 
 
 import MainLayout from "./layouts/MainLayout";
@@ -90,6 +91,11 @@ import CandidateConsentPage from './components/MagicLinkView/CandidateConsentPag
 // Job Route Handler
 import JobRouteHandler from "./components/jobs/JobRouteHandler";
 import JobViewRouteHandler from "./components/jobs/JobViewRouteHandler";
+
+
+// Background Verification
+// import BgvVerificationSection from "./pages/bg-verification/BgvVerificationSection";
+import BgvAnalyticsDashboard from "./pages/bg-verification/BgvAnalyticsDashboard.tsx";
 import CandidateBgvProfilePage from "./pages/bg-verification/CandidateBgvProfilePage";
 import AllCandidatesPage from "./pages/bg-verification/AllCandidatesPage";
 
@@ -329,6 +335,7 @@ function AppContent() {
               <Route path="/organization/:organizationId/jobs" element={<DetailedResourceView resourceType="jobs" />} />
               <Route path="/organization/:organizationId/clients" element={<DetailedResourceView resourceType="clients" />} />
               <Route path="/reports/organization-talent-trends" element={<OrganizationTalentTrendsReport />} />
+              <Route path="/organization/invoices" element={<GlobalInvoicesPage />} />
               
               <Route path="/projects" element={<ProjectManagement />} />
               <Route path="/client/:id" element={<ClientDashboard />} />
@@ -372,8 +379,13 @@ function AppContent() {
               <Route path="/jobstatuses" element={<StatusSettings />} />
               <Route path="/jobs/candidateprofile/:candidateId/:jobId" element={<EmployeeProfilePage />} />
 
+              {/* Background Verification */}
               <Route path="/jobs/:jobId/candidate/:candidateId/bgv" element={<CandidateBgvProfilePage />} />
               <Route path="/all-candidates" element={<AllCandidatesPage />} /> 
+        
+              <Route path="/bg-verification/analytics" element={<BgvAnalyticsDashboard />} />
+
+
 
               <Route path="/my-submission" element={<MySubmissionsReport />} />
 
