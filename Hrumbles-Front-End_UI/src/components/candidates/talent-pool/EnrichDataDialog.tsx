@@ -232,13 +232,13 @@ const EnrichDataDialog = ({ isOpen, onClose, candidate }) => {
               <Button onClick={handleParseAndFill} disabled={!pastedText} className="w-full sm:w-auto">
                 Parse and Fill Form Below
               </Button>
-            </div>
+            </div> 
 
             <div className="space-y-2 pt-6">
                 <Label className="text-lg font-semibold">2. Review and Save Changes</Label>
-                
+                                              
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 border-t mt-2">
-                  
+                      
                   {/* --- NEW SECTION: Personal Details --- */}
                   <div className="md:col-span-3 flex items-center gap-2 pb-1 border-b border-gray-100">
                     <span className="text-sm font-semibold text-purple-600 uppercase tracking-wider">Personal Details</span>
@@ -252,7 +252,7 @@ const EnrichDataDialog = ({ isOpen, onClose, candidate }) => {
                     <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
                     <Input id="email" name="email" value={formData.email || ''} onChange={handleFormChange} />
                   </div>
-                    <div className="space-y-2">
+                    <div className="space-y-2">          
                     <Label htmlFor="phone" className="mb-1 block">
                       Phone
                     </Label>

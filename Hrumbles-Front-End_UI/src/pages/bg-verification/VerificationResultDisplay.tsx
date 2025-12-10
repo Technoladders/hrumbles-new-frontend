@@ -10,7 +10,7 @@ import { Candidate } from '@/lib/types';
 
 interface Props {
   resultData: any[];
-  verificationType: string;
+  verificationType: string;       
   candidate: Candidate;
 }
 

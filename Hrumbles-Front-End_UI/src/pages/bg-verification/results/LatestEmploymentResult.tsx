@@ -1,6 +1,6 @@
 // src/pages/jobs/ai/results/LatestEmploymentResult.tsx
 import { Card, CardContent } from '@/components/ui/card';
-import { Building, User, Calendar, IdCard } from 'lucide-react';
+import { Building, User, Calendar, IdCard, CheckCircle2 } from 'lucide-react';
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return 'N/A';
@@ -10,6 +10,7 @@ const formatDate = (dateStr: string) => {
 
 export const LatestEmploymentResult = ({ result, meta }: { result: any; meta?: any }) => {
   const responseData = result?.data;
+  
   if (!responseData) {
     return (
       <Card className="border-red-200 bg-red-50">
@@ -47,58 +48,99 @@ export const LatestEmploymentResult = ({ result, meta }: { result: any; meta?: a
     );
   }
 
-  console.log("latestEmp:", latestEmp);
-
   return (
-    <Card className="bg-green-50 border-green-200 shadow-sm">
-      <CardContent className="p-5">
-        <div className="flex items-center gap-2 text-lg font-bold text-gray-800 mb-4">
-          <Building size={20} className="text-green-700" />
-          <h3>Latest Employment Record</h3>
-        </div>
-        {/* Candidate Name & UAN */}
-        <div className="mb-4 pb-3 border-b border-green-100">
-          <p className="flex items-center gap-2 text-sm">
-            <User size={16} className="text-gray-600" />
-            <span className="font-medium">Name:</span> {latestEmp.name || 'N/A'}
-          </p>
-          <p className="text-xs text-gray-600 mt-1">
-            Verified via UAN: <code className="bg-white px-2 py-0.5 rounded border">{uan}</code>
-          </p>
-        </div>
-        {/* Employment Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div className="flex items-start gap-2">
-            <Building size={16} className="text-gray-500 mt-0.5" />
-            <div>
-              <span className="font-medium text-gray-600">Current Company:</span>
-              <p className="font-semibold text-gray-800">{latestEmp.establishment_name || 'N/A'}</p>
+    <Card className="bg-green-50 border border-green-200/60 shadow-sm overflow-hidden transition-all hover:shadow-md">
+      <CardContent className="p-6">
+        {/* Header Section */}
+        <div className="flex items-center gap-4 mb-6">
+          <div className="h-12 w-12 rounded-xl bg-green-100 flex items-center justify-center shadow-sm border border-green-200 shrink-0">
+            <Building className="text-green-700 h-6 w-6" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 leading-tight">Latest Employment Record</h3>
+            <div className="flex items-center gap-1.5 mt-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+              <p className="text-xs font-medium text-green-700">Verified successfully</p>
             </div>
           </div>
-          <div className="flex items-start gap-2">
-            <Calendar size={16} className="text-gray-500 mt-0.5" />
-            <div>
-              <span className="font-medium text-gray-600">Date of Joining:</span>
-              <p className="font-semibold text-green-700">{formatDate(latestEmp.date_of_joining)}</p>
+        </div>
+
+        {/* Separator */}
+        <div className="h-px bg-green-200/50 w-full mb-6"></div>
+
+        {/* Candidate Identity Section */}
+        {/* UPDATED: Added flex-wrap and adjusted layout for better UAN visibility */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="mt-1 p-1.5 bg-white rounded-full border border-green-100 shadow-sm shrink-0">
+              <User size={18} className="text-gray-500" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-0.5">
+                Candidate Name
+              </p>
+              <p className="text-base font-bold text-gray-900 break-words leading-tight">
+                {latestEmp.name || 'N/A'}
+              </p>
             </div>
           </div>
-          <div className="md:col-span-2 flex items-center gap-2">
-            <IdCard size={16} className="text-gray-500" />
-            <div>
-              <span className="font-medium text-gray-600">Member ID:</span>
-              <code className="ml-2 text-xs bg-white px-2 py-1 rounded border">
+          
+          <div className="flex-shrink-0 flex items-center gap-2 bg-white/60 px-3 py-2 rounded-lg border border-green-100">
+            <span className="text-xs font-medium text-gray-500 whitespace-nowrap">Verified UAN:</span>
+            <code className="text-sm font-mono font-semibold text-gray-800 tracking-wide">
+              {uan}
+            </code>
+          </div>
+        </div>
+
+        {/* Employment Details Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8 bg-white/40 rounded-xl p-5 border border-green-100/50">
+          
+          {/* Current Company */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-green-800/70">
+              <Building size={14} className="shrink-0" />
+              <span className="text-xs font-bold uppercase tracking-wider whitespace-nowrap">Current Company</span>
+            </div>
+            <p className="text-sm font-bold text-gray-800 pl-5.5 leading-snug">
+              {latestEmp.establishment_name || 'N/A'}
+            </p>
+          </div>
+
+          {/* Date of Joining */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-green-800/70">
+              <Calendar size={14} className="shrink-0" />
+              <span className="text-xs font-bold uppercase tracking-wider whitespace-nowrap">Date of Joining</span>
+            </div>
+            <p className="text-sm font-bold text-green-700 pl-5.5">
+              {formatDate(latestEmp.date_of_joining)}
+            </p>
+          </div>
+
+          {/* Member ID */}
+          <div className="md:col-span-2 space-y-1.5">
+            <div className="flex items-center gap-2 text-green-800/70">
+              <IdCard size={14} className="shrink-0" />
+              <span className="text-xs font-bold uppercase tracking-wider whitespace-nowrap">Member ID</span>
+            </div>
+            <div className="pl-5.5">
+               <code className="inline-block px-2.5 py-1 bg-white border border-green-200 rounded text-xs font-mono text-gray-600 shadow-sm break-all">
                 {latestEmp.member_id || 'N/A'}
               </code>
             </div>
           </div>
         </div>
-        {/* Source Badge */}
+
+        {/* Footer Source Badge */}
         {sources && sources.length > 0 && (
-          <div className="mt-4 pt-3 border-t border-green-100">
-            <span className="text-xs font-medium text-gray-600">Source:</span>
-            <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              {sources.join(', ')}
-            </span>
+          <div className="mt-6 flex justify-end">
+            <div className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 border border-blue-100 shadow-sm">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-2"></span>
+              <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wide">
+                Source: {sources.join(', ')}
+              </span>
+            </div>
           </div>
         )}
       </CardContent>
