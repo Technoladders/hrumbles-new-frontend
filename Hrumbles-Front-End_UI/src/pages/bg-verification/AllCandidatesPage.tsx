@@ -1,8 +1,9 @@
 // src/pages/jobs/ai/AllCandidatesPage.tsx
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSelector } from 'react-redux'; 
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { UserPlus, ChevronLeft, ChevronRight, Search, Users, ShieldCheck, Clock, Briefcase } from 'lucide-react';
@@ -19,20 +20,49 @@ import { AssignCandidateToJobModal } from './AddCandidateJobSelectModal';
 
 const AllCandidatesPage = () => {
     const organizationId = useSelector((state: any) => state.auth.organization_id);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isJobSelectModalOpen, setIsJobSelectModalOpen] = useState(false);
   const [isAddCandidateModalOpen, setIsAddCandidateModalOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState(''); // State for search
-    // --- NEW PAGINATION STATE ---
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50); // Default to 50
+    
+    // Get page and itemsPerPage from URL, with defaults
+    const pageFromUrl = parseInt(searchParams.get('page') || '1', 10);
+    const itemsPerPageFromUrl = parseInt(searchParams.get('perPage') || '50', 10);
+    
+    const [currentPage, setCurrentPage] = useState(pageFromUrl);
+    const [itemsPerPage, setItemsPerPage] = useState(itemsPerPageFromUrl);
 
    const [assignModalState, setAssignModalState] = useState({ 
       isOpen: false, 
       candidateId: null as string | null, 
       candidateName: '' 
     });
+
+  // Sync URL parameters with state
+  useEffect(() => {
+    setSearchParams(
+      { 
+        page: currentPage.toString(), 
+        perPage: itemsPerPage.toString() 
+      },
+      { replace: true }
+    );
+  }, [currentPage, itemsPerPage, setSearchParams]);
+
+  // Sync state with URL parameters on mount/URL change
+  useEffect(() => {
+    const pageFromUrl = parseInt(searchParams.get('page') || '1', 10);
+    const itemsPerPageFromUrl = parseInt(searchParams.get('perPage') || '50', 10);
+    
+    if (pageFromUrl !== currentPage) {
+      setCurrentPage(pageFromUrl);
+    }
+    if (itemsPerPageFromUrl !== itemsPerPage) {
+      setItemsPerPage(itemsPerPageFromUrl);
+    }
+  }, [searchParams]);
 
 
   const { data: candidates = [], isLoading, refetch } = useQuery({
@@ -63,6 +93,13 @@ const AllCandidatesPage = () => {
   const totalPages = Math.ceil(filteredCandidates.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedCandidates = filteredCandidates.slice(startIndex, startIndex + itemsPerPage);
+
+  // Reset to page 1 if current page exceeds total pages
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
 
    const handleItemsPerPageChange = (value: string) => {
         setItemsPerPage(Number(value));
@@ -111,9 +148,21 @@ const AllCandidatesPage = () => {
       {/* --- TABLE CARD --- */}
       <Card>
         <CardHeader>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <Input placeholder="Search by name, email, or job title..." className="pl-10 h-10 w-full md:w-1/3" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            {/* Search Bar */}
+            <div className="relative flex-grow min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+              <Search
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                size={18}
+              />
+              <Input
+                placeholder="Search by name, email, or job title..."
+                className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+              />
             </div>
         </CardHeader>
         <CardContent>

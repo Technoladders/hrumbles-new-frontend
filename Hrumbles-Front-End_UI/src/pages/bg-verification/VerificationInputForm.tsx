@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Loader2, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Loader2, ArrowLeft } from 'lucide-react';
 import { BGVState } from '@/hooks/bg-verification/useBgvVerifications';
 import { VerificationResultDisplay } from './VerificationResultDisplay';
 import { isVerificationSuccessful } from '@/components/jobs/ai/utils/bgvUtils'; 
@@ -14,6 +14,7 @@ import { Candidate } from '@/lib/types';
 interface Props {
   title: string;
   verificationType: keyof BGVState['inputs'];
+  legacyKey?: string; // <--- NEW PROP
   inputs: { name: keyof BGVState['inputs']; placeholder: string; label: string }[];
   state: BGVState;
   onInputChange: (type: keyof BGVState['inputs'], value: string) => void;
@@ -22,29 +23,22 @@ interface Props {
   candidate: Candidate;
 }
 
-export const VerificationInputForm = ({ title, verificationType, inputs, state, onInputChange, onVerify, onBack, candidate }: Props) => {
+export const VerificationInputForm = ({ title, verificationType, legacyKey, inputs, state, onInputChange, onVerify, onBack, candidate }: Props) => {
   const [agreed, setAgreed] = useState(true);
   const isLoading = state.loading[verificationType];
-  const result = state.results[verificationType];
-
-  console.log("result", result)
-
-  // if (result && isVerificationSuccessful(result.data, verificationType)) {
-  //   return (
-  //     <div className="animate-fade-in">
-  //       <div className="flex items-center mb-4">
-  //         <Button variant="ghost" size="icon" onClick={onBack} className="mr-2 text-gray-500 hover:bg-gray-100"><ArrowLeft /></Button>
-  //         <h3 className="text-lg font-semibold text-gray-800">{title} - Result</h3>
-  //       </div>
-  //       <VerificationResultDisplay resultData={result.data} verificationType={verificationType} />
-  //       <Button variant="outline" size="sm" className="mt-4" onClick={() => onVerify(verificationType)} disabled={isLoading}>
-  //         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-  //         Verify Again
-  //       </Button>
-  //     </div>
-  //   );
-  // }
   
+  // --- DUAL CHECK LOGIC ---
+  const primaryResult = state.results[verificationType];
+  const legacyResult = legacyKey ? state.results[legacyKey] : null;
+
+  // Prefer primary (current provider), fallback to legacy (old provider) for DISPLAY
+  const resultToDisplay = primaryResult || legacyResult;
+  
+  // Important: If we are displaying the legacy result, we must tell the Display component 
+  // to render using the legacy key (e.g. 'uan_full_history') instead of the current key ('uan_full_history_gl')
+  // so that the correct sub-component is chosen.
+  const displayType = (primaryResult ? verificationType : legacyKey) as string;
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center mb-6">
@@ -68,15 +62,21 @@ export const VerificationInputForm = ({ title, verificationType, inputs, state, 
         {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit'}
       </Button>
 
-           {/* --- NEW: Results section that renders below the form --- */}
-      {result && (
+      {/* --- RESULTS SECTION --- */}
+      {resultToDisplay && (
         <div className="mt-6">
-            <h4 className="text-md font-semibold text-gray-800 mb-2">Verification Result</h4>
-            <VerificationResultDisplay resultData={result} verificationType={verificationType} candidate={candidate} />
+            <h4 className="text-md font-semibold text-gray-800 mb-2">
+                Verification Result 
+                {legacyResult && !primaryResult && <span className="text-xs font-normal text-gray-500 ml-2">(Previous Record)</span>}
+            </h4>
+            <VerificationResultDisplay 
+                resultData={resultToDisplay} 
+                verificationType={displayType} // Uses legacyKey if showing legacy data
+                candidate={candidate} 
+            />
         </div>
       )}
 
     </div>
   );
 };
-// 

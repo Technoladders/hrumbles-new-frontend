@@ -912,13 +912,15 @@ const authData = getAuthDataFromLocalStorage();
   }
 };
 
-export const getAllCandidatesWithVerificationInfo = async () => {
+// UPDATED candidateService.ts
+// Replace getAllCandidatesWithVerificationInfo with this:
 
+export const getAllCandidatesWithVerificationInfo = async () => {
   const authData = getAuthDataFromLocalStorage();
-    if (!authData) {
-      throw new Error('Failed to retrieve authentication data');
-    }
-    const { organization_id, userId } = authData;
+  if (!authData) {
+    throw new Error('Failed to retrieve authentication data');
+  }
+  const { organization_id, userId } = authData;
 
   const { data, error } = await supabase
     .from('hr_job_candidates')
@@ -931,7 +933,7 @@ export const getAllCandidatesWithVerificationInfo = async () => {
       job:hr_jobs!hr_job_candidates_job_id_fkey(id, title), 
       creator:hr_employees!hr_job_candidates_created_by_fkey (first_name, last_name),
       uanlookups (
-       created_at,
+        created_at,
         lookup_type,
         response_data,
         user:hr_employees!uanlookups_verified_by_fkey (
@@ -941,22 +943,30 @@ export const getAllCandidatesWithVerificationInfo = async () => {
       )
     `)
     .eq('organization_id', organization_id)
-    .order('created_at', { ascending: false }); // Sort lookups by date
+    .order('created_at', { ascending: false });
 
   if (error) {
     console.error("Error fetching all candidates with verification info:", error);
     throw new Error(error.message);
   }
 
-  // Process the data to flatten it and keep only the latest verification
-  return data.map(candidate => {
-    const latestVerification = candidate.uanlookups.length > 0 ? candidate.uanlookups[0] : null;
-    
-    return {
-      ...candidate,
-      job_id: candidate.job?.id,
-      job_title: candidate.job?.title,
-      latest_verification: latestVerification // Attach the latest record
-    };
-  });
+  // Process the data - KEEP ALL verifications sorted by date
+return data.map(candidate => {
+  const sortedVerifications = candidate.uanlookups
+    ? [...candidate.uanlookups].sort((a, b) => {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      })
+    : [];
+  
+  return {
+    ...candidate,
+    uanlookups: sortedVerifications,
+    latest_verification: sortedVerifications[0] || null
+  };
+});
 };
+
+
+
+
+

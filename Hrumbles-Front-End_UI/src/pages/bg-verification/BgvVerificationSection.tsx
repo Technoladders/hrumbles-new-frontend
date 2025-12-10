@@ -96,6 +96,7 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
         label: 'Fetch Employment History',
         isDirect: true,
         method: 'uan_full_history_gl', // Gridlines Method
+        legacyKey: 'uan_full_history',
         inputs: [{ name: 'uan', placeholder: 'Enter 12-digit UAN', label: 'UAN Number' }]
       };
     } else {
@@ -127,9 +128,22 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
     setActiveCategory({ key, ...category });
 
     if (!category.isDirect) {
+      // Logic: Find if ANY method in the submenu has results (checking both new and legacy keys)
       const successfulMethodKey = Object.keys(category.methods).find(methodKey => {
+        const methodConfig = category.methods[methodKey];
+        
+        // Check New Key
         const result = state.results[methodKey as keyof typeof state.results];
-        return result && isVerificationSuccessful(result.data, methodKey);
+        const isNewVerified = result && isVerificationSuccessful(result.data, methodKey);
+        if (isNewVerified) return true;
+
+        // Check Legacy Key (if exists)
+        if (methodConfig.legacyKey) {
+             const legacyResult = state.results[methodConfig.legacyKey as keyof typeof state.results];
+             if (legacyResult && isVerificationSuccessful(legacyResult.data, methodConfig.legacyKey)) return true;
+        }
+
+        return false;
       });
 
       if (successfulMethodKey) {
@@ -153,14 +167,21 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
     setView('form');
   };
 
-  const handleBack = () => {
+const handleBack = () => {
     if (view === 'all_results') {
         setView('main');
         return;
     }
     if (view === 'form') {
+      // Check if we should go back to Main or Submenu
+      // We assume if direct or verified, go to Main.
       const currentResult = state.results[activeMethod.key as keyof typeof state.results];
-      if (activeCategory.isDirect || isVerificationSuccessful(currentResult?.data, activeMethod.key)) {
+      const legacyResult = activeMethod.legacyKey ? state.results[activeMethod.legacyKey as keyof typeof state.results] : null;
+
+      const isVerified = (currentResult && isVerificationSuccessful(currentResult.data, activeMethod.key)) ||
+                         (legacyResult && isVerificationSuccessful(legacyResult.data, activeMethod.legacyKey));
+
+      if (activeCategory.isDirect || isVerified) {
         setView('main');
         setActiveCategory(null);
         setActiveMethod(null);
@@ -227,6 +248,7 @@ export const BgvVerificationSection = ({ candidate }: { candidate: Candidate }) 
                 title={activeMethod.label}
                 candidate={candidate}
                 verificationType={activeMethod.key as keyof typeof state.inputs}
+                legacyKey={activeMethod.legacyKey}
                 inputs={activeMethod.inputs}
                 state={state}
                 onInputChange={handleInputChange}

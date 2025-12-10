@@ -129,6 +129,8 @@ export const useBgvVerifications = (candidate: Candidate) => {
         uan: state.inputs.uan,
       };
 
+       console.log(`Verifying using provider: ${preferredProvider} (Function: ${functionName})`);
+
       const { data, error } = await supabase.functions.invoke(functionName, {
         body: { verificationType, payload },
       });
@@ -150,33 +152,31 @@ export const useBgvVerifications = (candidate: Candidate) => {
 
       // --- THIS IS THE NEW AND IMPROVED ERROR HANDLING BLOCK ---
       
-      let description = "An unknown error occurred. Please try after sometime."; // Default message
+     let description = "An unknown error occurred. Please try after sometime.";
 
+      // --- FIXED ERROR PARSING LOGIC ---
       try {
-        // The Supabase client wraps the raw error response in err.context
-        const errorJson = await err.context.json();
-        const rawError = errorJson.error || err.message;
-        
-        // Start with the raw error as the fallback
-        description = rawError;
-
-        // Use a regular expression to find the JSON object string inside the raw error message
-        const jsonMatch = rawError.match(/{[\s\S]*}/);
-
-        if (jsonMatch) {
-          // If a JSON string is found, try to parse it
-          const innerJson = JSON.parse(jsonMatch[0]);
+        if (err && typeof err.context?.json === 'function') {
+          // 1. Try to parse the JSON response body from the Edge Function
+          const errorJson = await err.context.json();
           
-          // Traverse the nested structure to find the user-friendly message
-          if (innerJson.error && typeof innerJson.error.message === 'string') {
-            description = innerJson.error.message;
-          } else if (typeof innerJson.message === 'string') {
-            description = innerJson.message;
+          console.log("Parsed Error JSON:", errorJson); // Debug log
+
+          // 2. Check for 'message' (standard) or 'error' (legacy) fields
+          if (errorJson.message) {
+            description = errorJson.message;
+          } else if (errorJson.error && typeof errorJson.error === 'string') {
+            description = errorJson.error;
+          } else if (errorJson.error && errorJson.error.message) {
+            description = errorJson.error.message;
           }
+        } else if (err.message) {
+          // Fallback if no JSON context is available
+          description = err.message;
         }
       } catch (parseError) {
-        // If anything fails during parsing, we fall back to the generic message
-        description = err.message || "Edge function failed with a non-JSON error response.";
+        console.error("Error parsing response:", parseError);
+        description = err.message || "Edge function failed.";
       }
       
       toast.error("Verification Failed", { description });
@@ -184,7 +184,7 @@ export const useBgvVerifications = (candidate: Candidate) => {
     } finally {
      setState(s => ({ ...s, loading: { ...s.loading, [verificationType]: false } }));
     }
-  }, [state.inputs, candidate, organizationId, user?.id, fetchPreviousResults]);
+  }, [state.inputs, candidate, organizationId, user?.id, fetchPreviousResults, orgConfig]);
 
   return { state, handleInputChange, handleVerify };
 };
