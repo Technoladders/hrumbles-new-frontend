@@ -12,6 +12,7 @@ interface Props {
   candidate: Candidate;
   results: BGVState['results'];
   onBack: () => void;
+  
 }
 
 const resultOrder = [
@@ -78,11 +79,12 @@ export const AllResultsDisplay = ({ candidate, results, onBack }: Props) => {
                                 Pass the full array (results[key]) directly.
                                 Added 'candidate' prop which is required by VerificationResultDisplay. 
                             */}
-                            <VerificationResultDisplay 
-                                resultData={results[key]} 
-                                verificationType={key}
-                                candidate={candidate}
-                            />
+                  <VerificationResultDisplay 
+  resultData={results[key]} 
+  verificationType={key}
+  candidate={candidate}
+  hideNavigationButtons={true} // ← ADD THIS LINE
+/>
                         </div>
                     ))}
                 </div>

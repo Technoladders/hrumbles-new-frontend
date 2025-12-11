@@ -811,7 +811,7 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
 
         .gemini-card-inner {
           position: relative;
-          z-index: 10;
+          z-index: 0;
           width: 100%;
           height: 100%;
           display: flex;
@@ -941,7 +941,7 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
           padding: 32px;
           margin-top: -30px; /* Overlap effect default */
           position: relative;
-          z-index: 20;
+          z-index: 0;
         }
         
         /* If hero is hidden, we remove the negative margin via inline style or utility class */
@@ -1151,11 +1151,7 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
                 <div className="gemini-action-buttons">
                   <input ref={fileInputRef} type="file" accept=".txt,.doc,.docx,.pdf" onChange={handleFileUpload} className="hidden" />
                   
-                  <button type="button" className="gemini-action-btn primary" onClick={handleGenerateBoolean} disabled={!jdText.trim() || isGeneratingBoolean}>
-                    {isGeneratingBoolean ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    {isGeneratingBoolean ? 'Generating...' : 'Generate Keywords'}
-                  </button>
-
+          
                   <button type="button" className="gemini-action-btn" onClick={() => fileInputRef.current?.click()}>
                     <Upload className="w-4 h-4" /> Upload JD
                   </button>
@@ -1170,6 +1166,13 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
                         <FileText className="w-4 h-4" /> Select Job
                       </button>
                     </PopoverTrigger>
+
+                            <button type="button" className="gemini-action-btn primary" onClick={handleGenerateBoolean} disabled={!jdText.trim() || isGeneratingBoolean}>
+                    {isGeneratingBoolean ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {isGeneratingBoolean ? 'Generating...' : 'Generate Keywords'}
+                  </button>
+
+
                     <PopoverContent className="w-[300px] p-0 bg-gray-900 border-gray-700 text-white">
                       <Command className="bg-transparent">
                         <CommandInput placeholder="Search job..." className="text-white placeholder:text-gray-500" />

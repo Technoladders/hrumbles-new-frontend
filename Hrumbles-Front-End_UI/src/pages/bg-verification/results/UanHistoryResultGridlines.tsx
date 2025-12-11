@@ -150,8 +150,8 @@ export const UanHistoryResultGridlines = ({ result, meta, candidate }: UanHistor
                   {/* Member ID */}
                   <div className="flex items-center gap-2 text-xs">
                      <Hash size={14} className="text-gray-400 shrink-0" />
-                     <span className="font-medium text-gray-500">ID:</span>
-                     <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-gray-100 text-gray-600 break-all">
+                     <span className="font-medium text-gray-500">Member ID:</span>
+                     <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-gray-100 text-black-900 break-all">
                         {job.member_id || 'N/A'}
                      </code>
                   </div>
