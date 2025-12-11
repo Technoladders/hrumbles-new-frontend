@@ -16,7 +16,7 @@ const formatDate = (dateStr?: string): string => {
 export const generateUanHistoryPdfGridlines = (candidate: Candidate, result: any, meta: { inputValue: string }) => {
   const history = result?.data?.employment_data;
   if (!Array.isArray(history) || history.length === 0) {
-    console.error('PDF Generation failed: No history data from Gridlines.', result);
+    console.error('PDF Generation failed: No history data.', result);
     return;
   }
 
@@ -75,5 +75,5 @@ export const generateUanHistoryPdfGridlines = (candidate: Candidate, result: any
     styles: { fontSize: 8, cellPadding: 2 },
   });
 
-  doc.save(`UAN_History_Gridlines_${candidateName.replace(/\s/g, '_')}_${uan}.pdf`);
+  doc.save(`UAN_History_${candidateName.replace(/\s/g, '_')}_${uan}.pdf`);
 };

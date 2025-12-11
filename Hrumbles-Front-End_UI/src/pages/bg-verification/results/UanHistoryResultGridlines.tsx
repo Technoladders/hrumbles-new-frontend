@@ -50,7 +50,7 @@ export const UanHistoryResultGridlines = ({ result, meta, candidate }: UanHistor
       generateUanHistoryPdfGridlines(candidate, result, meta);
       toast.success('UAN History PDF downloaded successfully');
     } catch (error) {
-      console.error('Error generating UAN History PDF from Gridlines:', error);
+      console.error('Error generating UAN History PDF:', error);
       toast.error('Failed to generate PDF');
     }
   };
@@ -127,7 +127,7 @@ export const UanHistoryResultGridlines = ({ result, meta, candidate }: UanHistor
             >
               {/* Company Name */}
               <div className="flex items-start gap-2.5 mb-3">
-                 <Building2 size={18} className="text-amber-600 mt-0.5 shrink-0" />
+                 {/* <Building2 size={18} className="text-amber-600 mt-0.5 shrink-0" /> */}
                  <p className="text-sm font-bold text-gray-800 leading-snug">
                     {job.establishment_name || 'N/A'}
                  </p>

@@ -31,7 +31,7 @@ const resultTitles: { [key: string]: string } = {
     latest_employment_uan: 'Latest Employment (UAN)',
     latest_employment_mobile: 'Latest Employment (Mobile/PAN)',
     uan_full_history: 'Full Employment History (UAN)',
-    uan_full_history_gl: 'Full Employment History (UAN - GL)',
+    uan_full_history_gl: 'Full Employment History (UAN)',
     latest_passbook_mobile: 'EPFO Passbook',
 };
 
