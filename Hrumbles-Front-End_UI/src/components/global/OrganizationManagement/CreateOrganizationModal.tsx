@@ -33,6 +33,7 @@ const CreateOrganizationModal: FC<CreateOrganizationModalProps> = ({ isOpen, onC
   const [role, setRole] = useState<string>(""); // State for selected role
     const [employeeId, setEmployeeId] = useState<string>(""); 
   const [isRecruitmentFirm, setIsRecruitmentFirm] = useState<boolean>(false);
+  const [isVerificationFirm, setIsVerificationFirm] = useState<boolean>(false); 
   const [roles, setRoles] = useState<Role[]>([]);
   const [roleLimits, setRoleLimits] = useState({
     organization_superadmin: 1,
@@ -95,7 +96,8 @@ const CreateOrganizationModal: FC<CreateOrganizationModalProps> = ({ isOpen, onC
         subdomain,
         roleLimits,
         employeeId, // Pass employeeId
-        isRecruitmentFirm // Pass isRecruitmentFirm
+        isRecruitmentFirm, // Pass isRecruitmentFirm
+        isVerificationFirm // Pass isVerificationFirm
       );
       toast({
         title: "Organization Created",
@@ -162,14 +164,34 @@ const CreateOrganizationModal: FC<CreateOrganizationModalProps> = ({ isOpen, onC
               </Flex>
             </FormControl>
 
-             <FormControl>
-                <Checkbox 
-                    isChecked={isRecruitmentFirm}
-                    onChange={(e) => setIsRecruitmentFirm(e.target.checked)}
-                >
-                    Is this a Recruitment Firm?
-                </Checkbox>
-            </FormControl>
+             {/* 3. Add the Checkboxes */}
+             <Flex gap={4} direction="column">
+                <FormControl>
+                    <Checkbox 
+                        isChecked={isRecruitmentFirm}
+                        onChange={(e) => {
+                            setIsRecruitmentFirm(e.target.checked);
+                            // Optional: Prevent both being checked if they are mutually exclusive
+                            if(e.target.checked) setIsVerificationFirm(false); 
+                        }}
+                    >
+                        Is this a Recruitment Firm?
+                    </Checkbox>
+                </FormControl>
+
+                <FormControl>
+                    <Checkbox 
+                        isChecked={isVerificationFirm}
+                        onChange={(e) => {
+                            setIsVerificationFirm(e.target.checked);
+                            // Optional: Prevent both being checked
+                            if(e.target.checked) setIsRecruitmentFirm(false);
+                        }}
+                    >
+                        Is this a Verification Firm?
+                    </Checkbox>
+                </FormControl>
+             </Flex>
 
             <Divider my={2} />
             <Heading size="sm" color="gray.600">Superadmin User Details</Heading>

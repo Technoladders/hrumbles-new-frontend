@@ -20,6 +20,7 @@ const ProtectedRoute = () => {
   });
 
   const user = useSelector((state: any) => state.auth.user);
+  const role = useSelector((state: any) => state.auth.role);
 
   useEffect(() => {
     const checkAccess = async () => {
@@ -52,7 +53,17 @@ const ProtectedRoute = () => {
           setLoading(false);
           return; // <-- Important: Stop further checks for existing users
         }
-      } else {
+      } 
+      if (role === 'organization_superadmin') {
+         setAuthStatus({
+            isAuthenticated: true,
+            canProceed: true,
+            redirectPath: null,
+          });
+          setLoading(false);
+          return;
+      }
+      else {
           console.warn("ProtectedRoute: `user.created_at` is missing. Cannot determine if user is new or existing. Proceeding with completion check for all users.");
       }
 

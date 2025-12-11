@@ -191,7 +191,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
         try {
           const { data, error } = await supabase
             .from('hr_organizations')
-            .select('id, is_recruitment_firm') // Select only the needed fields
+            .select('id, is_recruitment_firm, is_verification_firm') // Select only the needed fields
             .eq('id', organizationId)
             .single();
 
@@ -218,7 +218,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
         try {
           const { data, error } = await supabase
             .from('hr_organizations')
-            .select('id, is_recruitment_firm')
+            .select('id, is_recruitment_firm, is_verification_firm')
             .eq('id', organizationId)
             .single();
 
@@ -449,7 +449,7 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
       zIndex={20}
     >
       <Flex align="center" mb={8} minH="40px" px={isExpanded ? 0 : 1}>
-        {isExpanded && <Image className="mt-4" src="/1-cropped.svg" alt="Logo" width="120px" />}
+        {isExpanded && <Image className="mt-4" src={organizationDetails?.is_verification_firm ? "/Xrilic Verify Black.svg" : "/1-cropped.svg"} alt="Logo" width={organizationDetails?.is_verification_firm ? "140px" : "120px"} />}
         {!isExpanded && <Image src="/hrumbles-fav-blue-cropped.svg" alt="Logo" width="30px"  />}
 
         <Spacer />

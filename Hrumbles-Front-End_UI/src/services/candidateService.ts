@@ -935,6 +935,8 @@ export const getAllCandidatesWithVerificationInfo = async () => {
       uanlookups (
         created_at,
         lookup_type,
+        lookup_value,
+        status,
         response_data,
         user:hr_employees!uanlookups_verified_by_fkey (
           first_name,

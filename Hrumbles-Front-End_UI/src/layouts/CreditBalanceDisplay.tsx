@@ -76,7 +76,7 @@ export const CreditBalanceDisplay = () => {
     <TooltipProvider>
       <Tooltip delayDuration={100}>
         <TooltipTrigger>
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${isLow ? 'bg-red-50 border-red-200 text-red-700 animate-pulse' : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'}`}>
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${isLow ? 'bg-red-50 border-red-200 text-red-700' : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'}`}>
             <Coins size={16} />
             <span className="font-bold text-sm">
                 {currentBalance.toFixed(0)} / {totalLimit.toFixed(0)} Credits

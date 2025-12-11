@@ -265,7 +265,7 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
           </div>
  
           <div className="flex items-center gap-3">
-            {!shareMode && (
+            {/* {!shareMode && (
                 <VerificationProcessDialog
                     candidate={candidateForVerification}
                     organizationId={organizationId}
@@ -287,7 +287,7 @@ export const EmployeeInfoCard: React.FC<EmployeeInfoCardProps> = ({
                     isUanQueued={isUanQueued}
                 />
             )}
-           
+            */}
             {!shareMode && (
               <Dialog>
                 <DialogTrigger asChild>

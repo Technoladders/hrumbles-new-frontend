@@ -222,7 +222,8 @@ export const createOrganizationWithSuperadmin = async (
   subdomain,     
   roleLimits,   
   employeeId,   
-  isRecruitmentFirm 
+  isRecruitmentFirm,
+  isVerificationFirm
 ) => {
   const user = await getUser();
   if (!user) throw new Error("Auth session missing! Please log in.");
@@ -258,7 +259,8 @@ export const createOrganizationWithSuperadmin = async (
         name: orgName, 
         subdomain: subdomain,
         role_credit_limits: roleLimits,
-        is_recruitment_firm: isRecruitmentFirm,  }])
+        is_recruitment_firm: isRecruitmentFirm,
+        is_verification_firm: isVerificationFirm  }])
       .select("id")
       .single();
 

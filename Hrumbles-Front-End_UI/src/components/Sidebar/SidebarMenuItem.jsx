@@ -11,7 +11,7 @@ import { GoOrganization } from "react-icons/go";
 import { VscOrganization } from "react-icons/vsc";
 import { GrDocumentTime } from "react-icons/gr";
 import { LuCalendarPlus, LuUserSearch, LuCalendarCog } from "react-icons/lu";
-import { BsShieldLock, BsShieldCheck, BsPin } from "react-icons/bs";
+import { BsShieldLock, BsShieldCheck, BsPin, BsGraphUpArrow } from "react-icons/bs";
 import { FaUserShield, FaProjectDiagram, FaUserTie } from 'react-icons/fa';
 import { RiCustomerService2Fill } from 'react-icons/ri';
 import { TbDatabaseSearch } from "react-icons/tb";
@@ -242,6 +242,17 @@ const recruitmentFirmOrgSuperAdminMenu = [
     }
 ];
 
+const verificationFirmOrgSuperAdminMenu = [
+
+
+            { icon: LuUserSearch, label: "My Verifications", path: "/all-candidates" },
+            { icon: BsGraphUpArrow, label: "Analytics", path: "/bg-verification/analytics" },
+            
+  // { icon: MdOutlineManageAccounts, label: "User Management", path: "/user-management" },
+
+
+];
+
 const AscendionOrgSuperAdminMenu = [
     {
         title: "HIRING SUITE",
@@ -435,6 +446,10 @@ export const menuItemsByRole = {
     { icon: FiSettings, label: "Settings", path: "/settings" },
   ],
 organization_superadmin: (organizationId, organization, isPurelyPermanentOrg) => {
+
+  if (organization.is_verification_firm) {
+      return verificationFirmOrgSuperAdminMenu;
+   }
 
    if (organization.is_recruitment_firm) {
       // Need to apply filter to the predefined array

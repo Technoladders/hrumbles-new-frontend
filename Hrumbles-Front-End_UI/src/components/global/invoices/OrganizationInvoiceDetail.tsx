@@ -383,13 +383,13 @@ const OrganizationInvoiceDetail: React.FC<OrganizationInvoiceDetailProps> = ({ i
               {invoice.notes && (
                 <div>
                   <h4 className="font-semibold text-gray-700 mb-1">Notes</h4>
-                  <p className="text-gray-500 bg-gray-50 p-2.5 rounded-md border border-gray-100 leading-relaxed">{invoice.notes}</p>
+                  <p className="text-gray-500 bg-gray-50 p-2.5 rounded-md border border-gray-100 leading-relaxed whitespace-pre-wrap">{invoice.notes}</p>
                 </div>
               )}
               {invoice.terms && (
                 <div>
                   <h4 className="font-semibold text-gray-700 mb-1">Terms & Conditions</h4>
-                  <p className="text-gray-500 bg-gray-50 p-2.5 rounded-md border border-gray-100 leading-relaxed">{invoice.terms}</p>
+                  <p className="text-gray-500 bg-gray-50 p-2.5 rounded-md border border-gray-100 leading-relaxed whitespace-pre-wrap ">{invoice.terms}</p>
                 </div>
               )}
             </div>

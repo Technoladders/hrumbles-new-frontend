@@ -445,6 +445,19 @@ const handleLogin = async (): Promise<void> => {
             throw new Error("Access Denied. Please log in from your organization's domain.");
         }
 
+                // --- NEW: Check if this is a Verification Firm ---
+        const { data: orgData, error: orgError } = await supabase
+            .from('hr_organizations')
+            .select('is_verification_firm')
+            .eq('id', userOrgId)
+            .single();
+
+        if (orgError) {
+            console.warn("Could not fetch organization verification status:", orgError.message);
+        }
+
+        const isVerificationFirm = orgData?.is_verification_firm || false;
+
         // Run this in the background to not slow down the login
         sendLoginNotificationInBackground({
             userEmail: email,
@@ -460,7 +473,11 @@ const handleLogin = async (): Promise<void> => {
 
         // --- NAVIGATION LOGIC ---
         let navigateTo = "/dashboard"; 
-        if (role === "employee" && departmentName === "Finance") {
+    if (isVerificationFirm) {
+             // 1. Priority check for Verification Firm
+             navigateTo = "/all-candidates";
+        } else if (role === "employee" && departmentName === "Finance") {
+            // 2. Secondary check for Finance employees
             navigateTo = "/finance";
         }
 
