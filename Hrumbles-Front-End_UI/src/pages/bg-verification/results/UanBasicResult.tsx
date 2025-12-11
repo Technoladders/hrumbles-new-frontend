@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { User, Calendar, Hash, Fingerprint, Copy, Check, Smartphone, CreditCard, Shield, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { User, Calendar, Hash, Fingerprint, Copy, Check, Smartphone, CreditCard, Shield, ArrowRight, CheckCircle2, History, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { Candidate } from '@/lib/types';
 
@@ -12,6 +12,8 @@ interface UanBasicResultProps {
   result: any;
   meta?: any;
   candidate?: Candidate;
+  onNavigateToVerification?: (verificationType: string, prefillData: any) => void;
+  hideNavigationButtons?: boolean; 
 }
 
 interface NormalizedUanRecord {
@@ -19,12 +21,12 @@ interface NormalizedUanRecord {
   name: string | null;
   dob: string | null;
   gender: string | null;
-  sourceLabel: string; // 'Via Mobile', 'Via PAN', etc.
+  sourceLabel: string;
   sourceIcon: any;
-  verifiedNumber: string | null; // The mobile/PAN that was verified
+  verifiedNumber: string | null;
 }
 
-export const UanBasicResult = ({ result, meta }: UanBasicResultProps) => {
+export const UanBasicResult = ({ result, meta, onNavigateToVerification,   hideNavigationButtons = false  }: UanBasicResultProps) => {
   const [copiedUan, setCopiedUan] = useState<string | null>(null);
   const [copiedVerified, setCopiedVerified] = useState<string | null>(null);
 
@@ -41,18 +43,30 @@ export const UanBasicResult = ({ result, meta }: UanBasicResultProps) => {
     }
   };
 
+  // Handle navigation to Latest Employment - just trigger callback
+  const handleNavigateToLatestEmployment = (uan: string) => {
+    if (onNavigateToVerification) {
+      onNavigateToVerification('latest_employment_uan', { uan });
+    }
+  };
+
+  // Handle navigation to Full History - just trigger callback
+  const handleNavigateToFullHistory = (uan: string) => {
+    if (onNavigateToVerification) {
+      onNavigateToVerification('uan_full_history_gl', { uan });
+    }
+  };
+
   // --- NORMALIZATION LOGIC ---
   let records: NormalizedUanRecord[] = [];
 
   // Extract verified number from meta or result
   const getVerifiedNumber = (item?: any, path?: string) => {
-    // Try to get from meta first
     if (meta?.mobile_number) return meta.mobile_number;
     if (meta?.pan_number) return meta.pan_number;
     if (meta?.mobile) return meta.mobile;
     if (meta?.pan) return meta.pan;
     
-    // Try from result data
     if (item?.mobile) return item.mobile;
     if (item?.pan) return item.pan;
     if (result?.data?.mobile) return result.data.mobile;
@@ -79,7 +93,6 @@ export const UanBasicResult = ({ result, meta }: UanBasicResultProps) => {
     const message = result.data.message?.toLowerCase() || '';
     const path = result.path?.toLowerCase() || '';
 
-    // Determine Source based on Path or Message
     let globalSourceLabel = 'Via Mobile';
     let GlobalIcon = Smartphone;
 
@@ -93,8 +106,8 @@ export const UanBasicResult = ({ result, meta }: UanBasicResultProps) => {
 
     records = uanList.map((uan: string) => ({
       uan: uan,
-      name: null, // Gridlines basic lookup doesn't return name
-      dob: null,  // Gridlines basic lookup doesn't return DOB
+      name: null,
+      dob: null,
       gender: null,
       sourceLabel: globalSourceLabel,
       sourceIcon: GlobalIcon,
@@ -208,28 +221,28 @@ export const UanBasicResult = ({ result, meta }: UanBasicResultProps) => {
                     <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider mb-4 flex items-center gap-2">
                       <User size={16} className="text-purple-600" /> Personal Details
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       {record.name && (
                         <div className="bg-purple-50/50 rounded-lg p-3 border border-purple-100/50">
-                          <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Full Name</span>
-                          <div className="font-semibold text-gray-900 flex items-center gap-2">
+                          <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wider block mb-1 whitespace-nowrap">Full Name</span>
+                          <div className="font-semibold text-gray-900 text-xs flex items-center gap-2 whitespace-nowrap">
                             {record.name}
                           </div>
                         </div>
                       )}
                       {record.dob && (
-                        <div className="bg-purple-50/50 rounded-lg p-3 border border-purple-100/50">
-                          <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Date of Birth</span>
-                          <div className="font-semibold text-gray-900 flex items-center gap-2">
-                            <Calendar size={14} className="text-purple-500" /> {record.dob}
+                        <div className="bg-purple-50/50 rounded-lg p-2 border border-purple-100/50 min-w-0">
+                          <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wider block mb-1 whitespace-nowrap overflow-hidden text-ellipsis">Date of Birth</span>
+                          <div className="font-semibold text-gray-900 text-[10px] sm:text-xs flex items-center gap-1 whitespace-nowrap">
+                            <Calendar size={12} className="text-purple-500 flex-shrink-0" /> {record.dob}
                           </div>
                         </div>
                       )}
                       {record.gender && (
                         <div className="bg-purple-50/50 rounded-lg p-3 border border-purple-100/50">
-                          <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Gender</span>
-                          <div className="font-semibold text-gray-900 flex items-center gap-2">
-                            <Fingerprint size={14} className="text-purple-500" /> {record.gender}
+                          <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wider block mb-1 whitespace-nowrap">Gender</span>
+                          <div className="font-semibold text-gray-900 text-xs flex items-center gap-2 whitespace-nowrap">
+                            <Fingerprint size={12} className="text-purple-500 flex-shrink-0" /> {record.gender}
                           </div>
                         </div>
                       )}
@@ -237,22 +250,71 @@ export const UanBasicResult = ({ result, meta }: UanBasicResultProps) => {
                   </div>
                 )}
 
-                {/* Need More Details - CTA Section */}
-                {!hasDetails && (
-                  <div className="bg-amber-50 rounded-xl p-5 border border-amber-200 shadow-sm">
-                    <div className="flex items-start gap-4">
-                      <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 border border-amber-200">
-                        <ArrowRight className="text-amber-700" size={20} />
-                      </div>
-                      <div className="flex-1 pt-0.5">
-                        <h4 className="text-sm font-bold text-amber-900 mb-1">Need More Details?</h4>
-                        <p className="text-sm text-amber-800 leading-relaxed">
-                          To fetch complete employment details, use <span className="font-bold text-amber-950">Full Employment History</span> with this UAN.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+{/* Need More Details - Action Buttons Section */}
+  {!hasDetails && !hideNavigationButtons && (
+  <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-6 border border-amber-200/60 shadow-sm">
+    <div className="flex items-start gap-4 mb-5">
+      <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 border border-amber-200 shadow-sm">
+        <ArrowRight className="text-amber-700" size={20} />
+      </div>
+      <div className="flex-1 pt-0.5">
+        <h4 className="text-sm font-bold text-amber-900 mb-1">Need More Details?</h4>
+        <p className="text-sm text-amber-800 leading-relaxed">
+          Fetch complete employment information using the UAN above
+        </p>
+      </div>
+    </div>
+
+    {/* Action Buttons - Trigger Panel Navigation */}
+    {/* FIX: Changed md:grid-cols-2 to xl:grid-cols-2. 
+        This stacks buttons vertically on medium/large screens to prevent overflow, 
+        only placing them side-by-side on extra large screens. */}
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+      
+      {/* Navigate to Latest Employment */}
+      <Button
+        onClick={() => handleNavigateToLatestEmployment(record.uan)}
+        disabled={!onNavigateToVerification}
+        className="bg-white hover:bg-amber-50 text-amber-900 border-2 border-amber-200 hover:border-amber-300 shadow-sm hover:shadow transition-all duration-200 h-auto py-3 px-3 sm:px-4"
+      >
+        <div className="flex items-center gap-3 w-full">
+          <div className="h-8 w-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <FileText size={16} className="text-amber-700" />
+          </div>
+          {/* FIX: Added min-w-0 to allow text wrapping instead of overflow */}
+          <div className="flex-1 text-left min-w-0">
+            <div className="font-bold text-sm truncate">Latest Employment</div>
+            <div className="text-[10px] text-amber-700 font-medium whitespace-normal leading-tight">
+              Current job details
+            </div>
+          </div>
+          <ArrowRight size={16} className="text-amber-600 flex-shrink-0" />
+        </div>
+      </Button>
+
+      {/* Navigate to Full Employment History */}
+      <Button
+        onClick={() => handleNavigateToFullHistory(record.uan)}
+        disabled={!onNavigateToVerification}
+        className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white shadow-md hover:shadow-lg transition-all duration-200 h-auto py-3 px-3 sm:px-4"
+      >
+        <div className="flex items-center gap-3 w-full">
+          <div className="h-8 w-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0 border border-white/20">
+            <History size={16} className="text-white" />
+          </div>
+          {/* FIX: Added min-w-0 to allow text wrapping instead of overflow */}
+          <div className="flex-1 text-left min-w-0">
+            <div className="font-bold text-sm truncate">Full History</div>
+            <div className="text-[10px] text-amber-100 font-medium whitespace-normal leading-tight">
+              Complete work timeline
+            </div>
+          </div>
+          <ArrowRight size={16} className="text-white flex-shrink-0" />
+        </div>
+      </Button>
+    </div>
+  </div>
+)}
               </div>
             </CardContent>
           </Card>

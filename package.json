@@ -1,10 +1,14 @@
 {
   "dependencies": {
     "@types/md5": "^2.3.6",
+    "clsx": "^2.1.1",
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
+    "lucide-react": "^0.559.0",
     "md5": "^2.3.0",
-    "ogl": "^1.0.11"
+    "motion": "^12.23.26",
+    "ogl": "^1.0.11",
+    "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
     "@types/crypto-js": "^4.2.2"
