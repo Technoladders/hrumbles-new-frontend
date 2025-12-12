@@ -43,7 +43,7 @@ test.describe('Sidebar Navigation & Role Access', () => {
     await expect(page.getByRole('link', { name: 'Employees' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Jobs' })).toBeVisible();
 
-    // 3. Click Project Suite and verify change
+    // 3. Click Project Suite and verify change 
     await page.getByRole('button', { name: 'Project suite' }).click();
     await expect(page.getByRole('link', { name: 'Clients' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Projects' })).toBeVisible();

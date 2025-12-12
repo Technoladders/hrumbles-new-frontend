@@ -1,4 +1,5 @@
 // src/components/candidates/zive-x/CandidateSearchFilters.tsx
+// ENHANCED: Dynamic suggestions, auto-complete, and fluid AI experience
 
 import { useState, FC, useCallback, useMemo, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,7 +11,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { SearchFilters, SearchHistory } from '@/types/candidateSearch';
 import { City } from 'country-state-city';
-import { ChevronDown, ChevronUp, Info, Sparkles, X, Loader2, Check, Send, Bot, User, SkipForward, ArrowLeft, Upload, Zap, FileText, Wand2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Info, Sparkles, X, Loader2, Check, Send, Bot, User, SkipForward, ArrowLeft, Upload, Zap, FileText, Wand2, Lightbulb, Activity } from 'lucide-react';
 import {
   Command,
   CommandEmpty,
@@ -27,55 +28,11 @@ import {
 import { cn } from "@/lib/utils";
 import DarkVeil from '@/components/ui/Reactbits-theme/DarkVeil';
 
-// --- CHAT QUESTION CONFIGURATION ---
-const JD_CHAT_QUESTIONS = [
-  {
-    id: 'jobDetails',
-    text: "Let's build a great JD. First, what is the Job Title, Department, and Work Location (Remote/Hybrid/City)?",
-    placeholder: "e.g. Senior Python Dev, Engineering, Hybrid Bangalore..."
-  },
-  {
-    id: 'experience',
-    text: "Got it. What are the experience requirements (years) and expected seniority level?",
-    placeholder: "e.g. 5-8 years, Senior Level..."
-  },
-  {
-    id: 'skills',
-    text: "What are the Primary Skills (must-haves) and Secondary Skills (good-to-haves)?",
-    placeholder: "Primary: React, Node. Secondary: AWS, Docker..."
-  },
-  {
-    id: 'responsibilities',
-    text: "What are the top 3-5 key responsibilities for this role?",
-    placeholder: "e.g. Lead the frontend team, Architect solutions..."
-  },
-  {
-    id: 'education',
-    text: "Any specific Education (Degrees) or Certifications required?",
-    placeholder: "e.g. B.Tech CS, AWS Solution Architect..."
-  },
-  {
-    id: 'industry',
-    text: "Is experience in a specific Industry or Domain preferred?",
-    placeholder: "e.g. Fintech, Healthcare, E-commerce..."
-  },
-  {
-    id: 'salary',
-    text: "Do you want to mention a Salary Range? (Optional)",
-    placeholder: "e.g. 25-35 LPA or Skip"
-  },
-  {
-    id: 'hiringContext',
-    text: "Finally, how many positions are open and what is the hiring timeline?",
-    placeholder: "e.g. 2 positions, Immediate joiner preferred"
-  }
-];
-
-
 interface ChatMessage {
   id: string;
-  role: 'assistant' | 'user';
+  role: 'assistant' | 'user' | 'system';
   content: string;
+  metadata?: any;
 }
 
 interface CandidateSearchFiltersProps {
@@ -84,8 +41,180 @@ interface CandidateSearchFiltersProps {
   initialFilters?: Partial<SearchFilters>;
   organizationId: string;
   searchHistory?: SearchHistory | null;
-    hideHero?: boolean;
+  hideHero?: boolean;
 }
+
+// --- COMPREHENSIVE SUGGESTION DATABASE (FALLBACK) ---
+const SUGGESTION_DATABASE = {
+  // Entry-level roles for freshers/juniors
+  entryRoles: [
+    'Junior Software Engineer', 'Trainee Software Engineer', 'Associate Software Engineer',
+    'Junior Frontend Developer', 'Junior Backend Developer', 'Junior Full Stack Developer',
+    'Junior Python Developer', 'Junior Java Developer', 'Junior React Developer',
+    'Software Development Intern', 'Engineering Trainee',
+    'Junior QA Engineer', 'Junior Data Analyst', 'Associate Data Engineer',
+    'Frontend Intern', 'Backend Intern', 'UI/UX Design Intern'
+  ],
+  
+  // Mid-level roles (1-5 years)
+  midRoles: [
+    'Software Engineer', 'Frontend Developer', 'Backend Developer', 'Full Stack Developer',
+    'Python Developer', 'Java Developer', 'JavaScript Developer', 'React Developer',
+    'Node.js Developer', 'Angular Developer', 'Vue.js Developer',
+    'DevOps Engineer', 'Cloud Engineer',
+    'Data Analyst', 'Data Engineer', 'QA Engineer',
+    'Mobile Developer', 'iOS Developer', 'Android Developer', 'Flutter Developer',
+    'UI/UX Designer', 'Product Designer'
+  ],
+  
+  // Senior-level roles (5+ years)
+  seniorRoles: [
+    'Senior Software Engineer', 'Lead Software Engineer', 'Staff Engineer',
+    'Senior Frontend Developer', 'Senior Backend Developer', 'Senior Full Stack Developer',
+    'Senior Python Developer', 'Senior Java Developer',
+    'Senior DevOps Engineer', 'Site Reliability Engineer', 'Principal Engineer',
+    'Data Scientist', 'Senior Data Engineer', 'ML Engineer',
+    'Senior Product Manager', 'Engineering Manager', 'Tech Lead',
+    'Senior UI/UX Designer', 'Lead Designer',
+    'Senior QA Engineer', 'Automation Architect',
+    'AI Engineer', 'Machine Learning Engineer', 'Deep Learning Engineer',
+    'Solutions Architect', 'Security Engineer'
+  ],
+  
+  // Entry-level skills
+  entrySkills: [
+    'HTML', 'CSS', 'JavaScript basics', 'SQL basics', 'Git basics',
+    'Python basics', 'Java basics', 'React basics', 'OOP concepts',
+    'Data structures basics', 'Algorithms basics', 'Testing basics'
+  ],
+  
+  // Mid-level skills
+  midSkills: [
+    'Python', 'Java', 'JavaScript', 'TypeScript', 'C++',
+    'React', 'Angular', 'Vue.js', 'Node.js', 'Express',
+    'Django', 'Flask', 'Spring Boot',
+    'PostgreSQL', 'MongoDB', 'MySQL',
+    'REST API', 'Git', 'Agile'
+  ],
+  
+  // Senior-level skills
+  seniorSkills: [
+    'System Design', 'AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes',
+    'Microservices', 'GraphQL', 'CI/CD', 'Jenkins', 'Terraform',
+    'Redis', 'Kafka', 'TensorFlow', 'PyTorch',
+    'Architecture Patterns', 'Team Leadership', 'Code Review'
+  ],
+  
+  locations: [
+    'Bangalore', 'Mumbai', 'Delhi', 'Hyderabad', 'Pune', 'Chennai',
+    'Kolkata', 'Ahmedabad', 'Gurugram', 'Noida', 'Gurgaon', 'Kochi',
+    'Jaipur', 'Chandigarh', 'Indore',
+    'Remote', 'Hybrid', 'Work from Home'
+  ],
+  
+  // Experience keywords and their mappings
+  experienceKeywords: {
+    'fresher': { range: 'Fresher', level: 'entry', years: '0-1 years' },
+    'freshers': { range: 'Fresher', level: 'entry', years: '0-1 years' },
+    'intern': { range: 'Internship', level: 'entry', years: '0-1 years' },
+    'trainee': { range: 'Trainee', level: 'entry', years: '0-1 years' },
+    '0 year': { range: 'Fresher', level: 'entry', years: '0-1 years' },
+    '1 year': { range: '1 year', level: 'entry', years: '1-2 years' },
+    '2 year': { range: '2 years', level: 'mid', years: '2-3 years' },
+    '3 year': { range: '3 years', level: 'mid', years: '3-5 years' },
+    '4 year': { range: '4 years', level: 'mid', years: '3-5 years' },
+    '5 year': { range: '5 years', level: 'mid', years: '5-8 years' },
+    '6 year': { range: '6 years', level: 'senior', years: '5-8 years' },
+    '7 year': { range: '7 years', level: 'senior', years: '5-8 years' },
+    '8 year': { range: '8 years', level: 'senior', years: '8-10 years' },
+    '10 year': { range: '10+ years', level: 'senior', years: '10+ years' },
+    '5-8': { range: '5-8 years', level: 'senior', years: '5-8 years' },
+    '3-5': { range: '3-5 years', level: 'mid', years: '3-5 years' },
+    '1-3': { range: '1-3 years', level: 'mid', years: '1-3 years' },
+    '0-2': { range: '0-2 years', level: 'entry', years: '0-2 years' }
+  },
+  
+  domains: [
+    'Fintech', 'Healthcare', 'E-commerce', 'EdTech', 'SaaS',
+    'Enterprise', 'Startup', 'Product', 'Services', 'Consulting'
+  ]
+};
+
+// --- GENERATE SMART SUGGESTIONS (LOCAL FALLBACK) ---
+const generateDynamicSuggestions = (input: string): string[] => {
+  if (!input || input.length < 2) {
+    // Default suggestions when no input
+    return [
+      'Senior Python Developer, 5-8 years, hybrid Bangalore, Flask/Django',
+      'Frontend Engineer with React, 3-5 years, remote, startup experience',
+      'Full Stack Developer, Node.js and React, 4-6 years, Mumbai office',
+      'DevOps Engineer with AWS and Kubernetes, 6-10 years, Pune',
+      'Data Scientist, Python and ML, 3-5 years, remote, fintech domain'
+    ];
+  }
+
+  const inputLower = input.toLowerCase().trim();
+  const suggestions: string[] = [];
+  
+  let experienceLevel: 'entry' | 'mid' | 'senior' | null = null;
+  let experienceRange = '';
+  
+  for (const [keyword, data] of Object.entries(SUGGESTION_DATABASE.experienceKeywords)) {
+    if (inputLower.includes(keyword)) {
+      experienceLevel = data.level as 'entry' | 'mid' | 'senior';
+      experienceRange = data.range;
+      break;
+    }
+  }
+  
+  let rolePool: string[] = [];
+  let skillPool: string[] = [];
+  
+  if (experienceLevel === 'entry') {
+    rolePool = SUGGESTION_DATABASE.entryRoles;
+    skillPool = SUGGESTION_DATABASE.entrySkills;
+  } else if (experienceLevel === 'mid') {
+    rolePool = SUGGESTION_DATABASE.midRoles;
+    skillPool = SUGGESTION_DATABASE.midSkills;
+  } else if (experienceLevel === 'senior') {
+    rolePool = SUGGESTION_DATABASE.seniorRoles;
+    skillPool = SUGGESTION_DATABASE.seniorSkills;
+  } else {
+    rolePool = [...SUGGESTION_DATABASE.entryRoles, ...SUGGESTION_DATABASE.midRoles, ...SUGGESTION_DATABASE.seniorRoles];
+    skillPool = [...SUGGESTION_DATABASE.entrySkills, ...SUGGESTION_DATABASE.midSkills, ...SUGGESTION_DATABASE.seniorSkills];
+  }
+  
+  const matchedRoles = rolePool.filter(role => 
+    role.toLowerCase().includes(inputLower) || 
+    inputLower.split(' ').some(word => word.length > 2 && role.toLowerCase().includes(word))
+  ).slice(0, 4);
+  
+  const matchedLocations = SUGGESTION_DATABASE.locations.filter(location => 
+    location.toLowerCase().includes(inputLower) || 
+    inputLower.includes(location.toLowerCase())
+  ).slice(0, 3);
+  
+  const matchedSkills = skillPool.filter(skill => 
+    skill.toLowerCase().includes(inputLower) || 
+    inputLower.includes(skill.toLowerCase())
+  ).slice(0, 3);
+  
+  const locationsToUse = matchedLocations.length > 0 ? matchedLocations : ['Bangalore', 'Mumbai', 'Remote'];
+  
+  if (matchedRoles.length > 0) {
+    matchedRoles.slice(0, 3).forEach(role => {
+      locationsToUse.slice(0, 2).forEach(location => {
+         suggestions.push(`${role}, ${experienceRange || '3-5 years'}, ${location}, ${skillPool[0]}`);
+      });
+    });
+  } else {
+    // Generic fallback
+     suggestions.push(`Software Engineer, ${experienceRange || '3-5 years'}, ${locationsToUse[0]}, ${skillPool[0]}`);
+  }
+
+  const uniqueSuggestions = [...new Set(suggestions)];
+  return uniqueSuggestions.slice(0, 8);
+};
 
 const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({ 
   onSearch, 
@@ -93,7 +222,7 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
   initialFilters, 
   organizationId, 
   searchHistory,
-   hideHero = false
+  hideHero = false
 }) => {
   // Existing States
   const [name, setName] = useState<SearchTag[]>([]);
@@ -106,35 +235,24 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
   const [currentCompany, setCurrentCompany] = useState('');
   const [currentDesignation, setCurrentDesignation] = useState('');
   
-  // --- BOOLEAN & AI STATES ---
   const [booleanKeywords, setBooleanKeywords] = useState('');
   const [isBooleanKeywords, setIsBooleanKeywords] = useState(false);
   const [booleanDesignation, setBooleanDesignation] = useState('');
   const [isBooleanDesignation, setIsBooleanDesignation] = useState(false);
-  
-  // --- NEW: Store multiple selected Boolean patterns as tags ---
   const [selectedBooleanPatterns, setSelectedBooleanPatterns] = useState<SearchTag[]>([]);
 
-  // New States for AI JD & Suggestions
   const [jdText, setJdText] = useState('');
   const [isGeneratingBoolean, setIsGeneratingBoolean] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState('');
   const [openJobCombobox, setOpenJobCombobox] = useState(false);
   
-  // --- AI JD Analysis States ---
   const [isAnalyzingJD, setIsAnalyzingJD] = useState(false);
   const [aiSuggestedJobTitle, setAiSuggestedJobTitle] = useState('');
   const [showJDSuggestion, setShowJDSuggestion] = useState(false);
   const [isGeneratingFullJD, setIsGeneratingFullJD] = useState(false);
-  
-  // --- State to hold the AI suggestion before applying it ---
   const [aiSuggestedTags, setAiSuggestedTags] = useState<string[]>([]);
-  
-  // --- Typewriter animation states ---
   const [animatedTags, setAnimatedTags] = useState<string[]>([]);
   const [isAnimating, setIsAnimating] = useState(false);
-  
-  // --- Multi-stage analysis states ---
   const [analysisStages, setAnalysisStages] = useState<{
     stage: string;
     title: string;
@@ -148,19 +266,28 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- NEW CHAT BOT STATES ---
+  // --- SMART AI CHAT STATES ---
   const [isChatMode, setIsChatMode] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [chatInput, setChatInput] = useState("");
-  const [jdAnswers, setJdAnswers] = useState<Record<string, string>>({});
+  const [jdContext, setJdContext] = useState<any>(null);
+  const [isProcessingIntent, setIsProcessingIntent] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  
+  // --- DYNAMIC SUGGESTIONS STATE ---
+  const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([]);
+  const [showDynamicSuggestions, setShowDynamicSuggestions] = useState(true);
+  
+  // --- DEEPSEEK INTEGRATION STATES ---
+  const [suggestionCache] = useState<Map<string, string[]>>(new Map());
+  const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
+  const [isTestMode, setIsTestMode] = useState(false);
+  const [testDebugInfo, setTestDebugInfo] = useState<any>(null);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  // --- DARKVEIL ANIMATION STATE ---
-  const [showVeilAnimation, setShowVeilAnimation] = useState(true); // CHANGED: Always true by default
+  const [showVeilAnimation, setShowVeilAnimation] = useState(true);
 
-  // Other States
   const [minExp, setMinExp] = useState('');
   const [maxExp, setMaxExp] = useState('');
   const [minCurrentSalary, setMinCurrentSalary] = useState('');
@@ -173,23 +300,90 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
   const [showEmployment, setShowEmployment] = useState(false);
   const [showEducation, setShowEducation] = useState(false);
   const [showCompensation, setShowCompensation] = useState(false);
+  const [userName, setUserName] = useState('');
 
-    const [userName, setUserName] = useState('');
+  const BRAND_COLOR = '#7731E8';
 
+  // --- API CALL FUNCTION FOR SUGGESTIONS ---
+  const fetchDeepSeekSuggestions = async (input: string) => {
+    if (!input || input.length < 2) return;
+    
+    const cacheKey = input.toLowerCase().trim();
 
-// --- UPDATED: User Name Fetch Logic ---
+    // 1. Check Cache first (Save money)
+    if (suggestionCache.has(cacheKey)) {
+      setDynamicSuggestions(suggestionCache.get(cacheKey)!);
+      return;
+    }
+
+    setIsGeneratingSuggestions(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-jd-suggestions-deepseek-test', {
+        body: { 
+          userInput: input,
+          conversationContext: jdContext,
+          organizationId: organizationId 
+        }
+      });
+
+      if (error) throw error;
+
+      if (data && data.suggestions) {
+        setDynamicSuggestions(data.suggestions);
+        
+        // Update Test Mode Info
+        setIsTestMode(data.isTestMode || false);
+        if (data.debug) {
+            setTestDebugInfo(data.debug);
+        }
+
+        // Save to cache
+        suggestionCache.set(cacheKey, data.suggestions);
+      }
+    } catch (err) {
+      console.error("DeepSeek API Error, falling back to local:", err);
+      // Fallback to local logic
+      const localSuggestions = generateDynamicSuggestions(input);
+      setDynamicSuggestions(localSuggestions);
+    } finally {
+      setIsGeneratingSuggestions(false);
+    }
+  };
+
+  // --- UPDATE SUGGESTIONS DYNAMICALLY WITH DEBOUNCE ---
+  useEffect(() => {
+    if (isChatMode) {
+      // Clear previous timer
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+
+      if (chatInput.length >= 2) {
+        // Debounce for 600ms
+        debounceRef.current = setTimeout(() => {
+          fetchDeepSeekSuggestions(chatInput);
+        }, 600);
+      } else {
+        // Reset/Default suggestions for empty input
+        setDynamicSuggestions([
+          'Senior Python Developer, 5-8 years, hybrid Bangalore',
+          'Frontend Engineer with React, 3-5 years, remote',
+          'Full Stack Developer, Node.js, 4-6 years, Mumbai',
+          'DevOps Engineer, AWS, 6-10 years, Pune'
+        ]);
+        setTestDebugInfo(null);
+      }
+    }
+    return () => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [chatInput, isChatMode, organizationId]);
+
   useEffect(() => {
     const fetchUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
         const meta = user.user_metadata || {};
-        
-        // 1. Try 'full_name' (Google/GitHub default)
-        // 2. Try 'name' (Some custom auth setups)
-        // 3. Try combining 'first_name' + 'last_name'
-        // 4. Fallback: Email address prefix (capitalized)
-        
         let displayName = meta.full_name || meta.name;
 
         if (!displayName && meta.first_name) {
@@ -207,10 +401,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     fetchUser();
   }, []);
 
-  // --- BRAND COLOR CONSTANT ---
-  const BRAND_COLOR = '#7731E8'; 
-
-  // --- Handle File Upload ---
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -223,7 +413,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     }
   };
 
-  // --- FETCH JOBS FOR DROPDOWN ---
   const { data: jobs = [] } = useQuery({
     queryKey: ['activeJobsForFilter', organizationId],
     queryFn: async () => {
@@ -263,7 +452,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     setNoticePeriod(initialFilters?.notice_periods || []);
     setDatePosted(initialFilters?.date_posted || 'all_time');
     
-    // LOAD JD METADATA FROM INITIAL FILTERS
     if (initialFilters?.jd_text) {
       setJdText(initialFilters.jd_text);
       setAiSuggestedJobTitle(initialFilters.jd_job_title || '');
@@ -276,7 +464,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     }
   }, [initialFilters]);
 
-  // --- LOAD FROM SEARCH HISTORY ---
   useEffect(() => {
     if (searchHistory) {
       setJdText(searchHistory.jd_text);
@@ -310,7 +497,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     }
   }, [searchHistory]);
 
-  // Re-animate when boolean mode changes
   useEffect(() => {
     if (aiSuggestedTags.length > 0 && !isAnimating && !isGeneratingBoolean) {
       const reAnimate = async () => {
@@ -329,7 +515,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     }
   }, [isBooleanKeywords]);
 
-  // Auto-scroll chat
   useEffect(() => {
     if (isChatMode && chatContainerRef.current) {
       const { scrollHeight, clientHeight } = chatContainerRef.current;
@@ -340,7 +525,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     }
   }, [chatMessages, isChatMode]);
 
-  // CHANGED: Animation is always on - no conditional logic
   useEffect(() => {
     setShowVeilAnimation(true);
   }, []);
@@ -366,7 +550,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     return allIndianCities.filter(c => c.toLowerCase().includes(query.toLowerCase())).slice(0, 10);
   }, [allIndianCities]);
 
-  // --- SAVE SEARCH HISTORY ---
   const saveSearchHistory = async (keywords: string[]) => {
     if (!jdText.trim() || keywords.length === 0) return;
     
@@ -390,7 +573,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     }
   };
 
-  // --- HANDLE JOB SELECTION ---
   const handleJobSelect = (jobId: string) => {
     setSelectedJobId(jobId);
     const selectedJob = jobs.find(j => j.id === jobId);
@@ -399,12 +581,10 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     }
   };
 
-  // --- Count words ---
   const countWords = (text: string): number => {
     return text.trim().split(/\s+/).filter(word => word.length > 0).length;
   };
 
-  // --- Analyze JD for title ---
   const analyzeJDForTitle = async (jdText: string): Promise<string> => {
     try {
       const { data, error } = await supabase.functions.invoke('analyze-jd-title', {
@@ -419,7 +599,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     }
   };
 
-  // --- Handle JD text changes ---
   useEffect(() => {
     const analyzeJD = async () => {
       if (isChatMode) return;
@@ -455,92 +634,249 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     return () => clearTimeout(timer);
   }, [jdText, isChatMode]);
 
-  // --- CHAT BOT LOGIC ---
+  // --- START CHAT ---
   const startJDChat = () => {
     setIsChatMode(true);
     setShowJDSuggestion(false);
-    setCurrentQuestionIdx(0);
-    setJdAnswers({});
+    setShowDynamicSuggestions(true);
+    setJdContext(null);
+    setDynamicSuggestions([
+        'Senior Python Developer, 5-8 years, hybrid Bangalore',
+        'Frontend Engineer with React, 3-5 years, remote',
+        'Full Stack Developer, Node.js, 4-6 years, Mumbai',
+        'DevOps Engineer, AWS, 6-10 years, Pune'
+    ]);
     setChatMessages([
       {
         id: 'intro',
         role: 'assistant',
-        content: JD_CHAT_QUESTIONS[0].text
+        content: "Hi! I'll help you draft a great job description. You can describe the role in your own words, or pick a template below. Just tell me what you're looking for!"
       }
     ]);
   };
 
-  const handleChatSubmit = async (skipped = false) => {
-    const answerText = skipped ? "Skipped" : chatInput.trim();
-    if (!answerText) return;
-
-    const newUserMsg: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: answerText
-    };
-    
-    const currentQKey = JD_CHAT_QUESTIONS[currentQuestionIdx].id;
-    const updatedAnswers = { ...jdAnswers, [currentQKey]: answerText };
-    setJdAnswers(updatedAnswers);
-    
-    setChatInput("");
-    
-    const nextIdx = currentQuestionIdx + 1;
-    
-    if (nextIdx < JD_CHAT_QUESTIONS.length) {
-      const nextQ = JD_CHAT_QUESTIONS[nextIdx];
-      const newBotMsg: ChatMessage = {
-        id: `bot-${Date.now()}`,
-        role: 'assistant',
-        content: nextQ.text
-      };
-      setChatMessages(prev => [...prev, newUserMsg, newBotMsg]);
-      setCurrentQuestionIdx(nextIdx);
-    } else {
-      setChatMessages(prev => [...prev, newUserMsg]);
-      setIsGeneratingFullJD(true);
+  // --- PARSE USER INTENT ---
+  const parseUserIntent = async (userInput: string, existingContext: any = null) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('parse-jd-intent', {
+        body: { 
+          userInput,
+          conversationContext: existingContext 
+        }
+      });
       
-      try {
-        const payload = {
-          jobTitle: updatedAnswers['jobDetails'],
-          department: updatedAnswers['jobDetails'],
-          location: updatedAnswers['jobDetails'],
-          experienceRange: updatedAnswers['experience'],
-          seniority: updatedAnswers['experience'],
-          primarySkills: updatedAnswers['skills'],
-          secondarySkills: updatedAnswers['skills'],
-          responsibilities: updatedAnswers['responsibilities'],
-          education: updatedAnswers['education'],
-          industry: updatedAnswers['industry'],
-          salary: updatedAnswers['salary'],
-          positionCount: updatedAnswers['hiringContext'],
-          timeline: updatedAnswers['hiringContext']
-        };
-
-        const { data, error } = await supabase.functions.invoke('generate-jd-from-prompts', {
-          body: { answers: payload }
-        });
-
-        if (error) throw error;
-        
-        setJdText(data.fullJD);
-        setIsChatMode(false);
-        
-      } catch (err) {
-        console.error("Error generating JD:", err);
-        setChatMessages(prev => [...prev, {
-          id: 'error',
-          role: 'assistant',
-          content: "Sorry, I encountered an error generating the JD. Please try again or paste a description manually."
-        }]);
-      } finally {
-        setIsGeneratingFullJD(false);
-      }
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error parsing intent:', error);
+      return null;
     }
   };
 
-  // --- Boolean examples ---
+  // --- GENERATE JD FROM CONTEXT ---
+  const generateJDFromContext = async (context: any) => {
+    try {
+      const payload = {
+        jobTitle: context.jobTitle,
+        department: context.department,
+        location: context.location,
+        employmentType: context.workMode,
+        experienceRange: context.experienceMin && context.experienceMax 
+          ? `${context.experienceMin}-${context.experienceMax} years`
+          : null,
+        seniority: context.seniority,
+        primarySkills: context.primarySkills?.join(', '),
+        secondarySkills: context.secondarySkills?.join(', '),
+        responsibilities: context.responsibilities?.join('; '),
+        education: context.education?.join(', '),
+        certifications: context.certifications?.join(', '),
+        industry: context.industry,
+        salary: context.salaryMin && context.salaryMax
+          ? `₹${context.salaryMin}-${context.salaryMax} LPA`
+          : null,
+        positionCount: context.positionCount,
+        timeline: context.timeline
+      };
+
+      const { data, error } = await supabase.functions.invoke('generate-jd-from-prompts', {
+        body: { answers: payload }
+      });
+
+      if (error) throw error;
+      return data.fullJD;
+    } catch (error) {
+      console.error('Error generating JD:', error);
+      return null;
+    }
+  };
+
+  // --- HANDLE SUGGESTION CLICK ---
+  const handleSuggestionClick = async (suggestion: string) => {
+    setChatInput(suggestion);
+    setShowDynamicSuggestions(false);
+    
+    // Immediately trigger AI processing
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: suggestion
+    };
+    
+    setChatMessages(prev => [...prev, userMsg]);
+    setIsProcessingIntent(true);
+
+    try {
+      const parsed = await parseUserIntent(suggestion, jdContext);
+      
+      if (!parsed) {
+        setChatMessages(prev => [...prev, {
+          id: `error-${Date.now()}`,
+          role: 'assistant',
+          content: "Sorry, I had trouble understanding that. Could you rephrase?"
+        }]);
+        setIsProcessingIntent(false);
+        return;
+      }
+
+      const updatedContext = {
+        ...(jdContext || {}),
+        ...parsed.extracted
+      };
+      setJdContext(updatedContext);
+
+      if (parsed.canGenerateDraft) {
+        setChatMessages(prev => [...prev, {
+          id: `processing-${Date.now()}`,
+          role: 'system',
+          content: "✨ Great! I have enough information. Generating your job description..."
+        }]);
+
+        setIsGeneratingFullJD(true);
+        const generatedJD = await generateJDFromContext(updatedContext);
+        setIsGeneratingFullJD(false);
+
+        if (generatedJD) {
+          setJdText(generatedJD);
+          setIsChatMode(false);
+          
+          setChatMessages(prev => [...prev, {
+            id: `success-${Date.now()}`,
+            role: 'assistant',
+            content: "✅ Done! Your job description is ready. You can review and edit it, or generate keywords to start searching."
+          }]);
+        }
+      } else if (parsed.needsClarification && parsed.suggestedQuestion) {
+        setChatMessages(prev => [...prev, {
+          id: `clarify-${Date.now()}`,
+          role: 'assistant',
+          content: parsed.suggestedQuestion
+        }]);
+      } else {
+        setChatMessages(prev => [...prev, {
+          id: `ack-${Date.now()}`,
+          role: 'assistant',
+          content: "Got it! What else can you tell me about this role?"
+        }]);
+      }
+
+      setIsProcessingIntent(false);
+      
+    } catch (error) {
+      console.error('Suggestion processing error:', error);
+      setChatMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: "Something went wrong. Please try again."
+      }]);
+      setIsProcessingIntent(false);
+    }
+  };
+
+  // --- HANDLE CHAT SUBMIT (ENTER KEY) ---
+  const handleChatSubmit = async () => {
+    const userInput = chatInput.trim();
+    if (!userInput) return;
+
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: userInput
+    };
+    
+    setChatMessages(prev => [...prev, userMsg]);
+    setChatInput("");
+    setShowDynamicSuggestions(false);
+    setIsProcessingIntent(true);
+
+    try {
+      const parsed = await parseUserIntent(userInput, jdContext);
+      
+      if (!parsed) {
+        setChatMessages(prev => [...prev, {
+          id: `error-${Date.now()}`,
+          role: 'assistant',
+          content: "Sorry, I had trouble understanding that. Could you rephrase?"
+        }]);
+        setIsProcessingIntent(false);
+        return;
+      }
+
+      const updatedContext = {
+        ...(jdContext || {}),
+        ...parsed.extracted
+      };
+      setJdContext(updatedContext);
+
+      if (parsed.canGenerateDraft) {
+        setChatMessages(prev => [...prev, {
+          id: `processing-${Date.now()}`,
+          role: 'system',
+          content: "✨ Great! I have enough information. Generating your job description..."
+        }]);
+
+        setIsGeneratingFullJD(true);
+        const generatedJD = await generateJDFromContext(updatedContext);
+        setIsGeneratingFullJD(false);
+
+        if (generatedJD) {
+          setJdText(generatedJD);
+          setIsChatMode(false);
+          
+          setChatMessages(prev => [...prev, {
+            id: `success-${Date.now()}`,
+            role: 'assistant',
+            content: "✅ Done! Your job description is ready. You can review and edit it, or generate keywords to start searching."
+          }]);
+        }
+      } else if (parsed.needsClarification && parsed.suggestedQuestion) {
+        setChatMessages(prev => [...prev, {
+          id: `clarify-${Date.now()}`,
+          role: 'assistant',
+          content: parsed.suggestedQuestion
+        }]);
+        setShowDynamicSuggestions(true);
+      } else {
+        setChatMessages(prev => [...prev, {
+          id: `ack-${Date.now()}`,
+          role: 'assistant',
+          content: "Got it! What else can you tell me about this role?"
+        }]);
+        setShowDynamicSuggestions(true);
+      }
+
+      setIsProcessingIntent(false);
+      
+    } catch (error) {
+      console.error('Chat error:', error);
+      setChatMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: "Something went wrong. Please try again."
+      }]);
+      setIsProcessingIntent(false);
+    }
+  };
+
   const generateBooleanExamples = (keywords: string[]): string[] => {
     if (keywords.length === 0) return [];
     
@@ -578,7 +914,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     return examples;
   };
 
-  // --- Show keywords sequentially ---
   const showKeywordsSequentially = async (keywords: string[]) => {
     setVisibleKeywordsCount(0);
     
@@ -588,7 +923,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     }
   };
 
-  // --- Typewriter text ---
   const typewriterText = async (text: string, callback: (partial: string) => void) => {
     for (let i = 0; i <= text.length; i++) {
       callback(text.substring(0, i));
@@ -596,7 +930,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     }
   };
 
-  // --- Analysis stages ---
   const runAnalysisStages = async (keywords: string[]) => {
     const stages = [
       {
@@ -668,7 +1001,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     setCurrentStageIndex(-1);
   };
 
-  // --- Generate keywords ---
   const handleGenerateBoolean = async () => {
     if (!jdText.trim()) return;
     setIsGeneratingBoolean(true);
@@ -707,7 +1039,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     }
   };
 
-  // --- Add AI tag ---
   const handleAddAiTag = (tagToAdd: string) => {
     if (isBooleanKeywords) {
       setSelectedBooleanPatterns(prev => {
@@ -727,7 +1058,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     setAiSuggestedTags(prev => prev.filter(t => t !== tagToAdd));
   };
 
-  // --- Submit form ---
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -775,7 +1105,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     });
   };
 
-  // --- Display tags ---
   const displayTags = useMemo(() => {
     if (aiSuggestedTags.length === 0) return [];
     
@@ -786,7 +1115,7 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
     return tagsToShow.slice(0, visibleKeywordsCount);
   }, [aiSuggestedTags, isBooleanKeywords, visibleKeywordsCount]);
 
-   return (
+  return (
     <div className={cn("min-h-screen bg-gray-50/50", !hideHero && "pb-20")}>
       <form onSubmit={handleSubmit} className="zive-x-filters-container relative">
         <style>{`
@@ -821,7 +1150,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
           padding: 40px;
         }
 
-        /* HERO TEXT STYLES */
         .hero-badge {
             background: rgba(255,255,255,0.1);
             border: 1px solid rgba(255,255,255,0.2);
@@ -848,7 +1176,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
             text-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
 
-        /* GLASS INPUT AREA */
         .gemini-textarea-container {
           width: 100%;
           max-width: 600px;
@@ -882,7 +1209,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
           color: rgba(255, 255, 255, 0.5);
         }
 
-        /* GLASS BUTTONS */
         .gemini-action-buttons {
           display: flex;
           flex-wrap: wrap;
@@ -925,29 +1251,75 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
            border-color: rgba(255,255,255,0.3);
         }
 
-        /* Analysis Box overrides for dark mode */
+        /* CHAT CONTAINER */
+        .chat-container {
+          background: rgba(0, 0, 0, 0.4);
+          backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 20px;
+        }
+
+        /* DYNAMIC SUGGESTIONS */
+        .suggestions-container {
+          margin-top: 16px;
+          max-height: 300px;
+          overflow-y: auto;
+        }
+
+        .suggestions-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 12px;
+          color: rgba(255, 255, 255, 0.6);
+          font-size: 12px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .suggestion-tag {
+          background: linear-gradient(135deg, rgba(119, 49, 232, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%);
+          border: 1px solid rgba(119, 49, 232, 0.3);
+          color: white;
+          padding: 12px 16px;
+          border-radius: 12px;
+          cursor: pointer;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          font-size: 13px;
+          line-height: 1.4;
+          margin-bottom: 8px;
+          display: block;
+          text-align: left;
+        }
+        
+        .suggestion-tag:hover {
+          background: linear-gradient(135deg, rgba(119, 49, 232, 0.3) 0%, rgba(168, 85, 247, 0.3) 100%);
+          border-color: rgba(119, 49, 232, 0.6);
+          transform: translateX(4px);
+          box-shadow: 0 4px 12px rgba(119, 49, 232, 0.3);
+        }
+
         .keyword-appear.group {
             background: rgba(255,255,255,0.1) !important;
             border-color: rgba(255,255,255,0.2) !important;
             color: white !important;
         }
 
-        /* --- NEW WHITE FORM CARD STYLES --- */
+        /* WHITE FORM CARD */
         .white-form-card {
           background: white;
           border-radius: 16px;
           box-shadow: 0 10px 40px -10px rgba(0,0,0,0.08);
           border: 1px solid #e5e7eb;
           padding: 32px;
-          margin-top: -30px; /* Overlap effect default */
+          margin-top: -30px;
           position: relative;
           z-index: 0;
         }
         
-        /* If hero is hidden, we remove the negative margin via inline style or utility class */
-        
         .form-layout-container {
-          max-width: 100%; /* Flexible width */
+          max-width: 100%;
           margin: 4rem auto;
           padding: 0 24px 40px 24px;
         }
@@ -1017,7 +1389,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
            box-shadow: 0 0 0 4px rgba(119, 49, 232, 0.1);
         }
 
-        /* --- TOGGLE SWITCH STYLES --- */
         .boolean-toggle-wrapper {
             display: flex;
             align-items: center;
@@ -1070,15 +1441,50 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
             transform: translateX(20px);
         }
 
-        /* Utilities */
         .zive-x-filters-container input:focus { outline: none !important; }
         @keyframes slideDown {
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* Scrollbar styling for suggestions */
+        .suggestions-container::-webkit-scrollbar {
+          width: 6px;
+        }
+        .suggestions-container::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 10px;
+        }
+        .suggestions-container::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 10px;
+        }
+        .suggestions-container::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* TEST MODE STYLES */
+        .test-mode-badge {
+            background: rgba(234, 179, 8, 0.1);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+            border-radius: 12px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            font-size: 11px;
+            color: #fbbf24;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            backdrop-filter: blur(4px);
+        }
+        .test-metric {
+            display: flex;
+            justify-content: space-between;
+            opacity: 0.8;
+        }
         `}</style>
 
-        {/* --- 1. DARK HERO SECTION (CONDITIONAL) --- */}
+        {/* --- DARK HERO SECTION --- */}
         {!hideHero && (
           <div className={cn("gemini-card m-4 md:m-8 mb-12")}>
             <div className="gemini-card-veil">
@@ -1086,64 +1492,152 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
             </div>
 
             <div className="gemini-card-inner">
-              {/* Hero Title */}
               {!isChatMode && !jdText && (
-                 <div className="flex flex-col items-center animate-in fade-in zoom-in duration-1000 mb-6">
-                    <div className="hero-badge">
-                       <Sparkles className="w-3 h-3 text-purple-300" />
-                       <span>AI Recruiting</span>
-                    </div>
-                    {/* Welcome Message */}
-                    {userName && (
-                       <h1 className="hero-title max-w-2xl">
-                        Welcome {userName}
-                        </h1>
-                    )}
-                    {/* <h1 className="hero-title max-w-2xl">
-                       Empower hiring<br/>with intelligence
-                    </h1> */}
-                 </div>
+                <div className="flex flex-col items-center animate-in fade-in zoom-in duration-1000 mb-6">
+                  <div className="hero-badge">
+                    <Sparkles className="w-3 h-3 text-purple-300" />
+                    <span>AI Recruiting</span>
+                  </div>
+                  {userName && (
+                    <h1 className="hero-title max-w-2xl">
+                      Welcome {userName}
+                    </h1>
+                  )}
+                </div>
               )}
 
-              {/* Input Area */}
               <div className="gemini-textarea-container">
-                  {isChatMode ? (
-                    <div className="chat-container h-[300px] bg-black/40 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden flex flex-col">
-                      <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
-                        <span className="text-xs font-bold text-white uppercase tracking-wide flex items-center gap-2">
-                          <Bot className="w-4 h-4" /> AI Assistant
-                        </span>
-                        <Button variant="ghost" size="sm" onClick={() => setIsChatMode(false)} className="h-6 w-6 p-0 hover:bg-white/10 rounded-full text-white">
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      <div className="chat-messages flex-1 overflow-y-auto p-4 gap-3 flex flex-col" ref={chatContainerRef}>
-                        {chatMessages.map((msg) => (
-                          <div key={msg.id} className={cn("p-3 rounded-xl text-sm max-w-[85%]", msg.role === 'assistant' ? "bg-white/10 text-white self-start" : "bg-[#7731E8] text-white self-end")}>
-                            {msg.content}
-                          </div>
-                        ))}
-                        <div ref={chatEndRef} />
-                      </div>
-                      <div className="p-3 border-t border-white/10 flex gap-2">
-                         <input 
-                           className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 text-sm text-white focus:outline-none focus:border-purple-400"
-                           value={chatInput}
-                           onChange={(e) => setChatInput(e.target.value)}
-                           placeholder="Type your answer..."
-                           onKeyDown={(e) => e.key === 'Enter' && !isGeneratingFullJD && handleChatSubmit(false)}
-                         />
-                         <Button type="button" size="sm" onClick={() => handleChatSubmit(false)} className="bg-[#7731E8] hover:bg-[#6228c2]"><Send className="w-4 h-4" /></Button>
-                      </div>
+                {isChatMode ? (
+                  <div className="chat-container h-[500px] flex flex-col">
+                    <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
+                      <span className="text-xs font-bold text-white uppercase tracking-wide flex items-center gap-2">
+                        <Bot className="w-4 h-4" /> AI Assistant
+                        {isTestMode && <span className="bg-yellow-500/20 text-yellow-500 px-2 py-0.5 rounded text-[10px]">TEST MODE</span>}
+                      </span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => {setIsChatMode(false); setShowDynamicSuggestions(false);}} 
+                        className="h-6 w-6 p-0 hover:bg-white/10 rounded-full text-white"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
                     </div>
-                  ) : (
-                    <textarea
-                      value={jdText}
-                      onChange={(e) => setJdText(e.target.value)}
-                      placeholder="Paste your Job Description here, or ask AI to help you draft one..."
-                      className="gemini-textarea"
-                    />
-                  )}
+
+                    <div className="chat-messages flex-1 overflow-y-auto p-4" ref={chatContainerRef}>
+                      
+                       {/* TEST MODE DASHBOARD */}
+                       {isTestMode && testDebugInfo && (
+                        <div className="test-mode-badge animate-in slide-in-from-top-2">
+                            <div className="flex items-center gap-2 font-bold border-b border-yellow-500/20 pb-1 mb-1">
+                                <Activity className="w-3 h-3" /> LIVE BUDGET TRACKING
+                            </div>
+                            <div className="test-metric">
+                                <span>Requests:</span>
+                                <span>{testDebugInfo.requestNumber} / {testDebugInfo.remainingRequests + testDebugInfo.requestNumber}</span>
+                            </div>
+                            <div className="test-metric">
+                                <span>Spent:</span>
+                                <span>${Number(testDebugInfo.totalSpent).toFixed(4)} / $2.12</span>
+                            </div>
+                            <div className="w-full bg-yellow-900/30 h-1.5 rounded-full mt-1 overflow-hidden">
+                                <div 
+                                    className="bg-yellow-500 h-full transition-all duration-500" 
+                                    style={{ width: `${testDebugInfo.percentUsed}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                      )}
+
+                      {/* Chat messages */}
+                      {chatMessages.map((msg) => (
+                        <div 
+                          key={msg.id} 
+                          className={cn(
+                            "mb-3 p-3 rounded-xl text-sm max-w-[85%]", 
+                            msg.role === 'assistant' ? "bg-white/10 text-white" : 
+                            msg.role === 'system' ? "bg-purple-500/20 text-purple-200 text-center max-w-full mx-auto" :
+                            "bg-[#7731E8] text-white ml-auto"
+                          )}
+                        >
+                          {msg.content}
+                        </div>
+                      ))}
+                      
+                      {/* Dynamic suggestions */}
+                      {showDynamicSuggestions && (
+                        <div className="suggestions-container">
+                          <div className="suggestions-header flex justify-between">
+                            <div className="flex items-center gap-2">
+                                <Lightbulb className="w-3 h-3" />
+                                <span>{chatInput.length > 0 ? 'AI Suggestions:' : 'Try these examples:'}</span>
+                            </div>
+                            {isGeneratingSuggestions && <Loader2 className="w-3 h-3 animate-spin" />}
+                          </div>
+                          
+                          {/* Loading State or Suggestions */}
+                          {isGeneratingSuggestions && dynamicSuggestions.length === 0 ? (
+                             <div className="space-y-2 opacity-50">
+                                <div className="h-8 bg-white/10 rounded-lg w-3/4 animate-pulse"></div>
+                                <div className="h-8 bg-white/10 rounded-lg w-1/2 animate-pulse"></div>
+                             </div>
+                          ) : (
+                            dynamicSuggestions.map((suggestion, idx) => (
+                                <button
+                                key={idx}
+                                type="button"
+                                onClick={() => handleSuggestionClick(suggestion)}
+                                className="suggestion-tag"
+                                >
+                                {suggestion}
+                                </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+
+                      {isProcessingIntent && (
+                        <div className="flex items-center gap-2 text-white/60 text-sm mt-3">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Analyzing...</span>
+                        </div>
+                      )}
+                      
+                      <div ref={chatEndRef} />
+                    </div>
+
+                    <div className="p-3 border-t border-white/10 flex gap-2">
+                      <input 
+                        className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-purple-400"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        placeholder="Describe the role (e.g. 'Freshers Bangalore Python')..."
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !isProcessingIntent && !isGeneratingFullJD) {
+                            handleChatSubmit();
+                          }
+                        }}
+                        disabled={isProcessingIntent || isGeneratingFullJD}
+                      />
+                      <Button 
+                        type="button" 
+                        size="sm" 
+                        onClick={handleChatSubmit} 
+                        disabled={isProcessingIntent || isGeneratingFullJD}
+                        className="bg-[#7731E8] hover:bg-[#6228c2]"
+                      >
+                        {isProcessingIntent ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <textarea
+                    value={jdText}
+                    onChange={(e) => setJdText(e.target.value)}
+                    placeholder="Paste your Job Description here, or ask AI to help you draft one..."
+                    className="gemini-textarea"
+                  />
+                )}
               </div>
 
               {/* Action Buttons */}
@@ -1151,7 +1645,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
                 <div className="gemini-action-buttons">
                   <input ref={fileInputRef} type="file" accept=".txt,.doc,.docx,.pdf" onChange={handleFileUpload} className="hidden" />
                   
-          
                   <button type="button" className="gemini-action-btn" onClick={() => fileInputRef.current?.click()}>
                     <Upload className="w-4 h-4" /> Upload JD
                   </button>
@@ -1167,12 +1660,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
                       </button>
                     </PopoverTrigger>
 
-                            <button type="button" className="gemini-action-btn primary" onClick={handleGenerateBoolean} disabled={!jdText.trim() || isGeneratingBoolean}>
-                    {isGeneratingBoolean ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    {isGeneratingBoolean ? 'Generating...' : 'Generate Keywords'}
-                  </button>
-
-
                     <PopoverContent className="w-[300px] p-0 bg-gray-900 border-gray-700 text-white">
                       <Command className="bg-transparent">
                         <CommandInput placeholder="Search job..." className="text-white placeholder:text-gray-500" />
@@ -1180,7 +1667,12 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
                           <CommandEmpty>No jobs found.</CommandEmpty>
                           <CommandGroup>
                             {jobs.map((job: any) => (
-                              <CommandItem key={job.id} value={job.title} onSelect={() => { handleJobSelect(job.id); setOpenJobCombobox(false); }} className="text-white aria-selected:bg-white/10">
+                              <CommandItem 
+                                key={job.id} 
+                                value={job.title} 
+                                onSelect={() => { handleJobSelect(job.id); setOpenJobCombobox(false); }} 
+                                className="text-white aria-selected:bg-white/10"
+                              >
                                 {job.title}
                               </CommandItem>
                             ))}
@@ -1189,126 +1681,143 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
                       </Command>
                     </PopoverContent>
                   </Popover>
+
+                  <button 
+                    type="button" 
+                    className="gemini-action-btn primary" 
+                    onClick={handleGenerateBoolean} 
+                    disabled={!jdText.trim() || isGeneratingBoolean}
+                  >
+                    {isGeneratingBoolean ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {isGeneratingBoolean ? 'Generating...' : 'Generate Keywords'}
+                  </button>
                 </div>
               )}
               
               {/* Display Generated Tags */}
               {!isChatMode && (isGeneratingBoolean || displayTags.length > 0) && (
-                 <div className="mt-8 w-full max-w-4xl bg-black/40 backdrop-blur-md rounded-xl p-4 border border-white/10 animate-in slide-in-from-bottom-5">
-                    <div className="flex justify-between items-center mb-2 px-2">
-                      <span className="text-xs font-semibold text-purple-300 uppercase tracking-wider">Generated Keywords</span>
-                      <button type="button" onClick={() => {setAiSuggestedTags([]); setAnimatedTags([]);}} className="text-gray-400 hover:text-white"><X className="w-3 h-3" /></button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                       {displayTags.map((tag, idx) => (
-                        <button key={idx} type="button" onClick={() => handleAddAiTag(tag)}
-                          className="group flex items-center gap-1 text-sm bg-white/10 text-white border border-white/20 hover:bg-purple-500/50 hover:border-purple-400 px-3 py-1.5 rounded-full transition-all">
-                          <span className="font-mono text-xs">{tag}</span>
-                          <span className="opacity-0 group-hover:opacity-100 text-[10px] ml-1">+</span>
-                        </button>
-                       ))}
-                    </div>
-                 </div>
+                <div className="mt-8 w-full max-w-4xl bg-black/40 backdrop-blur-md rounded-xl p-4 border border-white/10 animate-in slide-in-from-bottom-5">
+                  <div className="flex justify-between items-center mb-2 px-2">
+                    <span className="text-xs font-semibold text-purple-300 uppercase tracking-wider">Generated Keywords</span>
+                    <button 
+                      type="button" 
+                      onClick={() => {setAiSuggestedTags([]); setAnimatedTags([]);}} 
+                      className="text-gray-400 hover:text-white"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {displayTags.map((tag, idx) => (
+                      <button 
+                        key={idx} 
+                        type="button" 
+                        onClick={() => handleAddAiTag(tag)}
+                        className="group flex items-center gap-1 text-sm bg-white/10 text-white border border-white/20 hover:bg-purple-500/50 hover:border-purple-400 px-3 py-1.5 rounded-full transition-all"
+                      >
+                        <span className="font-mono text-xs">{tag}</span>
+                        <span className="opacity-0 group-hover:opacity-100 text-[10px] ml-1">+</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           </div>
         )}
 
-        {/* --- 2. FORM SECTION (Has different style if hero is hidden) --- */}
+        {/* --- FORM SECTION --- */}
         <div className="form-layout-container">
-        <div className={cn("white-form-card", hideHero && "mt-0 shadow-none border-none p-0 h-full")}>
+          <div className={cn("white-form-card", hideHero && "mt-0 shadow-none border-none p-0 h-full")}>
             
-            {/* Keywords Section */}
             <div className="mb-8">
-                <div className="flex justify-between items-center mb-2">
-                  <label className="naukri-label mb-0">Keywords</label>
-                  <div className="boolean-toggle-wrapper">
-                    <span className={`boolean-label ${isBooleanKeywords ? 'active' : ''}`}>Boolean Search</span>
-                    <label className="toggle-switch">
-                      <input type="checkbox" checked={isBooleanKeywords} onChange={(e) => {
-                          setIsBooleanKeywords(e.target.checked);
-                          if (!e.target.checked) setSelectedBooleanPatterns([]);
-                        }} 
-                      />
-                      <span className="toggle-slider"></span>
-                    </label>
-                  </div>
-                </div>
-
-                {isBooleanKeywords ? (
-                  <div className="mandatory-tag-wrapper">
-                    <MandatoryTagSelector 
-                      value={selectedBooleanPatterns} 
-                      onChange={setSelectedBooleanPatterns} 
-                      placeholder="Select Boolean patterns..." 
-                      disableSuggestions={true}
+              <div className="flex justify-between items-center mb-2">
+                <label className="naukri-label mb-0">Keywords</label>
+                <div className="boolean-toggle-wrapper">
+                  <span className={`boolean-label ${isBooleanKeywords ? 'active' : ''}`}>Boolean Search</span>
+                  <label className="toggle-switch">
+                    <input 
+                      type="checkbox" 
+                      checked={isBooleanKeywords} 
+                      onChange={(e) => {
+                        setIsBooleanKeywords(e.target.checked);
+                        if (!e.target.checked) setSelectedBooleanPatterns([]);
+                      }} 
                     />
-                  </div>
-                ) : (
-                  <div className="mandatory-tag-wrapper">
-                    <MandatoryTagSelector 
-                      value={keywords} 
-                      onChange={setKeywords} 
-                      placeholder="Enter keywords like skills, designation and company" 
-                      disableSuggestions={true} 
-                    />
-                  </div>
-                )}
-                
-                {/* Purple Info Box */}
-                <div className="purple-info-box">
-                  <Info className="w-5 h-5 text-[#7731E8] flex-shrink-0" />
-                  <p>Many candidates skip adding their IT skills to their profiles, which can result in fewer matches when searching by specific technical skills.</p>
+                    <span className="toggle-slider"></span>
+                  </label>
                 </div>
+              </div>
 
-                {/* Experience Row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  <div className="group">
-                    <label className="naukri-label">Min experience</label>
-                    <Select value={minExp} onValueChange={setMinExp}>
-                      <SelectTrigger className="naukri-input">
-                        <SelectValue placeholder="Years" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {experienceOptions.map(y => (
-                          <SelectItem key={y} value={y.toString()}>{y} {y === 1 ? 'Year' : 'Years'}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="group">
-                    <label className="naukri-label">Max experience</label>
-                    <Select value={maxExp} onValueChange={setMaxExp}>
-                      <SelectTrigger className="naukri-input">
-                        <SelectValue placeholder="Years" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {experienceOptions.map(y => (
-                          <SelectItem key={y} value={y.toString()}>{y} {y === 1 ? 'Year' : 'Years'}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+              {isBooleanKeywords ? (
+                <div className="mandatory-tag-wrapper">
+                  <MandatoryTagSelector 
+                    value={selectedBooleanPatterns} 
+                    onChange={setSelectedBooleanPatterns} 
+                    placeholder="Select Boolean patterns..." 
+                    disableSuggestions={true}
+                  />
                 </div>
+              ) : (
+                <div className="mandatory-tag-wrapper">
+                  <MandatoryTagSelector 
+                    value={keywords} 
+                    onChange={setKeywords} 
+                    placeholder="Enter keywords like skills, designation and company" 
+                    disableSuggestions={true} 
+                  />
+                </div>
+              )}
+              
+              <div className="purple-info-box">
+                <Info className="w-5 h-5 text-[#7731E8] flex-shrink-0" />
+                <p>Many candidates skip adding their IT skills to their profiles, which can result in fewer matches when searching by specific technical skills.</p>
+              </div>
 
-                {/* Location */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div className="group">
-                  <label className="naukri-label">Current location of candidate</label>
-                  <div className="mandatory-tag-wrapper">
-                    <MandatoryTagSelector 
-                      value={locations} 
-                      onChange={setLocations} 
-                      placeholder="Add location" 
-                      fetchSuggestions={fetchLocationSuggestions} 
-                      queryKey="locationSuggestions" 
-                    />
-                  </div>
+                  <label className="naukri-label">Min experience</label>
+                  <Select value={minExp} onValueChange={setMinExp}>
+                    <SelectTrigger className="naukri-input">
+                      <SelectValue placeholder="Years" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {experienceOptions.map(y => (
+                        <SelectItem key={y} value={y.toString()}>{y} {y === 1 ? 'Year' : 'Years'}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+                <div className="group">
+                  <label className="naukri-label">Max experience</label>
+                  <Select value={maxExp} onValueChange={setMaxExp}>
+                    <SelectTrigger className="naukri-input">
+                      <SelectValue placeholder="Years" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {experienceOptions.map(y => (
+                        <SelectItem key={y} value={y.toString()}>{y} {y === 1 ? 'Year' : 'Years'}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="group">
+                <label className="naukri-label">Current location of candidate</label>
+                <div className="mandatory-tag-wrapper">
+                  <MandatoryTagSelector 
+                    value={locations} 
+                    onChange={setLocations} 
+                    placeholder="Add location" 
+                    fetchSuggestions={fetchLocationSuggestions} 
+                    queryKey="locationSuggestions" 
+                  />
+                </div>
+              </div>
             </div>
 
-            {/* Accordions */}
-            
-            {/* Employment Details */}
+            {/* Employment Details Accordion */}
             <div className="naukri-section">
               <div className="naukri-section-header" onClick={() => setShowEmployment(!showEmployment)}>
                 <h3>Employment Details</h3>
@@ -1320,41 +1829,76 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
                   <div className="group">
                     <label className="naukri-label">Skills</label>
                     <div className="mandatory-tag-wrapper">
-                      <MandatoryTagSelector value={skills} onChange={setSkills} placeholder="Filter by skills..." fetchSuggestions={fetchSkillSuggestions} queryKey="skillSuggestions" />
+                      <MandatoryTagSelector 
+                        value={skills} 
+                        onChange={setSkills} 
+                        placeholder="Filter by skills..." 
+                        fetchSuggestions={fetchSkillSuggestions} 
+                        queryKey="skillSuggestions" 
+                      />
                     </div>
                   </div>
                   
                   <div className="group">
                     <label className="naukri-label">Current Company</label>
-                    <Input placeholder="Company name" value={currentCompany} onChange={e => setCurrentCompany(e.target.value)} className="naukri-input" />
+                    <Input 
+                      placeholder="Company name" 
+                      value={currentCompany} 
+                      onChange={e => setCurrentCompany(e.target.value)} 
+                      className="naukri-input" 
+                    />
                   </div>
                   
                   <div className="group">
                     <div className="flex justify-between items-end mb-2">
                       <label className="naukri-label mb-0">Current Designation</label>
                       <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-bold uppercase ${isBooleanDesignation ? 'text-[#7731E8]' : 'text-gray-400'}`}>Advanced</span>
+                        <span className={`text-[10px] font-bold uppercase ${isBooleanDesignation ? 'text-[#7731E8]' : 'text-gray-400'}`}>
+                          Advanced
+                        </span>
                         <label className="toggle-switch scale-75">
-                          <input type="checkbox" checked={isBooleanDesignation} onChange={e => setIsBooleanDesignation(e.target.checked)} />
+                          <input 
+                            type="checkbox" 
+                            checked={isBooleanDesignation} 
+                            onChange={e => setIsBooleanDesignation(e.target.checked)} 
+                          />
                           <span className="toggle-slider"></span>
                         </label>
                       </div>
                     </div>
-                    <Input placeholder={isBooleanDesignation ? '("Engineer" OR "Developer")' : "Designation"} value={isBooleanDesignation ? booleanDesignation : currentDesignation} onChange={e => isBooleanDesignation ? setBooleanDesignation(e.target.value) : setCurrentDesignation(e.target.value)} className="naukri-input" />
+                    <Input 
+                      placeholder={isBooleanDesignation ? '("Engineer" OR "Developer")' : "Designation"} 
+                      value={isBooleanDesignation ? booleanDesignation : currentDesignation} 
+                      onChange={e => isBooleanDesignation ? setBooleanDesignation(e.target.value) : setCurrentDesignation(e.target.value)} 
+                      className="naukri-input" 
+                    />
                   </div>
                   
                   <div className="group">
                     <label className="naukri-label">Past Companies</label>
                     <div className="mandatory-tag-wrapper">
-                      <MandatoryTagSelector value={pastCompanies} onChange={setPastCompanies} placeholder="Filter by companies..." fetchSuggestions={fetchCompanySuggestions} queryKey="companySuggestions" />
+                      <MandatoryTagSelector 
+                        value={pastCompanies} 
+                        onChange={setPastCompanies} 
+                        placeholder="Filter by companies..." 
+                        fetchSuggestions={fetchCompanySuggestions} 
+                        queryKey="companySuggestions" 
+                      />
                     </div>
                   </div>
                   
                   <div>
                     <label className="naukri-label">Notice Period</label>
-                    <ToggleGroup type="multiple" value={noticePeriod} onValueChange={setNoticePeriod} className="flex flex-wrap gap-3 justify-start">
+                    <ToggleGroup 
+                      type="multiple" 
+                      value={noticePeriod} 
+                      onValueChange={setNoticePeriod} 
+                      className="flex flex-wrap gap-3 justify-start"
+                    >
                       {["Immediate", "15 Days", "1 Month", "2 Months", "3 Months+"].map(p => (
-                        <ToggleGroupItem key={p} value={p} className="naukri-toggle-button">{p}</ToggleGroupItem>
+                        <ToggleGroupItem key={p} value={p} className="naukri-toggle-button">
+                          {p}
+                        </ToggleGroupItem>
                       ))}
                     </ToggleGroup>
                   </div>
@@ -1362,7 +1906,6 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
               )}
             </div>
 
-            {/* Education Details */}
             <div className="naukri-section">
               <div className="naukri-section-header" onClick={() => setShowEducation(!showEducation)}>
                 <h3>Education Details</h3>
@@ -1374,14 +1917,19 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
                   <div className="group">
                     <label className="naukri-label">Education</label>
                     <div className="mandatory-tag-wrapper">
-                      <MandatoryTagSelector value={educations} onChange={setEducations} placeholder="Filter by education..." fetchSuggestions={fetchEducationSuggestions} queryKey="educationSuggestions" />
+                      <MandatoryTagSelector 
+                        value={educations} 
+                        onChange={setEducations} 
+                        placeholder="Filter by education..." 
+                        fetchSuggestions={fetchEducationSuggestions} 
+                        queryKey="educationSuggestions" 
+                      />
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Compensation */}
             <div className="naukri-section">
               <div className="naukri-section-header" onClick={() => setShowCompensation(!showCompensation)}>
                 <h3>Compensation & Availability</h3>
@@ -1393,22 +1941,45 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
                   <div className="group">
                     <label className="naukri-label">Current Salary (INR Lacs)</label>
                     <div className="grid grid-cols-2 gap-4">
-                      <Input type="number" placeholder="Min" value={minCurrentSalary} onChange={e => setMinCurrentSalary(e.target.value)} className="naukri-input" />
-                      <Input type="number" placeholder="Max" value={maxCurrentSalary} onChange={e => setMaxCurrentSalary(e.target.value)} className="naukri-input" />
+                      <Input 
+                        type="number" 
+                        placeholder="Min" 
+                        value={minCurrentSalary} 
+                        onChange={e => setMinCurrentSalary(e.target.value)} 
+                        className="naukri-input" 
+                      />
+                      <Input 
+                        type="number" 
+                        placeholder="Max" 
+                        value={maxCurrentSalary} 
+                        onChange={e => setMaxCurrentSalary(e.target.value)} 
+                        className="naukri-input" 
+                      />
                     </div>
                   </div>
                   <div className="group">
                     <label className="naukri-label">Expected Salary (INR Lacs)</label>
                     <div className="grid grid-cols-2 gap-4">
-                      <Input type="number" placeholder="Min" value={minExpectedSalary} onChange={e => setMinExpectedSalary(e.target.value)} className="naukri-input" />
-                      <Input type="number" placeholder="Max" value={maxExpectedSalary} onChange={e => setMaxExpectedSalary(e.target.value)} className="naukri-input" />
+                      <Input 
+                        type="number" 
+                        placeholder="Min" 
+                        value={minExpectedSalary} 
+                        onChange={e => setMinExpectedSalary(e.target.value)} 
+                        className="naukri-input" 
+                      />
+                      <Input 
+                        type="number" 
+                        placeholder="Max" 
+                        value={maxExpectedSalary} 
+                        onChange={e => setMaxExpectedSalary(e.target.value)} 
+                        className="naukri-input" 
+                      />
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Main Search Button (Bottom Right) */}
             <div className="flex justify-end pt-8">
               <Button 
                 type="submit" 

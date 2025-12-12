@@ -12,6 +12,7 @@ interface OrgStat {
   usage: number;
   successRate: number;
   cost: number;
+  unitPrice: number; // Required for the new column
 }
 
 interface OrganizationUsageTableProps {
@@ -58,6 +59,8 @@ const OrganizationUsageTable: React.FC<OrganizationUsageTableProps> = ({ data, v
             <TableHeader>
               <TableRow className="bg-slate-50 hover:bg-slate-100">
                 <TableHead className="py-3 px-6 text-slate-600">Organization</TableHead>
+                {/* 1. Request Price Column */}
+                <TableHead className="py-3 px-6 text-slate-600">Request Price</TableHead>
                 <TableHead className="py-3 px-6 text-slate-600">Total Usage</TableHead>
                 <TableHead className="py-3 px-6 text-slate-600">Success Rate</TableHead>
                 <TableHead className="py-3 px-6 text-slate-600">Billed Cost</TableHead>
@@ -68,17 +71,34 @@ const OrganizationUsageTable: React.FC<OrganizationUsageTableProps> = ({ data, v
               {paginatedData.length > 0 ? paginatedData.map(org => (
                 <TableRow key={org.id} className="hover:bg-slate-50/50 border-b">
                   <TableCell className="font-semibold text-gray-700 px-6 py-4">{org.name}</TableCell>
+                  
+                  {/* 2. Request Price Data */}
+                  <TableCell className="px-6 py-4 text-gray-600">
+                    {(org.unitPrice || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
+                  </TableCell>
+
                   <TableCell className="px-6 py-4 text-gray-600">{org.usage.toLocaleString()}</TableCell>
-                  <TableCell className="px-6 py-4 text-gray-600">{org.successRate.toFixed(1)}%</TableCell>
+                  <TableCell className="px-6 py-4">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                      org.successRate >= 80 ? 'bg-green-100 text-green-700' :
+                      org.successRate >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {org.successRate.toFixed(1)}%
+                    </span>
+                  </TableCell>
                   <TableCell className="px-6 py-4 text-gray-600">{org.cost.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</TableCell>
                   <TableCell className="text-right px-6 py-4">
                     <Button asChild variant="ghost" size="sm" className="text-indigo-600 hover:text-indigo-700">
-                      <Link to={`/verifications/${verificationType}/${org.id}?source=${sourceFilter}`}>View Logs <ExternalLink className="h-4 w-4 ml-1.5" /></Link>
+                      {/* 3. FIX: Changed URL structure to match your existing App.jsx */}
+                      <Link to={`/verifications/${verificationType}/${org.id}?source=${sourceFilter}`}>
+                        View Logs <ExternalLink className="h-4 w-4 ml-1.5" />
+                      </Link>
                     </Button>
                   </TableCell>
                 </TableRow>
               )) : (
-                <TableRow><TableCell colSpan={5} className="text-center h-24 text-gray-500">No organizations found for this period.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center h-24 text-gray-500">No organizations found for this period.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

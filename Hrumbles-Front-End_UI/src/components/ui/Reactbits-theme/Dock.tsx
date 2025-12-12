@@ -10,14 +10,14 @@ import {
   AnimatePresence
 } from 'motion/react';
 import React, { Children, cloneElement, useEffect, useMemo, useRef, useState } from 'react';
-import { cn } from '@/lib/utils'; // Assuming you have a cn utility, or remove cn usage
 
 export type DockItemData = {
   icon: React.ReactNode;
   label: React.ReactNode;
   onClick: () => void;
   className?: string;
-  isActive?: boolean; // Added to highlight active suite
+  isActive?: boolean;
+  id?: string;
 };
 
 export type DockProps = {
@@ -65,7 +65,11 @@ function DockItem({
     return val - rect.x - baseItemSize / 2;
   });
 
-  const targetSize = useTransform(mouseDistance, [-distance, 0, distance], [baseItemSize, magnification, baseItemSize]);
+  const targetSize = useTransform(
+    mouseDistance, 
+    [-distance, 0, distance], 
+    [baseItemSize, magnification, baseItemSize]
+  );
   const size = useSpring(targetSize, spring);
 
   return (
@@ -80,19 +84,30 @@ function DockItem({
       onFocus={() => isHovered.set(1)}
       onBlur={() => isHovered.set(0)}
       onClick={onClick}
-      className={`relative inline-flex items-center justify-center rounded-2xl border-2 shadow-md transition-colors duration-200 cursor-pointer ${className} ${
+      className={`relative inline-flex items-center justify-center rounded-2xl border-2 shadow-lg transition-all duration-200 cursor-pointer ${className} ${
         isActive 
-          ? 'bg-[#7731E8] border-[#7731E8] text-white' // Active State (Your Brand Purple)
-          : 'bg-[#060010] border-neutral-700 text-neutral-400 hover:border-neutral-500' // Inactive State
+          ? 'bg-[#7731E8] border-[#7731E8] text-white shadow-[#7731E8]/50' 
+          : 'bg-[#0a0a0a] border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:bg-neutral-900'
       }`}
       tabIndex={0}
       role="button"
-      aria-haspopup="true"
+      aria-pressed={isActive}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
     >
       {Children.map(children, child =>
         React.isValidElement(child)
           ? cloneElement(child as React.ReactElement<{ isHovered?: MotionValue<number> }>, { isHovered })
           : child
+      )}
+      {isActive && (
+        <motion.div
+          layoutId="activeSuiteIndicator"
+          className="absolute -bottom-1 left-1/2 w-1 h-1 bg-white rounded-full"
+          style={{ x: '-50%' }}
+          initial={false}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        />
       )}
     </motion.div>
   );
@@ -119,15 +134,16 @@ function DockLabel({ children, className = '', isHovered }: DockLabelProps) {
     <AnimatePresence>
       {isVisible && (
         <motion.div
-          initial={{ opacity: 0, y: 0 }}
-          animate={{ opacity: 1, y: -10 }}
-          exit={{ opacity: 0, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className={`${className} absolute -top-8 left-1/2 w-fit whitespace-pre rounded-md border border-neutral-700 bg-[#060010] px-2 py-1 text-xs text-white shadow-lg z-50`}
+          initial={{ opacity: 0, y: 5, scale: 0.9 }}
+          animate={{ opacity: 1, y: -8, scale: 1 }}
+          exit={{ opacity: 0, y: 5, scale: 0.9 }}
+          transition={{ duration: 0.15 }}
+          className={`${className} absolute -top-10 left-1/2 w-fit whitespace-nowrap rounded-lg border border-neutral-700 bg-[#0a0a0a] px-3 py-1.5 text-xs font-medium text-white shadow-xl backdrop-blur-sm z-50`}
           role="tooltip"
           style={{ x: '-50%' }}
         >
           {children}
+          <div className="absolute -bottom-1 left-1/2 w-2 h-2 bg-[#0a0a0a] border-r border-b border-neutral-700 transform -translate-x-1/2 rotate-45" />
         </motion.div>
       )}
     </AnimatePresence>
@@ -148,21 +164,25 @@ export default function Dock({
   items,
   className = '',
   spring = { mass: 0.1, stiffness: 150, damping: 12 },
-  magnification = 60, // Slightly reduced for sidebar fit
+  magnification = 56,
   distance = 140,
-  panelHeight = 68,
+  panelHeight = 64,
   dockHeight = 256,
-  baseItemSize = 40 // Smaller base size to fit sidebar
+  baseItemSize = 40
 }: DockProps) {
   const mouseX = useMotionValue(Infinity);
   const isHovered = useMotionValue(0);
 
-  const maxHeight = useMemo(() => Math.max(dockHeight, magnification + magnification / 2 + 4), [magnification, dockHeight]);
+  const maxHeight = useMemo(
+    () => Math.max(dockHeight, magnification + magnification / 2 + 4), 
+    [magnification, dockHeight]
+  );
+  
   const heightRow = useTransform(isHovered, [0, 1], [panelHeight, maxHeight]);
   const height = useSpring(heightRow, spring);
 
   return (
-    <motion.div style={{ height: panelHeight, scrollbarWidth: 'none' }} className="w-full flex justify-center items-end pb-2">
+    <div className="w-full flex justify-center items-center py-3">
       <motion.div
         onMouseMove={({ pageX }) => {
           isHovered.set(1);
@@ -172,14 +192,14 @@ export default function Dock({
           isHovered.set(0);
           mouseX.set(Infinity);
         }}
-        className={`${className} flex items-end gap-3 rounded-2xl border-neutral-800 bg-[#0a0a0a]/90 border p-2 backdrop-blur-md`}
-        style={{ height: panelHeight }}
+        className={`${className} flex items-center gap-2.5 rounded-2xl border-2 border-neutral-800 bg-[#060010]/95 backdrop-blur-md p-2.5 shadow-2xl`}
+        style={{ minHeight: panelHeight }}
         role="toolbar"
-        aria-label="Application dock"
+        aria-label="Suite navigation"
       >
         {items.map((item, index) => (
           <DockItem
-            key={index}
+            key={item.id || index}
             onClick={item.onClick}
             className={item.className}
             mouseX={mouseX}
@@ -194,6 +214,6 @@ export default function Dock({
           </DockItem>
         ))}
       </motion.div>
-    </motion.div>
+    </div>
   );
 }
