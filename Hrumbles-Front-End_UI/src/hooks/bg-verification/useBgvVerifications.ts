@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { toast } from 'sonner';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Candidate } from '@/lib/types';
 
-// --- KEY CHANGE: Add 'pan' to the state definition ---
 export interface BGVState {
   inputs: {
     mobile: string;
@@ -28,8 +27,9 @@ const sanitizeMobile = (phone: string): string => {
 export const useBgvVerifications = (candidate: Candidate) => {
   const user = useSelector((state: any) => state.auth.user);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
+  const queryClient = useQueryClient(); // Used to sync data across components
 
-  // --- NEW: Fetch Organization Verification Configuration ---
+  // --- 1. Fetch Organization Verification Configuration ---
   const { data: orgConfig } = useQuery({
     queryKey: ['org-verification-config', organizationId],
     queryFn: async () => {
@@ -49,87 +49,95 @@ export const useBgvVerifications = (candidate: Candidate) => {
     staleTime: 1000 * 60 * 30, // Cache for 30 minutes
   });
 
-  const [state, setState] = useState<BGVState>({
+  // --- 2. Local UI State (Inputs & Loading) ---
+  // We keep inputs local because typing shouldn't trigger global re-renders
+  const [uiState, setUiState] = useState<{
+    inputs: BGVState['inputs'];
+    loading: BGVState['loading'];
+  }>({
     inputs: { 
       mobile: candidate?.phone || '', 
-      pan: candidate?.metadata?.pan || '', // <-- INITIALIZE PAN HERE
+      pan: candidate?.metadata?.pan || '', 
       uan: candidate?.metadata?.uan || ''
     },
     loading: {},
-    results: {},
   });
 
-  // --- CHANGE 1: The fetching logic is extracted into a reusable useCallback function. ---
-  const fetchPreviousResults = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('uanlookups')
-      .select('lookup_type, response_data, created_at, lookup_value')
-      .eq('candidate_id', candidate.id)
-      .in('lookup_type', [
-          'mobile_to_uan', 
-          'pan_to_uan', 
-          'uan_full_history', 
-          'latest_employment_mobile',
-          'latest_passbook_mobile',
-          'latest_employment_uan',
-          'uan_full_history_gl'
-      ])
-      .order('created_at', { ascending: false });
+  // --- 3. Server State (Results) - REPLACES useEffect/fetchPreviousResults ---
+  // Using useQuery ensures both the ProfilePage and VerificationSection share the same data.
+  const { data: results = {} } = useQuery({
+    queryKey: ['bgvResults', candidate?.id],
+    queryFn: async () => {
+      if (!candidate?.id) return {};
 
-       console.log("Fetched raw data from Supabase:", data);
-    
-    if (data) {
-      // --- KEY CHANGE: Group results by lookup_type into arrays ---
+      const { data, error } = await supabase
+        .from('uanlookups')
+        .select('lookup_type, response_data, created_at, lookup_value')
+        .eq('candidate_id', candidate.id)
+        .in('lookup_type', [
+            'mobile_to_uan', 
+            'pan_to_uan', 
+            'uan_full_history', 
+            'latest_employment_mobile',
+            'latest_passbook_mobile',
+            'latest_employment_uan',
+            'uan_full_history_gl'
+        ])
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      // Transform raw data into the grouped structure required by the UI
       const groupedResults: { [key: string]: any[] } = {};
-      for (const res of data) {
-        if (!groupedResults[res.lookup_type]) {
-          groupedResults[res.lookup_type] = []; // Initialize array if it doesn't exist
-        }
-        // Push the full result object into the array
-        groupedResults[res.lookup_type].push({
-          status: 'completed',
-          data: res.response_data,
-          meta: { // Add useful metadata for display
-            timestamp: res.created_at,
-            inputValue: res.lookup_value
+      if (data) {
+        for (const res of data) {
+          if (!groupedResults[res.lookup_type]) {
+            groupedResults[res.lookup_type] = [];
           }
-        });
+          groupedResults[res.lookup_type].push({
+            status: 'completed',
+            data: res.response_data,
+            meta: { 
+              timestamp: res.created_at,
+              inputValue: res.lookup_value
+            }
+          });
+        }
       }
+      return groupedResults;
+    },
+    enabled: !!candidate?.id,
+    staleTime: 0, // Always consider stale to ensure invalidation works immediately
+  });
 
-        console.log("Grouped results to be set in state:", groupedResults);
-      setState(s => ({ ...s, results: groupedResults }));
-    }
-  }, [candidate?.id]);
-
-    // --- CHANGE 2: The useEffect now simply calls the function above. ---
-  useEffect(() => {
-    fetchPreviousResults();
-  }, [fetchPreviousResults]); 
-
-  const handleInputChange = (type: keyof BGVState['inputs'], value: string) => {
-    setState(s => ({ ...s, inputs: { ...s.inputs, [type]: value } }));
+  // --- 4. Merge Local and Server State ---
+  const state: BGVState = {
+    inputs: uiState.inputs,
+    loading: uiState.loading,
+    results: results, // Now coming from React Query
   };
 
- const handleVerify = useCallback(async (verificationType: keyof BGVState['inputs']) => {
-    setState(s => ({ ...s, loading: { ...s.loading, [verificationType]: true } }));
+  const handleInputChange = (type: keyof BGVState['inputs'], value: string) => {
+    setUiState(s => ({ ...s, inputs: { ...s.inputs, [type]: value } }));
+  };
+
+  const handleVerify = useCallback(async (verificationType: keyof BGVState['inputs']) => {
+    setUiState(s => ({ ...s, loading: { ...s.loading, [verificationType]: true } }));
 
     try {
-      // --- KEY CHANGE: Determine which Edge Function to call ---
-       const preferredProvider = orgConfig?.verification_check || 'truthscreen';
-      
-      // 2. Decide function name based on provider
+      const preferredProvider = orgConfig?.verification_check || 'truthscreen';
       let functionName = preferredProvider === 'gridlines' ? 'run-gridlines-check' : 'run-bgv-check';
       
       const payload = {
         candidate,
         organizationId,
         userId: user.id,
-        mobile: sanitizeMobile(state.inputs.mobile),
-        pan: state.inputs.pan,
-        uan: state.inputs.uan,
+        mobile: sanitizeMobile(uiState.inputs.mobile),
+        pan: uiState.inputs.pan,
+        uan: uiState.inputs.uan,
       };
 
-       console.log(`Verifying using provider: ${preferredProvider} (Function: ${functionName})`);
+      console.log(`Verifying using provider: ${preferredProvider} (Function: ${functionName})`);
 
       const { data, error } = await supabase.functions.invoke(functionName, {
         body: { verificationType, payload },
@@ -137,9 +145,16 @@ export const useBgvVerifications = (candidate: Candidate) => {
 
       if (error) throw error;
 
-            await fetchPreviousResults();
+      // --- KEY CHANGE: Invalidate Query to Update ALL Components Immediately ---
+      await queryClient.invalidateQueries({ queryKey: ['bgvResults', candidate.id] });
       
-      if (data.status === 'completed' && (data.data?.status === 1 || data.data?.data?.code === '1014' || data.data?.data?.code === '1022')) {
+      // Success Messages
+      if (data.status === 'completed' && (
+          data.data?.status === 1 || 
+          data.data?.data?.code === '1014' || 
+          data.data?.data?.code === '1022' ||
+          data.data?.data?.code === '1013' // Gridlines History Success
+      )) {
         toast.success(`${verificationType.replace(/_/g, ' ')} verification successful!`);
       } else if (data.status === 'pending') {
         toast.info(data.message);
@@ -149,20 +164,13 @@ export const useBgvVerifications = (candidate: Candidate) => {
       }
 
     } catch (err: any) {
+      let description = "Unable to fetch data at the moment. Please retry after some time.";
 
-      // --- THIS IS THE NEW AND IMPROVED ERROR HANDLING BLOCK ---
-      
-     let description = "An unknown error occurred. Please try after sometime.";
-
-      // --- FIXED ERROR PARSING LOGIC ---
       try {
         if (err && typeof err.context?.json === 'function') {
-          // 1. Try to parse the JSON response body from the Edge Function
           const errorJson = await err.context.json();
-          
-          console.log("Parsed Error JSON:", errorJson); // Debug log
+          console.log("Parsed Error JSON:", errorJson); 
 
-          // 2. Check for 'message' (standard) or 'error' (legacy) fields
           if (errorJson.message) {
             description = errorJson.message;
           } else if (errorJson.error && typeof errorJson.error === 'string') {
@@ -171,7 +179,6 @@ export const useBgvVerifications = (candidate: Candidate) => {
             description = errorJson.error.message;
           }
         } else if (err.message) {
-          // Fallback if no JSON context is available
           description = err.message;
         }
       } catch (parseError) {
@@ -182,9 +189,9 @@ export const useBgvVerifications = (candidate: Candidate) => {
       toast.error("Verification Failed", { description });
       
     } finally {
-     setState(s => ({ ...s, loading: { ...s.loading, [verificationType]: false } }));
+     setUiState(s => ({ ...s, loading: { ...s.loading, [verificationType]: false } }));
     }
-  }, [state.inputs, candidate, organizationId, user?.id, fetchPreviousResults, orgConfig]);
+  }, [uiState.inputs, candidate, organizationId, user?.id, orgConfig, queryClient]); // Added queryClient dependency
 
   return { state, handleInputChange, handleVerify };
 };

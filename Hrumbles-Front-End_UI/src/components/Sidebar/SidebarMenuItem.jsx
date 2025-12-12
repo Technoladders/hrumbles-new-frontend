@@ -46,6 +46,7 @@ const orgSuperAdminAllItems = [
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" },
   { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
   { icon: LuUserSearch, label: "All Candidates", path: "/all-candidates" },
+  { icon: BsGraphUpArrow, label: "Analytics", path: "/bg-verification/analytics" },
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
   { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
   { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", beta: true },
@@ -278,7 +279,7 @@ const AscendionOrgSuperAdminMenu = [
 const projectSuiteLabels = ["Clients", "Projects"];
 const salesSuiteLabels = ["Companies", "People", "Lists", "Kanban"];
 const financeSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll", "Bank Statement"];
-const verificationSuiteLabels = ["All Candidates"];
+const verificationSuiteLabels = ["All Candidates","Analytics"];
 
 const projectSuiteItems = orgSuperAdminAllItems.filter(item => projectSuiteLabels.includes(item.label));
 const salesSuiteItems = orgSuperAdminAllItems.filter(item => salesSuiteLabels.includes(item.label));

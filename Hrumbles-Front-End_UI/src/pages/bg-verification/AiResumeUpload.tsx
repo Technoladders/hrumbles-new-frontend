@@ -1,5 +1,3 @@
-// src/pages/jobs/ai/AiResumeUpload.tsx
-
 import { useState, FC } from 'react';
 import { useSelector } from 'react-redux';
 import { toast } from 'sonner';
@@ -8,12 +6,21 @@ import { Input } from '@/components/ui/input';
 import { Loader2 } from 'lucide-react';
 import mammoth from 'mammoth';
 import { DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { v4 as uuidv4 } from 'uuid'; // Ensure uuid is installed, same as AddCandidateModal
 
 // --- TYPES ---
 interface Props {
   // This prop is passed from the parent GlobalAddCandidateModal
   onAnalysisComplete: (data: any, file: File) => void;
 }
+
+// --- CONSTANTS ---
+const TALENT_POOL_BUCKET = 'talent-pool-resumes';
+
+// --- HELPERS ---
+const sanitizeFileName = (fileName: string): string => {
+  return fileName.replace(/[\[\]\+\s]+/g, '_');
+};
 
 // --- COMPONENT ---
 export const AiResumeUpload: FC<Props> = ({ onAnalysisComplete }) => {
@@ -24,7 +31,6 @@ export const AiResumeUpload: FC<Props> = ({ onAnalysisComplete }) => {
   // Helper to parse file content into text
   const parseFileToText = async (file: File): Promise<string> => {
     if (file.type.includes('pdf')) {
-      // Assuming a Supabase function for PDF parsing
       const { data, error } = await supabase.functions.invoke('talent-pool-parser', { body: file });
       if (error) throw new Error(`PDF Parsing Error: ${error.message}`);
       return data.text;
@@ -35,13 +41,58 @@ export const AiResumeUpload: FC<Props> = ({ onAnalysisComplete }) => {
     throw new Error('Unsupported file type. Please use .pdf or .docx.');
   };
 
-  // Helper to call the analysis function
-  const analyseResume = async (text: string) => {
+  // Helper to call the BGV analysis function
+  const analyseResumeForBgv = async (text: string) => {
     const { data, error } = await supabase.functions.invoke('analyze-resume-for-bgv', {
       body: { resumeText: text, organization_id: organizationId, user_id: user.id },
     });
     if (error) throw new Error(error.message);
     return data;
+  };
+
+  // --- NEW: Background Function for Talent Pool ---
+  // This function mimics the logic from AddCandidateModal but swallows errors/success
+  const addToTalentPoolSilently = async (file: File, text: string) => {
+    try {
+      // 1. Upload to Storage
+      const sanitizedName = sanitizeFileName(file.name);
+      const fileName = `${uuidv4()}-${sanitizedName}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+          .from(TALENT_POOL_BUCKET)
+          .upload(fileName, file, {
+              cacheControl: '3600',
+              upsert: false,
+          });
+      
+      if (uploadError) {
+        console.warn('Silent Talent Pool Sync: Upload Failed', uploadError);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage.from(TALENT_POOL_BUCKET).getPublicUrl(uploadData.path);
+      const resumePath = urlData.publicUrl;
+
+      // 2. Invoke Talent Pool Analysis Edge Function
+      const { error: edgeFunctionError } = await supabase.functions.invoke('talent-analyse-resume', {
+          body: {
+              resumeText: text,
+              organizationId: organizationId,
+              userId: user.id,
+              resumePath: resumePath,
+          },
+      });
+
+      if (edgeFunctionError) {
+        console.warn('Silent Talent Pool Sync: Edge Function Failed', edgeFunctionError);
+      } else {
+        console.log('Silent Talent Pool Sync: Success');
+      }
+
+    } catch (err) {
+      // Catch-all to ensure absolutely no interruption to the main thread
+      console.warn('Silent Talent Pool Sync: Unexpected Error', err);
+    }
   };
 
   // Main handler for the file input
@@ -56,17 +107,21 @@ export const AiResumeUpload: FC<Props> = ({ onAnalysisComplete }) => {
       // Step 1: Parse the file to get raw text
       const text = await parseFileToText(file);
       
-      // Step 2: Analyze the text to extract candidate data
-      const data = await analyseResume(text);
+      // Step 2: Trigger Talent Pool Sync in Background
+      // We do NOT await this. We let it run independently.
+      addToTalentPoolSilently(file, text);
+
+      // Step 3: Analyze for BGV (Blocking UI)
+      const data = await analyseResumeForBgv(text);
       
       toast.success("Analysis complete. Please review the details.", { id: toastId });
       
-      // Step 3: Pass the extracted data and the original file back to the parent modal
+      // Step 4: Pass data to parent
       onAnalysisComplete(data, file);
 
     } catch (err: any) {
       toast.error("Analysis Failed", { description: err.message, id: toastId });
-      setIsProcessing(false); // Stop the spinner only on failure
+      setIsProcessing(false); 
     }
   };
 

@@ -233,3 +233,4 @@ const BgvAnalyticsDashboard = () => {
 };
 
 export default BgvAnalyticsDashboard;
+// Enhanced price not found with new features
