@@ -119,8 +119,9 @@ const demoOrgSuperAdminMenu = [
   { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
   { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
+  
 
-  // { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", beta: true },
+  { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", beta: true },
   { icon: GoGoal, label: "Goals", path: "/goals" },
   { icon: ImProfile, label: "My Profile", path: "/profile" },
   { icon: AiOutlineProfile, label: "Reports", path: "/reports" },

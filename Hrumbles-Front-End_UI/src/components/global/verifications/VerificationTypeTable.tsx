@@ -27,6 +27,7 @@ const VerificationTypeTable: React.FC<VerificationTypeTableProps> = ({ data, sou
   }, [filteredData, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  console.log("data",data);
 
   return (
     <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl rounded-2xl">
