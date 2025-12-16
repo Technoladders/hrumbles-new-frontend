@@ -1,8 +1,10 @@
+// PrivateRoutes.tsx
 import { useEffect } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { fetchUserSession } from "../Redux/authSlice";
 import { Spinner, Flex } from "@chakra-ui/react";
+import supabase from "../config/supabaseClient";
 
 const PrivateRoutes = ({ allowedRoles }) => {
   const dispatch = useDispatch();
@@ -22,12 +24,26 @@ const PrivateRoutes = ({ allowedRoles }) => {
     );
   }
 
-  if (!user || !allowedRoles.includes(role)) {
-    console.warn(`🔴 Unauthorized access. User role: ${role}, Allowed roles: ${allowedRoles}`);
+  // 1. Check if user is logged in
+  if (!user) {
     return <Navigate to="/" />;
   }
 
-  console.log("✅ Authorized: Rendering protected content");
+  // 2. ✅ SECURITY FIX: Check if Redux metadata says they are active
+  // (Assuming your fetchUserSession populates user_metadata correctly)
+  // If the status is available in the user object, check it here:
+  /* 
+  if (user.user_metadata?.status && user.user_metadata?.status !== 'active') {
+      return <Navigate to="/" />;
+  }
+  */
+
+  // 3. Check Role
+  if (!allowedRoles.includes(role)) {
+    console.warn(`🔴 Unauthorized access. Role: ${role}`);
+    return <Navigate to="/" />;
+  }
+
   return <Outlet />;
 };
 

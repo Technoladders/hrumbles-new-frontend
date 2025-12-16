@@ -13,6 +13,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { EmployeeProvider } from "./context/EmployeeContext";
 import { ThemeProvider } from "@material-tailwind/react";
  import { GoogleOAuthProvider } from '@react-oauth/google';
+ import { HelmetProvider } from 'react-helmet-async';
 
 // --- START: Google Analytics Integration ---
 import ReactGA from 'react-ga4';
@@ -40,7 +41,9 @@ createRoot(document.getElementById('root')).render(
       <Sonner />
       <ThemeProvider>
         <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
+          <HelmetProvider>
       <App />
+      </HelmetProvider>
       </GoogleOAuthProvider>
       </ThemeProvider>
       </EmployeeProvider>

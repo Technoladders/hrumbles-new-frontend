@@ -16,7 +16,7 @@ const fetchEmployees = createAsyncThunk("employees/fetchEmployees", async (_, { 
   
     const { data, error } = await supabase
       .from("hr_employees")
-      .select("id, first_name, last_name, email, department_id, designation_id, role_id, organization_id, phone, hire_type")
+      .select("id, first_name, last_name, email, department_id, designation_id, role_id, organization_id, phone, hire_type, status")
       .eq("organization_id", organization_id); // ✅ Fetch employees only from this organization
   
     if (error) return rejectWithValue(error.message);

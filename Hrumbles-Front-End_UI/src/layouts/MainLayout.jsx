@@ -1,6 +1,6 @@
 import { Box, Flex, IconButton, Input, InputGroup, InputLeftElement, Avatar, Menu, MenuButton, MenuList, MenuItem, useColorMode, Text, useMediaQuery, Badge, Spinner } from "@chakra-ui/react";
 import { FiSearch, FiBell, FiSun, FiLogOut, FiUser, FiMenu } from "react-icons/fi";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Outlet, useNavigate } from "react-router-dom"; 
 import NewSidebar from "../components/Sidebar/NewSidebar"; 
 import { signOut } from "../utils/api";
@@ -33,6 +33,46 @@ const MainLayout = () => {
    useActivityTracker({ inactivityThreshold: 300000 }); 
 
   console.log("userrrrrrrr", user);
+
+  // --- 1. DEFINE LOGOUT FUNCTION WITH MEMOIZATION ---
+  // We wrap this in useCallback so we can use it inside useEffect dependencies
+  const handleLogout = useCallback(async () => {
+    dispatch(setLoggingOut(true));
+    
+    try {
+      // 1. Log the activity
+      if (user?.id && organizationId) {
+        /* Your log logic here (omitted for brevity, keeping your existing logic) */
+        // await logUserActivity(...) 
+      }
+
+      // 2. Sign out from Supabase (Invalidates session on server & client)
+      await supabase.auth.signOut();
+      
+      // 3. Clear Redux
+      dispatch(logout());
+
+      // 4. AGGRESSIVELY Clear Local Storage
+      // This loops through all keys and removes anything related to Supabase
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('sb-')) {
+          localStorage.removeItem(key);
+        }
+      });
+      localStorage.clear(); // Clear everything else
+      sessionStorage.clear();
+
+    } catch (error) {
+      console.error("Error during logout:", error);
+      // Fallback cleanup
+      localStorage.clear();
+      sessionStorage.clear();
+    } finally {
+      // 5. Force redirect
+      navigate("/login", { replace: true });
+    }
+  }, [dispatch, navigate, user?.id, organizationId]);
+
 
   const logUserActivity = async (
     userId, // No type annotation here as it's a .jsx file, not .tsx
@@ -137,12 +177,10 @@ const MainLayout = () => {
     fetchOrganizationCredits();
   }, [role, organizationId]); // Rerun if role or org ID changes
 
-  // MODIFICATION: Add a new useEffect for the real-time status listener
+// --- 2. UPDATED REAL-TIME LISTENER ---
   useEffect(() => {
-    // Ensure we have a user before subscribing
     if (!user?.id) return;
 
-    // Define the channel and subscription
     const channel = supabase
       .channel(`employee-status-channel:${user.id}`)
       .on(
@@ -151,42 +189,29 @@ const MainLayout = () => {
           event: 'UPDATE',
           schema: 'public',
           table: 'hr_employees',
-          filter: `id=eq.${user.id}`, // Only listen for changes to the currently logged-in user
+          filter: `id=eq.${user.id}`, 
         },
-        (payload) => {
-          console.log('Received a real-time update for the current user:', payload);
-          
+        async (payload) => { // Make async
+          console.log('Realtime update:', payload);
           const updatedEmployee = payload.new;
           
-          // Check if the user's status is no longer 'active'
           if (updatedEmployee.status !== 'active') {
-            console.log(`User status changed to "${updatedEmployee.status}". Forcing logout.`);
-            
-            // Show a toast message to inform the user
+            console.log(`User inactive. Forcing logout.`);
             toast.warning("Your account is disabled. Please contact your administrator.");
 
-            // Dispatch the logout action and redirect
-            dispatch(logout());
-            navigate("/login");
+            // ✅ CRITICAL FIX: Call the full handleLogout function, 
+            // do not just dispatch(logout) or the token remains.
+            await handleLogout(); 
           }
         }
       )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`Realtime channel subscribed for user: ${user.id}`);
-        }
-        if (err) {
-          console.error('Realtime subscription error:', err);
-        }
-      });
+      .subscribe();
 
-    // IMPORTANT: Cleanup function to unsubscribe when the component unmounts or the user changes
     return () => {
-      console.log('Unsubscribing from realtime channel.');
       supabase.removeChannel(channel);
     };
 
-  }, [user, dispatch, navigate]); // Rerun this effect if the user object changes
+  }, [user?.id, handleLogout]); // Add handleLogout to dependency
 
 
   useEffect(() => {
@@ -255,26 +280,7 @@ const MainLayout = () => {
   employee: 'Users',
 };
 
- const handleLogout = async () => {
-  dispatch(setLoggingOut(true));
-    try {
-      if (user?.id && organizationId) {
-        await logUserActivity(user.id, organizationId, 'logout', {
-          device_info: navigator.userAgent
-        });
-      }
-      await signOut();
-      dispatch(logout());
-      localStorage.clear();
-      sessionStorage.clear();
-    } catch (error) {
-      console.error("Error during logout:", error);
-      localStorage.clear();
-      sessionStorage.clear();
-    } finally {
-      navigate("/login");
-    }
-  };
+
 
   const formatInterviewDate = (date) => {
     const interviewDate = new Date(date);

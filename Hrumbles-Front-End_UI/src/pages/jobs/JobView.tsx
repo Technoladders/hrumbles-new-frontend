@@ -26,6 +26,7 @@ import { CreateJobModal } from "@/components/jobs/CreateJobModal";
 import { Input } from "@/components/ui/input"; 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { shareJob } from "@/services/jobs/supabaseQueries";
+import { Helmet } from "react-helmet-async";
 
 
 const JobView = () => {
@@ -45,6 +46,25 @@ const JobView = () => {
    // Define the missing state here
    const [isShared, setIsShared] = useState(false);
  const [sharedByName, setSharedByName] = useState<string | null>(null);
+
+
+const getOrgNameFromUrl = () => {
+    const hostname = window.location.hostname; // e.g., technoladders.hrumbles.ai
+    const parts = hostname.split('.');
+    
+    // If localhost, usually the first part is the subdomain (technoladders.localhost)
+    // If production, the first part is the subdomain
+    if (parts.length > 0) {
+      // Capitalize first letter
+      return parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+    }
+    return "HRumbles"; // Fallback
+  };
+
+  const orgName = getOrgNameFromUrl();
+  const currentUrl = window.location.href;
+
+
 
 useEffect(() => {
     const fetchSharedStatus = async () => {
@@ -328,6 +348,11 @@ useEffect(() => {
       </div>
     );
   }
+
+  // Define Job Description snippet for the preview (strip HTML tags if necessary)
+  const jobDescriptionPreview = job?.description
+    ? job.description.replace(/<[^>]+>/g, '').substring(0, 150) + "..."
+    : "Check out this open position.";
   
 // --- TAB STATE LOGIC ---
   const location = useLocation();
@@ -344,6 +369,27 @@ useEffect(() => {
 
   return (
     <div className="space-y-6 py-4">
+      {/* --- ADD HELMET HERE FOR URL PREVIEWS --- */}
+      {job && (
+        <Helmet>
+          {/* Standard Metadata */}
+          <title>{`${job.title} at ${orgName}`}</title>
+          <meta name="description" content={jobDescriptionPreview} />
+          {/* Open Graph / Facebook / LinkedIn / Teams */}
+          <meta property="og:type" content="website" />
+          <meta property="og:url" content={currentUrl} />
+          <meta property="og:title" content={`${job.title} | ${orgName} Careers`} />
+          <meta property="og:description" content={`We are hiring a ${job.title}. ${jobDescriptionPreview}`} />
+         
+          {/* If you have a company logo or specific job image, use it here.
+              Otherwise, use a default banner. */}
+          <meta property="og:image" content={`${window.location.origin}/og-image-default.png`} />
+          {/* Twitter Card */}
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:title" content={`${job.title} at ${orgName}`} />
+          <meta name="twitter:description" content={jobDescriptionPreview} />
+        </Helmet>
+      )}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-gray-500 hover:text-gray-700">

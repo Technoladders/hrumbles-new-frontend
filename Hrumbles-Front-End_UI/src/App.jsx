@@ -201,19 +201,37 @@ function AppContent() {
 
   
 
-  // --- Session Validation Logic ---
+ // --- Session Validation Logic ---
   const validateCurrentSession = useCallback(async () => {
-   if (isLoggingOut || !reduxUser) return;
-    const isPublicRoute = publicPaths.some(path => location.pathname.startsWith(path));
-    if (isPublicRoute) {
-      console.log('[Session Validator] On public route. Suppressing modal.');
-      return;
-    }
+    if (isLoggingOut) return; // Don't check if we are already leaving
+
     const { data: { session } } = await supabase.auth.getSession();
+    
+    // 1. No Supabase Session? Kill it.
     if (!session) {
-      console.warn('[Session Validator] MISMATCH on protected route. Triggering modal.');
-      dispatch(showSessionExpiredModal());
+       const isPublic = publicPaths.some(p => location.pathname.startsWith(p));
+       if(!isPublic) dispatch(showSessionExpiredModal());
+       return;
     }
+
+    // 2. We have a session, but is the DB status active?
+    // We rely on fetchUserSession to check this, BUT we should dispatch it if we suspect data is stale
+    // Or we can do a lightweight check here:
+    if (session?.user?.id) {
+       const { data, error } = await supabase
+         .from('hr_employees')
+         .select('status')
+         .eq('id', session.user.id)
+         .single();
+         
+       if (data && data.status !== 'active') {
+          console.warn("User is inactive. Logging out.");
+          await supabase.auth.signOut();
+          dispatch(logout()); // This clears localStorage in your updated slice
+          window.location.href = "/login";
+       }
+    }
+
   }, [reduxUser, dispatch, location.pathname, isLoggingOut]);
 
   useEffect(() => {
