@@ -202,37 +202,74 @@ function AppContent() {
   
 
  // --- Session Validation Logic ---
-  const validateCurrentSession = useCallback(async () => {
-    if (isLoggingOut) return; // Don't check if we are already leaving
+// Inside App.jsx -> AppContent component
+
+const validateCurrentSession = useCallback(async () => {
+    if (isLoggingOut) return;
 
     const { data: { session } } = await supabase.auth.getSession();
     
-    // 1. No Supabase Session? Kill it.
     if (!session) {
        const isPublic = publicPaths.some(p => location.pathname.startsWith(p));
        if(!isPublic) dispatch(showSessionExpiredModal());
        return;
     }
 
-    // 2. We have a session, but is the DB status active?
-    // We rely on fetchUserSession to check this, BUT we should dispatch it if we suspect data is stale
-    // Or we can do a lightweight check here:
     if (session?.user?.id) {
+       // 1. Fetch Status and Role Details
        const { data, error } = await supabase
          .from('hr_employees')
-         .select('status')
+         .select(`
+            status, 
+            role_id,
+            hr_roles (name),
+            hr_organizations!inner (
+                subscription_status
+            )
+         `)
          .eq('id', session.user.id)
          .single();
          
-       if (data && data.status !== 'active') {
-          console.warn("User is inactive. Logging out.");
-          await supabase.auth.signOut();
-          dispatch(logout()); // This clears localStorage in your updated slice
-          window.location.href = "/login";
+       if (data) {
+          // --- SAFELY EXTRACT ROLE NAME ---
+          // Sometimes supabase returns an array for joins, sometimes an object. Handle both.
+          const rawRole = data.hr_roles;
+          const roleName = Array.isArray(rawRole) ? rawRole[0]?.name : rawRole?.name;
+
+          const userStatus = data.status;
+          const subStatus = data.hr_organizations?.subscription_status;
+
+          // 1. Check User Status (Inactive Employee)
+          if (userStatus !== 'active') {
+              console.warn("User inactive. Logging out.");
+              await supabase.auth.signOut();
+              dispatch(logout());
+              window.location.href = "/login";
+              return;
+          }
+
+          // 2. Check Subscription Status
+          const isExpired = subStatus === 'expired' || subStatus === 'inactive' || subStatus === 'canceled';
+          
+          if (isExpired) {
+              // DEBUG LOG: Check what the system sees
+              console.log(`Subscription is ${subStatus}. User Role is: ${roleName}`);
+
+              // --- CRITICAL CHECK ---
+              // If it IS a superadmin, DO NOT LOGOUT. Return immediately.
+              if (roleName === 'organization_superadmin' || roleName === 'global_superadmin') {
+                  return; // Allow session to continue (MainLayout will show Lock Modal)
+              }
+
+              // If we get here, it's a regular user/admin. Logout them.
+              console.warn(`Subscription expired for ${roleName}. Logging out regular user.`);
+              await supabase.auth.signOut();
+              dispatch(logout());
+              window.location.href = "/login";
+          }
        }
     }
-
-  }, [reduxUser, dispatch, location.pathname, isLoggingOut]);
+  }, [dispatch, location.pathname, isLoggingOut]);
 
   useEffect(() => {
     validateCurrentSession(); // Initial check

@@ -1,48 +1,41 @@
-// src/utils/subdomain.js (Updated)
-
-// IMPORTANT: Store your root domain in an environment variable
-// In your .env file: VITE_APP_ROOT_DOMAIN=hrumbles.ai
-const ROOT_DOMAIN = import.meta.env.VITE_APP_ROOT_DOMAIN || 'hrumbles.ai';
+// src/utils/subdomain.js (NEW AND IMPROVED VERSION)
 
 export const getOrganizationSubdomain = () => {
   const hostname = window.location.hostname;
   
-  // Handles cases like 'technoladder.hrumbles.ai' and 'app.hrumbles.ai'
-  if (hostname.endsWith(`.${ROOT_DOMAIN}`)) {
-    const parts = hostname.split('.');
-    // Assuming 'subdomain.root.domain' structure
-    if (parts.length === 3) {
-      const subdomain = parts[0];
+  // This is loaded from your .env files (.env.dev, .env.staging, etc.)
+  const rootDomain = import.meta.env.VITE_APP_ROOT_DOMAIN;
 
-      // --- THIS IS THE KEY MODIFICATION ---
-      // If the subdomain is 'app' or 'www', we treat it as if no
-      // organization is specified. Returning null triggers the
-      // DomainVerificationPage in your App.jsx.
-      if (subdomain === 'app' || subdomain === 'www') {
-        return null;
-      }
-      
-      // For any other subdomain, it's a valid organization.
-      return subdomain;
+  // If the environment variable is not set, we can't proceed.
+  if (!rootDomain) {
+    // Check for localhost as a fallback for local development
+    if (hostname.includes('localhost')) {
+        const parts = hostname.split('.');
+        if (parts.length > 1 && parts[1] === 'localhost' && parts[0] !== 'www' && parts[0] !== 'app') {
+            return parts[0];
+        }
     }
+    return null;
+  }
+
+  // --- CORE LOGIC ---
+
+  // Case 1: The user is on the root domain itself (e.g., "xrilic.ai" or "www.xrilic.ai")
+  // This should show the domain verification page.
+  if (hostname === rootDomain || hostname === `www.${rootDomain}`) {
+    return null;
+  }
+
+  // Case 2: The hostname ends with the root domain (e.g., "demo.xrilic.ai" or "demo.dev.xrilic.ai")
+  // This is the main logic that will extract the organization's name.
+  if (hostname.endsWith(`.${rootDomain}`)) {
+    // This robustly removes the root part from the end to get the subdomain.
+    // "demo.dev.xrilic.ai".split(".dev.xrilic.ai") => ["demo", ""]
+    // "demo.xrilic.ai".split(".xrilic.ai") => ["demo", ""]
+    const subdomain = hostname.split(`.${rootDomain}`)[0];
+    return subdomain;
   }
   
-  // Handles local development with 'localhost'
-  // Example: http://technoladder.localhost:5173 -> returns 'technoladder'
-  if (hostname.includes('localhost')) {
-      const parts = hostname.split('.');
-      if (parts.length > 1 && parts[1] === 'localhost') {
-          const subdomain = parts[0];
-
-          // --- APPLY THE SAME LOGIC FOR LOCAL DEVELOPMENT ---
-          if (subdomain === 'app') {
-            return null;
-          }
-
-          return subdomain;
-      }
-  }
-
-  // If no subdomain is found (i.e., we are on 'hrumbles.ai' or 'localhost')
+  // If none of the above conditions are met, return null.
   return null;
 };

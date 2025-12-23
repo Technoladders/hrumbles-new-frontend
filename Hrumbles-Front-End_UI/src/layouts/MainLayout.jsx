@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isSameDay } from "date-fns";
 import { CreditBalanceDisplay } from "./CreditBalanceDisplay";
+import SubscriptionLockModal from "../layouts/SubscriptionLockModal";
 
 const MainLayout = () => {
   const { colorMode, toggleColorMode } = useColorMode();
@@ -25,6 +26,9 @@ const MainLayout = () => {
   const user = useSelector((state) => state.auth.user);
   const role = useSelector((state) => state.auth.role);
   const organizationId = useSelector((state) => state.auth.organization_id);
+
+   // NEW STATE: Track subscription status locally for UI locking
+  const [isSubscriptionExpired, setIsSubscriptionExpired] = useState(false);
 
     // MODIFICATION: State to hold organization credit details
   const [orgCredits, setOrgCredits] = useState(null);
@@ -177,6 +181,63 @@ const MainLayout = () => {
     fetchOrganizationCredits();
   }, [role, organizationId]); // Rerun if role or org ID changes
 
+  // --- NEW: Check Initial Subscription Status & Listen for Changes ---
+  useEffect(() => {
+    if (!organizationId) return;
+
+    // 1. Initial Check Function
+    const checkSubscription = async () => {
+      const { data } = await supabase
+        .from('hr_organizations')
+        .select('subscription_status')
+        .eq('id', organizationId)
+        .single();
+      
+      if (data) {
+        const expired = data.subscription_status === 'expired' || data.subscription_status === 'inactive';
+        setIsSubscriptionExpired(expired);
+        
+        // If expired and NOT superadmin, force logout immediately
+        if (expired && role !== 'organization_superadmin' && role !== 'global_superadmin') {
+            handleLogout();
+        }
+      }
+    };
+
+    checkSubscription();
+
+    // 2. Realtime Listener for Organization Changes
+    const orgChannel = supabase
+      .channel(`org-status-check:${organizationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'hr_organizations',
+          filter: `id=eq.${organizationId}`,
+        },
+        (payload) => {
+          const newStatus = payload.new.subscription_status;
+          console.log("Organization Subscription Updated:", newStatus);
+          
+          const expired = newStatus === 'expired' || newStatus === 'inactive';
+          setIsSubscriptionExpired(expired);
+
+          // Force logout for non-superadmins immediately upon realtime update
+          if (expired && role !== 'organization_superadmin' && role !== 'global_superadmin') {
+             toast.error("Organization subscription has expired.");
+             handleLogout();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(orgChannel);
+    };
+  }, [organizationId, role, handleLogout]);
+
 // --- 2. UPDATED REAL-TIME LISTENER ---
   useEffect(() => {
     if (!user?.id) return;
@@ -306,6 +367,10 @@ const MainLayout = () => {
 
   return (
     <Flex height="100vh" overflow="hidden" bg={colorMode === "dark" ? "gray.800" : "#F8F7F7"}>
+
+      <SubscriptionLockModal isOpen={isSubscriptionExpired && role === 'organization_superadmin'} />
+
+      
       {isMobile && isSidebarExpanded && (
         <Box
           position="fixed"

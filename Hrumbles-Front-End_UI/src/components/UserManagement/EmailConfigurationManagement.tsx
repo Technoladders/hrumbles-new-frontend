@@ -23,6 +23,7 @@ interface RecruiterReportConfig {
   recipients: string[];
   sendTime: string;
   sendDay?: string;
+  sendToRecruiters?: boolean; // NEW
 }
 
 const RECRUITER_REPORT_TYPES = ['daily_recruiter_report', 'weekly_recruiter_report', 'monthly_recruiter_report'];
@@ -40,11 +41,11 @@ const EmailConfigurationManagement = () => {
 
   // --- NEW STATE (Recruiter Reports) ---
   const [savingRecruiter, setSavingRecruiter] = useState(false);
-  const [recruiterConfigs, setRecruiterConfigs] = useState<Record<string, RecruiterReportConfig>>({
-    daily_recruiter_report: { isActive: false, recipients: [], sendTime: "19:00" },
-    weekly_recruiter_report: { isActive: false, recipients: [], sendTime: "19:00", sendDay: "Friday" },
-    monthly_recruiter_report: { isActive: false, recipients: [], sendTime: "19:00" },
-  });
+const [recruiterConfigs, setRecruiterConfigs] = useState<Record<string, RecruiterReportConfig>>({
+    daily_recruiter_report: { isActive: false, recipients: [], sendTime: "19:00", sendToRecruiters: false },
+    weekly_recruiter_report: { isActive: false, recipients: [], sendTime: "19:00", sendDay: "Friday", sendToRecruiters: false },
+    monthly_recruiter_report: { isActive: false, recipients: [], sendTime: "19:00", sendToRecruiters: false },
+});
 
   useEffect(() => {
     const loadData = async () => {
@@ -135,7 +136,7 @@ const EmailConfigurationManagement = () => {
     }));
   };
 
-  const handleSaveRecruiterReports = async () => {
+const handleSaveRecruiterReports = async () => {
     if (!organization_id) return;
     setSavingRecruiter(true);
     try {
@@ -148,7 +149,8 @@ const EmailConfigurationManagement = () => {
           is_active: conf.isActive,
           config: {
             sendTime: conf.sendTime,
-            sendDay: conf.sendDay
+            sendDay: conf.sendDay,
+            sendToRecruiters: conf.sendToRecruiters // <--- ADDED THIS LINE
           }
         };
       });
@@ -228,6 +230,21 @@ const EmailConfigurationManagement = () => {
                 These users will receive the report via email {showDayPicker ? `every ${config.sendDay}` : 'every day'} at {config.sendTime}.
               </p>
             </div>
+            <div className="flex items-center space-x-2 border p-3 rounded-md bg-white">
+  <Switch 
+    id={`recruiter-copy-${type}`}
+    checked={config.sendToRecruiters || false}
+    onCheckedChange={(val) => updateRecruiterConfig(type, 'sendToRecruiters', val)}
+  />
+  <div className="grid gap-1.5 leading-none">
+    <Label htmlFor={`recruiter-copy-${type}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+      Send individual copies to Recruiters
+    </Label>
+    <p className="text-xs text-muted-foreground">
+      If enabled, each recruiter mentioned in the report will receive a personalized email containing only their candidates.
+    </p>
+  </div>
+</div>
           </div>
         )}
       </div>

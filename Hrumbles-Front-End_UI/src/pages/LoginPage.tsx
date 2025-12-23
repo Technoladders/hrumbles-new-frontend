@@ -33,6 +33,7 @@ interface UserDetails {
   status: string | null;
   first_name?: string;  // ✅ CHANGE #2: ADD THIS LINE
   last_name?: string;   // ✅ CHANGE #2: ADD THIS LINE
+  subscriptionStatus: string | null;
 }
 
 /*
@@ -157,7 +158,7 @@ const LoginPage: FC = () => {
     try {
       const { data: employeeData, error: employeeError } = await supabase
         .from("hr_employees")
-        .select("role_id, department_id, organization_id, status, first_name, last_name")
+        .select("role_id, department_id, organization_id, status, first_name, last_name, hr_organizations!inner (subscription_status)")
         .eq("id", userId)
         .single();
 
@@ -194,11 +195,12 @@ const LoginPage: FC = () => {
         status: employeeData.status,
         first_name: employeeData.first_name,
         last_name: employeeData.last_name,
+        subscriptionStatus: employeeData.hr_organizations?.subscription_status
       };
 
     } catch (error: any) {
       console.error("Error in fetchUserDetails:", error.message);
-       return { role: null, departmentName: null, organizationId: null, status: null };
+       return { role: null, departmentName: null, organizationId: null, status: null, subscriptionStatus: null };
     }
   };
 
@@ -424,8 +426,10 @@ const handleLogin = async (): Promise<void> => {
             organizationId: fetchedOrgIdFromUserDetails,
             status,
             first_name,
-            last_name
+            last_name,
+            subscriptionStatus
         } = await fetchUserDetails(user.id);
+        
 
         userOrgId = fetchedOrgIdFromUserDetails;
         if (!userOrgId) {
@@ -444,6 +448,18 @@ const handleLogin = async (): Promise<void> => {
             }
             throw new Error("Access Denied. Please log in from your organization's domain.");
         }
+
+        const isExpired = subscriptionStatus === 'expired' || subscriptionStatus === 'inactive';
+        
+        if (isExpired) {
+            // 1. If it's a regular user or admin, BLOCK THEM completely
+            if (role !== 'organization_superadmin' && role !== 'global_superadmin') {
+                await supabase.auth.signOut(); // Kill session immediately
+                throw new Error("Organization subscription expired. Please contact your administrator.");
+            }
+            // 2. If it's organization_superadmin, ALLOW them (UI will handle the lock screen)
+        }
+        
 
                 // --- NEW: Check if this is a Verification Firm ---
         const { data: orgData, error: orgError } = await supabase

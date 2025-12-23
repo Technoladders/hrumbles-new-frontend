@@ -68,6 +68,9 @@ useEffect(() => {
           interviewsToDisplay = allInterviews.filter(
             (interview) => interview.employee_name === fullName
           );
+
+          console.log('Computed fullName:', fullName);
+console.log('Sample employee_name from RPC:', allInterviews?.[0]?.employee_name); // Check first result
         } else {
           // If employee not found, they have no interviews to see.
           interviewsToDisplay = [];

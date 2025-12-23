@@ -10,11 +10,13 @@
   "scripts": {
     "dev": "vite",
     "set-version": "echo \"VITE_APP_VERSION=$(git rev-parse --short HEAD)\" > .env.version",
-    "build": "npm run set-version && vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "build": "npm run set-version && vite build --mode production",
+    "build:develop": "npm run set-version && vite build --mode dev",
+    "build:staging": "npm run set-version && vite build --mode staging"
   },
   "dependencies": {
     "@chakra-ui/icons": "^2.2.4",

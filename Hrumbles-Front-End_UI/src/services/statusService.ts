@@ -951,6 +951,7 @@ const authData = getAuthDataFromLocalStorage();
     const eventData = {
       action: 'Status updated',
       timestamp: currentTime,
+      submission_date: additionalData.submission_date || null,
       client_budget: additionalData.accrual_ctc || null,
     };
 

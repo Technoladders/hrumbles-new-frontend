@@ -5,10 +5,10 @@ import { useState, useEffect, FC, ChangeEvent } from "react";
 import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
   FormControl, FormLabel, Input, VStack, Button, useToast, NumberInput,
-  NumberInputField, Divider, Heading, Flex, Select, Checkbox
+  NumberInputField, Divider, Heading, Flex, Select, Checkbox, Text, Box, Badge
 } from "@chakra-ui/react";
 import { createOrganizationWithSuperadmin, getAvailableRoles } from "../../../utils/api";
-
+import { supabase } from "../../../integrations/supabase/client";
 import PhoneInput, { E164Number } from "react-phone-number-input";
 import "react-phone-number-input/style.css"; // Don't forget the CSS
 
@@ -23,6 +23,16 @@ interface Role {
   name: string;
 }
 
+interface SubscriptionPlan {
+  id: string;
+  name: string;
+  limits: {
+    organization_superadmin: number;
+    admin: number;
+    employee: number;
+  };
+}
+
 const CreateOrganizationModal: FC<CreateOrganizationModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [adminDetails, setAdminDetails] = useState({
     firstName: "", lastName: "", email: "", password: ""
@@ -35,38 +45,72 @@ const CreateOrganizationModal: FC<CreateOrganizationModalProps> = ({ isOpen, onC
   const [isRecruitmentFirm, setIsRecruitmentFirm] = useState<boolean>(false);
   const [isVerificationFirm, setIsVerificationFirm] = useState<boolean>(false); 
   const [roles, setRoles] = useState<Role[]>([]);
+
+      // --- NEW: Plan State ---
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<string>("");
+
   const [roleLimits, setRoleLimits] = useState({
     organization_superadmin: 1,
     admin: 0,
     employee: 0
   });
+
+
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const toast = useToast();
 
-  // Fetch available roles on component mount
+  // 1. Fetch Plans and Roles on Mount
   useEffect(() => {
-    const fetchRoles = async () => {
+    const initData = async () => {
       try {
         const availableRoles = await getAvailableRoles();
         setRoles(availableRoles);
+
+        // Fetch Plans
+        const { data: plansData, error } = await supabase
+          .from('subscription_plans')
+          .select('*')
+          .eq('is_active', true)
+          .order('price_monthly', { ascending: true });
+        
+        if(error) throw error;
+        setPlans(plansData || []);
+        
+        // Default to first plan
+        if(plansData && plansData.length > 0) {
+            handlePlanChange(plansData[0].id, plansData);
+        }
+
       } catch (error: any) {
-        toast({
-          title: "Error Fetching Roles",
-          description: error.message,
-          status: "error",
-          duration: 5000,
-          isClosable: true,
-        });
+        toast({ title: "Error Fetching Data", description: error.message, status: "error", duration: 5000, isClosable: true });
       }
     };
-    fetchRoles();
-  }, [toast]);
+    if(isOpen) initData();
+  }, [isOpen]);
+
 
   const handleAdminChange = (e: ChangeEvent<HTMLInputElement>) => {
     setAdminDetails({ ...adminDetails, [e.target.name]: e.target.value });
   };
+
+   // 2. Handle Plan Selection
+  const handlePlanChange = (planId: string, currentPlansList = plans) => {
+    setSelectedPlanId(planId);
+    const plan = currentPlansList.find(p => p.id === planId);
+    if (plan) {
+        // Auto-fill limits based on the selected plan
+        setRoleLimits({
+            organization_superadmin: plan.limits.organization_superadmin || 1,
+            admin: plan.limits.admin || 0,
+            employee: plan.limits.employee || 0
+        });
+    }
+  };
   
   const handleLimitChange = (role: string, value: string) => {
+    // Optional: Allow manual override, but warn?
     setRoleLimits({ ...roleLimits, [role]: parseInt(value, 10) || 0 });
   };
 
@@ -99,22 +143,11 @@ const CreateOrganizationModal: FC<CreateOrganizationModalProps> = ({ isOpen, onC
         isRecruitmentFirm, // Pass isRecruitmentFirm
         isVerificationFirm // Pass isVerificationFirm
       );
-      toast({
-        title: "Organization Created",
-        status: "success",
-        duration: 5000,
-        isClosable: true,
-      });
+      toast({ title: "Organization Created", status: "success", duration: 5000, isClosable: true });
       onSuccess();
       onClose();
     } catch (error: any) {
-      toast({
-        title: "Creation Failed",
-        description: error.message,
-        status: "error",
-        duration: 5000,
-        isClosable: true,
-      });
+      toast({ title: "Creation Failed", description: error.message, status: "error", duration: 5000, isClosable: true });
     } finally {
       setIsLoading(false);
     }
@@ -140,29 +173,40 @@ const CreateOrganizationModal: FC<CreateOrganizationModalProps> = ({ isOpen, onC
               </FormControl>
             </Flex>
             
-            <FormControl>
-              <FormLabel fontSize="sm">Role Credit Limits</FormLabel>
-              <Flex gap={4} p={4} borderWidth={1} borderRadius="md" align="stretch">
-                <FormControl>
-                  <FormLabel fontSize="xs">Super Admins</FormLabel>
-                  <NumberInput value={roleLimits.organization_superadmin} onChange={(val) => handleLimitChange('organization_superadmin', val)} min={1}>
-                    <NumberInputField />
-                  </NumberInput>
-                </FormControl>
-                <FormControl>
-                  <FormLabel fontSize="xs">Admins</FormLabel>
-                  <NumberInput value={roleLimits.admin} onChange={(val) => handleLimitChange('admin', val)} min={0}>
-                    <NumberInputField />
-                  </NumberInput>
-                </FormControl>
-                <FormControl>
-                  <FormLabel fontSize="xs">Users</FormLabel>
-                  <NumberInput value={roleLimits.employee} onChange={(val) => handleLimitChange('employee', val)} min={0}>
-                    <NumberInputField />
-                  </NumberInput>
-                </FormControl>
-              </Flex>
+              {/* --- NEW: Plan Selection --- */}
+            <FormControl isRequired>
+                <FormLabel fontSize="sm">Subscription Plan</FormLabel>
+                <Select value={selectedPlanId} onChange={(e) => handlePlanChange(e.target.value)}>
+                    {plans.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                </Select>
             </FormControl>
+
+             {/* Limits Visualization (Read Only or Editable based on your preference) */}
+            <Box bg="blue.50" p={3} borderRadius="md" borderWidth="1px" borderColor="blue.200">
+                <Text fontSize="xs" fontWeight="bold" color="blue.700" mb={2}>Plan Limits (Auto-applied)</Text>
+                <Flex gap={4} align="stretch">
+                    <FormControl>
+                    <FormLabel fontSize="xs">Super Admins</FormLabel>
+                    <NumberInput value={roleLimits.organization_superadmin} isReadOnly>
+                        <NumberInputField bg="white" />
+                    </NumberInput>
+                    </FormControl>
+                    <FormControl>
+                    <FormLabel fontSize="xs">Admins</FormLabel>
+                    <NumberInput value={roleLimits.admin} isReadOnly>
+                        <NumberInputField bg="white" />
+                    </NumberInput>
+                    </FormControl>
+                    <FormControl>
+                    <FormLabel fontSize="xs">Users</FormLabel>
+                    <NumberInput value={roleLimits.employee} isReadOnly>
+                        <NumberInputField bg="white" />
+                    </NumberInput>
+                    </FormControl>
+                </Flex>
+            </Box>
 
              {/* 3. Add the Checkboxes */}
              <Flex gap={4} direction="column">

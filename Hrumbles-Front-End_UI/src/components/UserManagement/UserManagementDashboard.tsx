@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Users, UserPlus, Search, Shield, Clock, Building, Edit, Eye, Trash2, UserRoundPen } from "lucide-react";
+import { Users, UserPlus, Search, Shield, Clock, Building, Edit, Eye, Trash2, UserRoundPen, AlertCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +36,8 @@ import EditUserModal from './EditUserModal';
 import UserDetailsModal from './UserDetailsModal';
 import BulkActionsBar from './BulkActionsBar';
 import { useSelector } from 'react-redux';
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface Employee {
   id: string;
@@ -55,6 +57,7 @@ const UserManagementDashboard = () => {
         const organizationId = useSelector((state: any) => state.auth.organization_id);
   
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [planLimits, setPlanLimits] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -77,6 +80,28 @@ const UserManagementDashboard = () => {
         admin: 'Admin',
         employee: 'User',
     };
+
+        // 1. Fetch Organization Limits
+    useEffect(() => {
+        const fetchLimits = async () => {
+            if(!organizationId) return;
+            const { data } = await supabase
+                .from('hr_organizations')
+                .select('role_credit_limits, subscription_plan, subscription_status')
+                .eq('id', organizationId)
+                .single();
+            
+            if(data) setPlanLimits(data);
+        };
+        fetchLimits();
+    }, [organizationId]);
+
+    const employeeLimit = planLimits?.role_credit_limits?.employee || 5; 
+    const currentEmployees = stats.active + stats.inactive; // Terminated usually don't count towards active license limits
+    const isLimitReached = currentEmployees >= employeeLimit;
+    const usagePercentage = Math.min((currentEmployees / employeeLimit) * 100, 100);
+
+
 
 useEffect(() => {
         // MODIFICATION: The entire fetch function is replaced
@@ -175,6 +200,7 @@ useEffect(() => {
       setLoading(false);
     }
   };
+  
 
   const filteredEmployees = employees.filter(emp => {
     const matchesSearch = 
@@ -309,6 +335,36 @@ useEffect(() => {
         </Card>
       </div>
 
+      {/* --- NEW: Subscription Usage Banner --- */}
+            {planLimits && (
+                <Card className="bg-slate-50 border-slate-200">
+                    <CardContent className="pt-6">
+                        <div className="flex justify-between items-center mb-2">
+                            <div>
+                                <h3 className="font-semibold text-sm text-slate-700">
+                                    Current Plan: {planLimits.subscription_plan || 'Trial'}
+                                </h3>
+                                <p className="text-xs text-slate-500">
+                                    {isLimitReached 
+                                        ? "You have reached your user limit." 
+                                        : `You can add ${employeeLimit - currentEmployees} more users.`}
+                                </p>
+                            </div>
+                            <span className="text-sm font-bold text-slate-700">
+                                {currentEmployees} / {employeeLimit} Users
+                            </span>
+                        </div>
+                        {/* Simple Progress Bar */}
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div 
+                                className={`h-2.5 rounded-full ${isLimitReached ? 'bg-red-500' : 'bg-blue-600'}`} 
+                                style={{ width: `${usagePercentage}%` }}
+                            ></div>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
       {/* Main User Management Card */}
       <Card>
         <CardHeader>
@@ -319,10 +375,29 @@ useEffect(() => {
                 Manage users, roles, and permissions across your organization
               </CardDescription>
             </div>
-            <Button onClick={() => setShowAddModal(true)}>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Add User
-            </Button>
+                                   {isLimitReached ? (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="cursor-not-allowed">
+                                            <Button disabled variant="secondary">
+                                                <UserPlus className="h-4 w-4 mr-2" />
+                                                Add User (Limit Reached)
+                                            </Button>
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>Upgrade your plan to add more users.</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        ) : (
+                            <Button onClick={() => setShowAddModal(true)}>
+                                <UserPlus className="h-4 w-4 mr-2" />
+                                Add User
+                            </Button>
+                        )}
+
           </div>
         </CardHeader>
         
