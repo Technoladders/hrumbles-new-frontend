@@ -101,6 +101,8 @@ const GlobalSuperadminDashboard: FC = () => {
     }
   };
 
+  console.log("get_organizations_with_stats", organizations)
+
   useEffect(() => {
     fetchOrganizations();
   }, []);
