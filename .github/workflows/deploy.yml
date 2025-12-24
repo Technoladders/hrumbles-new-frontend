@@ -88,5 +88,5 @@ jobs:
             fi
 
             echo "Restarting services..."
-            docker-compose up -d --no-deps
+            docker compose up -d --no-deps
             echo "Deployment complete."
