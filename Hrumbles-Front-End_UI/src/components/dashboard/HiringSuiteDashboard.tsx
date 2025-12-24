@@ -339,6 +339,7 @@ const HiringSuiteDashboard = ({ employeeId }: { employeeId: string; role: string
   );
 };
 
+
 export const SubmissionChartCard = CombinedSubmissionOnboardingChart;
 
 export default HiringSuiteDashboard;

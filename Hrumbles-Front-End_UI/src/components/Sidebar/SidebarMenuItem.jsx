@@ -246,7 +246,7 @@ const recruitmentFirmOrgSuperAdminMenu = [
 
 const verificationFirmOrgSuperAdminMenu = [
 
-
+            { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
             { icon: LuUserSearch, label: "My Verifications", path: "/all-candidates" },
             { icon: BsGraphUpArrow, label: "Analytics", path: "/bg-verification/analytics" },
             

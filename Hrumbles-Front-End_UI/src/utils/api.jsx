@@ -1,8 +1,10 @@
-import  supabase  from "../config/supabaseClient"; 
+// api.jsx
+
+// Remove the curly braces if it is a default export
+import supabase from "../config/supabaseClient";
 
 // ✅ Get role ID by role name
 const getRoleId = async (roleName) => {
-
   const { data, error } = await supabase
     .from("hr_roles")
     .select("id")
@@ -15,7 +17,6 @@ const getRoleId = async (roleName) => {
   if (!data || !data.id) {
     throw new Error(`Role '${roleName}' not found in database! Please check hr_roles table.`);
   }
-
   return data.id;
 };
 
@@ -36,18 +37,77 @@ const getOrgId = async (orgName) => {
   }
   if (!data || !data.id) {
     console.error(`Organization '${orgName}' not found in database.`);
-    return null;  // Explicitly return null
+    return null;
   }
-
   return data.id;
 };
 
+// ====================================================================
+// 🆕 COMPANY SEARCH FUNCTIONS - Added for company linking feature
+// ====================================================================
 
+/**
+ * Search for companies in the master data
+ * @param {string} searchTerm - Company name or CIN to search for
+ * @param {number} limit - Maximum number of results (default: 10)
+ * @returns {Promise<Array>} Array of matching companies with UUID id
+ */
+export const searchCompanies = async (searchTerm, limit = 10) => {
+  if (!searchTerm || searchTerm.length < 2) {
+    return [];
+  }
 
+  const { data, error } = await supabase.rpc('search_companies', {
+    search_term: searchTerm,
+    limit_count: limit
+  });
+
+  if (error) {
+    console.error('Error searching companies:', error);
+    throw new Error(`Failed to search companies: ${error.message}`);
+  }
+
+  return data || [];
+};
+
+/**
+ * Parse address from company master data format
+ * @param {string} registeredAddress - Full registered address from MCA
+ * @returns {Object} Parsed address components
+ */
+export const parseCompanyAddress = (registeredAddress) => {
+  // Format: "House details, Area, City, State, PIN-Country"
+  const parts = registeredAddress.split(',').map(s => s.trim());
+  
+  const addressLine1 = parts[0] || '';
+  const addressLine2 = parts.slice(1, parts.length - 3).join(', ') || '';
+  
+  // Get last part and split by '-' for country
+  const lastPart = parts[parts.length - 1] || '';
+  const [zipWithCountry] = lastPart.split('-');
+  const zipCode = zipWithCountry?.match(/\d{6}/)?.[0] || '';
+  const country = lastPart.split('-')[1]?.trim() || 'India';
+  
+  const state = parts[parts.length - 2] || '';
+  const city = parts[parts.length - 3] || '';
+
+  return {
+    address_line1: addressLine1.substring(0, 200),
+    address_line2: addressLine2.substring(0, 200),
+    city: city.substring(0, 100),
+    state: state.substring(0, 100),
+    zip_code: zipCode,
+    country: country
+  };
+};
+
+// ====================================================================
+// END OF COMPANY SEARCH FUNCTIONS
+// ====================================================================
 
 // ✅ Check if Global Superadmin Exists
 export const isGlobalSuperadminExists = async () => {
-  const roleId = await getRoleId("global_superadmin");  // Ensure role exists first
+  const roleId = await getRoleId("global_superadmin");
 
   const { data, error } = await supabase
     .from("hr_employees")
@@ -71,10 +131,8 @@ export const signUpFirstUser = async (email, password, firstName, lastName, orgN
     throw new Error("Global Superadmin already exists! New requests will be sent to the existing Superadmin.");
   }
 
-  // ✅ Get global_superadmin role ID
   const roleId = await getRoleId("global_superadmin");
 
-  // ✅ Create user in Supabase Authentication
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -94,15 +152,14 @@ export const signUpFirstUser = async (email, password, firstName, lastName, orgN
   if (error) throw error;
   if (!data.user) throw new Error("User registration failed. No user data returned.");
 
-
-  // Insert into hr_organization
   const { error: organizationError } = await supabase.from("hr_organizations").insert({
     name: orgName,
   });
   if (organizationError) throw organizationError;
+  
   const orgId = await getOrgId(orgName);
-console.log("orgIDID", orgId)
-  // ✅ Insert into hr_employees
+  console.log("orgIDID", orgId)
+
   const { error: profileError } = await supabase.from("hr_employees").upsert({
     id: data.user.id,
     role_id: roleId,
@@ -113,6 +170,7 @@ console.log("orgIDID", orgId)
     employee_id: "HR001",
     email: email,
   });
+  
   console.log("Inserting into hr_employees:", {
     id: data.user.id,
     role_id: roleId,
@@ -122,24 +180,19 @@ console.log("orgIDID", orgId)
     phone: phoneNo,
     employee_id: "HR001",
   });
-  
 
   if (profileError) throw profileError;
-  
 
   return data;
 };
-
 
 // ✅ Register New User Request (Main Signup Function)
 export const registerNewUser = async (email, password, firstName, lastName, orgName, phoneNo) => {
   const exists = await isGlobalSuperadminExists();
 
   if (!exists) {
-    // ✅ No Global Superadmin → Create the first one
     return await signUpFirstUser(email, password, firstName, lastName, orgName, phoneNo);
   } else {
-    // ✅ Global Superadmin exists → Send request email
     return await sendRequestToGlobalSuperadmin(email, firstName, lastName, orgName, phoneNo);
   }
 };
@@ -151,7 +204,6 @@ export const signIn = async (email, password) => {
   if (error) throw error;
   if (!data.user) throw new Error("User sign-in failed.");
 
-  // ✅ Get user's role from hr_employees
   const { data: profile, error: profileError } = await supabase
     .from("hr_employees")
     .select("role_id")
@@ -161,7 +213,6 @@ export const signIn = async (email, password) => {
   if (profileError) throw profileError;
   if (!profile) throw new Error("User profile not found.");
 
-  // ✅ Fetch role name
   const { data: roleData, error: roleError } = await supabase
     .from("hr_roles")
     .select("name")
@@ -171,9 +222,8 @@ export const signIn = async (email, password) => {
   if (roleError) throw roleError;
   if (!roleData) throw new Error("Role not found.");
 
-  return { user: data.user, role: roleData.name }; // Returning user and role
+  return { user: data.user, role: roleData.name };
 };
-
 
 // ✅ Sign Out
 export const signOut = async () => {
@@ -195,9 +245,7 @@ export const getUserSession = async () => {
   return data.session;
 };
 
-
-///Organization Superadmnin
-
+// ✅ Get Available Roles
 export const getAvailableRoles = async () => {
   const { data, error } = await supabase
     .from("hr_roles")
@@ -211,6 +259,7 @@ export const getAvailableRoles = async () => {
   return data;
 };
 
+// ✅ Create Organization with Superadmin - UPDATED with company linking
 export const createOrganizationWithSuperadmin = async (
   email,
   password,
@@ -223,13 +272,16 @@ export const createOrganizationWithSuperadmin = async (
   roleLimits,   
   employeeId,   
   isRecruitmentFirm,
-  isVerificationFirm
+  isVerificationFirm,
+  companyId = null  // 🆕 NEW PARAMETER: UUID of linked company (optional)
 ) => {
   const user = await getUser();
   if (!user) throw new Error("Auth session missing! Please log in.");
 
   const userRole = await getUserRole(user.id);
-  if (userRole !== "global_superadmin") throw new Error("Only Global Superadmin can create organizations.");
+  if (userRole !== "global_superadmin") {
+    throw new Error("Only Global Superadmin can create organizations.");
+  }
 
   // ✅ Get role ID for selected role
   const roleId = await getRoleId(roleName);
@@ -242,7 +294,7 @@ export const createOrganizationWithSuperadmin = async (
       data: {
         first_name: firstName,
         last_name: lastName,
-        phone:phoneNo
+        phone: phoneNo
       },
     },
   });
@@ -260,7 +312,9 @@ export const createOrganizationWithSuperadmin = async (
         subdomain: subdomain,
         role_credit_limits: roleLimits,
         is_recruitment_firm: isRecruitmentFirm,
-        is_verification_firm: isVerificationFirm  }])
+        is_verification_firm: isVerificationFirm,
+        company_id: companyId  // 🆕 NEW: Link to company master data (UUID)
+      }])
       .select("id")
       .single();
 
@@ -275,14 +329,14 @@ export const createOrganizationWithSuperadmin = async (
     role_id: roleId,
     first_name: firstName,
     last_name: lastName,
-    phone:phoneNo,
+    phone: phoneNo,
     employee_id: employeeId,
     email: email,
   });
 
   if (profileError) throw profileError;
 
-   // --- START: New Logic to Clone Job Statuses ---
+  // Clone Job Statuses for Recruitment Firms
   if (isRecruitmentFirm) {
     const TEMPLATE_ORG_ID = '53989f03-bdc9-439a-901c-45b274eff506';
     const { error: cloneError } = await supabase.rpc('clone_job_statuses', {
@@ -291,14 +345,11 @@ export const createOrganizationWithSuperadmin = async (
     });
 
     if (cloneError) {
-      // Log the error but don't block completion of creation
       console.error("Failed to clone job statuses:", cloneError.message);
-      // Optionally, you could throw the error to notify the user of the partial failure:
-      // throw new Error(`Organization created, but failed to clone job statuses: ${cloneError.message}`);
     }
   }
 
-  return { user: data.user, organization: orgId };
+  return { user: data.user, organization: orgId, company_id: companyId };
 };
 
 // ✅ Get authenticated user
@@ -327,4 +378,3 @@ export const getUserRole = async (userId) => {
   if (roleError || !roleData) return null;
   return roleData.name;
 };
-// 
