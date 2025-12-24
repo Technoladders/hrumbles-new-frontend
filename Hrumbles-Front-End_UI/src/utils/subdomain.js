@@ -6,6 +6,8 @@ export const getOrganizationSubdomain = () => {
   // This is loaded from your .env files (.env.dev, .env.staging, etc.)
   const rootDomain = import.meta.env.VITE_APP_ROOT_DOMAIN;
 
+  console.log("RUNNING NEW SUBDOMAIN LOGIC - V2"); 
+
   // --- Case 1: Handle Local Development ---
   if (hostname.includes('localhost')) {
     const parts = hostname.split('.');
