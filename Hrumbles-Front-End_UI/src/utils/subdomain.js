@@ -1,47 +1,45 @@
-// src/utils/subdomain.js (FINAL & ROBUST VERSION)
+// src/utils/subdomain.js (FINAL CORRECTED VERSION)
 
 export const getOrganizationSubdomain = () => {
   const hostname = window.location.hostname;
-
-  // This environment variable is the key. It's set during the build process
-  // from your .env files (.env.dev, .env.production, etc.).
+  
+  // This is loaded from your .env files (.env.dev, .env.staging, etc.)
   const rootDomain = import.meta.env.VITE_APP_ROOT_DOMAIN;
 
-  // --- Case 1: Local Development (localhost) ---
-  // This logic runs first and is self-contained.
+  // --- Case 1: Handle Local Development ---
   if (hostname.includes('localhost')) {
     const parts = hostname.split('.');
-    // Handles 'technoladders.localhost:5173' -> returns 'technoladders'
-    // Ignores 'localhost:5173'
+    // For "demo.localhost:8081", this returns "demo"
     if (parts.length > 1 && parts[1] === 'localhost') {
       return parts[0];
     }
-    // If it's just 'localhost', we need to show the domain verification page.
+    // For "localhost:8081", this returns null
     return null;
   }
 
-  // --- Case 2: Deployed Environments (hrumbles.ai, xrilic.ai, etc.) ---
-  // If the rootDomain is not defined in the build, we can't proceed.
+  // If we are in a deployed environment, rootDomain MUST be set.
   if (!rootDomain) {
-    console.error("VITE_APP_ROOT_DOMAIN is not defined in the environment variables!");
+    console.error("VITE_APP_ROOT_DOMAIN is not set in the environment variables!");
     return null;
   }
 
-  // A) The user is on the root domain itself (e.g., "xrilic.ai", "www.xrilic.ai", "dev.xrilic.ai").
-  // This means no organization is specified, so we must show the verification page.
+  // --- Case 2: Handle Deployed Environments ---
+
+  // A) Check if the user is on the root domain itself (e.g., "xrilic.ai", "www.xrilic.ai", "dev.xrilic.ai")
+  // These should all trigger the domain verification page.
   if (hostname === rootDomain || hostname === `www.${rootDomain}`) {
     return null;
   }
 
-  // B) The hostname ends with the root domain. This is the main logic.
-  // It handles "demo.xrilic.ai", "demo.dev.xrilic.ai", and "demo.hrumbles.ai" all correctly.
+  // B) This is the core logic. Check if the hostname ends with the root domain.
   if (hostname.endsWith(`.${rootDomain}`)) {
-    // This removes the root domain part to isolate the organization's subdomain.
-    // Example: "demo.dev.xrilic.ai".slice(0, -"dev.xrilic.ai".length - 1) => "demo"
-    const subdomain = hostname.slice(0, hostname.length - rootDomain.length - 1);
+    // This robustly removes the root domain and the preceding dot.
+    // Example 1: "demo.dev.xrilic.ai".replace(".dev.xrilic.ai", "") => "demo"
+    // Example 2: "demo.xrilic.ai".replace(".xrilic.ai", "") => "demo"
+    const subdomain = hostname.replace(`.${rootDomain}`, '');
     return subdomain;
   }
   
-  // If none of the above conditions are met, it's an unknown state.
+  // If no other condition matches, return null.
   return null;
 };
