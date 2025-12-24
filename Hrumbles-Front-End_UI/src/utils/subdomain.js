@@ -1,41 +1,29 @@
-// src/utils/subdomain.js (NEW AND IMPROVED VERSION)
+// src/utils/subdomain.js (or .ts)
 
 export const getOrganizationSubdomain = () => {
   const hostname = window.location.hostname;
-  
-  // This is loaded from your .env files (.env.dev, .env.staging, etc.)
-  const rootDomain = import.meta.env.VITE_APP_ROOT_DOMAIN;
 
-  // If the environment variable is not set, we can't proceed.
-  if (!rootDomain) {
-    // Check for localhost as a fallback for local development
-    if (hostname.includes('localhost')) {
-        const parts = hostname.split('.');
-        if (parts.length > 1 && parts[1] === 'localhost' && parts[0] !== 'www' && parts[0] !== 'app') {
-            return parts[0];
-        }
-    }
+  // 1. Handle Localhost / IP
+  // If you are using "localhost", there is no subdomain.
+  // If you use "demo.localhost", this will correctly return "demo".
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return null;
   }
 
-  // --- CORE LOGIC ---
+  const parts = hostname.split('.');
 
-  // Case 1: The user is on the root domain itself (e.g., "xrilic.ai" or "www.xrilic.ai")
-  // This should show the domain verification page.
-  if (hostname === rootDomain || hostname === `www.${rootDomain}`) {
+  // 2. Safety Check: If there are no parts (shouldn't happen)
+  if (parts.length < 2) {
     return null;
   }
 
-  // Case 2: The hostname ends with the root domain (e.g., "demo.xrilic.ai" or "demo.dev.xrilic.ai")
-  // This is the main logic that will extract the organization's name.
-  if (hostname.endsWith(`.${rootDomain}`)) {
-    // This robustly removes the root part from the end to get the subdomain.
-    // "demo.dev.xrilic.ai".split(".dev.xrilic.ai") => ["demo", ""]
-    // "demo.xrilic.ai".split(".xrilic.ai") => ["demo", ""]
-    const subdomain = hostname.split(`.${rootDomain}`)[0];
-    return subdomain;
+  // 3. Handle "www" prefix (e.g., www.demo.hrumbles.ai)
+  if (parts[0] === 'www') {
+    return parts[1];
   }
-  
-  // If none of the above conditions are met, return null.
-  return null;
+
+  // 4. ✅ THE FIX: Always take the very first part
+  // e.g., "demo.dev.xrilic.ai" -> returns "demo"
+  // e.g., "demo.hrumbles.ai"   -> returns "demo"
+  return parts[0];
 };

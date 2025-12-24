@@ -44,7 +44,7 @@ export interface TimeLog {
   project_time_data?: {
     projects: DetailedTimesheetEntry[];
   };
-  recruiter_report_data?: JobLog[]; // NEW: Store recruiter job logs
+  recruiter_report_data?: RecruitmentReport | any;
   created_at?: string;
   updated_at?: string;
 }
@@ -69,4 +69,15 @@ export interface TimesheetSubmissionData {
   projectEntries?: DetailedTimesheetEntry[];
   detailedEntries?: DetailedTimesheetEntry[];
   recruiter_report_data?: JobLog[]; // NEW: Include recruiter data in submissions
+}
+
+export interface RecruitmentReport {
+  workStatus: { profilesWorkedOn: string; profilesUploaded: number };
+  atsReport: { resumesATS: number; resumesTalentPool: number };
+  candidateStatus: { paidSheet: number; unpaidSheet: number; linedUp: number; onField: number };
+  activitySummary: { contacted: number; totalCalls: number; connected: number; notConnected: number; callBack: number; proofNote: string };
+  scheduling: Array<{ name: string; mobile: string; position: string; proof: boolean; timeShared: boolean; jdShared: boolean }>;
+  walkIns: { expected: number; proofAttached: boolean; reminderNeeded: boolean };
+  qualityCheck: { reviewedCount: number; candidateNames: string };
+  targets: { source: number; calls: number; lineups: number; closures: number };
 }

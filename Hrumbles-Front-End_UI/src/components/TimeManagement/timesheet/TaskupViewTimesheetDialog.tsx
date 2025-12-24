@@ -9,6 +9,7 @@ import { TimesheetBasicInfo } from "./dialog/TimesheetBasicInfo";
 import { TimesheetDialogContent } from './dialog/TimesheetDialogContent';
 import { TimesheetEditForm } from "./dialog/TimesheetEditForm";
 import { TimesheetProjectDetails } from "./TimesheetProjectDetails";
+import { RecruitmentReportForm } from './dialog/RecruitmentReportForm';
 import { useTimesheetValidation } from './hooks/useTimesheetValidation';
 import { useSelector } from 'react-redux';
 import { fetchHrProjectEmployees, submitTimesheet } from '@/api/timeTracker';
@@ -105,6 +106,24 @@ const [temporaryDurationMinutes, setTemporaryDurationMinutes] = useState<number 
   const [additionalRecipients, setAdditionalRecipients] = useState<string[]>([]);
 
   const { validateForm } = useTimesheetValidation();
+
+  const [recruitmentReport, setRecruitmentReport] = useState<any>({
+  workStatus: { profilesWorkedOn: '', profilesUploaded: 0 },
+  atsReport: { resumesATS: 0, resumesTalentPool: 0 },
+  candidateStatus: { paidSheet: 0, unpaidSheet: 0, linedUp: 0, onField: 0 },
+  activitySummary: { contacted: 0, totalCalls: 0, connected: 0, notConnected: 0, callBack: 0, proofNote: '' },
+  scheduling: [],
+  walkIns: { expected: 0, proofAttached: false, reminderNeeded: false },
+  qualityCheck: { reviewedCount: 0, candidateNames: '' },
+  targets: { source: 0, calls: 0, lineups: 0, closures: 0 }
+});
+
+  // Update useEffect to load existing report if viewing
+useEffect(() => {
+  if (timesheet?.recruiter_report_data && open) {
+    setRecruitmentReport(timesheet.recruiter_report_data);
+  }
+}, [timesheet, open]);
 
   // Combined data fetching and setup effect
   useEffect(() => {
@@ -373,6 +392,7 @@ const sendEODReport = async (finalWorkReport: string, clockOutTime: string, dura
       isRecruiter,
       submissions: isRecruiter ? submissions : [],
       workReport: finalWorkReport,
+      recruiterReport: isRecruiter ? recruitmentReport : null,
       timesheetDetails: {
         date: timesheet.date,
         duration_minutes: durationMinutes,
@@ -464,6 +484,7 @@ const handleSubmit = async () => {
         date: new Date(timesheet.date),
         clockIn: timesheet.clock_in_time ? DateTime.fromISO(timesheet.clock_in_time, { zone: 'utc' }).setZone('Asia/Kolkata').toFormat('HH:mm') : undefined,
         clockOut,
+        recruiter_report_data: isRecruiter ? recruitmentReport : null,
       };
 
       console.log('Debug: Submitting timesheet for project-based employee', {
@@ -496,6 +517,7 @@ const handleSubmit = async () => {
         date: new Date(timesheet.date),
         clockIn: timesheet.clock_in_time ? DateTime.fromISO(timesheet.clock_in_time, { zone: 'utc' }).setZone('Asia/Kolkata').toFormat('HH:mm') : undefined,
         clockOut,
+        recruiter_report_data: isRecruiter ? recruitmentReport : null,
       };
 
       console.log('Debug: Submitting timesheet for non-project-based employee', {
@@ -570,12 +592,21 @@ const handleSubmit = async () => {
                       hrProjectEmployees={hrProjectEmployees}
                     />
                   ) : (
+                    <>
+                    
                     <TimesheetEditForm
                       formData={formData}
                       setFormData={setFormData}
                       timesheet={timesheet}
                       onValidationChange={setIsFormValid}
                     />
+                    {isEditing && isRecruiter && (
+  <RecruitmentReportForm 
+    data={recruitmentReport} 
+    onChange={setRecruitmentReport} 
+  />
+)}
+                    </>
                   )}
                   <div className="space-y-2 pt-4 border-t mt-4">
                     <Label htmlFor="recipients">Add More Recipients for EOD (Optional)</Label>
@@ -594,6 +625,7 @@ const handleSubmit = async () => {
                   <TimesheetProjectDetails timesheet={timesheet} employeeHasProjects={employeeHasProjects} />
                 </>
               )}
+              
             </>
           )}
         </div>
