@@ -184,6 +184,7 @@ const handleCompanySelect = (company: CompanySearchResult) => {
     company_status: company.company_status || "Active"
 
     });
+    
 
     setIsEditingProfile(false);
 
