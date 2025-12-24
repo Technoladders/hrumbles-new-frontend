@@ -69,6 +69,7 @@ jobs:
           context: ./hrumbles-website
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/hrumble-website:latest-xrilic
+          no-cache: true
 
       # --- Step 3: Deploy to Server ---
       - name: Deploy to Server
