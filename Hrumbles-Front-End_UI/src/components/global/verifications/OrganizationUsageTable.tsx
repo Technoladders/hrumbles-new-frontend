@@ -4,15 +4,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ExternalLink, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ExternalLink, Search, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from 'lucide-react';
 
 interface OrgStat {
   id: string;
   name: string;
   usage: number;
+  successfulCount: number;
+  failedCount: number;
   successRate: number;
   cost: number;
-  unitPrice: number; // Required for the new column
+  unitPrice: number;
+  priceNotFound: number;
 }
 
 interface OrganizationUsageTableProps {
@@ -59,8 +62,20 @@ const OrganizationUsageTable: React.FC<OrganizationUsageTableProps> = ({ data, v
             <TableHeader>
               <TableRow className="bg-slate-50 hover:bg-slate-100">
                 <TableHead className="py-3 px-6 text-slate-600">Organization</TableHead>
-                {/* 1. Request Price Column */}
-                <TableHead className="py-3 px-6 text-slate-600">Request Price</TableHead>
+                <TableHead className="py-3 px-6 text-slate-600">Success Price</TableHead>
+                <TableHead className="py-3 px-6 text-slate-600">Failure Price</TableHead>
+                <TableHead className="py-3 px-6 text-slate-600">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <span>Successful</span>
+                  </div>
+                </TableHead>
+                <TableHead className="py-3 px-6 text-slate-600">
+                  <div className="flex items-center gap-1.5">
+                    <XCircle className="h-4 w-4 text-red-600" />
+                    <span>Failed</span>
+                  </div>
+                </TableHead>
                 <TableHead className="py-3 px-6 text-slate-600">Total Usage</TableHead>
                 <TableHead className="py-3 px-6 text-slate-600">Success Rate</TableHead>
                 <TableHead className="py-3 px-6 text-slate-600">Billed Cost</TableHead>
@@ -72,25 +87,51 @@ const OrganizationUsageTable: React.FC<OrganizationUsageTableProps> = ({ data, v
                 <TableRow key={org.id} className="hover:bg-slate-50/50 border-b">
                   <TableCell className="font-semibold text-gray-700 px-6 py-4">{org.name}</TableCell>
                   
-                  {/* 2. Request Price Data */}
+                  {/* Success Price */}
                   <TableCell className="px-6 py-4 text-gray-600">
                     {(org.unitPrice || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
                   </TableCell>
 
-                  <TableCell className="px-6 py-4 text-gray-600">{org.usage.toLocaleString()}</TableCell>
+                  {/* Failure Price */}
+                  <TableCell className="px-6 py-4 text-gray-600">
+                    {(org.priceNotFound || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
+                  </TableCell>
+
+                  {/* Successful Count - Green styling */}
+                  <TableCell className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-700 border border-green-200">
+                        {org.successfulCount.toLocaleString()}
+                      </span>
+                    </div>
+                  </TableCell>
+
+                  {/* Failed Count - Red styling */}
+                  <TableCell className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-700 border border-red-200">
+                        {org.failedCount.toLocaleString()}
+                      </span>
+                    </div>
+                  </TableCell>
+
+                  {/* UPDATED: Total Usage - Just the number, no breakdown */}
+                  <TableCell className="px-6 py-4 font-semibold text-gray-700">
+                    {org.usage.toLocaleString()}
+                  </TableCell>
+
                   <TableCell className="px-6 py-4">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                       org.successRate >= 80 ? 'bg-green-100 text-green-700' :
                       org.successRate >= 50 ? 'bg-yellow-100 text-yellow-700' :
                       'bg-red-100 text-red-700'
-                    }`}>
+                    }`}>     
                       {org.successRate.toFixed(1)}%
                     </span>
                   </TableCell>
                   <TableCell className="px-6 py-4 text-gray-600">{org.cost.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</TableCell>
                   <TableCell className="text-right px-6 py-4">
                     <Button asChild variant="ghost" size="sm" className="text-indigo-600 hover:text-indigo-700">
-                      {/* 3. FIX: Changed URL structure to match your existing App.jsx */}
                       <Link to={`/verifications/${verificationType}/${org.id}?source=${sourceFilter}`}>
                         View Logs <ExternalLink className="h-4 w-4 ml-1.5" />
                       </Link>
@@ -98,7 +139,7 @@ const OrganizationUsageTable: React.FC<OrganizationUsageTableProps> = ({ data, v
                   </TableCell>
                 </TableRow>
               )) : (
-                <TableRow><TableCell colSpan={6} className="text-center h-24 text-gray-500">No organizations found for this period.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center h-24 text-gray-500">No organizations found for this period.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

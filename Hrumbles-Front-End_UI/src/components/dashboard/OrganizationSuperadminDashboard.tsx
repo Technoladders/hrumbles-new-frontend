@@ -13,6 +13,7 @@ import { TimelineCard } from "../employee/profile/cards/SuperadminTimeline";
 import {OnboardingChartCard} from "../employee/profile/cards/OnboardingChartCard";
 import HiringSuiteDashboard from "./HiringSuiteDashboard";
 import CombinedSubmissionOnboardingChart from '@/components/employee/profile/cards/SubmissionChartCard';
+import VerificationSuite from "./VerificationSuite"; 
 
  
 interface RecruiterData {
@@ -37,7 +38,8 @@ const OriginalDashboardContent = () => {
      const organizationId = useSelector((state: any) => state.auth.organization_id);
     const id = user?.id; // Ensure the user ID is available
     
- 
+
+
   useEffect(() => {
     const fetchData = async (filter: string) => {
       setIsLoading(true);
@@ -453,6 +455,7 @@ function OrganizationSuperadminDashboard() {
   
 
    const ASCENDION_ORG_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
+    const VERIFICATION_SUITE_ORG_ID = "edfd736c-6397-4447-8faf-40983dbd7bf2"; 
 
   // Define the organizations that will see the new dashboard
   const ITECH_HIRING_SUITE_ORGS = [
@@ -502,6 +505,10 @@ function OrganizationSuperadminDashboard() {
         <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
       </div>
     );
+  }
+
+    if (organizationId === VERIFICATION_SUITE_ORG_ID) {
+    return <VerificationSuite />;
   }
 
   if (organizationId === ASCENDION_ORG_ID) {

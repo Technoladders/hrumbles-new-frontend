@@ -25,6 +25,8 @@ import { menuItemsByRole } from "./SidebarMenuItem";
 import { ArrowRightFromLine, ArrowLeftToLine, BarChart3, TrendingUp } from 'lucide-react';
 import supabase from "../../config/supabaseClient";
 import { is } from "date-fns/locale";
+import PurpleDock from '../ui/Reactbits-theme/PurpleDock';
+
 
 const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownToggle }) => {
   const { icon, label, path, dropdown } = item;
@@ -420,6 +422,35 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
     navigate("/login");
   };
 
+
+const getSuiteIdFromTitle = (title) => {
+    if (!title) return 'hiring';
+    
+    const lower = title.toLowerCase();
+    
+    if (lower.includes('hiring')) return 'hiring';
+    if (lower.includes('project')) return 'project';
+    if (lower.includes('verification')) return 'verification';
+    if (lower.includes('sales')) return 'sales';
+    if (lower.includes('finance')) return 'finance';
+    if (lower.includes('hr')) return 'hr';
+    
+    return 'hiring';
+  };
+
+  // Convert suite ID (from dock) to suite title (for menuData)
+  const getSuiteTitleFromId = (id) => {
+    const map = {
+      'hiring': 'HIRING SUITE',
+      'project': 'PROJECT SUITE',
+      'verification': 'VERIFICATION SUITE',
+      'sales': 'SALES SUITE',
+      'finance': 'FINANCE SUITE',
+      'hr': 'HR Suite'
+    };
+    return map[id] || 'HIRING SUITE';
+  };
+
   const handleSuiteChange = (suiteTitle) => {
     if (suiteTitle !== activeSuite) {
       setActiveSuite(suiteTitle);
@@ -433,6 +464,57 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   };
 
   const fullName = employeeProfile ? `${employeeProfile.firstName} ${employeeProfile.lastName}` : "User Name";
+
+
+ const DockIcon = ({ icon: Icon, label, isActive, onClick }) => {
+    const [isHovered, setIsHovered] = useState(false);
+    const [scale, setScale] = useState(1);
+
+    return (
+      <Tooltip label={label} placement="top" isOpen={isHovered}>
+        <Box position="relative">
+          <IconButton
+            icon={<Icon />}
+            aria-label={label}
+            onClick={onClick}
+            onMouseEnter={() => {
+              setIsHovered(true);
+              setScale(1.4); // Magnification effect
+            }}
+            onMouseLeave={() => {
+              setIsHovered(false);
+              setScale(1);
+            }}
+            bg={isActive ? "white" : "whiteAlpha.200"}
+            color={isActive ? "#7B43F1" : "white"}
+            _hover={{
+              bg: isActive ? "white" : "whiteAlpha.300",
+              transform: `scale(${scale})`,
+            }}
+            transition="all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
+            transform={`scale(${scale})`}
+            size="md"
+            borderRadius="xl"
+            boxShadow={isActive ? "lg" : "none"}
+          />
+          
+          {/* Active indicator dot */}
+          {isActive && (
+            <Box
+              position="absolute"
+              bottom="-6px"
+              left="50%"
+              transform="translateX(-50%)"
+              w="4px"
+              h="4px"
+              bg="white"
+              borderRadius="full"
+            />
+          )}
+        </Box>
+      </Tooltip>
+    );
+  };
 
   return (
     <Flex
@@ -530,51 +612,17 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
           </Box>
         )} */}
 
-        {isCategorized && (
-          <HStack
-            justify="center"
-            spacing={isExpanded ? 4 : 0}
-            p={isExpanded ? 2 : 1}
-            borderRadius="lg"
-            bg="#7B43F1"
-          >
-            {(isExpanded ? menuConfig : menuConfig.filter(s => s.title === activeSuite)).map((suite) => (
-              <Tooltip
-        key={suite.title}
-        label={
-          suite.title.charAt(0).toUpperCase() +
-          suite.title.slice(1).toLowerCase()
-        }
-        placement="top"
-        hasArrow
-        bg="gray.700"
-        color="white"
-        fontSize="xs"
-        p={1}
-        borderRadius="sm"
-      >
-                <IconButton
-                  aria-label={suite.title}
-                   icon={
-            <Icon
-              as={suite.icon}
-              fontSize={suite.title === "PROJECT SUITE" ? "20px" : "16px"}
-            />
-          }
-                  isRound
-                  size="sm"
-                  bg={activeSuite === suite.title ? activeBg : 'transparent'}
-                  color={activeSuite === suite.title ? 'black' : 'white'}
-                  _hover={{
-    bg: activeSuite !== suite.title ? hoverBg : activeBg,color: 'black', // 👈 make icon text white on hover
-  }}
-                  onClick={() => handleSuiteChange(suite.title)}
-                  flex="1"
-                />
-              </Tooltip>
-            ))}
-          </HStack>
-        )}
+
+
+{isCategorized && isExpanded && (
+  <Box px={2} pb={2} overflow="visible">
+    <PurpleDock
+      items={menuConfig}
+      activeItem={activeSuite}
+      onItemClick={handleSuiteChange}
+    />
+  </Box>
+)}
       </VStack>
     </Flex>
   );

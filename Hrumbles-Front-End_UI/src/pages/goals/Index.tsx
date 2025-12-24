@@ -32,6 +32,7 @@ import { useNavigate } from "react-router-dom";
 import CreateAndAssignGoalWizard from '@/components/goals/wizard/CreateAndAssignGoalWizard';
 import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { OrgGoalDashboardChart } from "@/components/dashboard/chart/OrgGoalDashboardChart";
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, LineElement, LineController, BarController, PointElement, Title, Tooltip, Legend);
@@ -49,6 +50,7 @@ const GoalsIndex = () => {
   const [activeTimeframeTab, setActiveTimeframeTab] = useState("This Year");
   const [activeDepartmentTab, setActiveDepartmentTab] = useState("All Departments");
   const [chartTimeframe, setChartTimeframe] = useState<'day' | 'week' | 'month' | 'year'>('year');
+  const [organizationId, setOrganizationId] = useState<string>("");
 
   const tabToTimeframe = {
     "This Day": 'day' as const,
@@ -74,6 +76,21 @@ const GoalsIndex = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
+      
+      // Fetch current user's organization
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('organization_id')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile?.organization_id) {
+          setOrganizationId(profile.organization_id);
+        }
+      }
+      
       const goalsData = await getGoalsWithDetails();
       
       const assignedSectors = [...new Set(goalsData.map(g => g.sector))];
@@ -804,96 +821,17 @@ const GoalsIndex = () => {
           </motion.div>
         )}
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3 }}
-        >
-          <Card className="mb-8 bg-white/80 backdrop-blur-sm shadow-xl rounded-2xl border border-gray-200/50 overflow-hidden">
-            <CardHeader className="pb-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <CardTitle className="text-xl font-bold text-gray-900">Goal-Wise Performance Overview</CardTitle>
-                <div className="flex-shrink-0">
-                  <Tabs value={activeTimeframeTab} onValueChange={setActiveTimeframeTab}>
-                    <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
-                      {timeframeStatuses.map((status) => {
-                        const isActive = activeTimeframeTab === status.name;
-                        return (
-                          <TabsTrigger
-                            key={status.id}
-                            value={status.name}
-                            className={`relative px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
-                              data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all
-                              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                                isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-primary"
-                              }`}
-                          >
-                            <span className="relative flex items-center">
-                              {status.name}
-                              <span
-                                className={`ml-2 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
-                                  isActive ? "bg-white/20 text-white" : "bg-primary/10 text-primary"
-                                }`}
-                              >
-                                {getTimeframeCount(status.name)}
-                              </span>
-                            </span>
-                          </TabsTrigger>
-                        );
-                      })}
-                    </TabsList>
-                  </Tabs>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="h-[450px] p-6">
-                {chartData.labels.length > 0 ? (
-                  <Bar data={chartData} options={chartOptions as any} />
-                ) : (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="flex items-center justify-center h-full text-gray-500"
-                  >
-                    <div className="text-center">
-                      <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                      <p>No goal data available for the selected period.</p>
-                    </div>
-                  </motion.div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8"
-        >
-          <Card className="bg-white/80 backdrop-blur-sm shadow-xl rounded-2xl border border-gray-200/50 overflow-hidden">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg font-bold text-gray-900">Performance by Period Type</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="h-[300px] p-6">
-                <Bar data={periodTypeData} options={periodTypeOptions as any} />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white/80 backdrop-blur-sm shadow-xl rounded-2xl border border-gray-200/50 overflow-hidden">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg font-bold text-gray-900">Status Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="h-[300px] p-6">
-                <Doughnut data={pieData} options={pieOptions as any} />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+        {/* Goal Performance Chart */}
+        {organizationId && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="mb-8"
+          >
+            <OrgGoalDashboardChart organizationId={organizationId} />
+          </motion.div>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}

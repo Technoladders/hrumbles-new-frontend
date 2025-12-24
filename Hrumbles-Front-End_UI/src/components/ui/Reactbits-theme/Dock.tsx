@@ -65,11 +65,13 @@ function DockItem({
     return val - rect.x - baseItemSize / 2;
   });
 
+  // Calculate the size based on distance from mouse
   const targetSize = useTransform(
     mouseDistance, 
     [-distance, 0, distance], 
     [baseItemSize, magnification, baseItemSize]
   );
+  
   const size = useSpring(targetSize, spring);
 
   return (
@@ -84,7 +86,7 @@ function DockItem({
       onFocus={() => isHovered.set(1)}
       onBlur={() => isHovered.set(0)}
       onClick={onClick}
-      className={`relative inline-flex items-center justify-center rounded-2xl border-2 shadow-lg transition-all duration-200 cursor-pointer ${className} ${
+      className={`relative inline-flex items-center justify-center rounded-2xl border-2 shadow-lg transition-colors duration-200 cursor-pointer ${className} ${
         isActive 
           ? 'bg-[#7731E8] border-[#7731E8] text-white shadow-[#7731E8]/50' 
           : 'bg-[#0a0a0a] border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:bg-neutral-900'
@@ -92,8 +94,8 @@ function DockItem({
       tabIndex={0}
       role="button"
       aria-pressed={isActive}
-      whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
+      // Note: Removed whileHover={{ scale: 1.05 }} so it doesn't conflict with the physics zoom
     >
       {Children.map(children, child =>
         React.isValidElement(child)
@@ -135,10 +137,10 @@ function DockLabel({ children, className = '', isHovered }: DockLabelProps) {
       {isVisible && (
         <motion.div
           initial={{ opacity: 0, y: 5, scale: 0.9 }}
-          animate={{ opacity: 1, y: -8, scale: 1 }}
+          animate={{ opacity: 1, y: -15, scale: 1 }}
           exit={{ opacity: 0, y: 5, scale: 0.9 }}
           transition={{ duration: 0.15 }}
-          className={`${className} absolute -top-10 left-1/2 w-fit whitespace-nowrap rounded-lg border border-neutral-700 bg-[#0a0a0a] px-3 py-1.5 text-xs font-medium text-white shadow-xl backdrop-blur-sm z-50`}
+          className={`${className} absolute -top-8 left-1/2 w-fit whitespace-nowrap rounded-lg border border-neutral-700 bg-[#0a0a0a] px-3 py-1.5 text-xs font-medium text-white shadow-xl backdrop-blur-sm z-50`}
           role="tooltip"
           style={{ x: '-50%' }}
         >
@@ -157,16 +159,17 @@ type DockIconProps = {
 };
 
 function DockIcon({ children, className = '' }: DockIconProps) {
-  return <div className={`flex items-center justify-center ${className}`}>{children}</div>;
+  // Ensure the icon centers perfectly
+  return <div className={`flex w-full h-full items-center justify-center ${className}`}>{children}</div>;
 }
 
 export default function Dock({
   items,
   className = '',
   spring = { mass: 0.1, stiffness: 150, damping: 12 },
-  magnification = 56,
-  distance = 140,
-  panelHeight = 64,
+  magnification = 80, // INCREASED: This controls how big it gets (was 56)
+  distance = 140,     // Controls the curve width
+  panelHeight = 68,   // Slightly increased to fit the larger hover state
   dockHeight = 256,
   baseItemSize = 40
 }: DockProps) {
@@ -192,7 +195,8 @@ export default function Dock({
           isHovered.set(0);
           mouseX.set(Infinity);
         }}
-        className={`${className} flex items-center gap-2.5 rounded-2xl border-2 border-neutral-800 bg-[#060010]/95 backdrop-blur-md p-2.5 shadow-2xl`}
+        // CHANGED: gap-2 (was gap-2.5) makes the zoom wave feel smoother
+        className={`${className} flex items-center gap-2 rounded-2xl border-2 border-neutral-800 bg-[#060010]/95 backdrop-blur-md px-3 py-2.5 shadow-2xl`}
         style={{ minHeight: panelHeight }}
         role="toolbar"
         aria-label="Suite navigation"

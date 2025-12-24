@@ -40,89 +40,114 @@ const VerificationTypeDashboardPage: React.FC = () => {
     key: 'selection'
   });
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['verificationTypeDashboard', verificationType, dateRange, sourceFilter],
-    queryFn: async () => {
-        if (!dateRange.startDate || !dateRange.endDate) return { organizations: [], lookups: [], prices: [] };
-        const [orgsRes, lookupsRes, pricesRes] = await Promise.all([
-            supabase.from('hr_organizations').select('id, name'),
-            supabase.from('uanlookups').select('id, organization_id, response_data, created_at')
-              .eq('source', sourceFilter)
-              .in('lookup_type', config.lookupTypes)
-              .gte('created_at', dateRange.startDate.toISOString())
-              .lte('created_at', dateRange.endDate.toISOString()),
-            supabase.from('verification_pricing').select('price, organization_id')
-              .eq('source', sourceFilter)
-              .or(`verification_type.eq.${verificationType},verification_type.in.(${config.lookupTypes.join(',')})`)
-          ]);
-          return { organizations: orgsRes.data || [], lookups: lookupsRes.data || [], prices: pricesRes.data || [] };
-    },
-    enabled: !!config && !!dateRange.startDate && !!dateRange.endDate
-  });
+const { data, isLoading } = useQuery({
+  queryKey: ['verificationTypeDashboard', verificationType, dateRange, sourceFilter],
+  queryFn: async () => {
+      if (!dateRange.startDate || !dateRange.endDate) return { organizations: [], lookups: [], prices: [] };
+      const [orgsRes, lookupsRes, pricesRes] = await Promise.all([
+          supabase.from('hr_organizations').select('id, name'),
+          supabase.from('uanlookups').select('id, organization_id, response_data, created_at')
+            .eq('source', sourceFilter)
+            .in('lookup_type', config.lookupTypes)
+            .gte('created_at', dateRange.startDate.toISOString())
+            .lte('created_at', dateRange.endDate.toISOString()),
+          // UPDATED: Now fetching both price and price_not_found
+          supabase.from('verification_pricing').select('price, price_not_found, organization_id')
+            .eq('source', sourceFilter)
+            .or(`verification_type.eq.${verificationType},verification_type.in.(${config.lookupTypes.join(',')})`)
+        ]);
+        return { organizations: orgsRes.data || [], lookups: lookupsRes.data || [], prices: pricesRes.data || [] };
+  },
+  enabled: !!config && !!dateRange.startDate && !!dateRange.endDate
+});
 
-  const { orgStats, totals, chartData, statCardCharts } = useMemo(() => {
-    if (!data || !config || !dateRange.startDate || !dateRange.endDate) return { orgStats: [], totals: {}, chartData: [], statCardCharts: {} };
+const { orgStats, totals, chartData, statCardCharts } = useMemo(() => {
+  if (!data || !config || !dateRange.startDate || !dateRange.endDate) return { orgStats: [], totals: {}, chartData: [], statCardCharts: {} };
 
-    const getPrice = (orgId: string | null): number => {
-        const orgOverride = data.prices.find(p => p.organization_id === orgId);
-        return orgOverride ? Number(orgOverride.price) : 
-               (Number(data.prices.find(p => p.organization_id === null)?.price) || 0);
-    };
-    
-    const checkSuccess = (log: any) => {
-        if (config.successCodes) {
-            const responseData = log.response_data as any;
-            const code = String(responseData?.data?.code || responseData?.code || '');
-            return config.successCodes.includes(code);
-        }
-        return log.response_data?.status === 1;
-    };
-
-    const stats = data.organizations.map(org => {
-      const orgLookups = data.lookups.filter(l => l.organization_id === org.id);
-      const successful = orgLookups.filter(l => checkSuccess(l)).length;
+  // UPDATED: Now returns both price and priceNotFound
+  const getPrices = (orgId: string | null): { price: number; priceNotFound: number } => {
+      const orgOverride = data.prices.find(p => p.organization_id === orgId);
+      const defaultPricing = data.prices.find(p => p.organization_id === null);
       
-      const unitPrice = getPrice(org.id);
-      
-      return { 
-          id: org.id, 
-          name: org.name, 
-          usage: orgLookups.length, 
-          successRate: orgLookups.length > 0 ? (successful / orgLookups.length) * 100 : 0, 
-          unitPrice: unitPrice, // <--- Passing this to the table
-          cost: orgLookups.length * unitPrice
+      return {
+          price: orgOverride ? Number(orgOverride.price) : (Number(defaultPricing?.price) || 0),
+          priceNotFound: orgOverride ? Number(orgOverride.price_not_found) : (Number(defaultPricing?.price_not_found) || 0)
       };
-    }).filter(s => s.usage > 0);
+  };
+  
+  const checkSuccess = (log: any) => {
+      if (config.successCodes) {
+          const responseData = log.response_data as any;
+          const code = String(responseData?.data?.code || responseData?.code || '');
+          return config.successCodes.includes(code);
+      }
+      return log.response_data?.status === 1;
+  };
+
+  const stats = data.organizations.map(org => {
+    const orgLookups = data.lookups.filter(l => l.organization_id === org.id);
+    const successfulLookups = orgLookups.filter(l => checkSuccess(l));
+    const failedLookups = orgLookups.filter(l => !checkSuccess(l));
     
-    const sortedBySuccess = [...stats].sort((a,b) => b.successRate - a.successRate);
-    const topOrgByUsage = stats.reduce((max, o) => (o.usage > (max?.usage || 0) ? o : max), null as any);
-
-    const totalsData = {
-      verifications: stats.reduce((s, o) => s + o.usage, 0),
-      cost: stats.reduce((s, o) => s + o.cost, 0),
-      topOrg: topOrgByUsage,
-      avgSuccessRate: stats.reduce((s,o) => s + (o.successRate * o.usage), 0) / (stats.reduce((s,o) => s + o.usage, 0) || 1),
-      highestSuccessOrg: sortedBySuccess[0],
-      lowestSuccessOrg: sortedBySuccess[sortedBySuccess.length - 1],
+    const prices = getPrices(org.id);
+    
+    // UPDATED: Calculate cost based on successful and failed verifications
+    const cost = (successfulLookups.length * prices.price) + (failedLookups.length * prices.priceNotFound);
+    
+    return { 
+        id: org.id, 
+        name: org.name, 
+        usage: orgLookups.length,
+        successfulCount: successfulLookups.length, // NEW
+        failedCount: failedLookups.length, // NEW
+        successRate: orgLookups.length > 0 ? (successfulLookups.length / orgLookups.length) * 100 : 0, 
+        unitPrice: prices.price, // Price for successful verifications
+        priceNotFound: prices.priceNotFound, // NEW: Price for failed verifications
+        cost: cost // UPDATED: Now uses both prices
     };
+  }).filter(s => s.usage > 0);
+  
+  const sortedBySuccess = [...stats].sort((a,b) => b.successRate - a.successRate);
+  const topOrgByUsage = stats.reduce((max, o) => (o.usage > (max?.usage || 0) ? o : max), null as any);
 
-    const days = eachDayOfInterval({ start: dateRange.startDate, end: dateRange.endDate });
-    const formatDay = (d: Date) => format(d, 'MMM dd');
+  const totalsData = {
+    verifications: stats.reduce((s, o) => s + o.usage, 0),
+    cost: stats.reduce((s, o) => s + o.cost, 0),
+    topOrg: topOrgByUsage,
+    avgSuccessRate: stats.reduce((s,o) => s + (o.successRate * o.usage), 0) / (stats.reduce((s,o) => s + o.usage, 0) || 1),
+    highestSuccessOrg: sortedBySuccess[0],
+    lowestSuccessOrg: sortedBySuccess[sortedBySuccess.length - 1],
+  };
 
-    const dailyVerificationData = days.map(day => ({ name: formatDay(day), value: data.lookups.filter(l => startOfDay(new Date(l.created_at)).getTime() === startOfDay(day).getTime()).length }));
-    const dailyCostData = days.map(day => ({ name: formatDay(day), value: data.lookups.filter(l => startOfDay(new Date(l.created_at)).getTime() === startOfDay(day).getTime()).reduce((sum, l) => sum + getPrice(l.organization_id), 0) }));
-    const dailySuccessData = days.map(day => {
-        const lookupsOnDay = data.lookups.filter(l => startOfDay(new Date(l.created_at)).getTime() === startOfDay(day).getTime());
-        const successfulOnDay = lookupsOnDay.filter(l => checkSuccess(l)).length;
-        return { name: formatDay(day), value: lookupsOnDay.length > 0 ? (successfulOnDay / lookupsOnDay.length) * 100 : 0 };
-    });
-    const dailyTopOrgData = days.map(day => ({ name: formatDay(day), value: topOrgByUsage ? data.lookups.filter(l => l.organization_id === topOrgByUsage.id && startOfDay(new Date(l.created_at)).getTime() === startOfDay(day).getTime()).length : 0 }));
+  const days = eachDayOfInterval({ start: dateRange.startDate, end: dateRange.endDate });
+  const formatDay = (d: Date) => format(d, 'MMM dd');
 
-    return {
-      orgStats: stats.sort((a,b) => b.usage - a.usage), totals: totalsData, chartData: stats.sort((a,b) => b[chartDataType] - a[chartDataType]).slice(0, 10),
-      statCardCharts: { verifications: dailyVerificationData, cost: dailyCostData, success: dailySuccessData, topOrg: dailyTopOrgData }
-    };
-  }, [data, chartDataType, dateRange, config]);
+  const dailyVerificationData = days.map(day => ({ name: formatDay(day), value: data.lookups.filter(l => startOfDay(new Date(l.created_at)).getTime() === startOfDay(day).getTime()).length }));
+  
+  // UPDATED: Daily cost calculation now uses both prices
+  const dailyCostData = days.map(day => {
+      const lookupsOnDay = data.lookups.filter(l => startOfDay(new Date(l.created_at)).getTime() === startOfDay(day).getTime());
+      return { 
+          name: formatDay(day), 
+          value: lookupsOnDay.reduce((sum, l) => {
+              const prices = getPrices(l.organization_id);
+              return sum + (checkSuccess(l) ? prices.price : prices.priceNotFound);
+          }, 0) 
+      };
+  });
+  
+  const dailySuccessData = days.map(day => {
+      const lookupsOnDay = data.lookups.filter(l => startOfDay(new Date(l.created_at)).getTime() === startOfDay(day).getTime());
+      const successfulOnDay = lookupsOnDay.filter(l => checkSuccess(l)).length;
+      return { name: formatDay(day), value: lookupsOnDay.length > 0 ? (successfulOnDay / lookupsOnDay.length) * 100 : 0 };
+  });
+  const dailyTopOrgData = days.map(day => ({ name: formatDay(day), value: topOrgByUsage ? data.lookups.filter(l => l.organization_id === topOrgByUsage.id && startOfDay(new Date(l.created_at)).getTime() === startOfDay(day).getTime()).length : 0 }));
+
+  return {
+    orgStats: stats.sort((a,b) => b.usage - a.usage), totals: totalsData, chartData: stats.sort((a,b) => b[chartDataType] - a[chartDataType]).slice(0, 10),
+    statCardCharts: { verifications: dailyVerificationData, cost: dailyCostData, success: dailySuccessData, topOrg: dailyTopOrgData }
+  };
+}, [data, chartDataType, dateRange, config]);
 
   if (!config) return <div className="p-8 text-red-500 bg-slate-50 flex items-center justify-center h-screen">Invalid verification type specified: {verificationType}</div>;
   if (isLoading) return <div className="flex items-center justify-center h-screen bg-slate-50"><Loader size={60} /></div>;

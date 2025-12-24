@@ -656,22 +656,22 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
   };
 
   // --- PARSE USER INTENT ---
-  const parseUserIntent = async (userInput: string, existingContext: any = null) => {
-    try {
-      const { data, error } = await supabase.functions.invoke('parse-jd-intent', {
-        body: { 
-          userInput,
-          conversationContext: existingContext 
-        }
-      });
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Error parsing intent:', error);
-      return null;
-    }
-  };
+const parseUserIntent = async (userInput: string, existingContext: any = null) => {
+  try {
+    const { data, error } = await supabase.functions.invoke('parse-jd-intent-deepseek', {
+      body: { 
+        userInput,
+        conversationContext: existingContext 
+      }
+    });
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error parsing intent:', error);
+    return null;
+  }
+};
 
   // --- GENERATE JD FROM CONTEXT ---
   const generateJDFromContext = async (context: any) => {
@@ -711,86 +711,94 @@ const CandidateSearchFilters: FC<CandidateSearchFiltersProps> = ({
   };
 
   // --- HANDLE SUGGESTION CLICK ---
-  const handleSuggestionClick = async (suggestion: string) => {
-    setChatInput(suggestion);
-    setShowDynamicSuggestions(false);
+const handleSuggestionClick = async (suggestion: string) => {
+  console.log('🎯 Suggestion clicked:', suggestion);
+  
+  setChatInput(suggestion);
+  setShowDynamicSuggestions(false);
+  
+  const userMsg: ChatMessage = {
+    id: `user-${Date.now()}`,
+    role: 'user',
+    content: suggestion
+  };
+  
+  setChatMessages(prev => [...prev, userMsg]);
+  setIsProcessingIntent(true);
+
+  try {
+    console.log('🔍 Calling parseUserIntent with DeepSeek...');
+    const parsed = await parseUserIntent(suggestion, jdContext);
     
-    // Immediately trigger AI processing
-    const userMsg: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: suggestion
+    console.log('✅ DeepSeek response:', parsed);
+    
+    if (!parsed) {
+      console.error('❌ Parse failed');
+      setChatMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: "Sorry, I had trouble understanding that. Could you rephrase?"
+      }]);
+      setIsProcessingIntent(false);
+      return;
+    }
+
+    const updatedContext = {
+      ...(jdContext || {}),
+      ...parsed.extracted
     };
-    
-    setChatMessages(prev => [...prev, userMsg]);
-    setIsProcessingIntent(true);
+    setJdContext(updatedContext);
 
-    try {
-      const parsed = await parseUserIntent(suggestion, jdContext);
+    console.log('🎉 Updated context:', updatedContext);
+
+    if (parsed.canGenerateDraft) {
+      console.log('🚀 Generating full JD...');
       
-      if (!parsed) {
+      setChatMessages(prev => [...prev, {
+        id: `processing-${Date.now()}`,
+        role: 'system',
+        content: "✨ Great! I have enough information. Generating your job description..."
+      }]);
+
+      setIsGeneratingFullJD(true);
+      const generatedJD = await generateJDFromContext(updatedContext);
+      setIsGeneratingFullJD(false);
+
+      if (generatedJD) {
+        console.log('✅ JD generated successfully!');
+        setJdText(generatedJD);
+        setIsChatMode(false);
+        
         setChatMessages(prev => [...prev, {
-          id: `error-${Date.now()}`,
+          id: `success-${Date.now()}`,
           role: 'assistant',
-          content: "Sorry, I had trouble understanding that. Could you rephrase?"
+          content: "✅ Done! Your job description is ready. You can review and edit it, or generate keywords to start searching."
         }]);
-        setIsProcessingIntent(false);
-        return;
       }
-
-      const updatedContext = {
-        ...(jdContext || {}),
-        ...parsed.extracted
-      };
-      setJdContext(updatedContext);
-
-      if (parsed.canGenerateDraft) {
-        setChatMessages(prev => [...prev, {
-          id: `processing-${Date.now()}`,
-          role: 'system',
-          content: "✨ Great! I have enough information. Generating your job description..."
-        }]);
-
-        setIsGeneratingFullJD(true);
-        const generatedJD = await generateJDFromContext(updatedContext);
-        setIsGeneratingFullJD(false);
-
-        if (generatedJD) {
-          setJdText(generatedJD);
-          setIsChatMode(false);
-          
-          setChatMessages(prev => [...prev, {
-            id: `success-${Date.now()}`,
-            role: 'assistant',
-            content: "✅ Done! Your job description is ready. You can review and edit it, or generate keywords to start searching."
-          }]);
-        }
-      } else if (parsed.needsClarification && parsed.suggestedQuestion) {
+    } else {
+      console.log('ℹ️ Need more info, asking clarification question');
+      
+      if (parsed.needsClarification && parsed.suggestedQuestion) {
         setChatMessages(prev => [...prev, {
           id: `clarify-${Date.now()}`,
           role: 'assistant',
           content: parsed.suggestedQuestion
         }]);
-      } else {
-        setChatMessages(prev => [...prev, {
-          id: `ack-${Date.now()}`,
-          role: 'assistant',
-          content: "Got it! What else can you tell me about this role?"
-        }]);
       }
-
-      setIsProcessingIntent(false);
-      
-    } catch (error) {
-      console.error('Suggestion processing error:', error);
-      setChatMessages(prev => [...prev, {
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: "Something went wrong. Please try again."
-      }]);
-      setIsProcessingIntent(false);
     }
-  };
+
+    setIsProcessingIntent(false);
+    
+  } catch (error) {
+    console.error('❌ Suggestion processing error:', error);
+    setChatMessages(prev => [...prev, {
+      id: `error-${Date.now()}`,
+      role: 'assistant',
+      content: "Something went wrong. Please try again."
+    }]);
+    setIsProcessingIntent(false);
+  }
+};
 
   // --- HANDLE CHAT SUBMIT (ENTER KEY) ---
   const handleChatSubmit = async () => {

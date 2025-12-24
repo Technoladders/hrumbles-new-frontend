@@ -224,7 +224,7 @@ const OrganizationInvoiceDetail: React.FC<OrganizationInvoiceDetailProps> = ({ i
   return (
     <div className="bg-gray-50 p-4 font-sans h-full overflow-y-auto">
       {/* --- HEADER ACTIONS --- */}
-      <div className="flex justify-end mb-4 gap-2">
+    <div className="flex justify-end mb-4 gap-2 pr-10 pt-2">
         <Button onClick={handleDownloadPDF} disabled={isDownloading} size="sm" className="bg-purple-600 hover:bg-purple-700">
           {isDownloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
           {isDownloading ? 'Generating...' : 'Download PDF'}

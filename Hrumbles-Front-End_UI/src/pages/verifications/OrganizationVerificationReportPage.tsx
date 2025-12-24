@@ -44,27 +44,40 @@ const OrganizationVerificationReportPage: React.FC = () => {
   const { data, isLoading } = useQuery({
     queryKey: ['orgVerificationDetail', organizationId, verificationType, dateRange, sourceFilter],
     queryFn: async () => {
-      if (!dateRange.startDate || !dateRange.endDate) return { logs: [], orgName: '', price: 0 };
+      if (!dateRange.startDate || !dateRange.endDate) return { logs: [], pricing: [], orgName: '' };
 
-      const [logsRes, orgRes, pricesRes] = await Promise.all([
-        supabase.from('uanlookups').select('*, verified_by:hr_employees(first_name, last_name)')
+      const [logsRes, pricingRes, orgRes] = await Promise.all([
+        // 1. Fetch Logs + Credit Transactions
+        supabase.from('uanlookups')
+          .select(`
+            *, 
+            verified_by:hr_employees(first_name, last_name),
+            credit_transactions!credit_transactions_ref_fkey(amount)
+          `)
           .eq('organization_id', organizationId)
           .eq('source', sourceFilter)
           .in('lookup_type', config.lookupTypes)
           .gte('created_at', dateRange.startDate.toISOString())
           .lte('created_at', dateRange.endDate.toISOString()),
+
+        // 2. Fetch Pricing Logic (The JSON you provided)
+        supabase.from('verification_pricing')
+          .select('*')
+          .eq('organization_id', organizationId)
+          .eq('source', sourceFilter),
+
+        // 3. Fetch Org Name
         supabase.from('hr_organizations').select('name').eq('id', organizationId).single(),
-        supabase.from('verification_pricing').select('price, organization_id')
-          .eq('source', sourceFilter)
-          .or(`organization_id.eq.${organizationId},organization_id.is.null`)
       ]);
       
-      if (logsRes.error || orgRes.error || pricesRes.error) throw new Error("Failed to fetch details.");
+      if (logsRes.error) console.error("Logs error:", logsRes.error);
+      if (pricingRes.error) console.error("Pricing error:", pricingRes.error);
       
-      const specificPrice = pricesRes.data.find(p => p.organization_id === organizationId && (p.verification_type === verificationType || config.lookupTypes.includes(p.verification_type)));
-      const globalPrice = pricesRes.data.find(p => p.organization_id === null && (p.verification_type === verificationType || config.lookupTypes.includes(p.verification_type)));
-      
-      return { logs: logsRes.data, orgName: orgRes.data.name, price: specificPrice?.price || globalPrice?.price || 0 };
+      return { 
+        logs: logsRes.data || [], 
+        pricing: pricingRes.data || [], 
+        orgName: orgRes.data?.name || '' 
+      };
     },
     enabled: !!organizationId && !!config && !!dateRange.startDate && !!dateRange.endDate
   });
@@ -74,8 +87,36 @@ const OrganizationVerificationReportPage: React.FC = () => {
         return { logsWithCost: [], totals: {}, pieChartData: [], statCardCharts: {} };
     }
 
-    const pricePerCheck = Number(data.price);
-    const logsWithCost = data.logs.map(log => ({ ...log, cost: pricePerCheck }));
+    // --- COST CALCULATION LOGIC ---
+    const logsWithCost = data.logs.map(log => {
+        let finalCost = 0;
+
+        // 1. First Priority: Check Real Transaction
+        const transactions = log.credit_transactions as any[];
+        if (transactions && transactions.length > 0) {
+            finalCost = Math.abs(parseFloat(transactions[0].amount));
+        } 
+        // 2. Second Priority: Check Pricing Table (Fallback)
+        else {
+            const pricingRow = data.pricing.find((p: any) => p.verification_type === log.lookup_type);
+            
+            if (pricingRow) {
+                // Determine if the status was "Found" or "Not Found" to pick the right price
+                // Assuming status 1 = Found
+                const isFound = log.response_data?.status === 1;
+                
+                if (isFound) {
+                    finalCost = parseFloat(pricingRow.price || 0);
+                } else {
+                    // Use price_not_found if available, otherwise assume full price or 0 based on your business logic
+                    finalCost = parseFloat(pricingRow.price_not_found || pricingRow.price || 0);
+                }
+            }
+        }
+
+        return { ...log, cost: finalCost };
+    });
+    // -----------------------------
 
     const checkSuccess = (log: any) => {
         if (config.successCodes) {
@@ -87,7 +128,7 @@ const OrganizationVerificationReportPage: React.FC = () => {
     };
 
     const successful = logsWithCost.filter(l => checkSuccess(l)).length;
-    const totalCost = logsWithCost.length * pricePerCheck;
+    const totalCost = logsWithCost.reduce((sum, log) => sum + log.cost, 0);
     
     const verifierCounts = logsWithCost.reduce((acc, log) => {
         const verifier = log.verified_by ? `${log.verified_by.first_name} ${log.verified_by.last_name}` : 'System';
@@ -117,10 +158,11 @@ const OrganizationVerificationReportPage: React.FC = () => {
         value: logsWithCost.filter(l => startOfDay(new Date(l.created_at)).getTime() === startOfDay(day).getTime()).length 
     }));
     
-    const dailyCostData = dailyVerificationData.map(d => ({ 
-        name: d.name, 
-        value: d.value * pricePerCheck 
-    }));
+    const dailyCostData = days.map(day => {
+        const logsOnDay = logsWithCost.filter(l => startOfDay(new Date(l.created_at)).getTime() === startOfDay(day).getTime());
+        const costOnDay = logsOnDay.reduce((sum, l) => sum + l.cost, 0);
+        return { name: formatDay(day), value: costOnDay };
+    });
     
     const dailySuccessData = days.map(day => {
         const logsOnDay = logsWithCost.filter(l => startOfDay(new Date(l.created_at)).getTime() === startOfDay(day).getTime());

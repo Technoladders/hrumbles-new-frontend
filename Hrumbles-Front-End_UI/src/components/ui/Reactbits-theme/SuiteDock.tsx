@@ -1,88 +1,78 @@
-'use client';
-
 import React from 'react';
-import Dock, { DockItemData } from './Dock';
-import { 
-  Users, 
-  Briefcase, 
-  CheckCircle2, 
-  Building2, 
-  LayoutGrid,
-  ShieldCheck
-} from 'lucide-react';
+import Dock from './Dock';
+import {
+  MdPeopleAlt,
+  MdOutlineAccountBalance,
+} from "react-icons/md";
+import { CgOrganisation } from "react-icons/cg";
+import { BsShieldCheck } from "react-icons/bs";
+import { RiCustomerService2Fill } from "react-icons/ri";
 
-export type Suite = 'hiring' | 'project' | 'verification' | 'hr' | 'sales' | 'finance';
-
-export interface SuiteDockProps {
-  activeSuite: Suite;
-  onSuiteChange: (suite: Suite) => void;
-  availableSuites: Suite[];
-  className?: string;
-}
-
-// Suite Configuration
-const SUITE_CONFIG: Record<Suite, { icon: React.ReactNode; label: string; color: string }> = {
+// Suite configuration matching your menuData.js EXACTLY
+const SUITE_CONFIG = {
   hiring: {
-    icon: <Users size={20} strokeWidth={2.5} />,
-    label: 'Hiring Suite',
-    color: '#7731E8'
+    id: "hiring",
+    label: "Hiring Suite",
+    icon: MdPeopleAlt, // Matches menuData.js
   },
   project: {
-    icon: <Briefcase size={20} strokeWidth={2.5} />,
-    label: 'Project Suite',
-    color: '#7731E8'
+    id: "project",
+    label: "Project Suite",
+    icon: CgOrganisation, // Matches menuData.js
   },
   verification: {
-    icon: <ShieldCheck size={20} strokeWidth={2.5} />,
-    label: 'Verification Suite',
-    color: '#7731E8'
-  },
-  hr: {
-    icon: <Users size={20} strokeWidth={2.5} />,
-    label: 'HR Suite',
-    color: '#7731E8'
+    id: "verification",
+    label: "Verification Suite",
+    icon: BsShieldCheck, // Matches menuData.js
   },
   sales: {
-    icon: <Building2 size={20} strokeWidth={2.5} />,
-    label: 'Sales Suite',
-    color: '#7731E8'
+    id: "sales",
+    label: "Sales Suite",
+    icon: RiCustomerService2Fill, // Matches menuData.js
   },
   finance: {
-    icon: <LayoutGrid size={20} strokeWidth={2.5} />,
-    label: 'Finance Suite',
-    color: '#7731E8'
-  }
+    id: "finance",
+    label: "Finance Suite",
+    icon: MdOutlineAccountBalance, // Matches menuData.js
+  },
+  hr: {
+    id: "hr",
+    label: "HR Suite",
+    icon: MdPeopleAlt, // Matches menuData.js for admin
+  },
 };
 
 export default function SuiteDock({
   activeSuite,
   onSuiteChange,
   availableSuites,
-  className = ''
-}: SuiteDockProps) {
-  // Build dock items from available suites
-  const dockItems: DockItemData[] = availableSuites.map(suite => ({
-    id: suite,
-    icon: SUITE_CONFIG[suite].icon,
-    label: SUITE_CONFIG[suite].label,
-    onClick: () => onSuiteChange(suite),
-    isActive: activeSuite === suite,
-  }));
+}) {
+  // Convert availableSuites to dock items
+  const dockItems = availableSuites
+    .filter((suiteId) => SUITE_CONFIG[suiteId])
+    .map((suiteId) => {
+      const suite = SUITE_CONFIG[suiteId];
+      const IconComponent = suite.icon;
+      
+      return {
+        id: suite.id,
+        label: suite.label,
+        icon: <IconComponent size={20} />, // Convert to React element
+        isActive: activeSuite === suite.id,
+        onClick: () => onSuiteChange(suite.id),
+      };
+    });
 
-  // Don't render if no suites available
-  if (dockItems.length === 0) {
-    return null;
-  }
+  // Don't render if no items
+  if (dockItems.length === 0) return null;
 
   return (
-    <div className={`w-full ${className}`}>
-      <Dock 
-        items={dockItems}
-        panelHeight={64}
-        baseItemSize={40}
-        magnification={56}
-        distance={140}
-      />
-    </div>
+    <Dock
+      items={dockItems}
+      panelHeight={68}
+      baseItemSize={40}
+      magnification={80}
+      distance={140}
+    />
   );
 }
