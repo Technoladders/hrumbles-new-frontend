@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Edit, Mail, Phone, Globe, User, MoreVertical, Activity, Clock,   FileText, Home, Eye, Pencil, Users, UserCircle, Building2, BadgeCheck, Cog, MessageCircle, Fingerprint, CreditCard, Download, Copy, Briefcase, ShieldCheck, ShieldAlert, Loader2, CalendarDays, Heart, Droplet, CalendarPlus, IndianRupee, Timer, Hourglass, ClipboardList, Upload, Trash2, Paperclip, X, TrendingUp,  TrendingDown,Wallet  } from "lucide-react";
 import { useSelector } from "react-redux";
+import SalaryStructureView from "@/pages/salary-breakup/SalaryStructureView"; 
 
 interface PaymentEarning {
   id: string;
@@ -1877,6 +1878,12 @@ const handleDeleteDocument = async (docId: string) => {
 </TabsContent>
             {/* ✅ COMPLETE SALARY TAB WITH INSTANT UPLOAD */}
             <TabsContent value="salary" className="mt-6 space-y-8">
+
+               <SalaryStructureView 
+        employeeId={employee.employee_id} 
+        employeeName={`${employee.first_name} ${employee.last_name}`}
+        designation={employee.designation_name || "N/A"}
+    />
 {/* ✅ COMPACT MINIMAL SALARY DETAILS SECTION */}
 <Card className="rounded-2xl shadow-lg border-none bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 overflow-hidden">
   <CardContent className="p-6">

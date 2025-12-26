@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useSelector } from "react-redux";
 import GoalCard from "@/components/goals/common/GoalCard";
 import AnimatedCard from "@/components/ui/custom/AnimatedCard";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +40,8 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, LineElement
 
 const GoalsIndex = () => {
   const navigate = useNavigate();
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
+
   const [goals, setGoals] = useState<GoalWithDetails[]>([]);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [wizardKey, setWizardKey] = useState(0);
@@ -50,7 +53,7 @@ const GoalsIndex = () => {
   const [activeTimeframeTab, setActiveTimeframeTab] = useState("This Year");
   const [activeDepartmentTab, setActiveDepartmentTab] = useState("All Departments");
   const [chartTimeframe, setChartTimeframe] = useState<'day' | 'week' | 'month' | 'year'>('year');
-  const [organizationId, setOrganizationId] = useState<string>("");
+
 
   const tabToTimeframe = {
     "This Day": 'day' as const,
