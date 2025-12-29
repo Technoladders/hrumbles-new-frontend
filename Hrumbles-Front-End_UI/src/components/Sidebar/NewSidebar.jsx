@@ -15,8 +15,9 @@ import {
   Avatar,
   useDisclosure,
   Button,
+  Divider
 } from "@chakra-ui/react";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { logout } from "../../Redux/authSlice";
@@ -26,6 +27,7 @@ import { ArrowRightFromLine, ArrowLeftToLine, BarChart3, TrendingUp } from 'luci
 import supabase from "../../config/supabaseClient";
 import { is } from "date-fns/locale";
 import PurpleDock from '../ui/Reactbits-theme/PurpleDock';
+import {  FiLogOut, FiSettings } from "react-icons/fi";
 
 
 const MenuItem = ({ item, isExpanded, location, openDropdown, handleDropdownToggle }) => {
@@ -174,10 +176,9 @@ const NewSidebar = ({ isExpanded, toggleSidebar }) => {
   const [employeeProfile, setEmployeeProfile] = useState(null);
   const { isOpen: isProfileMenuOpen, onToggle: toggleProfileMenu } = useDisclosure();
 
-  const bgColor = "#ffffffff";
-  const activeBg = "#ffffffff";
-  const hoverBg = "#eee7f1dd";
-  const textColor = "black";
+  const bgColor = "white";
+  const railBg = "#fdfdfd"; // Slightly different to differentiate from the panel
+  const borderColor = "gray.100";
 
   const [activeSuite, setActiveSuite] = useState(() => {
     return localStorage.getItem('activeSuite') || null;
@@ -516,114 +517,86 @@ const getSuiteIdFromTitle = (title) => {
     );
   };
 
-  return (
+return (
     <Flex
-      direction="column"
-      bg={bgColor}
-      color={textColor}
-      height="100vh"
-      width={isExpanded ? "210px" : "74px"}
-      transition="width 0.1s ease-in-out"
       position="fixed"
       left={0}
       top={0}
-      p={isExpanded ? 4 : 2}
+      height="100vh"
       zIndex={20}
+      borderRight="1px solid"
+      borderColor={borderColor}
     >
-      <Flex align="center" mb={8} minH="40px" px={isExpanded ? 0 : 1}>
-        {isExpanded && <Image className="mt-4" src={organizationDetails?.is_verification_firm ? "/Xrilic Verify Black.svg" : "/1-cropped.svg"} alt="Logo" width={organizationDetails?.is_verification_firm ? "140px" : "120px"} />}
-        {!isExpanded && <Image src="/hrumbles-fav-blue-cropped.svg" alt="Logo" width="30px"  />}
-
-        <Spacer />
-        {!isMobile && (
-          <IconButton
-          marginTop={3}
-            fontSize={isExpanded ? "18px" : "8px"}
-            aria-label="Toggle Sidebar"
-            icon={<Icon as={isExpanded ? ArrowLeftToLine : ArrowRightFromLine} />}
-            variant="ghost"
-            color="gray.400"
-            _hover={{ bg: hoverBg, color: "white" }}
-            onClick={toggleSidebar}
-          />
-        )}
-      </Flex>
-
+      {/* LEFT RAIL: Suite Switchers (Like the image's far left icons) */}
       <VStack
-        spacing={2}
-        align="stretch"
-        flex="1"
-        overflowY="auto"
-        overflowX="hidden"
-        css={{ "&::-webkit-scrollbar": { display: "none" }, "scrollbar-width": "none" }}
+        w="74px"
+        bg={railBg}
+        py={6}
+        spacing={6}
+        borderRight="1px solid"
+        borderColor={borderColor}
+        align="center"
       >
-        {isCategorized && isExpanded && (
-          <Text px={3} py={2} fontSize="lg" fontWeight="bold" color="black">
-            {activeSuite || "Select a Suite"}
-          </Text>
-        )}a
-        {itemsToRender.length > 0 ? (
-          itemsToRender.map((item) => (
-            <MenuItem
-              key={item.label}
-              item={item}
-              isExpanded={isExpanded}
-              location={location}
-              openDropdown={openDropdown}
-              handleDropdownToggle={handleDropdownToggle}
+        {isCategorized && menuConfig.map((suite) => (
+          <Tooltip key={suite.title} label={suite.title} placement="right">
+            <IconButton
+              variant="ghost"
+              icon={<Icon as={suite.icon} fontSize="22px" />}
+              onClick={() => {
+                setActiveSuite(suite.title);
+                const defaultPath = getDefaultPathForSuite(suite.title);
+                navigate(defaultPath);
+              }}
+              color={activeSuite === suite.title ? "#7B43F1" : "gray.400"}
+              bg={activeSuite === suite.title ? "purple.50" : "transparent"}
+              _hover={{ bg: "purple.50", color: "#7B43F1" }}
+              borderRadius="xl"
+              p={6}
             />
-          ))
-        ) : (
-          <Text px={3} py={2} fontSize="sm" color="gray.400">
-            No menu items available
-          </Text>
-        )}
+          </Tooltip>
+        ))}
+        
+        <Spacer />
+        
+        {/* Bottom Icons (Settings/Help) */}
+        <VStack spacing={4} pb={4}>
+           <IconButton icon={<Icon as={FiSettings} />} variant="ghost" color="gray.400" />
+           <IconButton icon={<Icon as={FiLogOut} />} onClick={handleLogout} variant="ghost" color="gray.400" />
+        </VStack>
       </VStack>
 
-      <VStack spacing={2} align="stretch" mt={4}>
-        {/* {isExpanded && (
-          <Box>
-            <Flex
-              align="center"
-              p={2}
-              bg="gray.700"
-              borderRadius="lg"
-              cursor="pointer"
-              _hover={{ bg: "gray.600" }}
-              onClick={toggleProfileMenu}
-            >
-              <Avatar size="sm" name={fullName} src={employeeProfile?.avatarUrl} />
-              <Text ml={3} fontWeight="medium" noOfLines={1}>{fullName}</Text>
-              <Spacer />
-              <Icon as={isProfileMenuOpen ? ChevronUpIcon : ChevronDownIcon} />
-            </Flex>
-            <Collapse in={isProfileMenuOpen} animateOpacity>
-              <VStack align="stretch" spacing={1} mt={2} pl={2}>
-                {departmentName !== "Finance" && (
-                  <Text as={Link} to="/profile" p={2} borderRadius="md" _hover={{ bg: hoverBg }}>
-                    My Profile
-                  </Text>
-                )}
-                <Text onClick={handleLogout} p={2} borderRadius="md" cursor="pointer" _hover={{bg: hoverBg}}>
-                  Logout
-                </Text>
-              </VStack>
-            </Collapse>
+      {/* RIGHT PANEL: Menu Items (Like the image's text menu) */}
+      {isExpanded && (
+        <Flex
+          direction="column"
+          w="206px"
+          bg={bgColor}
+          transition="width 0.2s"
+          overflow="hidden"
+        >
+          <Box p={6}>
+            <Text fontSize="xs" fontWeight="bold" color="gray.400" letterSpacing="wider" mb={4}>
+              {activeSuite}
+            </Text>
+            
+            <VStack spacing={1} align="stretch" overflowY="auto" css={{ "&::-webkit-scrollbar": { display: "none" } }}>
+              {itemsToRender.map((item, idx) => (
+                <React.Fragment key={item.label}>
+                   <MenuItem
+                    item={item}
+                    isExpanded={true}
+                    location={location}
+                    openDropdown={openDropdown}
+                    handleDropdownToggle={handleDropdownToggle}
+                  />
+                  {/* Visual Divider like the image (every 4 items or by logical group) */}
+                  {(idx === 3 || idx === 7) && <Divider my={4} borderColor="gray.100" />}
+                </React.Fragment>
+              ))}
+            </VStack>
           </Box>
-        )} */}
-
-
-
-{isCategorized && isExpanded && (
-  <Box px={2} pb={2} overflow="visible">
-    <PurpleDock
-      items={menuConfig}
-      activeItem={activeSuite}
-      onItemClick={handleSuiteChange}
-    />
-  </Box>
-)}
-      </VStack>
+        </Flex>
+      )}
     </Flex>
   );
 };
