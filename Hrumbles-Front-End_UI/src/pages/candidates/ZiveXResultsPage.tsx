@@ -73,7 +73,7 @@ const ZiveXResultsPage: FC = () => {
       const locations = processTagsForRPC(filters.locations);
       const industries = processTagsForRPC(filters.industries);
 
-      const { data, error } = await supabase.rpc('search_unified_candidates_v8', {
+      const { data, error } = await supabase.rpc('search_unified_candidates_v22', {
         p_mandatory_keywords: keywords.mandatory, p_optional_keywords: keywords.optional,
         p_mandatory_skills: skills.mandatory, p_optional_skills: skills.optional,
         p_mandatory_companies: companies.mandatory, p_optional_companies: companies.optional,
