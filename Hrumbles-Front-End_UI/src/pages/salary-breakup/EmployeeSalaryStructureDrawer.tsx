@@ -385,7 +385,7 @@ const EmployeeSalaryStructureDrawer = ({ isOpen, onOpenChange, selectedEmployee 
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-[1100px] overflow-y-auto bg-slate-50">
+      <SheetContent className="w-full sm:max-w-[800px] overflow-y-auto bg-slate-50">
         <SheetHeader className="mb-4">
           <SheetTitle className="flex items-center gap-2">
             <Calculator className="w-5 h-5 text-blue-600" />

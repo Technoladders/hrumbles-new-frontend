@@ -1,4 +1,4 @@
-import { Box, Flex, IconButton, Input, InputGroup, InputLeftElement, Avatar, Menu, MenuButton, MenuList, MenuItem, useColorMode, Text, useMediaQuery, Badge, Spinner } from "@chakra-ui/react";
+import { Box, Flex, IconButton, Input, InputGroup, InputLeftElement, Avatar, Menu, MenuButton, MenuList, MenuItem, useColorMode, Text, useMediaQuery, Badge, Spinner, Image } from "@chakra-ui/react";
 import { FiSearch, FiBell, FiSun, FiLogOut, FiUser, FiMenu } from "react-icons/fi";
 import { useState, useEffect, useCallback } from "react";
 import { Outlet, useNavigate } from "react-router-dom"; 
@@ -33,6 +33,19 @@ const MainLayout = () => {
     // MODIFICATION: State to hold organization credit details
   const [orgCredits, setOrgCredits] = useState(null);
   const [isLoadingCredits, setIsLoadingCredits] = useState(true);
+  const [activeSuite, setActiveSuite] = useState(localStorage.getItem('activeSuite') || 'HIRING SUITE');
+
+   // Helper to get Logo based on Suite
+  const getLogoBySuite = (suite) => {
+    const s = suite?.toUpperCase();
+    if (s?.includes("RECRUIT") || s?.includes("HIRING")) return "/xrilic/Xrilic Recruit.svg";
+    if (s?.includes("VERIFICATION") || s?.includes("CRM")) return "/xrilic/Xrilic Verify Black.svg";
+    if (s?.includes("SALES") || s?.includes("CRM")) return "/xrilic/Xrilic CRM.svg";
+    if (s?.includes("FINANCE") || s?.includes("BOOKS")) return "/xrilic/Xrilic Books.svg";
+    return "/xrilic/Xrilic logo.svg";
+  };
+
+  const mainSidebarWidth = isSidebarExpanded ? "280px" : "74px"; // Rail (74px) + Panel (206px)
 
    useActivityTracker({ inactivityThreshold: 300000 }); 
 
@@ -357,9 +370,8 @@ const MainLayout = () => {
     return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   };
 
-  const expandedSidebarWidth = "210px";
-  const collapsedSidebarWidth = "74px";
-  const mainSidebarWidth = isSidebarExpanded ? expandedSidebarWidth : collapsedSidebarWidth;
+
+
 
   const toggleSidebar = () => {
     setSidebarExpanded(!isSidebarExpanded);
@@ -370,21 +382,14 @@ const MainLayout = () => {
 
       <SubscriptionLockModal isOpen={isSubscriptionExpired && role === 'organization_superadmin'} />
 
+
       
-      {isMobile && isSidebarExpanded && (
-        <Box
-          position="fixed"
-          top={0}
-          left={0}
-          right={0}
-          bottom={0}
-          bg="blackAlpha.600"
-          zIndex={15}
-          onClick={toggleSidebar}
-        />
-      )}
-      
-      <NewSidebar isExpanded={isSidebarExpanded} toggleSidebar={toggleSidebar} />
+       <NewSidebar 
+        isExpanded={isSidebarExpanded} 
+        toggleSidebar={toggleSidebar} 
+        activeSuite={activeSuite} 
+        setActiveSuite={setActiveSuite} 
+      />
 
       <Flex 
         direction="column" 
@@ -397,20 +402,22 @@ const MainLayout = () => {
           as="header"
           align="center"
           justify="space-between"
-          w={{
-            base: "100%",
-            md: `calc(100% - ${mainSidebarWidth})`
-          }}
-          position="fixed"
-          top={0}
-          p={4}
+          w="full"
+          px={6}
           height="70px"
-          bg={colorMode === "dark" ? "base.bgdark" : "white"}
+          bg="white"
+          borderBottom="1px solid"
+          borderColor="gray.100"
           zIndex={10}
-          transition="width 0.1s ease-in-out"
-          boxShadow="sm"
         >
-          <Flex align="center" gap={2}>
+          <Flex align="center" gap={4}>
+
+            <Image 
+              src={getLogoBySuite(activeSuite)} 
+              alt="Suite Logo" 
+              height="35px" 
+              fallbackSrc="/xrilic/Xrilic logo.svg"
+            />
             {isMobile && (
               <IconButton
                 icon={<FiMenu />}
@@ -524,3 +531,4 @@ const MainLayout = () => {
 };
 
 export default MainLayout;
+// Sidebar & Logo changes

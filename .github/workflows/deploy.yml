@@ -90,4 +90,13 @@ jobs:
 
             echo "Restarting services..."
             docker compose up -d --no-deps
-            echo "Deployment complete."
+
+
+            # ✅ NEW: AUTOMATED DISK CLEANUP
+            echo "🧹 Cleaning up old images and cache to free disk space..."
+            docker image prune -f
+            docker builder prune -f
+            
+            echo "Deployment and Cleanup complete."
+
+            
