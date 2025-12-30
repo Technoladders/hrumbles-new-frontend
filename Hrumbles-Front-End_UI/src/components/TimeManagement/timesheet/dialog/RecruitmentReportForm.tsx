@@ -1,4 +1,7 @@
 import React from "react";
+import { motion } from "framer-motion";
+import PhoneInput from "react-phone-number-input";
+import "react-phone-number-input/style.css";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,63 +13,220 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  RadioGroup,
-  RadioGroupItem,
-} from "@/components/ui/radio-group";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Plus, Trash, Calendar, Users, Phone } from "lucide-react";
 
-/* ================= MAIN COMPONENT ================= */
+// Animation Variants
+const sectionVariants = {
+  hidden: { opacity: 0, y: 25 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.5, staggerChildren: 0.1 },
+  },
+};
 
-export const RecruitmentReportForm = ({ data, onChange }: any) => {
+const itemVariants = {
+  hidden: { opacity: 0, y: 15 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },
+};
+
+const fieldHoverEffect = {
+  hover: {
+    scale: 1.02,
+    boxShadow: "0px 5px 15px -5px rgba(123, 97, 255, 0.1)",
+    transition: { type: "spring", stiffness: 400, damping: 15 },
+  },
+};
+
+export const RecruitmentReportForm = ({ data, onChange, errors = {} }: any) => {
   const update = (section: string, field: string, value: any) => {
-    onChange({
-      ...data,
-      [section]: { ...data[section], [field]: value },
-    });
+    onChange({ ...data, [section]: { ...data[section], [field]: value } });
   };
 
   /* ================= CANDIDATE STATUS HELPERS ================= */
 
-  const getStatusArray = (status: string) =>
-    Array.isArray(data.candidateStatus?.[status])
-      ? data.candidateStatus[status]
-      : [];
-
-  const addToStatus = (status: string, obj: any) => {
-    onChange({
-      ...data,
-      candidateStatus: {
-        ...data.candidateStatus,
-        [status]: [...getStatusArray(status), obj],
-      },
-    });
-  };
-
-  const updateCandidateField = (
+  const renderStatusCandidates = (
     status: string,
-    index: number,
-    field: string,
-    value: any
+    label: string,
+    icon: React.ReactNode,
+    isOnField = false
   ) => {
-    const arr = [...getStatusArray(status)];
-    arr[index] = { ...arr[index], [field]: value };
-    onChange({
-      ...data,
-      candidateStatus: { ...data.candidateStatus, [status]: arr },
-    });
-  };
+    const getStatusArray = (s: string) =>
+      Array.isArray(data.candidateStatus?.[s]) ? data.candidateStatus[s] : [];
 
-  const removeFromStatus = (status: string, index: number) => {
-    onChange({
-      ...data,
-      candidateStatus: {
-        ...data.candidateStatus,
-        [status]: getStatusArray(status).filter(
-          (_: any, i: number) => i !== index
-        ),
-      },
-    });
+    const addToStatus = (s: string) => {
+      const arr = getStatusArray(s);
+      onChange({
+        ...data,
+        candidateStatus: {
+          ...data.candidateStatus,
+          [s]: [...arr, { name: "", mobile: "", date: "", notes: "", ...(isOnField ? { status: "" } : {}) }],
+        },
+      });
+    };
+
+    const updateCandidateField = (s: string, index: number, field: string, value: any) => {
+      const arr = [...getStatusArray(s)];
+      arr[index] = { ...arr[index], [field]: value };
+      onChange({
+        ...data,
+        candidateStatus: { ...data.candidateStatus, [s]: arr },
+      });
+    };
+
+    const removeFromStatus = (s: string, index: number) => {
+      const arr = getStatusArray(s).filter((_: any, i: number) => i !== index);
+      onChange({
+        ...data,
+        candidateStatus: { ...data.candidateStatus, [s]: arr },
+      });
+    };
+
+    return (
+      <motion.div variants={itemVariants} className="border rounded-lg p-4 bg-slate-50 mb-4 shadow-sm">
+        <h5 className="flex items-center gap-2 text-sm font-bold mb-3">
+          {icon} {label}
+        </h5>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mb-3"
+          onClick={() => addToStatus(status)}
+        >
+          <Plus className="w-4 h-4 mr-1" /> Add Candidate
+        </Button>
+
+        {(getStatusArray(status).length === 0) && (
+          <p className="text-xs text-muted-foreground">No candidates added.</p>
+        )}
+
+        <div className="space-y-3">
+          {getStatusArray(status).map((c: any, i: number) => (
+            <motion.div
+              key={i}
+              variants={itemVariants}
+              className={`grid ${isOnField ? "grid-cols-5" : "grid-cols-4"} gap-3 border rounded-xl p-3 bg-white relative shadow-sm`}
+            >
+              {/* Name */}
+              <div className="space-y-0.5">
+                <Input
+                  placeholder="Name *"
+                  value={c.name || ""}
+                  className={
+                    errors[`candidateStatus.${status}.${i}.name`]
+                      ? "border-red-500 bg-red-50/30"
+                      : "focus:ring-2 focus:ring-purple-500"
+                  }
+                  onChange={(e) => updateCandidateField(status, i, "name", e.target.value)}
+                />
+                {errors[`candidateStatus.${status}.${i}.name`] && (
+                  <p className="text-[10px] text-red-500 font-bold">Required field</p>
+                )}
+              </div>
+
+              {/* Mobile */}
+              <div className="space-y-0.5">
+                <PhoneInput
+                  international
+                  defaultCountry="IN"
+                  placeholder="Mobile No. *"
+                  value={c.mobile || ""}
+                  className={`flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-input disabled:cursor-not-allowed disabled:opacity-50 ${
+                    errors[`candidateStatus.${status}.${i}.mobile`]
+                      ? "border-red-500 bg-red-50/30"
+                      : "focus:ring-2 focus:ring-purple-500"
+                  }`}
+                  onChange={(v) => updateCandidateField(status, i, "mobile", v)}
+                />
+                {errors[`candidateStatus.${status}.${i}.mobile`] && (
+                  <p className="text-[10px] text-red-500 font-bold">Required field</p>
+                )}
+              </div>
+
+              {/* Date */}
+              <div className="space-y-0.5">
+                <Input
+                  type="date"
+                  placeholder="Date *"
+                  value={c.date || ""}
+                  className={
+                    errors[`candidateStatus.${status}.${i}.date`]
+                      ? "border-red-500 bg-red-50/30"
+                      : "focus:ring-2 focus:ring-purple-500"
+                  }
+                  onChange={(e) => updateCandidateField(status, i, "date", e.target.value)}
+                />
+                {errors[`candidateStatus.${status}.${i}.date`] && (
+                  <p className="text-[10px] text-red-500 font-bold">Required field</p>
+                )}
+              </div>
+
+              {isOnField ? (
+                <>
+                  {/* Status Select */}
+                  <div className="space-y-0.5">
+                    <Select
+                      value={c.status || ""}
+                      onValueChange={(v) => updateCandidateField(status, i, "status", v)}
+                    >
+                      <SelectTrigger
+                        className={
+                          errors[`candidateStatus.${status}.${i}.status`]
+                            ? "border-red-500 bg-red-50/30"
+                            : "focus:ring-2 focus:ring-purple-500"
+                        }
+                      >
+                                          <SelectValue placeholder="Interview Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="attended">Interview Attended</SelectItem>
+                  <SelectItem value="not_attended">Not Attended</SelectItem>
+                  <SelectItem value="rescheduled">Rescheduled</SelectItem>
+                </SelectContent>
+                    </Select>
+                    {errors[`candidateStatus.${status}.${i}.status`] && (
+                      <p className="text-[10px] text-red-500 font-bold">Required field</p>
+                    )}
+                  </div>
+
+                  {/* Notes for onField */}
+                  <div className="space-y-0.5">
+                    <Input
+                      placeholder="Notes"
+                      value={c.notes || ""}
+                      className="focus:ring-2 focus:ring-purple-500"
+                      onChange={(e) => updateCandidateField(status, i, "notes", e.target.value)}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                {/* Notes for non-onField */}
+                <div className="space-y-0.5">
+                  <Input
+                    placeholder="Notes"
+                    value={c.notes || ""}
+                    className="focus:ring-2 focus:ring-purple-500"
+                    onChange={(e) => updateCandidateField(status, i, "notes", e.target.value)}
+                  />
+                </div>
+                </>
+              )}
+
+              <Button
+                size="icon"
+                variant="ghost"
+                className="absolute -top-2 -right-2 text-red-500 hover:bg-red-50"
+                onClick={() => removeFromStatus(status, i)}
+              >
+                <Trash className="w-4 h-4" />
+              </Button>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
+    );
   };
 
   /* ================= ACTIVITY SUMMARY HELPERS ================= */
@@ -83,30 +243,18 @@ export const RecruitmentReportForm = ({ data, onChange }: any) => {
         ...data.activitySummary,
         candidates: [
           ...getActivityCandidates(),
-          {
-            name: "",
-            mobile: "",
-            callStatus: "",
-            proofAttached: false,
-          },
+          { name: "", mobile: "", callStatus: "", proofAttached: false },
         ],
       },
     });
   };
 
-  const updateActivityCandidate = (
-    index: number,
-    field: string,
-    value: any
-  ) => {
+  const updateActivityCandidate = (index: number, field: string, value: any) => {
     const arr = [...getActivityCandidates()];
     arr[index] = { ...arr[index], [field]: value };
     onChange({
       ...data,
-      activitySummary: {
-        ...data.activitySummary,
-        candidates: arr,
-      },
+      activitySummary: { ...data.activitySummary, candidates: arr },
     });
   };
 
@@ -115,20 +263,86 @@ export const RecruitmentReportForm = ({ data, onChange }: any) => {
       ...data,
       activitySummary: {
         ...data.activitySummary,
-        candidates: getActivityCandidates().filter(
-          (_: any, i: number) => i !== index
-        ),
+        candidates: getActivityCandidates().filter((_: any, i: number) => i !== index),
       },
     });
   };
 
+  const renderActivityCandidates = () => (
+    <div className="space-y-3">
+      <div className="flex justify-between items-center mb-3">
+        <Label className="text-sm font-medium">Candidates Contacted Today</Label>
+        <Button variant="outline" size="sm" onClick={addActivityCandidate}>
+          <Plus className="w-4 h-4 mr-1" /> Add Candidate
+        </Button>
+      </div>
+      {getActivityCandidates().length === 0 && (
+        <p className="text-xs text-muted-foreground">No call activity added.</p>
+      )}
+      {getActivityCandidates().map((c: any, i: number) => (
+        <motion.div
+          key={i}
+          variants={itemVariants}
+          className="grid grid-cols-4 gap-3 border rounded-xl p-3 bg-white relative shadow-sm"
+        >
+          <Input
+            placeholder="Candidate Name"
+            value={c.name || ""}
+            className="focus:ring-2 focus:ring-purple-500"
+            onChange={(e) => updateActivityCandidate(i, "name", e.target.value)}
+          />
+          <div className="phone-input-container">
+            <PhoneInput
+              international
+              defaultCountry="IN"
+              placeholder="Mobile"
+              value={c.mobile || ""}
+              className="flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
+              onChange={(v) => updateActivityCandidate(i, "mobile", v)}
+            />
+          </div>
+          <Select
+            value={c.callStatus || ""}
+            onValueChange={(v) => updateActivityCandidate(i, "callStatus", v)}
+          >
+            <SelectTrigger className="focus:ring-2 focus:ring-purple-500">
+              <SelectValue placeholder="Call Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="connected">Connected</SelectItem>
+              <SelectItem value="not_connected">Not Connected</SelectItem>
+              <SelectItem value="callback">Call Back Scheduled</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center">
+            <Checkbox
+              checked={c.proofAttached || false}
+              onCheckedChange={(v) => updateActivityCandidate(i, "proofAttached", !!v)}
+            />
+            <Label className="text-xs">Proof Attached</Label>
+          </div>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="absolute -top-2 -right-2 text-red-500 hover:bg-red-50"
+            onClick={() => removeActivityCandidate(i)}
+          >
+            <Trash className="w-4 h-4" />
+          </Button>
+        </motion.div>
+      ))}
+    </div>
+  );
+
   /* ================= SCHEDULING HELPERS ================= */
+
+  const getSchedules = () => data.scheduling || [];
 
   const addSchedule = () => {
     onChange({
       ...data,
       scheduling: [
-        ...(data.scheduling || []),
+        ...getSchedules(),
         {
           name: "",
           mobile: "",
@@ -142,498 +356,323 @@ export const RecruitmentReportForm = ({ data, onChange }: any) => {
   };
 
   const updateScheduleField = (index: number, field: string, value: any) => {
-    const arr = [...(data.scheduling || [])];
+    const arr = [...getSchedules()];
     arr[index] = { ...arr[index], [field]: value };
-    onChange({
-      ...data,
-      scheduling: arr,
-    });
+    onChange({ ...data, scheduling: arr });
   };
 
   const removeSchedule = (index: number) => {
     onChange({
       ...data,
-      scheduling: (data.scheduling || []).filter(
-        (_: any, i: number) => i !== index
-      ),
+      scheduling: getSchedules().filter((_: any, i: number) => i !== index),
     });
   };
 
-  /* ================= RENDER STATUS CANDIDATES ================= */
-
-  const renderStatusCandidates = (
-    status: string,
-    label: string,
-    icon: React.ReactNode,
-    isOnField = false
-  ) => (
-    <StatusCard title={label} icon={icon}>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() =>
-          addToStatus(status, {
-            name: "",
-            email: "",
-            date: "",
-            notes: "",
-            ...(isOnField ? { attendance: "" } : {}),
-          })
-        }
-      >
-        <Plus className="w-4 h-4 mr-1" /> Add Candidate
+  const renderSchedules = () => (
+    <div className="space-y-3">
+      <Button variant="outline" size="sm" className="mb-3" onClick={addSchedule}>
+        <Plus className="w-4 h-4 mr-1" /> Add Candidate Scheduled for Tomorrow
       </Button>
-
-      {getStatusArray(status).length === 0 && (
-        <p className="text-xs text-muted-foreground">
-          No candidates added.
-        </p>
+      {getSchedules().length === 0 && (
+        <p className="text-xs text-muted-foreground">No scheduling entries added.</p>
       )}
-
-      {getStatusArray(status).map((c: any, i: number) => (
-        <div
+      {getSchedules().map((sch: any, i: number) => (
+        <motion.div
           key={i}
-          className={`grid ${
-            isOnField ? "grid-cols-5" : "grid-cols-4"
-          } gap-2 border rounded-lg p-2 relative`}
+          variants={itemVariants}
+          className="border rounded-xl p-3 bg-white shadow-sm relative"
         >
-          <Input
-            placeholder="Name"
-            value={c.name || ""}
-            onChange={(e) =>
-              updateCandidateField(status, i, "name", e.target.value)
-            }
-          />
-          <Input
-            placeholder="Email"
-            value={c.email || ""}
-            onChange={(e) =>
-              updateCandidateField(status, i, "email", e.target.value)
-            }
-          />
-          <Input
-            type={status === "linedUp" ? "date" : "date"}
-            placeholder={status === "linedUp" ? "Date" : "Date"}
-            value={c.date || ""}
-            onChange={(e) =>
-              updateCandidateField(status, i, "date", e.target.value)
-            }
-          />
-
-          {isOnField ? (
-            <>
-              <Select
-                value={c.attendance || ""}
-                onValueChange={(v) =>
-                  updateCandidateField(status, i, "attendance", v)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Attendance" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="present">Present</SelectItem>
-                  <SelectItem value="absent">Absent</SelectItem>
-                  <SelectItem value="late">Late</SelectItem>
-                  <SelectItem value="left-early">Left Early</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                placeholder="Notes"
-                value={c.notes || ""}
-                onChange={(e) =>
-                  updateCandidateField(status, i, "notes", e.target.value)
-                }
-              />
-            </>
-          ) : (
+          <div className="grid grid-cols-3 gap-3 mb-3">
             <Input
-              placeholder="Notes"
-              value={c.notes || ""}
-              onChange={(e) =>
-                updateCandidateField(status, i, "notes", e.target.value)
-              }
+              placeholder="Name"
+              value={sch.name || ""}
+              className="focus:ring-2 focus:ring-purple-500"
+              onChange={(e) => updateScheduleField(i, "name", e.target.value)}
             />
-          )}
-
+            <div className="phone-input-container">
+              <PhoneInput
+                international
+                defaultCountry="IN"
+                placeholder="Mobile"
+                value={sch.mobile || ""}
+                className="flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
+                onChange={(v) => updateScheduleField(i, "mobile", v)}
+              />
+            </div>
+            <Input
+              placeholder="Position"
+              value={sch.position || ""}
+              className="focus:ring-2 focus:ring-purple-500"
+              onChange={(e) => updateScheduleField(i, "position", e.target.value)}
+            />
+          </div>
+          <div className="col-span-3 space-y-3 text-xs">
+            <div className="flex items-center gap-2">
+              <Label className="font-medium w-64">Confirmation Proof (Call / WhatsApp)</Label>
+              <RadioGroup
+                value={sch.confirmationProof || ""}
+                onValueChange={(v) => updateScheduleField(i, "confirmationProof", v)}
+                className="flex gap-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="Call" id={`call-${i}`} />
+                  <Label htmlFor={`call-${i}`}>Call</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="WhatsApp" id={`whatsapp-${i}`} />
+                  <Label htmlFor={`whatsapp-${i}`}>WhatsApp</Label>
+                </div>
+              </RadioGroup>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="font-medium w-64">Reporting Time Shared (Yes/No)</Label>
+              <RadioGroup
+                value={sch.timeShared || ""}
+                onValueChange={(v) => updateScheduleField(i, "timeShared", v)}
+                className="flex gap-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="Yes" id={`time-yes-${i}`} />
+                  <Label htmlFor={`time-yes-${i}`}>Yes</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="No" id={`time-no-${i}`} />
+                  <Label htmlFor={`time-no-${i}`}>No</Label>
+                </div>
+              </RadioGroup>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="font-medium w-64">JD & Location Shared (Yes/No)</Label>
+              <RadioGroup
+                value={sch.jdShared || ""}
+                onValueChange={(v) => updateScheduleField(i, "jdShared", v)}
+                className="flex gap-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="Yes" id={`jd-yes-${i}`} />
+                  <Label htmlFor={`jd-yes-${i}`}>Yes</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="No" id={`jd-no-${i}`} />
+                  <Label htmlFor={`jd-no-${i}`}>No</Label>
+                </div>
+              </RadioGroup>
+            </div>
+          </div>
           <Button
             size="icon"
             variant="ghost"
-            className="absolute -top-2 -right-2 text-red-500"
-            onClick={() => removeFromStatus(status, i)}
+            className="absolute -top-2 -right-2 text-red-500 hover:bg-red-50"
+            onClick={() => removeSchedule(i)}
           >
             <Trash className="w-4 h-4" />
           </Button>
-        </div>
+        </motion.div>
       ))}
-    </StatusCard>
+    </div>
   );
 
-  /* ================= JSX ================= */
-
   return (
-    <div className="space-y-8 border-t pt-6">
-      <h3 className="text-xl font-bold bg-slate-100 p-3 rounded">
-         Daily Recruitment Work Report
-      </h3>
+    <motion.div
+      variants={sectionVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-8 border-t pt-6 bg-slate-50/50 p-6 rounded-2xl"
+    >
+      <motion.h3
+        variants={itemVariants}
+        className="text-2xl font-black text-slate-800 tracking-tight"
+      >
+        📍 Daily Recruitment Work Report
+      </motion.h3>
 
-      {/* 1️⃣ Work Status */}
-      <Section title="1️⃣ Work Status">
-        <InputBlock
-          label="Profiles worked on as per the allocated job role"
-          value={data.workStatus?.profilesWorkedOn}
-          onChange={(v) => update("workStatus", "profilesWorkedOn", v)}
-        />
-        <InputBlock
-          label="Number of Profiles Uploaded Today"
-          type="number"
-          value={data.workStatus?.profilesUploaded}
-          onChange={(v) => update("workStatus", "profilesUploaded", v)}
-        />
-      </Section>
+      {/* 1️⃣ & 2️⃣ Work Status & ATS Report */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <motion.div variants={itemVariants} className="p-5 bg-white rounded-xl shadow-sm border space-y-4">
+          <Label className="font-bold text-purple-700">1️⃣ Work Status</Label>
+          <InputBlock
+            label="Profiles worked on as per the allocated job role *"
+            value={data.workStatus?.profilesWorkedOn || ""}
+            error={errors["workStatus.profilesWorkedOn"]}
+            onChange={(v: any) => update("workStatus", "profilesWorkedOn", v)}
+          />
+          <InputBlock
+            label="Number of Profiles Uploaded Today *"
+            type="number"
+            error={errors["workStatus.profilesUploaded"]}
+            value={data.workStatus?.profilesUploaded || 0}
+            onChange={(v: any) => update("workStatus", "profilesUploaded", v)}
+          />
+        </motion.div>
 
-      {/* 2️⃣ ATS Report */}
-      <Section title="2️⃣ ATS Report" bg="blue">
-        <InputBlock
-          label="Total resumes uploaded in ATS"
-          type="number"
-          value={data.atsReport?.resumesATS}
-          onChange={(v) => update("atsReport", "resumesATS", v)}
-        />
-         <div className="space-y-1">
-        <InputBlock
-          label="Total Resumes in Talent Pool"
-          type="number"
-          value={data.atsReport?.resumesTalentPool}
-          onChange={(v) =>
-            update("atsReport", "resumesTalentPool", v)
-          }
-        />
+        <motion.div
+          variants={itemVariants}
+          className="p-5 bg-blue-50/50 rounded-xl shadow-sm border border-blue-100 space-y-4"
+        >
+          <Label className="font-bold text-blue-700">2️⃣ ATS Report</Label>
+          <InputBlock
+            label="Total resumes uploaded in ATS *"
+            type="number"
+            error={errors["atsReport.resumesATS"]}
+            value={data.atsReport?.resumesATS || 0}
+            onChange={(v: any) => update("atsReport", "resumesATS", v)}
+          />
+          <div className="space-y-1">
+            <InputBlock
+              label="Total Resumes in Talent Pool *"
+              type="number"
+              error={errors["atsReport.resumesTalentPool"]}
+              value={data.atsReport?.resumesTalentPool || 0}
+              onChange={(v: any) => update("atsReport", "resumesTalentPool", v)}
+            />
             <p className="text-[10px] text-muted-foreground italic leading-snug">
-      (This count <span className="font-medium">MUST</span> match the ATS dashboard report)
-    </p>
-    </div>
-      </Section>
+              (This count <span className="font-medium">MUST</span> match the ATS dashboard report)
+            </p>
+          </div>
+        </motion.div>
+      </div>
 
       {/* 3️⃣ Candidate Status */}
-      <Section title="3️⃣ Candidate Status" layout="stack">
-        {renderStatusCandidates(
-          "paid",
-          "Paid Sheet",
-          <Users className="w-4 h-4" />
-        )}
-        {renderStatusCandidates(
-          "unpaid",
-          "Unpaid Sheet",
-          <Users className="w-4 h-4" />
-        )}
-        {renderStatusCandidates(
-          "linedUp",
-          "Lined Up",
-          <Calendar className="w-4 h-4" />
-        )}
-        {renderStatusCandidates(
-          "onField",
-          "On Field",
-          <Users className="w-4 h-4" />,
-          true
-        )}
-      </Section>
+      <motion.div variants={itemVariants} className="space-y-4">
+        <Label className="font-bold px-2 text-purple-700">
+          3️⃣ Candidate Status (All Fields Mandatory)
+        </Label>
+        {renderStatusCandidates("paid", "Paid Sheet", <Users className="w-4 h-4 text-purple-500" />)}
+        {renderStatusCandidates("unpaid", "Unpaid Sheet", <Users className="w-4 h-4 text-blue-500" />)}
+        {renderStatusCandidates("linedUp", "Lined Up", <Calendar className="w-4 h-4 text-green-500" />)}
+        {renderStatusCandidates("onField", "On Field", <Users className="w-4 h-4 text-orange-500" />, true)}
+      </motion.div>
 
       {/* 4️⃣ Candidate Activity Summary */}
-      <Section title="4️⃣ Candidate Activity Summary" layout="stack">
+      <motion.div variants={itemVariants} className="p-5 bg-indigo-50/50 rounded-xl shadow-sm border border-indigo-100 space-y-4">
+        <Label className="font-bold text-indigo-700">4️⃣ Candidate Activity Summary</Label>
         <InputBlock
           label="Total Calls Made"
           type="number"
-          value={data.activitySummary?.totalCalls}
-          onChange={(v) =>
-            update("activitySummary", "totalCalls", v)
-          }
+          value={data.activitySummary?.totalCalls || 0}
+          onChange={(v: any) => update("activitySummary", "totalCalls", v)}
         />
-        <div className="flex justify-between items-center">
-          <Label className="text-sm font-medium">
-            Candidates Contacted Today
-          </Label>
-          <Button variant="outline" size="sm" onClick={addActivityCandidate}>
-            <Plus className="w-4 h-4 mr-1" /> Add Candidate
-          </Button>
-        </div>
-        {getActivityCandidates().length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            No call activity added.
-          </p>
-        )}
-        {getActivityCandidates().map((c: any, i: number) => (
-          <div
-            key={i}
-            className="grid grid-cols-4 gap-2 border rounded-lg p-3 relative"
-          >
-            <Input
-              placeholder="Candidate Name"
-              value={c.name || ""}
-              onChange={(e) =>
-                updateActivityCandidate(i, "name", e.target.value)
-              }
-            />
-            <Input
-              placeholder="Mobile"
-              value={c.mobile || ""}
-              onChange={(e) =>
-                updateActivityCandidate(i, "mobile", e.target.value)
-              }
-            />
-            <Select
-              value={c.callStatus || ""}
-              onValueChange={(v) =>
-                updateActivityCandidate(i, "callStatus", v)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Call Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="connected">Connected</SelectItem>
-                <SelectItem value="not_connected">Not Connected</SelectItem>
-                <SelectItem value="callback">Call Back Scheduled</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="flex items-center">
-              <Checkbox
-                checked={c.proofAttached || false}
-                onCheckedChange={(v) =>
-                  updateActivityCandidate(i, "proofAttached", !!v)
-                }
-              />
-              <Label className="text-xs">Proof Attached</Label>
-            </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="absolute -top-2 -right-2 text-red-500"
-              onClick={() => removeActivityCandidate(i)}
-            >
-              <Trash className="w-4 h-4" />
-            </Button>
-          </div>
-        ))}
-      </Section>
+        {renderActivityCandidates()}
+      </motion.div>
 
       {/* 5️⃣ Scheduling & Follow-Ups */}
-      <Section title="5️⃣ Scheduling & Follow-Ups" layout="stack">
-        <Button variant="outline" size="sm" onClick={addSchedule}>
-          <Plus className="w-4 h-4 mr-1" /> Add Candidate Scheduled for Tomorrow
-        </Button>
-
-        {(data.scheduling || []).length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            No scheduling entries added.
-          </p>
-        )}
-
-        {(data.scheduling || []).map((c: any, i: number) => (
-          <div
-            key={i}
-            className="grid grid-cols-3 gap-2 border rounded-lg p-3 relative"
-          >
-            <Input
-              placeholder="Name"
-              value={c.name || ""}
-              onChange={(e) =>
-                updateScheduleField(i, "name", e.target.value)
-              }
-            />
-            <Input
-              placeholder="Mobile"
-              value={c.mobile || ""}
-              onChange={(e) =>
-                updateScheduleField(i, "mobile", e.target.value)
-              }
-            />
-            <Input
-              placeholder="Position"
-              value={c.position || ""}
-              onChange={(e) =>
-                updateScheduleField(i, "position", e.target.value)
-              }
-            />
-
-            <div className="col-span-3 space-y-2">
-              <div className="flex items-center gap-2 text-xs">
-                <Label className="text-xs font-medium w-48">Confirmation Proof (Call / WhatsApp)</Label>
-                <RadioGroup value={c.confirmationProof || ""} onValueChange={(v) => updateScheduleField(i, "confirmationProof", v)} className="flex gap-4">
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Call" id={`call-${i}`} />
-                    <Label htmlFor={`call-${i}`}>Call</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="WhatsApp" id={`whatsapp-${i}`} />
-                    <Label htmlFor={`whatsapp-${i}`}>WhatsApp</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              <div className="flex items-center gap-2 text-xs">
-                <Label className="text-xs font-medium w-48">Reporting Time Shared (Yes/No)</Label>
-                <RadioGroup value={c.timeShared || ""} onValueChange={(v) => updateScheduleField(i, "timeShared", v)} className="flex gap-4">
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Yes" id={`time-yes-${i}`} />
-                    <Label htmlFor={`time-yes-${i}`}>Yes</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="No" id={`time-no-${i}`} />
-                    <Label htmlFor={`time-no-${i}`}>No</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              <div className="flex items-center gap-2 text-xs">
-                <Label className="text-xs font-medium w-48">JD & Location Shared (Yes/No)</Label>
-                <RadioGroup value={c.jdShared || ""} onValueChange={(v) => updateScheduleField(i, "jdShared", v)} className="flex gap-4">
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Yes" id={`jd-yes-${i}`} />
-                    <Label htmlFor={`jd-yes-${i}`}>Yes</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="No" id={`jd-no-${i}`} />
-                    <Label htmlFor={`jd-no-${i}`}>No</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-            </div>
-
-            <Button
-              size="icon"
-              variant="ghost"
-              className="absolute -top-2 -right-2 text-red-500"
-              onClick={() => removeSchedule(i)}
-            >
-              <Trash className="w-4 h-4" />
-            </Button>
-          </div>
-        ))}
-      </Section>
+      <motion.div variants={itemVariants} className="p-5 bg-yellow-50/50 rounded-xl shadow-sm border border-yellow-100">
+        <Label className="font-bold text-yellow-700">5️⃣ Scheduling & Follow-Ups</Label>
+        {renderSchedules()}
+      </motion.div>
 
       {/* 6️⃣ Expected Walk-Ins */}
-      <Section title="6️⃣ Expected Walk-Ins">
+      <motion.div variants={itemVariants} className="p-5 bg-white rounded-xl shadow-sm border space-y-4">
+        <Label className="font-bold text-green-700">6️⃣ Expected Walk-Ins</Label>
         <InputBlock
-          label="Expected walk-ins tomorrow"
+          label="Expected walk-ins tomorrow *"
           type="number"
-          value={data.walkins?.expected}
-          onChange={(v) => update("walkins", "expected", v)}
+          error={errors["walkIns.expected"]}
+          value={data.walkIns?.expected || 0}
+          onChange={(v: any) => update("walkIns", "expected", v)}
         />
+                <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="proof-attached"
+              checked={data.walkIns?.proofAttached || false}
+              onCheckedChange={(v) => update("walkIns", "proofAttached", !!v)}
+            />
+            <Label htmlFor="proof-attached">
+              Proof of confirmation attached
+            </Label>
+          </div>
+        </div>
         <InputBlock
-          label="Proof of confirmation attached"
-          value={data.walkins?.proofAttached}
-          onChange={(v) => update("walkins", "proofAttached", v)}
+          label="Mention if reminder follow-up is needed *"
+          error={errors["walkIns.reminderNeeded"]}
+          value={data.walkIns?.reminderNeeded || ""}
+          onChange={(v: any) => update("walkIns", "reminderNeeded", v)}
+          type="text"
+          as="textarea"
+          rows={2}
         />
-        <InputBlock
-          label="Mention if reminder follow-up is needed"
-          value={data.walkins?.reminderNeeded}
-          onChange={(v) => update("walkins", "reminderNeeded", v)}
-        />
-      </Section>
+      </motion.div>
 
       {/* 7️⃣ Quality Check */}
-      <Section title="7️⃣ Quality Check">
+      <motion.div variants={itemVariants} className="p-5 bg-rose-50/50 rounded-xl shadow-sm border border-rose-100 space-y-4">
+        <Label className="font-bold text-rose-700">7️⃣ Quality Check</Label>
         <InputBlock
-          label="Number of profiles reviewed today"
+          label="Number of profiles reviewed today *"
           type="number"
-          value={data.qualityCheck?.reviewedCount}
-          onChange={(v) => update("qualityCheck", "reviewedCount", v)}
+          error={errors["qualityCheck.reviewedCount"]}
+          value={data.qualityCheck?.reviewedCount || 0}
+          onChange={(v: any) => update("qualityCheck", "reviewedCount", v)}
         />
         <InputBlock
-          label="Candidate Names Reviewed"
-          value={data.qualityCheck?.candidateNames}
-          onChange={(v) => update("qualityCheck", "candidateNames", v)}
+          label="Candidate Names Reviewed *"
+          error={errors["qualityCheck.candidateNames"]}
+          value={data.qualityCheck?.candidateNames || ""}
+          onChange={(v: any) => update("qualityCheck", "candidateNames", v)}
         />
-      </Section>
+      </motion.div>
 
       {/* 8️⃣ Deadlines & Targets */}
-      <Section title="8️⃣ Deadlines & Targets" bg="green">
-        <InputBlock
-          label="Pending deadlines for current job roles"
-          value={data.targets?.pendingDeadlines}
-          onChange={(v) => update("targets", "pendingDeadlines", v)}
-        />
-        {["profiles to source", "Calls to make", "Lineups to achieve", "Expected closures"].map((k) => (
+      <motion.div
+        variants={itemVariants}
+        className="p-6 bg-green-50/50 border border-green-100 rounded-2xl"
+      >
+        <Label className="font-bold text-green-700 block mb-4">
+          8️⃣ Deadlines & Targets
+        </Label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <InputBlock
-            key={k}
-            label={k.charAt(0).toUpperCase() + k.slice(1)}
-            type="number"
-            value={data.targets?.[k]}
-            onChange={(v) => update("targets", k, v)}
+            label="Pending deadlines for current job roles *"
+            error={errors["targets.pendingDeadlines"]}
+            value={data.targets?.pendingDeadlines || ""}
+            onChange={(v: any) => update("targets", "pendingDeadlines", v)}
           />
-        ))}
-      </Section>
-    </div>
+          {["profiles to source", "Calls to make", "Lineups to achieve", "Expected closures"].map((k) => (
+            <InputBlock
+              key={k}
+              label={k.charAt(0).toUpperCase() + k.slice(1) + " *"}
+              type="number"
+              error={errors[`targets.${k}`]}
+              value={data.targets?.[k] || 0}
+              onChange={(v: any) => update("targets", k, v)}
+            />
+          ))}
+        </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
-/* ================= UI HELPERS ================= */
-
-const Section = ({
-  title,
-  children,
-  bg,
-  layout = "grid",
-}: any) => (
-  <div
-    className={`space-y-4 p-4 rounded-xl ${
-      bg === "blue"
-        ? "bg-blue-50"
-        : bg === "green"
-        ? "bg-green-50"
-        : "bg-white"
-    }`}
+const InputBlock = ({ label, value, onChange, type = "text", error, as = "input", rows }: any) => (
+  <motion.div
+    whileHover="hover"
+    variants={fieldHoverEffect}
+    className="space-y-1"
   >
-    <h4 className="font-semibold text-sm">{title}</h4>
-    <div
-      className={
-        layout === "grid"
-          ? "grid grid-cols-2 gap-4"
-          : "space-y-4"
-      }
-    >
-      {children}
-    </div>
-  </div>
-);
-
-const StatusCard = ({ title, icon, children }: any) => (
-  <div className="border rounded-lg p-3 bg-slate-50 mb-4">
-    <h5 className="flex items-center gap-2 text-sm font-medium">
-      {icon} {title}
-    </h5>
-    <div className="space-y-2 mt-2">{children}</div>
-  </div>
-);
-
-const InputBlock = ({
-  label,
-  value,
-  onChange,
-  type = "text",
-}: any) => (
-  <div className="space-y-1">
-    <Label className="text-xs">{label}</Label>
-    <Input
-      type={type}
-      value={value || ""}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  </div>
-);
-
-const CheckboxBlock = ({
-  label,
-  checked,
-  onChange,
-}: any) => (
-  <label className="flex items-center gap-2 text-sm">
-    <Checkbox
-      checked={checked}
-      onCheckedChange={(v) => onChange(!!v)}
-    />
-    {label}
-  </label>
+    <Label className="text-xs font-semibold text-slate-500">{label}</Label>
+    {as === "textarea" ? (
+      <textarea
+        rows={rows}
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+        className={`flex min-h-[80px] w-full rounded-md border ${
+          error ? "border-red-500 bg-red-50/30" : "border-input bg-background focus:ring-2 focus:ring-purple-500"
+        } px-3 py-2 text-sm`}
+      />
+    ) : (
+      <Input
+        type={type}
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+        className={
+          error
+            ? "border-red-500 bg-red-50/30"
+            : "focus:ring-2 focus:ring-purple-500"
+        }
+      />
+    )}
+    {error && (
+      <p className="text-[10px] text-red-500 font-bold">Required field</p>
+    )}
+  </motion.div>
 );

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { TimesheetInfo } from "./dialog/TimesheetInfo";
 import { TimesheetActions } from "./dialog/TimesheetActions";
 import { TimeLogDetails } from "@/components/TimeManagement/timesheet/dialog/TimeLogDetails";
+import { ViewRecruitmentReport } from '@/components/TimeManagement/timesheet/dialog/ViewRecruitmentReport';
 
 
 export interface DialogProps {
@@ -14,6 +15,9 @@ export interface DialogProps {
   handleRequestClarification: (timesheetId: string, reason: string) => Promise<void>;
   type: 'normal' | 'clarification';
 }
+
+// Define the Organization ID constant
+const TASKUP_ORG_ID = "0e4318d8-b1a5-4606-b311-c56d7eec47ce"
 
 const TimesheetDialog = ({
   dialogTimesheet,
@@ -42,6 +46,8 @@ const TimesheetDialog = ({
 
   const isApproved = dialogTimesheet.is_approved || dialogTimesheet.approval_status === 'approved';
 
+  console.log("DIlogTimesheet", dialogTimesheet)
+
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <DialogContent className="w-[95vw] max-w-[90vw] sm:max-w-4xl md:max-w-5xl lg:max-w-6xl max-h-[80vh] overflow-y-auto mx-auto">
@@ -66,12 +72,22 @@ const TimesheetDialog = ({
         
         <TimesheetInfo dialogTimesheet={dialogTimesheet} type={type} />
         
-        <div className="mt-4">
+       <div className="mt-4 space-y-6">
+          {/* Standard Time Logs */}
           <TimeLogDetails 
             timeLog={dialogTimesheet}
             getProjectName={getProjectName}
           />
+
+          {/* NEW: Conditional Recruitment Report for Approvers */}
+                    {dialogTimesheet.organization_id === TASKUP_ORG_ID && dialogTimesheet.recruiter_report_data && (
+            <div className="pt-6 border-t">
+               <ViewRecruitmentReport data={dialogTimesheet.recruiter_report_data} />
+            </div>
+          )}
         </div>
+
+        
 
         <DialogFooter className="flex justify-between sm:justify-between mt-4">
           <TimesheetActions

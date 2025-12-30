@@ -10,6 +10,7 @@ import { TimesheetDialogContent } from './dialog/TimesheetDialogContent';
 import { TimesheetEditForm } from "./dialog/TimesheetEditForm";
 import { TimesheetProjectDetails } from "./TimesheetProjectDetails";
 import { RecruitmentReportForm } from './dialog/RecruitmentReportForm';
+import { ViewRecruitmentReport } from './dialog/ViewRecruitmentReport';
 import { useTimesheetValidation } from './hooks/useTimesheetValidation';
 import { useSelector } from 'react-redux';
 import { fetchHrProjectEmployees, submitTimesheet } from '@/api/timeTracker';
@@ -78,6 +79,7 @@ export const TaskupViewTimesheetDialog: React.FC<TaskupViewTimesheetDialogProps>
   const employeeId = user?.id || "";
   const [date, setDate] = useState<Date>(new Date(timesheet?.date || Date.now()));
   
+  
   // Core State
   const [isEditing, setIsEditing] = useState(!timesheet?.is_submitted);
   const [isLoading, setIsLoading] = useState(false);
@@ -105,6 +107,9 @@ const [temporaryDurationMinutes, setTemporaryDurationMinutes] = useState<number 
   const [allEmployees, setAllEmployees] = useState<EmployeeOption[]>([]);
   const [additionalRecipients, setAdditionalRecipients] = useState<string[]>([]);
 
+  // NEW: Add formErrors state for recruiter validation
+  const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
+
   const { validateForm } = useTimesheetValidation();
 
   const [recruitmentReport, setRecruitmentReport] = useState<any>({
@@ -117,6 +122,86 @@ const [temporaryDurationMinutes, setTemporaryDurationMinutes] = useState<number 
   qualityCheck: { reviewedCount: 0, candidateNames: '' },
   targets: { source: 0, calls: 0, lineups: 0, closures: 0 }
 });
+
+// NEW: Clear formErrors when recruitmentReport changes
+useEffect(() => {
+  setFormErrors({});
+}, [recruitmentReport]);
+
+const validateRecruiterReport = (report: any) => {
+  if (!isRecruiter) return true;
+
+  // 1. Work Status
+  if (!report.workStatus?.profilesWorkedOn || !report.workStatus?.profilesUploaded) return false;
+  // 2. ATS Report
+  if (!report.atsReport?.resumesATS || !report.atsReport?.resumesTalentPool) return false;
+  // 6. Walkins
+  if (!report.walkins?.expected || !report.walkins?.proofAttached || !report.walkins?.reminderNeeded) return false;
+  // 7. Quality
+  if (!report.qualityCheck?.reviewedCount || !report.qualityCheck?.candidateNames) return false;
+  // 8. Targets
+  const targets = report.targets || {};
+  if (!targets.pendingDeadlines || !targets['profiles to source'] || !targets['Calls to make'] || !targets['Lineups to achieve'] || !targets['Expected closures']) return false;
+
+  return true;
+};
+
+// NEW: Add validateAndSubmit function
+const validateAndSubmit = async () => {
+  const errors: Record<string, boolean> = {};
+ 
+  // Basic validation checks (integrate with existing validateForm for non-recruiter fields)
+  const baseValidation = validateForm({
+    title,
+    workReport: formData.workReport,
+    totalWorkingHours: totalWorkingHours,
+    employeeHasProjects,
+    projectEntries,
+    detailedEntries: projectEntries
+  });
+  if (!baseValidation) {
+    // For non-recruiter errors, you can set a generic error or handle via existing toast
+    toast.error("Please fill all required fields.");
+    return;
+  }
+
+  // Recruiter-specific validation checks
+  if (isRecruiter) {
+    if (!recruitmentReport.workStatus?.profilesWorkedOn) errors['workStatus.profilesWorkedOn'] = true;
+    if (!recruitmentReport.workStatus?.profilesUploaded) errors['workStatus.profilesUploaded'] = true;
+    if (!recruitmentReport.atsReport?.resumesATS) errors['atsReport.resumesATS'] = true;
+    if (!recruitmentReport.atsReport?.resumesTalentPool) errors['atsReport.resumesTalentPool'] = true;
+   
+    // Validate targets (keys with spaces)
+    ["profiles to source", "Calls to make", "Lineups to achieve", "Expected closures"].forEach(k => {
+        if (!recruitmentReport.targets?.[k]) errors[`targets.${k}`] = true;
+    });
+    // Validate Status Arrays
+    ['paid', 'unpaid', 'linedUp', 'onField'].forEach(status => {
+        (recruitmentReport.candidateStatus?.[status] || []).forEach((c: any, i: number) => {
+            if (!c.name) errors[`candidateStatus.${status}.${i}.name`] = true;
+            if (!c.mobile) errors[`candidateStatus.${status}.${i}.mobile`] = true;
+            if (!c.date) errors[`candidateStatus.${status}.${i}.date`] = true;
+            if (status === 'onField' && !c.status) errors[`candidateStatus.${status}.${i}.status`] = true;
+        });
+    });
+
+    // Walkins validation (added for completeness based on existing validateRecruiterReport)
+    if (!recruitmentReport.walkIns?.expected) errors['walkIns.expected'] = true;
+    if (!recruitmentReport.walkIns?.reminderNeeded) errors['walkIns.reminderNeeded'] = true;
+    // Quality Check validation
+    if (!recruitmentReport.qualityCheck?.reviewedCount) errors['qualityCheck.reviewedCount'] = true;
+    if (!recruitmentReport.qualityCheck?.candidateNames) errors['qualityCheck.candidateNames'] = true;
+  }
+  
+  setFormErrors(errors);
+  if (Object.keys(errors).length > 0) {
+    toast.error("Please fill all mandatory recruitment fields highlighted in red.");
+    return;
+  }
+  // Proceed to original handleSubmit logic
+  await handleSubmit();
+};
 
   // Update useEffect to load existing report if viewing
 useEffect(() => {
@@ -221,13 +306,14 @@ useEffect(() => {
   setFormData((prev) => ({ ...prev, totalHours }));
   console.log('Calculated login hours:', { totalHours, clockIn: timesheet?.clock_in_time, clockOut: temporaryClockOutTime || timesheet?.clock_out_time });
 
+   // Updated: Remove recruiter validation from here; only base form validation
   setIsFormValid(validateForm({
     title,
     workReport: formData.workReport,
     totalWorkingHours: totalHours,
     employeeHasProjects,
     projectEntries,
-    detailedEntries: projectEntries  // Align with first component's usage
+    detailedEntries: projectEntries
   }));
 }, [timesheet, temporaryClockOutTime, temporaryDurationMinutes, employeeHasProjects, formData.workReport, title, projectEntries, detailedEntries]);
 
@@ -399,6 +485,7 @@ const sendEODReport = async (finalWorkReport: string, clockOutTime: string, dura
         clock_in_time: timesheet.clock_in_time,
         clock_out_time: clockOutTime,
       },
+      breakLogs: timesheet.break_logs || [],
       allRecipients: uniqueRecipients,
       csvContent: isRecruiter && submissions.length > 0 ? generateCSV(submissions) : null,
     };
@@ -443,6 +530,7 @@ const handleClose = () => {
   setEmailStatus(null);
   setTemporaryClockOutTime(null);
   setTemporaryDurationMinutes(null);
+  setFormErrors({}); // NEW: Reset errors
   onOpenChange(false);
 };
 
@@ -553,7 +641,8 @@ const handleSubmit = async () => {
   }
 };
 
-  const canSubmit = !timesheet?.is_submitted && !isLoading && isFormValid;
+  // UPDATED: Change canSubmit to always true for button visibility when editing and not submitted; disable only on loading
+  const canSubmit = !timesheet?.is_submitted && isEditing;
   const canEdit = !timesheet?.is_submitted && !timesheet?.is_approved;
 
   return (
@@ -604,6 +693,7 @@ const handleSubmit = async () => {
   <RecruitmentReportForm 
     data={recruitmentReport} 
     onChange={setRecruitmentReport} 
+    errors={formErrors} 
   />
 )}
                     </>
@@ -623,6 +713,9 @@ const handleSubmit = async () => {
                 <>
                   <TaskupTimeLogDetails timeLog={timesheet} employeeHasProjects={employeeHasProjects} />
                   <TimesheetProjectDetails timesheet={timesheet} employeeHasProjects={employeeHasProjects} />
+                  {isRecruiter && timesheet?.recruiter_report_data && (
+      <ViewRecruitmentReport data={timesheet.recruiter_report_data} />
+    )}
                 </>
               )}
               
@@ -637,8 +730,8 @@ const handleSubmit = async () => {
             <Button variant="outline" onClick={() => setIsEditing(true)}>Edit</Button>
           )}
           
-          {canSubmit && isEditing && (
-            <Button onClick={handleSubmit} disabled={isLoading || !isFormValid}>
+          {canSubmit && (
+            <Button onClick={validateAndSubmit} disabled={isLoading}>
               {isLoading ? "Submitting..." : "Submit and Send EOD"}
             </Button>
           )}
