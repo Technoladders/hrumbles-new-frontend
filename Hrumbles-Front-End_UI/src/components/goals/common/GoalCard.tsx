@@ -31,32 +31,32 @@ const CustomProgressBar = ({ current, target, progress, height = "h-7" }: { curr
   const text = `${current} / ${target}`;
   return (
     <div className={cn("relative w-full bg-gray-100 rounded-full overflow-hidden border border-gray-200/50 shadow-inner", height)}>
-      {/* Background Layer: Dark gray text visible when no bar is present */}
-      <div className="absolute inset-0 flex items-center justify-center px-4 pointer-events-none">
-        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-tight">{text}</span>
-      </div>
-      
       {/* Progress Layer: Gradient bar from lighter violet to deep indigo */}
       <div 
         className={cn(
-          "absolute left-0 top-0 h-full transition-all duration-700 ease-out flex items-center justify-center overflow-hidden rounded-full",
+          "absolute left-0 top-0 h-full transition-all duration-700 ease-out rounded-full",
           // GRADIENT APPLIED HERE: from-violet-400 (light) to-indigo-700 (deep/high)
           "bg-gradient-to-r from-violet-400 via-violet-600 to-indigo-700 shadow-[0_0_15px_rgba(124,58,237,0.3)]"
         )}
         style={{ width: `${progress}%` }}
-      >
-        {/* Foreground Text Revelation Layer */}
-        <div className="absolute w-[1000%] left-0 h-full flex items-center justify-center pointer-events-none">
-             <div className="w-[10%] flex items-center justify-center">
-                <span className="text-[11px] font-bold text-white uppercase tracking-tight drop-shadow-sm">{text}</span>
-             </div>
-        </div>
+      />
+      
+      {/* Text Layer: Changes color based on progress */}
+      <div className="absolute inset-0 flex items-center justify-center px-4 pointer-events-none">
+        <span 
+          className={cn(
+            "text-[11px] font-bold uppercase tracking-tight transition-colors duration-300",
+            progress >= 50 ? "text-white drop-shadow-sm" : "text-gray-400"
+          )}
+        >
+          {text}
+        </span>
       </div>
       
       {/* Percentage label logic */}
       {height === "h-7" && (
         <div className="absolute right-3 inset-y-0 flex items-center pointer-events-none">
-           <span className={cn("text-[10px] font-black", progress > 90 ? "text-white" : "text-gray-400")}>
+           <span className={cn("text-[10px] font-black transition-colors duration-300", progress > 50 ? "text-white drop-shadow-sm" : "text-gray-400")}>
              {progress}%
            </span>
         </div>

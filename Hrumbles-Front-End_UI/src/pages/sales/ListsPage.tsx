@@ -145,7 +145,7 @@ const ListsPage: React.FC = () => {
             list.push(file);
             filesByWs.set(file.workspace_id, list);
         });
-
+        
         const peopleWsIds = new Set<string>();
         const companiesWsIds = new Set<string>();
 

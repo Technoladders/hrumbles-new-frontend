@@ -435,104 +435,32 @@ const RecruiterReportPage: React.FC = () => {
         />
       </div>
 
-      <Tabs defaultValue="overview">
-<TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
-      <TabsTrigger
-        value="overview"
-        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
-          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-      >
-        Overview
-      </TabsTrigger>
-      <TabsTrigger
-        value="funnelAnalysis"
-        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
-          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-      >
-        Funnel Analysis
-      </TabsTrigger>
-      <TabsTrigger
-        value="recruiters"
-        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
-          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-      >
-        Recruiter Performance
-      </TabsTrigger>
-      <TabsTrigger
-        value="activity"
-        className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
-          data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-      >
-        Activity Patterns
-      </TabsTrigger>
-    </TabsList>
+      {/* Overview Content - No Tabs Needed */}
+      <div className="mx-auto">
+        <div className="grid grid-cols-1 gap-8">
+          <RecruiterPerformanceTable data={data} />
 
-        <TabsContent value="overview">
-        <div className="mx-auto">
-          <div className="grid grid-cols-1 gap-8">
-            <RecruiterPerformanceTable data={data} />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <FunnelChart data={getFunnelData()} title="Recruitment Funnel" />
-              <RecruiterRadarChart
-                data={getRadarData()}
-                title="Recruiter Performance Comparison"
-                recruiters={data.map(r => r.recruiter)}
-                colors={COLORS}
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <PieChartComponent
-                data={getOfferOutcomesData()}
-                title="Offer Outcomes"
-              />
-              <PieChartComponent
-                data={getJoiningOutcomesData()}
-                title="Joining Outcomes"
-              />
-            </div>
-          </div>
-        </div>
-        </TabsContent>
-
-        <TabsContent value="funnelAnalysis">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FunnelChart
-              data={getFunnelData()}
-              title="Recruitment Funnel"
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <FunnelChart data={getFunnelData()} title="Recruitment Funnel" />
+            <RecruiterRadarChart
+              data={getRadarData()}
+              title="Recruiter Performance Comparison"
+              recruiters={data.map(r => r.recruiter)}
+              colors={COLORS}
             />
-            <div className="grid grid-cols-1 gap-6">
-              <PieChartComponent
-                data={getOfferOutcomesData()}
-                title="Offer Outcomes"
-              />
-              <PieChartComponent
-                data={getJoiningOutcomesData()}
-                title="Joining Outcomes"
-              />
-            </div>
           </div>
-        </TabsContent>
-
-        <TabsContent value="recruiters">
-          <RecruiterRadarChart
-            data={getRadarData()}
-            title="Recruiter Performance Comparison"
-            recruiters={data.map(r => r.recruiter)}
-            colors={COLORS}
-          />
-          <div className="mt-6">
-            <RecruiterPerformanceTable data={data} />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="activity">
-          <HeatmapChart
-            data={getHeatmapData()}
-            title="Weekly Submission Activity Patterns"
-          />
-        </TabsContent>
-      </Tabs>
+          {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <PieChartComponent
+              data={getOfferOutcomesData()}
+              title="Offer Outcomes"
+            />
+            <PieChartComponent
+              data={getJoiningOutcomesData()}
+              title="Joining Outcomes"
+            />
+          </div> */}
+        </div>
+      </div>
     </div>
   );
 };

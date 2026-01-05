@@ -161,7 +161,7 @@ export const ContactImportDialog: React.FC<ContactImportDialogProps> = ({ open, 
       }
     );
   };
-
+          
   const resetState = () => {
     onOpenChange(false);
     setTimeout(() => {

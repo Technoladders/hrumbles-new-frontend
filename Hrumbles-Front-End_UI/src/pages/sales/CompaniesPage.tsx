@@ -44,6 +44,8 @@ import CreatorPerformanceChart from "@/components/sales/chart/CreatorPerformance
 import { EnhancedDateRangeSelector } from "@/components/ui/EnhancedDateRangeSelector";
 import CompanyStagePieChart from "@/components/sales/chart/CompanyStagePieChart";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, Spinner } from "@chakra-ui/react";
+import { CompanySearchDialog } from '@/components/sales/CompanySearchDialog';
+
 
 interface DateRange {
   startDate: Date | null;
@@ -363,6 +365,8 @@ const CompaniesPage = () => {
         }
     };
 
+const [isCompanySearchDialogOpen, setIsCompanySearchDialogOpen] = useState(false);
+
     return (
         <div className="space-y-8 animate-fade-in p-4 md:p-6">
             {fileId && (
@@ -383,6 +387,14 @@ const CompaniesPage = () => {
                     <p className="text-gray-500">Manage and track all company records</p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
+                    <Button 
+  onClick={() => setIsCompanySearchDialogOpen(true)}
+  variant="outline"
+  className="bg-blue-600 text-white hover:bg-blue-700"
+>
+  <Search className="h-4 w-4 mr-2" />
+  Search Apollo.io
+</Button>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button><Plus className="h-4 w-4 mr-2" />Add Company</Button></DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -611,6 +623,13 @@ const CompaniesPage = () => {
             <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
                 <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Edit Company</DialogTitle><DialogDescription>Update details for {editCompany?.name}.</DialogDescription></DialogHeader>{editCompany && <CompanyEditForm company={editCompany} onClose={() => setIsEditDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}</DialogContent>
             </Dialog>
+
+<CompanySearchDialog
+  open={isCompanySearchDialogOpen}
+  onOpenChange={setIsCompanySearchDialogOpen}
+  fileId={fileId}
+/>
+
         </div>
     );
 };

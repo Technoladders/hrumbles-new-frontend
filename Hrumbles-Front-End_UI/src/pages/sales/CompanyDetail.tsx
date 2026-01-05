@@ -24,6 +24,9 @@ import CompanyEditForm from "@/components/sales/CompanyEditForm";
 import EmployeeAssociationEditForm from "@/components/sales/EmployeeAssociationEditForm";
 import CandidateCompanyEditForm from "@/components/sales/CandidateCompanyEditForm";
 import { CandidateDetail, CompanyDetail as CompanyDetailType } from "@/types/company";
+import { Sparkles } from 'lucide-react'; 
+import { CompanyApolloTab } from "@/components/sales/company-detail/CompanyApolloTab";
+
 
 const CompanyDetail = () => {
   const { toast } = useToast();
@@ -127,19 +130,21 @@ const CompanyDetail = () => {
   const contacts = employees.filter(e => e.source_table === 'contacts');
 
   const renderTabContent = () => {
-    switch (activeTab) {
-      case 'overview':
-        return <CompanyFinancials company={company} />;
-      case 'employees':
-        return <EmployeesTab employees={employees} isLoading={isLoadingEmployees} companyId={companyId} companyName={company.name} onEditEmployee={handleEditEmployeeClick} onDataUpdate={handleDataUpdate} />;
-      case 'contacts':
-        return <ContactsTab contacts={contacts} isLoading={isLoadingEmployees} />;
-      case 'locations':
-        return <LocationsTab company={company} />;
-      default:
-        return null;
-    }
-  };
+  switch (activeTab) {
+    case 'overview':
+      return <CompanyFinancials company={company} />;
+    case 'apollo':
+      return <CompanyApolloTab company={company} />;
+    case 'employees':
+      return <EmployeesTab employees={employees} isLoading={isLoadingEmployees} companyId={companyId} companyName={company.name} onEditEmployee={handleEditEmployeeClick} onDataUpdate={handleDataUpdate} />;
+    case 'contacts':
+      return <ContactsTab contacts={contacts} isLoading={isLoadingEmployees} />;
+    case 'locations':
+      return <LocationsTab company={company} />;
+    default:
+      return null;
+  }
+};
 
   return (
     <div className="bg-gray-50/70 min-h-screen">
@@ -175,55 +180,65 @@ const CompanyDetail = () => {
         </header>
       </div>
 
-      <main className="max-w-screen-2xl mx-auto p-4 md:p-6 space-y-6">
+      <main className="max-w-screen-8xl mx-auto p-4 md:p-6 space-y-6">
         
         {/* --- TABS UI (Pill Format) --- */}
         <div className="flex justify-center">
             <div className="bg-white rounded-full p-1.5 shadow-sm inline-flex items-center space-x-1 border">
-                {[
-                { id: 'overview', label: 'Overview' },
-                { id: 'employees', label: 'Associate Employees', count: employees.length },
-                { id: 'contacts', label: 'Contacts', count: contacts.length },
-                { id: 'locations', label: 'Locations' },
-                ].map(tab => (
-                <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`
-                    px-4 py-1.5 rounded-full text-sm font-semibold flex items-center gap-2 transition-all duration-300 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-purple-500
-                    ${activeTab === tab.id
-                        ? 'bg-purple-600 text-white shadow-md'
-                        : 'bg-transparent text-gray-600 hover:bg-purple-50'
-                    }
-                    `}
-                >
-                    {tab.label}
-                    {typeof tab.count === 'number' && (
-                    <span className={`
-                        w-5 h-5 flex items-center justify-center rounded-full text-xs font-bold
-                        ${activeTab === tab.id
-                            ? 'bg-white/25 text-white'
-                            : 'bg-gray-200 text-purple-700'
-                        }
-                    `}>
-                        {tab.count}
-                    </span>
-                    )}
-                </button>
-                ))}
+{[
+  { id: 'overview', label: 'Overview' },
+  { id: 'apollo', label: 'Apollo.io Data', icon: <Sparkles className="h-4 w-4" /> },
+  { id: 'employees', label: 'Associate Employees', count: employees.length },
+  { id: 'contacts', label: 'Contacts', count: contacts.length },
+  { id: 'locations', label: 'Locations' },
+].map(tab => (
+  <button
+    key={tab.id}
+    onClick={() => setActiveTab(tab.id)}
+    className={`
+      px-4 py-1.5 rounded-full text-sm font-semibold flex items-center gap-2 transition-all duration-300 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-purple-500
+      ${activeTab === tab.id
+        ? 'bg-purple-600 text-white shadow-md'
+        : 'bg-transparent text-gray-600 hover:bg-purple-50'
+      }
+    `}
+  >
+    {tab.icon && tab.icon}
+    {tab.label}
+    {typeof tab.count === 'number' && (
+      <span className={`
+        w-5 h-5 flex items-center justify-center rounded-full text-xs font-bold
+        ${activeTab === tab.id
+          ? 'bg-white/25 text-white'
+          : 'bg-gray-200 text-purple-700'
+        }
+      `}>
+        {tab.count}
+      </span>
+    )}
+  </button>
+))}
             </div>
         </div>
 
 
         {/* --- TWO-COLUMN LAYOUT --- */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-2">
-            <CompanyPrimaryDetails company={company} />
-          </div>
-          <div className="lg:col-span-3">
-            {renderTabContent()}
-          </div>
-        </div>
+{activeTab === 'apollo' ? (
+  // Full width for Apollo tab
+  <div className="w-full">
+    {renderTabContent()}
+  </div>
+) : (
+  // Two column layout for other tabs
+  <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+    <div className="lg:col-span-2">
+      <CompanyPrimaryDetails company={company} />
+    </div>
+    <div className="lg:col-span-3">
+      {renderTabContent()}
+    </div>
+  </div>
+)}
       </main>
 
       {/* --- DIALOGS --- */}

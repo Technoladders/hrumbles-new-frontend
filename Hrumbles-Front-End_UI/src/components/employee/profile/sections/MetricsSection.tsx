@@ -9,6 +9,9 @@ import { QuickActionsCard } from "@/components/dashboard/QuickActionsCard";
 import CombinedSubmissionOnboardingChart from '@/components/employee/profile/cards/SubmissionChartCard';
 import { ClientWorkflowChart } from "@/components/dashboard/chart/ClientWorkflowChart";
 import { GoalPerformanceChart } from "@/components/dashboard/chart/GoalPerformanceChart";
+import { SalesActivityChart } from "@/components/dashboard/chart/SalesActivityChart";
+
+
 
 interface MetricsSectionProps {
   employeeId: string;
@@ -30,7 +33,9 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, depa
     (role === 'employee' && department === "Human Resource") ||
     (role === 'admin' && department !== "Sales & Marketing");
   // --- END: MODIFIED LOGIC ---
-  
+
+const isSalesTeam = department === "Sales & Marketing";
+
 
   return (
     <div className="space-y-6">
@@ -52,7 +57,7 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, depa
         </div>
         
       </div>
-
+         
       {/* ROW 2: Two-Column Layout for Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Use the new flag to decide if the timeline card should render */}
@@ -105,6 +110,15 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({ employeeId, depa
         </div>
       )}
 
+       
+          {(isSalesTeam || role === 'admin') && (
+      <div className="grid grid-cols-1 gap-6">
+        <div className="h-[400px]">
+          <SalesActivityChart organizationId={organizationId} />
+        </div>
+      </div>
+    )}
+      
      
   <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 mt-6">
  

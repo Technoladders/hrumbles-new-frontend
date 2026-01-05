@@ -587,13 +587,13 @@ export const columns: ColumnDef<SimpleContact>[] = [
       </div>
     ),
   },
-  {
+{
     accessorKey: 'name',
     header: ReorderableHeader,
-    size: 180, // Giving more space to the primary column
+    size: 180,
     minSize: 150,
     maxSize: 300,
-    cell: ({ row, ...props }) => {
+    cell: ({ row, table, ...props }) => {
       if (row.getIsGrouped()) {
         const { data: stages = [] } = useContactStages();
         const stageName = row.id.split(':')[1] || 'Uncategorized';
@@ -607,10 +607,24 @@ export const columns: ColumnDef<SimpleContact>[] = [
           </div>
         );
       }
-     return (<div className="whitespace-nowrap" style={{ paddingLeft: `${row.depth * 1.5}rem` }}><EditableCell row={row} {...props} /></div>);
+      
+      // Make name clickable to open detail panel
+      const contact = row.original;
+      const meta = table.options.meta as any;
+      
+      return (
+        <div className="whitespace-nowrap" style={{ paddingLeft: `${row.depth * 1.5}rem` }}>
+          <Button
+            variant="link"
+            className="p-0 h-auto font-medium text-purple-600 hover:text-purple-800 hover:underline"
+            onClick={() => meta?.onContactClick?.(contact)}
+          >
+            {contact.name}
+          </Button>
+        </div>
+      );
     },
   },
-
   // This is the final, updated code for your email column.
 
 // This is the updated code for the 'email' column

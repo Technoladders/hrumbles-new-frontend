@@ -1,4 +1,4 @@
-// TanstackContactPage.tsx
+// TanstackContactPage.tsx - UPDATED WITH CONTACT DETAIL PANEL + APOLLO SEARCH
 
 import React from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
@@ -42,7 +42,7 @@ import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { startOfMonth } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, FileText, Download } from 'lucide-react';
+import { MoreHorizontal, FileText, Download, Search } from 'lucide-react'; // NEW: Added Search
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,6 +58,8 @@ import { ChevronRightIcon } from '@chakra-ui/icons';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
+import { ContactDetailPanel } from '@/components/sales/contacts-table/ContactDetailPanel';
+import { PeopleSearchDialog } from '@/components/sales/contacts-table/PeopleSearchDialog';
 
 interface DateRange {
   startDate: Date | null;
@@ -99,10 +101,11 @@ const TanstackContactsPage: React.FC = () => {
   });
 
   const [isManageStagesOpen, setIsManageStagesOpen] = React.useState(false);
-  // const [data, setData] = React.useState<SimpleContact[]>([]);
   const [isAddColumnOpen, setIsAddColumnOpen] = React.useState(false);
   const [isAddContactOpen, setIsAddContactOpen] = React.useState(false);
   const [isImportOpen, setIsImportOpen] = React.useState(false);
+  const [selectedContact, setSelectedContact] = React.useState<SimpleContact | null>(null);
+  const [isSearchDialogOpen, setIsSearchDialogOpen] = React.useState(false); // NEW: Apollo search dialog state
   const [columnOrder, setColumnOrder] = React.useState<ColumnOrderState>([]);
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const [grouping, setGrouping] = React.useState<GroupingState>([]);
@@ -146,6 +149,7 @@ const TanstackContactsPage: React.FC = () => {
     enabled: !!organization_id,
   });
 
+  
   const filteredData = React.useMemo(() => {
     return serverContacts.filter(contact => {
       if (!chartDateRange?.startDate) return true;
@@ -157,8 +161,35 @@ const TanstackContactsPage: React.FC = () => {
     });
   }, [serverContacts, chartDateRange]);
 
+  // Create clickable name column
+  const createNameColumn = (): ColumnDef<SimpleContact> => ({
+    id: 'name',
+    accessorKey: 'name',
+    header: ReorderableHeader,
+    cell: ({ row }) => {
+      const contact = row.original;
+      
+      return (
+        <Button
+          variant="link"
+          className="p-0 h-auto font-medium text-purple-600 hover:text-purple-800 hover:underline"
+          onClick={() => setSelectedContact(contact)}
+        >
+          {contact.name}
+        </Button>
+      );
+    },
+    size: 200,
+    minSize: 150,
+    maxSize: 300,
+  });
  
   const memoizedColumns = React.useMemo<ColumnDef<SimpleContact>[]>(() => {
+    // Find and replace the name column with clickable version
+    const updatedDefaultColumns = defaultColumns.map(col => 
+      col.id === 'name' ? createNameColumn() : col
+    );
+
     const dynamicColumns: ColumnDef<SimpleContact>[] = customFields
         .filter(field => !NATIVE_COLUMNS.includes(field.column_key))
         .map(field => ({
@@ -169,15 +200,15 @@ const TanstackContactsPage: React.FC = () => {
             size: 150, minSize: 100, maxSize: 250,
         }));
     
-    const auditStartIndex = defaultColumns.findIndex(col => col.id === 'created_by_employee');
+    const auditStartIndex = updatedDefaultColumns.findIndex(col => col.id === 'created_by_employee');
 
     if (auditStartIndex !== -1) {
-        const preAuditColumns = defaultColumns.slice(0, auditStartIndex);
-        const auditColumns = defaultColumns.slice(auditStartIndex);
+        const preAuditColumns = updatedDefaultColumns.slice(0, auditStartIndex);
+        const auditColumns = updatedDefaultColumns.slice(auditStartIndex);
         return [...preAuditColumns, ...dynamicColumns, ...auditColumns, ActionColumn];
     }
 
-    return [...defaultColumns, ...dynamicColumns, ActionColumn];
+    return [...updatedDefaultColumns, ...dynamicColumns, ActionColumn];
   }, [customFields]);
 
   const table = useReactTable({
@@ -188,12 +219,12 @@ const TanstackContactsPage: React.FC = () => {
     initialState: { pagination: { pageSize: 20 } },
     state: { columnOrder, columnSizing, grouping, columnVisibility, columnFilters },
     meta: {
-          updateData: (rowIndex: number, columnId: string, value: unknown) => {
+      updateData: (rowIndex: number, columnId: string, value: unknown) => {
         console.log(`Step 2: table.meta.updateData called with:`, { rowIndex, columnId, value });
         handleRowUpdate(rowIndex, columnId, value);
       },
-
       deleteRow: (contactId: string) => handleDeleteRow(contactId),
+      onContactClick: (contact: SimpleContact) => setSelectedContact(contact),
     },
     columnResizeMode: 'onChange',
     onColumnFiltersChange: setColumnFilters,
@@ -221,15 +252,9 @@ const TanstackContactsPage: React.FC = () => {
     setColumnVisibility(grouping.includes('contact_stage') ? { 'contact_stage': false } : {});
   }, [grouping]);
 
-// This function goes inside your TanstackContactsPage.tsx component
-
-// TanstackContactPage.tsx
-
-const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => {
+  const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => {
     console.log("Step 3: handleRowUpdate function entered.");
 
-    // [THE FIX] Use `getPrePaginationRowModel` to get the row from the full dataset,
-    // ignoring the current page.
     const originalRow = table.getPrePaginationRowModel().rowsById[rowIndex]?.original;
 
     console.log("Original Row:", originalRow);
@@ -239,7 +264,6 @@ const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => 
       return;
     }
 
-    // --- The rest of your function remains exactly the same ---
     let incomingUpdates: Record<string, any>;
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         incomingUpdates = value;
@@ -280,12 +304,26 @@ const handleRowUpdate = (rowIndex: number, columnId: string, value: unknown) => 
             },
         }
     );
-};
+  };
+
   const handleDeleteRow = (contactId: string) => {
     deleteContactMutation.mutate(contactId, {
-      onSuccess: () => toast({ title: "Contact Deleted" }),
+      onSuccess: () => {
+        toast({ title: "Contact Deleted" });
+        // Close detail panel if deleted contact is currently selected
+        if (selectedContact?.id === contactId) {
+          setSelectedContact(null);
+        }
+      },
       onError: (err: any) => toast({ title: "Delete Failed", variant: "destructive", description: err.message }),
     });
+  };
+
+  const handleEditContact = (contact: SimpleContact) => {
+    // Close the detail panel
+    setSelectedContact(null);
+    // You can open an edit dialog here if needed
+    toast({ title: "Edit functionality", description: "Implement edit dialog here" });
   };
 
 const handleDownloadCsv = (exportAll: boolean) => {
@@ -352,13 +390,24 @@ return (
                         </h1>
                         <p className="text-gray-500 text-sm mt-1">
                             {fileIdFromUrl
-                                ? `Viewing poeple in the file: ${breadcrumbData?.name || ''}`
+                                ? `Viewing people in the file: ${breadcrumbData?.name || ''}`
                                 : viewingMode === 'unfiled'
                                     ? 'These contacts are not yet assigned to a file.'
                                     : 'Viewing all people in your organization.'}
                         </p>
                     </div>
                     <div className="flex items-center space-x-2">
+                        {/* NEW: Apollo Search Button */}
+                        <Button 
+                            onClick={() => setIsSearchDialogOpen(true)}
+                            variant="outline"
+                            size="sm"
+                            className="h-9 bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
+                        >
+                            <Search className="mr-2 h-4 w-4" />
+                            Search Apollo.io
+                        </Button>
+
                         <EnhancedDateRangeSelector value={chartDateRange} onChange={setChartDateRange} />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="h-9"><Download className="mr-2 h-4 w-4" /> Export</Button></DropdownMenuTrigger>
@@ -405,6 +454,16 @@ return (
             </div>
         </div>
 
+        {/* Contact Detail Panel */}
+        {selectedContact && (
+          <ContactDetailPanel
+            contact={selectedContact}
+            onClose={() => setSelectedContact(null)}
+            onEdit={handleEditContact}
+            onDelete={handleDeleteRow}
+          />
+        )}
+
         <ManageStagesDialog open={isManageStagesOpen} onOpenChange={setIsManageStagesOpen} />
         <AddColumnDialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen} />
         <ContactImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} fileId={fileIdFromUrl} />
@@ -413,9 +472,6 @@ return (
                 <DialogHeader><DialogTitle>Add New Contact</DialogTitle></DialogHeader>
                 <AddContactForm
                     onClose={() => setIsAddContactOpen(false)}
-                    // [THE FIX] Instead of optimistically updating local state,
-                    // we invalidate the query to refetch the list. This is the standard
-                    // way to handle additions/deletions.
                     onSuccess={() => {
                         toast({ title: "Contact Added" });
                         queryClient.invalidateQueries({ queryKey: ['simpleContactsList'] });
@@ -424,6 +480,13 @@ return (
                 />
             </DialogContent>
         </Dialog>
+
+        {/* NEW: Apollo People Search Dialog */}
+        <PeopleSearchDialog
+            open={isSearchDialogOpen}
+            onOpenChange={setIsSearchDialogOpen}
+        />
+
     </DndProvider>
 );
 
