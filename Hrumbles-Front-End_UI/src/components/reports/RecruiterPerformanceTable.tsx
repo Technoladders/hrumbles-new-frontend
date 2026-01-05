@@ -1,16 +1,32 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useState, useMemo, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FileSpreadsheet, Files, ChevronUp, ChevronDown, User, BarChart3, ChevronLeft, ChevronRight } from "lucide-react"
+import { FileSpreadsheet, Files, Loader2, Trophy, BarChart3 } from "lucide-react"
 import jsPDF from "jspdf"
 import "jspdf-autotable"
 import FileSaver from "file-saver"
-import { Badge } from "@/components/ui/badge"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts"
+
+interface LabelProps {
+  x?: number
+  y?: number
+  width?: number
+  value?: number
+  payload?: any
+}
 
 interface DerivedMetric {
   name: string
@@ -56,48 +72,32 @@ interface RecruiterPerformanceTableProps {
   data: RecruiterPerformanceData[]
 }
 
+interface ChartData {
+  recruiter: string
+  profiles_submitted: number
+  internal_reject: number
+  sent_to_client: number
+  client_reject: number
+  technical: number
+  technical_selected: number
+  technical_reject: number
+  l1: number
+  l1_selected: number
+  l1_reject: number
+  l2: number
+  l2_reject: number
+  end_client: number
+  end_client_reject: number
+  offers_made: number
+  offers_accepted: number
+  offers_rejected: number
+  joined: number
+  no_show: number
+}
+
 const RecruiterPerformanceTable: React.FC<RecruiterPerformanceTableProps> = ({ data }) => {
-  const [sortColumn, setSortColumn] = useState<string>("recruiter")
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
-  const [currentPage, setCurrentPage] = useState<number>(1)
+  const [activeTab, setActiveTab] = useState<string>("submission_flow")
 
-  const rowsPerPage = 5
-  const totalPages = Math.ceil(data.length / rowsPerPage)
-
-  console.log("datatat", data)
-
-  const handleSort = (column: string) => {
-    if (sortColumn === column) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
-    } else {
-      setSortColumn(column)
-      setSortDirection("asc")
-    }
-    setCurrentPage(1) // Reset to first page on sort
-  }
-
-  const sortedData = [...data].sort((a, b) => {
-    let aValue: any = a
-    let bValue: any = b
-
-    const parts = sortColumn.split(".")
-    for (const part of parts) {
-      aValue = aValue[part as keyof typeof aValue]
-      bValue = bValue[part as keyof typeof bValue]
-    }
-
-    if (typeof aValue === "string" && typeof bValue === "string") {
-      return sortDirection === "asc" ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue)
-    }
-
-    return sortDirection === "asc" ? aValue - bValue : bValue - aValue
-  })
-
-  // Calculate the data to display for the current page
-  const startIndex = (currentPage - 1) * rowsPerPage
-  const paginatedData = sortedData.slice(startIndex, startIndex + rowsPerPage)
-
-  console.log("paginatedData", paginatedData)
   const calculateDerivedMetrics = (recruiter: RecruiterPerformanceData): DerivedMetric[] => {
     const totalInterviews =
       recruiter.interviews.technical +
@@ -117,7 +117,7 @@ const RecruiterPerformanceTable: React.FC<RecruiterPerformanceTableProps> = ({ d
         formula: "(Interviews + Offers + Joins) / Sent to Client",
         value:
           recruiter.sent_to_client > 0
-            ? (recruiter.interviews.l1) / recruiter.sent_to_client
+            ? recruiter.interviews.l1 / recruiter.sent_to_client
             : 0,
         description: "Percentage of client-submitted profiles that move forward",
       },
@@ -180,6 +180,146 @@ const RecruiterPerformanceTable: React.FC<RecruiterPerformanceTableProps> = ({ d
       },
     ]
   }
+
+  // Transform data for chart
+  const chartData: ChartData[] = useMemo(() => {
+    return data.map((recruiter) => ({
+      recruiter: recruiter.recruiter,
+      profiles_submitted: recruiter.profiles_submitted,
+      internal_reject: recruiter.internal_reject,
+      sent_to_client: recruiter.sent_to_client,
+      client_reject: recruiter.client_reject,
+      technical: recruiter.interviews.technical,
+      technical_selected: recruiter.interviews.technical_selected,
+      technical_reject: recruiter.interviews.technical_reject,
+      l1: recruiter.interviews.l1,
+      l1_selected: recruiter.interviews.l1_selected,
+      l1_reject: recruiter.interviews.l1_reject,
+      l2: recruiter.interviews.l2,
+      l2_reject: recruiter.interviews.l2_reject,
+      end_client: recruiter.interviews.end_client,
+      end_client_reject: recruiter.interviews.end_client_reject,
+      offers_made: recruiter.offers.made,
+      offers_accepted: recruiter.offers.accepted,
+      offers_rejected: recruiter.offers.rejected,
+      joined: recruiter.joining.joined,
+      no_show: recruiter.joining.no_show,
+    }))
+  }, [data])
+
+  // Configuration based on Active Tab
+  const config = useMemo(() => {
+    switch (activeTab) {
+      case "submission_flow":
+        return {
+          bars: [
+            { key: "profiles_submitted", name: "Submitted", color: "#7e22ce", gradientId: "submissionGradient" },
+            { key: "internal_reject", name: "Int. Reject", color: "#ef4444", gradientId: "rejectGradient" },
+            { key: "sent_to_client", name: "To Client", color: "#10b981", gradientId: "clientGradient" },
+          ],
+        }
+      case "client_response":
+        return {
+          bars: [
+            { key: "sent_to_client", name: "To Client", color: "#10b981", gradientId: "clientGradient" },
+            { key: "client_reject", name: "Client Reject", color: "#ef4444", gradientId: "rejectGradient" },
+            { key: "technical", name: "Technical", color: "#3b82f6", gradientId: "technicalGradient" },
+          ],
+        }
+      case "interviews":
+        return {
+          bars: [
+            { key: "technical", name: "Technical", color: "#3b82f6", gradientId: "technicalGradient" },
+            { key: "technical_selected", name: "Tech Selected", color: "#10b981", gradientId: "selectedGradient" },
+            { key: "l1", name: "L1", color: "#8b5cf6", gradientId: "l1Gradient" },
+            { key: "l1_selected", name: "L1 Selected", color: "#059669", gradientId: "l1SelectedGradient" },
+            { key: "l2", name: "L2", color: "#f59e0b", gradientId: "l2Gradient" },
+          ],
+        }
+      case "end_client":
+        return {
+          bars: [
+            { key: "l2", name: "L2", color: "#f59e0b", gradientId: "l2Gradient" },
+            { key: "end_client", name: "End Client", color: "#06b6d4", gradientId: "ecGradient" },
+            { key: "end_client_reject", name: "EC Reject", color: "#ef4444", gradientId: "rejectGradient" },
+          ],
+        }
+      case "final_stage":
+        return {
+          bars: [
+            { key: "offers_made", name: "Offers Made", color: "#10b981", gradientId: "offerGradient" },
+            { key: "offers_accepted", name: "Accepted", color: "#059669", gradientId: "acceptedGradient" },
+            { key: "offers_rejected", name: "Rejected", color: "#ef4444", gradientId: "rejectGradient" },
+            { key: "joined", name: "Joined", color: "#7e22ce", gradientId: "joinedGradient" },
+            { key: "no_show", name: "No Show", color: "#dc2626", gradientId: "noShowGradient" },
+          ],
+        }
+      default:
+        return {
+          bars: [
+            { key: "profiles_submitted", name: "Submitted", color: "#7e22ce", gradientId: "submissionGradient" },
+            { key: "internal_reject", name: "Int. Reject", color: "#ef4444", gradientId: "rejectGradient" },
+            { key: "sent_to_client", name: "To Client", color: "#10b981", gradientId: "clientGradient" },
+          ],
+        }
+    }
+  }, [activeTab])
+
+  const renderTotalLabel = useCallback(
+    (props: LabelProps) => {
+      const { x, y, width, payload } = props
+
+      if (x == null || y == null || width == null || !payload) {
+        return null
+      }
+
+      // Calculate total from all bars in current config
+      const total = config.bars.reduce((sum, bar) => {
+        return sum + (Number(payload[bar.key]) || 0)
+      }, 0)
+
+      const radius = 10
+
+      return (
+        <g>
+          <circle
+            cx={Number(x) + Number(width) / 2}
+            cy={Number(y) - radius}
+            r={radius}
+            fill="#8884d8"
+          />
+          <text
+            x={Number(x) + Number(width) / 2}
+            y={Number(y) - radius}
+            fill="#fff"
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize="12"
+            fontWeight="bold"
+          >
+            {total}
+          </text>
+        </g>
+      )
+    },
+    [config]
+  )
+
+  const topRecruiters = useMemo(() => {
+    if (!chartData.length) return []
+    return [...chartData]
+      .sort((a, b) => {
+        // Calculate total based on all bars in current config
+        const totalA = config.bars.reduce((sum, bar) => {
+          return sum + (Number(a[bar.key as keyof ChartData]) || 0)
+        }, 0)
+        const totalB = config.bars.reduce((sum, bar) => {
+          return sum + (Number(b[bar.key as keyof ChartData]) || 0)
+        }, 0)
+        return totalB - totalA
+      })
+      .slice(0, 10)
+  }, [chartData, config])
 
   const exportToCSV = () => {
     let csv =
@@ -269,30 +409,9 @@ const RecruiterPerformanceTable: React.FC<RecruiterPerformanceTableProps> = ({ d
     doc.save("recruiter_performance.pdf")
   }
 
-  const renderSortIndicator = (column: string) => {
-    if (sortColumn === column) {
-      return sortDirection === "asc" ? (
-        <ChevronUp className="h-4 w-4 transition-transform duration-200" />
-      ) : (
-        <ChevronDown className="h-4 w-4 transition-transform duration-200" />
-      )
-    }
-    return null
-  }
-
-  const formatPercentage = (value: number) => {
-    return `${(value * 100).toFixed(1)}%`
-  }
-
-  const getPercentageColor = (value: number) => {
-    if (value >= 0.7) return "text-emerald-600 font-semibold"
-    if (value >= 0.5) return "text-amber-600 font-medium"
-    return "text-rose-600"
-  }
-
   return (
-    <Card className="shadow-lg border-0 overflow-hidden">
-      <CardHeader className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
+    <Card className="shadow-2xl bg-white/70 backdrop-blur-xl border border-white/20 hover:shadow-3xl transition-all duration-300 rounded-xl h-[600px] flex flex-col">
+      <CardHeader className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-t-xl pb-4 flex-shrink-0">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <CardTitle className="text-2xl font-semibold flex items-center gap-2">
@@ -300,7 +419,7 @@ const RecruiterPerformanceTable: React.FC<RecruiterPerformanceTableProps> = ({ d
               Recruiter Performance Metrics
             </CardTitle>
             <CardDescription className="text-purple-100 mt-1">
-              Detailed breakdown of recruiter performance across the recruitment funnel
+              Visual breakdown of recruiter performance across the recruitment funnel
             </CardDescription>
           </div>
           <div className="flex gap-3">
@@ -325,381 +444,258 @@ const RecruiterPerformanceTable: React.FC<RecruiterPerformanceTableProps> = ({ d
           </div>
         </div>
       </CardHeader>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <Table className="w-full">
-            <TableHeader>
-              <TableRow className="bg-indigo-50 border-b border-indigo-100">
-                <TableHead
-                  className="cursor-pointer whitespace-nowrap text-indigo-900 font-semibold hover:bg-indigo-100 transition-colors duration-200 py-4 sticky left-0 bg-white whitespace-nowrap"
-                  onClick={() => handleSort("recruiter")}
-                >
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-indigo-600" />
-                    Recruiter
-                    {renderSortIndicator("recruiter")}
-                  </div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer text-indigo-900 font-semibold hover:bg-indigo-100 transition-colors duration-200 py-4"
-                  onClick={() => handleSort("jobs_assigned")}
-                >
-                  <div className="flex items-center gap-2">
-                    Jobs
-                    {renderSortIndicator("jobs_assigned")}
-                  </div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer text-indigo-900 font-semibold hover:bg-indigo-100 transition-colors duration-200 py-4"
-                  onClick={() => handleSort("profiles_submitted")}
-                >
-                  <div className="flex items-center gap-2">
-                    Submitted
-                    {renderSortIndicator("profiles_submitted")}
-                  </div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer text-indigo-900 font-semibold hover:bg-indigo-100 transition-colors duration-200 py-4"
-                  onClick={() => handleSort("internal_reject")}
-                >
-                  <div className="flex items-center gap-2">
-                    Int. Reject
-                    {renderSortIndicator("internal_reject")}
-                  </div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer text-indigo-900 font-semibold hover:bg-indigo-100 transition-colors duration-200 py-4"
-                  onClick={() => handleSort("client_reject")}
-                >
-                  <div className="flex items-center gap-2">
-                    Client Rej.
-                    {renderSortIndicator("client_reject")}
-                  </div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer text-indigo-900 font-semibold hover:bg-indigo-100 transition-colors duration-200 py-4"
-                  onClick={() => handleSort("sent_to_client")}
-                >
-                  <div className="flex items-center gap-2">
-                    To Client
-                    {renderSortIndicator("sent_to_client")}
-                  </div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer text-indigo-900 font-semibold hover:bg-indigo-100 transition-colors duration-200 py-4"
-                  onClick={() => handleSort("interviews.technical")}
-                >
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2">
-                          Technical
-                          {renderSortIndicator("interviews.technical")}
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">Technical interview stage</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer text-indigo-900 font-semibold hover:bg-indigo-100 transition-colors duration-200 py-4"
-                  onClick={() => handleSort("interviews.l1")}
-                >
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2">
-                          L1 Int.
-                          {renderSortIndicator("interviews.l1")}
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">Level 1 interview stage</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer text-indigo-900 font-semibold hover:bg-indigo-100 transition-colors duration-200 py-4"
-                  onClick={() => handleSort("interviews.l2")}
-                >
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2">
-                          L2 Int.
-                          {renderSortIndicator("interviews.l2")}
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">Level 2 interview stage</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer text-indigo-900 font-semibold hover:bg-indigo-100 transition-colors duration-200 py-4"
-                  onClick={() => handleSort("interviews.end_client")}
-                >
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2">
-                          EC Int.
-                          {renderSortIndicator("interviews.end_client")}
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">End Client interview stage</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer text-indigo-900 font-semibold hover:bg-indigo-100 transition-colors duration-200 py-4"
-                  onClick={() => handleSort("offers.made")}
-                >
-                  <div className="flex items-center gap-2">
-                    Offers
-                    {renderSortIndicator("offers.made")}
-                  </div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer text-indigo-900 font-semibold hover:bg-indigo-100 transition-colors duration-200 py-4"
-                  onClick={() => handleSort("joining.joined")}
-                >
-                  <div className="flex items-center gap-2">
-                    Joined
-                    {renderSortIndicator("joining.joined")}
-                  </div>
-                </TableHead>
-                <TableHead className="text-right text-indigo-900 font-semibold py-4">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>Sub→Client</span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">Submission-to-Client Ratio</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableHead>
-                <TableHead className="text-right text-indigo-900 font-semibold py-4">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>Client Accept</span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">Client Acceptance Rate</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableHead>
-                <TableHead className="text-right text-indigo-900 font-semibold py-4">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>Client Rej. Rate</span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">Client Rejection Rate</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableHead>
-                {/* <TableHead className="text-right text-indigo-900 font-semibold py-4">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>Tech→L1</span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">Technical to L1 Conversion Rate</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableHead> */}
-                <TableHead className="text-right text-indigo-900 font-semibold py-4">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>Offer Accept</span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">Offer Acceptance Rate</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableHead>
-                <TableHead className="text-right text-indigo-900 font-semibold py-4">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>Funnel Eff.</span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">Overall Funnel Efficiency</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedData.map((recruiter, index) => {
-                const metrics = calculateDerivedMetrics(recruiter)
-
-                return (
-                  <TableRow
-                    key={index}
-                    className={`border-b border-gray-100 hover:bg-indigo-50/50 transition-colors duration-200 ${index % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
-                  >
-                    <TableCell className="font-medium text-gray-900 sticky left-0 bg-white whitespace-nowrap">{recruiter.recruiter}</TableCell>
-                    <TableCell className="text-gray-700">{recruiter.jobs_assigned}</TableCell>
-                    <TableCell className="text-gray-700">{recruiter.profiles_submitted}</TableCell>
-                    <TableCell className="text-gray-700">{recruiter.internal_reject}</TableCell>
-                    <TableCell className="text-gray-700">{recruiter.client_reject}</TableCell>
-                    <TableCell className="text-gray-700">{recruiter.sent_to_client}</TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex flex-col gap-1.5 justify-center items-center">
-                        <span className="font-medium text-gray-800">{recruiter.interviews.technical}</span>
-                        <div className="flex justify-center items-center">
-                          <Badge
-                            variant="outline"
-                            className="bg-gray-50 text-gray-700 border-gray-200 text-xs px-2 py-0.5 text-center hover:bg-gray-100 transition-colors duration-200"
-                          >
-                            <span className="bg-emerald-100 text-emerald-700 px-1 rounded">{recruiter.interviews.technical_selected}</span>
-                            <span className="mx-1">/</span>
-                            <span className="bg-rose-100 text-rose-700 px-1 rounded">{recruiter.interviews.technical_reject}</span>
-                          </Badge>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex flex-col gap-1.5 justify-center items-center">
-                        <span className="font-medium text-gray-800">{recruiter.interviews.l1}</span>
-                        <div className="flex justify-center items-center">
-                          <Badge
-                            variant="outline"
-                            className="bg-gray-50 text-gray-700 border-gray-200 text-xs px-2 py-0.5 text-center hover:bg-gray-100 transition-colors duration-200"
-                          >
-                            <span className="bg-emerald-100 text-emerald-700 px-1 rounded">{recruiter.interviews.l1_selected}</span>
-                            <span className="mx-1">/</span>
-                            <span className="bg-rose-100 text-rose-700 px-1 rounded">{recruiter.interviews.l1_reject}</span>
-                          </Badge>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex flex-col gap-1.5 justify-center items-center">
-                        <span className="font-medium text-gray-800">{recruiter.interviews.l2}</span>
-                        <div className="flex justify-center items-center">
-                          <Badge
-                            variant="outline"
-                            className="bg-gray-50 text-gray-700 border-gray-200 text-xs px-2 py-0.5 text-center hover:bg-gray-100 transition-colors duration-200"
-                          >
-                            <span className="bg-rose-100 text-rose-700 px-1 rounded">{recruiter.interviews.l2_reject}</span>
-                          </Badge>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex flex-col gap-1.5 justify-center items-center">
-                        <span className="font-medium text-gray-800">{recruiter.interviews.end_client}</span>
-                        <div className="flex justify-center items-center">
-                          <Badge
-                            variant="outline"
-                            className="bg-gray-50 text-gray-700 border-gray-200 text-xs px-2 py-0.5 text-center hover:bg-gray-100 transition-colors duration-200"
-                          >
-                            <span className="bg-rose-100 text-rose-700 px-1 rounded">{recruiter.interviews.end_client_reject}</span>
-                          </Badge>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex flex-col gap-1.5 justify-center items-center">
-                        <span className="font-medium text-gray-800">{recruiter.offers.made}</span>
-                        <div className="flex justify-center items-center">
-                          <Badge
-                            variant="outline"
-                            className="bg-gray-50 text-gray-700 border-gray-200 text-xs px-2 py-0.5 text-center hover:bg-gray-100 transition-colors duration-200"
-                          >
-                            <span className="bg-emerald-100 text-emerald-700 px-1 rounded">{recruiter.offers.accepted}</span>
-                            <span className="mx-1">/</span>
-                            <span className="bg-rose-100 text-rose-700 px-1 rounded">{recruiter.offers.rejected}</span>
-                          </Badge>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex flex-col gap-1.5 justify-center items-center">
-                        <span className="font-medium text-gray-800">{recruiter.joining.joined}</span>
-                        <div className="flex justify-center items-center">
-                          <Badge
-                            variant="outline"
-                            className="bg-gray-50 text-gray-700 border-gray-200 text-xs px-2 py-0.5 text-center hover:bg-gray-100 transition-colors duration-200"
-                          >
-                            <span className="bg-rose-100 text-rose-700 px-1 rounded">{recruiter.joining.no_show}</span>
-                          </Badge>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className={`text-right ${getPercentageColor(metrics[0].value)}`}>
-                      {formatPercentage(metrics[0].value)}
-                    </TableCell>
-                    <TableCell className={`text-right ${getPercentageColor(metrics[1].value)}`}>
-                      {formatPercentage(metrics[1].value)}
-                    </TableCell>
-                    <TableCell className={`text-right text-rose-600`}>
-                      {formatPercentage(metrics[10].value)}
-                    </TableCell>
-                    {/* <TableCell className={`text-right ${getPercentageColor(metrics[3].value)}`}>
-                      {formatPercentage(metrics[3].value)}
-                    </TableCell> */}
-                    <TableCell className={`text-right ${getPercentageColor(metrics[7].value)}`}>
-                      {formatPercentage(metrics[7].value)}
-                    </TableCell>
-                    <TableCell className={`text-right ${getPercentageColor(metrics[9].value)}`}>
-                      {formatPercentage(metrics[9].value)}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </div>
-        {/* Pagination Controls */}
-        {totalPages > 1 && (
-          <div className="flex justify-center items-center gap-4 py-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="flex items-center gap-2 text-indigo-700 border-indigo-200 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Previous
-            </Button>
-            <span className="text-sm text-gray-700">
-              Page {currentPage} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className="flex items-center gap-2 text-indigo-700 border-indigo-200 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+      <CardContent className="pt-6 flex flex-col flex-1 min-h-0">
+        {/* Tabs Section */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4 flex-shrink-0">
+          <div className="flex items-center">
+            <h3 className="text-lg font-bold text-gray-800 flex items-center">
+              <div className="w-1 h-6 bg-gradient-to-b from-purple-500 to-green-500 rounded-full mr-3"></div>
+              Recruiter Analytics
+              <span className="text-xs font-normal text-gray-500 ml-2">
+                (Top 10)
+              </span>
+            </h3>
           </div>
-        )}
+
+          <div className="flex-shrink-0">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+                <TabsTrigger
+                  value="submission_flow"
+                  className="px-2 py-1.5 rounded-full text-xs font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+                >
+                  Submission
+                </TabsTrigger>
+                <TabsTrigger
+                  value="client_response"
+                  className="px-2 py-1.5 rounded-full text-xs font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+                >
+                  Client
+                </TabsTrigger>
+                <TabsTrigger
+                  value="interviews"
+                  className="px-2 py-1.5 rounded-full text-xs font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+                >
+                  Interviews
+                </TabsTrigger>
+                <TabsTrigger
+                  value="end_client"
+                  className="px-2 py-1.5 rounded-full text-xs font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+                >
+                  End Client
+                </TabsTrigger>
+                <TabsTrigger
+                  value="final_stage"
+                  className="px-2 py-1.5 rounded-full text-xs font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+                >
+                  Offers & Joining
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
+
+        <div className="flex-1 flex min-h-0 gap-4 max-h-[380px]">
+          {topRecruiters.length > 0 ? (
+            <>
+              <div className="flex-[3] min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={topRecruiters}
+                    margin={{ top: 20, right: 10, left: 0, bottom: 5 }}
+                  >
+                    <defs>
+                      <linearGradient id="submissionGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#7e22ce" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#7e22ce" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#7e22ce" stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="clientGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#10b981" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#10b981" stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="rejectGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#ef4444" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#ef4444" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#ef4444" stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="technicalGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#3b82f6" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="selectedGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#10b981" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#10b981" stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="l1Gradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#8b5cf6" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="l1SelectedGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#059669" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#059669" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#059669" stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="l2Gradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#f59e0b" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="ecGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#06b6d4" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="offerGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#10b981" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="#10b981" stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="acceptedGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#059669" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#059669" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#059669" stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="joinedGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#7e22ce" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#7e22ce" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="#7e22ce" stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="noShowGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#dc2626" stopOpacity={0.8} />
+                        <stop offset="50%" stopColor="#dc2626" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#dc2626" stopOpacity={0.1} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#e5e7eb"
+                      strokeOpacity={0.5}
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="recruiter"
+                      tick={{ fontSize: 10, fill: "#64748b" }}
+                      axisLine={false}
+                      tickLine={false}
+                      dy={10}
+                      interval={0}
+                      tickFormatter={(value) =>
+                        value.length > 10 ? `${value.substring(0, 10)}...` : value
+                      }
+                    />
+                    <YAxis
+                      tick={{
+                        fontSize: 10,
+                        fill: "#64748b",
+                        fontWeight: "500",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={40}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "rgba(243, 244, 246, 0.4)" }}
+                      contentStyle={{
+                        backgroundColor: "rgba(255, 255, 255, 0.95)",
+                        backdropFilter: "blur(10px)",
+                        border: "none",
+                        borderRadius: "12px",
+                        boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
+                        fontSize: "12px",
+                      }}
+                    />
+                    <Legend
+                      verticalAlign="top"
+                      height={36}
+                      wrapperStyle={{
+                        fontSize: "12px",
+                        color: "#4b5563",
+                        paddingBottom: "5px",
+                      }}
+                      iconType="rect"
+                    />
+                    {config.bars.map((bar, index) => (
+                      <Bar
+                        key={bar.key}
+                        dataKey={bar.key}
+                        stackId="a"
+                        name={bar.name}
+                        fill={`url(#${bar.gradientId})`}
+                        maxBarSize={25}
+                        label={index === config.bars.length - 1 ? renderTotalLabel : undefined}
+                      />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex-1 min-w-[280px] max-w-[320px] border-l border-gray-100 pl-4 flex flex-col overflow-hidden">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1 pb-2 border-b border-gray-200">
+                  <Trophy className="w-4 h-4 text-yellow-500" /> Top Recruiters
+                </div>
+                <div className="overflow-y-auto pr-2 space-y-4 h-full flex-1" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
+                  {topRecruiters.map((recruiter, idx) => (
+                    <div
+                      key={idx}
+                      className="group p-3 rounded-lg hover:bg-gradient-to-r hover:from-violet-50 hover:to-indigo-50 transition-all border border-gray-100 hover:border-violet-200 hover:shadow-sm"
+                    >
+                      {/* Recruiter Name with Rank */}
+                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-100">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-white text-xs font-bold flex items-center justify-center shadow-sm">
+                            {idx + 1}
+                          </span>
+                          <span
+                            className="text-sm font-semibold text-gray-800 truncate"
+                            title={recruiter.recruiter}
+                          >
+                            {recruiter.recruiter}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Metrics Grid */}
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                        {config.bars.map((bar) => (
+                          <div key={bar.key} className="flex items-center justify-between text-xs">
+                            <span className="text-gray-600 font-medium truncate pr-1">
+                              {bar.name}:
+                            </span>
+                            <span
+                              className="font-bold tabular-nums"
+                              style={{ color: bar.color }}
+                            >
+                              {recruiter[bar.key as keyof ChartData]}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Total */}
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+                        <span className="text-xs font-semibold text-gray-700">Total:</span>
+                        <span className="text-xs font-bold text-indigo-600 tabular-nums">
+                          {config.bars.reduce((sum, bar) => {
+                            return sum + (Number(recruiter[bar.key as keyof ChartData]) || 0)
+                          }, 0)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center text-gray-400">
+              <BarChart3 className="h-10 w-10 mb-2 opacity-20" />
+              <p className="text-sm">No data available.</p>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   )

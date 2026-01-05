@@ -681,14 +681,14 @@ const GoalsIndex = () => {
                     setIsWizardOpen(false);
                     fetchData();
                   }} 
-                />
+                />    
               </Dialog>
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => navigate("/goalsview")}
                 className="flex items-center gap-2 text-sm sm:text-base px-4 py-2 border border-gray-200 hover:bg-gray-50 shadow-sm hover:shadow-md transition-all duration-300 rounded-xl bg-white text-gray-700"
-              >
+              >     
                 <Eye className="h-4 w-4" />
                 <span>Employee View</span>
               </motion.button>
@@ -696,7 +696,7 @@ const GoalsIndex = () => {
           </div>
         </div>
       </header>
-
+                   
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {loading ? (
           <motion.div
@@ -730,7 +730,7 @@ const GoalsIndex = () => {
             animate="visible"
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 mb-10"
             key="stats"
-          >
+          >     
             <motion.div variants={itemVariants} className="group">
               <AnimatedCard
                 animation="fade"
@@ -851,7 +851,7 @@ const GoalsIndex = () => {
                       {departmentStatuses.map((status) => {
                         const isActive = activeDepartmentTab === status.name;
                         return (
-                          <TabsTrigger
+                          <TabsTrigger 
                             key={status.id}
                             value={status.name}
                             className={`relative px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
@@ -928,3 +928,6 @@ const GoalsIndex = () => {
 };
 
 export default GoalsIndex;
+
+
+
