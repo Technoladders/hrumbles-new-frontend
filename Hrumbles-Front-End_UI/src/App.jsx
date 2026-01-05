@@ -135,6 +135,8 @@ import TanstackContactsPage from './pages/sales/TanstackContactsPage';
 import KanbanView from './pages/sales/KanbanBoard';
 import ListsPage from './pages/sales/ListsPage';
 
+import SalesDashboard from "./pages/sales/SalesDashboard";
+
 // Clients
 import ClientPage from "./pages/clients/ClientDashboard";
 import ClientManagementDashboard from "./pages/client-dashboard/ClientManagementDashboard";
@@ -476,6 +478,10 @@ const validateCurrentSession = useCallback(async () => {
 
 
               {/* Sales Companies and Contacts */}
+
+          <Route path="/sales/dashboard" element={<SalesDashboard />} />
+
+
               <Route path="/companies" element={<CompaniesPage />} />
               <Route path="/lists/companies/file/:fileId" element={<CompaniesPage />} />
               <Route path="/contacts" element={<TanstackContactsPage />} />
