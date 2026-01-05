@@ -583,9 +583,9 @@ const GlobalSuperadminDashboard: FC = () => {
                          </Tooltip>
                          
                          {/* Edit Button */}
-                         <Tooltip label="Edit Organization" hasArrow>
+                         <Tooltip label="Edit Settings & Permissions" hasArrow>
                            <IconButton
-                             aria-label="Edit Organization"
+                             aria-label="Edit"
                              icon={<EditIcon />}
                              size="xs"
                              onClick={() => { setSelectedOrg(org); setEditOpen(true); }}

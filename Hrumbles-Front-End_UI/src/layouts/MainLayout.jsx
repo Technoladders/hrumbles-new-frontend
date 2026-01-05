@@ -1,3 +1,4 @@
+// Hrumbles-Front-End_UI\src\layouts\MainLayout.jsx
 import { Box, Flex, IconButton, Input, InputGroup, InputLeftElement, Avatar, Menu, MenuButton, MenuList, MenuItem, useColorMode, Text, useMediaQuery, Badge, Spinner, Image } from "@chakra-ui/react";
 import { FiSearch, FiBell, FiSun, FiLogOut, FiUser, FiMenu } from "react-icons/fi";
 import { useState, useEffect, useCallback } from "react";
@@ -33,19 +34,43 @@ const MainLayout = () => {
     // MODIFICATION: State to hold organization credit details
   const [orgCredits, setOrgCredits] = useState(null);
   const [isLoadingCredits, setIsLoadingCredits] = useState(true);
-  const [activeSuite, setActiveSuite] = useState(localStorage.getItem('activeSuite') || 'HIRING SUITE');
 
-   // Helper to get Logo based on Suite
-  const getLogoBySuite = (suite) => {
+  // NEW: Reactive activeSuite state with localStorage listener
+  const [activeSuite, setActiveSuite] = useState(() => localStorage.getItem('activeSuite') || 'HIRING SUITE');
+
+  // NEW: Listen for localStorage changes to update logo reactively
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'activeSuite') {
+        setActiveSuite(e.newValue || 'HIRING SUITE');
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    // Also listen for same-tab changes (localStorage doesn't trigger on same tab, so poll or use custom event)
+    const interval = setInterval(() => {
+      const stored = localStorage.getItem('activeSuite');
+      if (stored !== activeSuite) {
+        setActiveSuite(stored || 'HIRING SUITE');
+      }
+    }, 100); // Poll every 100ms for reactivity
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [activeSuite]);
+
+  // NEW: Function to determine logo based on suite
+  const getLogoSrc = (suite) => {
     const s = suite?.toUpperCase();
     if (s?.includes("RECRUIT") || s?.includes("HIRING")) return "/xrilic/Xrilic Recruit.svg";
-    if (s?.includes("VERIFICATION") || s?.includes("CRM")) return "/xrilic/Xrilic Verify Black.svg";
-    if (s?.includes("SALES") || s?.includes("CRM")) return "/xrilic/Xrilic CRM.svg";
-    if (s?.includes("FINANCE") || s?.includes("BOOKS")) return "/xrilic/Xrilic Books.svg";
+    if (s?.includes("PROJECT")) return "/xrilic/Xrilic Recruit.svg";
+    if (s?.includes("VERIFICATION")) return "/xrilic/Xrilic Verify Black.svg";
+    if (s?.includes("SALES")) return "/xrilic/Xrilic CRM.svg";
+    if (s?.includes("FINANCE")) return "/xrilic/Xrilic Books.svg";
     return "/xrilic/Xrilic logo.svg";
   };
-
-  const mainSidebarWidth = isSidebarExpanded ? "280px" : "74px"; // Rail (74px) + Panel (206px)
 
    useActivityTracker({ inactivityThreshold: 300000 }); 
 
@@ -370,159 +395,185 @@ const MainLayout = () => {
     return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   };
 
-
-
+  const headerHeight = "70px";
+  const expandedSidebarWidth = "210px";
+  const collapsedSidebarWidth = "74px";
+  const mainSidebarWidth = isSidebarExpanded ? expandedSidebarWidth : collapsedSidebarWidth;
 
   const toggleSidebar = () => {
     setSidebarExpanded(!isSidebarExpanded);
   };
 
   return (
-    <Flex height="100vh" overflow="hidden" bg={colorMode === "dark" ? "gray.800" : "#F8F7F7"}>
+    <Flex direction="column" height="100vh" overflow="hidden" bg={colorMode === "dark" ? "gray.800" : "#F8F7F7"}>
 
       <SubscriptionLockModal isOpen={isSubscriptionExpired && role === 'organization_superadmin'} />
 
-
-      
-       <NewSidebar 
-        isExpanded={isSidebarExpanded} 
-        toggleSidebar={toggleSidebar} 
-        activeSuite={activeSuite} 
-        setActiveSuite={setActiveSuite} 
-      />
-
-      <Flex 
-        direction="column" 
-        flex="1" 
-        minW={0}
-        ml={{ base: isMobile ? "0" : mainSidebarWidth, md: mainSidebarWidth }}
-        transition="margin-left 0.1s ease-in-out"
+      {/* NEW: Full-width Header */}
+      <Flex
+        as="header"
+        align="center"
+        justify="space-between"
+        w="100%"
+        height={headerHeight}
+        p={4}
+        bg={colorMode === "dark" ? "base.bgdark" : "white"}
+        boxShadow="sm"
+        zIndex={10}
       >
-        <Flex
-          as="header"
-          align="center"
-          justify="space-between"
-          w="full"
-          px={6}
-          height="70px"
-          bg="white"
-          borderBottom="1px solid"
-          borderColor="gray.100"
-          zIndex={10}
-        >
-          <Flex align="center" gap={4}>
+        {/* Logo */}
+        <Image 
+          key={activeSuite} // NEW: Key to force re-render on suite change
+          src={getLogoSrc(activeSuite)} 
+          alt="Logo" 
+          width={{ base: "100px", md: "140px" }} 
+          height="auto"
+          mr={4}
+          transition="opacity 0.2s ease-in-out" // NEW: Smooth transition for logo change
+        />
 
-            <Image 
-              src={getLogoBySuite(activeSuite)} 
-              alt="Suite Logo" 
-              height="35px" 
-              fallbackSrc="/xrilic/Xrilic logo.svg"
-            />
-            {isMobile && (
-              <IconButton
-                icon={<FiMenu />}
-                aria-label="Toggle Sidebar"
-                onClick={toggleSidebar}
-                variant="ghost"
-              />
-            )}
-            <InputGroup width={{ base: "150px", md: "20em" }} height="2.5em">
-              <InputLeftElement pointerEvents="none">
-                <FiSearch color="gray.500" />
-              </InputLeftElement>
-              <Input
-                placeholder="Search..."
-                bg={colorMode === "dark" ? "box.bgboxdark" : "box.bgboxlight"}
-                borderRadius="50px"
-                _placeholder={{ color: "gray.500" }}
-              />
-            </InputGroup>
-          </Flex>
-
-          <Flex align="center" gap={4}>
-
-           {role === 'organization_superadmin' && <CreditBalanceDisplay />}
-            <Menu>
-              <MenuButton
-                as={IconButton}
-                icon={
-                  <Box position="relative">
-                    <FiBell />
-                    {hasTodayInterview && (
-                      <Box
-                        position="absolute"
-                        top="-2px"
-                        right="-2px"
-                        width="8px"
-                        height="8px"
-                        bg="red.500"
-                        borderRadius="full"
-                        border="1px solid"
-                        borderColor={colorMode === "dark" ? "base.bgdark" : "white"}
-                      />
-                    )}
-                  </Box>
-                }
-                size="lg"
-                aria-label="Notifications"
-                variant="ghost"
-                color={colorMode === "dark" ? "white" : "base.greylg"}
-              />
-              <MenuList maxW="300px" p={2}>
-                {interviews.length > 0 ? (
-                  interviews.map((interview, index) => (
-                    <MenuItem key={index} bg="transparent" _hover={{ bg: "gray.100" }} p={2}>
-                      <Box>
-                        <Text fontSize="sm" fontWeight="medium" isTruncated>
-                          {interview.name}
-                        </Text>
-                        <Text fontSize="xs" color="gray.500">
-                          {formatInterviewDate(interview.interview_date)} at{" "}
-                          {formatInterviewTime(interview.interview_time)}
-                        </Text>
-                        <Text fontSize="xs" color="gray.600">
-                          {interview.interview_location || "N/A"}
-                        </Text>
-                        <Text fontSize="xs" color="blue.600">
-                          {interview.interview_type || "N/A"} - {interview.round || "N/A"}
-                        </Text>
-                      </Box>
-                    </MenuItem>
-                  ))
-                ) : (
-                  <MenuItem bg="transparent" p={2}>
-                    <Text fontSize="sm" color="gray.500">No upcoming interviews.</Text>
-                  </MenuItem>
-                )}
-              </MenuList>
-            </Menu>
+        {/* Mobile Menu and Search */}
+        <Flex align="center" gap={2} flex="1" justify="center">
+          {isMobile && (
             <IconButton
-              icon={<FiSun />}
-              aria-label="Toggle theme"
+              icon={<FiMenu />}
+              aria-label="Toggle Sidebar"
+              onClick={toggleSidebar}
               variant="ghost"
-              size="lg"
-              color={colorMode === "dark" ? "yellow.400" : "base.greylg"}
-              onClick={toggleColorMode}
             />
-            <Menu>
-              <MenuButton>
-                <Flex align="center" gap={4}>
-                  <Box textAlign="left" display={{ base: "none", md: "block" }}>
-                    <Text fontSize="sm" fontWeight="bold">{`${user?.user_metadata?.first_name || "User"} ${user?.user_metadata?.last_name || "Name"}`}</Text>
-                    <Text fontSize="xs" color="gray.500">{user?.email || "user@example.com"}</Text>
-                  </Box>
-                  <Avatar size="sm" name={`${user?.user_metadata?.first_name || "User"} ${user?.user_metadata?.last_name || "Name"}`} src="/user-avatar.png" />
-                </Flex>
-              </MenuButton>
-              <MenuList>
-                <MenuItem onClick={() => navigate("/profile")} icon={<FiUser />}>View Profile</MenuItem>
-                <MenuItem onClick={handleLogout} icon={<FiLogOut />}>Logout</MenuItem>
-              </MenuList>
-            </Menu>
-          </Flex>
+          )}
+          {/* <InputGroup width={{ base: "150px", md: "20em" }} height="2.5em">
+            <InputLeftElement pointerEvents="none">
+              <FiSearch color="gray.500" />
+            </InputLeftElement>
+            <Input
+              placeholder="Search..."
+              bg={colorMode === "dark" ? "box.bgboxdark" : "box.bgboxlight"}
+              borderRadius="50px"
+              _placeholder={{ color: "gray.500" }}
+            />
+          </InputGroup> */}
         </Flex>
 
-        <Box flex="1" overflowY="auto" p={6} mt="60px" bg={colorMode} overflowX="hidden" w="100%" maxW="100%" >
+        {/* Right-side elements */}
+        <Flex align="center" gap={4}>
+          {role === 'organization_superadmin' && <CreditBalanceDisplay />}
+          <Menu>
+            <MenuButton
+              as={IconButton}
+              icon={
+                <Box position="relative">
+                  <FiBell />
+                  {hasTodayInterview && (
+                    <Box
+                      position="absolute"
+                      top="-2px"
+                      right="-2px"
+                      width="8px"
+                      height="8px"
+                      bg="red.500"
+                      borderRadius="full"
+                      border="1px solid"
+                      borderColor={colorMode === "dark" ? "base.bgdark" : "white"}
+                    />
+                  )}
+                </Box>
+              }
+              size="lg"
+              aria-label="Notifications"
+              variant="ghost"
+              color={colorMode === "dark" ? "white" : "base.greylg"}
+            />
+            <MenuList maxW="300px" p={2}>
+              {interviews.length > 0 ? (
+                interviews.map((interview, index) => (
+                  <MenuItem key={index} bg="transparent" _hover={{ bg: "gray.100" }} p={2}>
+                    <Box>
+                      <Text fontSize="sm" fontWeight="medium" isTruncated>
+                        {interview.name}
+                      </Text>
+                      <Text fontSize="xs" color="gray.500">
+                        {formatInterviewDate(interview.interview_date)} at{" "}
+                        {formatInterviewTime(interview.interview_time)}
+                      </Text>
+                      <Text fontSize="xs" color="gray.600">
+                        {interview.interview_location || "N/A"}
+                      </Text>
+                      <Text fontSize="xs" color="blue.600">
+                        {interview.interview_type || "N/A"} - {interview.round || "N/A"}
+                      </Text>
+                    </Box>
+                  </MenuItem>
+                ))
+              ) : (
+                <MenuItem bg="transparent" p={2}>
+                  <Text fontSize="sm" color="gray.500">No upcoming interviews.</Text>
+                </MenuItem>
+              )}
+            </MenuList>
+          </Menu>
+          {/* <IconButton
+            icon={<FiSun />}
+            aria-label="Toggle theme"
+            variant="ghost"
+            size="lg"
+            color={colorMode === "dark" ? "yellow.400" : "base.greylg"}
+            onClick={toggleColorMode}
+          /> */}
+          <Menu>
+            <MenuButton>
+              <Flex align="center" gap={4}>
+                <Box textAlign="left" display={{ base: "none", md: "block" }}>
+                  <Text fontSize="sm" fontWeight="bold">{`${user?.user_metadata?.first_name || "User"} ${user?.user_metadata?.last_name || "Name"}`}</Text>
+                  <Text fontSize="xs" color="gray.500">{user?.email || "user@example.com"}</Text>
+                </Box>
+                <Avatar size="sm" name={`${user?.user_metadata?.first_name || "User"} ${user?.user_metadata?.last_name || "Name"}`} src="/user-avatar.png" />
+              </Flex>
+            </MenuButton>
+            <MenuList>
+              <MenuItem onClick={() => navigate("/profile")} icon={<FiUser />}>View Profile</MenuItem>
+              <MenuItem onClick={handleLogout} icon={<FiLogOut />}>Logout</MenuItem>
+            </MenuList>
+          </Menu>
+        </Flex>
+      </Flex>
+
+      {/* NEW: Container for Sidebar and Main Content below Header */}
+      <Flex flex="1" overflow="hidden">
+        {/* Mobile Overlay */}
+        {isMobile && isSidebarExpanded && (
+          <Box
+            position="fixed"
+            top={headerHeight}
+            left={0}
+            right={0}
+            bottom={0}
+            bg="blackAlpha.600"
+            zIndex={15}
+            onClick={toggleSidebar}
+          />
+        )}
+        
+        {/* Sidebar - Adjusted to start below header */}
+        <NewSidebar 
+          isExpanded={isSidebarExpanded} 
+          toggleSidebar={toggleSidebar}
+          headerHeight={headerHeight}
+          mainSidebarWidth={mainSidebarWidth}
+        />
+
+        {/* Main Content */}
+        <Box 
+          flex="1" 
+          overflowY="auto" 
+          p={6} 
+          bg={colorMode} 
+          overflowX="hidden" 
+          w="100%" 
+          maxW="100%"
+          ml={{ base: isMobile ? "0" : mainSidebarWidth, md: mainSidebarWidth }}
+          transition="margin-left 0.1s ease-in-out"
+        >
           <Outlet />
         </Box>
       </Flex>
@@ -531,4 +582,3 @@ const MainLayout = () => {
 };
 
 export default MainLayout;
-// Sidebar & Logo changes

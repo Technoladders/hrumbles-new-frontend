@@ -11,6 +11,8 @@ import supabase from "./config/supabaseClient"
 import { setOrganization } from "./Redux/organizationSlice";
 import { getOrganizationSubdomain } from "./utils/subdomain";
 import { fetchFirmOrganizationDetails } from "./Redux/firmOrganizationSlice";
+import { fetchUserPermissions } from "./Redux/permissionSlice";
+
 
 // Import the SessionExpiredModal   
 import SessionExpiredModal from "./components/SessionExpiredModal";
@@ -315,6 +317,34 @@ const validateCurrentSession = useCallback(async () => {
       dispatch(setOrganization(organizationSubdomain));
     }
   }, [organizationSubdomain, dispatch]);
+
+  useEffect(() => {
+  // Dispatched whenever we have a valid user and organizationId
+  if (reduxUser?.id && organizationId) {
+    // Assuming you store role_id and department_id in your auth state or employee profile
+    // If not currently in state, you might need to fetch them first or use the data 
+    // from the validateCurrentSession logic
+    
+    const fetchPerms = async () => {
+        // We get the specific employee data to get role/dept for the RPC
+        const { data } = await supabase
+            .from('hr_employees')
+            .select('role_id, department_id')
+            .eq('id', reduxUser.id)
+            .single();
+
+        if (data) {
+            dispatch(fetchUserPermissions({
+                userId: reduxUser.id,
+                roleId: data.role_id,
+                departmentId: data.department_id
+            }));
+        }
+    };
+    
+    fetchPerms();
+  }
+}, [reduxUser?.id, organizationId, dispatch]);
 
   // --- The rest of your app's rendering logic ---
   if (!organizationSubdomain) {

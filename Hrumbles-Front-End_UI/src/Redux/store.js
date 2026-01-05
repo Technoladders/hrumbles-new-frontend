@@ -8,6 +8,9 @@ import organizationReducer from "./organizationSlice";
 import firmOrganizationReducer from './firmOrganizationSlice';
 import workspaceReducer from "./workspaceSlice";
 import uiReducer from './uiSlice';
+import permissionsReducer from './permissionSlice';
+
+
 
 const store = configureStore({
   reducer: {
@@ -20,6 +23,7 @@ const store = configureStore({
     firmOrganization: firmOrganizationReducer,
     workspace: workspaceReducer,
     ui: uiReducer,
+    permissions: permissionsReducer,
   },
 });
 

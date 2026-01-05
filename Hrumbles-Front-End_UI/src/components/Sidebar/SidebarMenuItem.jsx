@@ -30,72 +30,19 @@ const RECRUITMENT_FIRM_ID = "87fd4bb2-dbaf-4775-954a-eb82f70ac961";
 
 // Helper function to filter items
 const filterRestrictedItems = (items, isPurelyPermanentOrg) => {
-  if (!isPurelyPermanentOrg) return items;
-  const restrictedLabels = ["Bench Pool", "Projects"];
-  return items.filter(item => !restrictedLabels.includes(item.label));
+    if (!isPurelyPermanentOrg) return items;
+    const restrictedLabels = ["Bench Pool", "Projects"];
+    const filterItem = (item) => {
+        if (restrictedLabels.includes(item.label)) return null;
+        if (item.dropdown) {
+            const filteredDropdown = item.dropdown.map(filterItem).filter(Boolean);
+            if (filteredDropdown.length === 0) return null;
+            return { ...item, dropdown: filteredDropdown };
+        }
+        return item;
+    };
+    return items.map(filterItem).filter(Boolean);
 };
-
-
-// --- START: organization_superadmin categorization logic ---
-
-// 1. Define all items for the role in one place
-const orgSuperAdminAllItems = [
-  { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
-  { icon: FiUsers, label: "Employees", path: "/employee" },
-  { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
-  { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" },
-  { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
-  { icon: LuUserSearch, label: "All Candidates", path: "/all-candidates" },
-  { icon: BsGraphUpArrow, label: "Analytics", path: "/bg-verification/analytics" },
-  { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
-  { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
-  { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", beta: true },
-  { icon: GoGoal, label: "Goals", path: "/goals" },
-  { icon: ImProfile, label: "My Profile", path: "/profile" },
-  { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
-  { icon: MdOutlineAccountBalance, label: "Finance", path: "/finance",  },
-  
-            { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices",  },
-            { icon: FaSackDollar, label: "Expenses", path: "/accounts/expenses",  },
-            { icon: FiBriefcase, label: "Payroll", path: "/payroll",  },
-            { icon: FaFileLines, label: "Bank Statement", path: "/bank-statement" },
-  {
-    icon: TbCheckbox,
-    label: "Approvals",
-    path: "#",
-    dropdown: [
-      { icon: TbCheckbox, label: "Timesheet", path: "/approvals/timesheet" },
-      { icon: TbCheckbox, label: "Regularization", path: "/approvals/regularization" },
-      // { icon: TbCheckbox , label:"Leave", path: "/approvals/leave"},
-      // { icon: TbCheckbox, label: "Auto-Terminated Timesheets", path: "/approvals/auto-terminated" },
-    ],
-  },
-  {
-    icon: LuCalendarCog,
-    label: "Leave Management",
-    path: "#",
-    dropdown: [
-      { icon: TbCheckbox , label:"Leave Approval", path: "/approvals/leave"},
-      { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies" },
-
-    ],
-  },
-  { icon: GoOrganization, label: "Companies", path: "/companies" },
-  { icon: VscOrganization, label: "People", path: "/contacts" },
-  { icon: FiList, label: "Lists", path: "/lists" },
-  { icon: FaDropbox, label: "Kanban", path: "/sales/kanban" },
-  {
-    icon: FiSettings,
-    label: "Settings",
-    path: "#",
-    dropdown: [
-      { icon: IoCalendarNumberOutline, label: "Official Holidays", path: "/admin/holidays" },
-      { icon: BsShieldLock, label: "Password", path: "/password" },
-    ],
-  },
-  { icon: MdOutlineManageAccounts, label: "User Management", path: "/user-management" },
-];
-
 
 // --- TEMPORARY MENU FOR ITECH ORGANIZATION --- (This remains unchanged)
 const iTechOrgSuperAdminMenu = [
@@ -109,74 +56,7 @@ const iTechOrgSuperAdminMenu = [
     { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
 ];
 
-const demoOrgSuperAdminMenu = [
-    {
-        title: "HIRING SUITE",
-        icon: MdPeopleAlt, 
-        items: [
-           { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
-  { icon: FiUsers, label: "Employees", path: "/employee" },
-  { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
-  { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
-  { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
-  
 
-  { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", beta: true },
-  { icon: GoGoal, label: "Goals", path: "/goals" },
-  { icon: ImProfile, label: "My Profile", path: "/profile" },
-  { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
-
-  {
-    icon: TbCheckbox,
-    label: "Approvals",
-    path: "#",
-    dropdown: [
-      { icon: TbCheckbox, label: "Timesheet", path: "/approvals/timesheet" },
-      { icon: TbCheckbox, label: "Regularization", path: "/approvals/regularization" },
-      // { icon: TbCheckbox, label: "Auto-Terminated Timesheets", path: "/approvals/auto-terminated" },
-    ],
-  },
-  {
-    icon: LuCalendarCog,
-    label: "Leave Management",
-    path: "#",
-    dropdown: [
-      { icon: TbCheckbox , label:"Leave Approval", path: "/approvals/leave"},
-      { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies" },
-
-    ],
-  },
-  {
-    icon: FiSettings,
-    label: "Settings",
-    path: "#",
-    dropdown: [
-      { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies" },
-      { icon: IoCalendarNumberOutline, label: "Official Holidays", path: "/admin/holidays" },
-      { icon: BsShieldLock, label: "Password", path: "/password" },
-    ],
-  },
-  { icon: MdOutlineManageAccounts, label: "User Management", path: "/user-management" },
-
-        ],
-    },
-    {
-        title: "PROJECT SUITE",
-        icon: CgOrganisation, 
-        items: [  { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
-  { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" }, 
-        ],
-    },
-    {
-        title: "VERIFICATION SUITE",
-        icon: BsShieldCheck, 
-        items: [
-            { icon: LuUserSearch, label: "Verification", path: "/all-candidates" },
-            { icon: LuUserSearch, label: "Analytics", path: "/bg-verification/analytics" },
-
-        ],
-    }
-];
 
 const recruitmentFirmOrgSuperAdminMenu = [
     {
@@ -276,301 +156,173 @@ const AscendionOrgSuperAdminMenu = [
         ],
     }
 ];
-// 2. Define the items for each suite
-const projectSuiteLabels = ["Clients", "Projects"];
-const salesSuiteLabels = ["Companies", "People", "Lists", "Kanban"];
-const financeSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll", "Bank Statement"];
-const verificationSuiteLabels = ["All Candidates","Analytics"];
 
-const projectSuiteItems = orgSuperAdminAllItems.filter(item => projectSuiteLabels.includes(item.label));
-const salesSuiteItems = orgSuperAdminAllItems.filter(item => salesSuiteLabels.includes(item.label));
-const financeSuiteItems = orgSuperAdminAllItems.filter(item => financeSuiteLabels.includes(item.label));
-const verificationSuiteItems = orgSuperAdminAllItems.filter(item => verificationSuiteLabels.includes(item.label));
-
-// 3. The HR suite contains everything else
-const hrSuiteItems = orgSuperAdminAllItems.filter(
-  item => !projectSuiteLabels.includes(item.label) && !salesSuiteLabels.includes(item.label) && !financeSuiteLabels.includes(item.label) && !verificationSuiteLabels.includes(item.label)
-);
-
-// 4. Structure the final menu data with categories AND ICONS
-const getCategorizedOrgSuperAdminMenu = (isPurelyPermanentOrg) => [
-    {
-        title: "HIRING SUITE",
-        icon: MdPeopleAlt,
-        items: filterRestrictedItems(hrSuiteItems, isPurelyPermanentOrg),
-    },
-    {
-        title: "PROJECT SUITE",
-        icon: CgOrganisation,
-        items: filterRestrictedItems(projectSuiteItems, isPurelyPermanentOrg),
-    },
-    {
-        title: "VERIFICATION SUITE",
-        icon: BsShieldCheck,
-        items: filterRestrictedItems(verificationSuiteItems, isPurelyPermanentOrg),
-    },
-    {
-        title: "SALES SUITE",
-        icon: RiCustomerService2Fill,
-        items: filterRestrictedItems(salesSuiteItems, isPurelyPermanentOrg),
-    },
-    {
-        title: "FINANCE SUITE",
-        icon: MdOutlineAccountBalance,
-        items: filterRestrictedItems(financeSuiteItems, isPurelyPermanentOrg),
-    }
-].filter(suite => suite.items.length > 0); // Remove empty suites
-// --- END: organization_superadmin logic ---
-
-
-// --- START: New logic for admin categorization ---
-
-// 1. Define all possible items for an Admin in one place
-const adminAllItems = [
-    { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
-    { icon: FiUsers, label: "Employees", path: "/employee", department: "Human Resource", },
-    { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
-  { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
-  { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
-
-  { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", department:"Human Resource", beta: true },
-    { icon: GoGoal, label: "Goals", path: "/goals" },
-    { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
-    { icon: ImProfile, label: "My Profile", path: "/profile" },
-    { icon: GrDocumentTime, label: "Time Sheet", path: "/employee/timesheet" },
-    { icon: MdMoreTime, label: "Regularization", path: "/employee/regularization" },
-    { icon: LuCalendarPlus, label: "Leave", path: "/employee/leave" },
-    { icon: FaRegCalendarCheck, label: "Attendance", path: "/employee/attendance" },
-    { icon: IoCalendarNumberOutline, label: "Calendar", path: "/employee/calendar" },
-    { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients" },
-    { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects" }, // Using a different icon to avoid confusion
-    // Department-specific items below
-    { icon: GoOrganization, label: "Companies", path: "/companies", department: "Sales & Marketing" },
-    { icon: VscOrganization, label: "People", path: "/contacts", department: "Sales & Marketing" },
-    { icon: FiList, label: "Lists", path: "/lists", department: "Sales & Marketing" },
-    { icon: FaDropbox, label: "Kanban", path: "/sales/kanban", department: "Sales & Marketing" },
-            { icon: MdOutlineAccountBalance, label: "Finance", path: "/finance",  department: "Human Resource", },
-  
-            { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices",  department: "Human Resource", },
-            { icon: FaSackDollar, label: "Expenses", path: "/accounts/expenses",  department: "Human Resource", },
-            { icon: FiBriefcase, label: "Payroll", path: "/payroll",  department: "Human Resource", },
-      
-  
-    {
-        icon: FiSettings,
-        label: "Settings",
-        path: "#",
-        department: "Human Resource",
-        dropdown: [
-            { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies" },
-            { icon: IoCalendarNumberOutline, label: "Official Holidays", path: "/admin/holidays" },
-        ],
-    },
-];
-
-// 2. Define labels for each suite for the Admin role
-const adminHrSuiteLabels = ["Dashboard", "Employees", "Jobs", "Talent Pool", "Bench Pool", "Zive-X", "Goals", "Reports", "My Profile", "Time Sheet", "Regularization", "Leave", "Attendance", "Calendar", "Settings"];
-const adminProjectSuiteLabels = ["Clients", "Projects"];
-const adminSalesSuiteLabels = ["Companies", "People", "Lists", "Kanban"];
-const adminFinanceSuiteLabels = ["Finance", "Invoices", "Expenses", "Payroll"];
-
-// 3. Create a function to generate the categorized menu for an Admin
-const createCategorizedAdminMenu = (departmentName, isPurelyPermanentOrg) => {
-    // A. Filter the master list to get only items visible to this department
-    const visibleItems = adminAllItems.filter(item =>
-        !item.department || item.department === departmentName
-    );
-
-    // Apply strict filtering
-    const filteredVisibleItems = filterRestrictedItems(visibleItems, isPurelyPermanentOrg);
-
-    // B. Group the visible items into their respective suites
-    const hrItems = filteredVisibleItems.filter(item => adminHrSuiteLabels.includes(item.label));
-    const projectItems = filteredVisibleItems.filter(item => adminProjectSuiteLabels.includes(item.label));
-    const salesItems = filteredVisibleItems.filter(item => adminSalesSuiteLabels.includes(item.label));
-    const financeItems = filteredVisibleItems.filter(item => adminFinanceSuiteLabels.includes(item.label));
-
-    // C. Build the final categorized menu, only including suites that have items
-    const categorizedMenu = [];
-
-    if (hrItems.length > 0) {
-        categorizedMenu.push({
-            title: "HR Suite",
-            icon: MdPeopleAlt,
-            items: hrItems,
-        });
-    }
-    if (projectItems.length > 0) {
-        categorizedMenu.push({
-            title: "PROJECT SUITE",
-            icon: CgOrganisation,
-            items: projectItems,
-        });
-    }
-    if (salesItems.length > 0) {
-        categorizedMenu.push({
-            title: "SALES SUITE",
-            icon: RiCustomerService2Fill,
-            items: salesItems,
-        });
-    }
-    if (financeItems.length > 0) {
-        categorizedMenu.push({
-            title: "FINANCE SUITE",
-            icon: MdOutlineAccountBalance,
-            items: financeItems,
-        });
-    }
-
-    return categorizedMenu;
+// 1. Map permission keys to their respective Suites
+const SUITE_CONFIG = {
+  general: { title: "GENERAL SUITE", icon: MdDashboardCustomize },
+  recruitment: { title: "HIRING SUITE", icon: MdPeopleAlt },
+  verification: { title: "VERIFICATION", icon: BsShieldCheck },
+  sales: { title: "SALES SUITE", icon: RiCustomerService2Fill },
+  finance: { title: "FINANCE SUITE", icon: MdOutlineAccountBalance }
 };
 
-// --- END: admin categorization logic ---
+
+export const getDynamicMenu = (userPermissions, orgFeatures = {}, role) => {
+  if (role === 'global_superadmin') return [];
+
+  const categorizedMenu = [];
+
+  Object.keys(SUITE_CONFIG).forEach(suiteKey => {
+    const config = SUITE_CONFIG[suiteKey];
+    
+    // Check if Global Admin enabled this suite (General is always on)
+    const isSuiteEnabled = suiteKey === 'general' || orgFeatures[`${suiteKey}_suite`] !== false;
+
+    if (isSuiteEnabled) {
+      const suiteItems = masterMenuItems.filter(item => {
+        const matchesSuite = item.suite === suiteKey.toUpperCase();
+        
+        // Check permissions for item or its sub-dropdowns
+        if (item.dropdown) {
+           const hasSubPerm = item.dropdown.some(sub => userPermissions.includes(sub.permission));
+           return matchesSuite && hasSubPerm;
+        }
+        return matchesSuite && userPermissions.includes(item.permission);
+      }).map(item => {
+        if (item.dropdown) {
+          return { ...item, dropdown: item.dropdown.filter(sub => userPermissions.includes(sub.permission)) };
+        }
+        return item;
+      });
+
+      if (suiteItems.length > 0) {
+        categorizedMenu.push({
+          title: config.title,
+          icon: config.icon,
+          items: suiteItems
+        });
+      }
+    }
+  });
+
+  return categorizedMenu;
+};
+
+// 2. Define the Master Menu with Permission Requirements
+const masterMenuItems = [
+  // --- GENERAL SUITE ---
+  { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard", suite: "GENERAL", permission: "view_dashboard" },
+  { icon: FiUsers, label: "Employees", path: "/employee", suite: "GENERAL", permission: "access_employees" },
+  { icon: GoGoal, label: "Goals", path: "/goals", suite: "GENERAL", permission: "view_goals" },
+  { icon: ImProfile, label: "My Profile", path: "/profile", suite: "GENERAL", permission: "view_profile" },
+  { icon: AiOutlineProfile, label: "Reports", path: "/reports", suite: "GENERAL", permission: "view_reports" },
+  { icon: GrDocumentTime, label: "Time Sheet", path: "/employee/timesheet", suite: "GENERAL", permission: "access_timesheet" },
+  { icon: MdMoreTime, label: "Regularization", path: "/employee/regularization", suite: "GENERAL", permission: "access_regularization" },
+  { icon: LuCalendarPlus, label: "Leave", path: "/employee/leave", suite: "GENERAL", permission: "access_leave" },
+  { icon: FaRegCalendarCheck, label: "Attendance", path: "/employee/attendance", suite: "GENERAL", permission: "access_attendance" },
+  { icon: IoCalendarNumberOutline, label: "Calendar", path: "/employee/calendar", suite: "GENERAL", permission: "access_calendar" },
+  {
+    icon: TbCheckbox, label: "Approvals", path: "#", suite: "GENERAL",
+    dropdown: [
+      { icon: TbCheckbox, label: "Timesheet", path: "/approvals/timesheet", permission: "approve_timesheet" },
+      { icon: TbCheckbox, label: "Regularization", path: "/approvals/regularization", permission: "approve_regularization" },
+    ],
+  },
+  {
+    icon: LuCalendarCog, label: "Leave Management", path: "#", suite: "GENERAL",
+    dropdown: [
+      { icon: TbCheckbox, label: "Leave Approval", path: "/approvals/leave", permission: "approve_leave" },
+      { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies", permission: "manage_leave_policies" },
+    ],
+  },
+  { icon: MdOutlineManageAccounts, label: "User Management", path: "/user-management", suite: "GENERAL", permission: "access_user_management" },
+  {
+    icon: FiSettings, label: "Settings", path: "#", suite: "GENERAL",
+    dropdown: [
+      { icon: IoCalendarNumberOutline, label: "Official Holidays", path: "/admin/holidays", permission: "manage_holidays" },
+      { icon: BsShieldLock, label: "Password", path: "/password", permission: "change_password" },
+    ],
+  },
+
+  // --- RECRUIT & PROJECT SUITE ---
+  { icon: FiBriefcase, label: "Jobs", path: "/jobs", suite: "RECRUITMENT", permission: "access_jobs" },
+  { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool", suite: "RECRUITMENT", permission: "view_talent_pool" },
+  { icon: BsPin, label: "Bench Pool", path: "/bench-pool", suite: "RECRUITMENT", permission: "view_bench_pool" },
+  { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", suite: "RECRUITMENT", permission: "access_zive_x", beta: true },
+  { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients", suite: "RECRUITMENT", permission: "access_client_management" },
+  { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects", suite: "RECRUITMENT", permission: "access_project_management" },
+
+  // --- VERIFICATION SUITE ---
+  { icon: LuUserSearch, label: "Verification", path: "/all-candidates", suite: "VERIFICATION", permission: "access_verifications" },
+  { icon: BsGraphUpArrow, label: "Analytics", path: "/bg-verification/analytics", suite: "VERIFICATION", permission: "view_bgv_analytics" },
+
+  // --- SALES SUITE ---
+  { icon: GoOrganization, label: "Companies", path: "/companies", suite: "SALES", permission: "access_companies" },
+  { icon: VscOrganization, label: "People", path: "/contacts", suite: "SALES", permission: "access_people" },
+  { icon: FiList, label: "Lists", path: "/lists", suite: "SALES", permission: "access_lists" },
+  { icon: FaDropbox, label: "Kanban", path: "/sales/kanban", suite: "SALES", permission: "access_kanban" },
+
+  // --- FINANCE SUITE ---
+  { icon: MdOutlineAccountBalance, label: "Finance", path: "/finance", suite: "FINANCE", permission: "access_finance" },
+  { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices", suite: "FINANCE", permission: "access_invoices" },
+  { icon: FaSackDollar, label: "Expenses", path: "/accounts/expenses", suite: "FINANCE", permission: "access_expenses" },
+  { icon: FiBriefcase, label: "Payroll", path: "/payroll", suite: "FINANCE", permission: "access_payroll" },
+  { icon: FaFileLines, label: "Bank Statement", path: "/bank-statement", suite: "FINANCE", permission: "access_bank_statement" },
+];
+
+/**
+ * NEW DYNAMIC MENU GENERATOR
+ * @param {Array} userPermissions - Array of strings from Redux (e.g., ['view_dashboard', 'access_jobs'])
+ * @param {Object} orgFeatures - subscription_features from hr_organizations
+ * @param {string} role - The user role
+ * @param {string|null} departmentName - Optional department filter for admin role
+ */
+
 
 
 export const menuItemsByRole = {
-  global_superadmin: [
-    // ... remains the same
-    { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
-    { icon: SiAwsorganizations, label: "Organization", path: "/organization" },
-     { icon: BsShieldCheck, label: "Verifications", path: "/verifications" },
-     { icon: FaFileInvoiceDollar, label: "Invoices", path: "/organization/invoices" },
-
-     {
-    icon: BarChart3, // Using BarChart3 from lucide-react
-    label: "Reports",
-    path: "/reports", // Parent path
-    dropdown: [
-      { icon: TrendingUp, label: "Org. Talent Trends", path: "/reports/organization-talent-trends" },
-      // Add other reports specific to an organization here
-    ],
-  },
-    { icon: FiSettings, label: "Settings", path: "/settings" },
-  ],
-organization_superadmin: (organizationId, organization, isPurelyPermanentOrg) => {
-
-  if (organization.is_verification_firm) {
-      return verificationFirmOrgSuperAdminMenu;
-   }
-
-   if (organization.is_recruitment_firm) {
-      // Need to apply filter to the predefined array
-      const hireSuite = recruitmentFirmOrgSuperAdminMenu.find(s => s.title === "HIRING SUITE");
-      if (hireSuite) hireSuite.items = filterRestrictedItems(hireSuite.items, isPurelyPermanentOrg);
-      
-      const projectSuite = recruitmentFirmOrgSuperAdminMenu.find(s => s.title === "PROJECT SUITE");
-      if (projectSuite) projectSuite.items = filterRestrictedItems(projectSuite.items, isPurelyPermanentOrg);
-
-      return recruitmentFirmOrgSuperAdminMenu.filter(suite => suite.items.length > 0);
-    }
-   if (ITECH_ORGANIZATION_ID.includes(organizationId)) {
-      return filterRestrictedItems(iTechOrgSuperAdminMenu, isPurelyPermanentOrg); // Return the simple menu for iTech
-    } else if (organizationId === ASCENDION_ORGANIZATION_ID) {
-      return AscendionOrgSuperAdminMenu; // Return the simple menu for Ascendion
-    }
-    else if (organizationId === DEMO_ORGANIZATION_ID) {
-        // Apply logic to demo
-        const hireSuite = demoOrgSuperAdminMenu.find(s => s.title === "HIRING SUITE");
-        if(hireSuite) hireSuite.items = filterRestrictedItems(hireSuite.items, isPurelyPermanentOrg);
-
-        const projectSuite = demoOrgSuperAdminMenu.find(s => s.title === "PROJECT SUITE");
-        if(projectSuite) projectSuite.items = filterRestrictedItems(projectSuite.items, isPurelyPermanentOrg);
-
-      return demoOrgSuperAdminMenu.filter(suite => suite.items.length > 0); 
-    }
-   
-    return getCategorizedOrgSuperAdminMenu(isPurelyPermanentOrg); // Return the standard suite menu for everyone else
-  },
-  admin: (departmentName, isPurelyPermanentOrg) => createCategorizedAdminMenu(departmentName, isPurelyPermanentOrg), // Use the new categorized function
-employee: (departmentName, designationName, userId, isPurelyPermanentOrg) => {
-    // MODIFIED: Centralized definitions for menu item groups for reusability
-
-    const SPECIAL_USER_ID = '00c22bbb-9781-44bc-9973-c53bd08c9da2';
-
-    const coreEmployeeItems = [
-      { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
-      { icon: GrDocumentTime, label: "Time Sheet", path: "/employee/timesheet"},
-      { icon: MdMoreTime, label: "Regularization", path: "/employee/regularization",},
-      { icon: ImProfile, label: "My Profile", path: "/profile" },
-      { icon: LuCalendarPlus, label: "Leave", path: "/employee/leave" },
-      { icon: FaRegCalendarCheck, label: "Attendance", path: "/employee/attendance" },
-      { icon: IoCalendarNumberOutline, label: "Calendar", path: "/employee/calendar" },
-    ];
-
-    const hrSpecificItems = [
-      { icon: FiBriefcase, label: "Jobs", path: "/jobs" },
-      { icon: AiOutlineProfile, label: "My Submission", path: "/my-submission" },
-      { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool" },
-      { icon: BsPin, label: "Bench Pool", path: "/bench-pool" },
-      { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", beta: true },
-      { icon: GoGoal, label: "Goals", path: "/goalsview" },
-      { icon: AiOutlineProfile, label: "Reports", path: "/reports" },
-    ];
-    
-    // Filter hrSpecificItems
-    const filteredHrItems = filterRestrictedItems(hrSpecificItems, isPurelyPermanentOrg);
-
-    const salesSuiteItems = [
-      { icon: GoOrganization, label: "Companies", path: "/companies" },
-      { icon: VscOrganization, label: "People", path: "/contacts" },
-      { icon: FiList, label: "Lists", path: "/lists" },
-      { icon: RiCustomerService2Fill, label: "Kanban", path: "/sales/kanban" }
-    ];
-
-    // --- NEW: Logic for the special user to get a categorized/suite menu ---
-    if (userId === SPECIAL_USER_ID) {
-      // Build and return the categorized menu structure
-      return [
+    global_superadmin: [
+        { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
+        { icon: SiAwsorganizations, label: "Organization", path: "/organization" },
+        { icon: BsShieldCheck, label: "Verifications", path: "/verifications" },
+        { icon: FaFileInvoiceDollar, label: "Invoices", path: "/organization/invoices" },
         {
-          title: "HR Suite",
-          icon: MdPeopleAlt,
-          // This user gets all core employee items plus the HR-specific items
-          items: [
-             // Manually order items for the suite view
-            { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
-            ...filteredHrItems,
-            ...coreEmployeeItems.filter(item => item.label !== "Dashboard") // Add rest of core items
-          ],
+            icon: BarChart3,
+            label: "Reports",
+            path: "/reports",
+            dropdown: [
+                { icon: TrendingUp, label: "Org. Talent Trends", path: "/reports/organization-talent-trends" },
+            ],
         },
-        {
-          title: "SALES SUITE",
-          icon: RiCustomerService2Fill,
-          items: salesSuiteItems,
-        }
-      ];
+        { icon: FiSettings, label: "Settings", path: "/settings" },
+    ],
+    organization_superadmin: (organizationId, organization, isPurelyPermanentOrg, userPermissions) => {
+        const orgFeatures = organization?.subscription_features || {};
+        let rawMenu = getDynamicMenu(userPermissions, orgFeatures, 'organization_superadmin');
+        return rawMenu.map(suite => ({
+            ...suite,
+            items: filterRestrictedItems(suite.items, isPurelyPermanentOrg)
+        })).filter(suite => suite.items.length > 0);
+    },
+    admin: (departmentName, isPurelyPermanentOrg, userPermissions) => {
+        const orgFeatures = { hiring_suite: true, project_suite: true, finance_suite: true, sales_suite: true, verification_suite: true };
+        let rawMenu = getDynamicMenu(userPermissions, orgFeatures, 'admin');
+        return rawMenu.map(suite => ({
+            ...suite,
+            items: filterRestrictedItems(suite.items, isPurelyPermanentOrg)
+        })).filter(suite => suite.items.length > 0);
+    },
+    employee: (departmentName, designationName, userId, isPurelyPermanentOrg, userPermissions) => {
+        const orgFeatures = { hiring_suite: true, project_suite: true, finance_suite: true, sales_suite: true, verification_suite: true };
+        let rawMenu = getDynamicMenu(userPermissions, orgFeatures, 'employee');
+        return rawMenu.map(suite => ({
+            ...suite,
+            items: filterRestrictedItems(suite.items, isPurelyPermanentOrg)
+        })).filter(suite => suite.items.length > 0);
     }
-    
-    // --- Existing logic for all other employees (returns a flat menu) ---
-    
-    // Start with the base items for a standard employee
-    let baseMenu = [...coreEmployeeItems];
-
-    if (departmentName === "Human Resource") {
-      // Insert HR-specific items after "Dashboard"
-      baseMenu.splice(1, 0, ...filteredHrItems);
-    }
-
-    if (departmentName === "Sales & Marketing" && designationName === "Consultant") {
-      baseMenu.splice(1, 0, { icon: FiBriefcase, label: "Jobs", path: "/jobs" });
-    }
-
-    if (departmentName === "Sales & Marketing") {
-      // Insert sales items after "My Profile" (or adjust index as needed)
-      baseMenu.splice(4, 0, ...salesSuiteItems);
-    }
-    
-    if (departmentName === "Finance") {
-      return [
-        { icon: MdOutlineAccountBalance, label: "Finance", path: "/finance" },
-        { icon: FaFileInvoiceDollar, label: "Invoices", path: "/accounts/invoices" },
-        { icon: FaSackDollar, label: "Expenses", path: "/accounts/expenses" },
-      ];
-    }
-
-    return baseMenu;
-  },
 };
 
 export const extraMenuItems = [
   { icon: FiLogOut, label: "Logout", action: "logout" },
 ];
+// New layout change
