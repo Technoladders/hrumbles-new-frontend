@@ -42,7 +42,7 @@ import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { startOfMonth } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, FileText, Download, Search } from 'lucide-react'; // NEW: Added Search
+import { MoreHorizontal, FileText, Download, Search, Loader2 } from 'lucide-react'; // Added Loader2
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,6 +60,10 @@ import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
 import { ContactDetailPanel } from '@/components/sales/contacts-table/ContactDetailPanel';
 import { PeopleSearchDialog } from '@/components/sales/contacts-table/PeopleSearchDialog';
+// Add these imports
+import { useContactFilters } from '@/hooks/use-contact-filters';
+import { AdvancedFilterPanel, ActiveFilter } from '@/components/sales/ AdvancedFilterPanel';
+import { X } from 'lucide-react';
 
 interface DateRange {
   startDate: Date | null;
@@ -72,6 +76,14 @@ const TanstackContactsPage: React.FC = () => {
   const { toast } = useToast();
   const { fileId: fileIdFromUrl } = useParams<{ fileId?: string }>();
   const organization_id = useSelector((state: any) => state.auth.organization_id);
+   const [activeFilters, setActiveFilters] = React.useState<ActiveFilter[]>([]);
+  const [globalSearchTerm, setGlobalSearchTerm] = React.useState("");
+  
+  // ✅ NEW: Fetch filter options
+  const { filters, isLoading: isFiltersLoading } = useContactFilters({
+    organizationId: organization_id,
+  });
+
   const currentUser = useSelector((state: any) => state.auth.user);
   const { viewingMode } = useSelector((state: any) => state.workspace);
   const queryClient = useQueryClient();
@@ -112,11 +124,11 @@ const TanstackContactsPage: React.FC = () => {
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   
-  const [chartDateRange, setChartDateRange] = React.useState<DateRange>({
-    startDate: startOfMonth(new Date()),
-    endDate: new Date(),
-  });
-
+// Find this block (around line 125) and update it:
+const [chartDateRange, setChartDateRange] = React.useState<DateRange>({
+  startDate: null,
+  endDate: null,
+});
   const { data: savedColumnOrder, set: saveColumnOrder } = useUserPreferences<ColumnOrderState>('contactsColumnOrderV2');
   const { data: savedColumnSizing, set: saveColumnSizing } = useUserPreferences<ColumnSizingState>('contactsColumnSizing');
 
@@ -150,16 +162,63 @@ const TanstackContactsPage: React.FC = () => {
   });
 
   
-  const filteredData = React.useMemo(() => {
-    return serverContacts.filter(contact => {
-      if (!chartDateRange?.startDate) return true;
+// Find this block (around line 155) and update it:
+const filteredData = React.useMemo(() => {
+  let data = serverContacts;
+
+  // Apply date range filter
+  if (chartDateRange?.startDate) {
+    data = data.filter(contact => {
       const createdAt = new Date(contact.created_at);
-      const from = chartDateRange.startDate;
-      const to = chartDateRange.endDate || new Date();
+      const from = chartDateRange.startDate!;
+      const to = chartDateRange.endDate ? new Date(chartDateRange.endDate) : new Date();
       to.setHours(23, 59, 59, 999);
       return createdAt >= from && createdAt <= to;
     });
-  }, [serverContacts, chartDateRange]);
+  }
+
+ // ✅ UPDATE: Apply advanced filters
+  if (activeFilters.length > 0) {
+    data = data.filter(contact => {
+      return activeFilters.every((filter) => {
+        if (filter.values.length === 0) return true;
+        
+        switch (filter.filterId) {
+          // ADD THESE TWO CASES:
+          case 'name':
+            return filter.values.includes(contact.name || '');
+          case 'email':
+            return filter.values.includes(contact.email || '');
+            
+          // Existing cases:
+          case 'job_title':
+            return filter.values.includes(contact.job_title || '');
+          case 'contact_stage':
+            return filter.values.includes(contact.contact_stage || '');
+          case 'contact_owner':
+            return filter.values.includes(contact.contact_owner || '');
+          // ... rest of cases
+          default:
+            return true;
+        }
+      });
+    });
+  }
+
+  // // ✅ NEW: Apply global search
+  // if (globalSearchTerm) {
+  //   const searchLower = globalSearchTerm.toLowerCase();
+  //   data = data.filter(contact =>
+  //     contact.name?.toLowerCase().includes(searchLower) ||
+  //     contact.email?.toLowerCase().includes(searchLower) ||
+  //     contact.mobile?.toLowerCase().includes(searchLower) ||
+  //     contact.job_title?.toLowerCase().includes(searchLower) ||
+  //     contact.company_name?.toLowerCase().includes(searchLower)
+  //   );
+  // }
+
+  return data;
+}, [serverContacts, chartDateRange, activeFilters, globalSearchTerm]);
 
   // Create clickable name column
   const createNameColumn = (): ColumnDef<SimpleContact> => ({
@@ -360,6 +419,13 @@ const handleDownloadCsv = (exportAll: boolean) => {
     doc.save('contacts.pdf');
   };
 
+  // ✅ Fix: Define handleClearAllFilters
+  const handleClearAllFilters = () => {
+    setActiveFilters([]);
+    setGlobalSearchTerm("");
+    setChartDateRange({ startDate: null, endDate: null });
+  };
+
 return (
     <DndProvider backend={HTML5Backend}>
         <div className="w-full h-full flex flex-col space-y-4">
@@ -430,28 +496,115 @@ return (
                 </div>
             </header>
             
-            <div className="flex-1 flex flex-col rounded-lg border bg-white overflow-hidden">
-                <div className="p-4 border-b flex-shrink-0">
-                    <DataTableToolbar
-                        table={table}
-                        onOpenAddContactDialog={() => setIsAddContactOpen(true)}
-                        onOpenImportDialog={() => setIsImportOpen(true)}
-                        onToggleGrouping={() => table.setGrouping(prev => prev.length ? [] : ['contact_stage'])}
-                        createdByOptions={createdByOptions}
-                    />
-                </div>
+<div className="flex-1 flex flex-col rounded-lg border bg-white overflow-hidden">
+  {/* ✅ Filter Bar - INSIDE table container */}
+  <div className="border-b border-gray-200 bg-gray-50 p-4">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Left side - Advanced Filters & Search */}
+      <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+        {/* Advanced Filters Panel */}
+        <AdvancedFilterPanel
+          filters={filters}
+          activeFilters={activeFilters}
+          onFilterChange={setActiveFilters}
+          onClearAll={handleClearAllFilters}
+          isLoading={isFiltersLoading}
+        />
 
-               <div className="flex-1 relative">
-                    {isLoading ? (
-                        <p className="p-4 text-center">Loading Contacts...</p>
-                    ) : (
-                        <DataTable table={table} />
-                    )}
-                </div>
-                <div className="p-2 border-t flex-shrink-0">
-                    <DataTablePagination table={table} />
-                </div>
-            </div>
+        {/* Search */}
+        <div className="relative flex-1 min-w-[200px] max-w-[400px]">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <input
+            type="text"
+            placeholder="Search contacts..."
+            value={globalSearchTerm}
+            onChange={(e) => setGlobalSearchTerm(e.target.value)}
+            className="w-full h-10 pl-9 pr-3 rounded-lg bg-white border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      {/* Right side - Results Count */}
+      <div className="text-sm text-gray-600 font-medium whitespace-nowrap">
+        {isLoading ? (
+          <span className="flex items-center gap-2">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Loading...
+          </span>
+        ) : (
+          <span>{filteredData.length} {filteredData.length === 1 ? 'contact' : 'contacts'}</span>
+        )}
+      </div>
+    </div>
+
+    {/* Active Filters Display */}
+    {activeFilters.length > 0 && (
+      <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-200">
+        <span className="text-sm font-medium text-gray-700">Active Filters:</span>
+        {activeFilters.map((filter) => {
+          const filterConfig = filters.find(f => f.id === filter.filterId);
+          return filter.values.map((value) => {
+            const option = filterConfig?.options?.find(opt => opt.value === value);
+            return (
+              <span
+                key={`${filter.filterId}-${value}`}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800 border border-blue-200"
+              >
+                <span className="font-medium">{filterConfig?.label}:</span>
+                <span>{option?.label || value}</span>
+                <button
+                  onClick={() => {
+                    setActiveFilters(prev =>
+                      prev.map(f =>
+                        f.filterId === filter.filterId
+                          ? { ...f, values: f.values.filter(v => v !== value) }
+                          : f
+                      ).filter(f => f.values.length > 0)
+                    );
+                  }}
+                  className="ml-1 hover:bg-blue-200 rounded-full p-0.5"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            );
+          });
+        })}
+        <button
+          onClick={handleClearAllFilters}
+          className="text-sm text-blue-600 hover:text-blue-800 font-medium hover:underline"
+        >
+          Clear all
+        </button>
+      </div>
+    )}
+  </div>
+
+  {/* Existing Toolbar */}
+  <div className="p-4 border-b flex-shrink-0">
+    <DataTableToolbar
+      table={table}
+      onOpenAddContactDialog={() => setIsAddContactOpen(true)}
+      onOpenImportDialog={() => setIsImportOpen(true)}
+      onToggleGrouping={() => table.setGrouping(prev => prev.length ? [] : ['contact_stage'])}
+      createdByOptions={createdByOptions}
+    />
+  </div>
+
+  {/* Table */}
+  <div className="flex-1 relative">
+    {isLoading ? (
+      <p className="p-4 text-center">Loading Contacts...</p>
+    ) : (
+      <DataTable table={table} />
+    )}
+  </div>
+  
+  <div className="p-2 border-t flex-shrink-0">
+    <DataTablePagination table={table} />
+  </div>
+</div>
+
         </div>
 
         {/* Contact Detail Panel */}

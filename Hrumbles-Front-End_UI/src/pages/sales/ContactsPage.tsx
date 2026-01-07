@@ -24,6 +24,7 @@ interface DynamicColumn {
   type: string;
 }
 
+
 const ContactsPage: React.FC = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -40,7 +41,7 @@ const ContactsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isEditContactDialogOpen, setIsEditContactDialogOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<UnifiedContactListItem | null>(null);
-  const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
+  const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);CompaniesPage
 
   // --- THE FIX: Use an effect that only runs ONCE when the data successfully loads ---
   useEffect(() => {

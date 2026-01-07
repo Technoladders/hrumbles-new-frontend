@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from "@/integrations/supabase/client";
 import { UnifiedContactListItem } from '@/types/contact'; 
 import { Database } from '@/types/database.types'; 
+import { ActiveFilter } from '@/components/sales/AdvancedFilterPanel'; // ✅ ADD THIS
 
-// Define types for rows from Supabase for better type safety during mapping
+// Keep all your existing type definitions - NO CHANGES
 type ContactFromDB = Database['public']['Tables']['contacts']['Row'] & { 
     company_data_from_join: Pick<Database['public']['Tables']['companies']['Row'], 'name'> | null 
 };
@@ -17,7 +18,6 @@ type EmployeeAssociationBaseFromDB = Database['public']['Tables']['employee_asso
     companies: Pick<Database['public']['Tables']['companies']['Row'], 'name'> | null;
 };
 
-// Details from the analysis tables
 type ResumeAnalysisData = Pick<Database['public']['Tables']['resume_analysis']['Row'], 
   'candidate_id' | 'job_id' | 'candidate_name' | 'email' | 'phone_number' | 'linkedin'
 >;
@@ -25,26 +25,48 @@ type CandidateResumeAnalysisData = Pick<Database['public']['Tables']['candidate_
   'candidate_id' | 'job_id' | 'candidate_name' | 'email' | 'phone_number' | 'linkedin'
 >;
 
+// ✅ ADD THIS: Options interface for filtering
+interface UseContactsOptions {
+  fileId?: string;
+  organizationId?: string;
+  activeFilters?: ActiveFilter[];
+  searchTerm?: string;
+}
 
-export const useContacts = () => {
+// ✅ MODIFY: Add options parameter with default value
+export const useContacts = (options: UseContactsOptions = {}) => {
+  const { fileId, organizationId, activeFilters = [], searchTerm = '' } = options;
+
   return useQuery<UnifiedContactListItem[], Error>({
-    queryKey: ['combinedContactsListV4'], 
+    // ✅ MODIFY: Include filter params in query key for proper caching
+    queryKey: ['combinedContactsListV4', fileId, organizationId, activeFilters, searchTerm], 
     queryFn: async (): Promise<UnifiedContactListItem[]> => {
       console.log("useContacts: Fetching all contacts, emp_assoc, cand_comp; enriching from analysis tables...");
 
-      // --- 1. Fetch from 'contacts' table ---
-      const { data: manualContactsData, error: manualContactsError } = await supabase
+      // ✅ MODIFY: Add organization and file filters if provided
+      let contactsQuery = supabase
         .from('contacts')
         .select(`
-          id, name, email, mobile, job_title, linkedin_url, contact_owner, contact_stage, created_at, updated_at, company_id,
+          id, name, email, mobile, job_title, linkedin_url, contact_owner, contact_stage, created_at, updated_at, company_id, organization_id, file_id,
           company_data_from_join:companies!fk_contacts_to_companies ( name ) 
-        `) as { data: ContactFromDB[] | null; error: any };
+        `);
+
+      // Add filters if provided
+      if (organizationId) {
+        contactsQuery = contactsQuery.eq('organization_id', organizationId);
+      }
+      if (fileId) {
+        contactsQuery = contactsQuery.eq('file_id', fileId);
+      }
+
+      const { data: manualContactsData, error: manualContactsError } = await contactsQuery as { data: ContactFromDB[] | null; error: any };
 
       if (manualContactsError) {
         console.error('useContacts: Error fetching manual contacts:', manualContactsError);
         throw manualContactsError;
       }
 
+      // --- Keep ALL your existing logic below - NO CHANGES ---
       let processedItems: UnifiedContactListItem[] = (manualContactsData || []).map(c => ({
         id: c.id,
         name: c.name,
@@ -68,7 +90,6 @@ export const useContacts = () => {
         association_is_current: null,
       }));
 
-      // --- 2. Fetch base data from 'employee_associations' ---
       const { data: newAssociations, error: newAssocError } = await supabase
         .from('employee_associations')
         .select('id, candidate_id, company_id, job_id, designation, contact_owner, contact_stage, created_at, start_date, end_date, is_current, companies(name)') as { data: EmployeeAssociationBaseFromDB[] | null; error: any };
@@ -78,7 +99,6 @@ export const useContacts = () => {
         throw newAssocError; 
       }
       
-      // --- 3. Fetch base data from 'candidate_companies' ---
       const { data: legacyLinks, error: legacyError } = await supabase
         .from('candidate_companies')
         .select('candidate_id, job_id, company_id, designation, contact_owner, contact_stage, years, companies(name)') as { data: CandidateCompanyBaseFromDB[] | null; error: any };
@@ -88,7 +108,6 @@ export const useContacts = () => {
         throw legacyError; 
       }
 
-      // --- Consolidate (candidate_id, job_id) pairs for analysis lookups ---
       const analysisLookups: { candidate_id: string; job_id: string | null; original_source_item: any; source_type: 'employee_associations' | 'candidate_companies' }[] = [];
       
       (newAssociations || []).forEach(assoc => {
@@ -121,7 +140,6 @@ export const useContacts = () => {
       let candidateResumeAnalysisMap = new Map<string, CandidateResumeAnalysisData>();
       let resumeAnalysisMap = new Map<string, ResumeAnalysisData>();
 
-      // --- Fetch candidate_resume_analysis in batches ---
       const craLookups = uniqueLookupsInput.filter(l => l.candidate_id && l.job_id && /^[0-9a-fA-F-]{36}$/.test(l.job_id)); 
       if (craLookups.length > 0) {
         const chunkSize = 10;
@@ -155,7 +173,6 @@ export const useContacts = () => {
         craDataAll.forEach(r => candidateResumeAnalysisMap.set(`${String(r.candidate_id)}|${String(r.job?.job_id)}`, r as CandidateResumeAnalysisData));
       }
 
-      // --- Fetch resume_analysis ---
       const allCandidateIdsForRA = [...new Set(uniqueLookupsInput.filter(l => l.candidate_id).map(l => l.candidate_id))];
       if (allCandidateIdsForRA.length > 0) {
         const { data: raData, error: raError } = await supabase.from('resume_analysis')
@@ -171,7 +188,6 @@ export const useContacts = () => {
         });
       }
 
-      // --- Process analysis lookups ---
       analysisLookups.forEach(lookup => {
         const item = lookup.original_source_item;
         const candIdStr = String(lookup.candidate_id); 
@@ -255,8 +271,58 @@ export const useContacts = () => {
           uniqueContactsMap.set(key, item);
         }
       }
-      const finalData = Array.from(uniqueContactsMap.values());
+      
+      let finalData = Array.from(uniqueContactsMap.values());
 
+      // ✅ ADD THIS: Apply search filter (client-side)
+      if (searchTerm && searchTerm.trim() !== '') {
+        const searchLower = searchTerm.toLowerCase().trim();
+        finalData = finalData.filter(contact => {
+          return (
+            (contact.name?.toLowerCase() || '').includes(searchLower) ||
+            (contact.email?.toLowerCase() || '').includes(searchLower) ||
+            (contact.mobile?.toLowerCase() || '').includes(searchLower) ||
+            (contact.job_title?.toLowerCase() || '').includes(searchLower) ||
+            (contact.company_name?.toLowerCase() || '').includes(searchLower)
+          );
+        });
+      }
+
+      // ✅ ADD THIS: Apply advanced filters (client-side)
+      if (activeFilters.length > 0) {
+        finalData = finalData.filter((contact) => {
+          return activeFilters.every((filter) => {
+            if (filter.values.length === 0) return true;
+
+            switch (filter.filterId) {
+              case 'job_title':
+                return filter.values.includes(contact.job_title || '');
+              
+              case 'company':
+                return filter.values.includes(String(contact.company_id || ''));
+              
+              case 'contact_stage':
+                return filter.values.includes(contact.contact_stage || '');
+              
+              case 'contact_owner':
+                return filter.values.includes(contact.contact_owner || '');
+              
+              case 'source_table':
+                return filter.values.includes(contact.source_table || '');
+              
+              // Add more filter cases based on your UnifiedContactListItem type
+              // If you have additional fields like medium, country, state, city:
+              // case 'medium':
+              //   return filter.values.includes(contact.medium || '');
+              
+              default:
+                return true;
+            }
+          });
+        });
+      }
+
+      // Keep your existing sort logic
       finalData.sort((a, b) => {
         const aDate = a.created_at ? new Date(a.created_at).getTime() : null;
         const bDate = b.created_at ? new Date(b.created_at).getTime() : null;
@@ -270,12 +336,13 @@ export const useContacts = () => {
         return nameA.localeCompare(nameB);
       });
       
-      console.log(`useContacts: Final list count after deduplication: ${finalData.length}`);
+      console.log(`useContacts: Final list count after deduplication and filtering: ${finalData.length}`);
       return finalData;
     },
   });
 };
 
+// ✅ NO CHANGES to useContactDetails - keep as is
 export const useContactDetails = (contactId: string | undefined) => {
   return useQuery<UnifiedContactListItem | null, Error>({ 
     queryKey: ['contact', contactId], 
@@ -289,7 +356,6 @@ export const useContactDetails = (contactId: string | undefined) => {
         .select(`*, company_data_from_join:companies!fk_contacts_to_companies (name)`) 
         .eq('id', contactId)
         .maybeSingle() as { data: (ContactFromDB & {company_data_from_join: {name: string} | null}) | null; error: any };
-
 
       if (error) throw error;
 
@@ -325,3 +391,7 @@ export const useContactDetails = (contactId: string | undefined) => {
     enabled: !!contactId, 
   });
 };
+
+
+
+

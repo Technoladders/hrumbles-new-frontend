@@ -596,3 +596,4 @@ export const CompanyApolloTab: React.FC<CompanyApolloTabProps> = ({ company }) =
     </div>
   );
 };
+
