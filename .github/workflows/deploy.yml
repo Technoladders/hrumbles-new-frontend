@@ -14,24 +14,25 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4   # ← updated 2024/2025 version
+        uses: actions/checkout@v4
 
       # ── Determine environment ───────────────────────────────
       - name: Setup environment variables
         run: |
           case "${{ github.ref_name }}" in
             cicd)
-              echo "ENV_NAME=develop"               >> $GITHUB_ENV
+              echo "BUILD_SCRIPT=build:develop"     >> $GITHUB_ENV
               echo "DOCKER_TAG=dev-latest"          >> $GITHUB_ENV
               echo "DEPLOY_PATH=/home/deploy/apps/xrilic-dev"    >> $GITHUB_ENV
               ;;
             staging)
-              echo "ENV_NAME=staging"               >> $GITHUB_ENV
+              echo "BUILD_SCRIPT=build:staging"     >> $GITHUB_ENV
               echo "DOCKER_TAG=staging-latest"      >> $GITHUB_ENV
               echo "DEPLOY_PATH=/home/deploy/apps/xrilic-staging" >> $GITHUB_ENV
               ;;
             main)
-              echo "ENV_NAME=production"            >> $GITHUB_ENV
+              # Assuming standard 'build' for production
+              echo "BUILD_SCRIPT=build"             >> $GITHUB_ENV
               echo "DOCKER_TAG=prod-latest"         >> $GITHUB_ENV
               echo "DEPLOY_PATH=/home/deploy/apps/xrilic-prod"    >> $GITHUB_ENV
               ;;
@@ -52,23 +53,25 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'                  # ← consider upgrading
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: 'Hrumbles-Front-End_UI/package-lock.json'
 
       - name: Install dependencies
         working-directory: ./Hrumbles-Front-End_UI
-        run: npm ci                           # ← prefer ci over install
+        run: npm ci
 
       - name: Build application
         working-directory: ./Hrumbles-Front-End_UI
-        run: npm run build:${{ env.ENV_NAME }}   # ← more readable naming
+        # ✅ FIX: Uses explicit script name mapped above
+        run: npm run ${{ env.BUILD_SCRIPT }}
 
       - name: Build & push Docker image
-        uses: docker/build-push-action@v6     # ← latest major version
+        uses: docker/build-push-action@v6
         with:
           context: ./Hrumbles-Front-End_UI
           push: true
+          # ✅ NOTE: Ensure your server compose files use this exact tag format
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/hrumble-new-frontend:${{ env.DOCKER_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -87,10 +90,12 @@ jobs:
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/hrumble-new-frontend:${{ env.DOCKER_TAG }}
 
             echo "Restarting services..."
-            docker compose up -d --no-deps --force-recreate --remove-orphans
+            # --force-recreate ensures it uses the new image even if config didn't change
+            docker compose up -d --no-deps --force-recreate
 
-            echo "Cleaning up old images..."
+            echo "Cleaning up..."
             docker image prune -f
-            docker builder prune -f --keep-storage 2GB 2>/dev/null || true
-
+            # Added prune for build cache too, just in case
+            docker builder prune -f
+            
             echo "Deployment finished ✓"
