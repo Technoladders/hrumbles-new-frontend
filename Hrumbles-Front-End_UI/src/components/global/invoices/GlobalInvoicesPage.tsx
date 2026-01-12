@@ -8,6 +8,7 @@ import {
   Filter, X, CheckSquare, Square, Package, AlertCircle, DollarSign, HandCoins
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
@@ -40,6 +41,18 @@ const GlobalInvoicesPage = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [previewInvoice, setPreviewInvoice] = useState<any>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+
+
+const [paymentType, setPaymentType] = useState<'full' | 'manual'>('full');
+const [paymentData, setPaymentData] = useState({
+  id: '',
+  status: '',
+  amount: '' as string | number, // Allow string for empty input
+  date: format(new Date(), 'yyyy-MM-dd'),
+  method: 'Bank Transfer'
+});
   
   // NEW: Advanced filters
   const [dateRange, setDateRange] = useState<{ start: string; end: string } | null>(null);
@@ -71,21 +84,25 @@ const GlobalInvoicesPage = () => {
     setSearchParams(newParams);
   };
 
-  const fetchInvoices = async () => {
+const fetchInvoices = async () => {
     setIsLoading(true);
     const { data, error } = await supabase
       .from('hr_invoices')
       .select('*, status_history, updated_by')
       .eq('organization_id', organizationId)
-      .eq('type', 'Organization') 
-      .not('organization_client_id', 'is', null) 
+      .eq('type', 'Organization')
+      .not('organization_client_id', 'is', null)
       .order('created_at', { ascending: false });
-
     if (error) {
       console.error('Error fetching invoices:', error);
       toast.error("Failed to fetch invoices");
     } else {
-      setInvoices(data || []);
+      // Parse items for compatibility
+      const parsedInvoices = (data || []).map(inv => ({
+        ...inv,
+        items: typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items || []
+      }));
+      setInvoices(parsedInvoices);
     }
     setIsLoading(false);
   };
@@ -246,27 +263,68 @@ const GlobalInvoicesPage = () => {
     });
   };
 
-  // --- INDIVIDUAL ACTIONS ---
-  const handleStatusChange = async (id: string, newStatus: string) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const { error } = await supabase
-        .from('hr_invoices')
-        .update({ 
-          status: newStatus,
-          updated_by: user?.id,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', id);
-      
-      if (error) throw error;
-      toast.success(`Status updated to ${newStatus}`);
-      fetchInvoices();
-    } catch (error: any) {
-      toast.error("Failed to update status");
-    }
+// Update handleStatusChange to intercept Paid/Partially Paid
+const handleStatusChange = async (id: string, newStatus: string) => {
+  const inv = invoices.find(i => i.id === id);
+  
+  if (newStatus === 'Paid' || newStatus === 'Partially Paid') {
+    const remainingBalance = Number(inv.total_amount) - Number(inv.paid_amount || 0);
+    
+    setPaymentType('full'); // Default to full
+    setPaymentData({
+      id,
+      status: newStatus,
+      amount: remainingBalance, 
+      date: format(new Date(), 'yyyy-MM-dd'),
+      method: 'Bank Transfer'
+    });
+    setIsPaymentDialogOpen(true);
+    return;
+  }
+  await performStatusUpdate(id, newStatus, inv.paid_amount, null, null);
+};
+
+  // Update logic to handle Edit Modal correctly
+  const handleEditClick = (inv: any) => {
+    // Ensure items are parsed if they come as a string from DB
+    const processedInvoice = {
+      ...inv,
+      items: typeof inv.items === 'string' ? JSON.parse(inv.items) : (inv.items || [])
+    };
+    setSelectedInvoice(processedInvoice);
+    setIsCreateOpen(true);
   };
+
+// New function to handle the actual database save
+const performStatusUpdate = async (id: string, status: string, paidAmount: number, date: string | null, method: string | null) => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    // Calculate if it should be Paid or Partially Paid based on amount
+    const inv = invoices.find(i => i.id === id);
+    const totalAmount = Number(inv.total_amount);
+    const finalStatus = (status === 'Paid' && paidAmount < totalAmount) ? 'Partially Paid' : status;
+
+    const { error } = await supabase
+      .from('hr_invoices')
+      .update({ 
+        status: finalStatus,
+        paid_amount: paidAmount,
+        payment_date: date,
+        updated_by: user?.id,
+        updated_at: new Date().toISOString(),
+        // We pass method via metadata if needed, but history trigger captures status
+      })
+      .eq('id', id);
+    
+    if (error) throw error;
+    toast.success(`Invoice updated to ${finalStatus}`);
+    setIsPaymentDialogOpen(false);
+    fetchInvoices();
+  } catch (error) {
+    toast.error("Failed to update status");
+  }
+};
 
   const handleDelete = (id: string) => {
     toast.warning("Are you sure?", {
@@ -334,8 +392,12 @@ const GlobalInvoicesPage = () => {
     return format(date, 'dd MMM yyyy');
   };
 
-  const openPreview = (invoice: any) => {
-    setPreviewInvoice(invoice);
+const openPreview = (invoice: any) => {
+    const parsedInvoice = {
+      ...invoice,
+      items: typeof invoice.items === 'string' ? JSON.parse(invoice.items) : invoice.items || []
+    };
+    setPreviewInvoice(parsedInvoice);
     setIsPreviewOpen(true);
   };
 
@@ -639,32 +701,42 @@ const GlobalInvoicesPage = () => {
                           </div>
 
                           {/* 4. Amount */}
-                          <Popover>
-                            <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
-                              <div className="col-span-1 font-semibold text-purple-700 hover:text-purple-800 cursor-pointer underline decoration-dotted">
-                                {inv.currency === 'USD' ? '$' : '₹'}{Number(inv.total_amount).toLocaleString()}
-                              </div>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-64" align="start">
-                              <div className="space-y-2">
-                                <h4 className="font-semibold text-sm">Amount Breakdown</h4>
-                                <div className="space-y-1 text-sm">
-                                  <div className="flex justify-between">
-                                    <span className="text-gray-600">Subtotal:</span>
-                                    <span className="font-medium">₹{(Number(inv.total_amount) / 1.18).toFixed(2)}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-gray-600">GST (18%):</span>
-                                    <span className="font-medium">₹{(Number(inv.total_amount) - (Number(inv.total_amount) / 1.18)).toFixed(2)}</span>
-                                  </div>
-                                  <div className="flex justify-between pt-2 border-t font-semibold">
-                                    <span>Total:</span>
-                                    <span className="text-purple-700">₹{Number(inv.total_amount).toLocaleString()}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </PopoverContent>
-                          </Popover>
+     <Popover>
+        <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
+          <div className="col-span-1 font-semibold text-purple-700 hover:text-purple-800 cursor-pointer underline decoration-dotted">
+            ₹{Number(inv.total_amount).toLocaleString()}
+          </div>
+        </PopoverTrigger>
+        <PopoverContent className="w-64" align="start">
+          <div className="space-y-2 text-sm">
+            <h4 className="font-bold border-b pb-1">Invoice Summary</h4>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Subtotal:</span>
+              <span>₹{Number(inv.subtotal).toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Tax ({inv.tax_mode}):</span>
+              <span>₹{Number(inv.tax_amount).toLocaleString()}</span>
+            </div>
+            {Number(inv.tds_amount) > 0 && (
+              <div className="flex justify-between text-red-500">
+                <span>TDS (-):</span>
+                <span>₹{Number(inv.tds_amount).toLocaleString()}</span>
+              </div>
+            )}
+            {Number(inv.tcs_amount) > 0 && (
+              <div className="flex justify-between text-green-600">
+                <span>TCS (+):</span>
+                <span>₹{Number(inv.tcs_amount).toLocaleString()}</span>
+              </div>
+            )}
+            <div className="flex justify-between pt-1 border-t font-bold text-purple-700">
+              <span>Total:</span>
+              <span>₹{Number(inv.total_amount).toLocaleString()}</span>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
 
                           {/* 5. Payment Method */}
                           <div className="col-span-1 text-gray-600 text-xs">
@@ -783,7 +855,7 @@ const GlobalInvoicesPage = () => {
                                       variant="ghost" 
                                       size="icon" 
                                       className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors" 
-                                      onClick={() => { setSelectedInvoice(inv); setIsCreateOpen(true); }}
+                                     onClick={() => handleEditClick(inv)}
                                     >
                                       <Edit className="h-3.5 w-3.5" />
                                     </Button>
@@ -889,7 +961,7 @@ const GlobalInvoicesPage = () => {
 
       {/* CREATE/EDIT MODAL */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedInvoice ? 'Edit Invoice' : 'Create Organization Invoice'}</DialogTitle>
           </DialogHeader>
@@ -908,6 +980,114 @@ const GlobalInvoicesPage = () => {
         </DialogContent>
       </Dialog>
 
+<Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+  <DialogContent className="sm:max-w-[425px]">
+    <DialogHeader>
+      <DialogTitle>Record Payment</DialogTitle>
+    </DialogHeader>
+    <div className="grid gap-6 py-4">
+      
+      {/* Radio Selection for Payment Type */}
+      <div className="space-y-3">
+        <Label>Payment Type</Label>
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input 
+              type="radio" 
+              className="w-4 h-4 accent-purple-600"
+              checked={paymentType === 'full'} 
+              onChange={() => {
+                const inv = invoices.find(i => i.id === paymentData.id);
+                const balance = Number(inv.total_amount) - Number(inv.paid_amount || 0);
+                setPaymentType('full');
+                setPaymentData({ ...paymentData, amount: balance });
+              }} 
+            />
+            <span className="text-sm font-medium">Fully Paid</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input 
+              type="radio" 
+              className="w-4 h-4 accent-purple-600"
+              checked={paymentType === 'manual'} 
+              onChange={() => {
+                setPaymentType('manual');
+                setPaymentData({ ...paymentData, amount: '' }); // Set to empty
+              }} 
+            />
+            <span className="text-sm font-medium">Manual Amount</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Amount Received - Visible always, but empty/editable if manual */}
+      <div className="space-y-2">
+        <Label>Amount Received</Label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span>
+          <Input 
+            type="number" 
+            placeholder="0.00"
+            className="pl-7"
+            value={paymentData.amount} 
+            disabled={paymentType === 'full'}
+            onChange={(e) => {
+              // Allow clearing the field completely
+              const val = e.target.value;
+              setPaymentData({ ...paymentData, amount: val === '' ? '' : Number(val) });
+            }}
+          />
+        </div>
+        {paymentType === 'full' && (
+          <p className="text-[10px] text-purple-600 font-medium italic">Auto-calculated remaining balance</p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Payment Date</Label>
+          <Input 
+            type="date" 
+            value={paymentData.date} 
+            onChange={(e) => setPaymentData({...paymentData, date: e.target.value})}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Method</Label>
+          <Select value={paymentData.method} onValueChange={(val) => setPaymentData({...paymentData, method: val})}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+              <SelectItem value="UPI">UPI / QR</SelectItem>
+              <SelectItem value="Cash">Cash</SelectItem>
+              <SelectItem value="Cheque">Cheque</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+
+    <div className="flex justify-end gap-2">
+      <Button variant="outline" onClick={() => setIsPaymentDialogOpen(false)}>Cancel</Button>
+      <Button 
+        disabled={!paymentData.amount || Number(paymentData.amount) <= 0}
+        onClick={() => {
+          const inv = invoices.find(i => i.id === paymentData.id);
+          const paidNow = Number(paymentData.amount);
+          const newTotalPaid = Number(inv.paid_amount || 0) + paidNow;
+          
+          // Determine status based on if balance is cleared
+          const totalInvoiceAmount = Number(inv.total_amount);
+          const finalStatus = newTotalPaid >= totalInvoiceAmount ? 'Paid' : 'Partially Paid';
+          
+          performStatusUpdate(paymentData.id, finalStatus, newTotalPaid, paymentData.date, paymentData.method);
+        }}
+      >
+        Save Payment
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
       {/* PREVIEW SIDE PANEL */}
       <Sheet open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <SheetContent side="right" className="w-full sm:max-w-2xl p-0 overflow-hidden">

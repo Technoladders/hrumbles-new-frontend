@@ -1,102 +1,96 @@
-name: Deploy Xrilic Frontend & Website
+name: Deploy Hrumbles Frontend
 
 on:
   push:
     branches:
-      - cicd      # Deploys dev app
-      - staging   # Deploys staging app
-      - main      # Deploys BOTH prod app and prod website
+      - cicd      # → dev
+      - staging   # → staging
+      - main      # → production
   workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    # The 'strategy' and job-level 'if' have been removed.
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4   # ← updated 2024/2025 version
 
-      # --- NEW: SETUP VARIABLES STEP ---
-      # This step checks the branch name and sets environment variables for the rest of the job.
+      # ── Determine environment ───────────────────────────────
       - name: Setup environment variables
         run: |
-          if [ "${{ github.ref_name }}" = "cicd" ]; then
-            echo "BUILD_COMMAND=npm run build:develop" >> $GITHUB_ENV
-            echo "DOCKER_TAG=dev-latest-xrilic" >> $GITHUB_ENV
-            echo "DEPLOY_PATH=/home/deploy/apps/xrilic-dev" >> $GITHUB_ENV
-          elif [ "${{ github.ref_name }}" = "staging" ]; then
-            echo "BUILD_COMMAND=npm run build:staging" >> $GITHUB_ENV
-            echo "DOCKER_TAG=staging-latest-xrilic" >> $GITHUB_ENV
-            echo "DEPLOY_PATH=/home/deploy/apps/xrilic-staging" >> $GITHUB_ENV
-          elif [ "${{ github.ref_name }}" = "main" ]; then
-            echo "BUILD_COMMAND=npm run build" >> $GITHUB_ENV
-            echo "DOCKER_TAG=prod-latest-xrilic" >> $GITHUB_ENV
-            echo "DEPLOY_PATH=/home/deploy/apps/xrilic-prod" >> $GITHUB_ENV
-          fi
+          case "${{ github.ref_name }}" in
+            cicd)
+              echo "ENV_NAME=develop"               >> $GITHUB_ENV
+              echo "DOCKER_TAG=dev-latest"          >> $GITHUB_ENV
+              echo "DEPLOY_PATH=/home/deploy/apps/xrilic-dev"    >> $GITHUB_ENV
+              ;;
+            staging)
+              echo "ENV_NAME=staging"               >> $GITHUB_ENV
+              echo "DOCKER_TAG=staging-latest"      >> $GITHUB_ENV
+              echo "DEPLOY_PATH=/home/deploy/apps/xrilic-staging" >> $GITHUB_ENV
+              ;;
+            main)
+              echo "ENV_NAME=production"            >> $GITHUB_ENV
+              echo "DOCKER_TAG=prod-latest"         >> $GITHUB_ENV
+              echo "DEPLOY_PATH=/home/deploy/apps/xrilic-prod"    >> $GITHUB_ENV
+              ;;
+            *)
+              echo "Unknown branch!" >&2
+              exit 1
+              ;;
+          esac
 
+      # ── Docker Hub ───────────────────────────────────────────
       - name: Login to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # --- Step 1: Build & Push the React App ---
+      # ── Build & Push Frontend ────────────────────────────────
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18.17.0'
+          node-version: '20'                  # ← consider upgrading
           cache: 'npm'
           cache-dependency-path: 'Hrumbles-Front-End_UI/package-lock.json'
-      - name: Install App Dependencies
+
+      - name: Install dependencies
         working-directory: ./Hrumbles-Front-End_UI
-        run: npm install --force --quiet
-      - name: Build React Application
+        run: npm ci                           # ← prefer ci over install
+
+      - name: Build application
         working-directory: ./Hrumbles-Front-End_UI
-        run: ${{ env.BUILD_COMMAND }} # <-- Uses the variable we just set
-      - name: Build and push App Docker image
-        uses: docker/build-push-action@v4
+        run: npm run build:${{ env.ENV_NAME }}   # ← more readable naming
+
+      - name: Build & push Docker image
+        uses: docker/build-push-action@v6     # ← latest major version
         with:
           context: ./Hrumbles-Front-End_UI
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/hrumble-new-frontend:${{ env.DOCKER_TAG }} # <-- Uses variable
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/hrumble-new-frontend:${{ env.DOCKER_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      # --- Step 2: Build & Push the Website (ONLY for the 'main' branch) ---
-      - name: Build and push Website Docker image
-        if: github.ref_name == 'main'
-        uses: docker/build-push-action@v4
-        with:
-          context: ./hrumbles-website
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/hrumble-website:latest-xrilic
-          no-cache: true
-
-      # --- Step 3: Deploy to Server ---
-      - name: Deploy to Server
-        uses: appleboy/ssh-action@master
+      # ── Deploy to server ─────────────────────────────────────
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd ${{ env.DEPLOY_PATH }} # <-- Uses variable
-            echo "Pulling latest images..."
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/hrumble-new-frontend:${{ env.DOCKER_TAG }} # <-- Uses variable
-            
-            # Conditionally pull the website image only for production deploy
-            if [ "${{ github.ref_name }}" = "main" ]; then
-              docker pull ${{ secrets.DOCKERHUB_USERNAME }}/hrumble-website:latest-xrilic
-            fi
+            cd ${{ env.DEPLOY_PATH }}
+
+            echo "Pulling latest frontend image..."
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/hrumble-new-frontend:${{ env.DOCKER_TAG }}
 
             echo "Restarting services..."
-            docker compose up -d --no-deps
+            docker compose up -d --no-deps --force-recreate --remove-orphans
 
-
-            # ✅ NEW: AUTOMATED DISK CLEANUP
-            echo "🧹 Cleaning up old images and cache to free disk space..."
+            echo "Cleaning up old images..."
             docker image prune -f
-            docker builder prune -f
-            
-            echo "Deployment and Cleanup complete."
+            docker builder prune -f --keep-storage 2GB 2>/dev/null || true
 
-            
+            echo "Deployment finished ✓"
