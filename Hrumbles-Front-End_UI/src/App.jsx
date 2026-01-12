@@ -202,7 +202,7 @@ function AppContent() {
   const reduxUser = useSelector((state) => state.auth.user);
   const isLoggingOut = useSelector((state) => state.auth.isLoggingOut);
 
-    const [isOrgValidated, setIsOrgValidated] = useState(null); // null=loading, true=valid, false=invalid
+ const [isOrgValidated, setIsOrgValidated] = useState(null); 
   
   // --- Define Public Routes ---
   const publicPaths = [
@@ -213,17 +213,25 @@ function AppContent() {
 
 
     // --- 2. Organization Validation Logic ---
-  useEffect(() => {
+useEffect(() => {
     const validateOrganization = async () => {
-      const subdomain = getOrganizationSubdomain();
+      let subdomain = getOrganizationSubdomain();
+      console.log(`[Org Check] Detected subdomain: '${subdomain}'`);
+
+      // 🛡️ SECURITY: Explicitly block 'app' and 'www' if the utility file misses it
+      if (subdomain === 'app' || subdomain === 'www') {
+          console.warn(`[Org Check] '${subdomain}' is a reserved platform domain. Blocking.`);
+          subdomain = null;
+      }
 
       // Case A: No subdomain found (e.g. app.xrilic.ai, localhost)
       if (!subdomain) {
+        console.log("[Org Check] No valid subdomain. Setting invalid.");
         setIsOrgValidated(false);
         return;
       }
 
-      // Case B: Subdomain found in URL, verify against Supabase
+      // Case B: Verify existence in Supabase
       try {
         const { data, error } = await supabase
           .from('hr_organizations')
@@ -232,15 +240,15 @@ function AppContent() {
           .single();
 
         if (error || !data) {
-          console.warn("Invalid subdomain detected:", subdomain);
+          console.warn(`[Org Check] Subdomain '${subdomain}' not found in DB.`);
           setIsOrgValidated(false);
         } else {
-          // Organization is valid
+          console.log(`[Org Check] Organization '${subdomain}' verified.`);
           dispatch(setOrganization(subdomain));
           setIsOrgValidated(true);
         }
       } catch (err) {
-        console.error("Error validating organization:", err);
+        console.error("[Org Check] Error validating organization:", err);
         setIsOrgValidated(false);
       }
     };
@@ -253,6 +261,8 @@ function AppContent() {
 
 const validateCurrentSession = useCallback(async () => {
     if (isLoggingOut) return;
+
+     if (isOrgValidated !== true) return; 
 
     const { data: { session } } = await supabase.auth.getSession();
     
@@ -316,7 +326,7 @@ const validateCurrentSession = useCallback(async () => {
           }
        }
     }
-  }, [dispatch, location.pathname, isLoggingOut]);
+  }, [dispatch, location.pathname, isLoggingOut, isOrgValidated]);
 
   useEffect(() => {
     validateCurrentSession(); // Initial check

@@ -65,6 +65,7 @@ const MainLayout = () => {
   const getLogoSrc = (suite) => {
     const s = suite?.toUpperCase();
     if (s?.includes("RECRUIT") || s?.includes("HIRING")) return "/xrilic/Xrilic Recruit.svg";
+    if (s?.includes("GENERAL")) return "/xrilic/xrilic_ai.svg";  
     if (s?.includes("PROJECT")) return "/xrilic/Xrilic Recruit.svg";
     if (s?.includes("VERIFICATION")) return "/xrilic/Xrilic Verify Black.svg";
     if (s?.includes("SALES")) return "/xrilic/Xrilic CRM.svg";
