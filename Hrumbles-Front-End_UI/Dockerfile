@@ -1,29 +1,28 @@
-# Use Node.js base image
 FROM node:18.17.0
 
-# Set working directory
 WORKDIR /usr/src/app
 
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies
 RUN npm install --force --quiet
 
-# Copy the rest of the application code
 COPY . .
 
-# Add this line (INCREASE HEAP SIZE)
+# ✅ NEW: Accept the build script name (default to 'build')
+ARG BUILD_SCRIPT=build
+ENV BUILD_SCRIPT=${BUILD_SCRIPT}
+
+# ✅ NEW: Accept Vite Env Vars
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_KEY
+# Add other VITE vars here if needed
+
+ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+ENV VITE_SUPABASE_KEY=${VITE_SUPABASE_KEY}
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-# Build the application
-RUN npm run build
+# ✅ Run the specific build script passed from GitHub Actions
+RUN npm run ${BUILD_SCRIPT}
 
-# Install serve to run the application
 RUN npm install -g serve
-
-# Expose port 80
 EXPOSE 80
-
-# Start the application
 CMD ["serve", "-s", "dist", "-l", "80"]
