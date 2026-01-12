@@ -1,6 +1,6 @@
 // App.jsx (Corrected Structure)
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
 import ReactGA from 'react-ga4';
 import store from "./Redux/store";
@@ -175,6 +175,13 @@ import BenchProfilesPage from "./pages/bench-profiles/BenchProfilesPage";
 // reports detail page
 import UserActivityDetailsPage from "./components/reports/UserActivityDetailsPage";
 
+// --- Simple Loader for Organization Check ---
+const FullScreenLoader = () => (
+  <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
+     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+  </div>
+);
+
 // --- Google Analytics Tracker ---
 const RouteChangeTracker = () => {
   const location = useLocation();
@@ -194,6 +201,8 @@ function AppContent() {
   const firmOrgStatus = useSelector((state) => state.firmOrganization.status);
   const reduxUser = useSelector((state) => state.auth.user);
   const isLoggingOut = useSelector((state) => state.auth.isLoggingOut);
+
+    const [isOrgValidated, setIsOrgValidated] = useState(null); // null=loading, true=valid, false=invalid
   
   // --- Define Public Routes ---
   const publicPaths = [
@@ -203,7 +212,41 @@ function AppContent() {
 
 
 
-  
+    // --- 2. Organization Validation Logic ---
+  useEffect(() => {
+    const validateOrganization = async () => {
+      const subdomain = getOrganizationSubdomain();
+
+      // Case A: No subdomain found (e.g. app.xrilic.ai, localhost)
+      if (!subdomain) {
+        setIsOrgValidated(false);
+        return;
+      }
+
+      // Case B: Subdomain found in URL, verify against Supabase
+      try {
+        const { data, error } = await supabase
+          .from('hr_organizations')
+          .select('id')
+          .eq('subdomain', subdomain)
+          .single();
+
+        if (error || !data) {
+          console.warn("Invalid subdomain detected:", subdomain);
+          setIsOrgValidated(false);
+        } else {
+          // Organization is valid
+          dispatch(setOrganization(subdomain));
+          setIsOrgValidated(true);
+        }
+      } catch (err) {
+        console.error("Error validating organization:", err);
+        setIsOrgValidated(false);
+      }
+    };
+
+    validateOrganization();
+  }, [dispatch]);
 
  // --- Session Validation Logic ---
 // Inside App.jsx -> AppContent component
@@ -348,9 +391,15 @@ const validateCurrentSession = useCallback(async () => {
   }
 }, [reduxUser?.id, organizationId, dispatch]);
 
-  // --- The rest of your app's rendering logic ---
-  if (!organizationSubdomain) {
-    // 3. The <Router> is REMOVED from here, as the parent now provides it.
+  // --- 3. RENDER LOGIC ---
+
+  // A. Loading state while checking DB
+  if (isOrgValidated === null) {
+    return <FullScreenLoader />;
+  }
+
+  // B. Invalid Organization -> Show Verification Page
+  if (isOrgValidated === false) {
     return (
       <>
         <RouteChangeTracker />
