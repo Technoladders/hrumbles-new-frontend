@@ -7,20 +7,23 @@ RUN npm install --force --quiet
 
 COPY . .
 
-# ✅ NEW: Accept the build script name (default to 'build')
+# --- BUILD ARGUMENTS ---
 ARG BUILD_SCRIPT=build
-ENV BUILD_SCRIPT=${BUILD_SCRIPT}
-
-# ✅ NEW: Accept Vite Env Vars
+# ✅ These ARGs come from GitHub Actions
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_KEY
-# Add other VITE vars here if needed
 
-ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-ENV VITE_SUPABASE_KEY=${VITE_SUPABASE_KEY}
+# --- ENVIRONMENT VARIABLES ---
+# ✅ We must export them as ENV so Vite can see them during 'npm run build'
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_KEY=$VITE_SUPABASE_KEY
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-# ✅ Run the specific build script passed from GitHub Actions
+# --- DEBUGGING (Optional) ---
+# Print the URL during build to verify it exists (It will show in GitHub logs)
+RUN echo "Building with Supabase URL: $VITE_SUPABASE_URL"
+
+# Build the application
 RUN npm run ${BUILD_SCRIPT}
 
 RUN npm install -g serve

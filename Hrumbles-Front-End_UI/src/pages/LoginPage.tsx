@@ -406,7 +406,9 @@ const LoginPage: FC = () => {
 const handleLogin = async (): Promise<void> => {
     setError(null);
     setIsLoading(true);
+    console.log("--- Welcome ---");
     console.log("--- LOGIN PROCESS STARTED ---");
+
 
     let userId: string | null = null;
     let userOrgId: string | null = null;
