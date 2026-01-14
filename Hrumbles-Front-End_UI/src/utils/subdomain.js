@@ -23,7 +23,7 @@ export const getOrganizationSubdomain = () => {
   const platformPrefixes = new Set([
     "app", "www", "api", "admin", "portal", "auth",
     "dev", "development", "stage", "staging", "test", "preview", "qa", "ci",
-    "demo" // Optional: if 'demo' is a reserved landing page, keep it here. If 'demo' is a tenant, remove it.
+  
   ]);
 
   // 3. Extract Potential Subdomain

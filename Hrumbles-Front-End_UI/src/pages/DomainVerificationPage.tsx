@@ -1,79 +1,28 @@
 import { useState, useEffect, FC, FormEvent, ChangeEvent } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Loader2, 
+  CheckCircle2, 
+  AlertCircle, 
+  ArrowRight
+} from 'lucide-react';
 
 import useDebounce from '../hooks/useDebounce';
 import { supabase } from "@/integrations/supabase/client";
-
-// ── Icons ────────────────────────────────────────────────────────────────
-
-const Spinner: FC = () => (
-  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-  </svg>
-);
-
-const CheckCircleIcon: FC = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-  </svg>
-);
-
-const WarningTwoIcon: FC = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.031-1.742 3.031H4.42c-1.532 0-2.492-1.697-1.742-3.031l5.58-9.92zM10 13a1 1 0 110-2 1 1 0 010 2zm-1-8a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" />
-  </svg>
-);
-
-const CaretLeftIcon: FC = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M165.66,202.34a8,8,0,0,1-11.32,0L88.68,136.68a8,8,0,0,1,0-11.32l65.66-65.66a8,8,0,0,1,11.32,11.32L105.32,128l60.34,63.02A8,8,0,0,1,165.66,202.34Z"></path>
-  </svg>
-);
-
-// ── Types ────────────────────────────────────────────────────────────────
-
-type ValidationStatus = 'idle' | 'validating' | 'valid' | 'invalid';
+import Orb from '../components/ui/Reactbits-theme/Orb';
 
 // ── Helper: Get current root domain ─────────────────────────────────────
-
-// src/utils/domain.ts
-
 export const getRootDomain = (): string => {
-  // 1. Highest priority: explicit environment variable
   if (import.meta.env.VITE_APP_ROOT_DOMAIN) {
     const envDomain = import.meta.env.VITE_APP_ROOT_DOMAIN as string;
-
-    // If env explicitly says "xrilic.ai" or "hrumbles.ai" → trust it
-    if (['hrumbles.ai', 'xrilic.ai'].includes(envDomain)) {
-      return envDomain;
-    }
-
-    // If someone set VITE_APP_ROOT_DOMAIN=dev.xrilic.ai by mistake → clean it
-    if (envDomain.endsWith('.xrilic.ai')) {
-      return 'xrilic.ai';
-    }
-    if (envDomain.endsWith('.hrumbles.ai')) {
-      return 'hrumbles.ai';
-    }
-
-    // Otherwise trust whatever is in env (useful for very custom setups)
+    if (['hrumbles.ai', 'xrilic.ai'].includes(envDomain)) return envDomain;
+    if (envDomain.endsWith('.xrilic.ai')) return 'xrilic.ai';
+    if (envDomain.endsWith('.hrumbles.ai')) return 'hrumbles.ai';
     return envDomain;
   }
-
-  // 2. No env → runtime detection from current hostname
-  const hostname = window.location.hostname.replace(/:\d+$/, ''); // remove port
-
-  // Known development/staging prefixes to strip
-  const prefixStripPatterns = [
-    /^dev\./,
-    /^staging\./,
-    /^preview\./,
-    /^test\./,
-    /^qa\./,
-    /^ci\./,
-  ];
-
+  const hostname = window.location.hostname.replace(/:\d+$/, '');
+  const prefixStripPatterns = [/^dev\./, /^staging\./, /^preview\./, /^test\./, /^qa\./, /^ci\./];
   let cleanHost = hostname;
   for (const pattern of prefixStripPatterns) {
     if (pattern.test(cleanHost)) {
@@ -81,19 +30,11 @@ export const getRootDomain = (): string => {
       break;
     }
   }
-
-  // Local development
   if (cleanHost === 'localhost' || cleanHost.startsWith('127.0.') || cleanHost.startsWith('192.168.')) {
     return 'localhost';
   }
-
-  // Take last two parts (most common for SaaS)
   const parts = cleanHost.split('.');
-  if (parts.length >= 2) {
-    return parts.slice(-2).join('.');
-  }
-
-  // Ultimate fallback
+  if (parts.length >= 2) return parts.slice(-2).join('.');
   return 'xrilic.ai';
 };
 
@@ -101,11 +42,12 @@ export const getRootDomain = (): string => {
 
 const DomainVerificationPage: FC = () => {
   const [subdomain, setSubdomain] = useState<string>('');
-  const [validationStatus, setValidationStatus] = useState<ValidationStatus>('idle');
+  const [validationStatus, setValidationStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
   const [isRedirecting, setIsRedirecting] = useState<boolean>(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   const debouncedSubdomain = useDebounce(subdomain, 500);
-  const rootDomain = getRootDomain(); // ← now dynamic!
+  const rootDomain = getRootDomain();
 
   useEffect(() => {
     const checkSubdomain = async () => {
@@ -113,9 +55,7 @@ const DomainVerificationPage: FC = () => {
         setValidationStatus('idle');
         return;
       }
-
       setValidationStatus('validating');
-
       try {
         const { data, error } = await supabase
           .from('hr_organizations')
@@ -133,109 +73,240 @@ const DomainVerificationPage: FC = () => {
         setValidationStatus('invalid');
       }
     };
-
     checkSubdomain();
   }, [debouncedSubdomain]);
 
   const handleContinue = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (validationStatus !== 'valid') return;
-
     setIsRedirecting(true);
-
     const protocol = window.location.protocol;
     const port = window.location.port ? `:${window.location.port}` : '';
-
-    // Build target URL with current root domain
     const targetUrl = `${protocol}//${debouncedSubdomain.trim().toLowerCase()}.${rootDomain}${port}/login`;
-
     window.location.href = targetUrl;
   };
 
-  const getValidationIcon = (): JSX.Element | null => {
-    switch (validationStatus) {
-      case 'validating': return <Spinner />;
-      case 'valid':      return <CheckCircleIcon />;
-      case 'invalid':    return <WarningTwoIcon />;
-      default:           return null;
-    }
+  const itemVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5 } }
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans grid grid-cols-1 lg:grid-cols-2">
-      {/* Left Column - Branding / Testimonial */}
-      <div className="relative hidden lg:flex flex-col items-center justify-center p-12 login-gradient m-4" style={{ borderRadius: '3rem' }}>
-        <div className="max-w-lg w-full">
-          <img alt="hrumbles" className="h-44 w-full rounded-full" src="/hrumbles-wave-white.svg" />
-          <blockquote className="text-xl text-white leading-relaxed mb-8 space-y-4 mt-8">
-            <p className="italic tracking-[.30rem] whitespace-nowrap" style={{ marginLeft: '-40px' }}>
-              "Reduce hiring risks and speed up decisions"
-            </p>
-          </blockquote>
+    <div className="min-h-screen w-full flex font-sans">
+      
+      {/* ── LEFT SIDE: Black Background + Orb + Tagline ──────────────────── */}
+      <div className="hidden lg:flex w-1/2 relative flex-col justify-center items-center p-12 overflow-hidden bg-black text-white">
+        
+        {/* Background Orb */}
+        <div className="absolute inset-0 z-0">
+          <Orb
+            hoverIntensity={0.5}
+            rotateOnHover={true}
+            hue={0}
+            forceHoverState={false}
+          />
+        </div>
+        
+        {/* Content Layer (Tagline Only) */}
+        <div className="p-8 relative z-10 w-full max-w-lg text-center lg:text-left">
+           <motion.h1 
+             initial={{ opacity: 0, y: 20 }}
+             animate={{ opacity: 1, y: 0 }}
+             transition={{ duration: 0.8, delay: 0.2 }}
+             className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight text-white"
+           >
+             One platform.{" "}
+             <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+               Every function. Zero chaos.
+             </span>
+           </motion.h1>
+        </div>
+
+        {/* Fixed Footer Text - Snapped to the bottom left */}
+        <div className="absolute bottom-12 left-12 z-20 text-sm text-gray-500 font-medium">
+          © {new Date().getFullYear()} Xrilic AI.
         </div>
       </div>
 
-      {/* Right Column - Form */}
-      <main className="relative flex items-center justify-center p-8">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-gray-900">Verify Domain</h1>
-            <p className="text-gray-500 mt-2">to access your company's workspace</p>
-          </div>
+      {/* ── RIGHT SIDE: Soft Light Theme + Logo + Form ───────────────────── */}
+      <div className="w-full lg:w-1/2 flex flex-col items-center justify-center p-6 lg:p-12 relative z-20 bg-slate-50 text-gray-900 selection:bg-purple-100 selection:text-purple-900 overflow-hidden">
+        
+        {/* Subtle Ambient Mesh Gradient Background for Right Side */}
+        <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-50 via-slate-50 to-gray-100 opacity-70 pointer-events-none" />
 
-          <form onSubmit={handleContinue} className="space-y-6">
-            <div>
-              <label htmlFor="domain" className="block text-sm font-medium text-gray-700 mb-1">
-                Your Domain <span className="text-red-500">*</span>
+        <motion.div 
+          initial="hidden"
+          animate="visible"
+          variants={{
+            hidden: { opacity: 0 },
+            visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+          }}
+          className="w-full max-w-md space-y-8 relative z-10"
+        >
+          {/* Header with LOGO */}
+          <motion.div variants={itemVariants} className="text-center flex flex-col items-center space-y-6">
+            
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.5 }}
+            >
+              <img 
+                 src="/xrilic/Xrilic logo.svg" 
+                 alt="Xrilic Logo" 
+                 className="h-16 w-auto object-contain"
+               />
+            </motion.div>
+
+            <div className="space-y-2">
+              <h1 className="text-3xl lg:text-4xl font-bold tracking-tight text-gray-900">
+                Verify your workspace
+              </h1>
+              <p className="text-gray-500 text-lg">
+                Enter your organization's domain to continue.
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Form */}
+          <motion.form 
+            variants={itemVariants} 
+            onSubmit={handleContinue} 
+            className="space-y-6"
+          >
+            <div className="space-y-2">
+              <label htmlFor="domain" className="text-sm font-semibold text-gray-700 ml-1">
+                Workspace URL
               </label>
 
-              <div className="flex items-center rounded-lg border border-gray-300 focus-within:border-gray-800 focus-within:ring-1 focus-within:ring-gray-800 transition-all duration-200">
-                <span className="pl-4 pr-2 text-gray-500">https://</span>
-
-                <div className="relative flex-grow">
-                  <input
-                    type="text"
-                    id="domain"
-                    className="w-full h-12 border-none focus:outline-none text-gray-900 placeholder-gray-400"
-                    placeholder="your-company"
-                    value={subdomain}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => setSubdomain(e.target.value.trimStart())}
-                    autoComplete="off"
-                    autoCapitalize="none"
-                  />
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    {validationStatus !== 'idle' && getValidationIcon()}
-                  </div>
+              {/* The input container is explicitly pure white (bg-white) to pop off the bg-slate-50 background */}
+              <div 
+                className={`
+                  relative flex items-center transition-all duration-300
+                  bg-white border rounded-xl overflow-hidden shadow-sm
+                  ${isFocused 
+                    ? 'border-purple-600 ring-4 ring-purple-100/50 shadow-md' 
+                    : 'border-gray-200 hover:border-gray-300'
+                  }
+                  ${validationStatus === 'invalid' ? '!border-red-500 !ring-red-100' : ''}
+                  ${validationStatus === 'valid' ? '!border-emerald-500 !ring-emerald-100' : ''}
+                `}
+              >
+                <div className="pl-4 pr-2 select-none flex items-center gap-2 bg-white">
+                  <span className="text-xs uppercase font-bold tracking-wider text-gray-400">https://</span>
                 </div>
 
-                {/* Dynamic root domain display */}
-                <span className="pr-4 pl-1 text-gray-500">.{rootDomain}</span>
+                <input
+                  type="text"
+                  id="domain"
+                  className="w-full h-14 bg-white border-none outline-none focus:outline-none focus:ring-0 text-gray-900 placeholder-gray-400 text-lg font-medium"
+                  placeholder="your-company"
+                  value={subdomain}
+                  onFocus={() => setIsFocused(true)}
+                  onBlur={() => setIsFocused(false)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setSubdomain(e.target.value.trimStart())}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                />
+
+                <div className="pr-4 flex items-center gap-2 bg-white text-gray-400 font-medium">
+                  <span className="hidden sm:inline-block">.{rootDomain}</span>
+                  
+                  {/* Status Icons */}
+                  <div className="w-6 h-6 flex items-center justify-center">
+                    <AnimatePresence mode="wait">
+                      {validationStatus === 'validating' && (
+                        <motion.div
+                          key="loading"
+                          initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
+                        >
+                          <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                        </motion.div>
+                      )}
+                      {validationStatus === 'valid' && (
+                        <motion.div
+                          key="valid"
+                          initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
+                        >
+                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                        </motion.div>
+                      )}
+                      {validationStatus === 'invalid' && (
+                        <motion.div
+                          key="invalid"
+                          initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
+                        >
+                          <AlertCircle className="w-5 h-5 text-red-500" />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
               </div>
 
-              {validationStatus === 'invalid' && (
-                <p className="mt-2 text-sm text-red-600">
-                  This workspace does not exist. Please check the name or sign up.
-                </p>
-              )}
+              {/* Validation Message */}
+              <div className="h-6 ml-1">
+                <AnimatePresence>
+                  {validationStatus === 'invalid' && (
+                    <motion.p 
+                      initial={{ opacity: 0, y: -5 }} 
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="text-sm text-red-600 flex items-center gap-1.5 font-medium"
+                    >
+                      <AlertCircle className="w-3 h-3" />
+                      Workspace not found. Please check the spelling.
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
 
-            <button
+            <motion.button
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
               type="submit"
               disabled={validationStatus !== 'valid' || isRedirecting}
-              className="w-full flex justify-center items-center h-12 px-6 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              className={`
+                w-full h-12 rounded-lg font-semibold text-white transition-all duration-300 flex items-center justify-center gap-2 shadow-sm
+                ${validationStatus === 'valid' 
+                  ? 'bg-gray-900 hover:bg-gray-800 hover:shadow-lg' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none'}
+              `}
             >
-              {isRedirecting ? <Spinner /> : 'Continue'}
-            </button>
+              {isRedirecting ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Redirecting...</span>
+                </>
+              ) : (
+                <>
+                  <span>Continue to Workspace</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </motion.button>
 
-            <p className="text-center text-sm text-gray-600">
-              New to the platform?{' '}
-              <RouterLink to="/signup" className="font-medium text-gray-800 hover:text-gray-900 underline">
-                Sign up for free
+            <motion.p variants={itemVariants} className="text-center text-sm text-gray-500 mt-6">
+              Don't have a workspace yet?{' '}
+              <RouterLink 
+                to="/signup" 
+                className="text-purple-600 hover:text-purple-700 font-semibold transition-colors hover:underline underline-offset-4"
+              >
+                Create one now
               </RouterLink>
-            </p>
-          </form>
+            </motion.p>
+          </motion.form>
+        </motion.div>
+
+        {/* Footer Links */}
+        <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-6 text-xs text-gray-400 font-medium z-10">
+           <a href="#" className="hover:text-gray-900 transition-colors">Privacy Policy</a>
+           <a href="#" className="hover:text-gray-900 transition-colors">Terms of Service</a>
+           <a href="#" className="hover:text-gray-900 transition-colors">Help Center</a>
         </div>
-      </main>
+
+      </div>
     </div>
   );
 };
