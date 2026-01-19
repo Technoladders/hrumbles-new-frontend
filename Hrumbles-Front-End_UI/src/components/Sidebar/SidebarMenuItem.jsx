@@ -170,6 +170,11 @@ const SUITE_CONFIG = {
 export const getDynamicMenu = (userPermissions, orgFeatures = {}, role) => {
   if (role === 'global_superadmin') return [];
 
+  if (!userPermissions || !Array.isArray(userPermissions)) {
+    console.warn('getDynamicMenu: userPermissions is invalid, returning empty menu'); // Optional log for debugging
+    return [];
+  }
+
   const categorizedMenu = [];
 
   Object.keys(SUITE_CONFIG).forEach(suiteKey => {
@@ -213,10 +218,12 @@ const masterMenuItems = [
   // --- GENERAL SUITE ---
   { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard", suite: "GENERAL", permission: "view_dashboard" },
   { icon: FiUsers, label: "Employees", path: "/employee", suite: "GENERAL", permission: "access_employees" },
-  { icon: GoGoal, label: "Goals", path: "/goals", suite: "GENERAL", permission: "view_goals" },
+  { icon: GoGoal, label: "Goals", path: "/goalsview", suite: "GENERAL", permission: "view_goals_employee" },
   { icon: ImProfile, label: "My Profile", path: "/profile", suite: "GENERAL", permission: "view_profile" },
   { icon: AiOutlineProfile, label: "Reports", path: "/reports", suite: "GENERAL", permission: "view_reports" },
   { icon: GrDocumentTime, label: "Time Sheet", path: "/employee/timesheet", suite: "GENERAL", permission: "access_timesheet" },
+  { icon: GoGoal, label: "Goals Management", path: "/goals", suite: "GENERAL", permission: "view_goals" },
+
   { icon: MdMoreTime, label: "Regularization", path: "/employee/regularization", suite: "GENERAL", permission: "access_regularization" },
   { icon: LuCalendarPlus, label: "Leave", path: "/employee/leave", suite: "GENERAL", permission: "access_leave" },
   { icon: FaRegCalendarCheck, label: "Attendance", path: "/employee/attendance", suite: "GENERAL", permission: "access_attendance" },
@@ -248,6 +255,7 @@ const masterMenuItems = [
   { icon: FiBriefcase, label: "Jobs", path: "/jobs", suite: "RECRUITMENT", permission: "access_jobs" },
   { icon: LuUserSearch, label: "Talent Pool", path: "/talent-pool", suite: "RECRUITMENT", permission: "view_talent_pool" },
   { icon: BsPin, label: "Bench Pool", path: "/bench-pool", suite: "RECRUITMENT", permission: "view_bench_pool" },
+  { icon: AiOutlineProfile, label: "My Submission", path: "/my-submission", suite: "RECRUITMENT", permission: "view_my_submission" },
   { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", suite: "RECRUITMENT", permission: "access_zive_x", beta: true },
   { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients", suite: "RECRUITMENT", permission: "access_client_management" },
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects", suite: "RECRUITMENT", permission: "access_project_management" },

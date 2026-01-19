@@ -170,6 +170,8 @@ export interface JobData {
   closedDate?: string | null;
   closedBy?: string | null;   
   hr_job_candidates: { name: string }[];  
+  currency_type?: string;  
+  budget_type?: string;   
 }
 
 // src/lib/types.ts

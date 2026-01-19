@@ -141,8 +141,8 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
           pointOfContact: editJob.clientDetails?.pointOfContact || "",
           assignedTo: editJob.assignedTo?.name || "",
           clientProjectId: editJob.clientProjectId || "",
-          currency_type: editJob.currencyType || "INR",
-          budget_type: editJob.budgetType || "LPA",
+          currency_type: editJob.currency_type || "INR",  // Direct from DB (snake_case)
+  budget_type: editJob.budget_type || "LPA",      // Direct from DB (snake_case)
         },
         jobDescription: {
           description: editJob.description || "",

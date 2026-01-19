@@ -81,20 +81,20 @@ export const TaskupViewTimesheetDialog: React.FC<TaskupViewTimesheetDialogProps>
   
   
   // Core State
-  const [isEditing, setIsEditing] = useState(!timesheet?.is_submitted);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isFormValid, setIsFormValid] = useState(true);
+const [isEditing, setIsEditing] = useState(false); // Changed: default false, set in effect
+const [isLoading, setIsLoading] = useState(false);
+const [isFormValid, setIsFormValid] = useState(true);
 
-  // Project-based employee state
-  const [title, setTitle] = useState(timesheet?.title || '');
-  const [workReport, setWorkReport] = useState(timesheet?.notes || '');
-  const [totalWorkingHours, setTotalWorkingHours] = useState(timesheet?.total_working_hours || 8);
-  const [detailedEntries, setDetailedEntries] = useState<DetailedTimesheetEntry[]>(timesheet?.project_time_data?.projects || []);
-  const [projectEntries, setProjectEntries] = useState<any[]>(timesheet?.project_time_data?.projects || []);
-  const [hrProjectEmployees, setHrProjectEmployees] = useState<any[]>([]);
+// Project-based employee state
+const [title, setTitle] = useState(''); // Changed: empty string
+const [workReport, setWorkReport] = useState(''); // Changed: empty string
+const [totalWorkingHours, setTotalWorkingHours] = useState(8); // Changed: default 8
+const [detailedEntries, setDetailedEntries] = useState<DetailedTimesheetEntry[]>([]); // Changed: empty array
+const [projectEntries, setProjectEntries] = useState<any[]>([]); // Changed: empty array
+const [hrProjectEmployees, setHrProjectEmployees] = useState<any[]>([]);
 
   // Non-project employee state
-  const [formData, setFormData] = useState({ workReport: timesheet?.notes || '' });
+const [formData, setFormData] = useState({ workReport: '' });
   
   // Modified: Add temporary state declarations after the existing core state
 const [temporaryClockOutTime, setTemporaryClockOutTime] = useState<string | null>(null);
@@ -105,7 +105,7 @@ const [temporaryDurationMinutes, setTemporaryDurationMinutes] = useState<number 
   const [emailStatus, setEmailStatus] = useState<string | null>(null);
   const [isRecruiter, setIsRecruiter] = useState(false);
   const [allEmployees, setAllEmployees] = useState<EmployeeOption[]>([]);
-  const [additionalRecipients, setAdditionalRecipients] = useState<string[]>([]);
+const [additionalRecipients, setAdditionalRecipients] = useState<string[]>([]);
 
   // NEW: Add formErrors state for recruiter validation
   const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
@@ -122,6 +122,124 @@ const [temporaryDurationMinutes, setTemporaryDurationMinutes] = useState<number 
   qualityCheck: { reviewedCount: 0, candidateNames: '' },
   targets: { source: 0, calls: 0, lineups: 0, closures: 0 }
 });
+
+  // NEW: Unique key for this specific timesheet entry to store locally
+  const DRAFT_STORAGE_KEY = `timesheet_draft_${timesheet?.id}`;
+
+// --- EFFECT 1: INITIALIZATION (LOAD DRAFT OR DB) ---
+useEffect(() => {
+  console.log('Init effect triggered: open=', open, 'timesheet.id=', timesheet?.id, 'DRAFT_KEY=', DRAFT_STORAGE_KEY); // DEBUG
+  if (timesheet && open) {
+    const savedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+    console.log('Draft exists?', !!savedDraft); // DEBUG
+    
+    if (savedDraft) {
+      try {
+        const draft = JSON.parse(savedDraft);
+        console.log('Parsed draft workReport:', draft.workReport); // DEBUG
+        setTitle(draft.title || '');
+        setWorkReport(draft.workReport || '');
+        setFormData({ workReport: draft.workReport || '' });
+        setRecruitmentReport(draft.recruitmentReport || { /* defaults if missing */ });
+        setProjectEntries(draft.projectEntries || []);
+        setDetailedEntries(draft.detailedEntries || []);
+        setAdditionalRecipients(draft.additionalRecipients || []);
+        console.log("Draft loaded from local storage");
+      } catch (e) {
+        console.error("Failed to parse draft", e);
+      }
+    } else {
+      console.log('No draft: Loading from timesheet'); // DEBUG
+      // No draft found: Load from Database values
+      setTitle(timesheet.title || '');
+      setWorkReport(timesheet.notes || '');
+      setFormData({ workReport: timesheet.notes || '' });
+      setRecruitmentReport(timesheet.recruiter_report_data || {
+        workStatus: { profilesWorkedOn: '', profilesUploaded: 0 },
+        atsReport: { resumesATS: 0, resumesTalentPool: 0 },
+        candidateStatus: { paidSheet: 0, unpaidSheet: 0, linedUp: 0, onField: 0 },
+        activitySummary: { contacted: 0, totalCalls: 0, connected: 0, notConnected: 0, callBack: 0, proofNote: '' },
+        scheduling: [],
+        walkIns: { expected: 0, proofAttached: false, reminderNeeded: false },
+        qualityCheck: { reviewedCount: 0, candidateNames: '' },
+        targets: { source: 0, calls: 0, lineups: 0, closures: 0 }
+      });
+      setProjectEntries(timesheet.project_time_data?.projects || []);
+      setDetailedEntries(timesheet.project_time_data?.projects || []);
+    }
+
+    // Common logic for both Draft and DB load
+    setDate(new Date(timesheet.date));
+    setIsEditing(!timesheet.is_submitted);
+    setTotalWorkingHours(timesheet?.total_working_hours || 8);
+
+    if (!timesheet.is_submitted) {
+      const nowISO = new Date().toISOString();
+      setTemporaryClockOutTime(nowISO);
+      if (timesheet.clock_in_time) {
+        const clockInTime = DateTime.fromISO(timesheet.clock_in_time);
+        const tempClockOutTime = DateTime.fromISO(nowISO);
+        const diffInMinutes = tempClockOutTime.diff(clockInTime, 'minutes').toObject().minutes || 0;
+        const totalBreakMinutes = timesheet.break_logs?.reduce((sum, b) => sum + (b.duration_minutes || 0), 0) || 0;
+        const netDuration = Math.floor(diffInMinutes) - totalBreakMinutes;
+        setTemporaryDurationMinutes(netDuration > 0 ? netDuration : 0);
+      } else {
+        setTemporaryDurationMinutes(0); // ADDED: Handle no clock-in
+      }
+    } else {
+      setTemporaryClockOutTime(null); // ADDED: Outer else for submitted
+      setTemporaryDurationMinutes(null);
+    }
+  }
+}, [open, timesheet?.id]);
+
+// --- EFFECT 2: AUTO-SAVE (SAVES TO LOCALSTORAGE ON CHANGE) ---
+useEffect(() => {
+  // Only save if the dialog is open and we are in edit mode
+  if (open && isEditing && !timesheet?.is_submitted) {
+    const draftData = {
+      title,
+      workReport: employeeHasProjects ? workReport : formData.workReport,
+      recruitmentReport,
+      projectEntries,
+      detailedEntries,
+      additionalRecipients
+    };
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftData));
+    console.log('Auto-saved draft:', draftData.workReport); // DEBUG
+  }
+}, [
+  open, title, workReport, formData.workReport, 
+  recruitmentReport, projectEntries, detailedEntries, additionalRecipients,
+  isEditing, timesheet?.is_submitted // ADDED: Ensure condition deps are explicit
+]);
+
+// --- EFFECT 3: TOTAL HOURS CALCULATION (VALIDATION ONLY) ---
+useEffect(() => {
+  let totalHours = timesheet?.total_working_hours || 8;
+  if (timesheet?.clock_in_time) {
+    let clockOutTime = temporaryClockOutTime || timesheet?.clock_out_time;
+    if (clockOutTime) {
+      const clockIn = new Date(timesheet.clock_in_time);
+      const clockOut = new Date(clockOutTime);
+      const diffMs = clockOut.getTime() - clockIn.getTime();
+      const diffMinutes = diffMs / (1000 * 60);
+      const totalBreakMinutes = timesheet.break_logs?.reduce((sum, b) => sum + (b.duration_minutes || 0), 0) || 0;
+      const netMinutes = Math.floor(diffMinutes) - totalBreakMinutes;
+      totalHours = Math.round((netMinutes / 60) * 100) / 100;
+    }
+  }
+  setTotalWorkingHours(totalHours);
+  
+  setIsFormValid(validateForm({
+    title,
+    workReport: formData.workReport,
+    totalWorkingHours: totalHours,
+    employeeHasProjects,
+    projectEntries,
+    detailedEntries: projectEntries
+  }));
+}, [timesheet, temporaryClockOutTime, formData.workReport, title, projectEntries]);
 
 // NEW: Clear formErrors when recruitmentReport changes
 useEffect(() => {
@@ -203,12 +321,8 @@ const validateAndSubmit = async () => {
   await handleSubmit();
 };
 
-  // Update useEffect to load existing report if viewing
-useEffect(() => {
-  if (timesheet?.recruiter_report_data && open) {
-    setRecruitmentReport(timesheet.recruiter_report_data);
-  }
-}, [timesheet, open]);
+
+
 
   // Combined data fetching and setup effect
   useEffect(() => {
@@ -245,77 +359,9 @@ useEffect(() => {
     }
   }, [open, organization_id, employeeId, employeeHasProjects]);
 
- // Modified: Remove initial values from state declarations (e.g., useState('') -> useState('')) and add this new useEffect for initialization and temporary calculation
-// Initialize form state when the dialog opens or timesheet changes
-useEffect(() => {
-  if (timesheet && open) {
-    setTitle(timesheet.title || '');
-    setWorkReport(timesheet.notes || '');
-    setTotalWorkingHours(timesheet?.total_working_hours || 8);
-    setDetailedEntries(timesheet?.project_time_data?.projects || []);
-    setProjectEntries(timesheet?.project_time_data?.projects || []);
-    setFormData({ workReport: timesheet.notes || '' });
-    setDate(new Date(timesheet.date));
-    setIsEditing(!timesheet.is_submitted);
 
-    if (!timesheet.is_submitted) {
-      const nowISO = new Date().toISOString();
-      setTemporaryClockOutTime(nowISO);
 
-      if (timesheet.clock_in_time) {
-        const clockInTime = DateTime.fromISO(timesheet.clock_in_time);
-        const tempClockOutTime = DateTime.fromISO(nowISO);
-        
-        const diffInMinutes = tempClockOutTime.diff(clockInTime, 'minutes').toObject().minutes || 0;
-        
-        const totalBreakMinutes = timesheet.break_logs?.reduce(
-          (sum, b) => sum + (b.duration_minutes || 0), 0
-        ) || 0;
-          
-        const netDuration = Math.floor(diffInMinutes) - totalBreakMinutes;
 
-        setTemporaryDurationMinutes(netDuration > 0 ? netDuration : 0);
-      } else {
-        setTemporaryDurationMinutes(0);
-      }
-    } else {
-      setTemporaryClockOutTime(null);
-      setTemporaryDurationMinutes(null);
-    }
-  }
-}, [timesheet, open]);
-
-// Modified: Update the existing useEffect for calculating totalHours to incorporate temporary values and net duration (subtract breaks)
-useEffect(() => {
-  let totalHours = timesheet?.total_working_hours || 8;
-
-  if (timesheet?.clock_in_time) {
-    let clockOutTime = temporaryClockOutTime || timesheet?.clock_out_time;
-    if (clockOutTime) {
-      const clockIn = new Date(timesheet.clock_in_time);
-      const clockOut = new Date(clockOutTime);
-      const diffMs = clockOut.getTime() - clockIn.getTime();
-      const diffMinutes = diffMs / (1000 * 60);
-      const totalBreakMinutes = timesheet.break_logs?.reduce((sum, b) => sum + (b.duration_minutes || 0), 0) || 0;
-      const netMinutes = Math.floor(diffMinutes) - totalBreakMinutes;
-      totalHours = Math.round((netMinutes / 60) * 100) / 100;
-    }
-  }
-
-  setTotalWorkingHours(totalHours);
-  setFormData((prev) => ({ ...prev, totalHours }));
-  console.log('Calculated login hours:', { totalHours, clockIn: timesheet?.clock_in_time, clockOut: temporaryClockOutTime || timesheet?.clock_out_time });
-
-   // Updated: Remove recruiter validation from here; only base form validation
-  setIsFormValid(validateForm({
-    title,
-    workReport: formData.workReport,
-    totalWorkingHours: totalHours,
-    employeeHasProjects,
-    projectEntries,
-    detailedEntries: projectEntries
-  }));
-}, [timesheet, temporaryClockOutTime, temporaryDurationMinutes, employeeHasProjects, formData.workReport, title, projectEntries, detailedEntries]);
 
   const fetchSubmissions = async () => {
     if (!employeeId || !timesheet) return;
@@ -512,25 +558,13 @@ const sendEODReport = async (finalWorkReport: string, clockOutTime: string, dura
   }
 };
 
-// Modified: Update handleClose to reset temporary states
 const handleClose = () => {
-  setDate(new Date(timesheet?.date || Date.now()));
-  setTitle(timesheet?.title || '');
-  setTotalWorkingHours(timesheet?.total_working_hours || 8);
-  setWorkReport(timesheet?.notes || '');
-  setDetailedEntries(timesheet?.project_time_data?.projects || []);
-  setProjectEntries(timesheet?.project_time_data?.projects || []);
-  setFormData({
-    workReport: timesheet?.notes || '',
-    projectAllocations: timesheet?.project_time_data?.projects || [],
-    totalHours: timesheet?.total_working_hours || 0,
-  });
-  setIsEditing(!timesheet?.is_submitted);
-  setIsFormValid(true);
   setEmailStatus(null);
   setTemporaryClockOutTime(null);
   setTemporaryDurationMinutes(null);
-  setFormErrors({}); // NEW: Reset errors
+  setFormErrors({}); // Reset errors
+  // Do NOT reset title, workReport, formData, recruitmentReport, etc. -- let init effect handle on reopen
+  // Do NOT reset isEditing or date -- they will be set correctly on reopen
   onOpenChange(false);
 };
 
@@ -620,17 +654,18 @@ const handleSubmit = async () => {
       isSubmissionSuccessful = await submitTimesheet(timesheet.id, timesheetData, organization_id, durationMinutes);
     }
 
-    if (isSubmissionSuccessful) {
-      await sendEODReport(finalWorkReport, clockOutTimeISO, durationMinutes);
-      
-      if (emailStatus && emailStatus.startsWith('Failed')) {
-        // Error is already displayed
-      } else {
-        toast.success("Timesheet and EOD report submitted successfully");
-        onSubmitTimesheet();
-        onOpenChange(false);
-      }
-    } else {
+if (isSubmissionSuccessful) {
+  await sendEODReport(finalWorkReport, clockOutTimeISO, durationMinutes);
+ 
+  if (!(emailStatus && emailStatus.startsWith('Failed'))) {
+    // SUCCESS: Remove the draft after successful submission
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+   
+    toast.success("Timesheet and EOD report submitted successfully");
+    onSubmitTimesheet();
+    onOpenChange(false);
+  }
+} else {
       toast.error('Failed to submit timesheet');
     }
   } catch (error: any) {

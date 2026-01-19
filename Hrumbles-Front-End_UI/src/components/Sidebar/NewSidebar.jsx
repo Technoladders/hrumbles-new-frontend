@@ -108,12 +108,25 @@ const NewSidebar = memo(({ isExpanded, toggleSidebar, headerHeight }) => {
   }, [role, organizationId]);
 
   // Stable Menu Configuration
-  const menuConfig = useMemo(() => {
-    if (role === 'global_superadmin') return menuItemsByRole.global_superadmin || [];
-    const source = menuItemsByRole[role];
-    if (!source) return [];
-    return source(organizationId, organizationDetails, false, userPermissions);
-  }, [role, organizationDetails, userPermissions, organizationId]);
+const menuConfig = useMemo(() => {
+  if (role === 'global_superadmin') return menuItemsByRole.global_superadmin || [];
+  const source = menuItemsByRole[role];
+  if (!source) return [];
+
+  // Use switch for role-specific calls (reuse organizationId/false as placeholders)
+  switch (role) {
+    case 'organization_superadmin':
+      return source(organizationId, organizationDetails, false, userPermissions);
+    case 'admin':
+      // Pass organizationId as deptName placeholder, false as isPurelyPermanentOrg
+      return source(organizationId, false, userPermissions);
+    case 'employee':
+      // Pass organizationId as placeholders for deptName/designationName/userId, false as isPurelyPermanentOrg
+      return source(organizationId, organizationId, organizationId, false, userPermissions);
+    default:
+      return [];
+  }
+}, [role, organizationDetails, userPermissions, organizationId]);
 
   // Detect if menu is Suite-based or Flat-based
   const isCategorized = useMemo(() => 

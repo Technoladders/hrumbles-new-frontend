@@ -10,6 +10,8 @@ import { getOrganizationSubdomain } from "../utils/subdomain";
 import { Eye, EyeOff, Loader2, Mail, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Orb from '../components/ui/Reactbits-theme/Orb'; // Adjust path if needed
+import Silk from '../components/ui/Reactbits-theme/Silk'; // Adjust path if needed
+
 
 // --- Constants ---
 const ITECH_ORGANIZATION_ID = [
@@ -438,41 +440,55 @@ const LoginPage: FC = () => {
         
         {/* Background Orb */}
         <div className="absolute inset-0 z-0">
-          <Orb
-            hoverIntensity={0.5}
-            rotateOnHover={true}
-            hue={0}
-            // Pass the parent's hover state to the orb to force the effect
-            forceHoverState={isLeftPanelHovered}
-          />
+     <Silk
+  speed={5}
+  scale={1}
+  color="#5227ff"
+  noiseIntensity={1.5}
+  rotation={0}
+/>
         </div>
         
         {/* Content Layer (Tagline) */}
-        <div className="relative z-10 w-full max-w-lg text-center lg:text-center pointer-events-none">
-          <motion.h1 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight text-white"
-          >
-            All your business operations unified in a{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
-              single, powerful platform
-            </span>
-          </motion.h1>
-        </div>
+<div className="relative z-10 w-full max-w-lg text-center lg:text-center pointer-events-none">
+  <motion.h1 
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.8, delay: 0.2 }}
+    className="text-4xl md:text-5xl lg:text-6xl font-bold [line-height:2rem] md:[line-height:2.5rem] lg:[line-height:4.5rem] tracking-tight text-white"
+  >
+    One platform.{" "}
+    <span className="text-transparent bg-clip-text text-white">
+      Every function. Zero chaos.
+    </span>
+  </motion.h1>
+</div>
 
         {/* Fixed Footer Text */}
-        <div className="absolute bottom-12 left-12 z-20 text-sm text-gray-500 font-medium">
+        <div className="absolute bottom-12 left-12 z-20 text-sm text-gray-300 font-medium">
           © {new Date().getFullYear()} Xrilic ai.
         </div>
       </div>
 
-      {/* ── RIGHT SIDE: Soft Light Theme + Logo + Form ───────────────────── */}
+       {/* ── RIGHT SIDE: Soft Light Theme + Logo + Form ───────────────────── */}
       <div className="w-full lg:w-1/2 flex flex-col items-center justify-center p-6 lg:p-12 relative z-20 bg-slate-50 text-gray-900 selection:bg-purple-100 selection:text-purple-900 overflow-hidden">
         
         {/* Subtle Ambient Mesh Gradient Background for Right Side */}
         <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-50 via-slate-50 to-gray-100 opacity-70 pointer-events-none" />
+
+        {/* Logo positioned at top-right corner */}
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5 }}
+          className="absolute top-6 right-6 lg:top-12 lg:right-16 z-30"
+        >
+          <img 
+            src="/xrilic/Xrilic logo.svg" 
+            alt="Xrilic Logo" 
+            className="h-24 w-auto object-contain"  // Increased from h-14 to h-16
+          />
+        </motion.div>
 
         <motion.div 
           initial="hidden"
@@ -483,27 +499,15 @@ const LoginPage: FC = () => {
           }}
           className="w-full max-w-md space-y-8 relative z-10"
         >
-          {/* Header with LOGO */}
+          {/* Header (no logo here now) */}
           <motion.div variants={itemVariants} className="text-center flex flex-col items-center space-y-6">
             
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.5 }}
-            >
-              <img 
-                 src="/xrilic/Xrilic logo.svg" 
-                 alt="Xrilic Logo" 
-                 className="h-14 w-auto object-contain"
-               />
-            </motion.div>
-
             <div className="space-y-2">
-              <h1 className="text-3xl lg:text-4xl font-bold tracking-tight text-gray-900">
-                Welcome back
+              <h1 className="text-3xl lg:text-4xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 via-zinc-600 to-zinc-300">
+                Sign In
               </h1>
-              <p className="text-gray-500 text-lg">
-                Securely log in to your workspace.
+              <p className="text-gray-500 text-md">
+                Securely log in to your account.
               </p>
             </div>
           </motion.div>
@@ -529,7 +533,7 @@ const LoginPage: FC = () => {
                   }
                 `}
               >
-                <div className="pl-4 pr-2 text-gray-400">
+               <div className={`pl-4 pr-2 ${focusedField === 'email' ? 'text-purple-600' : 'text-gray-400'}`}>
                     <Mail className="w-5 h-5" />
                 </div>
 
@@ -542,7 +546,7 @@ const LoginPage: FC = () => {
                   onKeyDown={handleKeyDown}
                   onFocus={() => setFocusedField('email')}
                   onBlur={() => setFocusedField(null)}
-                  className="w-full h-14 bg-white border-none focus:ring-0 text-gray-900 placeholder-gray-400 text-lg font-medium"
+                  className="w-full h-14 bg-white border-none outline-none focus:ring-0 text-gray-900 placeholder-gray-400 text-md font-medium autofill-white"
                 />
               </div>
             </motion.div>
@@ -569,7 +573,7 @@ const LoginPage: FC = () => {
                         : 'border-gray-200 hover:border-gray-300'
                     }
                 `}>
-                    <div className="pl-4 pr-2 text-gray-400">
+                    <div className={`pl-4 pr-2 ${focusedField === 'password' ? 'text-purple-600' : 'text-gray-400'}`}>
                         <Lock className="w-5 h-5" />
                     </div>
 
@@ -582,7 +586,7 @@ const LoginPage: FC = () => {
                         onKeyDown={handleKeyDown}
                         onFocus={() => setFocusedField('password')}
                         onBlur={() => setFocusedField(null)}
-                        className="w-full h-14 bg-white border-none focus:ring-0 text-gray-900 placeholder-gray-400 text-lg font-medium pr-10"
+                        className="w-full h-14 bg-white border-none outline-none focus:ring-0 text-gray-900 placeholder-gray-400 text-md font-medium pr-10 autofill-white"
                     />
                     <button
                         type="button"
@@ -616,7 +620,7 @@ const LoginPage: FC = () => {
               className={`
                 w-full h-12 rounded-lg font-semibold text-white transition-all duration-300 flex items-center justify-center gap-2 shadow-sm
                 ${!isLoading 
-                  ? 'bg-gray-900 hover:bg-gray-800 hover:shadow-lg' 
+                  ? 'bg-gradient-to-r from-zinc-900 via-zinc-500 to-zinc-400 hover:bg-gray-800 hover:shadow-lg' 
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none'}
               `}
             >

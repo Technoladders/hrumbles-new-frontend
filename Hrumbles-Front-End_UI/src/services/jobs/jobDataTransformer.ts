@@ -37,7 +37,9 @@ export const transformToJobData = (jobRecord: any): JobData => {
     hr_budget: jobRecord.budget,
     createdAt: jobRecord.created_at,
     hr_budget_type: jobRecord.budget_type,
-    hr_job_candidates: jobRecord.hr_job_candidates
+    hr_job_candidates: jobRecord.hr_job_candidates,
+    currency_type: jobRecord.currency_type,
+    budget_type: jobRecord.budget_type,
   };
 
  
@@ -70,7 +72,9 @@ export const transformToDbJob = (job: JobData): Record<string, any> => {
     organization_id: job.organization,
     created_at: job.createdAt,
     closed_date: job.closedDate,
-    closed_by: job.closedBy
+    closed_by: job.closedBy,
+    currency_type: job.currency_type,
+    budget_type: job.budget_type,
     // hr_job_candidates: job.hr_job_candidates
   };
 };

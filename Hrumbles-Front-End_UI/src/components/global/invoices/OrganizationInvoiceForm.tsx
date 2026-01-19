@@ -56,35 +56,53 @@ const OrganizationInvoiceForm: React.FC<any> = ({ invoice, onClose, onSuccess })
   const [clientProfile, setClientProfile] = useState<any>(null);
 
   const [invoiceNumber, setInvoiceNumber] = useState(invoice?.invoice_number || '');
+  // --- 2. Robust Setting Parsing ---
   const [targetOrgId, setTargetOrgId] = useState(invoice?.organization_client_id || '');
-  const [taxApplicable, setTaxApplicable] = useState<boolean>(invoice?.tax_applicable ?? (Number(invoice?.tax_amount || 0) > 0));
-  const [taxMode, setTaxMode] = useState<'GST' | 'IGST' | null>(invoice?.tax_mode || 'GST');
   
-  // Parse items for old/new data compatibility
+  // Logic: if tax_applicable column is null, check if tax_amount was > 0 in old record
+  const [taxApplicable, setTaxApplicable] = useState<boolean>(
+    invoice?.tax_applicable ?? (Number(invoice?.tax_amount || 0) > 0)
+  );
+
+  const [taxMode, setTaxMode] = useState<'GST' | 'IGST' | null>(invoice?.tax_mode || 'GST');
+  const [paymentTerms, setPaymentTerms] = useState<string>(invoice?.payment_terms || 'NET 30');
+  
+  const [adjustmentType, setAdjustmentType] = useState<'none' | 'TDS' | 'TCS'>(
+    Number(invoice?.tds_amount || 0) > 0 ? 'TDS' : Number(invoice?.tcs_amount || 0) > 0 ? 'TCS' : 'none'
+  );
+  const [adjustmentRateId, setAdjustmentRateId] = useState<string>(
+    invoice?.tds_rate_id || invoice?.tcs_rate_id || ''
+  );
+  
+  // --- 1. Robust Item Parsing for Legacy Data ---
   const initialItems = useMemo(() => {
     if (!invoice?.items) return [defaultItem];
     try {
       const parsed = typeof invoice.items === 'string' ? JSON.parse(invoice.items) : invoice.items;
-      return Array.isArray(parsed) ? parsed.map((item: any) => ({
+      if (!Array.isArray(parsed)) return [defaultItem];
+      
+      return parsed.map((item: any) => ({
         ...item,
-        tax_percentage: item.tax_percentage ?? 18  // Ensure tax_percentage for old items
-      })) : [defaultItem];
-    } catch {
+        // Fallback title to description if title is missing
+        title: item.title || item.description || 'Service',
+        // Fallback tax to the old invoice-level tax_rate or 18%
+        tax_percentage: item.tax_percentage ?? (Number(invoice.tax_rate) > 0 ? Number(invoice.tax_rate) : 18),
+        tax_value: item.tax_value ?? 0,
+        total_amount: item.total_amount ?? item.amount ?? 0
+      }));
+    } catch (e) {
+      console.error("Failed to parse legacy items:", e);
       return [defaultItem];
     }
   }, [invoice]);
 
   const [items, setItems] = useState<any[]>(initialItems);
+  
 
-  const [paymentTerms, setPaymentTerms] = useState<string>(invoice?.payment_terms || 'NET 30');
+
   const [invoiceDate, setInvoiceDate] = useState<Date>(invoice?.invoice_date ? new Date(invoice.invoice_date) : new Date());
   const [dueDate, setDueDate] = useState<Date>(invoice?.due_date ? new Date(invoice.due_date) : addDays(new Date(), 30));
-  
-  const [adjustmentType, setAdjustmentType] = useState<'none' | 'TDS' | 'TCS'>(
-    Number(invoice?.tds_amount || 0) > 0 ? 'TDS' : Number(invoice?.tcs_amount || 0) > 0 ? 'TCS' : 'none'
-  );
-  const [adjustmentRateId, setAdjustmentRateId] = useState<string>(invoice?.tds_rate_id || invoice?.tcs_rate_id || '');
-  
+
   const [notes, setNotes] = useState(invoice?.notes || '');
   const [terms, setTerms] = useState(invoice?.terms || '');
 
@@ -141,6 +159,12 @@ if (!invoice) {
   // Due Date Logic
   useEffect(() => {
     if (paymentTerms === 'custom') return;
+    
+    if (paymentTerms === 'Due on Receipt') {
+      setDueDate(invoiceDate);
+      return;
+    }
+
     const days = parseInt(paymentTerms.replace('NET ', '')) || 0;
     setDueDate(addDays(invoiceDate, days));
   }, [paymentTerms, invoiceDate]);
@@ -305,7 +329,7 @@ if (!invoice) {
             <Select value={paymentTerms} onValueChange={setPaymentTerms}>
                 <SelectTrigger className="h-9 text-xs bg-white"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                    {['NET 15', 'NET 30', 'NET 45', 'NET 60', 'NET 90', 'custom'].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    {['Due on Receipt', 'NET 15', 'NET 30', 'NET 45', 'NET 60', 'NET 90', 'custom'].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
             </Select>
           </div>

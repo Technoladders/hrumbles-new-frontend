@@ -40,6 +40,8 @@ const BudgetField = ({ data, onChange }: BudgetFieldProps) => {
     }
   };
 
+  console.log("BudgetField props:", data);
+
   const budgetTypeOptions = getBudgetTypeOptions();
   
   // Effect to auto-update budget type if it becomes invalid after changing hiring mode

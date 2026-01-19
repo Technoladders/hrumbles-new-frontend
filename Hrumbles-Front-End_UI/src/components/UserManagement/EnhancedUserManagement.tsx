@@ -211,14 +211,29 @@ const RoleSelector = ({ organizationId, onSelect }: any) => {
   React.useEffect(() => {
     const fetch = async () => {
       const { data } = await supabase.from('hr_roles').select('*'); // Roles are global but mappings are org-specific
-      setRoles(data || []);
+      // Filter out global_superadmin
+      const filteredRoles = (data || []).filter((role: any) => role.name !== "global_superadmin");
+      setRoles(filteredRoles);
     };
     fetch();
   }, []);
   return (
     <Select onValueChange={onSelect}>
       <SelectTrigger><SelectValue placeholder="Choose Role" /></SelectTrigger>
-      <SelectContent>{roles.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
+      <SelectContent>
+        {roles.map((r: any) => {
+          // Map display names
+          let displayName = r.name;
+          if (r.name === "organization_superadmin") {
+            displayName = "Superadmin";
+          } else if (r.name === "admin") {
+            displayName = "Admin";
+          } else if (r.name === "employee") {
+            displayName = "User";
+          }
+          return <SelectItem key={r.id} value={r.id}>{displayName}</SelectItem>;
+        })}
+      </SelectContent>
     </Select>
   );
 };
