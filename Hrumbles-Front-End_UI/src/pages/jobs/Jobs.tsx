@@ -77,6 +77,20 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/jobs/ui/dropdown-menu";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/jobs/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/jobs/ui/popover";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import AssociateToClientModal from "@/components/jobs/job/AssociateToClientModal";
 import { useSelector } from "react-redux";
@@ -180,6 +194,7 @@ const Jobs = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [associateModalOpen, setAssociateModalOpen] = useState(false);
   const [clientselectedJob, setClientSelectedJob] = useState<JobData | null>(null);
+  const [open, setOpen] = useState(false);
 
   const user = useSelector((state: any) => state.auth.user);
   const userRole = useSelector((state: any) => state.auth.role);
@@ -242,11 +257,24 @@ useEffect(() => {
     refetchOnWindowFocus: false,
   });
 
-  const clientList = useMemo(() => {
-    if (!jobs || jobs.length === 0) return [];
-    const clientNames = jobs.map(job => job.clientOwner).filter(clientName => clientName && clientName !== "Internal HR");
-    return Array.from(new Set(clientNames)).sort();
-  }, [jobs]);
+const clientList = useMemo(() => {
+  if (!jobs || jobs.length === 0) return [];
+  const clientNames = jobs
+    .map(job => job.clientDetails?.clientName)
+    .filter(clientName => clientName && clientName.trim() !== ""); // Filter out empty/undefined, adjust as needed (e.g., exclude "Internal HR" if it appears in clientName)
+  return Array.from(new Set(clientNames)).sort();
+}, [jobs]);
+
+// Add this useMemo for filtered clients (based on search input)
+const [searchTermClient, setSearchTermClient] = useState("");
+const filteredClients = useMemo(() => {
+  if (!searchTermClient) return clientList;
+  return clientList.filter((client) =>
+    client.toLowerCase().includes(searchTermClient.toLowerCase())
+  );
+}, [clientList, searchTermClient]);
+  console.log("Client LIst in filters:", clientList);
+  console.log("Total Jobs:", jobs);
 
   useEffect(() => {
     if (error) {
@@ -293,7 +321,7 @@ const filteredJobs = useMemo(() => jobs.filter((job) => {
       return jobDate.isBetween(dateRange.startDate, endDate, undefined, '[]');
     })();
 
-    const matchesClient = selectedClient === "all" || job.clientOwner === selectedClient;
+    const matchesClient = selectedClient === "all" || job.clientDetails?.clientName === selectedClient;
     
     const matchesStatus = (() => {
       if (selectedStatus === "all") return true;
@@ -958,34 +986,81 @@ if (isLoading) {
 {/* Client Filter */}
 {!isEmployee && (
   <div className="flex-shrink-0 order-4 w-full sm:w-[150px]">
-    <Select
-      value={selectedClient}
-      onValueChange={(value) => {
-        setSelectedClient(value);
-        setCurrentPage(1);
-      }}
-    >
-      <SelectTrigger className="w-full rounded-full text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
-        <SelectValue placeholder="Client" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem 
-          value="all" 
-          className="focus:bg-[#7731E8] focus:text-white cursor-pointer"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between rounded-full text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm"
         >
-          All Clients
-        </SelectItem>
-        {clientList.map((clientName) => (
-          <SelectItem 
-            key={clientName} 
-            value={clientName}
-            className="focus:bg-[#7731E8] focus:text-white cursor-pointer"
-          >
-            {clientName}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+          <span className="truncate flex-1 text-left">
+          {selectedClient === "all"
+            ? "All Clients"
+            : clientList.find((client) => client === selectedClient) || selectedClient}
+            </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[250px] p-0" align="start"> {/* Increased width for better search UX */}
+        <Command>
+          <CommandInput
+            placeholder="Search clients..."
+            value={searchTermClient}
+            onValueChange={(value) => {
+              setSearchTermClient(value);
+            }}
+          />
+          <CommandList>
+            <CommandEmpty>No client found.</CommandEmpty>
+            <CommandGroup>
+              {/* "All Clients" as a pinned option */}
+              <CommandItem
+                value="all"
+                onSelect={() => {
+                  setSelectedClient("all");
+                  setCurrentPage(1);
+                  setOpen(false);
+                  setSearchTermClient(""); // Clear search on select
+                }}
+                className="font-medium"
+              >
+                <Check
+                  className={`mr-2 h-4 w-4 ${
+                    selectedClient === "all"
+                      ? "opacity-100"
+                      : "opacity-0"
+                  }`}
+                />
+                All Clients
+              </CommandItem>
+              {/* Filtered client list */}
+              {filteredClients.map((client) => (
+                <CommandItem
+                  key={client}
+                  value={client}
+                  onSelect={() => {
+                    setSelectedClient(client);
+                    setCurrentPage(1);
+                    setOpen(false);
+                    setSearchTermClient(""); // Clear search on select
+                  }}
+                >
+                  <Check
+                    className={`mr-2 h-4 w-4 ${
+                      selectedClient === client
+                        ? "opacity-100"
+                        : "opacity-0"
+                    }`}
+                  />
+                  {client}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   </div>
 )}
 </div>
