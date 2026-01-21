@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, TrendingUp } from "lucide-react";
 import { useSelector } from "react-redux";
+import { Badge } from "@/components/ui/badge";
+import { useQuery } from "@tanstack/react-query"
 import EmployeeDataSelection, { DataSharingOptions } from "./EmployeeDataSelection";
 import { useEmployeeProfile } from "@/components/MagicLinkView/hooks/useEmployeeProfile";
 import { useDocumentVerification } from "@/components/MagicLinkView/hooks/useDocumentVerification";
@@ -17,6 +19,7 @@ import { useUanLookup } from "@/components/MagicLinkView/hooks/useUanLookup";
 import { useConsentLink } from "@/components/MagicLinkView/hooks/useConsentLink";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import TalentMasterSkills from "./TalentMasterSkills";
 import { WorkHistorySection } from "./WorkHistorySection";
 
 interface EmployeeProfilePageProps {
@@ -24,6 +27,21 @@ interface EmployeeProfilePageProps {
   shareId?: string;
   sharedDataOptions?: DataSharingOptions;
 }
+
+
+// Helper to safely parse JSON arrays
+const parseJsonArray = (data: any) => {
+  if (Array.isArray(data)) return data;
+  if (typeof data === "string") {
+    try {
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
+};
 
 const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
   shareMode = false,
@@ -90,6 +108,87 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
     generateConsentLink,
     copyConsentLink,
   } = useConsentLink();
+
+   // 1. Fetch data from hr_talent_pool using candidate email
+  const { data: talentPoolEntry } = useQuery({
+    queryKey: ["talentPoolSkills", candidate?.email],
+    queryFn: async () => {
+      if (!candidate?.email) return null;
+      const { data, error } = await supabase
+        .from("hr_talent_pool")
+        .select("*")
+        .eq("email", candidate.email)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!candidate?.email,
+  });
+
+  const talentTopSkills = useMemo(
+    () => parseJsonArray(talentPoolEntry?.top_skills),
+    [talentPoolEntry]
+  );
+
+  // 2. Fetch enriched data for these skills
+  const { data: enrichedSkills, isLoading: isLoadingEnriched } = useQuery({
+    queryKey: ["enrichedSkills", talentTopSkills],
+    queryFn: async () => {
+      if (!talentTopSkills || talentTopSkills.length === 0) return [];
+      const { data, error } = await supabase.rpc("get_enriched_skills", {
+        p_skill_names: talentTopSkills,
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!talentTopSkills && talentTopSkills.length > 0,
+  });
+
+  // 3. Group and Sort logic (Identical to CandidateProfilePage)
+  const sortedGroupedSkills = useMemo(() => {
+    if (!enrichedSkills || !talentTopSkills) return {};
+    const enrichedSkillMap = new Map(
+      enrichedSkills.map((skill: any) => [
+        skill.skill_name.trim().toLowerCase(),
+        skill,
+      ])
+    );
+
+    const groups = talentTopSkills.reduce((acc: any, rawSkill: string) => {
+      const skillKey = rawSkill.trim().toLowerCase();
+      const enriched = enrichedSkillMap.get(skillKey);
+
+      if (enriched) {
+        const groupKey = `${enriched.category || "Other"}`;
+        if (!acc[groupKey]) acc[groupKey] = [];
+        if (!acc[groupKey].some((s: any) => s.name === enriched.normalized_name)) {
+          acc[groupKey].push({
+            name: enriched.normalized_name,
+            description: enriched.description,
+          });
+        }
+      } else {
+        const groupKey = "Other Skills (General)";
+        if (!acc[groupKey]) acc[groupKey] = [];
+        if (!acc[groupKey].some((s: any) => s.name === rawSkill)) {
+          acc[groupKey].push({
+            name: rawSkill,
+            description: "No description available.",
+          });
+        }
+      }
+      return acc;
+    }, {} as Record<string, { name: string; description: string }[]>);
+
+    const entries = Object.entries(groups);
+    const otherSkillsEntry = entries.find(([key]) => key.startsWith("Other Skills"));
+    const sortedEntries = entries
+      .filter(([key]) => !key.startsWith("Other Skills"))
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    if (otherSkillsEntry) sortedEntries.push(otherSkillsEntry);
+    return Object.fromEntries(sortedEntries);
+  }, [enrichedSkills, talentTopSkills]);
 
   const handleSaveUanResult = useCallback(async (dataToSave: any) => {
     if (dataToSave.status !== 1) {
@@ -349,6 +448,8 @@ const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({
             isSavingDocuments={isSavingDocuments}
             isUanQueued={isUanQueued}
           />
+
+<TalentMasterSkills email={candidate?.email} />
 
           {workHistory.length > 0 && (
             <WorkHistorySection

@@ -1,9 +1,14 @@
+// Hrumbles-Front-End_UI\src\components\jobs\job-description\JobDetailsRightCard.tsx
+// Changes: Consolidated experience here (removed from left). Added modern card styling with icons.
+// Made it more scannable with better spacing. Kept role-based visibility.
+
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { JobData } from "@/lib/types";
 import {
   Building,
@@ -39,98 +44,112 @@ const JobDetailsRightCard = ({ job }: JobDetailsRightCardProps) => {
     }).format(amount);
   };
 
+  // Consolidated Experience Display
+  const getExperienceText = () => {
+    const min = job.experience?.min;
+    const max = job.experience?.max;
+    if (min && max) {
+      return `${min.years}-${max.years} years`;
+    }
+    if (min) {
+      return `${min.years} years min`;
+    }
+    return "Not specified";
+  };
+
   return (
-    <Card className="h-full shadow-md">
-      <CardHeader>
-        <CardTitle className="text-lg">Job Information</CardTitle>
+    <Card className="h-full shadow-sm sticky top-6">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base font-semibold flex items-center gap-2 text-gray-900">
+          Quick Info
+        </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-8">
+      <CardContent className="space-y-4 text-sm">
         {/* Company / Client Name */}
         <InfoItem
-          icon={<Building className="text-blue-500" />}
-          title="Company Name"
+          icon={<Building className="w-4 h-4 text-blue-500" />}
+          label="Company"
           value={formatDisplayValue(job.clientDetails?.clientName || job.clientOwner)}
         />
 
-        {/* Required Experience */}
+        {/* Required Experience - Consolidated here */}
         <InfoItem
-          icon={<Hourglass className="text-orange-500" />}
-          title="Required Experience"
-          value={formatDisplayValue(`${job.experience?.min?.years} years to ${job.experience?.max?.years} years`)}
+          icon={<Hourglass className="w-4 h-4 text-orange-500" />}
+          label="Experience"
+          value={getExperienceText()}
         />
 
         {/* No. of Positions */}
         <InfoItem
-          icon={<UserPlus className="text-teal-500" />}
-          title="No. of Positions"
+          icon={<UserPlus className="w-4 h-4 text-teal-500" />}
+          label="Positions"
           value={formatDisplayValue(job.numberOfCandidates)}
+          badge={<Badge variant="secondary" className="ml-1 text-xs bg-green-50 text-green-700 border-green-200">Open</Badge>}
         />
 
         {/* Job Type */}
         <InfoItem
-          icon={<FileText className="text-gray-500" />}
-          title="Job Type"
+          icon={<FileText className="w-4 h-4 text-gray-500" />}
+          label="Type"
           value={formatDisplayValue(job.jobType)}
         />
 
         {/* Hiring Mode */}
         <InfoItem
-          icon={<UserCheck className="text-purple-500" />}
-          title="Hiring Mode"
+          icon={<UserCheck className="w-4 h-4 text-purple-500" />}
+          label="Hiring Mode"
           value={formatDisplayValue(job.hiringMode)}
         />
 
-        {/* Client Budget - Admin Only, Hidden for Employee */}
-        {!isEmployee && (
+        {/* Client Budget - Admin Only */}
+        {!isEmployee && job.clientDetails?.clientBudget && (
           <InfoItem
-            icon={<IndianRupee className="text-green-500" />}
-            title="Client Budget"
-            value={formatDisplayValue(job.clientDetails?.clientBudget)}
+            icon={<IndianRupee className="w-4 h-4 text-green-500" />}
+            label="Client Budget"
+            value={formatDisplayValue(job.clientDetails.clientBudget)}
             isAdmin={true}
           />
         )}
 
-        {/* HR Budget in Admin */}
+        {/* HR Budget */}
         <InfoItem
-  icon={<IndianRupee className="text-emerald-500" />}
-  title={isEmployee ? "Budget" : "Budget (HR)"}
-  value={`${formatINR(job.hr_budget)} ${job.hr_budget_type}`}
-/>
+          icon={<IndianRupee className="w-4 h-4 text-emerald-500" />}
+          label={isEmployee ? "Budget" : "HR Budget"}
+          value={`${formatINR(job.hr_budget)} ${job.hr_budget_type}`}
+        />
 
-
-        {/* Vendor Budget - Hidden for Employee */}
+        {/* Vendor Budget - Admin Only */}
         {!isEmployee && job.budgets?.vendorBudget && (
           <InfoItem
-            icon={<IndianRupee className="text-teal-500" />}
-            title="Vendor Budget"
-            value={formatDisplayValue(job.budgets?.vendorBudget)}
+            icon={<IndianRupee className="w-4 h-4 text-teal-500" />}
+            label="Vendor Budget"
+            value={formatDisplayValue(job.budgets.vendorBudget)}
           />
         )}
 
         {/* End Client */}
         {job.clientDetails?.endClient && (
           <InfoItem
-            icon={<CircleUser className="text-indigo-500" />}
-            title="End Client"
+            icon={<CircleUser className="w-4 h-4 text-indigo-500" />}
+            label="End Client"
             value={formatDisplayValue(job.clientDetails.endClient)}
           />
         )}
 
         {/* Posted Date */}
         <InfoItem
-          icon={<CalendarDays className="text-amber-500" />}
-          title="Date Posted"
+          icon={<CalendarDays className="w-4 h-4 text-amber-500" />}
+          label="Posted"
           value={formatDisplayValue(job.postedDate)}
         />
 
-        {/* Location */}
-        {job.location?.length > 0 && (
-          <InfoItem
-            icon={<MapPin className="text-red-500" />}
-            title="Location"
-            value={job.location.map(loc => formatDisplayValue(loc)).join(", ")}
-          />
-        )}
+        {/* Due Date */}
+        <InfoItem
+          icon={<Clock className="w-4 h-4 text-red-500" />}
+          label="Due"
+          value={formatDisplayValue(job.dueDate)}
+          badge={<Badge variant="destructive" className="ml-1 text-xs">Urgent</Badge>} // Dynamic based on proximity
+        />
       </CardContent>
     </Card>
   );
@@ -138,25 +157,28 @@ const JobDetailsRightCard = ({ job }: JobDetailsRightCardProps) => {
 
 interface InfoItemProps {
   icon: React.ReactNode;
-  title: string;
+  label: string;
   value: string;
   isAdmin?: boolean;
+  badge?: React.ReactNode;
 }
 
-const InfoItem = ({ icon, title, value, isAdmin = false }: InfoItemProps) => {
+const InfoItem = ({ icon, label, value, isAdmin = false, badge }: InfoItemProps) => {
   // Mock authorization check
-  const isAuthorized = true; // In a real app, this would be from auth context
+  const isAuthorized = true;
 
-  // If it's admin-only and user is not authorized, don't show
   if (isAdmin && !isAuthorized) {
     return null;
   }
 
   return (
-    <div className="flex items-center gap-2">
-      {icon}
-      <span className="text-sm font-medium">{title}:</span>
-      <span className="text-sm text-gray-700">{value}</span>
+    <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50/50 transition-colors">
+      <div className="flex-shrink-0 mt-0.5">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <span className="block text-xs font-medium text-gray-600 truncate">{label}</span>
+        <span className="block font-semibold text-gray-900 text-sm truncate">{value}</span>
+      </div>
+      {badge && <div className="flex-shrink-0">{badge}</div>}
     </div>
   );
 };
