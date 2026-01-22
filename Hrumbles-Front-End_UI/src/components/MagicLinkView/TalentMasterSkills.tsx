@@ -99,10 +99,10 @@ const TalentMasterSkills: React.FC<TalentMasterSkillsProps> = ({ email }) => {
     <div className="relative group">
       <Badge 
         variant="secondary" 
-        className="bg-gradient-to-r from-purple-50 to-blue-50 text-purple-700 border-purple-100 font-semibold text-[11px] px-2.5 py-1 whitespace-nowrap hover:shadow-md transition-all cursor-help flex items-center gap-1.5 shadow-sm"
+        className="bg-gradient-to-r from-purple-50 to-blue-50 text-purple-700 border-purple-100 font-semibold text-[11px] px-2.5 py-1 truncate hover:shadow-md transition-all cursor-help flex items-center gap-1.5 shadow-sm"
       >
-        {item.name}
-        <Info className="w-3 h-3 opacity-40" />
+        <span className="truncate">{item.name}</span>
+        <Info className="w-3 h-3 opacity-40 flex-shrink-0" />
       </Badge>
 
       {/* ABSOLUTE HOVER POPUP */}
@@ -133,47 +133,47 @@ const TalentMasterSkills: React.FC<TalentMasterSkillsProps> = ({ email }) => {
   );
 
   const renderTable = (data: typeof groupedData) => (
-    <div className="max-h-96">
-      <table className="w-full border-collapse text-left text-xs min-w-[450px]">
-        <thead className="bg-white/80 backdrop-blur-sm sticky top-0 z-10 border-b border-slate-200">
-          <tr>
-            <th className="px-3 py-2 font-bold text-slate-600 uppercase tracking-wider w-24">Category</th>
-            <th className="px-3 py-2 font-bold text-slate-600 uppercase tracking-wider">Skill</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100 bg-white">
-          {data.map(([category, items]) => (
-            <React.Fragment key={category}>
-              {items.map((item, index) => (
-                <tr key={`${category}-${index}`} className="hover:bg-gradient-to-r hover:from-purple-50/50 hover:to-blue-50/50 transition-all group">
-                  {/* Merged Category Column - Gradient accent */}
-                  {index === 0 && (
-                    <td
-                      rowSpan={items.length}
-                      className="px-3 py-2 align-center border-r border-slate-100 bg-gradient-to-b from-purple-50/70 to-transparent"
-                    >
-                      <div className="flex items-center gap-1.5 group-hover:scale-105 transition-transform">
-                        {/* <div className="p-1 bg-gradient-to-r from-purple-500 to-blue-500 rounded">
-                          {getCategoryIcon(category)}
-                        </div> */}
-                        <span className="font-bold text-slate-800 text-xs whitespace-nowrap">
-                          {category}
-                        </span>
-                      </div>
-                    </td>
-                  )}
-                  
-                  {/* Skill - Badge with Hover Popover */}
-                  <td className="px-3 py-2">
-                    <SkillBadge item={item} />
+    <table className="w-full border-collapse text-left text-xs overflow-visible">
+      <thead className="bg-white/80 backdrop-blur-sm sticky top-0 z-10 border-b border-slate-200">
+        <tr>
+          <th className="px-3 py-2 font-bold text-slate-600 uppercase tracking-wider w-1/4 min-w-[120px]">Category</th>
+          <th className="px-3 py-2 font-bold text-slate-600 uppercase tracking-wider w-3/4">Skill</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100 bg-white">
+        {data.map(([category, items]) => (
+          <React.Fragment key={category}>
+            {items.map((item, index) => (
+              <tr key={`${category}-${index}`} className="hover:bg-gradient-to-r hover:from-purple-50/50 hover:to-blue-50/50 transition-all group">
+                {/* Merged Category Column - Gradient accent */}
+                {index === 0 && (
+                  <td
+                    rowSpan={items.length}
+                    className="px-3 py-2 align-center border-r border-slate-100 bg-gradient-to-b from-purple-50/70 to-transparent"
+                  >
+                    <div className="flex items-center gap-1.5 group-hover:scale-105 transition-transform">
+                      {/* <div className="p-1 bg-gradient-to-r from-purple-500 to-blue-500 rounded">
+                        {getCategoryIcon(category)}
+                      </div> */}
+                      <span className="font-bold text-slate-800 text-xs whitespace-nowrap">
+                        {category}
+                      </span>
+                    </div>
                   </td>
-                </tr>
-              ))}
-            </React.Fragment>
-          ))}
-        </tbody>
-      </table>
-    </div>
+                )}
+                
+                {/* Skill - Badge with Hover Popover */}
+                <td className="px-3 py-2 max-w-md">
+                  <div className="flex flex-wrap gap-1">
+                    <SkillBadge item={item} />
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </React.Fragment>
+        ))}
+      </tbody>
+    </table>
   );
 
   if (isTalentLoading || isEnrichedLoading) {
@@ -193,18 +193,20 @@ const TalentMasterSkills: React.FC<TalentMasterSkillsProps> = ({ email }) => {
             <span className="text-sm font-bold uppercase tracking-wider">Candidate Skills</span>
           </div>
         </div>
-        <div className="">
+        <div className="overflow-visible">
           {shouldSplit ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-4">
-              <div className="border-r border-slate-100 pr-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-4 overflow-visible">
+              <div className="border-r border-slate-100 pr-3 overflow-visible">
                 {renderTable(firstHalf)}
               </div>
-              <div className="pl-3">
+              <div className="pl-3 overflow-visible">
                 {renderTable(secondHalf)}
               </div>
             </div>
           ) : (
-            renderTable(groupedData)
+            <div className="overflow-visible p-4">
+              {renderTable(groupedData)}
+            </div>
           )}
         </div>
       </CardContent>
