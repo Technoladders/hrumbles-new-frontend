@@ -1,6 +1,5 @@
-
 // src/components/sales/contacts-table/PeopleSearchDialog.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -50,6 +49,8 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { useSelector } from 'react-redux';
+import { useParams } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from "@/lib/utils";
 import {
   searchPeopleInApollo,
@@ -69,7 +70,47 @@ export const PeopleSearchDialog: React.FC<PeopleSearchDialogProps> = ({
 }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+    const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
+const { fileId: urlFileId } = useParams();
+const [selectedWorkspace, setSelectedWorkspace] = React.useState('');
+const [selectedFile, setSelectedFile] = React.useState(urlFileId || '');
+
+// NEW: Fetch workspace_id from workspace_files if urlFileId is provided
+const { data: fileInfo, isLoading: isFileLoading } = useQuery({
+  queryKey: ['workspace-file-info', urlFileId],
+  queryFn: async () => {
+    if (!urlFileId) return null;
+    const { data, error } = await supabase
+      .from('workspace_files')
+      .select('workspace_id')
+      .eq('id', urlFileId)
+      .single();
+    if (error) {
+      console.error('Failed to fetch workspace for file:', error);
+      throw error; // Will trigger query error handling if needed
+    }
+    return data;
+  },
+  enabled: !!urlFileId,
+});
+
+  const { data: workspaces } = useQuery({
+    queryKey: ['workspaces', organization_id],
+    queryFn: async () => (await supabase.from('workspaces').select('id, name')).data
+  });
+  const { data: files } = useQuery({
+    queryKey: ['workspace-files', selectedWorkspace],
+    queryFn: async () => (await supabase.from('workspace_files').select('id, name').eq('workspace_id', selectedWorkspace)).data,
+    enabled: !!selectedWorkspace
+  });
+
+// NEW: Auto-set selectedWorkspace when fileInfo loads
+useEffect(() => {
+  if (fileInfo?.workspace_id) {
+    setSelectedWorkspace(fileInfo.workspace_id);
+  }
+}, [fileInfo?.workspace_id]);
 
   // --- Filter States ---
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -116,17 +157,31 @@ export const PeopleSearchDialog: React.FC<PeopleSearchDialogProps> = ({
     enabled: false,
   });
 
-  const saveMutation = useMutation({
-    mutationFn: (person: ApolloSearchPerson) =>
-      saveSearchResultToContacts(person, organization_id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      toast({ title: 'Contact Added! 🎉', description: 'Person has been added to your contacts.' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Failed to Add Contact', description: error.message, variant: 'destructive' });
-    },
-  });
+const saveMutation = useMutation({
+  mutationFn: async (person: ApolloSearchPerson) => {
+
+    const resolvedWorkspace = selectedWorkspace || fileInfo?.workspace_id;
+    if (!resolvedWorkspace) {
+      throw new Error('Workspace ID is required but not available.');
+    }
+    // FIX: Pass all 5 required arguments
+    const result = await saveSearchResultToContacts(
+      person, 
+      organization_id, 
+      resolvedWorkspace,  // Use resolved value
+      selectedFile || urlFileId,  // Ensure file ID is always passed
+      user?.id // Pass the logged-in user ID
+    );
+    return result;
+  },
+  onSuccess: (data) => {
+    queryClient.invalidateQueries({ queryKey: ['simpleContactsList'] }); // Match your query key
+    toast({ title: 'Contact Added! 🎉', description: 'Person has been added to your contacts.' });
+  },
+  onError: (error: any) => {
+    toast({ title: 'Failed to Add Contact', description: error.message, variant: 'destructive' });
+  },
+});
 
   const handleSearch = () => {
     const newFilters: ApolloSearchFilters = {};
@@ -148,9 +203,18 @@ export const PeopleSearchDialog: React.FC<PeopleSearchDialogProps> = ({
     refetch();
   };
 
-  const handleAddContact = (person: ApolloSearchPerson) => {
-    saveMutation.mutate(person);
-  };
+const handleAddContact = (person: ApolloSearchPerson) => {
+  if (!selectedFile && !urlFileId) {
+    toast({ title: "Action Required", description: "Please select a workspace and file first.", variant: "destructive" });
+    return;
+  }
+  // NEW: Quick check for file loading (brief UX feedback if fetching workspace)
+  if (urlFileId && isFileLoading) {
+    toast({ title: "Loading", description: "Fetching file details...", variant: "default" });
+    return;
+  }
+  saveMutation.mutate(person);
+};
 
   const getInitials = (name: string) => {
     if (!name) return '??';
@@ -287,6 +351,26 @@ export const PeopleSearchDialog: React.FC<PeopleSearchDialogProps> = ({
             {isLoading ? 'Searching...' : 'Search Apollo.io'}
           </Button>
         </div>
+
+        {/* Add this UI before the results list */}
+        {!urlFileId && (
+          <div className="flex gap-4 p-4 bg-slate-50 rounded-lg border mb-4">
+            <div className="flex-1">
+              <Label className="text-[10px] uppercase font-bold">Target Workspace</Label>
+              <Select onValueChange={setSelectedWorkspace}>
+                <SelectTrigger><SelectValue placeholder="Select Workspace" /></SelectTrigger>
+                <SelectContent>{workspaces?.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1">
+              <Label className="text-[10px] uppercase font-bold">Target File</Label>
+              <Select onValueChange={setSelectedFile} disabled={!selectedWorkspace}>
+                <SelectTrigger><SelectValue placeholder="Select File" /></SelectTrigger>
+                <SelectContent>{files?.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
 
         {/* --- Results Section (Preserved) --- */}
         <div className="space-y-3 mt-4">

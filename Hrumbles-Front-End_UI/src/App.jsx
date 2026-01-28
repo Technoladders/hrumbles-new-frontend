@@ -136,6 +136,8 @@ import EditableContactsPage from './pages/sales/EditableContactsPage';
 import TanstackContactsPage from './pages/sales/TanstackContactsPage';
 import KanbanView from './pages/sales/KanbanBoard';
 import ListsPage from './pages/sales/ListsPage';
+import LeadsWorkspace from './pages/crm/LeadsWorkspace.tsx'
+import ContactDetailPage from './pages/sales/ContactDetailPage.tsx'
 
 import SalesDashboard from "./pages/sales/SalesDashboard";
 
@@ -579,6 +581,10 @@ const validateCurrentSession = useCallback(async () => {
               <Route path="/companies/:id/edit" element={<CompanyEdit />} />
               <Route path="/lists" element={<ListsPage />} />
               <Route path="/lists/contacts/file/:fileId" element={<TanstackContactsPage />} />
+              <Route path="/lead" element={<LeadsWorkspace />} />
+              <Route path="/contacts/:id" element={<ContactDetailPage />} />
+
+
 
               {/* TimeTracker, Timesheet, Attendance and Leave */}
               {/* Employee routes */}

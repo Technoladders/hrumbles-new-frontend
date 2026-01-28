@@ -18,14 +18,51 @@ export const useUpdateSimpleContact = () => {
 
   return useMutation<SimpleContact, Error, UpdateSimpleContactPayload>({
     mutationFn: async ({ item, updates }: UpdateSimpleContactPayload) => {
+      console.log('DEBUG: Incoming updates payload:', updates); // ← DEBUG: Log raw incoming updates
+
+      // Normalize empty strings to NULL for constrained fields (e.g., email) to avoid unique constraint violations
+      const normalizedUpdates = { ...updates };
+      if ('email' in normalizedUpdates && typeof normalizedUpdates.email === 'string') {  // FIXED: Check property existence first, then type (ignores falsy '' value)
+        const emailValue = normalizedUpdates.email;
+        console.log('DEBUG: Email value before normalization:', emailValue, '(type:', typeof emailValue, ', length:', emailValue?.length, ')'); // ← DEBUG: Inspect email specifically
+
+        const trimmed = emailValue.trim();
+        console.log('DEBUG: Email trimmed:', trimmed, '(length:', trimmed.length, ')'); // ← DEBUG: Check after trim
+
+        if (trimmed === '') {
+          normalizedUpdates.email = null;  // Set to NULL instead of ''
+          console.log('DEBUG: Email normalized to NULL'); // ← DEBUG: Confirm change
+        } else {
+          normalizedUpdates.email = trimmed;  // Re-set trimmed non-empty string
+          console.log('DEBUG: Email trimmed but kept as string');
+        }
+      } else {
+        console.log('DEBUG: No email property or not a string in updates, skipping');
+      }
+
+      // Extend for other fields if they have similar constraints, e.g.:
+      // if ('mobile' in normalizedUpdates && typeof normalizedUpdates.mobile === 'string') {
+      //   const trimmedMobile = normalizedUpdates.mobile.trim();
+      //   if (trimmedMobile === '') {
+      //     normalizedUpdates.mobile = null;
+      //   } else {
+      //     normalizedUpdates.mobile = trimmedMobile;
+      //   }
+      // }
+
+      console.log('DEBUG: Normalized updates payload:', normalizedUpdates); // ← DEBUG: Log after normalization
+
       const { data, error } = await supabase
         .from('contacts')
-        .update(updates)
+        .update(normalizedUpdates)  // Use normalized updates
         .eq('id', item.id)
         .select(`*, company:companies(*), created_by_employee:hr_employees!created_by(*), updated_by_employee:hr_employees!updated_by(*)`)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('DEBUG: Supabase update error:', error); // ← DEBUG: Log any Supabase errors
+        throw error;
+      }
       return data as SimpleContact;
     },
     // [THE SECOND AND MAIN FIX] Use a simple onSuccess with a fuzzy invalidation.

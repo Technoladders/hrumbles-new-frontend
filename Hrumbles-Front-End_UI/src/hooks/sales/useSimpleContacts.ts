@@ -23,7 +23,7 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
         .from('contacts')
         .select(`
           *,
-          companies ( name, logo_url),
+          companies ( name, logo_url, industry ),
           created_by_employee:created_by ( first_name, last_name, profile_picture_url ),
           updated_by_employee:updated_by ( first_name, last_name, profile_picture_url )
         `)

@@ -32,7 +32,7 @@ export function DataTableColumnHeader<TData, TValue>({
       <Button
         variant="secondary"
         size="sm"
-        className="-ml-3 h-8 data-[state=open]:bg-accent"
+        className="-ml-3 h-8 data-[state=open]:bg-accent bg-gradient-to-r from-purple-600 to-violet-600 text-white"
         onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
       >
         <span>{title}</span>

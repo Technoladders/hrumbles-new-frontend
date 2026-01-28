@@ -644,3 +644,84 @@ async function uploadLogoFromUrl(url: string | null | undefined): Promise<string
     return null; // Return null on failure
   }
 }
+
+export const useDiscoveredCompanies = () => {
+  return useQuery({
+    queryKey: ['discovered-companies'],
+    queryFn: async () => {
+      // 1. Get IDs of companies already in CRM
+      const { data: existing } = await supabase
+        .from('companies')
+        .select('apollo_org_id')
+        .not('apollo_org_id', 'is', null);
+      
+      const existingIds = (existing || []).map(c => c.apollo_org_id);
+
+      // 2. Query enrichment_organizations that aren't in CRM
+      // This includes companies found in employment histories too
+      let query = supabase
+        .from('enrichment_organizations')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (existingIds.length > 0) {
+        query = query.not('apollo_org_id', 'in', `(${existingIds.join(',')})`);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    }
+  });
+};
+
+export const useUnifiedCompanies = (fileId?: string) => {
+  const authData = getAuthDataFromLocalStorage();
+  const organization_id = authData?.organization_id;
+
+  return useQuery({
+    queryKey: ['unified-companies', organization_id, fileId],
+    queryFn: async () => {
+      // 1. Fetch CRM Companies
+      let crmQuery = supabase
+        .from('companies')
+        .select(`
+          *,
+          created_by_employee:hr_employees!companies_created_by_fkey(first_name, last_name)
+        `)
+        .eq('organization_id', organization_id);
+
+      if (fileId) crmQuery = crmQuery.eq('file_id', fileId);
+      const { data: crmData } = await crmQuery;
+
+      // 2. Fetch Discovered Organizations (from Intelligence Layer)
+      const { data: intelData } = await supabase
+        .from('enrichment_organizations')
+        .select('*');
+
+      // 3. Merge and Deduplicate
+      // We prioritize CRM records. If an Apollo Org ID exists in CRM, we don't show the "Raw" version.
+      const crmApolloIds = new Set(crmData?.map(c => c.apollo_org_id).filter(Boolean));
+      
+      const discoveredOnly = (intelData || [])
+        .filter(intel => !crmApolloIds.has(intel.apollo_org_id))
+        .map(intel => ({
+          ...intel,
+          id: `intel-${intel.apollo_org_id}`, // Virtual ID for React keys
+          is_intelligence_only: true, // Flag to differentiate UI
+          industry: intel.industry,
+          location: `${intel.city || ''}, ${intel.country || ''}`,
+          employee_count: intel.estimated_num_employees,
+          website: intel.website_url,
+        }));
+
+      return [...(crmData || []), ...discoveredOnly].sort((a, b) => {
+        // Sort CRM records to the top, then by name
+        if (a.is_intelligence_only && !b.is_intelligence_only) return 1;
+        if (!a.is_intelligence_only && b.is_intelligence_only) return -1;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+    },
+    enabled: !!organization_id
+  });
+};

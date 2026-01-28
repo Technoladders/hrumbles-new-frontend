@@ -1,112 +1,174 @@
-// src/components/sales/contacts-table/data-table-toolbar.tsx
+// src/components/sales/contacts-table/data-table-toolbar.tsx - REDESIGNED COMPACT TOOLBAR
+
 import React from 'react';
-import { X, Plus, Columns, GripVertical, Upload } from 'lucide-react';
+import { X, Plus, Columns, Upload, ListFilter, Layers } from 'lucide-react';
 import { type Table } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { DataTableFacetedFilter } from './data-table-faceted-filter';
+import { Badge } from '@/components/ui/badge';
+import { 
+  DropdownMenu, 
+  DropdownMenuCheckboxItem, 
+  DropdownMenuContent, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from '@/components/ui/dropdown-menu';
 
 interface DataTableToolbarProps<TData> {
   table: Table<TData>;
-  onOpenAddContactDialog: () => void; // Prop is renamed for clarity
+  onOpenAddContactDialog: () => void;
   onOpenImportDialog: () => void;
   onToggleGrouping: () => void;
-   createdByOptions: {
+  onToggleFilters: () => void;
+  isSidebarOpen: boolean;
+  createdByOptions: {
     label: string;
     value: string;
   }[];
 }
 
-export function DataTableToolbar<TData>({ table, onOpenAddContactDialog, onToggleGrouping, createdByOptions, onOpenImportDialog }: DataTableToolbarProps<TData>) {
-
+export function DataTableToolbar<TData>({ 
+  table, 
+  onOpenAddContactDialog, 
+  onToggleGrouping, 
+  onToggleFilters,
+  isSidebarOpen,
+  createdByOptions, 
+  onOpenImportDialog 
+}: DataTableToolbarProps<TData>) {
   const isFiltered = table.getState().columnFilters.length > 0;
   const isGrouped = table.getState().grouping.length > 0;
+  const activeFiltersCount = table.getState().columnFilters.length;
 
   return (
-<div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
-  {/* Search Input */}
-  <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
-    <Input
-      placeholder="Filter contacts..."
-      value={(table.getColumn('name')?.getFilterValue() as string) ?? ''}
-      onChange={(event) => table.getColumn('name')?.setFilterValue(event.target.value)}
-      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm"
-    />
-  </div>
+    <div className="flex flex-wrap items-center gap-2">
+      {/* Filter Sidebar Toggle */}
+      <Button 
+        variant={isSidebarOpen ? "default" : "outline"}
+        size="sm" 
+        className={cn(
+          "h-8 text-xs gap-1.5 transition-all",
+          isSidebarOpen 
+            ? "bg-slate-800 text-white hover:bg-slate-700" 
+            : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+        )}
+        onClick={onToggleFilters}
+      >
+        <ListFilter className="h-3.5 w-3.5" />
+        Filters
+        {activeFiltersCount > 0 && (
+          <Badge variant="secondary" className="ml-1 h-4 min-w-[16px] px-1 text-[10px] font-bold bg-blue-500 text-white">
+            {activeFiltersCount}
+          </Badge>
+        )}
+      </Button>
 
-  {/* Created By Filter */}
-  {table.getColumn('created_by_employee') && (
-    <div className="flex-shrink-0 order-2">
-      <DataTableFacetedFilter
-        column={table.getColumn('created_by_employee')}
-        title="Created By"
-        options={createdByOptions}
-        className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm"
-      />
-    </div>
-  )}
+      {/* Search Input */}
+      <div className="relative flex-grow max-w-sm">
+        <Input
+          placeholder="Search by name..."
+          value={(table.getColumn('name')?.getFilterValue() as string) ?? ''}
+          onChange={(event) => table.getColumn('name')?.setFilterValue(event.target.value)}
+          className="h-8 text-xs pl-3 pr-8 bg-white border-slate-300"
+        />
+        {table.getColumn('name')?.getFilterValue() && (
+          <button
+            onClick={() => table.getColumn('name')?.setFilterValue('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
 
-  {/* Reset Button */}
-  {isFiltered && (
-    <Button 
-      variant="ghost" 
-      onClick={() => table.resetColumnFilters()} 
-      className="flex-shrink-0 order-3 rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm px-2 lg:px-3"
-    >
-      Reset
-      <X className="ml-2 h-4 w-4" />
-    </Button>
-  )}
-
-  {/* Group Button */}
-  <Button 
-    variant="outline" 
-    size="sm" 
-    className="flex-shrink-0 order-4 rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm"
-    onClick={onToggleGrouping}
-  >
-    {isGrouped ? "Ungroup" : "Group by Stage"}
-  </Button>
-
-  {/* View Columns Dropdown */}
-  <div className="flex-shrink-0 order-5">
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm lg:flex">
-          <Columns className="mr-2 h-4 w-4" />View
+      {/* Reset Filters */}
+      {isFiltered && (
+        <Button 
+          variant="ghost" 
+          onClick={() => table.resetColumnFilters()} 
+          className="h-8 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 gap-1.5"
+        >
+          <X className="h-3.5 w-3.5" />
+          Reset
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[150px]">
-        <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {table.getAllColumns().filter((column) => typeof column.accessorFn !== 'undefined' && column.getCanHide()).map((column) => (
-          <DropdownMenuCheckboxItem key={column.id} className="capitalize" checked={column.getIsVisible()} onCheckedChange={(value) => column.toggleVisibility(!!value)}>
-            {column.id.replace(/_/g, ' ')}
-          </DropdownMenuCheckboxItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  </div>
+      )}
 
-  {/* Import Button */}
-  <Button 
-    variant="outline" 
-    size="sm" 
-    className="flex-shrink-0 order-6 rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm"
-    onClick={onOpenImportDialog}
-  >
-    <Upload className="mr-2 h-4 w-4" /> Import
-  </Button>
+      {/* Group Toggle */}
+      <Button 
+        variant="outline" 
+        size="sm" 
+        className={cn(
+          "h-8 text-xs gap-1.5",
+          isGrouped && "bg-slate-100 border-slate-400"
+        )}
+        onClick={onToggleGrouping}
+      >
+        <Layers className="h-3.5 w-3.5" />
+        {isGrouped ? "Ungroup" : "Group"}
+      </Button>
 
-  {/* Add People Button */}
-  <Button 
-    size="sm" 
-    className="flex-shrink-0 order-7 rounded-full h-10 bg-violet-600 hover:bg-violet-700 text-white text-sm"
-    onClick={onOpenAddContactDialog}
-  >
-    <Plus className="mr-2 h-4 w-4" /> Add People
-  </Button>
-</div>
+      {/* Spacer */}
+      <div className="flex-grow" />
+
+      {/* View Columns */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-8 text-xs gap-1.5"
+          >
+            <Columns className="h-3.5 w-3.5" />
+            Columns
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuLabel className="text-xs font-semibold">Toggle columns</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <div className="max-h-72 overflow-y-auto">
+            {table
+              .getAllColumns()
+              .filter((column) => typeof column.accessorFn !== 'undefined' && column.getCanHide())
+              .map((column) => (
+                <DropdownMenuCheckboxItem
+                  key={column.id}
+                  className="capitalize text-xs"
+                  checked={column.getIsVisible()}
+                  onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                >
+                  {column.id.replace(/_/g, ' ')}
+                </DropdownMenuCheckboxItem>
+              ))}
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Import */}
+      <Button 
+        variant="outline" 
+        size="sm" 
+        className="h-8 text-xs gap-1.5"
+        onClick={onOpenImportDialog}
+      >
+        <Upload className="h-3.5 w-3.5" />
+        Import
+      </Button>
+
+      {/* Add People */}
+      <Button 
+        size="sm" 
+        className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+        onClick={onOpenAddContactDialog}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add People
+      </Button>
+    </div>
   );
+}
+
+// Add cn utility if not already present
+function cn(...classes: (string | boolean | undefined)[]) {
+  return classes.filter(Boolean).join(' ');
 }

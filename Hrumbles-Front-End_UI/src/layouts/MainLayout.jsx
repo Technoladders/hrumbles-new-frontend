@@ -566,7 +566,7 @@ const MainLayout = () => {
         <Box 
           flex="1" 
           overflowY="auto" 
-          p={6} 
+          p={1} 
           bg={colorMode} 
           overflowX="hidden" 
           w="100%" 

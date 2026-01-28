@@ -53,6 +53,29 @@ export interface ApolloSearchResponse {
   breadcrumbs?: any[];
 }
 
+export function levenshteinDistance(a: string, b: string): number {
+  const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
+  for (let i = 0; i <= a.length; i++) matrix[0][i] = i;
+  for (let j = 0; j <= b.length; j++) matrix[j][0] = j;
+  for (let j = 1; j <= b.length; j++) {
+    for (let i = 1; i <= a.length; i++) {
+      const indicator = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[j][i] = Math.min(
+        matrix[j][i - 1] + 1, // deletion
+        matrix[j - 1][i] + 1, // insertion
+        matrix[j - 1][i - 1] + indicator // substitution
+      );
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+export function nameSimilarity(name1: string, name2: string): number {
+  const maxLen = Math.max(name1.length, name2.length);
+  if (maxLen === 0) return 1;
+  return 1 - (levenshteinDistance(name1.toLowerCase(), name2.toLowerCase()) / maxLen);
+}
+
 // Helper function to normalize API response
 function normalizePerson(person: any): ApolloSearchPerson {
   // Build full name from first_name + last_name
@@ -138,91 +161,65 @@ export async function searchPeopleInApollo(
 }
 
 export async function saveSearchResultToContacts(
-  person: ApolloSearchPerson,
-  organizationId: string
+  person: any, // The raw object from search
+  organizationId: string,
+  workspaceId: string,
+  fileId: string,
+  userId: string
 ): Promise<string> {
   try {
-    console.log('💾 Saving contact to database:', person.name);
-
-    // Step 1: Enrich the person to get email/phone (this consumes 1 credit)
-    if (person.linkedin_url) {
-      console.log('🔍 Enriching person data from Apollo.io...');
-      
-      const { data: enrichedData, error: enrichError } = await supabase.functions.invoke(
-        'apollo-enrich',
-        {
-          body: {
-            linkedin_url: person.linkedin_url,
-            first_name: person.first_name,
-            last_name: person.last_name,
-            organization_name: person.organization?.name,
-          },
-        }
-      );
-
-      if (enrichError) {
-        console.error('❌ Enrichment error:', enrichError);
-        // Continue without enrichment if it fails
-      } else if (enrichedData) {
-        // Merge enriched data
-        person.email = enrichedData.email || person.email;
-        person.phone_numbers = enrichedData.phone_numbers || person.phone_numbers;
-        console.log('✅ Person enriched successfully');
-      }
-    }
-
-    // Step 2: Check if contact already exists
-    const existingQuery = supabase
+    
+    console.log('💾 Saving contact with:', { workspaceId, fileId, userId });
+    // 1. Check for duplicates using Apollo ID
+    const { data: existing } = await supabase
       .from('contacts')
       .select('id')
-      .eq('organization_id', organizationId);
+      .eq('apollo_person_id', person.id)
+      .eq('organization_id', organizationId)
+      .maybeSingle();
 
-    // Add email or linkedin_url filter
-    if (person.email) {
-      existingQuery.eq('email', person.email);
-    } else if (person.linkedin_url) {
-      existingQuery.eq('linkedin_url', person.linkedin_url);
-    }
+    if (existing) return existing.id;
 
-    const { data: existing } = await existingQuery.single();
-
-    if (existing) {
-      console.log('ℹ️ Contact already exists:', existing.id);
-      return existing.id;
-    }
-
-    // Step 3: Create contact
-    const { data: newContact, error } = await supabase
+    // 2. Insert the main contact
+    const { data: contact, error } = await supabase
       .from('contacts')
       .insert({
-        name: person.name,
-        email: person.email || null,
-        mobile: person.phone_numbers?.[0]?.sanitized_number || null,
+        name: `${person.first_name} ${person.last_name || ''}`.trim(),
         job_title: person.title,
-        linkedin_url: person.linkedin_url,
         organization_id: organizationId,
-        city: person.city,
-        state: person.state,
-        country: person.country,
-        contact_stage: 'Prospect',
+       
+        file_id: fileId,
+        apollo_person_id: person.id,
+        created_by: userId,
+        contact_stage: 'Identified',
       })
       .select()
       .single();
 
     if (error) throw error;
 
-    // Step 4: Save Apollo enrichment data
+    // 3. Save Availability Flags for UI indicators
+    await supabase.from('enrichment_availability').upsert({
+      contact_id: contact.id,
+      has_email: person.has_email,
+      has_phone: person.has_direct_phone === "Yes" || person.has_direct_phone?.includes("Maybe"),
+      has_location: person.has_city || person.has_state || person.has_country,
+      has_org_details: !!person.organization
+    });
+
+        // Step 4: Save enrichment (unchanged)
     await supabase.from('apollo_enrichments').insert({
-      contact_id: newContact.id,
+      contact_id: contact.id,
       organization_id: organizationId,
       apollo_data: person,
       last_enriched_at: new Date().toISOString(),
     });
 
-    console.log('✅ Contact saved:', newContact.id);
-    return newContact.id;
-  } catch (error: any) {
-    console.error('❌ Error saving contact:', error);
+    console.log('✅ New contact saved:', contact.id);
+
+    return contact.id;
+  } catch (error) {
+    console.error('Save error:', error);
     throw error;
   }
 }

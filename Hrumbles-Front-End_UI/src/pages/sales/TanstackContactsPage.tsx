@@ -1,4 +1,4 @@
-// TanstackContactPage.tsx - UPDATED WITH CONTACT DETAIL PANEL + APOLLO SEARCH
+// TanstackContactPage.tsx - REDESIGNED WITH PROFESSIONAL UI
 
 import React from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
@@ -42,13 +42,13 @@ import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { startOfMonth } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, FileText, Download, Search } from 'lucide-react'; // NEW: Added Search
+import { MoreHorizontal, FileText, Download, Search, Filter, SlidersHorizontal } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-   DropdownMenuSeparator,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { ManageStagesDialog } from '@/components/sales/contacts-table/ManageStagesDialog'
 import { ContactImportDialog } from '@/components/sales/contacts-table/ContactImportDialog';
@@ -60,6 +60,9 @@ import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
 import { ContactDetailPanel } from '@/components/sales/contacts-table/ContactDetailPanel';
 import { PeopleSearchDialog } from '@/components/sales/contacts-table/PeopleSearchDialog';
+import { ContactFiltersSidebar } from '@/components/sales/contacts-table/ContactFiltersSidebar';
+import { TableSkeleton } from '@/components/sales/contacts-table/TableSkeleton';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface DateRange {
   startDate: Date | null;
@@ -105,7 +108,8 @@ const TanstackContactsPage: React.FC = () => {
   const [isAddContactOpen, setIsAddContactOpen] = React.useState(false);
   const [isImportOpen, setIsImportOpen] = React.useState(false);
   const [selectedContact, setSelectedContact] = React.useState<SimpleContact | null>(null);
-  const [isSearchDialogOpen, setIsSearchDialogOpen] = React.useState(false); // NEW: Apollo search dialog state
+  const [isSearchDialogOpen, setIsSearchDialogOpen] = React.useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
   const [columnOrder, setColumnOrder] = React.useState<ColumnOrderState>([]);
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const [grouping, setGrouping] = React.useState<GroupingState>([]);
@@ -113,8 +117,8 @@ const TanstackContactsPage: React.FC = () => {
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   
   const [chartDateRange, setChartDateRange] = React.useState<DateRange>({
-    startDate: startOfMonth(new Date()),
-    endDate: new Date(),
+    startDate: null,
+    endDate: null,
   });
 
   const { data: savedColumnOrder, set: saveColumnOrder } = useUserPreferences<ColumnOrderState>('contactsColumnOrderV2');
@@ -161,7 +165,6 @@ const TanstackContactsPage: React.FC = () => {
     });
   }, [serverContacts, chartDateRange]);
 
-  // Create clickable name column
   const createNameColumn = (): ColumnDef<SimpleContact> => ({
     id: 'name',
     accessorKey: 'name',
@@ -172,20 +175,19 @@ const TanstackContactsPage: React.FC = () => {
       return (
         <Button
           variant="link"
-          className="p-0 h-auto font-medium text-purple-600 hover:text-purple-800 hover:underline"
+          className="p-0 h-auto font-medium text-blue-600 hover:text-blue-700 hover:underline text-sm"
           onClick={() => setSelectedContact(contact)}
         >
           {contact.name}
         </Button>
       );
     },
-    size: 200,
-    minSize: 150,
-    maxSize: 300,
+    size: 180,
+    minSize: 140,
+    maxSize: 280,
   });
  
   const memoizedColumns = React.useMemo<ColumnDef<SimpleContact>[]>(() => {
-    // Find and replace the name column with clickable version
     const updatedDefaultColumns = defaultColumns.map(col => 
       col.id === 'name' ? createNameColumn() : col
     );
@@ -197,7 +199,7 @@ const TanstackContactsPage: React.FC = () => {
             accessorFn: row => (row.custom_data as any)?.[field.column_key],
             header: ReorderableHeader,
             cell: getCustomCell(field.data_type as any),
-            size: 150, minSize: 100, maxSize: 250,
+            size: 140, minSize: 100, maxSize: 220,
         }));
     
     const auditStartIndex = updatedDefaultColumns.findIndex(col => col.id === 'created_by_employee');
@@ -212,11 +214,19 @@ const TanstackContactsPage: React.FC = () => {
   }, [customFields]);
 
   const table = useReactTable({
-   data: filteredData, 
+    data: filteredData,
     enableRowSelection: true,
     columns: memoizedColumns,
-      autoResetPageIndex: false,
-    initialState: { pagination: { pageSize: 20 } },
+    autoResetPageIndex: false,
+    initialState: {
+      pagination: { pageSize: 20 },
+      columnVisibility: {
+        workspace_id: false,
+        file_id: false,
+        industry: false,
+        ...columnVisibility
+      }
+    },
     state: { columnOrder, columnSizing, grouping, columnVisibility, columnFilters },
     meta: {
       updateData: (rowIndex: number, columnId: string, value: unknown) => {
@@ -240,6 +250,15 @@ const TanstackContactsPage: React.FC = () => {
     getExpandedRowModel: getExpandedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
+    filterFns: {
+      emailExists: (row, columnId, filterValue) => {
+        if (filterValue === 'exists') {
+          const email = row.getValue(columnId);
+          return email != null && email !== '';
+        }
+        return true;
+      },
+    },
   });
 
   React.useEffect(() => {
@@ -310,7 +329,6 @@ const TanstackContactsPage: React.FC = () => {
     deleteContactMutation.mutate(contactId, {
       onSuccess: () => {
         toast({ title: "Contact Deleted" });
-        // Close detail panel if deleted contact is currently selected
         if (selectedContact?.id === contactId) {
           setSelectedContact(null);
         }
@@ -320,13 +338,11 @@ const TanstackContactsPage: React.FC = () => {
   };
 
   const handleEditContact = (contact: SimpleContact) => {
-    // Close the detail panel
     setSelectedContact(null);
-    // You can open an edit dialog here if needed
     toast({ title: "Edit functionality", description: "Implement edit dialog here" });
   };
 
-const handleDownloadCsv = (exportAll: boolean) => {
+  const handleDownloadCsv = (exportAll: boolean) => {
     const rowsToExport = exportAll ? table.getPrePaginationRowModel().rows : table.getRowModel().rows;
     const visibleColumns = table.getVisibleLeafColumns().filter(c => !['select', 'actions'].includes(c.id));
     const header = visibleColumns.map(c => c.id);
@@ -360,136 +376,224 @@ const handleDownloadCsv = (exportAll: boolean) => {
     doc.save('contacts.pdf');
   };
 
-return (
+  return (
     <DndProvider backend={HTML5Backend}>
-        <div className="w-full h-full flex flex-col space-y-4">
-            
-            {fileIdFromUrl && (
-                <Breadcrumb spacing="8px" separator={<ChevronRightIcon color="gray.500" />} mb={-2}>
-                    <BreadcrumbItem>
-                        <BreadcrumbLink as={RouterLink} to="/lists">Workspaces</BreadcrumbLink>
-                    </BreadcrumbItem>
-                    {isLoadingBreadcrumb ? <Spinner size="xs" /> : breadcrumbData && (
-                        <>
-                            <BreadcrumbItem>
-                                <BreadcrumbLink as={RouterLink} to="/lists">{breadcrumbData.workspaces?.name || 'Workspace'}</BreadcrumbLink>
-                            </BreadcrumbItem>
-                            <BreadcrumbItem isCurrentPage>
-                                <BreadcrumbLink href="#">{breadcrumbData.name}</BreadcrumbLink>
-                            </BreadcrumbItem>
-                        </>
-                    )}
-                </Breadcrumb>
-            )}
+      {/* Main Container with modern gradient background */}
+      <div className="flex h-[calc(100vh-64px)] w-full overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-50">
+        
 
-            <header className="flex-shrink-0">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 tracking-tight">
-                            {fileIdFromUrl ? (breadcrumbData?.name || 'File People') : (viewingMode === 'unfiled' ? 'Unfiled People' : 'All People')}
-                        </h1>
-                        <p className="text-gray-500 text-sm mt-1">
-                            {fileIdFromUrl
-                                ? `Viewing people in the file: ${breadcrumbData?.name || ''}`
-                                : viewingMode === 'unfiled'
-                                    ? 'These contacts are not yet assigned to a file.'
-                                    : 'Viewing all people in your organization.'}
-                        </p>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                        {/* NEW: Apollo Search Button */}
-                        <Button 
-                            onClick={() => setIsSearchDialogOpen(true)}
-                            variant="outline"
-                            size="sm"
-                            className="h-9 bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
+
+        {/* RIGHT CONTENT AREA */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          
+          {/* Header Section with clean design */}
+          <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-sm">
+            <div className="px-6 py-4">
+              {fileIdFromUrl && (
+                <Breadcrumb spacing="6px" separator={<ChevronRightIcon color="gray.400" boxSize={3} />} mb={2}>
+                  <BreadcrumbItem>
+                    <BreadcrumbLink 
+                      as={RouterLink} 
+                      to="/lists"
+                      className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+                    >
+                      Workspaces
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                  {isLoadingBreadcrumb ? (
+                    <Spinner size="xs" color="slate.400" />
+                  ) : breadcrumbData && (
+                    <>
+                      <BreadcrumbItem>
+                        <BreadcrumbLink 
+                          as={RouterLink} 
+                          to="/lists"
+                          className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
                         >
-                            <Search className="mr-2 h-4 w-4" />
-                            Search Apollo.io
-                        </Button>
+                          {breadcrumbData.workspaces?.name || 'Workspace'}
+                        </BreadcrumbLink>
+                      </BreadcrumbItem>
+                      <BreadcrumbItem isCurrentPage>
+                        <BreadcrumbLink className="text-xs text-slate-700 font-medium">
+                          {breadcrumbData.name}
+                        </BreadcrumbLink>
+                      </BreadcrumbItem>
+                    </>
+                  )}
+                </Breadcrumb>
+              )}
+              
+              <div className="flex items-center justify-between mt-2">
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+                    {fileIdFromUrl 
+                      ? (breadcrumbData?.name || 'File People') 
+                      : (viewingMode === 'unfiled' ? 'Unfiled People' : 'All People')
+                    }
+                  </h1>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {fileIdFromUrl
+                      ? `${filteredData.length} contacts in this file`
+                      : viewingMode === 'unfiled'
+                        ? `${filteredData.length} unassigned contacts`
+                        : `${filteredData.length} total contacts`
+                    }
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Button 
+                    onClick={() => setIsSearchDialogOpen(true)}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 hover:border-blue-300"
+                  >
+                    <Search className="mr-1.5 h-3.5 w-3.5" />
+                    Apollo Search
+                  </Button>
 
-                        <EnhancedDateRangeSelector value={chartDateRange} onChange={setChartDateRange} />
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="h-9"><Download className="mr-2 h-4 w-4" /> Export</Button></DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleDownloadCsv(false)}>Export Page (CSV)</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleDownloadCsv(true)}>Export All (CSV)</DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => handleDownloadPdf(false)}>Export Page (PDF)</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleDownloadPdf(true)}>Export All (PDF)</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="h-9 w-9"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => setIsManageStagesOpen(true)}>Manage Stages</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setIsAddColumnOpen(true)}>Manage Columns</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
+                  <EnhancedDateRangeSelector 
+                    value={chartDateRange} 
+                    onChange={setChartDateRange} 
+                  />
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 text-xs">
+                        <Download className="mr-1.5 h-3.5 w-3.5" />
+                        Export
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem onClick={() => handleDownloadCsv(false)}>
+                        Export Page (CSV)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDownloadCsv(true)}>
+                        Export All (CSV)
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleDownloadPdf}>
+                        Export Page (PDF)
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+                        <SlidersHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem onClick={() => setIsManageStagesOpen(true)}>
+                        Manage Stages
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setIsAddColumnOpen(true)}>
+                        Manage Columns
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-            </header>
-            
-            <div className="flex-1 flex flex-col rounded-lg border bg-white overflow-hidden">
-                <div className="p-4 border-b flex-shrink-0">
-                    <DataTableToolbar
-                        table={table}
-                        onOpenAddContactDialog={() => setIsAddContactOpen(true)}
-                        onOpenImportDialog={() => setIsImportOpen(true)}
-                        onToggleGrouping={() => table.setGrouping(prev => prev.length ? [] : ['contact_stage'])}
-                        createdByOptions={createdByOptions}
-                    />
-                </div>
-
-               <div className="flex-1 relative">
-                    {isLoading ? (
-                        <p className="p-4 text-center">Loading Contacts...</p>
-                    ) : (
-                        <DataTable table={table} />
-                    )}
-                </div>
-                <div className="p-2 border-t flex-shrink-0">
-                    <DataTablePagination table={table} />
-                </div>
+              </div>
             </div>
+
+            {/* Toolbar Section */}
+            <div className="px-6 pb-3">
+              <DataTableToolbar
+                table={table}
+                onOpenAddContactDialog={() => setIsAddContactOpen(true)}
+                onOpenImportDialog={() => setIsImportOpen(true)}
+                onToggleGrouping={() => table.setGrouping(prev => prev.length ? [] : ['contact_stage'])}
+                onToggleFilters={() => setIsSidebarOpen(!isSidebarOpen)}
+                isSidebarOpen={isSidebarOpen}
+                createdByOptions={createdByOptions}
+              />
+            </div>
+          </div>
+
+        {/* NEW INTEGRATED TABLE & SIDEBAR AREA */}
+          <div className="flex-1 flex overflow-hidden p-4 gap-0">
+            
+            {/* 
+                SIDEBAR MOVED HERE 
+                It now sits inside the content area, below the header/toolbar 
+            */}
+            <AnimatePresence mode="wait">
+              {isSidebarOpen && (
+                <motion.div
+                  initial={{ x: -300, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: -300, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                  className="h-full"
+                >
+                  <div className="w-auto h-full bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                    <ContactFiltersSidebar 
+                      table={table} 
+                      isOpen={true} // Logic handled by parent AnimatePresence
+                      onClose={() => setIsSidebarOpen(false)}
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* TABLE CONTAINER */}
+            <div className="flex-1 bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col min-w-0">
+              {isLoading ? (
+                <TableSkeleton />
+              ) : (
+                <>
+                  <div className="flex-1 overflow-hidden">
+                    <DataTable table={table} onAddContact={() => setIsAddContactOpen(true)} />
+                  </div>
+                  <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50/50">
+                    <DataTablePagination table={table} />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
+      </div>
 
-        {/* Contact Detail Panel */}
-        {selectedContact && (
-          <ContactDetailPanel
-            contact={selectedContact}
-            onClose={() => setSelectedContact(null)}
-            onEdit={handleEditContact}
-            onDelete={handleDeleteRow}
-          />
-        )}
-
-        <ManageStagesDialog open={isManageStagesOpen} onOpenChange={setIsManageStagesOpen} />
-        <AddColumnDialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen} />
-        <ContactImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} fileId={fileIdFromUrl} />
-        <Dialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>
-            <DialogContent className="sm:max-w-[600px] z-50">
-                <DialogHeader><DialogTitle>Add New Contact</DialogTitle></DialogHeader>
-                <AddContactForm
-                    onClose={() => setIsAddContactOpen(false)}
-                    onSuccess={() => {
-                        toast({ title: "Contact Added" });
-                        queryClient.invalidateQueries({ queryKey: ['simpleContactsList'] });
-                    }}
-                    fileId={fileIdFromUrl}
-                />
-            </DialogContent>
-        </Dialog>
-
-        {/* NEW: Apollo People Search Dialog */}
-        <PeopleSearchDialog
-            open={isSearchDialogOpen}
-            onOpenChange={setIsSearchDialogOpen}
+      {/* Contact Detail Panel */}
+      {selectedContact && (
+        <ContactDetailPanel
+          contact={selectedContact}
+          onClose={() => setSelectedContact(null)}
+          onEdit={handleEditContact}
+          onDelete={handleDeleteRow}
         />
+      )}
 
+      {/* Dialogs */}
+      <ManageStagesDialog open={isManageStagesOpen} onOpenChange={setIsManageStagesOpen} />
+      <AddColumnDialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen} />
+      <ContactImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} fileId={fileIdFromUrl} />
+      
+      <Dialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Add New Contact</DialogTitle>
+          </DialogHeader>
+          <AddContactForm
+            onClose={() => setIsAddContactOpen(false)}
+            onSuccess={() => {
+              toast({ title: "Contact Added" });
+              queryClient.invalidateQueries({ queryKey: ['simpleContactsList'] });
+            }}
+            fileId={fileIdFromUrl}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <PeopleSearchDialog
+        open={isSearchDialogOpen}
+        onOpenChange={setIsSearchDialogOpen}
+      />
     </DndProvider>
-);
-
+  );
 };
 
 export default TanstackContactsPage;

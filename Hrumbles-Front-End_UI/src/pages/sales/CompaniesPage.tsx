@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Link as RouterLink, useParams } from "react-router-dom";
+import { Link as RouterLink, useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Company, CompanyDetail } from "@/types/company";
-import { useCompanies, useCompanyCounts } from "@/hooks/use-companies";
+import { useCompanies, useCompanyCounts, useUnifiedCompanies } from "@/hooks/use-companies";
 import {
   Edit, Building2, Users, Search, Plus, Globe, Linkedin, Link as LinkIcon,
-  Upload, Loader2, Download, ChevronDown, Sparkles, PenSquare, Eye, ChevronLeft, ChevronRight, ChevronRightIcon
+  Upload, Loader2, Download, ChevronDown, Sparkles, PenSquare, Eye, ChevronLeft, ChevronRight, ChevronRightIcon, ShieldCheck, ArrowRightCircle,
+  TrendingUp, DollarSign, MapPin, Calendar, ArrowUpDown
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -45,7 +47,7 @@ import { EnhancedDateRangeSelector } from "@/components/ui/EnhancedDateRangeSele
 import CompanyStagePieChart from "@/components/sales/chart/CompanyStagePieChart";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, Spinner } from "@chakra-ui/react";
 import { CompanySearchDialog } from '@/components/sales/CompanySearchDialog';
-
+import { cn } from "@/lib/utils";
 
 interface DateRange {
   startDate: Date | null;
@@ -104,7 +106,7 @@ const companyCsvSchema = z.object({
   competitors: data.competitors_string?.split(',').map(s => s.trim()).filter(Boolean) || null,
   products: data.products_string?.split(',').map(s => s.trim()).filter(Boolean) || null,
   services: data.services_string?.split(',').map(s => s.trim()).filter(Boolean) || null,
-  key_people: data.key_people_string ? JSON.parse(data.key_people_string) : null,
+  key_people: data.key_people_string ? (() => { try { return JSON.parse(data.key_people_string); } catch { return null; } })() : null,
 }));
 type CompanyCsvRow = z.infer<typeof companyCsvSchema>;
 
@@ -135,11 +137,13 @@ const getDisplayValue = (value: string | number | null | undefined, fallback: st
 
 const CompaniesPage = () => {
     const { fileId } = useParams<{ fileId?: string }>();
+    const navigate = useNavigate();
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const user = useSelector((state: any) => state.auth.user);
     const organizationId = useSelector((state: any) => state.auth.organization_id);
-    const { data: companies = [], isLoading, isError, error } = useCompanies(fileId);
+    const { data: allCompanies = [], isLoading: isUnifiedLoading, isError: isUnifiedError, error: unifiedError } = useUnifiedCompanies(fileId);
+    const { data: companies = [], isError, error } = useCompanies(fileId);
     const { data: counts, isLoading: isCountsLoading } = useCompanyCounts();
 
     const [currentPage, setCurrentPage] = useState(1);
@@ -154,6 +158,7 @@ const CompaniesPage = () => {
     const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false);
     const [companyToReview, setCompanyToReview] = useState<Partial<Company> | null>(null);
     const [isManualAddDialogOpen, setIsManualAddDialogOpen] = useState(false);
+    const [isCompanySearchDialogOpen, setIsCompanySearchDialogOpen] = useState(false);
     const currentUserId = user?.id || null;
 
     const [chartDateRange, setChartDateRange] = useState<DateRange>({
@@ -161,12 +166,35 @@ const CompaniesPage = () => {
       endDate: new Date(),
     });
 
+    // 2. Mutation to "Promote" an intelligence record to a CRM record
+  const promoteToCrm = useMutation({
+    mutationFn: async (intel: any) => {
+      const { data, error } = await supabase.from('companies').insert({
+        name: intel.name,
+        website: intel.website,
+        apollo_org_id: intel.apollo_org_id,
+        logo_url: intel.logo_url,
+        industry: intel.industry,
+        location: intel.location,
+        organization_id: organizationId,
+        created_by: currentUserId,
+        status: 'Identified'
+      }).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (newCompany) => {
+      toast({ title: "Company Registered", description: "Record moved to CRM database." });
+      queryClient.invalidateQueries({ queryKey: ['unified-companies'] });
+      navigate(`/companies/${newCompany.id}`); // Navigate to the new detail page
+    }
+  });
+
     const { data: breadcrumbData, isLoading: isLoadingBreadcrumb } = useQuery({
         queryKey: ['companyBreadcrumb', fileId],
         queryFn: async () => {
             if (!fileId) return null;
-            const { data, error } = await supabase.from('workspace_files').select('name, workspaces(name)').eq('id', fileId).single();
-            if (error) throw error;
+            const { data } = await supabase.from('workspace_files').select('name, workspaces(name)').eq('id', fileId).single();
             return data;
         },
         enabled: !!fileId,
@@ -176,7 +204,10 @@ const CompaniesPage = () => {
       if (isError && error) {
         toast({ title: "Error Loading Companies", description: error.message || "Could not fetch data.", variant: "destructive" });
       }
-    }, [isError, error, toast]);
+      if (isUnifiedError && unifiedError) {
+        toast({ title: "Error Loading Unified Companies", description: unifiedError.message || "Could not fetch data.", variant: "destructive" });
+      }
+    }, [isError, error, isUnifiedError, unifiedError, toast]);
 
     useEffect(() => { setCurrentPage(1); }, [searchTerm, selectedCreatorId]);
 
@@ -188,22 +219,18 @@ const CompaniesPage = () => {
         onSuccess: () => {
           toast({ title: "Stage Updated", description: "The company stage has been successfully updated." });
           queryClient.invalidateQueries({ queryKey: ['companies', fileId || 'all'] });
+          queryClient.invalidateQueries({ queryKey: ['unified-companies'] });
         },
         onError: (e: any) => toast({ title: "Update Failed", description: e.message, variant: "destructive" }),
     });
 
     const handleStageChange = (companyId: number, newStage: string) => updateStageMutation.mutate({ companyId, stage: newStage });
     const handleEditClick = (company: CompanyDetail) => { setEditCompany(company); setIsEditDialogOpen(true); };
-    const handleCreatorClick = (creatorId: string | null | undefined) => {
-      const newCreatorId = creatorId ?? 'system';
-      setSelectedCreatorId(newCreatorId);
-      setCurrentPage(1);
-    };
 
     const uniqueCreators = useMemo(() => {
         const creators = new Map<string, { id: string; name: string }>();
         creators.set('system', { id: 'system', name: 'System' });
-        companies.forEach(company => {
+        allCompanies.forEach(company => {
             const creatorId = company.created_by ?? 'system';
             let name = 'System';
             if (company.created_by_employee?.first_name) {
@@ -214,17 +241,17 @@ const CompaniesPage = () => {
             }
         });
         return Array.from(creators.values());
-    }, [companies]);
+    }, [allCompanies]);
 
     const tableFilteredData = useMemo(() => {
-        return companies.filter(company => {
+        return allCompanies.filter(company => {
             const searchMatch = (company.name?.toLowerCase() || '').includes(searchTerm.toLowerCase());
             const creatorMatch = selectedCreatorId === 'all' ? true :
                 selectedCreatorId === 'system' ? (company.created_by === null || company.created_by === undefined) :
                 company.created_by === selectedCreatorId;
             return searchMatch && creatorMatch;
         });
-    }, [companies, searchTerm, selectedCreatorId]);
+    }, [allCompanies, searchTerm, selectedCreatorId]);
 
     const chartFilteredData = useMemo(() => {
         return companies.filter(company => {
@@ -353,6 +380,7 @@ const CompaniesPage = () => {
                 const skippedCount = validCompanies.length - insertedCount;
                 toast({ title: "Import Complete", description: `${insertedCount} companies processed. ${skippedCount > 0 ? `${skippedCount} duplicates skipped.` : ''}` });
                 queryClient.invalidateQueries({ queryKey: ['companies'] });
+                queryClient.invalidateQueries({ queryKey: ['unified-companies'] });
                 queryClient.invalidateQueries({ queryKey: ['company-counts'] });
             } catch (err: any) {
                 toast({ title: "Import Failed", description: err.message || "A database error occurred.", variant: "destructive" });
@@ -365,10 +393,159 @@ const CompaniesPage = () => {
         }
     };
 
-const [isCompanySearchDialogOpen, setIsCompanySearchDialogOpen] = useState(false);
+    const renderTable = () => {
+        if (isUnifiedLoading || isCountsLoading) return <div className="p-12 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto text-purple-600" /><p className="mt-2 text-slate-500">Loading intelligence...</p></div>;
+        if (paginatedCompanies.length === 0) return <div className="p-12 text-center text-slate-500">No companies found. Try a different search.</div>;
+        return (
+            <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm transition-all">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gradient-to-r from-purple-600 to-violet-600">
+                            <tr>
+                                <th scope="col" className="sticky left-0 z-30 bg-purple-600 px-6 py-3 text-left text-[10px] font-bold text-white uppercase tracking-widest border-r border-white/10">Company Entity</th>
+                                <th scope="col" className="px-4 py-3 text-left text-[10px] font-bold text-white uppercase tracking-widest border-r border-white/10">Source</th>
+                                <th scope="col" className="px-6 py-3 text-left text-[10px] font-bold text-white uppercase tracking-widest border-r border-white/10">Industry & Sector</th>
+                                <th scope="col" className="px-6 py-3 text-left text-[10px] font-bold text-white uppercase tracking-widest border-r border-white/10">HQ Location</th>
+                                <th scope="col" className="px-6 py-3 text-left text-[10px] font-bold text-white uppercase tracking-widest border-r border-white/10">Growth & Scale</th>
+                                <th scope="col" className="px-6 py-3 text-left text-[10px] font-bold text-white uppercase tracking-widest border-r border-white/10">CRM Stage</th>
+                                <th scope="col" className="px-6 py-3 text-left text-[10px] font-bold text-white uppercase tracking-widest border-r border-white/10">Created By</th>
+                                <th scope="col" className="px-6 py-3 text-center text-[10px] font-bold text-white uppercase tracking-widest">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-100">
+                            {paginatedCompanies.map((company) => (
+                                <tr key={company.id} className="group transition-all hover:bg-slate-50/80">
+                                    {/* STICKY FIRST COLUMN */}
+                                    <td className="sticky left-0 z-20 bg-white group-hover:bg-slate-50 px-6 py-4 whitespace-nowrap shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] border-r border-slate-50">
+                                        <div className="flex items-center">
+                                            <Avatar className="h-10 w-10 border shadow-sm flex-shrink-0">
+                                                <AvatarImage src={company.logo_url} />
+                                                <AvatarFallback className="bg-slate-100 text-slate-400 font-bold">{company.name?.charAt(0)}</AvatarFallback>
+                                            </Avatar>
+                                            <div className="ml-4 flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <RouterLink to={`/companies/${company.id}`} className="text-sm font-bold text-slate-900 hover:text-purple-600 hover:underline">
+                                                        {company.name}
+                                                    </RouterLink>
+                                                    {company.apollo_org_id && (
+                                                        <TooltipProvider>
+                                                            <Tooltip>
+                                                                <TooltipTrigger><ShieldCheck className="h-4 w-4 text-blue-500 fill-blue-50" /></TooltipTrigger>
+                                                                <TooltipContent className="text-[10px]">Verified Intelligence Data</TooltipContent>
+                                                            </Tooltip>
+                                                        </TooltipProvider>
+                                                    )}
+                                                </div>
+                                                <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-1">
+                                                    <Globe size={11} /> {company.website || company.domain || 'No website'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-4 whitespace-nowrap">
+                                        <Badge variant="secondary" className={cn("text-[10px] font-medium", company.is_intelligence_only ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-50 text-gray-700 border-gray-200")}>
+                                            {company.is_intelligence_only ? "Intelligence" : "CRM"}
+                                        </Badge>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-600 font-medium">
+                                        {company.industry || <span className="text-slate-300">Not identified</span>}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-2 text-xs text-slate-600">
+                                            <MapPin size={12} className="text-slate-400" />
+                                            {company.location || 'N/A'}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                                                <Users size={12} className="text-blue-400" /> {company.employee_count?.toLocaleString() || '-'}
+                                            </div>
+                                            <div className="flex items-center gap-2 text-[10px] text-green-600 font-bold">
+                                                <TrendingUp size={11} /> {company.revenue || 'Revenue N/A'}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        {company.is_intelligence_only ? (
+                                            <Badge variant="outline" className="bg-blue-100 text-blue-800 text-[10px] font-medium">Pending Promotion</Badge>
+                                        ) : (
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="outline" size="sm" className={cn("h-7 px-3 text-[10px] font-bold border-none uppercase tracking-tight rounded-full", stageColors[company.stage || 'default'])}>
+                                                        {company.stage || 'Select Stage'} <ChevronDown className="h-3 w-3 ml-1.5 opacity-50" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="start">
+                                                    {STAGES.map((s) => (<DropdownMenuItem key={s} onSelect={() => handleStageChange(company.id, s)} className="text-xs">{s}</DropdownMenuItem>))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-3">
+                                            <Avatar className="h-7 w-7 ring-2 ring-white">
+                                                <AvatarFallback className="text-[9px] bg-slate-900 text-white font-bold">
+                                                    {company.created_by_employee ? `${company.created_by_employee.first_name?.[0]}${company.created_by_employee.last_name?.[0]}` : 'S'}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div>
+                                                <p className="text-[10px] font-bold text-slate-700">{company.created_by_employee?.first_name || 'System'}</p>
+                                                <p className="text-[9px] text-slate-400">{moment(company.created_at).format("DD MMM YYYY")}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                                        <div className="flex justify-center">
+                                            {company.is_intelligence_only ? (
+                                                <Button 
+                                                    onClick={() => promoteToCrm.mutate(company)} 
+                                                    disabled={promoteToCrm.isPending}
+                                                    size="sm" 
+                                                    className="h-7 bg-green-600 hover:bg-green-700 text-white shadow-sm text-[10px] font-bold"
+                                                >
+                                                    <Plus className="h-3 w-3 mr-1" /> Promote
+                                                </Button>
+                                            ) : (
+                                                <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 border border-slate-200 shadow-inner">
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <RouterLink to={`/companies/${company.id}`}>
+                                                                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full hover:bg-purple-600 hover:text-white transition-all">
+                                                                        <Eye className="h-3.5 w-3.5" />
+                                                                    </Button>
+                                                                </RouterLink>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent className="text-[10px]">Deep Intel</TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                   
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button variant="ghost" size="icon" onClick={() => handleEditClick(company as CompanyDetail)} className="h-7 w-7 rounded-full hover:bg-purple-600 hover:text-white transition-all">
+                                                                    <Edit className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent className="text-[10px]">Edit CRM</TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
 
     return (
-        <div className="space-y-8 animate-fade-in p-4 md:p-6">
+        <div className="space-y-8 animate-fade-in p-4 md:p-6 bg-slate-50/50 min-h-screen">
             {fileId && (
                 <Breadcrumb spacing="8px" separator={<ChevronRightIcon className="h-4 w-4" />} className="mb-2">
                     <BreadcrumbItem><BreadcrumbLink as={RouterLink} to="/lists">Lists</BreadcrumbLink></BreadcrumbItem>
@@ -381,25 +558,27 @@ const [isCompanySearchDialogOpen, setIsCompanySearchDialogOpen] = useState(false
                 </Breadcrumb>
             )}
 
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
-                    <h1 className="text-3xl font-bold mb-1">{fileId ? (breadcrumbData?.name || 'Loading List...') : 'Company Dashboard'}</h1>
-                    <p className="text-gray-500">Manage and track all company records</p>
+                    <h1 className="text-3xl font-black text-slate-900 tracking-tighter">
+                        {fileId ? (breadcrumbData?.name || 'Loading List...') : 'Company Intelligence'}
+                    </h1>
+                    <p className="text-slate-500 text-sm mt-1">Manage, discover and enrich enterprise records from one central hub.</p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <Button 
-  onClick={() => setIsCompanySearchDialogOpen(true)}
-  variant="outline"
-  className="bg-blue-600 text-white hover:bg-blue-700"
->
-  <Search className="h-4 w-4 mr-2" />
-  Search Apollo.io
-</Button>
+                        onClick={() => setIsCompanySearchDialogOpen(true)}
+                        variant="outline"
+                        className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50 font-bold shadow-sm"
+                    >
+                        <Search className="h-4 w-4 mr-2 text-purple-600" />
+                        Intelligence Search
+                    </Button>
                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild><Button><Plus className="h-4 w-4 mr-2" />Add Company</Button></DropdownMenuTrigger>
+                        <DropdownMenuTrigger asChild><Button className="bg-purple-600 hover:bg-purple-700 shadow-md font-bold text-white"><Plus className="h-4 w-4 mr-2" />Add Account</Button></DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => setIsAddDialogOpen(true)}><Sparkles className="mr-2 h-4 w-4" />Fetch with AI</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setIsManualAddDialogOpen(true)}><PenSquare className="mr-2 h-4 w-4" />Enter Manually</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setIsAddDialogOpen(true)}><Sparkles className="mr-2 h-4 w-4" />AI Discovery</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setIsManualAddDialogOpen(true)}><PenSquare className="mr-2 h-4 w-4" />Manual Entry</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                     <Button variant="outline" onClick={downloadCsvTemplate}><Download className="h-4 w-4 mr-2" />Template</Button>
@@ -411,225 +590,96 @@ const [isCompanySearchDialogOpen, setIsCompanySearchDialogOpen] = useState(false
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Card className="p-4 flex justify-between items-start"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">Total Companies</p><h3 className="text-3xl font-bold">{isCountsLoading ? '...' : counts?.companies ?? 0}</h3></div><div className="p-2 bg-blue-100 rounded-lg"><Building2 className="text-blue-600" size={22} /></div></Card>
-                <Card className="p-4 flex justify-between items-start"><div className="space-y-1"><p className="text-sm font-medium text-gray-500">Total Employees</p><h3 className="text-3xl font-bold">{isCountsLoading ? '...' : counts?.employees?.toLocaleString() ?? 0}</h3></div><div className="p-2 bg-purple-100 rounded-lg"><Users className="text-purple-600" size={22} /></div></Card>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <Card className="border-none shadow-sm"><CardContent className="p-6 flex justify-between items-center"><div><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Total Intelligence</p><h3 className="text-3xl font-black text-slate-900">{isCountsLoading ? '...' : counts?.companies ?? 0}</h3></div><div className="p-3 bg-purple-50 rounded-xl text-purple-600"><Building2 size={24}/></div></CardContent></Card>
+                <Card className="border-none shadow-sm"><CardContent className="p-6 flex justify-between items-center"><div><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Verified Entities</p><h3 className="text-3xl font-black text-slate-900">{allCompanies.filter(c => c.apollo_org_id).length}</h3></div><div className="p-3 bg-blue-50 rounded-xl text-blue-600"><ShieldCheck size={24}/></div></CardContent></Card>
             </div>
             
             <div className="mb-6">
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-semibold">Performance Dashboard</h2>
+                    <h2 className="text-xl font-semibold"></h2>
                     <EnhancedDateRangeSelector value={chartDateRange} onChange={setChartDateRange} />
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <CreatorPerformanceChart data={creatorStatsForChart} />
                     <CompanyStagePieChart data={stageStatsForChart} />
-                </div>
+                </div> */}
             </div>
 
             <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
-  {/* Search */}
-  <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
-    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-    <Input 
-      placeholder="Search companies by name..." 
-      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm" 
-      value={searchTerm} 
-      onChange={(e) => setSearchTerm(e.target.value)} 
-    />
-  </div>
+                {/* Search */}
+                <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                    <Input 
+                        placeholder="Search companies by name..." 
+                        className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm" 
+                        value={searchTerm} 
+                        onChange={(e) => setSearchTerm(e.target.value)} 
+                    />
+                </div>
 
-  {/* Creator Filter */}
-  <div className="flex-shrink-0 order-2 w-full md:w-[220px]">
-    <Select value={selectedCreatorId} onValueChange={setSelectedCreatorId}>
-      <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
-        <SelectValue placeholder="Filter by Creator" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">All Creators</SelectItem>
-        {uniqueCreators.map(creator => (
-          <SelectItem key={creator.id} value={creator.id}>
-            {creator.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
-</div>
-
-            <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-<thead className="bg-purple-600">
-    <tr>
-        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider opacity-90">Company</th>
-        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider opacity-90">Industry</th>
-        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider opacity-90">Headquarters</th>
-        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider opacity-90">Size</th>
-        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider opacity-90">Stage</th>
-        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider opacity-90">Created By</th>
-        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider opacity-90">Last Updated</th>
-        <th scope="col" className="px-6 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider opacity-90">Actions</th>
-    </tr>
-</thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {isLoading ? (
-                                <tr><td colSpan={8} className="text-center p-12 text-gray-500">Loading companies...</td></tr>
-                            ) : paginatedCompanies.length === 0 ? (
-                                <tr><td colSpan={8} className="text-center p-12 text-gray-500">No companies found.</td></tr>
-                            ) : (
-                                paginatedCompanies.map((company) => (
-                                    <tr key={company.id} className="transition-all duration-200 ease-in-out hover:shadow-md hover:-translate-y-px hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center">
-                                                <Avatar className="h-9 w-9 flex-shrink-0"><AvatarImage src={company.logo_url || undefined} /><AvatarFallback>{company.name?.charAt(0)}</AvatarFallback></Avatar>
-                                                <div className="ml-4">
-                                                    <RouterLink to={`/companies/${company.id}`} className="text-sm font-medium text-gray-900 hover:text-primary hover:underline">{company.name}</RouterLink>
-                                                    <div className="text-xs text-muted-foreground flex items-center gap-3 mt-1">
-                                                        {company.website && <a href={!company.website.startsWith('http') ? `https://${company.website}` : company.website} target="_blank" rel="noreferrer" title="Website"><Globe className="h-3.5 w-3.5 text-gray-400 hover:text-primary" /></a>}
-                                                        {company.linkedin && <a href={!company.linkedin.startsWith('http') ? `https://${company.linkedin}` : company.linkedin} target="_blank" rel="noreferrer" title="LinkedIn"><Linkedin className="h-3.5 w-3.5 text-gray-400 hover:text-primary" /></a>}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getDisplayValue(company.industry)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getDisplayValue(company.location)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            <div>{getDisplayValue(company.employee_count?.toLocaleString())}</div>
-                                            {company.employee_count_date && (<div className="text-xs text-gray-400">as of {moment(company.employee_count_date).format("MMM yyyy")}</div>)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                     <Button variant="outline" size="sm" className={`h-7 px-2 text-xs w-full max-w-[150px] justify-between truncate border-0 font-semibold ${stageColors[getDisplayValue(company.stage, 'default')] ?? stageColors['default']}`} disabled={updateStageMutation.isPending && updateStageMutation.variables?.companyId === company.id}>
-                                                        <span className="truncate">{getDisplayValue(company.stage, 'Select Stage')}</span><ChevronDown className="h-3 w-3 ml-1 flex-shrink-0" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="start">{STAGES.map((stage) => (<DropdownMenuItem key={stage} onSelect={() => handleStageChange(company.id, stage)} className="text-sm">{stage}</DropdownMenuItem>))}</DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            <div className="flex items-center">
-                                                <TooltipProvider>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <div onClick={() => handleCreatorClick(company.created_by)} className="cursor-pointer">
-                                                                <Avatar className="h-8 w-8">
-                                                                    <AvatarFallback className="text-xs bg-gradient-to-br from-blue-500 to-cyan-500 text-white font-semibold">
-                                                                        {company.created_by_employee
-                                                                            ? `${company.created_by_employee.first_name?.[0] || ''}${company.created_by_employee.last_name?.[0] || ''}`
-                                                                            : 'S'}
-                                                                    </AvatarFallback>
-                                                                </Avatar>
-                                                            </div>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            <p>{company.created_by_employee ? `${company.created_by_employee.first_name} ${company.created_by_employee.last_name}` : 'System'}</p>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                </TooltipProvider>
-                                                <div className="ml-3">
-                                                    <div className="font-medium text-gray-800">
-                                                        {company.created_by_employee ? company.created_by_employee.first_name : 'System'}
-                                                    </div>
-                                                    <div className="text-xs text-gray-400">{moment(company.created_at).format("DD MMM YYYY")}</div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {company.updated_by_employee ? (
-                                                <div className="flex items-center">
-                                                    <TooltipProvider>
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <div onClick={() => handleCreatorClick(company.updated_by)} className="cursor-pointer">
-                                                                    <Avatar className="h-8 w-8">
-                                                                        <AvatarFallback className="text-xs bg-gradient-to-br from-green-500 to-teal-500 text-white font-semibold">
-                                                                            {`${company.updated_by_employee.first_name?.[0] || ''}${company.updated_by_employee.last_name?.[0] || ''}`}
-                                                                        </AvatarFallback>
-                                                                    </Avatar>
-                                                                </div>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                                <p>{`${company.updated_by_employee.first_name} ${company.updated_by_employee.last_name}`}</p>
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    </TooltipProvider>
-                                                    <div className="ml-3">
-                                                        <div className="font-medium text-gray-800">
-                                                            {company.updated_by_employee.first_name}
-                                                        </div>
-                                                        <div className="text-xs text-gray-400">{moment(company.updated_at).fromNow()}</div>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center">
-                                                    <Avatar className="h-8 w-8"><AvatarFallback className="text-xs bg-gray-200 text-gray-600">N/A</AvatarFallback></Avatar>
-                                                    <div className="ml-3">
-                                                        <div className="font-medium text-gray-800">N/A</div>
-                                                        <div className="text-xs text-gray-400">{moment(company.updated_at).fromNow()}</div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                                            <div className="flex justify-center">
-                                                <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-sm border border-slate-200">
-                                                    <TooltipProvider><Tooltip><TooltipTrigger asChild><RouterLink to={`/companies/${company.id}`}><Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors"><Eye className="h-4 w-4" /></Button></RouterLink></TooltipTrigger><TooltipContent><p>View Company</p></TooltipContent></Tooltip></TooltipProvider>
-                                                    <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleEditClick(company as CompanyDetail)} className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors"><Edit className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Edit Company</p></TooltipContent></Tooltip></TooltipProvider>
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                {/* Creator Filter */}
+                <div className="flex-shrink-0 order-2 w-full md:w-[220px]">
+                    <Select value={selectedCreatorId} onValueChange={setSelectedCreatorId}>
+                        <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
+                            <SelectValue placeholder="Filter by Creator" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Creators</SelectItem>
+                            {uniqueCreators.map(creator => (
+                                <SelectItem key={creator.id} value={creator.id}>
+                                    {creator.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
             </div>
 
+            {renderTable()}
+
             {tableFilteredData.length > 0 && (
-                <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
+                <div className="flex flex-col sm:flex-row justify-between items-center mt-6 p-4 bg-white rounded-xl border">
                     <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">Rows per page</span>
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Show</span>
                         <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
-                            <SelectTrigger className="w-[75px] h-9"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="w-[70px] h-8 text-xs font-bold"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="10">10</SelectItem><SelectItem value="20">20</SelectItem>
-                                <SelectItem value="50">50</SelectItem><SelectItem value="100">100</SelectItem>
+                                <SelectItem value="10">10</SelectItem><SelectItem value="20">20</SelectItem><SelectItem value="50">50</SelectItem><SelectItem value="100">100</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}><ChevronLeft className="h-4 w-4" /> Prev</Button>
-                        <span className="text-sm text-gray-600">Page {currentPage} of {totalPages}</span>
-                        <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next <ChevronRight className="h-4 w-4" /></Button>
+                    <div className="flex items-center gap-4">
+                        <Button variant="ghost" size="sm" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="text-xs font-bold uppercase"><ChevronLeft className="h-4 w-4 mr-1" /> Back</Button>
+                        <div className="h-8 w-px bg-slate-100"></div>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Page {currentPage} / {totalPages}</span>
+                        <div className="h-8 w-px bg-slate-100"></div>
+                        <Button variant="ghost" size="sm" onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="text-xs font-bold uppercase">Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
                     </div>
-                    <span className="text-sm text-gray-600">
-                        Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, tableFilteredData.length)} of {tableFilteredData.length} companies
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        Total {tableFilteredData.length} Records
                     </span>
                 </div>
             )}
 
+            <CompanySearchDialog
+                open={isCompanySearchDialogOpen}
+                onOpenChange={setIsCompanySearchDialogOpen}
+                fileId={fileId}
+            />
+
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Fetch Company Data</DialogTitle><DialogDescription>Enter a company name to fetch details using AI.</DialogDescription></DialogHeader><CompanyAddForm onAdd={handleCompanyDataFetched} onCancel={() => setIsAddDialogOpen(false)} /></DialogContent>
+                <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>AI Discovery</DialogTitle><DialogDescription>Fetch global datasets via business identifier.</DialogDescription></DialogHeader><CompanyAddForm onAdd={handleCompanyDataFetched} onCancel={() => setIsAddDialogOpen(false)} /></DialogContent>
             </Dialog>
             <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
-                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Review and Create Company</DialogTitle><DialogDescription>Review the AI-fetched data then save.</DialogDescription></DialogHeader>{companyToReview && <CompanyEditForm company={companyToReview} onClose={() => setIsReviewDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}</DialogContent>
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Verify & Import Record</DialogTitle><DialogDescription>Review the AI-fetched data then save.</DialogDescription></DialogHeader>{companyToReview && <CompanyEditForm company={companyToReview} onClose={() => setIsReviewDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}</DialogContent>
             </Dialog>
             <Dialog open={isManualAddDialogOpen} onOpenChange={setIsManualAddDialogOpen}>
-                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Add Company Manually</DialogTitle><DialogDescription>Fill out the form and click "Create Company" to save.</DialogDescription></DialogHeader><CompanyEditForm company={{}} onClose={() => setIsManualAddDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} /></DialogContent>
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>New CRM Record</DialogTitle><DialogDescription>Fill out the form and click "Create Company" to save.</DialogDescription></DialogHeader><CompanyEditForm company={{}} onClose={() => setIsManualAddDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} /></DialogContent>
             </Dialog>
             <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Edit Company</DialogTitle><DialogDescription>Update details for {editCompany?.name}.</DialogDescription></DialogHeader>{editCompany && <CompanyEditForm company={editCompany} onClose={() => setIsEditDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}</DialogContent>
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Update Record Intelligence</DialogTitle><DialogDescription>Update details for {editCompany?.name}.</DialogDescription></DialogHeader>{editCompany && <CompanyEditForm company={editCompany} onClose={() => setIsEditDialogOpen(false)} currentUserId={currentUserId} organizationId={organizationId} fileId={fileId} />}</DialogContent>
             </Dialog>
-
-<CompanySearchDialog
-  open={isCompanySearchDialogOpen}
-  onOpenChange={setIsCompanySearchDialogOpen}
-  fileId={fileId}
-/>
-
         </div>
     );
 };
