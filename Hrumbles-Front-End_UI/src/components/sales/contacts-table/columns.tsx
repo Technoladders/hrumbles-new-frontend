@@ -541,6 +541,53 @@ const MediumSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
   );
 };
 
+// Enrichment table column
+const FilterOnlyColumn = (id: string, header: string): ColumnDef<SimpleContact> => ({
+  id,
+  accessorKey: id,
+  header,
+  enableHiding: true,
+  cell: ({ getValue }) => <span className="text-slate-400 text-[10px]">{String(getValue() || '-')}</span>,
+});
+
+// 2. UPDATE EMAIL CELL FOR MULTIPLE VALUES
+const MultiEmailCell: React.FC<any> = (props) => {
+  const { row } = props;
+  const manualEmail = row.original.email;
+  const enrichedEmails = row.original.all_emails || [];
+  
+  return (
+    <div className="flex flex-col gap-1 py-1">
+      {manualEmail && <CopyableEditableCell {...props} />}
+      {enrichedEmails.filter((e: any) => e.email !== manualEmail).map((e: any, i: number) => (
+        <div key={i} className="flex items-center gap-1.5 group">
+          <Badge variant="outline" className="text-[8px] h-3 px-1 bg-blue-50 text-blue-600 border-blue-100">DISCOVERED</Badge>
+          <span className="text-[10px] font-medium text-slate-500">{e.email}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// 3. UPDATE PHONE CELL FOR MULTIPLE VALUES
+const MultiPhoneCell: React.FC<any> = (props) => {
+  const { row } = props;
+  const manualPhone = row.original.mobile;
+  const enrichedPhones = row.original.all_phones || [];
+
+  return (
+    <div className="flex flex-col gap-1 py-1">
+      {manualPhone && <CopyablePhoneCell {...props} />}
+      {enrichedPhones.filter((p: any) => p.phone_number !== manualPhone).map((p: any, i: number) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <Badge variant="outline" className="text-[8px] h-3 px-1 bg-green-50 text-green-600 border-green-100 uppercase">{p.type || 'Direct'}</Badge>
+          <span className="text-[10px] font-medium text-slate-500">{p.phone_number}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 export const ActionColumn: ColumnDef<SimpleContact> = {
   id: 'actions',
   size: 60,
@@ -746,6 +793,8 @@ export const columns: ColumnDef<SimpleContact>[] = [
       );
     }
   },
+  { accessorKey: 'enriched email', header: ReorderableHeader, cell: MultiEmailCell }, // UPDATED
+  { accessorKey: 'enriched mobile', header: ReorderableHeader, cell: MultiPhoneCell }, // UPDATED
   {
     id: 'location',
     header: () => <div className="text-[10px] font-bold uppercase tracking-wider text-white opacity-90">Location</div>,
@@ -874,4 +923,13 @@ export const columns: ColumnDef<SimpleContact>[] = [
     maxSize: 120,
   },
   { accessorKey: 'updated_at', header: () => <div className="text-[10px] font-bold uppercase tracking-wider text-white opacity-90">Updated</div>, cell: DisplayDateCell, enableSorting: true, size: 90, minSize: 60, maxSize: 120 },
+  FilterOnlyColumn('seniority', 'Seniority'),
+  { accessorKey: 'departments', header: 'Departments', filterFn: 'arrIncludesSome' },
+  { accessorKey: 'functions', header: 'Functions', filterFn: 'arrIncludesSome' },
+  FilterOnlyColumn('industry', 'Industry'),
+  FilterOnlyColumn('revenue', 'Revenue'),
+  FilterOnlyColumn('employee_count', 'Size'),
+  FilterOnlyColumn('country', 'Country'),
+  FilterOnlyColumn('city', 'City'),
 ];
+// claude new column change

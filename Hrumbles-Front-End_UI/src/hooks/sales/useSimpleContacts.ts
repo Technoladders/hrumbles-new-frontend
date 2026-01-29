@@ -9,40 +9,59 @@ interface UseSimpleContactsOptions {
     fetchUnfiled?: boolean;
 }
 
-export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
+export const useSimpleContacts = (options: any = {}) => {
   const { fileId, fetchUnfiled = false } = options;
   const organization_id = useSelector((state: any) => state.auth.organization_id);
 
   return useQuery<SimpleContact[], Error>({
-    // The query key now reflects whether we're fetching for a file or the unfiled list
     queryKey: ['simpleContactsList', { fileId: fileId || 'all', fetchUnfiled }],
     queryFn: async (): Promise<SimpleContact[]> => {
       if (!organization_id) return [];
 
-      let query = supabase
+      // REMOVED COMMENTS and fixed join paths for PostgREST
+      const { data, error } = await supabase
         .from('contacts')
         .select(`
           *,
           companies ( name, logo_url, industry ),
-          created_by_employee:created_by ( first_name, last_name, profile_picture_url ),
-          updated_by_employee:updated_by ( first_name, last_name, profile_picture_url )
+          created_by_employee:hr_employees!created_by ( first_name, last_name, profile_picture_url ),
+          updated_by_employee:hr_employees!updated_by ( first_name, last_name, profile_picture_url ),
+          intel_person:enrichment_people!contact_id (
+            apollo_person_id,
+            enrichment_person_metadata ( seniority, departments, functions ),
+            enrichment_organizations ( industry, estimated_num_employees, annual_revenue_printed )
+          ),
+          enrichment_contact_emails ( email, email_status ),
+          enrichment_contact_phones ( phone_number, type )
         `)
-        .eq('organization_id', organization_id);
-
-      // Main logic change: either filter by file_id OR filter for where file_id is null
-      if (fetchUnfiled) {
-        query = query.is('file_id', null);
-      } else if (fileId) {
-        query = query.eq('file_id', fileId);
-      }
-      // If neither is specified, the query proceeds without file_id filters, fetching all contacts for the org.
-      
-      const { data, error } = await query.order('created_at', { ascending: false });
+        .eq('organization_id', organization_id)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return (data || []).map(c => ({ ...c, company_name: c.companies?.name || null }));
+
+      // Flatten nested data for the table engine
+      return (data || []).map(c => {
+        const personIntel = c.intel_person?.[0];
+        const meta = personIntel?.enrichment_person_metadata?.[0];
+        const org = personIntel?.enrichment_organizations;
+
+        return {
+          ...c,
+          company_name: c.companies?.name || null,
+          // Map enrichment fields for the Sidebar Filters to work
+          seniority: meta?.seniority || null,
+          departments: meta?.departments || [],
+          functions: meta?.functions || [],
+          industry: org?.industry || c.companies?.industry || null,
+          employee_count: org?.estimated_num_employees || null,
+          revenue: org?.annual_revenue_printed || null,
+          // Store raw arrays for the Multi-Value UI
+          all_emails: c.enrichment_contact_emails || [],
+          all_phones: c.enrichment_contact_phones || []
+        };
+      });
     },
-    // The query is enabled only if we have an org ID.
     enabled: !!organization_id,
   });
 };
+// Query update

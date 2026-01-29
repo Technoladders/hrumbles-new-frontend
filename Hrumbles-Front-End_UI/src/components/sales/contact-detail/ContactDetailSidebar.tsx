@@ -160,28 +160,37 @@ export const ContactDetailSidebar = ({ contact, isRequestingPhone, setIsRequesti
             ))}
 
             {/* Request Phone Button */}
-            {!contact.mobile && 
-             data.phoneNumbers.length === 0 && 
-             contact.phone_enrichment_status !== 'pending_phones' && 
-             data.hasDirectPhone && (
-              <Button 
-                onClick={handleRequestPhone} 
-                disabled={isRequestingPhone}
-                className="w-full h-11 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-black text-xs shadow-lg hover:shadow-xl transition-all"
-              >
-                {isRequestingPhone ? (
-                  <>
-                    <Clock size={14} className="mr-2 animate-spin" />
-                    VERIFYING...
-                  </>
-                ) : (
-                  <>
-                    <Phone size={14} className="mr-2" />
-                    REVEAL VERIFIED PHONE
-                  </>
-                )}
-              </Button>
-            )}
+{/* Request Phone Button – show when we believe Apollo has a phone to reveal */}
+{!contact.mobile &&
+  data.phoneNumbers.length === 0 &&
+  contact.phone_enrichment_status !== 'pending_phones' &&
+  (
+    // Option A – if you already compute this in extractFromRaw
+    data.hasDirectPhone ||
+    
+    // Option B – safer fallback checks (add these to your extractFromRaw or inline)
+    data.directDialStatus === 'enrichment_successful' ||
+    !!data.organization?.primary_phone ||
+    (data.phoneNumbersUnrevealed?.length > 0)   // if you extract unrevealed ones
+  ) && (
+  <Button
+    onClick={handleRequestPhone}
+    disabled={isRequestingPhone}
+    className="w-full h-11 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-black text-xs shadow-lg hover:shadow-xl transition-all"
+  >
+    {isRequestingPhone ? (
+      <>
+        <Clock size={14} className="mr-2 animate-spin" />
+        VERIFYING...
+      </>
+    ) : (
+      <>
+        <Phone size={14} className="mr-2" />
+        REVEAL VERIFIED PHONE
+      </>
+    )}
+  </Button>
+)}
 
             {/* Pending Status */}
             {contact.phone_enrichment_status === 'pending_phones' && (

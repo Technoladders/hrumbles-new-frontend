@@ -394,7 +394,8 @@ const validateCurrentSession = useCallback(async () => {
             dispatch(fetchUserPermissions({
                 userId: reduxUser.id,
                 roleId: data.role_id,
-                departmentId: data.department_id
+                departmentId: data.department_id,
+                organizationId: organizationId
             }));
         }
     };
