@@ -4,49 +4,38 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ColumnDef } from '@tanstack/react-table';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useContactStages } from '@/hooks/sales/useContactStages';
 import { Badge } from '@/components/ui/badge';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem } from '@/components/ui/dropdown-menu';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Label } from '@/components/ui/label';
 import { 
-  ChevronDown, ChevronRight, GripVertical, Link as LinkIcon, Trash2, AtSign, 
-  Linkedin, Phone, Mail, UserPlus, Globe, MessageCircle, MoreHorizontal, 
+  ChevronDown, Link as LinkIcon, Trash2, 
+  Linkedin, Phone, Mail, UserPlus, Globe, MoreHorizontal, 
   Copy, Check, Loader2, Plus, ShieldCheck, ListPlus, Eye, Building2, Clock, 
-  CheckCircle2, Flag, Star, Pencil, Send, AlertCircle, HelpCircle, X, XCircle,
-  MapPin, Briefcase, Info
+  CheckCircle2, Flag, Star, Pencil, AlertCircle, HelpCircle, X, XCircle,
+  MapPin, Sparkles, Zap, Signal, SignalHigh, SignalLow, SignalMedium
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { DataTableColumnHeader } from './data-table-column-header';
 import { CompanyCombobox } from './CompanyCombobox';
 import { LocationCell } from './LocationCell';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useDeleteContact } from '@/hooks/sales/useDeleteContact';
 import { useToast } from '@/hooks/use-toast';
-// --- PHONE INPUT & FLAGS ---
 import PhoneInput, { parsePhoneNumber } from "react-phone-number-input";
 import flags from 'react-phone-number-input/flags';
 import "react-phone-number-input/style.css";
 
-// --- 1. UTILITIES & REUSABLE COMPONENTS ---
+// --- UTILITIES ---
 
 const isDiscoveryRow = (row: any) => row.original?.is_discovery === true;
 
-// Helper to determine Source Label
-const getSourceLabel = (source: string) => {
-  if (!source) return 'CRM';
-  if (source.toLowerCase().includes('manual') || source.toLowerCase().includes('user')) return 'Manual';
-  return 'CRM';
-};
-
-// Helper: Get Flag Component based on number
+// Phone Flag Component
 const PhoneFlag = ({ number }: { number: string }) => {
   if (!number) return <Globe size={10} className="text-slate-400" />;
   try {
@@ -59,101 +48,195 @@ const PhoneFlag = ({ number }: { number: string }) => {
   return <Globe size={10} />;
 };
 
+// Status Icons with Colors
 const StatusIcon = ({ status }: { status?: string }) => {
-  if (status === 'verified' || status === 'valid_number') return <TooltipProvider><Tooltip><TooltipTrigger><CheckCircle2 size={10} className="text-emerald-500" /></TooltipTrigger><TooltipContent>Verified</TooltipContent></Tooltip></TooltipProvider>;
-  if (status === 'incorrect' || status === 'invalid') return <TooltipProvider><Tooltip><TooltipTrigger><AlertCircle size={10} className="text-red-500" /></TooltipTrigger><TooltipContent>Incorrect/Invalid</TooltipContent></Tooltip></TooltipProvider>;
-  return <TooltipProvider><Tooltip><TooltipTrigger><HelpCircle size={10} className="text-slate-400" /></TooltipTrigger><TooltipContent>Unverified</TooltipContent></Tooltip></TooltipProvider>;
+  if (status === 'verified' || status === 'valid_number') {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>
+            <div className="flex items-center justify-center h-4 w-4 rounded-full bg-emerald-100">
+              <CheckCircle2 size={10} className="text-emerald-600 fill-emerald-100" />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="text-xs">Verified</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+  if (status === 'incorrect' || status === 'invalid') {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>
+            <div className="flex items-center justify-center h-4 w-4 rounded-full bg-red-100">
+              <XCircle size={10} className="text-red-500 fill-red-100" />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="text-xs">Invalid</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger>
+          <div className="flex items-center justify-center h-4 w-4 rounded-full bg-slate-100">
+            <HelpCircle size={10} className="text-slate-400" />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent className="text-xs">Unverified</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 };
 
-// --- DISCOVERY AVAILABILITY ICONS ---
-const DiscoveryAvailabilityIcons = ({ contact }: { contact: any }) => {
+// Deliverability Indicator Component
+const DeliverabilityIndicator = ({ level }: { level: 'high' | 'medium' | 'low' | 'none' }) => {
+  const configs = {
+    high: {
+      icon: SignalHigh,
+      color: 'text-emerald-600',
+      bgColor: 'bg-emerald-100',
+      fillColor: 'fill-emerald-600',
+      label: 'Highly Deliverable',
+      bars: 3,
+    },
+    medium: {
+      icon: SignalMedium,
+      color: 'text-amber-600',
+      bgColor: 'bg-amber-100',
+      fillColor: 'fill-amber-600',
+      label: 'Likely Deliverable',
+      bars: 2,
+    },
+    low: {
+      icon: SignalLow,
+      color: 'text-orange-500',
+      bgColor: 'bg-orange-100',
+      fillColor: 'fill-orange-500',
+      label: 'Low Deliverability',
+      bars: 1,
+    },
+    none: {
+      icon: Signal,
+      color: 'text-slate-400',
+      bgColor: 'bg-slate-100',
+      fillColor: 'fill-slate-400',
+      label: 'Unknown',
+      bars: 0,
+    },
+  };
+
+  const config = configs[level];
+  const Icon = config.icon;
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={cn("flex items-center justify-center h-5 w-5 rounded-full transition-all", config.bgColor)}>
+            <Icon size={12} className={cn(config.color, config.fillColor)} />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent className="text-xs font-medium">{config.label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
+// --- DISCOVERY MODE: Availability Indicator Pills ---
+const DiscoveryAvailabilityPills = ({ contact }: { contact: any }) => {
   const hasEmail = contact.has_email;
   const hasPhone = contact.has_phone || contact.has_direct_phone === 'Yes';
-  const hasLocation = contact.city || contact.state || contact.country || contact.original_data?.city || contact.original_data?.state || contact.original_data?.country;
+  const hasLocation = contact.city || contact.state || contact.country || 
+                      contact.original_data?.city || contact.original_data?.state || contact.original_data?.country;
   const hasOrgDetails = contact.company_name || contact.organization?.name || contact.original_data?.organization?.name;
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
+      {/* Email Availability */}
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <div className={cn(
-              "flex items-center justify-center h-5 w-5 rounded-full transition-colors",
-              hasEmail ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"
+              "flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-semibold transition-all cursor-default",
+              hasEmail 
+                ? "bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 border border-emerald-200/50" 
+                : "bg-slate-100 text-slate-400 border border-slate-200/50"
             )}>
-              <Mail size={10} />
+              <Mail size={10} className={hasEmail ? "fill-emerald-200" : ""} />
+              {hasEmail ? "Email" : "No Email"}
             </div>
           </TooltipTrigger>
-          <TooltipContent>
-            <p className="text-xs">{hasEmail ? 'Email Available' : 'No Email'}</p>
+          <TooltipContent className="text-xs">
+            {hasEmail ? 'Email available - will be revealed on add' : 'No email in database'}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
+      {/* Phone Availability */}
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <div className={cn(
-              "flex items-center justify-center h-5 w-5 rounded-full transition-colors",
-              hasPhone ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"
+              "flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-semibold transition-all cursor-default",
+              hasPhone 
+                ? "bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 border border-blue-200/50" 
+                : "bg-slate-100 text-slate-400 border border-slate-200/50"
             )}>
-              <Phone size={10} />
+              <Phone size={10} className={hasPhone ? "fill-blue-200" : ""} />
+              {hasPhone ? "Phone" : "No Phone"}
             </div>
           </TooltipTrigger>
-          <TooltipContent>
-            <p className="text-xs">{hasPhone ? 'Phone Available' : 'No Phone'}</p>
+          <TooltipContent className="text-xs">
+            {hasPhone ? 'Direct dial available - will be revealed on add' : 'No phone in database'}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className={cn(
-              "flex items-center justify-center h-5 w-5 rounded-full transition-colors",
-              hasLocation ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-400"
-            )}>
-              <MapPin size={10} />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p className="text-xs">{hasLocation ? 'Location Available' : 'No Location'}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      {/* Location Indicator */}
+      {hasLocation && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center justify-center h-5 w-5 rounded-full bg-purple-100 text-purple-600 cursor-default">
+                <MapPin size={10} />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="text-xs">Location data available</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
 
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className={cn(
-              "flex items-center justify-center h-5 w-5 rounded-full transition-colors",
-              hasOrgDetails ? "bg-purple-100 text-purple-600" : "bg-slate-100 text-slate-400"
-            )}>
-              <Building2 size={10} />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p className="text-xs">{hasOrgDetails ? 'Company Info Available' : 'No Company Info'}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      {/* Company Indicator */}
+      {hasOrgDetails && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center justify-center h-5 w-5 rounded-full bg-amber-100 text-amber-600 cursor-default">
+                <Building2 size={10} />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="text-xs">Company data available</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </div>
   );
 };
 
-// Simple Column Header (No drag, no sort from header)
-const SimpleColumnHeader = ({ column, title }: { column: any; title: string }) => {
-  return (
-    <div className="flex items-center">
-      <span className="text-[10px] font-bold uppercase tracking-wider text-white/90">
-        {title}
-      </span>
-    </div>
-  );
-};
+// Simple Column Header
+const SimpleColumnHeader = ({ column, title }: { column: any; title: string }) => (
+  <div className="flex items-center">
+    <span className="text-[10px] font-semibold uppercase tracking-wider text-white/90">
+      {title}
+    </span>
+  </div>
+);
 
-// --- 2. DIALOG: ADD ASSET (Phone/Email) ---
-
+// --- ADD ASSET DIALOG ---
 const AddAssetDialog = ({ open, onOpenChange, type, onSave }: any) => {
   const [value, setValue] = useState("");
   const [phone, setPhone] = useState("");
@@ -164,11 +247,10 @@ const AddAssetDialog = ({ open, onOpenChange, type, onSave }: any) => {
   const handleSave = () => {
     let finalValue = value;
     if (type === 'mobile' && subtype === 'mobile') {
-        finalValue = extension ? `${phone} ext ${extension}` : phone;
-    } else {
-        if(type === 'mobile' && subtype !== 'mobile') finalValue = value;
+      finalValue = extension ? `${phone} ext ${extension}` : phone;
+    } else if (type === 'mobile' && subtype !== 'mobile') {
+      finalValue = value;
     }
-    
     onSave(finalValue, { type: subtype, status });
     onOpenChange(false);
     setValue(""); setPhone(""); setExtension("");
@@ -176,15 +258,23 @@ const AddAssetDialog = ({ open, onOpenChange, type, onSave }: any) => {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[320px] p-4">
-        <DialogHeader>
-          <DialogTitle className="text-sm font-bold">Add {type === 'email' ? 'Email' : 'Phone'}</DialogTitle>
+      <DialogContent className="sm:max-w-[340px] p-0 overflow-hidden">
+        <DialogHeader className={cn(
+          "px-4 py-3",
+          type === 'email' 
+            ? "bg-gradient-to-r from-indigo-600 to-blue-600" 
+            : "bg-gradient-to-r from-emerald-600 to-teal-600"
+        )}>
+          <DialogTitle className="text-sm font-bold text-white flex items-center gap-2">
+            {type === 'email' ? <Mail size={16} /> : <Phone size={16} />}
+            Add {type === 'email' ? 'Email' : 'Phone'}
+          </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-3 py-2">
+        <div className="p-4 space-y-3">
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500">Type</Label>
+            <Label className="text-[10px] uppercase text-slate-500 font-semibold">Type</Label>
             <Select value={subtype} onValueChange={setSubtype}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {type === 'email' ? (
                   <><SelectItem value="work" className="text-xs">Work</SelectItem><SelectItem value="personal" className="text-xs">Personal</SelectItem><SelectItem value="other" className="text-xs">Other</SelectItem></>
@@ -195,40 +285,46 @@ const AddAssetDialog = ({ open, onOpenChange, type, onSave }: any) => {
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500">Value</Label>
+            <Label className="text-[10px] uppercase text-slate-500 font-semibold">Value</Label>
             {type === "mobile" && subtype === "mobile" ? (
-                <div className="flex gap-2">
-                <PhoneInput international defaultCountry="US" value={phone} onChange={(v) => setPhone(v || "")} className="text-xs h-8 px-2 border rounded-md flex-1" />
-                <Input placeholder="Ext" value={extension} onChange={(e) => setExtension(e.target.value)} className="h-8 w-16 text-xs" />
-                </div>
+              <div className="flex gap-2">
+                <PhoneInput international defaultCountry="US" value={phone} onChange={(v) => setPhone(v || "")} className="text-xs h-9 px-2 border rounded-md flex-1" />
+                <Input placeholder="Ext" value={extension} onChange={(e) => setExtension(e.target.value)} className="h-9 w-16 text-xs" />
+              </div>
             ) : type === "mobile" ? (
-                <Input placeholder="+1 555 000 0000" value={value} onChange={(e) => setValue(e.target.value)} className="h-8 text-xs" />
+              <Input placeholder="+1 555 000 0000" value={value} onChange={(e) => setValue(e.target.value)} className="h-9 text-xs" />
             ) : (
-                <Input placeholder="name@example.com" value={value} onChange={(e) => setValue(e.target.value)} className="h-8 text-xs" />
+              <Input placeholder="name@example.com" value={value} onChange={(e) => setValue(e.target.value)} className="h-9 text-xs" />
             )}
           </div>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500">Status</Label>
+            <Label className="text-[10px] uppercase text-slate-500 font-semibold">Status</Label>
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {type === 'email' ? (
-                   <><SelectItem value="verified" className="text-xs">Verified</SelectItem><SelectItem value="unverified" className="text-xs">Unverified</SelectItem><SelectItem value="incorrect" className="text-xs">Incorrect</SelectItem></>
+                  <><SelectItem value="verified" className="text-xs">Verified</SelectItem><SelectItem value="unverified" className="text-xs">Unverified</SelectItem><SelectItem value="incorrect" className="text-xs">Incorrect</SelectItem></>
                 ) : (
-                   <><SelectItem value="valid_number" className="text-xs">Valid</SelectItem><SelectItem value="no_status" className="text-xs">No Status</SelectItem><SelectItem value="invalid" className="text-xs">Invalid</SelectItem></>
+                  <><SelectItem value="valid_number" className="text-xs">Valid</SelectItem><SelectItem value="no_status" className="text-xs">No Status</SelectItem><SelectItem value="invalid" className="text-xs">Invalid</SelectItem></>
                 )}
               </SelectContent>
             </Select>
           </div>
         </div>
-        <DialogFooter><Button size="sm" onClick={handleSave} className="h-7 text-xs w-full bg-indigo-600">Save</Button></DialogFooter>
+        <div className="px-4 pb-4">
+          <Button size="sm" onClick={handleSave} className={cn(
+            "h-9 text-xs w-full font-semibold",
+            type === 'email' ? "bg-indigo-600 hover:bg-indigo-700" : "bg-emerald-600 hover:bg-emerald-700"
+          )}>
+            Save {type === 'email' ? 'Email' : 'Phone'}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
 };
 
-// --- 3. ROW COMPONENT (Inside Hover Card - Fully Editable) ---
-
+// --- CONTACT ASSET ROW (HoverCard Content) ---
 const ContactAssetRow = ({ value, type, label, isPrimary, source, status, onSetPrimary, onDelete, onUpdateFull, onFlag }: any) => {
   const [isHovered, setIsHovered] = useState(false);
   const { toast } = useToast();
@@ -236,156 +332,315 @@ const ContactAssetRow = ({ value, type, label, isPrimary, source, status, onSetP
   const [editVal, setEditVal] = useState(value);
   const [editStatus, setEditStatus] = useState(status);
 
-  const handleCopy = () => { navigator.clipboard.writeText(value); toast({ title: "Copied" }); };
-  const handleSaveEdit = () => { onUpdateFull({ value: editVal, type: label, status: editStatus }); setEditMode(false); };
+  const handleCopy = () => { 
+    navigator.clipboard.writeText(value); 
+    toast({ title: "Copied!", description: `${type === 'email' ? 'Email' : 'Phone'} copied to clipboard` }); 
+  };
+  
+  const handleSaveEdit = () => { 
+    onUpdateFull({ value: editVal, type: label, status: editStatus }); 
+    setEditMode(false); 
+  };
   
   const handleFlagToggle = () => {
     const isIncorrect = status === 'incorrect' || status === 'invalid';
     onFlag(isIncorrect ? (type === 'email' ? 'unverified' : 'no_status') : (type === 'email' ? 'incorrect' : 'invalid'));
   };
 
+  // Determine deliverability level for emails
+  const getDeliverability = () => {
+    if (type !== 'email') return null;
+    if (status === 'verified') return 'high';
+    if (status === 'likely' || status === 'unverified') return 'medium';
+    if (status === 'incorrect') return 'none';
+    return 'low';
+  };
+
+  const deliverability = getDeliverability();
+
   return (
-    <div className={cn("flex items-start justify-between p-2 rounded-md group transition-colors", isPrimary ? "bg-emerald-50/30" : "hover:bg-slate-50")} onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
+    <div 
+      className={cn(
+        "flex items-start justify-between p-2.5 rounded-lg group transition-all",
+        isPrimary 
+          ? "bg-gradient-to-r from-emerald-50/80 to-teal-50/50 border border-emerald-200/50" 
+          : "hover:bg-slate-50 border border-transparent hover:border-slate-200/50"
+      )} 
+      onMouseEnter={() => setIsHovered(true)} 
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <div className="flex items-start gap-3 overflow-hidden w-full">
         <div className="mt-0.5 flex-shrink-0">
-           {type === 'phone' ? <div className="w-5 flex justify-center"><PhoneFlag number={value} /></div> : <div className={cn("flex h-5 w-5 items-center justify-center rounded-full border", isPrimary ? "bg-emerald-100 border-emerald-200 text-emerald-600" : "bg-slate-100 border-slate-200 text-slate-500")}><Mail size={10} /></div>}
+          {type === 'phone' ? (
+            <div className="w-6 h-6 flex items-center justify-center rounded-lg bg-blue-100">
+              <PhoneFlag number={value} />
+            </div>
+          ) : (
+            <div className={cn(
+              "flex h-6 w-6 items-center justify-center rounded-lg",
+              isPrimary ? "bg-emerald-100 text-emerald-600" : "bg-indigo-100 text-indigo-600"
+            )}>
+              <Mail size={12} />
+            </div>
+          )}
         </div>
         <div className="flex flex-col min-w-0 w-full">
-            {editMode ? (
-                <div className="flex flex-col gap-1 w-full animate-in fade-in zoom-in-95">
-                    <Input className="h-6 text-xs" value={editVal} onChange={e => setEditVal(e.target.value)} autoFocus />
-                    <div className="flex gap-1">
-                        <Select value={editStatus} onValueChange={setEditStatus}>
-                            <SelectTrigger className="h-6 text-[10px] w-24"><SelectValue /></SelectTrigger>
-                            <SelectContent>{type === 'email' ? (<><SelectItem value="verified" className="text-xs">Verified</SelectItem><SelectItem value="unverified" className="text-xs">Unverified</SelectItem><SelectItem value="incorrect" className="text-xs">Incorrect</SelectItem></>) : (<><SelectItem value="valid_number" className="text-xs">Valid</SelectItem><SelectItem value="no_status" className="text-xs">No Status</SelectItem><SelectItem value="invalid" className="text-xs">Invalid</SelectItem></>)}</SelectContent>
-                        </Select>
-                        <Button size="icon" className="h-6 w-6" onClick={handleSaveEdit}><Check size={10}/></Button>
-                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditMode(false)}><X size={10}/></Button>
-                    </div>
-                </div>
-            ) : (
-                <>
-                    <div className="flex items-center gap-2"><span className={cn("text-xs font-medium truncate select-all", (status === 'incorrect' || status === 'invalid') ? 'line-through text-slate-400' : 'text-slate-800')}>{value}</span><StatusIcon status={status} /></div>
-                    <div className="flex items-center gap-1.5 text-[9px] text-slate-400 mt-0.5"><Badge variant="outline" className="text-[8px] h-3.5 px-1 py-0 font-normal border-slate-200 text-slate-500 capitalize">{label || (type === 'email' ? 'Work' : 'Mobile')}</Badge><span>•</span><span className={cn(source?.toLowerCase().includes('manual') ? "text-blue-600 font-semibold" : "")}>{source?.toLowerCase().includes('manual') ? 'Manual' : 'CRM'}</span>{isPrimary && <span className="text-emerald-600 font-bold ml-1">Primary</span>}</div>
-                </>
-            )}
+          {editMode ? (
+            <div className="flex flex-col gap-2 w-full animate-in fade-in zoom-in-95">
+              <Input className="h-7 text-xs" value={editVal} onChange={e => setEditVal(e.target.value)} autoFocus />
+              <div className="flex gap-1">
+                <Select value={editStatus} onValueChange={setEditStatus}>
+                  <SelectTrigger className="h-7 text-[10px] w-24"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {type === 'email' ? (
+                      <><SelectItem value="verified" className="text-xs">Verified</SelectItem><SelectItem value="unverified" className="text-xs">Unverified</SelectItem><SelectItem value="incorrect" className="text-xs">Incorrect</SelectItem></>
+                    ) : (
+                      <><SelectItem value="valid_number" className="text-xs">Valid</SelectItem><SelectItem value="no_status" className="text-xs">No Status</SelectItem><SelectItem value="invalid" className="text-xs">Invalid</SelectItem></>
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button size="icon" className="h-7 w-7 bg-emerald-600 hover:bg-emerald-700" onClick={handleSaveEdit}>
+                  <Check size={12} />
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditMode(false)}>
+                  <X size={12} />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "text-xs font-medium truncate select-all",
+                  (status === 'incorrect' || status === 'invalid') ? 'line-through text-slate-400' : 'text-slate-800'
+                )}>
+                  {value}
+                </span>
+                {deliverability && <DeliverabilityIndicator level={deliverability} />}
+                {type === 'phone' && <StatusIcon status={status} />}
+              </div>
+              <div className="flex items-center gap-1.5 text-[9px] text-slate-400 mt-1">
+                <Badge variant="outline" className="text-[8px] h-4 px-1.5 py-0 font-medium border-slate-200 text-slate-500 capitalize bg-white">
+                  {label || (type === 'email' ? 'Work' : 'Mobile')}
+                </Badge>
+                <span className="text-slate-300">•</span>
+                <span className={cn(source?.toLowerCase().includes('manual') ? "text-blue-600 font-semibold" : "text-slate-400")}>
+                  {source?.toLowerCase().includes('manual') ? 'Manual' : 'CRM'}
+                </span>
+                {isPrimary && (
+                  <>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                      <Star size={8} className="fill-emerald-600" /> Primary
+                    </span>
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
       {!editMode && (
-          <div className={cn("flex items-center gap-0.5 transition-opacity", isHovered ? "opacity-100" : "opacity-0")}>
-            <TooltipProvider><Tooltip><TooltipTrigger asChild><button onClick={handleCopy} className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-700"><Copy size={10} /></button></TooltipTrigger><TooltipContent>Copy</TooltipContent></Tooltip></TooltipProvider>
-            <TooltipProvider><Tooltip><TooltipTrigger asChild><button onClick={() => setEditMode(true)} className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-700"><Pencil size={10} /></button></TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip></TooltipProvider>
-            {!isPrimary && (<TooltipProvider><Tooltip><TooltipTrigger asChild><button onClick={onSetPrimary} className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-amber-500"><Star size={10} /></button></TooltipTrigger><TooltipContent>Set Primary</TooltipContent></Tooltip></TooltipProvider>)}
-            <TooltipProvider><Tooltip><TooltipTrigger asChild><button onClick={handleFlagToggle} className={cn("p-1.5 hover:bg-slate-200 rounded", (status === 'incorrect' || status === 'invalid') ? "text-red-600 bg-red-50" : "text-slate-400 hover:text-red-500")}><Flag size={10} fill={(status === 'incorrect' || status === 'invalid') ? "currentColor" : "none"} /></button></TooltipTrigger><TooltipContent>{(status === 'incorrect' || status === 'invalid') ? 'Unflag' : 'Flag Incorrect'}</TooltipContent></Tooltip></TooltipProvider>
-            <TooltipProvider><Tooltip><TooltipTrigger asChild><button onClick={onDelete} className="p-1.5 hover:bg-red-50 rounded text-slate-400 hover:text-red-600"><Trash2 size={10} /></button></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip></TooltipProvider>
-          </div>
+        <div className={cn("flex items-center gap-0.5 transition-opacity", isHovered ? "opacity-100" : "opacity-0")}>
+          <TooltipProvider><Tooltip><TooltipTrigger asChild>
+            <button onClick={handleCopy} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400 hover:text-slate-700 transition-colors">
+              <Copy size={11} />
+            </button>
+          </TooltipTrigger><TooltipContent className="text-xs">Copy</TooltipContent></Tooltip></TooltipProvider>
+          
+          <TooltipProvider><Tooltip><TooltipTrigger asChild>
+            <button onClick={() => setEditMode(true)} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400 hover:text-slate-700 transition-colors">
+              <Pencil size={11} />
+            </button>
+          </TooltipTrigger><TooltipContent className="text-xs">Edit</TooltipContent></Tooltip></TooltipProvider>
+          
+          {!isPrimary && (
+            <TooltipProvider><Tooltip><TooltipTrigger asChild>
+              <button onClick={onSetPrimary} className="p-1.5 hover:bg-amber-100 rounded-md text-slate-400 hover:text-amber-600 transition-colors">
+                <Star size={11} />
+              </button>
+            </TooltipTrigger><TooltipContent className="text-xs">Set Primary</TooltipContent></Tooltip></TooltipProvider>
+          )}
+          
+          <TooltipProvider><Tooltip><TooltipTrigger asChild>
+            <button 
+              onClick={handleFlagToggle} 
+              className={cn(
+                "p-1.5 rounded-md transition-colors",
+                (status === 'incorrect' || status === 'invalid') 
+                  ? "text-red-600 bg-red-50 hover:bg-red-100" 
+                  : "text-slate-400 hover:text-red-500 hover:bg-red-50"
+              )}
+            >
+              <Flag size={11} fill={(status === 'incorrect' || status === 'invalid') ? "currentColor" : "none"} />
+            </button>
+          </TooltipTrigger><TooltipContent className="text-xs">{(status === 'incorrect' || status === 'invalid') ? 'Unflag' : 'Flag Incorrect'}</TooltipContent></Tooltip></TooltipProvider>
+          
+          <TooltipProvider><Tooltip><TooltipTrigger asChild>
+            <button onClick={onDelete} className="p-1.5 hover:bg-red-50 rounded-md text-slate-400 hover:text-red-600 transition-colors">
+              <Trash2 size={11} />
+            </button>
+          </TooltipTrigger><TooltipContent className="text-xs">Delete</TooltipContent></Tooltip></TooltipProvider>
+        </div>
       )}
     </div>
   );
 };
 
-// --- 4. SMART CELL IMPLEMENTATIONS ---
-
+// --- SMART EMAIL CELL ---
 const SmartEmailCell = ({ row, table }: any) => {
   const c = row.original;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  // Discovery mode - show availability icon
+  // Discovery mode - show stylized availability indicator
   if (c.is_discovery) {
+    const hasEmail = c.has_email;
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className={cn(
-              "flex items-center justify-center h-6 w-6 rounded-full mx-auto cursor-help",
-              c.has_email ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"
-            )}>
-              <Mail size={12} />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p className="text-xs font-medium">
-              {c.has_email ? 'Email Available - Add to reveal' : 'No email available'}
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <div className="flex items-center justify-center">
+        <div className={cn(
+          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-semibold transition-all",
+          hasEmail 
+            ? "bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 border border-emerald-200/60 shadow-sm shadow-emerald-100" 
+            : "bg-slate-100 text-slate-400 border border-slate-200/50"
+        )}>
+          <Mail size={11} className={hasEmail ? "fill-emerald-200" : ""} />
+          {hasEmail ? (
+            <span className="flex items-center gap-1">
+              Available
+              <Sparkles size={9} className="text-emerald-500" />
+            </span>
+          ) : "Unavailable"}
+        </div>
+      </div>
     );
   }
   
+  // CRM Contact - Show actual emails with deliverability
   const emails = [
     ...(c.email ? [{ email: c.email, type: 'work', is_primary: true, source: 'Manual', email_status: 'verified' }] : []),
     ...(c.all_emails || []).filter((e:any) => e.email !== c.email).map((e:any) => ({ ...e, source: e.source || 'CRM' }))
   ];
   const primaryEmail = emails[0]?.email;
+  const primaryStatus = emails[0]?.email_status;
   const count = emails.length;
 
   const handleAdd = (val: string, meta: any) => { table.options.meta?.handleAssetAction(row.index, 'email', 'add', val, meta); };
   const execAction = (action: string, val: string, payload?: any) => { table.options.meta?.handleAssetAction(row.index, 'email', action, val, payload); };
 
+  // No emails - show access button
   if (count === 0) {
-     return (
-        <div className="flex items-center gap-2 group w-full">
-             <Button onClick={() => table.options.meta?.enrichContact(c.id, c.apollo_person_id, 'email')} variant="secondary" size="sm" className="h-7 px-2 text-[10px] bg-slate-100 text-slate-600 hover:text-indigo-600 w-full justify-start"><Mail size={10} className="mr-2" /> Access Email</Button>
-             <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-indigo-600 rounded-full hover:bg-slate-100" onClick={() => setIsDialogOpen(true)}><Plus size={12} /></Button></TooltipTrigger><TooltipContent>Add manually</TooltipContent></Tooltip></TooltipProvider>
-             <AddAssetDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} type="email" onSave={handleAdd} />
-        </div>
-     );
+    return (
+      <div className="flex items-center gap-2 group w-full">
+        <Button 
+          onClick={() => table.options.meta?.enrichContact(c.id, c.apollo_person_id, 'email')} 
+          variant="outline" 
+          size="sm" 
+          className="h-7 px-2.5 text-[10px] font-medium bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200/60 text-indigo-700 hover:from-indigo-100 hover:to-blue-100 w-full justify-start shadow-sm"
+        >
+          <Zap size={10} className="mr-1.5 text-indigo-500" /> 
+          Access Email
+        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-indigo-600 rounded-full hover:bg-indigo-50" onClick={() => setIsDialogOpen(true)}>
+                <Plus size={12} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="text-xs">Add manually</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <AddAssetDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} type="email" onSave={handleAdd} />
+      </div>
+    );
   }
 
+  // Determine deliverability display
+  const getDeliverabilityLevel = (status: string) => {
+    if (status === 'verified') return 'high';
+    if (status === 'likely' || status === 'unverified') return 'medium';
+    return 'low';
+  };
+
   return (
-    <HoverCard openDelay={200} closeDelay={300}>
-        <HoverCardTrigger asChild>
-            <div className="flex items-center justify-between w-full group cursor-pointer py-1.5 relative">
-                <div className="flex items-center gap-2 overflow-hidden pr-6">
-                    {c.email_status === 'verified' ? <CheckCircle2 size={10} className="text-emerald-500" /> : <Mail size={12} className="text-slate-400" />}
-                    <span className="text-xs text-slate-700 truncate">{primaryEmail}</span>
-                </div>
-                {count > 1 && <Badge className="absolute right-0 h-4 min-w-[16px] px-1 text-[8px] bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100 rounded-full pointer-events-none">+{count-1}</Badge>}
-            </div>
-        </HoverCardTrigger>
-        <HoverCardContent align="start" className="w-[340px] p-0 shadow-lg border-slate-200" sideOffset={5}>
-            <div className="p-2 bg-slate-50 border-b flex justify-between items-center"><span className="text-[10px] font-bold text-slate-500 uppercase">Emails</span><div className="flex gap-2"><Badge variant="outline" className="bg-white text-[9px]">{count}</Badge><Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => setIsDialogOpen(true)}><Plus size={10}/></Button></div></div>
-            <div className="p-1 max-h-[250px] overflow-y-auto bg-white">
-                {emails.map((e: any, idx: number) => (
-                    <ContactAssetRow key={idx} value={e.email} type="email" label={e.type} isPrimary={idx===0} status={e.email_status} source={e.source}
-                        onSetPrimary={() => execAction('set_primary', e.email)} onDelete={() => execAction('delete', e.email)} onFlag={(status: string) => execAction('flag', e.email, status)} onUpdateFull={(payload: any) => execAction('edit', e.email, payload)} />
-                ))}
-            </div>
-            <AddAssetDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} type="email" onSave={handleAdd} />
-        </HoverCardContent>
+    <HoverCard openDelay={150} closeDelay={200}>
+      <HoverCardTrigger asChild>
+        <div className="flex items-center justify-between w-full group cursor-pointer py-1 relative">
+          <div className="flex items-center gap-2 overflow-hidden pr-8">
+            <DeliverabilityIndicator level={getDeliverabilityLevel(primaryStatus)} />
+            <span className="text-xs text-slate-700 truncate font-medium">{primaryEmail}</span>
+          </div>
+          {count > 1 && (
+            <Badge className="absolute right-0 h-5 min-w-[20px] px-1.5 text-[9px] font-semibold bg-gradient-to-r from-indigo-100 to-blue-100 text-indigo-700 border-indigo-200/50 rounded-full">
+              +{count-1}
+            </Badge>
+          )}
+        </div>
+      </HoverCardTrigger>
+      <HoverCardContent align="start" className="w-[360px] p-0 shadow-xl border-slate-200 rounded-xl overflow-hidden" sideOffset={5}>
+        <div className="px-3 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 flex justify-between items-center">
+          <span className="text-[10px] font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+            <Mail size={12} /> Emails
+          </span>
+          <div className="flex items-center gap-2">
+            <Badge className="bg-white/20 text-white text-[9px] font-semibold border-0">{count}</Badge>
+            <Button variant="ghost" size="icon" className="h-5 w-5 text-white/80 hover:text-white hover:bg-white/20" onClick={() => setIsDialogOpen(true)}>
+              <Plus size={12} />
+            </Button>
+          </div>
+        </div>
+        <div className="p-2 max-h-[280px] overflow-y-auto bg-white space-y-1">
+          {emails.map((e: any, idx: number) => (
+            <ContactAssetRow 
+              key={idx} 
+              value={e.email} 
+              type="email" 
+              label={e.type} 
+              isPrimary={idx === 0} 
+              status={e.email_status} 
+              source={e.source}
+              onSetPrimary={() => execAction('set_primary', e.email)} 
+              onDelete={() => execAction('delete', e.email)} 
+              onFlag={(status: string) => execAction('flag', e.email, status)} 
+              onUpdateFull={(payload: any) => execAction('edit', e.email, payload)} 
+            />
+          ))}
+        </div>
+        <AddAssetDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} type="email" onSave={handleAdd} />
+      </HoverCardContent>
     </HoverCard>
   );
 };
 
+// --- SMART PHONE CELL ---
 const SmartPhoneCell = ({ row, table }: any) => {
   const c = row.original;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  // Discovery mode - show availability icon
+  // Discovery mode
   if (c.is_discovery) {
     const hasPhone = c.has_phone || c.has_direct_phone === 'Yes';
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className={cn(
-              "flex items-center justify-center h-6 w-6 rounded-full mx-auto cursor-help",
-              hasPhone ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"
-            )}>
-              <Phone size={12} />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p className="text-xs font-medium">
-              {hasPhone ? 'Phone Available - Add to reveal' : 'No phone available'}
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <div className="flex items-center justify-center">
+        <div className={cn(
+          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-semibold transition-all",
+          hasPhone 
+            ? "bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 border border-blue-200/60 shadow-sm shadow-blue-100" 
+            : "bg-slate-100 text-slate-400 border border-slate-200/50"
+        )}>
+          <Phone size={11} className={hasPhone ? "fill-blue-200" : ""} />
+          {hasPhone ? (
+            <span className="flex items-center gap-1">
+              Direct Dial
+              <Zap size={9} className="text-blue-500" />
+            </span>
+          ) : "Unavailable"}
+        </div>
+      </div>
     );
   }
 
+  // CRM Contact
   const phones = [
     ...(c.mobile ? [{ phone_number: c.mobile, type: 'mobile', source_name: 'Manual', status: 'valid_number' }] : []),
     ...(c.all_phones || []).filter((p:any) => p.phone_number !== c.mobile).map((p:any) => ({ ...p, source_name: p.source_name || 'CRM' }))
@@ -396,55 +651,110 @@ const SmartPhoneCell = ({ row, table }: any) => {
   const handleAdd = (val: string, meta: any) => { table.options.meta?.handleAssetAction(row.index, 'mobile', 'add', val, meta); };
   const execAction = (action: string, val: string, payload?: any) => { table.options.meta?.handleAssetAction(row.index, 'mobile', action, val, payload); };
 
+  // No phones
   if (count === 0) {
-      return (
-        <div className="flex items-center gap-2 w-full group">
-             {c.phone_enrichment_status === 'pending_phones' ? (
-                 <Badge className="bg-amber-50 text-amber-600 border-amber-200 animate-pulse font-bold text-[9px] w-full justify-center"><Clock size={10} className="mr-1"/> Verifying...</Badge>
-             ) : (
-                <Button onClick={() => table.options.meta?.enrichContact(c.id, c.apollo_person_id, 'phone')} variant="secondary" size="sm" className="h-7 px-2 text-[10px] bg-slate-100 text-slate-600 hover:text-emerald-600 w-full justify-start"><Phone size={10} className="mr-2" /> Access Mobile</Button>
-             )}
-             <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-emerald-600 rounded-full hover:bg-slate-100" onClick={() => setIsDialogOpen(true)}><Plus size={12} /></Button></TooltipTrigger><TooltipContent>Add manually</TooltipContent></Tooltip></TooltipProvider>
-             <AddAssetDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} type="mobile" onSave={handleAdd} />
-        </div>
-      );
+    return (
+      <div className="flex items-center gap-2 w-full group">
+        {c.phone_enrichment_status === 'pending_phones' ? (
+          <Badge className="bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 border-amber-200/60 animate-pulse font-semibold text-[9px] w-full justify-center py-1.5">
+            <Loader2 size={10} className="mr-1.5 animate-spin" /> Verifying...
+          </Badge>
+        ) : (
+          <Button 
+            onClick={() => table.options.meta?.enrichContact(c.id, c.apollo_person_id, 'phone')} 
+            variant="outline" 
+            size="sm" 
+            className="h-7 px-2.5 text-[10px] font-medium bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200/60 text-emerald-700 hover:from-emerald-100 hover:to-teal-100 w-full justify-start shadow-sm"
+          >
+            <Zap size={10} className="mr-1.5 text-emerald-500" /> 
+            Access Phone
+          </Button>
+        )}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-emerald-600 rounded-full hover:bg-emerald-50" onClick={() => setIsDialogOpen(true)}>
+                <Plus size={12} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="text-xs">Add manually</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <AddAssetDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} type="mobile" onSave={handleAdd} />
+      </div>
+    );
   }
 
   return (
-    <HoverCard openDelay={200} closeDelay={300}>
-        <HoverCardTrigger asChild>
-            <div className="flex items-center justify-between w-full group cursor-pointer py-1.5 relative">
-                <div className="flex items-center gap-2 overflow-hidden pr-6">
-                    <PhoneFlag number={primaryPhone} />
-                    <span className="text-xs text-slate-700 truncate">{primaryPhone}</span>
-                </div>
-                {count > 1 && <Badge className="absolute right-0 h-4 min-w-[16px] px-1 text-[8px] bg-green-50 text-green-600 border-green-100 hover:bg-green-100 rounded-full pointer-events-none">+{count-1}</Badge>}
+    <HoverCard openDelay={150} closeDelay={200}>
+      <HoverCardTrigger asChild>
+        <div className="flex items-center justify-between w-full group cursor-pointer py-1 relative">
+          <div className="flex items-center gap-2 overflow-hidden pr-8">
+            <div className="flex items-center justify-center h-5 w-6 rounded bg-slate-100">
+              <PhoneFlag number={primaryPhone} />
             </div>
-        </HoverCardTrigger>
-        <HoverCardContent align="start" className="w-[340px] p-0 shadow-lg border-slate-200" sideOffset={5}>
-            <div className="p-2 bg-slate-50 border-b flex justify-between items-center"><span className="text-[10px] font-bold text-slate-500 uppercase">Phones</span><div className="flex gap-2"><Badge variant="outline" className="bg-white text-[9px]">{count}</Badge><Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => setIsDialogOpen(true)}><Plus size={10}/></Button></div></div>
-            <div className="p-1 max-h-[250px] overflow-y-auto bg-white">
-                {phones.map((p: any, idx: number) => (
-                    <ContactAssetRow key={idx} value={p.phone_number} type="phone" label={p.type} isPrimary={idx===0} status={p.status} source={p.source_name}
-                        onSetPrimary={() => execAction('set_primary', p.phone_number)} onDelete={() => execAction('delete', p.phone_number)} onFlag={(status: string) => execAction('flag', p.phone_number, status)} onUpdateFull={(payload: any) => execAction('edit', p.phone_number, payload)} />
-                ))}
-            </div>
-            <AddAssetDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} type="mobile" onSave={handleAdd} />
-        </HoverCardContent>
+            <span className="text-xs text-slate-700 truncate font-medium">{primaryPhone}</span>
+          </div>
+          {count > 1 && (
+            <Badge className="absolute right-0 h-5 min-w-[20px] px-1.5 text-[9px] font-semibold bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 border-emerald-200/50 rounded-full">
+              +{count-1}
+            </Badge>
+          )}
+        </div>
+      </HoverCardTrigger>
+      <HoverCardContent align="start" className="w-[360px] p-0 shadow-xl border-slate-200 rounded-xl overflow-hidden" sideOffset={5}>
+        <div className="px-3 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 flex justify-between items-center">
+          <span className="text-[10px] font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+            <Phone size={12} /> Phones
+          </span>
+          <div className="flex items-center gap-2">
+            <Badge className="bg-white/20 text-white text-[9px] font-semibold border-0">{count}</Badge>
+            <Button variant="ghost" size="icon" className="h-5 w-5 text-white/80 hover:text-white hover:bg-white/20" onClick={() => setIsDialogOpen(true)}>
+              <Plus size={12} />
+            </Button>
+          </div>
+        </div>
+        <div className="p-2 max-h-[280px] overflow-y-auto bg-white space-y-1">
+          {phones.map((p: any, idx: number) => (
+            <ContactAssetRow 
+              key={idx} 
+              value={p.phone_number} 
+              type="phone" 
+              label={p.type} 
+              isPrimary={idx === 0} 
+              status={p.status} 
+              source={p.source_name}
+              onSetPrimary={() => execAction('set_primary', p.phone_number)} 
+              onDelete={() => execAction('delete', p.phone_number)} 
+              onFlag={(status: string) => execAction('flag', p.phone_number, status)} 
+              onUpdateFull={(payload: any) => execAction('edit', p.phone_number, payload)} 
+            />
+          ))}
+        </div>
+        <AddAssetDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} type="mobile" onSave={handleAdd} />
+      </HoverCardContent>
     </HoverCard>
   );
 };
 
-
-// --- 5. OTHER CELLS ---
+// --- OTHER CELLS ---
 
 export const EditableCell: React.FC<any> = ({ getValue, row, column, table }) => {
-  if (row.getIsGrouped() || isDiscoveryRow(row)) return <span className="text-xs text-slate-600 truncate">{getValue()}</span>;
+  if (row.getIsGrouped() || isDiscoveryRow(row)) {
+    return <span className="text-xs text-slate-600 truncate">{getValue()}</span>;
+  }
   const initialValue = getValue() || "";
   const [value, setValue] = useState(initialValue);
   const onBlur = () => { if (value !== initialValue) table.options.meta?.updateData(row.index, column.id, value); };
   useEffect(() => setValue(initialValue), [initialValue]);
-  return <Input value={value} onChange={(e) => setValue(e.target.value)} onBlur={onBlur} className="h-full text-xs border-none bg-transparent rounded-none p-0 truncate focus-visible:ring-1 focus-visible:ring-blue-500" />;
+  return (
+    <Input 
+      value={value} 
+      onChange={(e) => setValue(e.target.value)} 
+      onBlur={onBlur} 
+      className="h-full text-xs border-none bg-transparent rounded-none p-0 truncate focus-visible:ring-1 focus-visible:ring-indigo-500/50" 
+    />
+  );
 };
 
 const ActionCell = ({ row, table }: any) => {
@@ -453,61 +763,48 @@ const ActionCell = ({ row, table }: any) => {
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Discovery mode – show prominent ADD button
+  // Discovery mode – prominent ADD button with gradient
   if (c.is_discovery) {
     return (
       <div className="flex justify-center">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                size="sm"
-                onClick={() => table.options.meta?.openListModal(c, true)}
-                className="h-7 px-3 text-[10px] font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm active:scale-95 transition-all rounded-md"
-              >
-                <Plus size={12} className="mr-1.5" />
-                ADD
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="text-xs">
-              Save to CRM & add to list
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Button
+          size="sm"
+          onClick={() => table.options.meta?.openListModal(c, true)}
+          className="h-7 px-4 text-[10px] font-bold bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-md shadow-violet-200 active:scale-95 transition-all rounded-lg"
+        >
+          <Plus size={12} className="mr-1.5" />
+          ADD
+        </Button>
       </div>
     );
   }
 
-  // Normal CRM contact – direct icon buttons
+  // CRM contact actions
   return (
     <div className="flex items-center justify-end gap-0.5">
-      {/* Add to List */}
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50/60 rounded-md"
+              className="h-7 w-7 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
               onClick={() => table.options.meta?.openListModal(c, false)}
             >
               <ListPlus size={14} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            Add to List
-          </TooltipContent>
+          <TooltipContent side="bottom" className="text-xs">Add to List</TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
-      {/* View Profile */}
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-slate-500 hover:text-blue-600 hover:bg-blue-50/60 rounded-md"
+              className="h-7 w-7 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
               asChild
             >
               <Link to={`/contacts/${c.id}`}>
@@ -515,82 +812,64 @@ const ActionCell = ({ row, table }: any) => {
               </Link>
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            View Profile
-          </TooltipContent>
+          <TooltipContent side="bottom" className="text-xs">View Profile</TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
-      {/* Verify / Enrich Data */}
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50/60 rounded-md"
+              className="h-7 w-7 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
               onClick={() => table.options.meta?.enrichContact(c.id, c.apollo_person_id, 'email')}
             >
               <ShieldCheck size={14} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            Verify / Enrich Data
-          </TooltipContent>
+          <TooltipContent side="bottom" className="text-xs">Verify / Enrich</TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
-      {/* Delete */}
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-slate-500 hover:text-red-600 hover:bg-red-50/60 rounded-md"
+              className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               onClick={() => setIsDeleting(true)}
             >
               <Trash2 size={14} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            Delete Contact
-          </TooltipContent>
+          <TooltipContent side="bottom" className="text-xs">Delete</TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleting} onOpenChange={setIsDeleting}>
         <DialogContent className="sm:max-w-[380px]">
           <DialogHeader>
             <DialogTitle>Delete Contact</DialogTitle>
             <DialogDescription>
-              Are you sure you want to permanently delete <span className="font-medium">{c.name}</span>?
-              <br />
-              This action cannot be undone.
+              Permanently delete <span className="font-semibold">{c.name}</span>? This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsDeleting(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setIsDeleting(false)}>Cancel</Button>
             <Button
               variant="destructive"
               onClick={() => {
                 deleteContactMutation.mutate(c.id, {
                   onSuccess: () => {
-                    toast({ title: "Contact deleted", description: "The contact has been removed." });
+                    toast({ title: "Contact deleted" });
                     setIsDeleting(false);
                   },
                   onError: () => {
-                    toast({
-                      variant: "destructive",
-                      title: "Failed to delete",
-                      description: "Something went wrong. Please try again.",
-                    });
+                    toast({ variant: "destructive", title: "Failed to delete" });
                   },
                 });
-                setIsDeleting(false);
               }}
             >
               Delete
@@ -603,7 +882,17 @@ const ActionCell = ({ row, table }: any) => {
 };
 
 const CompanyCell: React.FC<any> = ({ getValue, row, table }) => {
-  if (isDiscoveryRow(row)) return <span className="text-xs text-slate-700 truncate">{getValue()}</span>;
+  if (isDiscoveryRow(row)) {
+    const companyName = getValue() || row.original.original_data?.organization?.name;
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 text-amber-600">
+          <Building2 size={12} />
+        </div>
+        <span className="text-xs text-slate-700 truncate font-medium">{companyName || '-'}</span>
+      </div>
+    );
+  }
   const initialCompanyId = row.original.company_id;
   const companyName = getValue() as string;
   const onSelect = (id: number | null) => table.options.meta?.updateData(row.index, 'company_id', id);
@@ -619,17 +908,29 @@ const StageSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
   
   return (
     <Select value={initialValue || ""} onValueChange={onValueChange}>
-      <SelectTrigger className="h-7 text-xs border-none bg-transparent shadow-none px-0">
+      <SelectTrigger className="h-7 text-xs border-none bg-transparent shadow-none px-0 hover:bg-slate-50 rounded-lg transition-colors">
         <SelectValue>
           {initialValue ? (
-            <Badge variant="outline" className="border text-[10px] font-medium" style={{ backgroundColor: stageInfo?.color + '20', color: stageInfo?.color, borderColor: stageInfo?.color + '40' }}>{initialValue}</Badge>
+            <Badge 
+              className="text-[10px] font-semibold border"
+              style={{ 
+                backgroundColor: stageInfo?.color + '15', 
+                color: stageInfo?.color, 
+                borderColor: stageInfo?.color + '30' 
+              }}
+            >
+              {initialValue}
+            </Badge>
           ) : <span className="text-slate-400 text-xs">Select...</span>}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {stages.map(stage => (
           <SelectItem key={stage.id} value={stage.name} className="text-xs">
-             <div className="flex items-center"><span className="mr-2 h-2 w-2 rounded-full" style={{ backgroundColor: stage.color }} />{stage.name}</div>
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
+              {stage.name}
+            </div>
           </SelectItem>
         ))}
       </SelectContent>
@@ -642,28 +943,41 @@ const MediumSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
   const initialValue = getValue();
   const onValueChange = (val: string) => table.options.meta?.updateData(row.index, column.id, val);
   const mediumOptions = [
-    { name: 'LinkedIn', color: '#0A66C2', icon: LinkIcon },
-    { name: 'Cold Call', color: '#413a3aff', icon: Phone },
+    { name: 'LinkedIn', color: '#0A66C2', icon: Linkedin },
+    { name: 'Cold Call', color: '#374151', icon: Phone },
     { name: 'Email Campaign', color: '#10B981', icon: Mail },
     { name: 'Referral', color: '#8B5CF6', icon: UserPlus },
     { name: 'Website Form', color: '#3B82F6', icon: Globe },
     { name: 'Other', color: '#6B7280', icon: MoreHorizontal },
   ];
   const selected = mediumOptions.find(o => o.name === initialValue);
+  
   return (
     <Select value={initialValue || ""} onValueChange={onValueChange}>
-      <SelectTrigger className="h-7 text-xs border-none bg-transparent shadow-none px-0">
+      <SelectTrigger className="h-7 text-xs border-none bg-transparent shadow-none px-0 hover:bg-slate-50 rounded-lg transition-colors">
         <SelectValue>
           {initialValue ? (
-             <Badge variant="outline" className="border text-[10px] font-medium flex items-center gap-1" style={{ backgroundColor: selected?.color + '20', color: selected?.color, borderColor: selected?.color + '40' }}>
-               {selected && <selected.icon size={10} />} {initialValue}
-             </Badge>
+            <Badge 
+              className="text-[10px] font-semibold border flex items-center gap-1"
+              style={{ 
+                backgroundColor: selected?.color + '15', 
+                color: selected?.color, 
+                borderColor: selected?.color + '30' 
+              }}
+            >
+              {selected && <selected.icon size={10} />} {initialValue}
+            </Badge>
           ) : <span className="text-slate-400 text-xs">Source...</span>}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {mediumOptions.map(m => (
-          <SelectItem key={m.name} value={m.name} className="text-xs">{m.name}</SelectItem>
+          <SelectItem key={m.name} value={m.name} className="text-xs">
+            <div className="flex items-center gap-2">
+              <m.icon size={12} style={{ color: m.color }} />
+              {m.name}
+            </div>
+          </SelectItem>
         ))}
       </SelectContent>
     </Select>
@@ -672,11 +986,11 @@ const MediumSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
 
 const DisplayDateCell: React.FC<any> = ({ getValue }) => {
   const date = getValue();
-  if (!date) return <span className="text-slate-400 text-xs">-</span>;
+  if (!date) return <span className="text-slate-300 text-xs">-</span>;
   return <span className="text-slate-600 text-xs">{new Date(date).toLocaleDateString()}</span>;
 };
 
-// --- 6. EXPORTED COLUMNS ---
+// --- EXPORTED COLUMNS ---
 
 export const columns: ColumnDef<any>[] = [
   // 1. SELECT (Sticky)
@@ -717,48 +1031,78 @@ export const columns: ColumnDef<any>[] = [
     enableSorting: false,
     cell: ({ row }) => {
       const c = row.original;
+      const isDiscovery = c.is_discovery;
+      
       return (
         <div className="flex items-center gap-3 py-1">
-          <Avatar className="h-7 w-7 border border-slate-100 rounded-lg flex-shrink-0">
+          <Avatar className={cn(
+            "h-8 w-8 border-2 rounded-xl flex-shrink-0 shadow-sm",
+            isDiscovery 
+              ? "border-violet-200 ring-2 ring-violet-100" 
+              : "border-slate-200"
+          )}>
             <AvatarImage src={c.photo_url} />
-            <AvatarFallback className="text-[9px] bg-slate-100 text-slate-500 font-bold">{c.name?.[0]}</AvatarFallback>
+            <AvatarFallback className={cn(
+              "text-[10px] font-bold",
+              isDiscovery 
+                ? "bg-gradient-to-br from-violet-100 to-purple-100 text-violet-700" 
+                : "bg-slate-100 text-slate-600"
+            )}>
+              {c.name?.[0]?.toUpperCase()}
+            </AvatarFallback>
           </Avatar>
           <div className="flex flex-col min-w-0">
-            {c.is_discovery ? (
-               <span className="text-xs font-bold text-slate-900 truncate" title={c.name}>{c.name}</span>
+            {isDiscovery ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-900 truncate" title={c.name}>{c.name}</span>
+                <Badge className="h-4 px-1 text-[8px] font-bold bg-gradient-to-r from-violet-100 to-purple-100 text-violet-700 border-violet-200/50">
+                  NEW
+                </Badge>
+              </div>
             ) : (
-               <Link to={`/contacts/${c.id}`} className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline truncate" title={c.name}>
-                 {c.name}
-               </Link>
+              <Link 
+                to={`/contacts/${c.id}`} 
+                className="text-xs font-bold text-slate-800 hover:text-indigo-600 hover:underline truncate transition-colors" 
+                title={c.name}
+              >
+                {c.name}
+              </Link>
             )}
-             {c.linkedin_url && (
-                <a href={c.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[9px] text-slate-400 hover:text-blue-500">
-                    <Linkedin size={9} /> LinkedIn
-                </a>
-             )}
+            {c.linkedin_url && (
+              <a 
+                href={c.linkedin_url} 
+                target="_blank" 
+                rel="noreferrer" 
+                className="flex items-center gap-1 text-[9px] text-slate-400 hover:text-[#0A66C2] transition-colors"
+              >
+                <Linkedin size={9} /> LinkedIn
+              </a>
+            )}
           </div>
         </div>
       );
     }
   },
 
-  // 3. SMART CONTACT INFO
+  // 3. EMAIL
   {
     accessorKey: 'email',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Email" />,
-    size: 180,
+    size: 200,
     enableSorting: false,
     cell: SmartEmailCell
   },
+  
+  // 4. PHONE
   {
     accessorKey: 'mobile',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Phone" />,
-    size: 160,
+    size: 180,
     enableSorting: false,
     cell: SmartPhoneCell
   },
 
-  // 4. JOB & COMPANY
+  // 5. JOB TITLE
   {
     accessorKey: 'job_title',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Job Title" />,
@@ -766,6 +1110,8 @@ export const columns: ColumnDef<any>[] = [
     enableSorting: false,
     cell: EditableCell
   },
+  
+  // 6. COMPANY
   {
     accessorKey: 'company_name',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Company" />,
@@ -774,17 +1120,17 @@ export const columns: ColumnDef<any>[] = [
     cell: CompanyCell
   },
 
-  // 5. ACTIONS
+  // 7. ACTIONS
   {
     id: 'actions',
-    header: () => <div className="text-center text-[10px] font-bold uppercase tracking-wider text-white/90">Actions</div>,
-    size: 100,
+    header: () => <div className="text-center text-[10px] font-semibold uppercase tracking-wider text-white/90">Actions</div>,
+    size: 120,
     cell: ActionCell,
     enableHiding: false,
     enableSorting: false,
   },
 
-  // 6. CRM SPECIFIC
+  // 8. CRM SPECIFIC
   {
     accessorKey: 'contact_stage',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Stage" />,
@@ -814,8 +1160,15 @@ export const columns: ColumnDef<any>[] = [
       return (
         <TooltipProvider>
           <Tooltip>
-            <TooltipTrigger><Avatar className="h-5 w-5"><AvatarImage src={employee.profile_picture_url} /><AvatarFallback className="text-[8px] bg-indigo-600 text-white">{employee.first_name?.[0]}</AvatarFallback></Avatar></TooltipTrigger>
-            <TooltipContent><p className="text-xs">{employee.first_name} {employee.last_name}</p></TooltipContent>
+            <TooltipTrigger>
+              <Avatar className="h-6 w-6 border border-slate-200">
+                <AvatarImage src={employee.profile_picture_url} />
+                <AvatarFallback className="text-[8px] bg-indigo-600 text-white font-bold">
+                  {employee.first_name?.[0]}
+                </AvatarFallback>
+              </Avatar>
+            </TooltipTrigger>
+            <TooltipContent className="text-xs">{employee.first_name} {employee.last_name}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       );
@@ -831,7 +1184,7 @@ export const columns: ColumnDef<any>[] = [
     enableHiding: true,
   },
   
-  // 7. LOCATION (Editable with real-time local time)
+  // 9. LOCATION
   {
     id: 'location',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Location" />,
@@ -844,7 +1197,7 @@ export const columns: ColumnDef<any>[] = [
     enableHiding: true,
   },
 
-  // 8. HIDDEN METADATA (Helpers for filtering)
+  // 10. HIDDEN METADATA
   { id: 'seniority', accessorKey: 'seniority', enableHiding: true, size: 0 },
   { id: 'departments', accessorKey: 'departments', enableHiding: true, size: 0 },
   { id: 'functions', accessorKey: 'functions', enableHiding: true, size: 0 },

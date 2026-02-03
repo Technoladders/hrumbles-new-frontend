@@ -131,21 +131,52 @@ const ContactDetailPage = () => {
   });
 
   // Enrich Contact
-  const handleEnrich = async () => {
+const handleEnrich = async () => {
     setIsEnriching(true);
     try {
-      const { error } = await supabase.functions.invoke('enrich-contact', {
-        body: { contactId: id, apolloPersonId: contact?.apollo_person_id }
-      });
-      if (error) throw error;
-      toast({ title: "Intelligence Refreshed" });
+      // Condition 1: If we ALREADY have the Apollo ID, use standard enrichment
+      if (contact?.apollo_person_id) {
+        const { error } = await supabase.functions.invoke('enrich-contact', {
+          body: { 
+            contactId: id, 
+            apolloPersonId: contact.apollo_person_id 
+          }
+        });
+        if (error) throw error;
+        toast({ title: "Intelligence Refreshed", description: "Contact data updated via Apollo ID." });
+      
+      } else {
+        // Condition 2: If ID is MISSING, use "old-contact-enrich" to find and link the person
+        console.log("Missing Apollo ID, attempting to match...");
+        
+        const payload = {
+          contactId: id,
+          // Match Parameters from existing contact data
+          email: contact?.email,
+          name: contact?.name,
+          linkedin_url: contact?.linkedin_url,
+          // Context for better matching
+          organization_name: contact?.company_name || contact?.companies?.name,
+          domain: contact?.companies?.website 
+        };
+
+        const { error } = await supabase.functions.invoke('old-contact-enrich', {
+          body: payload
+        });
+
+        if (error) throw error;
+        toast({ title: "Contact Matched & Enriched", description: "We found this person in Apollo and linked their ID." });
+      }
+
       refetch();
     } catch (err: any) {
-      toast({ variant: "destructive", title: "Error", description: err.message });
+      console.error(err);
+      toast({ variant: "destructive", title: "Enrichment Failed", description: err.message });
     } finally { 
       setIsEnriching(false); 
     }
   };
+
 
   // Request Phone
   const handleRequestPhone = async () => {

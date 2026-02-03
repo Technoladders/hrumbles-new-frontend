@@ -78,7 +78,11 @@ const intelligenceSearchSlice = createSlice({
       state.results = [];
       state.totalEntries = 0;
       state.currentPage = 1;
-    }
+    },
+    setTotalEntries: (state, action) => {
+      state.totalEntries = action.payload;
+    },
+
 
   },
 });
@@ -93,7 +97,7 @@ export const {
   setFilters,
   setTargetDestination,
   clearSearch,
- setCrmSearchTerm, setSearchResults, setPerPage, resetSearch
+ setCrmSearchTerm, setSearchResults, setPerPage, resetSearch, setTotalEntries
 } = intelligenceSearchSlice.actions;
 
 export default intelligenceSearchSlice.reducer;

@@ -43,5 +43,5 @@ export const saveDiscoveryToCRM = async (person: any, orgId: string, userId: str
     });
   }
   
-  return contact.id;
+  return contact;
 };

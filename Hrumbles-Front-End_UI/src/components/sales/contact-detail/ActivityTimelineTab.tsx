@@ -161,7 +161,9 @@ export const ActivityTimelineTab: React.FC<ActivityTimelineProps> = ({ contact, 
                  value={tab}
                  className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
                >
-                 {tab === 'all' ? 'Activity' : tab + 's'}
+                {tab === 'all' 
+          ? 'All Activity' 
+          : tab.charAt(0).toUpperCase() + tab.slice(1) + 's'}
                </TabsTrigger>
              ))}
            </TabsList>
@@ -506,3 +508,4 @@ const TimelineCard = ({ activity, expanded, onToggle, isOverdue }: any) => {
     </div>
   );
 };
+// claude 5 UI

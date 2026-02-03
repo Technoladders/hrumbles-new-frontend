@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -27,7 +27,7 @@ import { AddToListModal } from '@/components/sales/contacts-table/AddToListModal
 import { columns } from '@/components/sales/contacts-table/columns';
 
 // Redux & Services
-import { setDiscoveryMode, setPage, setFilters, resetSearch } from '@/Redux/intelligenceSearchSlice';
+import { setDiscoveryMode, setPage, setFilters, resetSearch, setPerPage } from '@/Redux/intelligenceSearchSlice';
 import { saveDiscoveryToCRM } from '@/services/sales/discoveryService';
 import { useSimpleContacts } from '@/hooks/sales/useSimpleContacts';
 import { useToast } from '@/hooks/use-toast';
@@ -86,14 +86,27 @@ export default function TanstackContactsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+    // 1. Redux State
+  const { isDiscoveryMode, totalEntries, currentPage, perPage } = useSelector(
+    (state: any) => state.intelligenceSearch
+  );
+
+  useEffect(() => {
+    const pageParam = searchParams.get('page');
+    const pageNumber = pageParam ? parseInt(pageParam, 10) : 1;
+    
+    // Only dispatch if different to prevent loops
+    if (pageNumber !== currentPage) {
+        dispatch(setPage(pageNumber));
+    }
+  }, [searchParams, currentPage, dispatch]);
   
   // Get fileId from route params
   const { fileId } = useParams<{ fileId?: string }>();
   
-  // 1. Redux State
-  const { isDiscoveryMode, totalEntries, currentPage, perPage } = useSelector(
-    (state: any) => state.intelligenceSearch || { isDiscoveryMode: false, currentPage: 1, perPage: 25 }
-  );
+
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   const user = useSelector((state: any) => state.auth.user);
 
@@ -214,10 +227,13 @@ export default function TanstackContactsPage() {
   }, [columnVisibility, columnOrder, columnSizing, preferencesLoaded, user?.id]);
 
   // 9. Unified Data Fetching - Now supports fileId
-  const { data: tableData = [], isLoading, isFetching } = useSimpleContacts({ 
+ const { data: queryResult, isLoading, isFetching } = useSimpleContacts({ 
     fileId: fileId || null, 
     fetchUnfiled: false 
   });
+
+  const tableData = queryResult?.data || [];
+  const totalRowCount = queryResult?.count || 0; // Get count from query
 
   // 10. Actions
   const handleSaveDiscovery = async (person: any, targetFileId?: string) => {
@@ -257,26 +273,83 @@ export default function TanstackContactsPage() {
     }
   };
 
-  const handleListAdd = async (targetFileId: string) => {
-    try {
-      if (isFromDiscovery && selectedContact?.original_data) {
-        await handleSaveDiscovery(selectedContact.original_data, targetFileId);
-      } else if (selectedContact?.id) {
-        await supabase.from('contact_workspace_files').upsert({
+// Replace the current handleListAdd completely
+const handleListAdd = async (targetFileId: string) => {
+  if (!targetFileId) {
+    toast({ variant: "destructive", title: "No list selected" });
+    return;
+  }
+
+  try {
+    if (isFromDiscovery && selectedContact?.original_data) {
+      // ── Discovery → CRM + add to list in one flow ──
+      const person = selectedContact.original_data;
+
+      // 1. Save to contacts + get the new contact
+      const savedContact = await saveDiscoveryToCRM(person, organization_id, user.id);
+
+      if (!savedContact?.id) {
+        throw new Error("Contact was created but no ID returned");
+      }
+
+      // 2. Add to the chosen list
+      const { error } = await supabase
+        .from('contact_workspace_files')
+        .upsert({
+          contact_id: savedContact.id,
+          file_id: targetFileId,
+          added_by: user.id,
+          // optional: added_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `${person.name || person.first_name} saved to CRM and added to list.`,
+      });
+
+      // Refresh relevant queries
+      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+      queryClient.invalidateQueries({ queryKey: ['file-contacts', targetFileId] });
+      queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
+    } 
+    else if (selectedContact?.id) {
+      // ── Normal CRM contact – just add to list ──
+      const { error } = await supabase
+        .from('contact_workspace_files')
+        .upsert({
           contact_id: selectedContact.id,
           file_id: targetFileId,
-          added_by: user.id
+          added_by: user.id,
         });
-        toast({ title: "Added to List" });
-        queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-        queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
+
+      if (error) throw error;
+
+      toast({ title: "Added to List" });
+
+      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+      queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
+      if (fileId) {
+        queryClient.invalidateQueries({ queryKey: ['file-contacts', fileId] });
       }
-      setListModalOpen(false);
-      setIsFromDiscovery(false);
-    } catch (e: any) { 
-      toast({ title: "Error", variant: "destructive", description: e.message }); 
+    } 
+    else {
+      throw new Error("No valid contact selected");
     }
-  };
+  } catch (err: any) {
+    console.error("Add to list failed:", err);
+    toast({
+      variant: "destructive",
+      title: "Failed to add to list",
+      description: err.message || "An unexpected error occurred",
+    });
+  } finally {
+    setListModalOpen(false);
+    setIsFromDiscovery(false);
+    setSelectedContact(null); // clean up
+  }
+};
 
   // --- 11. COMPREHENSIVE ASSET HANDLER (ADD/EDIT/DELETE/FLAG) ---
   const handleAssetAction = async (rowIndex: number, type: 'email' | 'mobile', action: string, value: string, payload?: any) => {
@@ -423,17 +496,42 @@ export default function TanstackContactsPage() {
       columnSizing,
       pagination: { pageIndex: currentPage - 1, pageSize: perPage } 
     },
-    manualPagination: isDiscoveryMode, 
+    manualPagination: true, // <--- ALWAYS TRUE NOW (Server-side paging)
+    rowCount: totalRowCount, // <--- PASS TOTAL COUNT FROM SERVER
     pageCount: isDiscoveryMode ? Math.ceil(totalEntries / perPage) : undefined,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onColumnOrderChange: setColumnOrder,
     onColumnSizingChange: setColumnSizing,
     columnResizeMode: 'onChange',
-    onPaginationChange: (updater) => {
-      if (typeof updater === 'function') {
-         const newState = updater({ pageIndex: currentPage - 1, pageSize: perPage });
-         dispatch(setPage(newState.pageIndex + 1));
+  onPaginationChange: (updater) => {
+      // 1. Calculate the new state
+      // 'updater' is usually a function: (oldState) => newState
+      const currentPagination = { pageIndex: currentPage - 1, pageSize: perPage };
+      const newPagination = typeof updater === 'function'
+        ? updater(currentPagination)
+        : updater;
+
+      // 2. Handle Page Size Change (Rows per page)
+      if (newPagination.pageSize !== perPage) {
+        dispatch(setPerPage(newPagination.pageSize)); // Update Redux
+        dispatch(setPage(1)); // Always reset to page 1 when changing limit
+        
+        // Update URL to page 1
+        setSearchParams(prev => {
+          prev.set('page', '1');
+          return prev;
+        });
+      }
+
+      // 3. Handle Page Index Change (Next/Prev)
+      else if (newPagination.pageIndex !== currentPagination.pageIndex) {
+        const newPageNumber = newPagination.pageIndex + 1;
+        // Update URL (useEffect will catch this and update Redux)
+        setSearchParams(prev => {
+          prev.set('page', newPageNumber.toString());
+          return prev;
+        });
       }
     },
     getCoreRowModel: getCoreRowModel(),
@@ -596,50 +694,61 @@ export default function TanstackContactsPage() {
           )}
 
           {/* TABLE AREA */}
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-            <div className="flex-1 overflow-hidden p-0 pb-0 flex flex-col">
-               {isLoading || isFetching ? (
-                 <div className="flex-1 flex flex-col items-center justify-center bg-white rounded-2xl border border-dashed">
-                   <Spinner size="xl" color="indigo.500" />
-                   <p className="mt-4 text-xs font-black text-slate-400 uppercase tracking-widest">
-                     Syncing Intelligence...
-                   </p>
+<div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+  <div className="flex-1 overflow-hidden p-0 pb-0 flex flex-col relative">
+      
+      {/* 
+         CHANGE 1: Only show full Spinner on INITIAL load (isLoading).
+         On updates (isFetching), keep the table mounted but dimmed.
+      */}
+      {isLoading ? (
+        <div className="flex-1 flex flex-col items-center justify-center bg-white rounded-2xl border border-dashed">
+          <Spinner size="xl" color="indigo.500" />
+          <p className="mt-4 text-xs font-black text-slate-400 uppercase tracking-widest">
+            Loading Contacts...
+          </p>
+        </div>
+      ) : (
+        <div className={cn(
+            "flex-1 bg-white rounded-t-2xl border shadow-sm overflow-hidden flex flex-col transition-opacity duration-200",
+            // Dim the table while fetching new page/rows
+            isFetching ? "opacity-60 pointer-events-none" : "opacity-100"
+        )}>
+           {isDiscoveryMode && tableData.length === 0 ? (
+             <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
+                 <div className="bg-indigo-50 p-4 rounded-full mb-4">
+                   <Zap className="h-8 w-8 text-indigo-600" />
                  </div>
-               ) : (
-                 <div className="flex-1 bg-white rounded-t-2xl border shadow-sm overflow-hidden flex flex-col">
-                    {isDiscoveryMode && tableData.length === 0 ? (
-                      <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-                          <div className="bg-indigo-50 p-4 rounded-full mb-4">
-                            <Zap className="h-8 w-8 text-indigo-600" />
-                          </div>
-                          <h3 className="text-lg font-bold text-slate-800">Global Intelligence Search</h3>
-                          <p className="text-sm text-slate-500 max-w-md mt-2">
-                            Search over 275M+ verified contacts.
-                          </p>
-                      </div>
-                    ) : tableData.length === 0 ? (
-                      <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-                          <div className="bg-slate-100 p-4 rounded-full mb-4">
-                            <FolderOpen className="h-8 w-8 text-slate-400" />
-                          </div>
-                          <h3 className="text-lg font-bold text-slate-800">No Contacts Yet</h3>
-                          <p className="text-sm text-slate-500 max-w-md mt-2">
-                            {fileId 
-                              ? "This list is empty. Add contacts from the Discovery mode or your CRM."
-                              : "Start by adding contacts or searching in Discovery mode."
-                            }
-                          </p>
-                      </div>
-                    ) : (
-                      <DataTable table={table} />
-                    )}
+                 <h3 className="text-lg font-bold text-slate-800">Global Intelligence Search</h3>
+                 <p className="text-sm text-slate-500 max-w-md mt-2">
+                   Search over 275M+ verified contacts.
+                 </p>
+             </div>
+           ) : tableData.length === 0 ? (
+             <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
+                 <div className="bg-slate-100 p-4 rounded-full mb-4">
+                   <FolderOpen className="h-8 w-8 text-slate-400" />
                  </div>
-               )}
-               <div className="bg-white border-x border-b rounded-b-2xl px-6 py-3 flex justify-between items-center shadow-sm mb-6">
-                  <DataTablePagination table={table} />
-               </div>
-            </div>
-          </div>
+                 <h3 className="text-lg font-bold text-slate-800">No Contacts Yet</h3>
+                 <p className="text-sm text-slate-500 max-w-md mt-2">
+                   {fileId 
+                     ? "This list is empty. Add contacts from the Discovery mode or your CRM."
+                     : "Start by adding contacts or searching in Discovery mode."
+                   }
+                 </p>
+             </div>
+           ) : (
+             <DataTable table={table} />
+           )}
+        </div>
+      )}
+
+      {/* Pagination Bar */}
+      <div className="bg-white border-x border-b rounded-b-2xl px-6 py-3 flex justify-between items-center shadow-sm mb-6">
+         <DataTablePagination table={table} />
+      </div>
+  </div>
+</div>
         </div>
 
         {/* ADD TO LIST MODAL */}
