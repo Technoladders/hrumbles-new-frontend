@@ -9,6 +9,7 @@ import firmOrganizationReducer from './firmOrganizationSlice';
 import workspaceReducer from "./workspaceSlice";
 import uiReducer from './uiSlice';
 import permissionsReducer from './permissionSlice';
+import intelligenceSearchReducer from './intelligenceSearchSlice';
 
 
 
@@ -24,6 +25,7 @@ const store = configureStore({
     workspace: workspaceReducer,
     ui: uiReducer,
     permissions: permissionsReducer,
+    intelligenceSearch: intelligenceSearchReducer,
   },
 });
 

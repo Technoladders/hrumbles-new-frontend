@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { EmptyState } from '@/components/sales/contacts-table/EmptyState';
 import { cn } from '@/lib/utils';
 
-// We use raw HTML tags instead of the UI components to have full control over the sticky/overflow behavior
 const rowVariants = {
   hidden: { opacity: 0, y: 8 },
   visible: (i: number) => ({
@@ -30,12 +29,21 @@ export function DataTable<TData, TValue>({
         className="table-fixed border-collapse" 
         style={{ width: totalTableWidth, minWidth: '100%' }}
       >
-        {/* THEAD: Sticky so it stays at the top during Y-scroll */}
-        <thead className="sticky top-0 z-40 bg-gradient-to-r from-purple-600 to-violet-600 shadow-md">
+        {/* THEAD: Sticky so it stays at the top during Y-scroll - New modern gradient header */}
+        <thead className="sticky top-0 z-40">
           {table.getHeaderGroups().map((headerGroup: any) => (
-            <tr key={headerGroup.id} className="border-b border-slate-600/30">
+            <tr 
+              key={headerGroup.id} 
+              className="bg-gradient-to-r from-purple-600 to-violet-600"
+            >
               {headerGroup.headers.map((header: any) => {
                 const isStickyColumn = header.column.id === 'select' || header.column.id === 'name';
+                
+                // Calculate left position for sticky columns
+                let leftPosition = 0;
+                if (header.column.id === 'name') {
+                  leftPosition = 40; // width of select column
+                }
                 
                 return (
                   <th
@@ -44,12 +52,15 @@ export function DataTable<TData, TValue>({
                     style={{ 
                       width: header.getSize(),
                       position: isStickyColumn ? 'sticky' : 'relative',
-                      left: isStickyColumn ? (header.column.id === 'select' ? 0 : 40) : undefined,
+                      left: isStickyColumn ? leftPosition : undefined,
                     }}
                     className={cn(
                       "px-3 py-3 text-left text-[10px] font-bold text-white uppercase tracking-wider",
-                      "border-r border-slate-600/20 last:border-r-0",
-                      isStickyColumn && "z-50 bg-purple-600" // Ensure sticky columns stay purple
+                      "border-r border-slate-600/30 last:border-r-0",
+                      // Sticky columns need solid background to hide content scrolling behind
+                      isStickyColumn && "z-50",
+                      header.column.id === 'select' && "bg-gradient-to-r from-purple-600 to-violet-600",
+                      header.column.id === 'name' && "bg-gradient-to-r from-purple-600 to-violet-600 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.3)]"
                     )}
                   >
                     <div className="flex items-center gap-1.5">
@@ -62,8 +73,8 @@ export function DataTable<TData, TValue>({
                       onTouchStart={header.getResizeHandler()}
                       className={cn(
                         "absolute top-0 right-0 h-full w-1.5 cursor-col-resize select-none touch-none opacity-0 hover:opacity-100 transition-opacity",
-                        "before:absolute before:inset-y-0 before:right-0 before:w-0.5 before:bg-white/50",
-                        header.column.getIsResizing() && "opacity-100 before:bg-white before:w-1"
+                        "before:absolute before:inset-y-0 before:right-0 before:w-0.5 before:bg-white/30",
+                        header.column.getIsResizing() && "opacity-100 before:bg-indigo-400 before:w-1"
                       )}
                     />
                   </th>
@@ -87,11 +98,17 @@ export function DataTable<TData, TValue>({
                   layout
                   className={cn(
                     "group border-b border-slate-100 transition-colors duration-150",
-                    row.getIsSelected() ? "bg-blue-50/60" : "hover:bg-slate-50/80",
+                    row.getIsSelected() ? "bg-indigo-50/60" : "hover:bg-slate-50/80",
                   )}
                 >
                   {row.getVisibleCells().map((cell: any) => {
                     const isStickyColumn = cell.column.id === 'select' || cell.column.id === 'name';
+                    
+                    // Calculate left position for sticky columns
+                    let leftPosition = 0;
+                    if (cell.column.id === 'name') {
+                      leftPosition = 40; // width of select column
+                    }
                     
                     return (
                       <td
@@ -99,14 +116,18 @@ export function DataTable<TData, TValue>({
                         style={{ 
                           width: cell.column.getSize(),
                           position: isStickyColumn ? 'sticky' : 'relative',
-                          left: isStickyColumn ? (cell.column.id === 'select' ? 0 : 40) : undefined,
+                          left: isStickyColumn ? leftPosition : undefined,
                         }}
                         className={cn(
                           "px-3 py-1.5 text-xs text-slate-700 align-middle border-r border-slate-100/50 last:border-r-0",
-                          isStickyColumn && "z-10 bg-white group-hover:bg-slate-50/80",
-                          isStickyColumn && row.getIsSelected() && "bg-blue-50/60",
-                          // Add a subtle shadow to separate the sticky name column when scrolling
-                          isStickyColumn && cell.column.id === 'name' && "shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          // Sticky columns need solid opaque background - not transparent!
+                          isStickyColumn && "z-20",
+                          // Default state background
+                          cell.column.id === 'select' && "bg-white group-hover:bg-slate-50/80",
+                          cell.column.id === 'name' && "bg-white group-hover:bg-slate-50/80 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.05)]",
+                          // Selected state override
+                          cell.column.id === 'select' && row.getIsSelected() && "bg-indigo-50/60",
+                          cell.column.id === 'name' && row.getIsSelected() && "bg-indigo-50/60",
                         )}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}

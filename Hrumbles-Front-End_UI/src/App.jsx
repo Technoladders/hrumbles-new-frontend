@@ -140,6 +140,8 @@ import LeadsWorkspace from './pages/crm/LeadsWorkspace.tsx'
 import ContactDetailPage from './pages/sales/ContactDetailPage.tsx'
 
 import SalesDashboard from "./pages/sales/SalesDashboard";
+import DiscoveryPage from "./pages/sales/DiscoveryPage";
+
 
 // Clients
 import ClientPage from "./pages/clients/ClientDashboard";
@@ -584,6 +586,7 @@ const validateCurrentSession = useCallback(async () => {
               <Route path="/lists/contacts/file/:fileId" element={<TanstackContactsPage />} />
               <Route path="/lead" element={<LeadsWorkspace />} />
               <Route path="/contacts/:id" element={<ContactDetailPage />} />
+              <Route path="/discovery" element={<DiscoveryPage />} />
 
 
 

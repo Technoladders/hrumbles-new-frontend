@@ -160,6 +160,18 @@ export async function searchPeopleInApollo(
   }
 }
 
+export async function searchPeopleInDiscovery(
+  filters: any,
+  page: number = 1,
+  perPage: number = 100
+): Promise<any> {
+  const { data, error } = await supabase.functions.invoke('apollo-people-search', {
+    body: { filters, page, per_page: perPage },
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function saveSearchResultToContacts(
   person: any, // The raw object from search
   organizationId: string,

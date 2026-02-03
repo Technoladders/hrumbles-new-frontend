@@ -570,7 +570,7 @@ const EmployeeSalaryStructureDrawer = ({ isOpen, onOpenChange, selectedEmployee 
                         <Separator className="bg-slate-700" />
 
                         <div className="flex justify-between items-end">
-                            <span className="text-slate-400 text-sm">Calculated Annual CTC</span>
+                            <span className="text-slate-400 text-sm">Calculated Annual CTC (Gross)</span>
                             <span className="text-xl font-bold text-white">₹{totals.ctcCalcY.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                         </div>
                         

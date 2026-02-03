@@ -1,4 +1,3 @@
-// src/components/sales/contacts-table/PeopleSearchDialog.tsx
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -10,10 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Select,
   SelectContent,
@@ -36,28 +32,25 @@ import {
 } from "@/components/ui/popover";
 import {
   Search,
-  UserPlus,
-  Building2,
   MapPin,
-  Mail,
-  Linkedin,
-  AlertCircle,
   Check,
   ChevronsUpDown,
-  Plus
+  Plus,
+  Building2,
+  Briefcase,
+  Sparkles
 } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from "@/lib/utils";
-import {
-  searchPeopleInApollo,
-  saveSearchResultToContacts,
-  type ApolloSearchPerson,
-  type ApolloSearchFilters,
-} from '@/services/apolloSearch';
+import { 
+  setDiscoveryMode, 
+  setFilters, 
+  setTargetDestination 
+} from '../../../Redux/intelligenceSearchSlice';
 
 interface PeopleSearchDialogProps {
   open: boolean;
@@ -68,236 +61,185 @@ export const PeopleSearchDialog: React.FC<PeopleSearchDialogProps> = ({
   open,
   onOpenChange,
 }) => {
+  const dispatch = useDispatch();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-    const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
-const { fileId: urlFileId } = useParams();
-const [selectedWorkspace, setSelectedWorkspace] = React.useState('');
-const [selectedFile, setSelectedFile] = React.useState(urlFileId || '');
+  const { fileId: urlFileId } = useParams();
 
-// NEW: Fetch workspace_id from workspace_files if urlFileId is provided
-const { data: fileInfo, isLoading: isFileLoading } = useQuery({
-  queryKey: ['workspace-file-info', urlFileId],
-  queryFn: async () => {
-    if (!urlFileId) return null;
-    const { data, error } = await supabase
-      .from('workspace_files')
-      .select('workspace_id')
-      .eq('id', urlFileId)
-      .single();
-    if (error) {
-      console.error('Failed to fetch workspace for file:', error);
-      throw error; // Will trigger query error handling if needed
-    }
-    return data;
-  },
-  enabled: !!urlFileId,
-});
+  // --- Local Form State ---
+  const [selectedWorkspace, setSelectedWorkspace] = useState('');
+  const [selectedFile, setSelectedFile] = useState(urlFileId || '');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [titleQuery, setTitleQuery] = useState('');
+  const [locationQuery, setLocationQuery] = useState('');
+  const [orgQuery, setOrgQuery] = useState('');
+  const [orgMode, setOrgMode] = useState<'include' | 'exclude'>('include');
+  const [isLocationOpen, setIsLocationOpen] = useState(false);
+
+  // --- External Data Fetching ---
+  const { data: fileInfo, isLoading: isFileLoading } = useQuery({
+    queryKey: ['workspace-file-info', urlFileId],
+    queryFn: async () => {
+      if (!urlFileId) return null;
+      const { data, error } = await supabase
+        .from('workspace_files')
+        .select('workspace_id')
+        .eq('id', urlFileId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!urlFileId,
+  });
 
   const { data: workspaces } = useQuery({
     queryKey: ['workspaces', organization_id],
-    queryFn: async () => (await supabase.from('workspaces').select('id, name')).data
+    queryFn: async () => (await supabase.from('workspaces').select('id, name')).data,
+    enabled: !!organization_id
   });
+
   const { data: files } = useQuery({
     queryKey: ['workspace-files', selectedWorkspace],
     queryFn: async () => (await supabase.from('workspace_files').select('id, name').eq('workspace_id', selectedWorkspace)).data,
     enabled: !!selectedWorkspace
   });
 
-// NEW: Auto-set selectedWorkspace when fileInfo loads
-useEffect(() => {
-  if (fileInfo?.workspace_id) {
-    setSelectedWorkspace(fileInfo.workspace_id);
-  }
-}, [fileInfo?.workspace_id]);
+  useEffect(() => {
+    if (fileInfo?.workspace_id) {
+      setSelectedWorkspace(fileInfo.workspace_id);
+    }
+  }, [fileInfo?.workspace_id]);
 
-  // --- Filter States ---
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [titleQuery, setTitleQuery] = React.useState('');
-  const [locationQuery, setLocationQuery] = React.useState('');
-  const [orgQuery, setOrgQuery] = React.useState('');
-  const [orgMode, setOrgMode] = React.useState<'include' | 'exclude'>('include');
-  const [isLocationOpen, setIsLocationOpen] = React.useState(false);
-
-  // Expanded Comprehensive Location List (States & Cities)
   const locationOptions = React.useMemo(() => [
-    // States
-    "Andhra Pradesh, India", "Arunachal Pradesh, India", "Assam, India", "Bihar, India", "Chhattisgarh, India", 
-    "Goa, India", "Gujarat, India", "Haryana, India", "Himachal Pradesh, India", "Jharkhand, India", 
-    "Karnataka, India", "Kerala, India", "Madhya Pradesh, India", "Maharashtra, India", "Manipur, India", 
-    "Meghalaya, India", "Mizoram, India", "Nagaland, India", "Odisha, India", "Punjab, India", 
-    "Rajasthan, India", "Sikkim, India", "Tamil Nadu, India", "Telangana, India", "Tripura, India", 
-    "Uttar Pradesh, India", "Uttarakhand, India", "West Bengal, India",
-    // Major & Tier 2 Cities
-    "Ahmedabad, Gujarat", "Amritsar, Punjab", "Bangalore, Karnataka", "Bhopal, Madhya Pradesh", 
-    "Bhubaneswar, Odisha", "Chandigarh, India", "Chennai, Tamil Nadu", "Coimbatore, Tamil Nadu", 
-    "Dehradun, Uttarakhand", "Delhi, NCR", "Erode, Tamil Nadu", "Faridabad, Haryana", "Ghaziabad, Uttar Pradesh", 
-    "Gurgaon, Haryana", "Guwahati, Assam", "Gwalior, Madhya Pradesh", "Hubli, Karnataka", "Hyderabad, Telangana", 
-    "Indore, Madhya Pradesh", "Jabalpur, Madhya Pradesh", "Jaipur, Rajasthan", "Jalandhar, Punjab", 
-    "Jammu, J&K", "Jamshedpur, Jharkhand", "Jodhpur, Rajasthan", "Kanpur, Uttar Pradesh", "Karur, Tamil Nadu", 
-    "Kochi, Kerala", "Kolkata, West Bengal", "Lucknow, Uttar Pradesh", "Ludhiana, Punjab", "Madurai, Tamil Nadu", 
-    "Mangalore, Karnataka", "Meerut, Uttar Pradesh", "Mumbai, Maharashtra", "Mysore, Karnataka", "Nagpur, Maharashtra", 
-    "Nashik, Maharashtra", "Noida, Uttar Pradesh", "Patna, Bihar", "Pondicherry, India", "Pune, Maharashtra", 
-    "Raipur, Chhattisgarh", "Rajkot, Gujarat", "Ranchi, Jharkhand", "Salem, Tamil Nadu", "Shimla, Himachal Pradesh", 
-    "Surat, Gujarat", "Thane, Maharashtra", "Thiruvananthapuram, Kerala", "Tirunelveli, Tamil Nadu", 
-    "Tirupur, Tamil Nadu", "Trichy, Tamil Nadu", "Udaipur, Rajasthan", "Vadodara, Gujarat", "Varanasi, Uttar Pradesh", 
-    "Vijayawada, Andhra Pradesh", "Visakhapatnam, Andhra Pradesh", "Warangal, Telangana"
+    "Ahmedabad, Gujarat", "Bangalore, Karnataka", "Chennai, Tamil Nadu", "Coimbatore, Tamil Nadu", 
+    "Delhi, NCR", "Gurgaon, Haryana", "Hyderabad, Telangana", "Kochi, Kerala", "Kolkata, West Bengal", 
+    "Mumbai, Maharashtra", "Noida, Uttar Pradesh", "Pune, Maharashtra", "California, USA", "London, UK", "Dubai, UAE"
   ].sort((a, b) => a.localeCompare(b)), []);
 
-  const [filters, setFilters] = React.useState<ApolloSearchFilters>({
-    person_titles: [],
-    q_keywords: '',
-  });
-  const [hasSearched, setHasSearched] = React.useState(false);
+  // --- SEARCH EXECUTION ---
+  const handleExecuteSearch = () => {
+    // 1. Validation: Ensure destination is set
+    const finalFileId = selectedFile || urlFileId;
+    const finalWorkspaceId = selectedWorkspace || fileInfo?.workspace_id;
 
-  const { data: searchResults, isLoading, error, refetch } = useQuery({
-    queryKey: ['apolloSearch', filters],
-    queryFn: () => searchPeopleInApollo(filters, 1, 20),
-    enabled: false,
-  });
-
-const saveMutation = useMutation({
-  mutationFn: async (person: ApolloSearchPerson) => {
-
-    const resolvedWorkspace = selectedWorkspace || fileInfo?.workspace_id;
-    if (!resolvedWorkspace) {
-      throw new Error('Workspace ID is required but not available.');
-    }
-    // FIX: Pass all 5 required arguments
-    const result = await saveSearchResultToContacts(
-      person, 
-      organization_id, 
-      resolvedWorkspace,  // Use resolved value
-      selectedFile || urlFileId,  // Ensure file ID is always passed
-      user?.id // Pass the logged-in user ID
-    );
-    return result;
-  },
-  onSuccess: (data) => {
-    queryClient.invalidateQueries({ queryKey: ['simpleContactsList'] }); // Match your query key
-    toast({ title: 'Contact Added! 🎉', description: 'Person has been added to your contacts.' });
-  },
-  onError: (error: any) => {
-    toast({ title: 'Failed to Add Contact', description: error.message, variant: 'destructive' });
-  },
-});
-
-  const handleSearch = () => {
-    const newFilters: ApolloSearchFilters = {};
-    if (searchQuery.trim()) newFilters.q_keywords = searchQuery.trim();
-    if (titleQuery.trim()) newFilters.person_titles = titleQuery.split(',').map(t => t.trim());
-    if (locationQuery.trim()) newFilters.person_locations = [locationQuery.trim()];
-    
-    if (orgQuery.trim()) {
-      const orgs = orgQuery.split(',').map(o => o.trim());
-      if (orgMode === 'include') {
-        newFilters.organization_names = orgs;
-      } else {
-        (newFilters as any).excluded_organization_names = orgs;
-      }
+    if (!finalFileId || !finalWorkspaceId) {
+      toast({ 
+        title: "Configuration Required", 
+        description: "Please select a target Workspace and File to save discovery results.", 
+        variant: "destructive" 
+      });
+      return;
     }
 
-    setFilters(newFilters);
-    setHasSearched(true);
-    refetch();
-  };
+    // 2. Build Filters
+    const apiFilters: any = {
+      q_keywords: searchQuery || undefined,
+      person_titles: titleQuery ? [titleQuery] : undefined,
+      person_locations: locationQuery ? [locationQuery] : undefined,
+    };
 
-const handleAddContact = (person: ApolloSearchPerson) => {
-  if (!selectedFile && !urlFileId) {
-    toast({ title: "Action Required", description: "Please select a workspace and file first.", variant: "destructive" });
-    return;
-  }
-  // NEW: Quick check for file loading (brief UX feedback if fetching workspace)
-  if (urlFileId && isFileLoading) {
-    toast({ title: "Loading", description: "Fetching file details...", variant: "default" });
-    return;
-  }
-  saveMutation.mutate(person);
-};
+    if (orgQuery) {
+      if (orgMode === 'include') apiFilters.organization_names = [orgQuery];
+      else apiFilters.excluded_organization_names = [orgQuery];
+    }
 
-  const getInitials = (name: string) => {
-    if (!name) return '??';
-    return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
+    // 3. Dispatch to Redux
+    dispatch(setFilters(apiFilters));
+    dispatch(setTargetDestination({ 
+      workspaceId: finalWorkspaceId, 
+      fileId: finalFileId 
+    }));
+    dispatch(setDiscoveryMode(true));
+
+    // 4. UI Transition
+    onOpenChange(false);
+    toast({ 
+      title: "Discovery Mode Activated", 
+      description: "Switching to global professional database view.",
+    });
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl overflow-y-auto rounded-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            Search People in Apollo.io
+          <DialogTitle className="flex items-center gap-2 text-xl font-black text-slate-900">
+            <Sparkles className="h-6 w-6 text-indigo-600" />
+            Global Professional Discovery
           </DialogTitle>
-          <DialogDescription>
-            Find and add new contacts from Apollo.io's database
+          <DialogDescription className="font-medium text-slate-500">
+            Configure filters to search across 275M+ verified professional profiles.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4 border-b">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Keywords */}
-            <div>
-              <Label htmlFor="search">Name or Keywords</Label>
+        <div className="space-y-6 py-4">
+          {/* Destination Config (Shown only if not already in a specific file) */}
+          {!urlFileId && (
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge className="bg-indigo-600 text-white text-[9px] font-black uppercase tracking-tighter">Required</Badge>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Target Destination</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-bold text-slate-700">Workspace</Label>
+                  <Select value={selectedWorkspace} onValueChange={setSelectedWorkspace}>
+                    <SelectTrigger className="bg-white"><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectContent>
+                      {workspaces?.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-bold text-slate-700">Target File</Label>
+                  <Select value={selectedFile} onValueChange={setSelectedFile} disabled={!selectedWorkspace}>
+                    <SelectTrigger className="bg-white"><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectContent>
+                      {files?.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Filter Inputs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                <Search size={12}/> Keywords or Name
+              </Label>
               <Input
-                id="search"
-                placeholder="e.g., John Smith, Software"
+                placeholder="e.g., Jane Doe, Product Designer"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                className="h-10 focus-visible:ring-indigo-500"
               />
             </div>
 
-            {/* ENHANCED Location Searchable Dropdown */}
-            <div className="flex flex-col space-y-2">
-              <Label htmlFor="location" className="flex items-center gap-1">
-                <MapPin className="h-3 w-3" /> Location
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                <MapPin size={12}/> Location
               </Label>
               <Popover open={isLocationOpen} onOpenChange={setIsLocationOpen}>
                 <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    className="justify-between font-normal text-left h-10 overflow-hidden"
-                  >
-                    {locationQuery ? locationQuery : "Select city or state..."}
+                  <Button variant="outline" className="w-full justify-between font-medium h-10">
+                    {locationQuery || "Search city/state..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0" align="start">
+                <PopoverContent className="w-[300px] p-0 shadow-2xl" align="start">
                   <Command>
-                    <CommandInput 
-                      placeholder="Type a city or state..." 
-                      value={locationQuery}
-                      onValueChange={(val) => setLocationQuery(val)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && locationQuery) {
-                           setIsLocationOpen(false);
-                           handleSearch();
-                        }
-                      }}
-                    />
+                    <CommandInput placeholder="Filter locations..." value={locationQuery} onValueChange={setLocationQuery} />
                     <CommandList>
-                      {/* Allow custom entry if not in list (e.g., Karur) */}
                       <CommandEmpty>
-                        <Button 
-                          variant="ghost" 
-                          className="w-full justify-start text-xs text-purple-600"
-                          onClick={() => setIsLocationOpen(false)}
-                        >
-                          <Plus className="mr-2 h-3 w-3" /> Use custom: "{locationQuery}"
+                        <Button variant="ghost" className="w-full justify-start text-xs text-indigo-600" onClick={() => setIsLocationOpen(false)}>
+                          <Plus size={12} className="mr-2"/> Use custom: "{locationQuery}"
                         </Button>
                       </CommandEmpty>
-                      <CommandGroup heading="Locations">
+                      <CommandGroup heading="Suggestions">
                         {locationOptions.map((loc) => (
-                          <CommandItem
-                            key={loc}
-                            value={loc}
-                            onSelect={(currentValue) => {
-                              setLocationQuery(currentValue);
-                              setIsLocationOpen(false);
-                            }}
-                          >
+                          <CommandItem key={loc} value={loc} onSelect={(v) => { setLocationQuery(v); setIsLocationOpen(false); }}>
                             <Check className={cn("mr-2 h-4 w-4", locationQuery === loc ? "opacity-100" : "opacity-0")} />
                             {loc}
                           </CommandItem>
@@ -309,97 +251,48 @@ const handleAddContact = (person: ApolloSearchPerson) => {
               </Popover>
             </div>
 
-            {/* Job Title */}
-            <div>
-              <Label htmlFor="title">Job Title</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                <Briefcase size={12}/> Specific Job Title
+              </Label>
               <Input
-                id="title"
-                placeholder="e.g., CEO, Developer, Manager"
+                placeholder="e.g., Software Engineer"
                 value={titleQuery}
                 onChange={(e) => setTitleQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                className="h-10"
               />
             </div>
 
-            {/* Company Filter */}
-            <div className="space-y-2">
-              <Label className="flex justify-between items-center">
-                <span>Company Filter</span>
-                <span className="text-[10px] text-gray-400">Comma separated for multiple</span>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                <Building2 size={12}/> Organisation Filter
               </Label>
               <div className="flex gap-2">
                 <Select value={orgMode} onValueChange={(v: any) => setOrgMode(v)}>
-                  <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-[100px] text-[10px] font-bold uppercase"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="include">Is any of</SelectItem>
-                    <SelectItem value="exclude">Is not any of</SelectItem>
+                    <SelectItem value="include">Is</SelectItem>
+                    <SelectItem value="exclude">Is Not</SelectItem>
                   </SelectContent>
                 </Select>
                 <Input
-                  placeholder="Enter companies..."
+                  placeholder="Company Name..."
                   value={orgQuery}
                   onChange={(e) => setOrgQuery(e.target.value)}
-                  className="flex-1"
-                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                  className="flex-1 h-10"
                 />
               </div>
             </div>
           </div>
-
-          <Button onClick={handleSearch} disabled={isLoading} className="w-full bg-purple-600 hover:bg-purple-700">
-            <Search className="h-4 w-4 mr-2" />
-            {isLoading ? 'Searching...' : 'Search Apollo.io'}
-          </Button>
         </div>
 
-        {/* Add this UI before the results list */}
-        {!urlFileId && (
-          <div className="flex gap-4 p-4 bg-slate-50 rounded-lg border mb-4">
-            <div className="flex-1">
-              <Label className="text-[10px] uppercase font-bold">Target Workspace</Label>
-              <Select onValueChange={setSelectedWorkspace}>
-                <SelectTrigger><SelectValue placeholder="Select Workspace" /></SelectTrigger>
-                <SelectContent>{workspaces?.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="flex-1">
-              <Label className="text-[10px] uppercase font-bold">Target File</Label>
-              <Select onValueChange={setSelectedFile} disabled={!selectedWorkspace}>
-                <SelectTrigger><SelectValue placeholder="Select File" /></SelectTrigger>
-                <SelectContent>{files?.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-          </div>
-        )}
-
-        {/* --- Results Section (Preserved) --- */}
-        <div className="space-y-3 mt-4">
-          {isLoading && <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 w-full" />)}</div>}
-          {error && <Card className="border-red-200 bg-red-50"><CardContent className="flex items-center gap-3 py-4"><AlertCircle className="h-5 w-5 text-red-600" /><div><p className="font-medium text-red-900">Search Failed</p><p className="text-sm text-red-700">{(error as Error).message}</p></div></CardContent></Card>}
-          {!isLoading && hasSearched && searchResults?.people.length === 0 && <Card className="border-yellow-200 bg-yellow-50"><CardContent className="flex flex-col items-center gap-3 py-8"><AlertCircle className="h-12 w-12 text-yellow-600" /><div className="text-center"><p className="font-medium text-yellow-900">No Results Found</p></div></CardContent></Card>}
-          {!isLoading && searchResults && searchResults.people.map((person) => (
-                <Card key={person.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-4">
-                      <Avatar className="h-16 w-16">
-                        {person.photo_url ? <AvatarImage src={person.photo_url} /> : <AvatarFallback className="bg-purple-100 text-purple-600">{getInitials(person.name)}</AvatarFallback>}
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div><h3 className="font-semibold text-gray-900">{person.name}</h3><p className="text-sm text-gray-600">{person.title}</p></div>
-                          <Button size="sm" onClick={() => handleAddContact(person)} disabled={saveMutation.isPending}><UserPlus className="h-4 w-4 mr-1" />Add</Button>
-                        </div>
-                        {person.organization && <div className="flex items-center gap-1 text-sm text-gray-500 mt-2"><Building2 className="h-3 w-3" />{person.organization.name}</div>}
-                        <div className="flex flex-wrap gap-3 mt-3">
-                          {person.email && <div className="flex items-center gap-1 text-xs text-gray-600"><Mail className="h-3 w-3" />{person.email}</div>}
-                          {(person.city || person.state || person.country) && <div className="flex items-center gap-1 text-xs text-gray-600"><MapPin className="h-3 w-3" />{[person.city, person.state, person.country].filter(Boolean).join(', ')}</div>}
-                          {person.linkedin_url && <a href={person.linkedin_url} target="_blank" className="flex items-center gap-1 text-xs text-blue-600"><Linkedin className="h-3 w-3" />LinkedIn</a>}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+        <div className="pt-4 border-t flex justify-end">
+          <Button 
+            onClick={handleExecuteSearch} 
+            className="w-full md:w-auto px-10 bg-indigo-600 hover:bg-indigo-700 font-black shadow-lg shadow-indigo-100"
+          >
+            LAUNCH DISCOVERY ENGINE
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

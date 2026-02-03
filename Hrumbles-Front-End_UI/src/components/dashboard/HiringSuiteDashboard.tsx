@@ -221,7 +221,7 @@ const HiringSuiteDashboard = ({ employeeId }: { employeeId: string; role: string
 
   return (
     <div className="min-h-screen bg-slate-50 p-2 sm:p-4 md:p-6 lg:p-8">
-      <div className="max-w-8xl mx-auto space-y-4 sm:space-y-6">
+      <div className="max-w-9xl mx-auto space-y-4 sm:space-y-6">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 tracking-tight">Hiring Suite Dashboard</h1>
         
         {/* --- ROW 1 --- */}
