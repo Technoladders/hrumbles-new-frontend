@@ -680,7 +680,7 @@ const handleListAdd = async (targetFileId: string) => {
           
           {/* SIDEBAR */}
           {isSidebarOpen && (
-            <div className="w-[320px] flex-shrink-0 border-r bg-white z-20 overflow-hidden">
+            <div className="w-[220px] flex-shrink-0 border-r bg-white z-20 overflow-hidden">
                {isDiscoveryMode ? (
                  <DiscoverySidebar /> 
                ) : (
@@ -688,6 +688,7 @@ const handleListAdd = async (targetFileId: string) => {
                    table={table} 
                    isOpen={isSidebarOpen} 
                    onClose={() => setIsSidebarOpen(false)} 
+                   fileId={fileId || null}
                  />
                )}
             </div>

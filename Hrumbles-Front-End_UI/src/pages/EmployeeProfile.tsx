@@ -11,9 +11,10 @@ import { toast } from "sonner";
 import { Input } from '@/components/ui/input';
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Edit, Mail, Phone, Globe, User, MoreVertical, Activity, Clock,   FileText, Home, Eye, Pencil, Users, UserCircle, Building2, BadgeCheck, Cog, MessageCircle, Fingerprint, CreditCard, Download, Copy, Briefcase, ShieldCheck, ShieldAlert, Loader2, CalendarDays, Heart, Droplet, CalendarPlus, IndianRupee, Timer, Hourglass, ClipboardList, Upload, Trash2, Paperclip, X, TrendingUp,  TrendingDown,Wallet  } from "lucide-react";
+import { Edit, Mail, Phone, Globe, User, MoreVertical, Activity, Clock,   FileText, Home, Eye, Pencil, Users, UserCircle, Building2, BadgeCheck, Cog, MessageCircle, Fingerprint, CreditCard, Download, Copy, Briefcase, ShieldCheck, ShieldAlert, Loader2, CalendarDays, Heart, Droplet, CalendarPlus, IndianRupee, Timer, Hourglass, ClipboardList, Upload, Trash2, Paperclip, X, TrendingUp,  TrendingDown, Wallet, CheckCircle2, XCircle, AlertTriangle, SearchCheck   } from "lucide-react";
 import { useSelector } from "react-redux";
 import SalaryStructureView from "@/pages/salary-breakup/SalaryStructureView"; 
+import VerificationTab from "@/components/admin/employee-profile/VerificationTab";
 
 interface PaymentEarning {
   id: string;
@@ -198,6 +199,19 @@ const EmployeeProfile = () => {
   const navigate = useNavigate();
   const [employee, setEmployee] = useState<EmployeeDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Verification States
+const [isVerifyingProfile, setIsVerifyingProfile] = useState(false);
+const [showVerificationModal, setShowVerificationModal] = useState(false);
+const [verificationResult, setVerificationResult] = useState<any>(null);
+
+// State for Employment Result
+const [employmentResult, setEmploymentResult] = useState<any>(null);
+const [profileResult, setProfileResult] = useState<any>(null);
+
+// State for Bank verify result
+const [bankVerifications, setBankVerifications] = useState(null);
+
 
   // ✅ STATE FOR ALL DOCUMENT UPLOADS
   const [offerLetterMonth, setOfferLetterMonth] = useState<string>('');
@@ -531,6 +545,41 @@ const EmployeeProfile = () => {
       if (verificationsError) throw verificationsError;
       setVerifications(verificationsData || []);
 
+      // FETCH VERIFICATION HISTORY
+const { data: verifyData, error: verifyError } = await supabase
+  .from('hr_personal_profile_verifications') // Make sure this matches your DB
+  .select('*')
+  .eq('employee_id', employeeId)
+  .order('created_at', { ascending: false })
+  .limit(1)
+  .maybeSingle();
+
+if (verifyError) console.log("Verif error", verifyError);
+setProfileResult(verifyData);
+
+    // Fetch Employment Verification (NEW)
+    const { data: empData } = await supabase
+        .from('hr_employment_verifications')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    setEmploymentResult(empData);
+
+    const { data: bankverifyData } = await supabase
+        .from('hr_bank_account_verifications')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    if (bankverifyData) {
+      setBankVerifications(bankverifyData);
+    } else {
+      setBankVerifications(null);
+    }
+
       setEmployee(completeEmployeeData);
     } catch (error: any) {
       console.error("Error fetching employee details:", error);
@@ -539,6 +588,7 @@ const EmployeeProfile = () => {
       setLoading(false);
     }
   };
+  
 
   const handleVerifyIdentity = async (type: 'pan' | 'aadhaar') => {
     if (!employee || !user || !organizationId) return;
@@ -671,6 +721,65 @@ const EmployeeProfile = () => {
     setIsExitModalOpen(false);
     fetchEmployeeDetails(employee!.id);
   };
+
+const handleProfileVerification = async () => {
+  if (!employee) return;
+
+  // Validation
+  if (!employee.phone || !employee.first_name) {
+    toast.error("Phone number and First Name are required for verification.");
+    return;
+  }
+
+  setIsVerifyingProfile(true);
+  try {
+    const { data, error } = await supabase.functions.invoke('verify-employee-profile', {
+      body: {
+        employeeId: employee.id,
+        organizationId: organizationId,
+        userId: user.id,
+        phone: employee.phone,
+        firstName: employee.first_name,
+        lastName: employee.last_name,
+        pan: employee.pan_number
+      }
+    });
+
+    // Handle Network/Supabase System Errors
+    if (error) {
+        console.error("System Error:", error);
+        // Try to read body if it's a FunctionsHttpError, otherwise show generic
+        let msg = error.message;
+        if(error instanceof Error && error.message.includes("Edge Function returned a non-2xx")) {
+             msg = "Server error occurred. Please check logs."; 
+        }
+        toast.error(msg);
+        return;
+    }
+
+    // Handle API Logic Errors (Returned as 200 OK but with status='error')
+    if (data && data.status === 'error') {
+        console.error("Verification API Error:", data.raw_error || data.message);
+        toast.error(data.message || "Verification failed.");
+        return;
+    }
+
+    // Success Case
+    if (data && data.status === 'success') {
+      setVerificationResult(data.verificationRecord);
+      setShowVerificationModal(true);
+      toast.success("Profile verification completed successfully.");
+    } else {
+      toast.error("Unexpected response from verification server.");
+    }
+
+  } catch (error: any) {
+    console.error("Verification Exception:", error);
+    toast.error(error.message || "An unexpected error occurred.");
+  } finally {
+    setIsVerifyingProfile(false);
+  }
+};
 
   // ✅ FIXED: NO PAGE REFRESH - Updates state directly
 const handleDocumentUpload = async (
@@ -1121,6 +1230,7 @@ const handleDeleteDocument = async (docId: string) => {
     </div>
   );
 
+
 // Helper to handle viewing documents based on file type
   const handleViewDocument = (url: string) => {
     // Get file extension
@@ -1212,6 +1322,24 @@ const handleDeleteDocument = async (docId: string) => {
               </div>
               <div className="mt-8">
                 <h2 className="text-lg font-bold text-gray-800 dark:text-gray-200 mb-6">Basic Information</h2>
+                 {/* NEW VERIFY BUTTON */}
+    <Button 
+      onClick={handleProfileVerification}
+      disabled={isVerifyingProfile}
+      variant="outline"
+      size="sm"
+      className="text-purple-600 border-purple-200 hover:bg-purple-50 dark:border-purple-800 dark:hover:bg-purple-900/30"
+    >
+      {isVerifyingProfile ? (
+        <>
+          <Loader2 className="h-3 w-3 mr-2 animate-spin" /> Verifying...
+        </>
+      ) : (
+        <>
+          <SearchCheck className="h-3 w-3 mr-2" /> Verify Profile
+        </>
+      )}
+    </Button>
                 <div className="space-y-5 text-sm">
                   <div className="flex items-start gap-4">
                     <Mail className="h-5 w-5 text-gray-400 flex-shrink-0 mt-1" />
@@ -1323,6 +1451,9 @@ const handleDeleteDocument = async (docId: string) => {
                 <TabsTrigger value="salary" className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all">
                   Salary
                 </TabsTrigger>
+                <TabsTrigger value="verification" className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all">
+          Verification
+        </TabsTrigger>
               </TabsList>
             </div>
             {/* ✅ ENHANCED PERSONAL TAB WITHOUT SECTION HEADER ICONS */}
@@ -2597,6 +2728,16 @@ const handleDeleteDocument = async (docId: string) => {
                 </CardContent>
               </Card>
             </TabsContent>
+             <TabsContent value="verification" className="mt-6">
+       <VerificationTab 
+          employee={employee}
+        profileResult={profileResult}
+        employmentResult={employmentResult}
+        isVerifyingProfile={isVerifyingProfile}
+        onVerifyProfile={handleProfileVerification}
+        refetchEmployee={() => fetchEmployeeDetails(id!)}
+       />
+    </TabsContent>
           </Tabs>
         </div>
       </div>

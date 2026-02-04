@@ -4,8 +4,8 @@ import { Table } from '@tanstack/react-table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { 
-  Building2, User, MapPin, Clock, ListFilter, FilterX, X,
-  Briefcase, Users, DollarSign, Tag, Sparkles, Search, ChevronDown
+  Building2, User, MapPin, ListFilter, FilterX, X,
+  Briefcase, Tag, Sparkles, Search, Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,11 +13,13 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { useFilterStatistics } from '@/hooks/sales/useFilterStatistics';
 
 interface ContactFiltersSidebarProps {
   table: Table<any>;
   isOpen?: boolean;
   onClose?: () => void;
+  fileId?: string | null; // Pass fileId for file-specific statistics
 }
 
 // Predefined filter options
@@ -65,8 +67,12 @@ const SOURCE_OPTIONS = [
 export function ContactFiltersSidebar({ 
   table, 
   isOpen = true, 
-  onClose 
+  onClose,
+  fileId = null
 }: ContactFiltersSidebarProps) {
+  // Fetch statistics from database (ALL contacts, not just current page)
+  const { data: stats, isLoading: statsLoading } = useFilterStatistics({ fileId });
+
   // Local filter state
   const [filters, setFilters] = useState({
     search: '',
@@ -83,118 +89,21 @@ export function ContactFiltersSidebar({
     isEnriched: false,
   });
 
-  // Get all data for counting
-  const allRows = table.getPreFilteredRowModel().rows;
-  
-  // Calculate real counts from data
-  const counts = useMemo(() => {
-    const seniorityCount: Record<string, number> = {};
-    const employeeCountCount: Record<string, number> = {};
-    const stageCount: Record<string, number> = {};
-    const sourceCount: Record<string, number> = {};
-    const industryCount: Record<string, number> = {};
-    const departmentCount: Record<string, number> = {};
-    let hasEmailCount = 0;
-    let hasPhoneCount = 0;
-    let enrichedCount = 0;
-
-    allRows.forEach(row => {
-      const data = row.original;
-      
-      // Seniority
-      if (data.seniority) {
-        const s = data.seniority.toLowerCase();
-        seniorityCount[s] = (seniorityCount[s] || 0) + 1;
-      }
-
-      // Employee Count - map to ranges
-      if (data.employee_count) {
-        const emp = parseInt(data.employee_count);
-        let range = '';
-        if (emp <= 10) range = '1-10';
-        else if (emp <= 50) range = '11-50';
-        else if (emp <= 200) range = '51-200';
-        else if (emp <= 500) range = '201-500';
-        else if (emp <= 1000) range = '501-1000';
-        else if (emp <= 5000) range = '1001-5000';
-        else if (emp <= 10000) range = '5001-10000';
-        else range = '10001+';
-        employeeCountCount[range] = (employeeCountCount[range] || 0) + 1;
-      }
-
-      // Stage
-      if (data.contact_stage) {
-        stageCount[data.contact_stage] = (stageCount[data.contact_stage] || 0) + 1;
-      }
-
-      // Source/Medium
-      if (data.medium) {
-        sourceCount[data.medium] = (sourceCount[data.medium] || 0) + 1;
-      }
-
-      // Industry
-      if (data.industry) {
-        industryCount[data.industry] = (industryCount[data.industry] || 0) + 1;
-      }
-
-      // Departments
-      if (data.departments && Array.isArray(data.departments)) {
-        data.departments.forEach((d: string) => {
-          departmentCount[d] = (departmentCount[d] || 0) + 1;
-        });
-      }
-
-      // Has Email
-      if (data.email || (data.all_emails && data.all_emails.length > 0)) {
-        hasEmailCount++;
-      }
-
-      // Has Phone
-      if (data.mobile || (data.all_phones && data.all_phones.length > 0)) {
-        hasPhoneCount++;
-      }
-
-      // Enriched
-      if (data.apollo_person_id || data.intel_person) {
-        enrichedCount++;
-      }
-    });
-
-    return {
-      seniority: seniorityCount,
-      employeeCount: employeeCountCount,
-      stage: stageCount,
-      source: sourceCount,
-      industry: industryCount,
-      department: departmentCount,
-      hasEmail: hasEmailCount,
-      hasPhone: hasPhoneCount,
-      enriched: enrichedCount,
-      total: allRows.length,
-    };
-  }, [allRows]);
-
-  // Get unique industries from data
+  // Get unique industries from stats (sorted by count)
   const uniqueIndustries = useMemo(() => {
-    const industries = new Set<string>();
-    allRows.forEach(row => {
-      if (row.original.industry) {
-        industries.add(row.original.industry);
-      }
-    });
-    return Array.from(industries).sort();
-  }, [allRows]);
+    if (!stats?.industries) return [];
+    return Object.entries(stats.industries)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => name);
+  }, [stats?.industries]);
 
-  // Get unique departments from data
+  // Get unique departments from stats (sorted by count)
   const uniqueDepartments = useMemo(() => {
-    const departments = new Set<string>();
-    allRows.forEach(row => {
-      if (row.original.departments && Array.isArray(row.original.departments)) {
-        row.original.departments.forEach((d: string) => departments.add(d));
-      }
-    });
-    return Array.from(departments).sort();
-  }, [allRows]);
+    if (!stats?.departments) return [];
+    return Object.entries(stats.departments)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => name);
+  }, [stats?.departments]);
 
   // Toggle array item helper
   const toggleArrayItem = (field: keyof typeof filters, value: string) => {
@@ -209,37 +118,38 @@ export function ContactFiltersSidebar({
 
   // Apply filters to table
   const applyFilters = () => {
-    // Reset all filters first
     table.resetColumnFilters();
 
-    // Apply search filter
     if (filters.search) {
       table.getColumn('name')?.setFilterValue(filters.search);
     }
 
-    // Apply seniority filter
     if (filters.seniorities.length > 0) {
       table.getColumn('seniority')?.setFilterValue(filters.seniorities);
     }
 
-    // Apply stage filter
     if (filters.stages.length > 0) {
       table.getColumn('contact_stage')?.setFilterValue(filters.stages);
     }
 
-    // Apply source filter
     if (filters.sources.length > 0) {
       table.getColumn('medium')?.setFilterValue(filters.sources);
     }
 
-    // Apply country filter
     if (filters.country) {
       table.getColumn('country')?.setFilterValue(filters.country);
     }
 
-    // Apply city filter
     if (filters.city) {
       table.getColumn('city')?.setFilterValue(filters.city);
+    }
+
+    if (filters.industries.length > 0) {
+      table.getColumn('industry')?.setFilterValue(filters.industries);
+    }
+
+    if (filters.employeeCounts.length > 0) {
+      table.getColumn('employee_count')?.setFilterValue(filters.employeeCounts);
     }
   };
 
@@ -337,22 +247,29 @@ export function ContactFiltersSidebar({
           />
         </div>
 
-        {/* Stats Card */}
+        {/* Stats Card - Now from database */}
         <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100 rounded-lg p-3">
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div>
-              <div className="text-lg font-bold text-indigo-900">{counts.total}</div>
-              <div className="text-[9px] text-indigo-600 uppercase font-semibold">Total</div>
+          {statsLoading ? (
+            <div className="flex items-center justify-center py-2">
+              <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+              <span className="ml-2 text-xs text-indigo-600">Loading stats...</span>
             </div>
-            <div>
-              <div className="text-lg font-bold text-indigo-900">{counts.enriched}</div>
-              <div className="text-[9px] text-indigo-600 uppercase font-semibold">Enriched</div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <div className="text-lg font-bold text-indigo-900">{(stats?.total || 0).toLocaleString()}</div>
+                <div className="text-[9px] text-indigo-600 uppercase font-semibold">Total</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold text-indigo-900">{(stats?.enriched || 0).toLocaleString()}</div>
+                <div className="text-[9px] text-indigo-600 uppercase font-semibold">Enriched</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold text-indigo-900">{table.getFilteredRowModel().rows.length}</div>
+                <div className="text-[9px] text-indigo-600 uppercase font-semibold">On Page</div>
+              </div>
             </div>
-            <div>
-              <div className="text-lg font-bold text-indigo-900">{table.getFilteredRowModel().rows.length}</div>
-              <div className="text-[9px] text-indigo-600 uppercase font-semibold">Filtered</div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -377,21 +294,21 @@ export function ContactFiltersSidebar({
                 <FilterCheckbox
                   id="has-email"
                   label="Has Email"
-                  count={counts.hasEmail}
+                  count={stats?.hasEmail || 0}
                   checked={filters.hasEmail}
                   onChange={(checked) => setFilters(prev => ({ ...prev, hasEmail: checked }))}
                 />
                 <FilterCheckbox
                   id="has-phone"
                   label="Has Phone"
-                  count={counts.hasPhone}
+                  count={stats?.hasPhone || 0}
                   checked={filters.hasPhone}
                   onChange={(checked) => setFilters(prev => ({ ...prev, hasPhone: checked }))}
                 />
                 <FilterCheckbox
                   id="is-enriched"
                   label="Enriched Contacts"
-                  count={counts.enriched}
+                  count={stats?.enriched || 0}
                   checked={filters.isEnriched}
                   onChange={(checked) => setFilters(prev => ({ ...prev, isEnriched: checked }))}
                 />
@@ -421,7 +338,7 @@ export function ContactFiltersSidebar({
                     key={option.id}
                     id={`stage-${option.id}`}
                     label={option.label}
-                    count={counts.stage[option.id] || 0}
+                    count={stats?.stages?.[option.id] || 0}
                     checked={filters.stages.includes(option.id)}
                     onChange={() => toggleArrayItem('stages', option.id)}
                   />
@@ -457,7 +374,7 @@ export function ContactFiltersSidebar({
                       key={option.id}
                       id={`seniority-${option.id}`}
                       label={option.label}
-                      count={counts.seniority[option.id] || 0}
+                      count={stats?.seniorities?.[option.id] || 0}
                       checked={filters.seniorities.includes(option.id)}
                       onChange={() => toggleArrayItem('seniorities', option.id)}
                     />
@@ -465,7 +382,7 @@ export function ContactFiltersSidebar({
                 </div>
               </div>
 
-              {/* Departments (if any exist) */}
+              {/* Departments (dynamic from stats) */}
               {uniqueDepartments.length > 0 && (
                 <div>
                   <Label className="text-[10px] uppercase text-slate-500 font-semibold mb-2 block">
@@ -477,7 +394,7 @@ export function ContactFiltersSidebar({
                         key={dept}
                         id={`dept-${dept}`}
                         label={dept}
-                        count={counts.department[dept] || 0}
+                        count={stats?.departments?.[dept] || 0}
                         checked={filters.departments.includes(dept)}
                         onChange={() => toggleArrayItem('departments', dept)}
                       />
@@ -520,7 +437,7 @@ export function ContactFiltersSidebar({
                       key={option.id}
                       id={`emp-${option.id}`}
                       label={option.label}
-                      count={counts.employeeCount[option.id] || 0}
+                      count={stats?.employeeRanges?.[option.id] || 0}
                       checked={filters.employeeCounts.includes(option.id)}
                       onChange={() => toggleArrayItem('employeeCounts', option.id)}
                     />
@@ -528,7 +445,7 @@ export function ContactFiltersSidebar({
                 </div>
               </div>
 
-              {/* Industry (dynamic from data) */}
+              {/* Industry (dynamic from stats) */}
               {uniqueIndustries.length > 0 && (
                 <div>
                   <Label className="text-[10px] uppercase text-slate-500 font-semibold mb-2 block">
@@ -540,7 +457,7 @@ export function ContactFiltersSidebar({
                         key={industry}
                         id={`industry-${industry}`}
                         label={industry}
-                        count={counts.industry[industry] || 0}
+                        count={stats?.industries?.[industry] || 0}
                         checked={filters.industries.includes(industry)}
                         onChange={() => toggleArrayItem('industries', industry)}
                       />
@@ -578,7 +495,7 @@ export function ContactFiltersSidebar({
                     key={option.id}
                     id={`source-${option.id}`}
                     label={option.label}
-                    count={counts.source[option.id] || 0}
+                    count={stats?.sources?.[option.id] || 0}
                     checked={filters.sources.includes(option.id)}
                     onChange={() => toggleArrayItem('sources', option.id)}
                   />
@@ -616,6 +533,31 @@ export function ContactFiltersSidebar({
                     table.getColumn('country')?.setFilterValue(e.target.value || undefined);
                   }}
                 />
+                {/* Show top countries from stats */}
+                {stats?.countries && Object.keys(stats.countries).length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {Object.entries(stats.countries)
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 5)
+                      .map(([country, count]) => (
+                        <button
+                          key={country}
+                          onClick={() => {
+                            setFilters(prev => ({ ...prev, country }));
+                            table.getColumn('country')?.setFilterValue(country);
+                          }}
+                          className={cn(
+                            "text-[9px] px-1.5 py-0.5 rounded-full border transition-colors",
+                            filters.country === country
+                              ? "bg-rose-100 border-rose-300 text-rose-700"
+                              : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                          )}
+                        >
+                          {country} ({count})
+                        </button>
+                      ))}
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] uppercase text-slate-500 font-semibold">
@@ -692,7 +634,7 @@ const FilterCheckbox: React.FC<FilterCheckboxProps> = ({
         ? "text-slate-600 bg-slate-100 group-hover:bg-slate-200" 
         : "text-slate-400"
     )}>
-      {count}
+      {count.toLocaleString()}
     </span>
   </div>
 );

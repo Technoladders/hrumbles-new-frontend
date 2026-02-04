@@ -46,7 +46,7 @@ export function DataTable<TData, TValue>({
                 
                 let leftPosition = 0;
                 if (header.column.id === 'name') {
-                  leftPosition = 40;
+                  leftPosition = 39;
                 }
                 
                 return (
@@ -114,7 +114,7 @@ export function DataTable<TData, TValue>({
                         ? "bg-indigo-50/70 hover:bg-indigo-50" 
                         : isDiscoveryRow
                           ? "bg-gradient-to-r from-violet-50/30 via-white to-purple-50/30 hover:from-violet-50/60 hover:to-purple-50/60"
-                          : "hover:bg-slate-50/80",
+                          : "hover:bg-slate-100",
                     )}
                   >
                     {row.getVisibleCells().map((cell: any) => {
@@ -122,7 +122,7 @@ export function DataTable<TData, TValue>({
                       
                       let leftPosition = 0;
                       if (cell.column.id === 'name') {
-                        leftPosition = 40;
+                        leftPosition = 39;
                       }
                       
                       return (
@@ -137,11 +137,11 @@ export function DataTable<TData, TValue>({
                             "px-3 py-2 text-xs text-slate-700 align-middle border-r border-slate-100/50 last:border-r-0",
                             isStickyColumn && "z-20",
                             // Select column backgrounds
-                            cell.column.id === 'select' && !row.getIsSelected() && !isDiscoveryRow && "bg-white group-hover:bg-slate-50/80",
+                            cell.column.id === 'select' && !row.getIsSelected() && !isDiscoveryRow && "bg-white group-hover:bg-slate-100",
                             cell.column.id === 'select' && !row.getIsSelected() && isDiscoveryRow && "bg-gradient-to-r from-violet-50/30 via-white to-white group-hover:from-violet-50/60",
                             cell.column.id === 'select' && row.getIsSelected() && "bg-indigo-50/70",
                             // Name column backgrounds
-                            cell.column.id === 'name' && !row.getIsSelected() && !isDiscoveryRow && "bg-white group-hover:bg-slate-50/80 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.03)]",
+                            cell.column.id === 'name' && !row.getIsSelected() && !isDiscoveryRow && "bg-white group-hover:bg-slate-100 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.03)]",
                             cell.column.id === 'name' && !row.getIsSelected() && isDiscoveryRow && "bg-gradient-to-r from-white to-white group-hover:from-violet-50/40 shadow-[2px_0_8px_-2px_rgba(139,92,246,0.1)]",
                             cell.column.id === 'name' && row.getIsSelected() && "bg-indigo-50/70 shadow-[2px_0_8px_-2px_rgba(99,102,241,0.1)]",
                           )}

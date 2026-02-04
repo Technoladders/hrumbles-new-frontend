@@ -98,7 +98,7 @@ export async function searchPeopleInApollo(
     console.log('🔍 Searching Apollo.io (API Search - No Credits) with filters:', filters);
 
     // Call NEW edge function that uses mixed_people/api_search endpoint
-    const { data, error } = await supabase.functions.invoke('apollo-people-search', {
+    const { data, error } = await supabase.functions.invoke('apollo-people-search-v1', {
       body: {
         filters,
         page,
