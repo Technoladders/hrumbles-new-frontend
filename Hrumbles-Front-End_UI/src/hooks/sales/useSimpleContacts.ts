@@ -33,7 +33,7 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
           return { data: [], count: 0 };
         }
 
-        const { data, error } = await supabase.functions.invoke('apollo-people-search', {
+        const { data, error } = await supabase.functions.invoke('apollo-people-search-v1', {
           body: { filters, page: currentPage, per_page: perPage },
         });
         
