@@ -1,14 +1,15 @@
 // Hrumbles-Front-End_UI/src/components/sales/contact-detail/ContactDetailSidebar.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { 
-  Mail, Phone, ShieldCheck, Clock, CheckCircle2, XCircle, AlertCircle, 
-  MapPin, Globe, Linkedin, Twitter, Copy, ExternalLink, Plus, ChevronRight
+  Mail, Phone, ShieldCheck, Clock, CheckCircle2, AlertCircle, 
+  MapPin, Globe, Linkedin, Copy, ExternalLink, Plus, ChevronDown, ChevronUp,
+  Building, AlertTriangle, Settings
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { extractFromRaw, hasData } from '@/utils/dataExtractor';
@@ -31,6 +32,10 @@ export const ContactDetailSidebar: React.FC<ContactDetailSidebarProps> = ({
 }) => {
   const { toast } = useToast();
   const data = extractFromRaw(contact);
+  
+  // Collapsible states
+  const [contactInfoOpen, setContactInfoOpen] = useState(true);
+  const [scoresOpen, setScoresOpen] = useState(true);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -60,212 +65,325 @@ export const ContactDetailSidebar: React.FC<ContactDetailSidebarProps> = ({
     }
   };
 
+  // Count emails and phones
+  const emailCount = (data.allEmails?.length || 0) + (contact.email && !data.allEmails?.find((e: any) => e.email === contact.email) ? 1 : 0);
+  const phoneCount = (data.phoneNumbers?.length || 0) + (contact.mobile ? 1 : 0);
+
   return (
-    <div className="space-y-4">
-      {/* Quick Info Card */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-2">
-            <MapPin size={14} />
-            Quick Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {data.city && (
-            <InfoRow 
-              label="Location"
-              value={[data.city, data.state, data.country].filter(Boolean).join(', ')}
-            />
+    <div className="divide-y divide-gray-200">
+      
+      {/* Contact Information Section */}
+      <Collapsible open={contactInfoOpen} onOpenChange={setContactInfoOpen}>
+        <CollapsibleTrigger className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
+          <span className="text-sm font-semibold text-gray-900">Contact information</span>
+          {contactInfoOpen ? (
+            <ChevronUp size={16} className="text-gray-400" />
+          ) : (
+            <ChevronDown size={16} className="text-gray-400" />
           )}
-          {data.timezone && (
-            <InfoRow 
-              label="Timezone"
-              value={data.timezone?.replace('_', ' ')}
-            />
-          )}
-          {data.seniority && (
-            <InfoRow 
-              label="Seniority"
-              value={
-                <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200 text-[10px] font-semibold">
-                  {data.seniority}
-                </Badge>
-              }
-            />
-          )}
-          {contact.medium && (
-            <InfoRow 
-              label="Source"
-              value={contact.medium}
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Email Addresses Card */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-2">
-              <Mail size={14} />
-              Email Addresses
-            </CardTitle>
-            <Badge variant="outline" className="text-[10px] font-medium">
-              {(data.allEmails?.length || 0) + (contact.email && !data.allEmails?.find((e: any) => e.email === contact.email) ? 1 : 0)}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {/* Primary/Manual Email */}
-          {contact.email && (
-            <EmailItem 
-              email={contact.email}
-              status="Primary"
-              isPrimary={true}
-              onCopy={() => copyToClipboard(contact.email, 'Email')}
-            />
-          )}
-
-          {/* Enriched Emails */}
-          {data.allEmails?.filter((e: any) => e.email !== contact.email).map((emailData: any, idx: number) => (
-            <EmailItem 
-              key={idx}
-              email={emailData.email}
-              status={emailData.email_status || emailData.status}
-              onCopy={() => copyToClipboard(emailData.email, 'Email')}
-            />
-          ))}
-
-          {/* No emails state */}
-          {!hasData(data.allEmails) && !contact.email && (
-            <EmptyState icon={<Mail size={20} />} message="No email addresses found" />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Phone Numbers Card */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-2">
-              <Phone size={14} />
-              Phone Numbers
-            </CardTitle>
-            <Badge variant="outline" className="text-[10px] font-medium">
-              {data.phoneNumbers?.length || (contact.mobile ? 1 : 0)}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {/* Primary/Manual Phone */}
-          {contact.mobile && (
-            <PhoneItem 
-              number={contact.mobile}
-              type="Primary"
-              status="verified"
-              onCopy={() => copyToClipboard(contact.mobile, 'Phone')}
-            />
-          )}
-
-          {/* Enriched Phones */}
-          {data.phoneNumbers?.map((phoneData: any, idx: number) => (
-            <PhoneItem 
-              key={idx}
-              number={phoneData.phone_number || phoneData.raw_number}
-              type={phoneData.type}
-              status={phoneData.status}
-              onCopy={() => copyToClipboard(phoneData.phone_number || phoneData.raw_number, 'Phone')}
-            />
-          ))}
-
-          {/* Request Phone Button */}
-          {!contact.mobile && 
-           data.phoneNumbers?.length === 0 && 
-           contact.phone_enrichment_status !== 'pending_phones' &&
-           (data.hasDirectPhone || data.directDialStatus === 'enrichment_successful') && (
-            <Button
-              onClick={handleRequestPhone}
-              disabled={isRequestingPhone}
-              className="w-full h-10 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold text-xs shadow-sm"
-            >
-              {isRequestingPhone ? (
-                <>
-                  <Clock size={14} className="mr-2 animate-spin" />
-                  Verifying...
-                </>
+        </CollapsibleTrigger>
+        
+        <CollapsibleContent>
+          <div className="px-4 pb-4 space-y-4">
+            
+            {/* Email Section */}
+            <div className="space-y-2">
+              {/* Primary/Manual Email */}
+              {contact.email ? (
+                <ContactInfoRow
+                  icon={<Mail size={16} className="text-green-600" />}
+                  iconBg="bg-green-50"
+                  value={contact.email}
+                  label="Primary"
+                  verified={true}
+                  onCopy={() => copyToClipboard(contact.email, 'Email')}
+                />
               ) : (
-                <>
-                  <Phone size={14} className="mr-2" />
-                  Reveal Phone Number
-                </>
+                <ContactInfoRow
+                  icon={<Mail size={16} className="text-gray-400" />}
+                  iconBg="bg-gray-50"
+                  value="****@****.com"
+                  masked={true}
+                  actionButton={
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-7 text-xs font-medium text-gray-600 border-gray-300"
+                    >
+                      <Plus size={12} className="mr-1" />
+                      Access email
+                    </Button>
+                  }
+                />
               )}
-            </Button>
-          )}
 
-          {/* Pending Status */}
-          {contact.phone_enrichment_status === 'pending_phones' && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
-              <Clock size={16} className="text-amber-600 mx-auto mb-1 animate-spin" />
-              <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide">
-                Verification in Progress
-              </p>
+              {/* Enriched Emails */}
+              {data.allEmails?.filter((e: any) => e.email !== contact.email).map((emailData: any, idx: number) => (
+                <ContactInfoRow
+                  key={idx}
+                  icon={<Mail size={16} className="text-green-600" />}
+                  iconBg="bg-green-50"
+                  value={emailData.email}
+                  label={emailData.email_status || emailData.status}
+                  verified={['verified', 'valid'].includes(emailData.email_status?.toLowerCase())}
+                  onCopy={() => copyToClipboard(emailData.email, 'Email')}
+                />
+              ))}
             </div>
-          )}
 
-          {/* No phones state */}
-          {!contact.mobile && 
-           (!data.phoneNumbers || data.phoneNumbers.length === 0) && 
-           !data.hasDirectPhone && 
-           contact.phone_enrichment_status !== 'pending_phones' && (
-            <EmptyState icon={<Phone size={20} />} message="No phone numbers available" />
-          )}
-        </CardContent>
-      </Card>
+            {/* Phone Section */}
+            <div className="space-y-2">
+              {/* Primary/Manual Phone */}
+              {contact.mobile ? (
+                <ContactInfoRow
+                  icon={<Phone size={16} className="text-gray-600" />}
+                  iconBg="bg-gray-100"
+                  value={contact.mobile}
+                  label="Mobile"
+                  onCopy={() => copyToClipboard(contact.mobile, 'Phone')}
+                />
+              ) : data.hasDirectPhone ? (
+                <ContactInfoRow
+                  icon={<Phone size={16} className="text-gray-400" />}
+                  iconBg="bg-gray-50"
+                  value="(***)-***-****"
+                  sublabel="Mobile · credits"
+                  masked={true}
+                  actionButton={
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-7 text-xs font-medium text-gray-600 border-gray-300"
+                      onClick={handleRequestPhone}
+                      disabled={isRequestingPhone}
+                    >
+                      {isRequestingPhone ? (
+                        <>
+                          <Clock size={12} className="mr-1 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        <>
+                          <Phone size={12} className="mr-1" />
+                          Access mobile
+                        </>
+                      )}
+                    </Button>
+                  }
+                />
+              ) : null}
 
-      {/* Social Profiles Card */}
-      {(data.linkedinUrl || data.twitterUrl || data.facebookUrl || data.githubUrl) && (
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-2">
-              <Globe size={14} />
-              Social Profiles
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
+              {/* Enriched Phones */}
+              {data.phoneNumbers?.map((phoneData: any, idx: number) => (
+                <ContactInfoRow
+                  key={idx}
+                  icon={<Phone size={16} className="text-gray-600" />}
+                  iconBg="bg-gray-100"
+                  value={phoneData.phone_number || phoneData.raw_number}
+                  label={phoneData.type}
+                  onCopy={() => copyToClipboard(phoneData.phone_number || phoneData.raw_number, 'Phone')}
+                />
+              ))}
+
+              {/* No business phone available */}
+              {!contact.mobile && (!data.phoneNumbers || data.phoneNumbers.length === 0) && (
+                <ContactInfoRow
+                  icon={<Building size={16} className="text-gray-400" />}
+                  iconBg="bg-gray-50"
+                  value="No phone number available"
+                  sublabel="Business"
+                  disabled={true}
+                />
+              )}
+
+              {/* Pending Status */}
+              {contact.phone_enrichment_status === 'pending_phones' && (
+                <div className="flex items-center gap-2 px-2 py-2 bg-amber-50 rounded-md border border-amber-200">
+                  <Clock size={14} className="text-amber-600 animate-spin" />
+                  <span className="text-xs text-amber-700 font-medium">Verification in progress...</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Scores Section */}
+      <Collapsible open={scoresOpen} onOpenChange={setScoresOpen}>
+        <CollapsibleTrigger className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
+          <span className="text-sm font-semibold text-gray-900">Scores</span>
+          {scoresOpen ? (
+            <ChevronUp size={16} className="text-gray-400" />
+          ) : (
+            <ChevronDown size={16} className="text-gray-400" />
+          )}
+        </CollapsibleTrigger>
+        
+        <CollapsibleContent>
+          <div className="px-4 pb-4">
+            <div className="flex items-center gap-3 py-3">
+              {/* Placeholder score bars */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="w-6 h-1.5 rounded-full bg-gray-200" />
+                  ))}
+                </div>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div 
+                      key={i} 
+                      className={cn(
+                        "w-6 h-1.5 rounded-full",
+                        i <= 2 ? "bg-green-500" : "bg-gray-200"
+                      )} 
+                    />
+                  ))}
+                </div>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="w-6 h-1.5 rounded-full bg-gray-200" />
+                  ))}
+                </div>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-900">No scores found</p>
+              </div>
+              <Button variant="outline" size="sm" className="h-8 text-xs font-medium">
+                Create score
+              </Button>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* DNC Warning */}
+      <div className="px-4 py-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={16} className="text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-amber-800">
+                Do Not Call (DNC) is not enabled
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Protect your team from compliance risks by screening numbers against DNC registries.
+              </p>
+              <a 
+                href="#" 
+                className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 hover:text-amber-900 mt-2"
+              >
+                Enable in Settings
+                <ExternalLink size={11} />
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Social Profiles Section */}
+      {(data.linkedinUrl || data.twitterUrl) && (
+        <div className="px-4 py-4">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Social Profiles
+          </h3>
+          <div className="space-y-2">
             {data.linkedinUrl && (
-              <SocialLink 
-                url={data.linkedinUrl}
-                icon={<Linkedin size={16} />}
-                label="LinkedIn"
-                color="bg-[#0A66C2]"
-              />
+              <a 
+                href={data.linkedinUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition-all group"
+              >
+                <div className="p-1.5 bg-[#0A66C2] rounded">
+                  <Linkedin size={14} className="text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-700 group-hover:text-gray-900 truncate">
+                    LinkedIn Profile
+                  </p>
+                </div>
+                <ExternalLink size={14} className="text-gray-400 group-hover:text-gray-600" />
+              </a>
             )}
             {data.twitterUrl && (
-              <SocialLink 
-                url={data.twitterUrl}
-                icon={<XIcon />}
-                label="X (Twitter)"
-                color="bg-slate-900"
-              />
+              <a 
+                href={data.twitterUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition-all group"
+              >
+                <div className="p-1.5 bg-gray-900 rounded">
+                  <XIcon />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-700 group-hover:text-gray-900 truncate">
+                    X (Twitter) Profile
+                  </p>
+                </div>
+                <ExternalLink size={14} className="text-gray-400 group-hover:text-gray-600" />
+              </a>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
-      {/* Record Metadata Card */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-            Record Details
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
+      {/* Quick Info Section */}
+      {(data.city || data.timezone || data.seniority || contact.medium) && (
+        <div className="px-4 py-4">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Quick Information
+          </h3>
+          <div className="space-y-2.5">
+            {data.city && (
+              <InfoRow 
+                label="Location"
+                value={[data.city, data.state, data.country].filter(Boolean).join(', ')}
+              />
+            )}
+            {data.timezone && (
+              <InfoRow 
+                label="Timezone"
+                value={data.timezone?.replace('_', ' ')}
+              />
+            )}
+            {data.seniority && (
+              <InfoRow 
+                label="Seniority"
+                value={
+                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-medium rounded">
+                    {data.seniority}
+                  </span>
+                }
+              />
+            )}
+            {contact.medium && (
+              <InfoRow 
+                label="Source"
+                value={contact.medium}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Record Details */}
+      <div className="px-4 py-4">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+          Record Details
+        </h3>
+        <div className="space-y-2.5">
           <InfoRow 
-            label="CRM Stage"
+            label="Stage"
             value={
-              <Badge className="bg-indigo-600 text-white border-none text-[10px] font-semibold">
+              <span className={cn(
+                "px-2 py-0.5 text-xs font-medium rounded",
+                contact.contact_stage === 'Lead' && "bg-blue-100 text-blue-700",
+                contact.contact_stage === 'Prospect' && "bg-purple-100 text-purple-700",
+                contact.contact_stage === 'Customer' && "bg-green-100 text-green-700",
+              )}>
                 {contact.contact_stage}
-              </Badge>
+              </span>
             }
           />
           {contact.created_at && (
@@ -288,165 +406,97 @@ export const ContactDetailSidebar: React.FC<ContactDetailSidebarProps> = ({
               })}
             />
           )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-};
-
-// Helper Components
-const InfoRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
-  <div className="flex items-center justify-between py-1">
-    <span className="text-xs text-slate-500 font-medium">{label}</span>
-    <span className="text-xs text-slate-900 font-semibold">{value}</span>
-  </div>
-);
-
-const EmailItem = ({ 
-  email, 
-  status, 
-  isPrimary,
-  onCopy 
-}: { 
-  email: string; 
-  status?: string; 
-  isPrimary?: boolean;
-  onCopy: () => void;
-}) => {
-  const getStatusColor = (s: string) => {
-    const lower = s?.toLowerCase();
-    if (lower === 'verified' || lower === 'valid') return 'text-green-600 bg-green-50 border-green-200';
-    if (lower === 'likely') return 'text-blue-600 bg-blue-50 border-blue-200';
-    if (lower === 'primary') return 'text-indigo-600 bg-indigo-50 border-indigo-200';
-    return 'text-slate-600 bg-slate-50 border-slate-200';
-  };
-
-  const getStatusIcon = (s: string) => {
-    const lower = s?.toLowerCase();
-    if (lower === 'verified' || lower === 'valid') return <CheckCircle2 size={12} className="text-green-600" />;
-    if (lower === 'likely') return <AlertCircle size={12} className="text-blue-600" />;
-    if (lower === 'primary') return <ShieldCheck size={12} className="text-indigo-600" />;
-    return <AlertCircle size={12} className="text-slate-500" />;
-  };
-
-  return (
-    <div className={cn(
-      "group relative p-3 rounded-lg border transition-all hover:shadow-sm",
-      isPrimary ? "border-indigo-200 bg-indigo-50/30" : "border-slate-200 bg-white"
-    )}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-slate-900 truncate" title={email}>
-            {email}
-          </p>
-          <div className="flex items-center gap-1.5 mt-1">
-            {status && getStatusIcon(status)}
-            <Badge className={cn("text-[9px] font-medium border px-1.5 py-0", getStatusColor(status || ''))}>
-              {status}
-            </Badge>
-          </div>
         </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={onCopy}
-              >
-                <Copy size={12} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="text-xs">Copy email</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
       </div>
     </div>
   );
 };
 
-const PhoneItem = ({ 
-  number, 
-  type, 
-  status,
-  onCopy 
-}: { 
-  number: string; 
-  type?: string; 
-  status?: string;
-  onCopy: () => void;
-}) => (
-  <div className="group relative p-3 rounded-lg border border-slate-200 bg-white transition-all hover:shadow-sm">
-    <div className="flex items-start justify-between gap-2">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-slate-900">{number}</p>
-        <div className="flex items-center gap-1.5 mt-1">
-          {status === 'valid_number' && (
-            <ShieldCheck size={12} className="text-green-600" />
-          )}
-          <Badge variant="outline" className="text-[9px] font-medium bg-slate-50 border-slate-200 px-1.5 py-0">
-            {type || 'Phone'}
-          </Badge>
-        </div>
-      </div>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={onCopy}
-            >
-              <Copy size={12} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent className="text-xs">Copy number</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    </div>
-  </div>
-);
-
-const SocialLink = ({ 
-  url, 
+// Contact Info Row Component - Apollo Style
+const ContactInfoRow = ({ 
   icon, 
+  iconBg,
+  value, 
   label, 
-  color 
+  sublabel,
+  verified,
+  masked,
+  disabled,
+  onCopy,
+  actionButton
 }: { 
-  url: string; 
-  icon: React.ReactNode; 
-  label: string; 
-  color: string;
+  icon: React.ReactNode;
+  iconBg: string;
+  value: string;
+  label?: string;
+  sublabel?: string;
+  verified?: boolean;
+  masked?: boolean;
+  disabled?: boolean;
+  onCopy?: () => void;
+  actionButton?: React.ReactNode;
 }) => (
-  <a 
-    href={url}
-    target="_blank"
-    rel="noreferrer"
-    className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:shadow-sm transition-all group"
-  >
-    <div className={cn("p-2 rounded-lg text-white", color)}>
+  <div className={cn(
+    "flex items-start gap-3 py-2",
+    disabled && "opacity-50"
+  )}>
+    <div className={cn("p-2 rounded-full flex-shrink-0", iconBg)}>
       {icon}
     </div>
-    <div className="flex-1">
-      <p className="text-sm font-medium text-slate-700 group-hover:text-indigo-600 transition-colors">
-        {label}
-      </p>
+    <div className="flex-1 min-w-0">
+      <div className="flex items-center gap-2">
+        <p className={cn(
+          "text-sm font-medium truncate",
+          masked ? "text-gray-400" : "text-gray-900"
+        )}>
+          {value}
+        </p>
+        {verified && (
+          <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
+        )}
+        {onCopy && !masked && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button 
+                  onClick={onCopy}
+                  className="p-1 hover:bg-gray-100 rounded transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <Copy size={12} className="text-gray-400" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="text-xs">Copy</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
+      {(label || sublabel) && (
+        <p className="text-xs text-gray-500 mt-0.5">
+          {label && <span className="capitalize">{label}</span>}
+          {sublabel && <span>{label ? ' · ' : ''}{sublabel}</span>}
+        </p>
+      )}
     </div>
-    <ExternalLink size={14} className="text-slate-400 group-hover:text-indigo-500" />
-  </a>
-);
-
-const EmptyState = ({ icon, message }: { icon: React.ReactNode; message: string }) => (
-  <div className="text-center py-6 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-    <div className="text-slate-300 mx-auto mb-2">{icon}</div>
-    <p className="text-xs text-slate-400 font-medium">{message}</p>
+    {actionButton && (
+      <div className="flex-shrink-0">
+        {actionButton}
+      </div>
+    )}
   </div>
 );
 
+// Info Row Component
+const InfoRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
+  <div className="flex items-center justify-between">
+    <span className="text-xs text-gray-500">{label}</span>
+    <span className="text-sm text-gray-900 font-medium">{value}</span>
+  </div>
+);
+
+// X (Twitter) Icon
 const XIcon = () => (
-  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+  <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor">
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
   </svg>
 );
+// 

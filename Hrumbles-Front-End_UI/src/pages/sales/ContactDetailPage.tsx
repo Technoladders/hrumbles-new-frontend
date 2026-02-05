@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   PhoneCall, StickyNote, Mail, Calendar, CheckSquare, 
-  Clock, Loader2, User, Building2, Briefcase, Database
+  Clock, Loader2, User, Building2, Database, FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -131,10 +131,9 @@ const ContactDetailPage = () => {
   });
 
   // Enrich Contact
-const handleEnrich = async () => {
+  const handleEnrich = async () => {
     setIsEnriching(true);
     try {
-      // Condition 1: If we ALREADY have the Apollo ID, use standard enrichment
       if (contact?.apollo_person_id) {
         const { error } = await supabase.functions.invoke('enrich-contact', {
           body: { 
@@ -144,18 +143,14 @@ const handleEnrich = async () => {
         });
         if (error) throw error;
         toast({ title: "Intelligence Refreshed", description: "Contact data updated via Apollo ID." });
-      
       } else {
-        // Condition 2: If ID is MISSING, use "old-contact-enrich" to find and link the person
         console.log("Missing Apollo ID, attempting to match...");
         
         const payload = {
           contactId: id,
-          // Match Parameters from existing contact data
           email: contact?.email,
           name: contact?.name,
           linkedin_url: contact?.linkedin_url,
-          // Context for better matching
           organization_name: contact?.company_name || contact?.companies?.name,
           domain: contact?.companies?.website 
         };
@@ -176,7 +171,6 @@ const handleEnrich = async () => {
       setIsEnriching(false); 
     }
   };
-
 
   // Request Phone
   const handleRequestPhone = async () => {
@@ -271,12 +265,16 @@ const handleEnrich = async () => {
 
   if (isLoading || !contact) {
     return (
-      <div className="min-h-screen bg-slate-50 p-6">
-        <div className="max-w-9xl mx-auto space-y-4">
-          <Skeleton className="h-16 w-full rounded-xl" />
-          <div className="flex gap-6">
-            <Skeleton className="h-[600px] w-[340px] rounded-xl" />
-            <Skeleton className="h-[600px] flex-1 rounded-xl" />
+      <div className="min-h-screen bg-[#FAFAFA]">
+        <div className="border-b border-gray-200 bg-white px-6 py-4">
+          <Skeleton className="h-8 w-64" />
+        </div>
+        <div className="flex">
+          <div className="w-[380px] border-r border-gray-200 bg-white p-4">
+            <Skeleton className="h-[400px] w-full" />
+          </div>
+          <div className="flex-1 p-6">
+            <Skeleton className="h-[500px] w-full" />
           </div>
         </div>
       </div>
@@ -284,8 +282,8 @@ const handleEnrich = async () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      {/* Full-width Header */}
+    <div className="min-h-screen bg-[#FAFAFA]">
+      {/* Header - Apollo Style */}
       <ContactDetailHeader 
         contact={contact} 
         onBack={() => navigate(-1)} 
@@ -295,24 +293,21 @@ const handleEnrich = async () => {
         refetch={refetch}
       />
 
-      {/* Main Content with max-width */}
-      <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex flex-col lg:flex-row gap-6">
-          
-          {/* LEFT SIDEBAR - Contact Info */}
-          <aside className="w-full lg:w-[360px] flex-shrink-0">
-            <ContactDetailSidebar 
-              contact={contact} 
-              isRequestingPhone={isRequestingPhone} 
-              setIsRequestingPhone={setIsRequestingPhone} 
-              onRequestPhone={handleRequestPhone}
-              refetch={refetch}
-            />
-          </aside>
+      {/* Main Content - Two Column Layout */}
+      <div className="flex">
+        {/* LEFT SIDEBAR - Contact Info (Fixed Width) */}
+        <aside className="w-[380px] min-w-[380px] border-r border-gray-200 bg-white min-h-[calc(100vh-65px)] overflow-y-auto">
+          <ContactDetailSidebar 
+            contact={contact} 
+            isRequestingPhone={isRequestingPhone} 
+            setIsRequestingPhone={setIsRequestingPhone} 
+            onRequestPhone={handleRequestPhone}
+            refetch={refetch}
+          />
+        </aside>
 
-          {/* MAIN WORKSPACE */}
-          <main className="flex-1 min-w-0">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        {/* MAIN WORKSPACE - Tabs Content */}
+        <main className="flex-1 min-w-0 overflow-y-auto">
               <Tabs defaultValue="prospect" className="w-full">
                 {/* Tab Navigation */}
                 <div className="border-b border-slate-200 bg-slate-50/50">
@@ -374,61 +369,63 @@ const handleEnrich = async () => {
                   </TabsContent>
                 </div>
               </Tabs>
-            </div>
-          </main>
-        </div>
+          
+        </main>
       </div>
 
       {/* ========== MODALS ========== */}
       
       {/* NOTE MODAL */}
       <Dialog open={activeModal === 'note'} onOpenChange={() => closeModal()}>
-        <DialogContent className="sm:max-w-[560px] p-0 overflow-hidden">
-          <DialogHeader className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700">
-            <DialogTitle className="text-white font-bold flex items-center gap-2">
-              <StickyNote size={20} />
+        <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-lg">
+          <DialogHeader className="px-5 py-4 bg-white border-b border-gray-200">
+            <DialogTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <div className="p-1.5 bg-blue-100 rounded">
+                <StickyNote size={16} className="text-blue-600" />
+              </div>
               Create Note
             </DialogTitle>
           </DialogHeader>
           
-          <div className="p-6 space-y-4">
-            <div className="flex items-center gap-2 text-sm text-slate-600">
-              <span className="font-medium">For:</span>
-              <Badge variant="secondary" className="font-medium">
-                {contact.name}
-              </Badge>
+          <div className="p-5 space-y-4 bg-gray-50">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-500">For:</span>
+              <span className="font-medium text-gray-900">{contact.name}</span>
             </div>
             
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                 Note Content
               </Label>
               <Textarea 
                 placeholder="Write your note here..."
-                className="min-h-[180px] resize-none"
+                className="min-h-[160px] resize-none bg-white border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                 value={noteContent}
                 onChange={(e) => setNoteContent(e.target.value)}
               />
             </div>
 
-            <div className="flex items-center space-x-2 pt-2">
+            <div className="flex items-center space-x-2">
               <Checkbox 
                 id="followup-note" 
                 checked={createFollowUp}
                 onCheckedChange={(checked) => setCreateFollowUp(!!checked)}
+                className="border-gray-300"
               />
-              <label htmlFor="followup-note" className="text-sm text-slate-600 cursor-pointer">
+              <label htmlFor="followup-note" className="text-sm text-gray-600 cursor-pointer">
                 Create a follow-up task in 3 business days
               </label>
             </div>
           </div>
 
-          <DialogFooter className="px-6 py-4 bg-slate-50 border-t">
-            <Button variant="ghost" onClick={closeModal}>Cancel</Button>
+          <DialogFooter className="px-5 py-3 bg-white border-t border-gray-200">
+            <Button variant="ghost" onClick={closeModal} className="text-gray-600">
+              Cancel
+            </Button>
             <Button 
               onClick={handleLogNote}
               disabled={!noteContent.trim() || logActivity.isPending}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               {logActivity.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create Note
@@ -439,32 +436,32 @@ const handleEnrich = async () => {
 
       {/* CALL MODAL */}
       <Dialog open={activeModal === 'call'} onOpenChange={() => closeModal()}>
-        <DialogContent className="sm:max-w-[560px] p-0 overflow-hidden">
-          <DialogHeader className="px-6 py-4 bg-gradient-to-r from-amber-500 to-orange-500">
-            <DialogTitle className="text-white font-bold flex items-center gap-2">
-              <PhoneCall size={20} />
+        <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-lg">
+          <DialogHeader className="px-5 py-4 bg-white border-b border-gray-200">
+            <DialogTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <div className="p-1.5 bg-amber-100 rounded">
+                <PhoneCall size={16} className="text-amber-600" />
+              </div>
               Log Call
             </DialogTitle>
           </DialogHeader>
           
-          <div className="p-6 space-y-4">
-            <div className="flex items-center gap-2 text-sm text-slate-600">
-              <span className="font-medium">Contacted:</span>
-              <Badge variant="secondary" className="font-medium">
-                {contact.name}
-              </Badge>
+          <div className="p-5 space-y-4 bg-gray-50">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-500">Contacted:</span>
+              <span className="font-medium text-gray-900">{contact.name}</span>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Call Outcome
                 </Label>
                 <Select 
                   value={callDetails.outcome}
                   onValueChange={(v) => setCallDetails(p => ({...p, outcome: v}))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white border-gray-200">
                     <SelectValue placeholder="Select outcome" />
                   </SelectTrigger>
                   <SelectContent>
@@ -478,14 +475,14 @@ const handleEnrich = async () => {
               </div>
               
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Call Direction
                 </Label>
                 <Select 
                   value={callDetails.direction}
                   onValueChange={(v) => setCallDetails(p => ({...p, direction: v}))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white border-gray-200">
                     <SelectValue placeholder="Select direction" />
                   </SelectTrigger>
                   <SelectContent>
@@ -498,24 +495,25 @@ const handleEnrich = async () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Activity Date
                 </Label>
                 <Input 
                   type="datetime-local" 
                   defaultValue={new Date().toISOString().slice(0, 16)}
+                  className="bg-white border-gray-200"
                 />
               </div>
               
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Duration
                 </Label>
                 <Select 
                   value={callDetails.duration}
                   onValueChange={(v) => setCallDetails(p => ({...p, duration: v}))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white border-gray-200">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -531,35 +529,38 @@ const handleEnrich = async () => {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                 Call Notes
               </Label>
               <Textarea 
                 placeholder="Start typing to log a call..."
-                className="min-h-[120px] resize-none"
+                className="min-h-[100px] resize-none bg-white border-gray-200"
                 value={callDetails.notes}
                 onChange={(e) => setCallDetails(p => ({...p, notes: e.target.value}))}
               />
             </div>
 
-            <div className="flex items-center space-x-2 pt-2">
+            <div className="flex items-center space-x-2">
               <Checkbox 
                 id="followup-call" 
                 checked={createFollowUp}
                 onCheckedChange={(checked) => setCreateFollowUp(!!checked)}
+                className="border-gray-300"
               />
-              <label htmlFor="followup-call" className="text-sm text-slate-600 cursor-pointer">
+              <label htmlFor="followup-call" className="text-sm text-gray-600 cursor-pointer">
                 Create a follow-up task in 3 business days
               </label>
             </div>
           </div>
 
-          <DialogFooter className="px-6 py-4 bg-slate-50 border-t">
-            <Button variant="ghost" onClick={closeModal}>Cancel</Button>
+          <DialogFooter className="px-5 py-3 bg-white border-t border-gray-200">
+            <Button variant="ghost" onClick={closeModal} className="text-gray-600">
+              Cancel
+            </Button>
             <Button 
               onClick={handleLogCall}
               disabled={!callDetails.notes.trim() || logActivity.isPending}
-              className="bg-amber-500 hover:bg-amber-600"
+              className="bg-amber-500 hover:bg-amber-600 text-white"
             >
               {logActivity.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Log Call
@@ -570,63 +571,67 @@ const handleEnrich = async () => {
 
       {/* EMAIL MODAL */}
       <Dialog open={activeModal === 'email'} onOpenChange={() => closeModal()}>
-        <DialogContent className="sm:max-w-[560px] p-0 overflow-hidden">
-          <DialogHeader className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-indigo-700">
-            <DialogTitle className="text-white font-bold flex items-center gap-2">
-              <Mail size={20} />
+        <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-lg">
+          <DialogHeader className="px-5 py-4 bg-white border-b border-gray-200">
+            <DialogTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <div className="p-1.5 bg-indigo-100 rounded">
+                <Mail size={16} className="text-indigo-600" />
+              </div>
               Log Email
             </DialogTitle>
           </DialogHeader>
           
-          <div className="p-6 space-y-4">
-            <div className="flex items-center gap-2 text-sm text-slate-600">
-              <span className="font-medium">To:</span>
-              <Badge variant="secondary" className="font-medium">
-                {contact.email || contact.name}
-              </Badge>
+          <div className="p-5 space-y-4 bg-gray-50">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-500">To:</span>
+              <span className="font-medium text-gray-900">{contact.email || contact.name}</span>
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                 Subject
               </Label>
               <Input 
                 placeholder="Enter email subject..."
                 value={emailDetails.subject}
                 onChange={(e) => setEmailDetails(p => ({...p, subject: e.target.value}))}
+                className="bg-white border-gray-200"
               />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                 Email Body
               </Label>
               <Textarea 
                 placeholder="Enter email content..."
-                className="min-h-[180px] resize-none"
+                className="min-h-[160px] resize-none bg-white border-gray-200"
                 value={emailDetails.body}
                 onChange={(e) => setEmailDetails(p => ({...p, body: e.target.value}))}
               />
             </div>
 
-            <div className="flex items-center space-x-2 pt-2">
+            <div className="flex items-center space-x-2">
               <Checkbox 
                 id="followup-email" 
                 checked={createFollowUp}
                 onCheckedChange={(checked) => setCreateFollowUp(!!checked)}
+                className="border-gray-300"
               />
-              <label htmlFor="followup-email" className="text-sm text-slate-600 cursor-pointer">
+              <label htmlFor="followup-email" className="text-sm text-gray-600 cursor-pointer">
                 Create a follow-up task in 3 business days
               </label>
             </div>
           </div>
 
-          <DialogFooter className="px-6 py-4 bg-slate-50 border-t">
-            <Button variant="ghost" onClick={closeModal}>Cancel</Button>
+          <DialogFooter className="px-5 py-3 bg-white border-t border-gray-200">
+            <Button variant="ghost" onClick={closeModal} className="text-gray-600">
+              Cancel
+            </Button>
             <Button 
               onClick={handleLogEmail}
               disabled={!emailDetails.subject.trim() || logActivity.isPending}
-              className="bg-indigo-600 hover:bg-indigo-700"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
             >
               {logActivity.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Log Email
@@ -637,60 +642,65 @@ const handleEnrich = async () => {
 
       {/* TASK MODAL */}
       <Dialog open={activeModal === 'task'} onOpenChange={() => closeModal()}>
-        <DialogContent className="sm:max-w-[560px] p-0 overflow-hidden">
-          <DialogHeader className="px-6 py-4 bg-gradient-to-r from-emerald-600 to-emerald-700">
-            <DialogTitle className="text-white font-bold flex items-center gap-2">
-              <CheckSquare size={20} />
+        <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-lg">
+          <DialogHeader className="px-5 py-4 bg-white border-b border-gray-200">
+            <DialogTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <div className="p-1.5 bg-emerald-100 rounded">
+                <CheckSquare size={16} className="text-emerald-600" />
+              </div>
               Create Task
             </DialogTitle>
           </DialogHeader>
           
-          <div className="p-6 space-y-4">
+          <div className="p-5 space-y-4 bg-gray-50">
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                 Task Title *
               </Label>
               <Input 
                 placeholder="Enter your task..."
                 value={taskDetails.title}
                 onChange={(e) => setTaskDetails(p => ({...p, title: e.target.value}))}
+                className="bg-white border-gray-200"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Due Date
                 </Label>
                 <Input 
                   type="date" 
                   value={taskDetails.dueDate}
                   onChange={(e) => setTaskDetails(p => ({...p, dueDate: e.target.value}))}
+                  className="bg-white border-gray-200"
                 />
               </div>
               
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Due Time
                 </Label>
                 <Input 
                   type="time" 
                   value={taskDetails.dueTime}
                   onChange={(e) => setTaskDetails(p => ({...p, dueTime: e.target.value}))}
+                  className="bg-white border-gray-200"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Task Type
                 </Label>
                 <Select 
                   value={taskDetails.taskType}
                   onValueChange={(v) => setTaskDetails(p => ({...p, taskType: v}))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white border-gray-200">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -703,14 +713,14 @@ const handleEnrich = async () => {
               </div>
               
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Priority
                 </Label>
                 <Select 
                   value={taskDetails.priority}
                   onValueChange={(v) => setTaskDetails(p => ({...p, priority: v}))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white border-gray-200">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -724,31 +734,31 @@ const handleEnrich = async () => {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                 Description
               </Label>
               <Textarea 
                 placeholder="Add task notes..."
-                className="min-h-[100px] resize-none"
+                className="min-h-[80px] resize-none bg-white border-gray-200"
                 value={taskDetails.description}
                 onChange={(e) => setTaskDetails(p => ({...p, description: e.target.value}))}
               />
             </div>
 
-            <div className="flex items-center gap-2 text-sm text-slate-600 pt-2">
-              <span className="font-medium">Associated with:</span>
-              <Badge variant="secondary" className="font-medium">
-                {contact.name}
-              </Badge>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-500">Associated with:</span>
+              <span className="font-medium text-gray-900">{contact.name}</span>
             </div>
           </div>
 
-          <DialogFooter className="px-6 py-4 bg-slate-50 border-t">
-            <Button variant="ghost" onClick={closeModal}>Cancel</Button>
+          <DialogFooter className="px-5 py-3 bg-white border-t border-gray-200">
+            <Button variant="ghost" onClick={closeModal} className="text-gray-600">
+              Cancel
+            </Button>
             <Button 
               onClick={handleCreateTask}
               disabled={!taskDetails.title.trim() || logActivity.isPending}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
             >
               {logActivity.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create Task
@@ -759,43 +769,44 @@ const handleEnrich = async () => {
 
       {/* MEETING MODAL */}
       <Dialog open={activeModal === 'meeting'} onOpenChange={() => closeModal()}>
-        <DialogContent className="sm:max-w-[560px] p-0 overflow-hidden">
-          <DialogHeader className="px-6 py-4 bg-gradient-to-r from-purple-600 to-purple-700">
-            <DialogTitle className="text-white font-bold flex items-center gap-2">
-              <Calendar size={20} />
+        <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-lg">
+          <DialogHeader className="px-5 py-4 bg-white border-b border-gray-200">
+            <DialogTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <div className="p-1.5 bg-purple-100 rounded">
+                <Calendar size={16} className="text-purple-600" />
+              </div>
               Log Meeting
             </DialogTitle>
           </DialogHeader>
           
-          <div className="p-6 space-y-4">
-            <div className="flex items-center gap-2 text-sm text-slate-600">
-              <span className="font-medium">Attendees:</span>
-              <Badge variant="secondary" className="font-medium">
-                {contact.name}
-              </Badge>
+          <div className="p-5 space-y-4 bg-gray-50">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-500">Attendees:</span>
+              <span className="font-medium text-gray-900">{contact.name}</span>
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                 Meeting Title
               </Label>
               <Input 
                 placeholder="Enter meeting title..."
                 value={meetingDetails.title}
                 onChange={(e) => setMeetingDetails(p => ({...p, title: e.target.value}))}
+                className="bg-white border-gray-200"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Meeting Outcome
                 </Label>
                 <Select 
                   value={meetingDetails.outcome}
                   onValueChange={(v) => setMeetingDetails(p => ({...p, outcome: v}))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white border-gray-200">
                     <SelectValue placeholder="Select outcome" />
                   </SelectTrigger>
                   <SelectContent>
@@ -809,14 +820,14 @@ const handleEnrich = async () => {
               </div>
               
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Duration
                 </Label>
                 <Select 
                   value={meetingDetails.duration}
                   onValueChange={(v) => setMeetingDetails(p => ({...p, duration: v}))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white border-gray-200">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -832,46 +843,50 @@ const handleEnrich = async () => {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                 Meeting Start Time
               </Label>
               <Input 
                 type="datetime-local" 
                 value={meetingDetails.startTime}
                 onChange={(e) => setMeetingDetails(p => ({...p, startTime: e.target.value}))}
+                className="bg-white border-gray-200"
               />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
                 Meeting Notes
               </Label>
               <Textarea 
                 placeholder="Start typing to log a meeting..."
-                className="min-h-[120px] resize-none"
+                className="min-h-[100px] resize-none bg-white border-gray-200"
                 value={meetingDetails.notes}
                 onChange={(e) => setMeetingDetails(p => ({...p, notes: e.target.value}))}
               />
             </div>
 
-            <div className="flex items-center space-x-2 pt-2">
+            <div className="flex items-center space-x-2">
               <Checkbox 
                 id="followup-meeting" 
                 checked={createFollowUp}
                 onCheckedChange={(checked) => setCreateFollowUp(!!checked)}
+                className="border-gray-300"
               />
-              <label htmlFor="followup-meeting" className="text-sm text-slate-600 cursor-pointer">
+              <label htmlFor="followup-meeting" className="text-sm text-gray-600 cursor-pointer">
                 Create a follow-up task in 3 business days
               </label>
             </div>
           </div>
 
-          <DialogFooter className="px-6 py-4 bg-slate-50 border-t">
-            <Button variant="ghost" onClick={closeModal}>Cancel</Button>
+          <DialogFooter className="px-5 py-3 bg-white border-t border-gray-200">
+            <Button variant="ghost" onClick={closeModal} className="text-gray-600">
+              Cancel
+            </Button>
             <Button 
               onClick={handleLogMeeting}
               disabled={!meetingDetails.notes.trim() || logActivity.isPending}
-              className="bg-purple-600 hover:bg-purple-700"
+              className="bg-purple-600 hover:bg-purple-700 text-white"
             >
               {logActivity.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Log Meeting

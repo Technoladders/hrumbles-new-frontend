@@ -550,6 +550,8 @@ const handleListAdd = async (targetFileId: string) => {
     }
   });
 
+  console.log("tableData from TanstackContactsPage:", tableData);
+
   // 16. Reset preferences to default
   const handleResetPreferences = () => {
     setColumnVisibility(DEFAULT_COLUMN_VISIBILITY);

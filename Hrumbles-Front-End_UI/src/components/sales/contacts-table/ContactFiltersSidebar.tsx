@@ -1,11 +1,12 @@
 // src/components/sales/contacts-table/ContactFiltersSidebar.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Table } from '@tanstack/react-table';
+import { useDispatch, useSelector } from 'react-redux';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { 
   Building2, User, MapPin, ListFilter, FilterX, X,
-  Briefcase, Tag, Sparkles, Search, Loader2
+  Briefcase, Tag, Sparkles, Search, Loader2, Users, Factory
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,12 +15,18 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useFilterStatistics } from '@/hooks/sales/useFilterStatistics';
+import { CompanyFilterSelect } from './filters/CompanyFilterSelect';
+import { LocationFilterSelect } from './filters/LocationFilterSelect';
+import { JobTitleFilterSelect } from './filters/JobTitleFilterSelect';
+import { IndustryFilterSelect } from './filters/IndustryFilterSelect';
+import { PipelineStagesFilter } from './filters/PipelineStagesFilter';
+import { setFilters as setReduxFilters } from '@/Redux/intelligenceSearchSlice';
 
 interface ContactFiltersSidebarProps {
   table: Table<any>;
   isOpen?: boolean;
   onClose?: () => void;
-  fileId?: string | null; // Pass fileId for file-specific statistics
+  fileId?: string | null;
 }
 
 // Predefined filter options
@@ -46,22 +53,16 @@ const EMPLOYEE_COUNT_OPTIONS = [
   { id: '10001+', label: '10,000+' },
 ];
 
-const CONTACT_STAGE_OPTIONS = [
-  { id: 'Lead', label: 'Lead' },
-  { id: 'Prospect', label: 'Prospect' },
-  { id: 'Qualified', label: 'Qualified' },
-  { id: 'Customer', label: 'Customer' },
-  { id: 'Churned', label: 'Churned' },
-];
+
 
 const SOURCE_OPTIONS = [
-  { id: 'Website', label: 'Website' },
-  { id: 'Referral', label: 'Referral' },
   { id: 'LinkedIn', label: 'LinkedIn' },
-  { id: 'Cold Outreach', label: 'Cold Outreach' },
-  { id: 'Event', label: 'Event' },
-  { id: 'Inbound', label: 'Inbound' },
-  { id: 'Discovery', label: 'Discovery' },
+  { id: 'Cold Call', label: 'Cold Call' },
+  { id: 'Email Campaign', label: 'Email Campaign' },
+  { id: 'Referral', label: 'Referral' },
+  { id: 'Website Form', label: 'Website Form' },
+  { id: 'Other', label: 'Other' },
+ 
 ];
 
 export function ContactFiltersSidebar({ 
@@ -70,26 +71,35 @@ export function ContactFiltersSidebar({
   onClose,
   fileId = null
 }: ContactFiltersSidebarProps) {
-  // Fetch statistics from database (ALL contacts, not just current page)
+  const dispatch = useDispatch();
+  
+  // Fetch statistics from database
   const { data: stats, isLoading: statsLoading } = useFilterStatistics({ fileId });
+
+  // Single accordion value state - only one section open at a time
+  const [openSection, setOpenSection] = useState<string>('job-titles');
 
   // Local filter state
   const [filters, setFilters] = useState({
     search: '',
+    jobTitles: [] as string[],
+    managementLevels: [] as string[],
+    departments: [] as string[],
+    functions: [] as string[],
     seniorities: [] as string[],
     employeeCounts: [] as string[],
     stages: [] as string[],
     sources: [] as string[],
     industries: [] as string[],
-    departments: [] as string[],
-    country: '',
-    city: '',
+    companyIds: [] as number[],
+    countries: [] as string[],
+    cities: [] as string[],
     hasEmail: false,
     hasPhone: false,
     isEnriched: false,
   });
 
-  // Get unique industries from stats (sorted by count)
+  // Get unique industries from stats
   const uniqueIndustries = useMemo(() => {
     if (!stats?.industries) return [];
     return Object.entries(stats.industries)
@@ -97,13 +107,34 @@ export function ContactFiltersSidebar({
       .map(([name]) => name);
   }, [stats?.industries]);
 
-  // Get unique departments from stats (sorted by count)
+  // Get unique departments from stats
   const uniqueDepartments = useMemo(() => {
     if (!stats?.departments) return [];
     return Object.entries(stats.departments)
       .sort((a, b) => b[1] - a[1])
       .map(([name]) => name);
   }, [stats?.departments]);
+
+  // Auto-apply filters when certain fields change
+  useEffect(() => {
+    if (
+      filters.countries.length > 0 || 
+      filters.cities.length > 0 || 
+      filters.jobTitles.length > 0 ||
+      filters.managementLevels.length > 0 ||
+      filters.departments.length > 0 ||
+      filters.functions.length > 0
+    ) {
+      applyFilters();
+    }
+  }, [
+    filters.countries, 
+    filters.cities, 
+    filters.jobTitles,
+    filters.managementLevels,
+    filters.departments,
+    filters.functions
+  ]);
 
   // Toggle array item helper
   const toggleArrayItem = (field: keyof typeof filters, value: string) => {
@@ -116,74 +147,129 @@ export function ContactFiltersSidebar({
     });
   };
 
-  // Apply filters to table
-  const applyFilters = () => {
+  // Apply filters - update both table and Redux
+  const applyFilters = useCallback(() => {
+    // Reset table filters first
     table.resetColumnFilters();
+
+    // Build filter object for Redux
+    const reduxFilters: any = {};
 
     if (filters.search) {
       table.getColumn('name')?.setFilterValue(filters.search);
+      reduxFilters.search = filters.search;
+    }
+
+    if (filters.jobTitles.length > 0) {
+      table.getColumn('job_title')?.setFilterValue(filters.jobTitles);
+      reduxFilters.jobTitles = filters.jobTitles;
+    }
+
+    if (filters.managementLevels.length > 0) {
+      table.getColumn('seniority')?.setFilterValue(filters.managementLevels);
+      reduxFilters.seniorities = filters.managementLevels;
+    }
+
+    if (filters.departments.length > 0) {
+      table.getColumn('departments')?.setFilterValue(filters.departments);
+      reduxFilters.departments = filters.departments;
+    }
+
+    if (filters.functions.length > 0) {
+      table.getColumn('functions')?.setFilterValue(filters.functions);
+      reduxFilters.functions = filters.functions;
     }
 
     if (filters.seniorities.length > 0) {
       table.getColumn('seniority')?.setFilterValue(filters.seniorities);
+      reduxFilters.seniorities = filters.seniorities;
     }
 
     if (filters.stages.length > 0) {
       table.getColumn('contact_stage')?.setFilterValue(filters.stages);
+      reduxFilters.stages = filters.stages;
     }
 
     if (filters.sources.length > 0) {
       table.getColumn('medium')?.setFilterValue(filters.sources);
+      reduxFilters.sources = filters.sources;
     }
 
-    if (filters.country) {
-      table.getColumn('country')?.setFilterValue(filters.country);
+    if (filters.countries.length > 0) {
+      table.getColumn('country')?.setFilterValue(filters.countries);
+      reduxFilters.countries = filters.countries;
     }
 
-    if (filters.city) {
-      table.getColumn('city')?.setFilterValue(filters.city);
+    if (filters.cities.length > 0) {
+      table.getColumn('city')?.setFilterValue(filters.cities);
+      reduxFilters.cities = filters.cities;
     }
 
     if (filters.industries.length > 0) {
       table.getColumn('industry')?.setFilterValue(filters.industries);
+      reduxFilters.industries = filters.industries;
     }
 
     if (filters.employeeCounts.length > 0) {
       table.getColumn('employee_count')?.setFilterValue(filters.employeeCounts);
+      reduxFilters.employeeCounts = filters.employeeCounts;
     }
-  };
+
+    // Company filter
+    if (filters.companyIds.length > 0) {
+      table.getColumn('company_id')?.setFilterValue(filters.companyIds);
+      reduxFilters.companyIds = filters.companyIds;
+    }
+
+    // Quick filters
+    if (filters.hasEmail) reduxFilters.hasEmail = true;
+    if (filters.hasPhone) reduxFilters.hasPhone = true;
+    if (filters.isEnriched) reduxFilters.isEnriched = true;
+
+    // Dispatch to Redux for server-side filtering
+    dispatch(setReduxFilters(reduxFilters));
+  }, [filters, table, dispatch]);
 
   // Reset all filters
   const handleReset = () => {
     setFilters({
       search: '',
+      jobTitles: [],
+      managementLevels: [],
+      departments: [],
+      functions: [],
       seniorities: [],
       employeeCounts: [],
       stages: [],
       sources: [],
       industries: [],
-      departments: [],
-      country: '',
-      city: '',
+      companyIds: [],
+      countries: [],
+      cities: [],
       hasEmail: false,
       hasPhone: false,
       isEnriched: false,
     });
     table.resetColumnFilters();
+    dispatch(setReduxFilters({}));
   };
 
   // Count active filters
   const activeFiltersCount = useMemo(() => {
     let count = 0;
     if (filters.search) count++;
+    count += filters.jobTitles.length;
+    count += filters.managementLevels.length;
+    count += filters.departments.length;
+    count += filters.functions.length;
     count += filters.seniorities.length;
     count += filters.employeeCounts.length;
     count += filters.stages.length;
     count += filters.sources.length;
     count += filters.industries.length;
-    count += filters.departments.length;
-    if (filters.country) count++;
-    if (filters.city) count++;
+    count += filters.companyIds.length;
+    count += filters.countries.length;
+    count += filters.cities.length;
     if (filters.hasEmail) count++;
     if (filters.hasPhone) count++;
     if (filters.isEnriched) count++;
@@ -247,7 +333,7 @@ export function ContactFiltersSidebar({
           />
         </div>
 
-        {/* Stats Card - Now from database */}
+        {/* Stats Card */}
         <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100 rounded-lg p-3">
           {statsLoading ? (
             <div className="flex items-center justify-center py-2">
@@ -276,8 +362,10 @@ export function ContactFiltersSidebar({
       {/* SCROLLABLE FILTERS */}
       <ScrollArea className="flex-1 overflow-y-auto">
         <Accordion 
-          type="multiple" 
-          defaultValue={['quick', 'stage', 'person', 'company', 'location']} 
+          type="single" 
+          value={openSection}
+          onValueChange={setOpenSection}
+          collapsible
           className="w-full px-3 py-2"
         >
           
@@ -316,6 +404,59 @@ export function ContactFiltersSidebar({
             </AccordionContent>
           </AccordionItem>
 
+          {/* JOB TITLES FILTER */}
+          <AccordionItem value="job-titles" className="border-b border-slate-100">
+            <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
+              <div className="flex items-center justify-between w-full pr-2">
+                <div className="flex items-center gap-2">
+                  <Briefcase size={14} className="text-blue-500" />
+                  Job Titles
+                </div>
+                {filters.jobTitles.length > 0 && (
+                  <Badge className="h-4 px-1.5 text-[9px] bg-blue-100 text-blue-700">
+                    {filters.jobTitles.length}
+                  </Badge>
+                )}
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-2 pb-3 pt-1">
+              <JobTitleFilterSelect
+                selectedTitles={filters.jobTitles}
+                onSelectionChange={(titles) => setFilters(prev => ({ ...prev, jobTitles: titles }))}
+                selectedManagementLevels={filters.managementLevels}
+                onManagementLevelsChange={(levels) => setFilters(prev => ({ ...prev, managementLevels: levels }))}
+                selectedDepartments={filters.departments}
+                onDepartmentsChange={(departments) => setFilters(prev => ({ ...prev, departments }))}
+                selectedFunctions={filters.functions}
+                onFunctionsChange={(functions) => setFilters(prev => ({ ...prev, functions }))}
+                fileId={fileId}
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* COMPANY FILTER */}
+          <AccordionItem value="company" className="border-b border-slate-100">
+            <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
+              <div className="flex items-center justify-between w-full pr-2">
+                <div className="flex items-center gap-2">
+                  <Building2 size={14} className="text-violet-500" />
+                  Company
+                </div>
+                {filters.companyIds.length > 0 && (
+                  <Badge className="h-4 px-1.5 text-[9px] bg-violet-100 text-violet-700">
+                    {filters.companyIds.length}
+                  </Badge>
+                )}
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-2 pb-3 pt-1">
+              <CompanyFilterSelect
+                selectedCompanyIds={filters.companyIds}
+                onSelectionChange={(ids) => setFilters(prev => ({ ...prev, companyIds: ids }))}
+              />
+            </AccordionContent>
+          </AccordionItem>
+
           {/* CONTACT STAGE */}
           <AccordionItem value="stage" className="border-b border-slate-100">
             <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
@@ -332,18 +473,11 @@ export function ContactFiltersSidebar({
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-2 pb-3 pt-1">
-              <div className="space-y-2">
-                {CONTACT_STAGE_OPTIONS.map(option => (
-                  <FilterCheckbox
-                    key={option.id}
-                    id={`stage-${option.id}`}
-                    label={option.label}
-                    count={stats?.stages?.[option.id] || 0}
-                    checked={filters.stages.includes(option.id)}
-                    onChange={() => toggleArrayItem('stages', option.id)}
-                  />
-                ))}
-              </div>
+              <PipelineStagesFilter
+                selectedStages={filters.stages}
+                onSelectionChange={(stages) => setFilters(prev => ({ ...prev, stages }))}
+                fileId={fileId}
+              />
             </AccordionContent>
           </AccordionItem>
 
@@ -363,7 +497,6 @@ export function ContactFiltersSidebar({
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-2 pb-3 pt-1 space-y-4">
-              {/* Seniority */}
               <div>
                 <Label className="text-[10px] uppercase text-slate-500 font-semibold mb-2 block">
                   Seniority Level
@@ -382,7 +515,6 @@ export function ContactFiltersSidebar({
                 </div>
               </div>
 
-              {/* Departments (dynamic from stats) */}
               {uniqueDepartments.length > 0 && (
                 <div>
                   <Label className="text-[10px] uppercase text-slate-500 font-semibold mb-2 block">
@@ -410,66 +542,58 @@ export function ContactFiltersSidebar({
             </AccordionContent>
           </AccordionItem>
 
-          {/* COMPANY DETAILS */}
-          <AccordionItem value="company" className="border-b border-slate-100">
+          {/* EMPLOYEE COUNT */}
+          <AccordionItem value="employee-count" className="border-b border-slate-100">
             <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
               <div className="flex items-center justify-between w-full pr-2">
                 <div className="flex items-center gap-2">
-                  <Building2 size={14} className="text-emerald-500" />
-                  Company Details
+                  <Users size={14} className="text-cyan-500" />
+                  Employee Count
                 </div>
-                {(filters.employeeCounts.length + filters.industries.length) > 0 && (
-                  <Badge className="h-4 px-1.5 text-[9px] bg-emerald-100 text-emerald-700">
-                    {filters.employeeCounts.length + filters.industries.length}
+                {filters.employeeCounts.length > 0 && (
+                  <Badge className="h-4 px-1.5 text-[9px] bg-cyan-100 text-cyan-700">
+                    {filters.employeeCounts.length}
                   </Badge>
                 )}
               </div>
             </AccordionTrigger>
-            <AccordionContent className="px-2 pb-3 pt-1 space-y-4">
-              {/* Employee Count */}
-              <div>
-                <Label className="text-[10px] uppercase text-slate-500 font-semibold mb-2 block">
-                  Employee Count
-                </Label>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                  {EMPLOYEE_COUNT_OPTIONS.map(option => (
-                    <FilterCheckbox
-                      key={option.id}
-                      id={`emp-${option.id}`}
-                      label={option.label}
-                      count={stats?.employeeRanges?.[option.id] || 0}
-                      checked={filters.employeeCounts.includes(option.id)}
-                      onChange={() => toggleArrayItem('employeeCounts', option.id)}
-                    />
-                  ))}
-                </div>
+            <AccordionContent className="px-2 pb-3 pt-1">
+              <div className="space-y-1.5">
+                {EMPLOYEE_COUNT_OPTIONS.map(option => (
+                  <FilterCheckbox
+                    key={option.id}
+                    id={`emp-${option.id}`}
+                    label={option.label}
+                    count={stats?.employeeRanges?.[option.id] || 0}
+                    checked={filters.employeeCounts.includes(option.id)}
+                    onChange={() => toggleArrayItem('employeeCounts', option.id)}
+                  />
+                ))}
               </div>
+            </AccordionContent>
+          </AccordionItem>
 
-              {/* Industry (dynamic from stats) */}
-              {uniqueIndustries.length > 0 && (
-                <div>
-                  <Label className="text-[10px] uppercase text-slate-500 font-semibold mb-2 block">
-                    Industry
-                  </Label>
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                    {uniqueIndustries.slice(0, 10).map(industry => (
-                      <FilterCheckbox
-                        key={industry}
-                        id={`industry-${industry}`}
-                        label={industry}
-                        count={stats?.industries?.[industry] || 0}
-                        checked={filters.industries.includes(industry)}
-                        onChange={() => toggleArrayItem('industries', industry)}
-                      />
-                    ))}
-                    {uniqueIndustries.length > 10 && (
-                      <p className="text-[9px] text-slate-400 pt-1">
-                        +{uniqueIndustries.length - 10} more
-                      </p>
-                    )}
-                  </div>
+          {/* INDUSTRY */}
+          <AccordionItem value="industry" className="border-b border-slate-100">
+            <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
+              <div className="flex items-center justify-between w-full pr-2">
+                <div className="flex items-center gap-2">
+                  <Factory size={14} className="text-emerald-500" />
+                  Industry
                 </div>
-              )}
+                {filters.industries.length > 0 && (
+                  <Badge className="h-4 px-1.5 text-[9px] bg-emerald-100 text-emerald-700">
+                    {filters.industries.length}
+                  </Badge>
+                )}
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-2 pb-3 pt-1">
+              <IndustryFilterSelect
+                selectedIndustries={filters.industries}
+                onSelectionChange={(industries) => setFilters(prev => ({ ...prev, industries }))}
+                fileId={fileId}
+              />
             </AccordionContent>
           </AccordionItem>
 
@@ -512,65 +636,35 @@ export function ContactFiltersSidebar({
                   <MapPin size={14} className="text-rose-500" />
                   Location
                 </div>
-                {(filters.country || filters.city) && (
+                {(filters.countries.length + filters.cities.length) > 0 && (
                   <Badge className="h-4 px-1.5 text-[9px] bg-rose-100 text-rose-700">
-                    {(filters.country ? 1 : 0) + (filters.city ? 1 : 0)}
+                    {filters.countries.length + filters.cities.length}
                   </Badge>
                 )}
               </div>
             </AccordionTrigger>
-            <AccordionContent className="px-2 pb-3 pt-1 space-y-3">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase text-slate-500 font-semibold">
+            <AccordionContent className="px-2 pb-3 pt-1 space-y-4">
+              <div>
+                <Label className="text-[10px] uppercase text-slate-500 font-semibold mb-2 block">
                   Country
                 </Label>
-                <Input
-                  placeholder="Enter country..."
-                  className="h-8 text-xs"
-                  value={filters.country}
-                  onChange={(e) => {
-                    setFilters(prev => ({ ...prev, country: e.target.value }));
-                    table.getColumn('country')?.setFilterValue(e.target.value || undefined);
-                  }}
+                <LocationFilterSelect
+                  type="country"
+                  selectedLocations={filters.countries}
+                  onSelectionChange={(countries) => setFilters(prev => ({ ...prev, countries }))}
+                  fileId={fileId}
                 />
-                {/* Show top countries from stats */}
-                {stats?.countries && Object.keys(stats.countries).length > 0 && (
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {Object.entries(stats.countries)
-                      .sort((a, b) => b[1] - a[1])
-                      .slice(0, 5)
-                      .map(([country, count]) => (
-                        <button
-                          key={country}
-                          onClick={() => {
-                            setFilters(prev => ({ ...prev, country }));
-                            table.getColumn('country')?.setFilterValue(country);
-                          }}
-                          className={cn(
-                            "text-[9px] px-1.5 py-0.5 rounded-full border transition-colors",
-                            filters.country === country
-                              ? "bg-rose-100 border-rose-300 text-rose-700"
-                              : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                          )}
-                        >
-                          {country} ({count})
-                        </button>
-                      ))}
-                  </div>
-                )}
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase text-slate-500 font-semibold">
+
+              <div>
+                <Label className="text-[10px] uppercase text-slate-500 font-semibold mb-2 block">
                   City
                 </Label>
-                <Input
-                  placeholder="Enter city..."
-                  className="h-8 text-xs"
-                  value={filters.city}
-                  onChange={(e) => {
-                    setFilters(prev => ({ ...prev, city: e.target.value }));
-                    table.getColumn('city')?.setFilterValue(e.target.value || undefined);
-                  }}
+                <LocationFilterSelect
+                  type="city"
+                  selectedLocations={filters.cities}
+                  onSelectionChange={(cities) => setFilters(prev => ({ ...prev, cities }))}
+                  fileId={fileId}
                 />
               </div>
             </AccordionContent>
@@ -579,7 +673,7 @@ export function ContactFiltersSidebar({
         </Accordion>
       </ScrollArea>
 
-      {/* APPLY BUTTON (Fixed at bottom) */}
+      {/* APPLY BUTTON */}
       {activeFiltersCount > 0 && (
         <div className="flex-shrink-0 p-3 border-t border-slate-200 bg-slate-50">
           <Button

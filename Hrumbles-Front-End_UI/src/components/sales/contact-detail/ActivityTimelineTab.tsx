@@ -1,511 +1,335 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  Phone, StickyNote, Mail, Calendar, CheckSquare, 
-  Search, Filter, ChevronDown, ChevronRight, MoreHorizontal,
-  Clock, CheckCircle2, AlertCircle, ArrowUpRight, User,
-  ChevronUp
-} from 'lucide-react';
-import { format, isFuture, isPast, parseISO, isValid, compareDesc } from 'date-fns';
-import { cn } from '@/lib/utils';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+// Hrumbles-Front-End_UI/src/components/sales/contact-detail/ActivityTimelineTab.tsx
+import React, { useState } from 'react';
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { 
+  PhoneCall, Mail, StickyNote, Calendar, CheckSquare, Clock,
+  Plus, Filter, ChevronDown, MoreHorizontal, CheckCircle2, Circle
+} from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuTrigger,
   DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Card } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from '@/lib/utils';
+import { getRelativeTime, formatDate } from '@/utils/dataExtractor';
 
-// --- Types ---
-type ActivityType = 'all' | 'note' | 'call' | 'email' | 'task' | 'meeting' | 'stage_change';
-
-interface ActivityTimelineProps {
+interface ActivityTimelineTabProps {
   contact: any;
-  onOpenModal: (type: 'note' | 'call' | 'email' | 'task' | 'meeting') => void;
+  onOpenModal: (type: 'call' | 'note' | 'email' | 'task' | 'meeting') => void;
 }
 
-// --- Helper Functions ---
+export const ActivityTimelineTab: React.FC<ActivityTimelineTabProps> = ({ 
+  contact, 
+  onOpenModal 
+}) => {
+  const [filter, setFilter] = useState<string>('all');
+  const activities = contact.contact_activities || [];
+  
+  // Filter activities
+  const filteredActivities = filter === 'all' 
+    ? activities 
+    : activities.filter((a: any) => a.type === filter);
+  
+  // Sort by date (newest first)
+  const sortedActivities = [...filteredActivities].sort(
+    (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 
-// Safe JSON parser for the metadata field which might come as string or object
-const parseMetadata = (meta: any) => {
-  if (!meta) return {};
-  if (typeof meta === 'object') return meta;
-  try {
-    return JSON.parse(meta);
-  } catch (e) {
-    return {};
-  }
-};
-
-// --- Main Component ---
-
-export const ActivityTimelineTab: React.FC<ActivityTimelineProps> = ({ contact, onOpenModal }) => {
-  const [activeTab, setActiveTab] = useState<ActivityType>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<string[]>([]);
-  const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(new Set());
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-
-  // 1. Process and Sort Data
-  const groupedActivities = useMemo(() => {
-    const rawActivities = contact?.contact_activities || [];
-    
-    // Filter first
-    const filtered = rawActivities.filter((act: any) => {
-      // Tab Filter
-      if (activeTab !== 'all' && act.type !== activeTab) return false;
-      
-      // Search
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const meta = parseMetadata(act.metadata);
-        return (
-          act.title?.toLowerCase().includes(q) || 
-          act.description?.toLowerCase().includes(q) ||
-          meta.outcome?.toLowerCase().includes(q)
-        );
-      }
-
-      // Checkbox Filter
-      if (activeTab === 'all' && filterType.length > 0 && !filterType.includes(act.type)) {
-        return false;
-      }
-      return true;
+  // Group activities by date
+  const groupedActivities = sortedActivities.reduce((groups: any, activity: any) => {
+    const date = new Date(activity.created_at).toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
     });
+    if (!groups[date]) groups[date] = [];
+    groups[date].push(activity);
+    return groups;
+  }, {});
 
-    // Grouping Buckets
-    const groups = {
-      overdue: [] as any[],
-      upcoming: [] as any[],
-      months: {} as Record<string, any[]>
-    };
+  const activityTypes = [
+    { value: 'all', label: 'All Activities' },
+    { value: 'call', label: 'Calls' },
+    { value: 'email', label: 'Emails' },
+    { value: 'note', label: 'Notes' },
+    { value: 'task', label: 'Tasks' },
+    { value: 'meeting', label: 'Meetings' },
+  ];
 
-    filtered.forEach((act: any) => {
-      // Use activity_date (custom column) or created_at as fallback
-      const dateStr = act.activity_date || act.created_at;
-      const date = new Date(dateStr);
-      const meta = parseMetadata(act.metadata);
-      const isTask = act.type === 'task';
-      const isCompleted = act.status === 'completed' || meta.status === 'completed';
-
-      // Logic for Overdue vs Upcoming vs Past
-      if (isTask && !isCompleted && isPast(date)) {
-        groups.overdue.push(act);
-      } else if (isFuture(date)) {
-        groups.upcoming.push(act);
-      } else {
-        // Past / Completed activities grouped by Month
-        const monthKey = format(date, 'MMMM yyyy');
-        if (!groups.months[monthKey]) groups.months[monthKey] = [];
-        groups.months[monthKey].push(act);
-      }
-    });
-
-    // Sort within groups
-    groups.overdue.sort((a, b) => new Date(a.activity_date).getTime() - new Date(b.activity_date).getTime()); // Ascending for overdue
-    groups.upcoming.sort((a, b) => new Date(a.activity_date).getTime() - new Date(b.activity_date).getTime()); // Ascending for upcoming
-    
-    // Sort months descending
-    const sortedMonthKeys = Object.keys(groups.months).sort((a, b) => 
-      new Date(b).getTime() - new Date(a).getTime()
-    );
-
-    // Sort items within months descending
-    sortedMonthKeys.forEach(key => {
-      groups.months[key].sort((a, b) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-    });
-
-    return { ...groups, sortedMonthKeys };
-  }, [contact, activeTab, searchQuery, filterType]);
-
-  // --- Handlers ---
-  const toggleMonth = (month: string) => {
-    const newSet = new Set(collapsedMonths);
-    if (newSet.has(month)) newSet.delete(month);
-    else newSet.add(month);
-    setCollapsedMonths(newSet);
-  };
-
-  const toggleItem = (id: string) => {
-    const newSet = new Set(expandedItems);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setExpandedItems(newSet);
-  };
-
-  const collapseAll = () => {
-    // If all expanded, collapse all. Else expand all within reason.
-    // For this UI, "Collapse all" usually means closing the accordion details of items
-    setExpandedItems(new Set());
-  };
-
-  const totalCount = (contact?.contact_activities || []).length;
+  const quickActions = [
+    { type: 'call' as const, icon: PhoneCall, label: 'Log Call', color: 'text-amber-600' },
+    { type: 'email' as const, icon: Mail, label: 'Log Email', color: 'text-blue-600' },
+    { type: 'note' as const, icon: StickyNote, label: 'Create Note', color: 'text-purple-600' },
+    { type: 'task' as const, icon: CheckSquare, label: 'Create Task', color: 'text-green-600' },
+    { type: 'meeting' as const, icon: Calendar, label: 'Log Meeting', color: 'text-indigo-600' },
+  ];
 
   return (
-    <div className="flex flex-col space-y-4 font-sans text-slate-600">
-      
-      {/* 1. Header & Filters */}
-      <div className="flex flex-col gap-4">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ActivityType)} className="w-full">
-           <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
-             {['all', 'note', 'email', 'call', 'task', 'meeting'].map((tab) => (
-               <TabsTrigger 
-                 key={tab} 
-                 value={tab}
-                 className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-               >
-                {tab === 'all' 
-          ? 'All Activity' 
-          : tab.charAt(0).toUpperCase() + tab.slice(1) + 's'}
-               </TabsTrigger>
-             ))}
-           </TabsList>
-        </Tabs>
-
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50 p-2 rounded-lg border border-slate-100">
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <span className="text-xs font-semibold text-slate-500 whitespace-nowrap">Filter by:</span>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 text-teal-600 font-semibold hover:text-teal-700 hover:bg-teal-50">
-                  Filter activity ({totalCount}) <ChevronDown size={14} className="ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
-                {['note', 'email', 'call', 'task', 'meeting'].map((t) => (
-                  <DropdownMenuCheckboxItem 
-                    key={t}
-                    checked={filterType.includes(t)}
-                    onCheckedChange={(c) => c ? setFilterType([...filterType, t]) : setFilterType(filterType.filter(x => x !== t))}
-                    className="capitalize"
-                  >
-                    {t}s
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Button variant="ghost" size="sm" className="h-8 text-teal-600 font-semibold hover:text-teal-700 hover:bg-teal-50">
-              All users <ChevronDown size={14} className="ml-1" />
+    <div className="space-y-6">
+      {/* Header with Quick Actions */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-900">Log Activity</h3>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {quickActions.map((action) => (
+            <Button
+              key={action.type}
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenModal(action.type)}
+              className="h-9 px-3 text-sm font-medium border-gray-200 hover:bg-gray-50"
+            >
+              <action.icon size={14} className={cn("mr-1.5", action.color)} />
+              {action.label}
             </Button>
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-             <div className="relative flex-1 sm:w-64">
-               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-               <Input 
-                 placeholder="Search activity..." 
-                 className="pl-8 h-8 text-xs bg-white border-slate-200 focus:border-teal-500"
-                 value={searchQuery}
-                 onChange={(e) => setSearchQuery(e.target.value)}
-               />
-             </div>
-             <Button variant="ghost" size="sm" onClick={collapseAll} className="h-8 px-2 text-xs text-slate-400 hover:text-slate-600">
-               Collapse all
-             </Button>
-          </div>
+          ))}
         </div>
       </div>
 
-      {/* 2. Timeline Content */}
-      <div className="relative min-h-[400px]">
-        {/* Vertical Line for the whole timeline */}
-        <div className="absolute left-6 top-0 bottom-0 w-px bg-slate-200 z-0" />
-
-        {/* SECTION: OVERDUE */}
-        {groupedActivities.overdue.length > 0 && (
-          <div className="mb-8 relative z-10">
-            <div className="flex items-center gap-2 mb-4 bg-slate-100 py-1 px-2 rounded w-fit ml-4">
-              <AlertCircle size={14} className="text-red-500" />
-              <h3 className="text-xs font-bold text-red-600 uppercase tracking-wide">Overdue</h3>
-            </div>
-            <div className="space-y-4">
-              {groupedActivities.overdue.map(act => (
-                <TimelineCard 
-                  key={act.id} 
-                  activity={act} 
-                  expanded={expandedItems.has(act.id)}
-                  onToggle={() => toggleItem(act.id)}
-                  isOverdue={true}
-                />
+      {/* Timeline Section */}
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        {/* Filter Header */}
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-gray-900">Activity Timeline</span>
+            <Badge variant="secondary" className="text-xs">
+              {sortedActivities.length}
+            </Badge>
+          </div>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 px-3 text-xs">
+                <Filter size={12} className="mr-1.5" />
+                {activityTypes.find(t => t.value === filter)?.label}
+                <ChevronDown size={12} className="ml-1.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {activityTypes.map((type) => (
+                <DropdownMenuItem 
+                  key={type.value}
+                  onClick={() => setFilter(type.value)}
+                  className={cn(filter === type.value && "bg-gray-100")}
+                >
+                  {type.label}
+                </DropdownMenuItem>
               ))}
-            </div>
-          </div>
-        )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
-        {/* SECTION: UPCOMING */}
-        {groupedActivities.upcoming.length > 0 && (
-          <div className="mb-8 relative z-10">
-             <h3 className="text-sm font-semibold text-slate-500 mb-4 ml-14">Upcoming</h3>
-             <div className="space-y-4">
-               {groupedActivities.upcoming.map(act => (
-                 <TimelineCard 
-                    key={act.id} 
-                    activity={act} 
-                    expanded={expandedItems.has(act.id)}
-                    onToggle={() => toggleItem(act.id)}
-                  />
-               ))}
-             </div>
-          </div>
-        )}
-
-        {/* SECTION: MONTHLY GROUPS */}
-        {groupedActivities.sortedMonthKeys.map((month) => (
-          <div key={month} className="mb-8 relative z-10">
-            <div 
-              className="flex items-center gap-2 mb-4 ml-12 cursor-pointer group"
-              onClick={() => toggleMonth(month)}
-            >
-              <h3 className="text-sm font-bold text-slate-700">{month}</h3>
-              <div className="h-px bg-slate-200 flex-1 group-hover:bg-slate-300 transition-colors" />
-              <ChevronDown 
-                size={14} 
-                className={cn("text-slate-400 transition-transform", collapsedMonths.has(month) && "-rotate-90")} 
-              />
-            </div>
-
-            {!collapsedMonths.has(month) && (
-              <div className="space-y-4">
-                {groupedActivities.months[month].map(act => (
-                  <TimelineCard 
-                    key={act.id} 
-                    activity={act} 
-                    expanded={expandedItems.has(act.id)}
-                    onToggle={() => toggleItem(act.id)}
-                  />
+        {/* Timeline Content */}
+        <div className="divide-y divide-gray-100">
+          {sortedActivities.length === 0 ? (
+            <EmptyState onOpenModal={onOpenModal} />
+          ) : (
+            Object.entries(groupedActivities).map(([date, dateActivities]: [string, any]) => (
+              <div key={date}>
+                {/* Date Header */}
+                <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
+                  <span className="text-xs font-medium text-gray-500">{date}</span>
+                </div>
+                
+                {/* Activities for this date */}
+                {dateActivities.map((activity: any) => (
+                  <ActivityItem key={activity.id} activity={activity} />
                 ))}
               </div>
-            )}
-          </div>
-        ))}
-
-        {totalCount === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 ml-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-             <div className="bg-white p-4 rounded-full shadow-sm mb-3">
-               <Clock className="text-slate-300" size={32} />
-             </div>
-             <p className="text-slate-600 font-semibold">No activity found</p>
-             <p className="text-xs text-slate-400 mt-1">Try changing filters or log a new activity</p>
-          </div>
-        )}
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-// --- Timeline Card Component ---
-
-const TimelineCard = ({ activity, expanded, onToggle, isOverdue }: any) => {
-  const metadata = parseMetadata(activity.metadata);
-  const date = new Date(activity.activity_date || activity.created_at);
-  const creator = activity.creator || {}; // Assuming joined from backend
-
-  // Configuration map for Icons and Colors based on HubSpot style
-  const config: Record<string, any> = {
-    task: { 
-      icon: CheckCircle2, 
-      color: isOverdue ? "text-red-500 bg-white" : "text-emerald-500 bg-white",
-      label: "Task"
-    },
-    call: { 
-      icon: Phone, 
-      color: "text-amber-600 bg-white",
-      label: "Logged call"
-    },
-    email: { 
-      icon: Mail, 
-      color: "text-slate-600 bg-white",
-      label: "Email sent"
-    },
-    meeting: { 
-      icon: Calendar, 
-      color: "text-red-500 bg-white",
-      label: "Meeting"
-    },
-    note: { 
-      icon: StickyNote, 
-      color: "text-yellow-500 bg-white",
-      label: "Note"
-    },
-    stage_change: { 
-      icon: ArrowUpRight, 
-      color: "text-blue-500 bg-white",
-      label: "Lifecycle change"
-    }
+// Activity Item Component
+const ActivityItem = ({ activity }: { activity: any }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  const typeConfig: Record<string, { icon: any; color: string; bg: string }> = {
+    call: { icon: PhoneCall, color: 'text-amber-600', bg: 'bg-amber-50' },
+    email: { icon: Mail, color: 'text-blue-600', bg: 'bg-blue-50' },
+    note: { icon: StickyNote, color: 'text-purple-600', bg: 'bg-purple-50' },
+    task: { icon: CheckSquare, color: 'text-green-600', bg: 'bg-green-50' },
+    meeting: { icon: Calendar, color: 'text-indigo-600', bg: 'bg-indigo-50' },
   };
-
-  const typeConfig = config[activity.type] || { icon: CheckSquare, color: "text-slate-400", label: "Activity" };
-  const Icon = typeConfig.icon;
-
-  // Formatting the Title/Header based on Type
-  const renderHeader = () => {
-    switch (activity.type) {
-      case 'call':
-        return (
-          <span className="text-sm font-semibold text-slate-800">
-            {activity.title || 'Logged call'}
-            {metadata.outcome && <span className="font-normal text-slate-500"> - {metadata.outcome}</span>}
-          </span>
-        );
-      case 'task':
-        return (
-          <span className={cn("text-sm font-semibold", isOverdue ? "text-slate-900" : "text-slate-800")}>
-            {activity.title}
-          </span>
-        );
-      case 'meeting':
-        return (
-          <span className="text-sm font-semibold text-slate-800">
-            Meeting - {activity.title}
-          </span>
-        );
-      case 'stage_change':
-        return (
-          <span className="text-sm font-bold text-slate-800">
-            Lifecycle change
-          </span>
-        );
-      default:
-        return <span className="text-sm font-semibold text-slate-800">{activity.title || typeConfig.label}</span>;
-    }
-  };
+  
+  const config = typeConfig[activity.type] || typeConfig.note;
+  const Icon = config.icon;
+  const isTask = activity.type === 'task';
+  const isCompleted = activity.status === 'completed' || activity.metadata?.status === 'completed';
 
   return (
-    <div className="group relative pl-12 transition-all">
-      {/* Icon Bubble */}
-      <div className={cn(
-        "absolute left-3 top-0 h-7 w-7 rounded-full border border-slate-200 flex items-center justify-center z-20 shadow-sm",
-        typeConfig.color,
-        activity.type === 'task' && !isOverdue && "border-emerald-500" // Checkbox style for tasks
-      )}>
-        <Icon size={14} />
-      </div>
-
-      <Card className={cn(
-        "border-slate-200 shadow-sm transition-all hover:shadow-md", 
-        expanded ? "ring-1 ring-teal-500 border-teal-500" : "hover:border-slate-300"
-      )}>
-        {/* Card Header (Always Visible) */}
-        <div 
-          className="p-4 flex items-start justify-between cursor-pointer" 
-          onClick={onToggle}
-        >
-          <div className="flex-1 pr-4">
-            <div className="flex items-center gap-2 mb-1">
-               {/* Type Label (e.g. "Logged call") */}
-               <span className="text-xs font-bold text-slate-700 capitalize">
-                 {typeConfig.label}
-               </span>
-            </div>
-
-            {/* Main Title Row */}
-            <div className="flex items-center gap-2">
-              {creator.first_name && (
-                <span className="text-sm font-semibold text-teal-600 hover:underline">
-                  {creator.first_name} {creator.last_name}
-                </span>
+    <div className="px-4 py-3 hover:bg-gray-50 transition-colors group">
+      <div className="flex items-start gap-3">
+        {/* Icon */}
+        <div className={cn("p-2 rounded-lg", config.bg)}>
+          <Icon size={16} className={config.color} />
+        </div>
+        
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              {/* Title Row */}
+              <div className="flex items-center gap-2">
+                {isTask && (
+                  <button className="flex-shrink-0">
+                    {isCompleted ? (
+                      <CheckCircle2 size={16} className="text-green-500" />
+                    ) : (
+                      <Circle size={16} className="text-gray-300 hover:text-gray-400" />
+                    )}
+                  </button>
+                )}
+                <h4 className={cn(
+                  "text-sm font-medium text-gray-900",
+                  isTask && isCompleted && "line-through text-gray-500"
+                )}>
+                  {activity.title}
+                </h4>
+                <Badge 
+                  variant="secondary" 
+                  className="text-[10px] font-medium capitalize bg-gray-100 text-gray-600"
+                >
+                  {activity.type}
+                </Badge>
+              </div>
+              
+              {/* Description Preview */}
+              {activity.description && (
+                <p className={cn(
+                  "text-sm text-gray-600 mt-1",
+                  !isExpanded && "line-clamp-2"
+                )}>
+                  {activity.description}
+                </p>
               )}
-              {activity.type === 'stage_change' ? (
-                <span className="text-sm text-slate-600">
-                   {activity.description} 
-                   <span className="text-teal-600 font-semibold cursor-pointer ml-1 inline-flex items-center">
-                     View details <ArrowUpRight size={10} className="ml-0.5" />
-                   </span>
-                </span>
-              ) : (
-                <div className="flex flex-col">
-                  {renderHeader()}
-                  {!expanded && activity.description && (
-                    <span className="text-xs text-slate-500 line-clamp-1 mt-1 font-medium">
-                      {activity.description.replace(/<[^>]*>?/gm, '')}
-                    </span>
+              
+              {/* Metadata */}
+              {activity.metadata && (
+                <div className="flex items-center gap-3 mt-2 flex-wrap">
+                  {activity.metadata.outcome && (
+                    <MetadataBadge label="Outcome" value={activity.metadata.outcome} />
+                  )}
+                  {activity.metadata.direction && (
+                    <MetadataBadge label="Direction" value={activity.metadata.direction} />
+                  )}
+                  {activity.metadata.duration && (
+                    <MetadataBadge label="Duration" value={`${activity.metadata.duration} min`} />
+                  )}
+                  {activity.metadata.priority && activity.metadata.priority !== 'none' && (
+                    <MetadataBadge label="Priority" value={activity.metadata.priority} />
+                  )}
+                  {activity.metadata.dueDate && (
+                    <MetadataBadge 
+                      label="Due" 
+                      value={new Date(activity.metadata.dueDate).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })} 
+                    />
                   )}
                 </div>
               )}
+              
+              {/* Footer: Creator & Time */}
+              <div className="flex items-center gap-3 mt-2">
+                {activity.creator && (
+                  <div className="flex items-center gap-1.5">
+                    <Avatar className="h-5 w-5">
+                      <AvatarImage src={activity.creator.profile_picture_url} />
+                      <AvatarFallback className="bg-gray-200 text-gray-600 text-[10px]">
+                        {activity.creator.first_name?.[0]}{activity.creator.last_name?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-xs text-gray-500">
+                      {activity.creator.first_name} {activity.creator.last_name}
+                    </span>
+                  </div>
+                )}
+                <span className="text-xs text-gray-400 flex items-center gap-1">
+                  <Clock size={10} />
+                  {getRelativeTime(activity.created_at)}
+                </span>
+              </div>
+            </div>
+            
+            {/* Actions */}
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {activity.description && activity.description.length > 100 && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-7 px-2 text-xs text-gray-500"
+                  onClick={() => setIsExpanded(!isExpanded)}
+                >
+                  {isExpanded ? 'Less' : 'More'}
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400">
+                    <MoreHorizontal size={14} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem>Edit</DropdownMenuItem>
+                  <DropdownMenuItem className="text-red-600">Delete</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
-
-          {/* Right Side Metadata */}
-          <div className="flex flex-col items-end gap-1">
-             <div className="flex items-center gap-2 text-xs text-slate-400">
-               {isOverdue && (
-                 <span className="text-red-600 font-semibold flex items-center gap-1">
-                   <Calendar size={10} /> Overdue: {format(date, "MMM d, h:mm a")}
-                 </span>
-               )}
-               {!isOverdue && (
-                 <span>{format(date, "MMM d, yyyy 'at' h:mm a")}</span>
-               )}
-             </div>
-             <div className={cn("transition-transform duration-200", expanded && "rotate-180")}>
-               <ChevronDown size={14} className="text-slate-400" />
-             </div>
-          </div>
         </div>
-
-        {/* Expandable Content */}
-        {expanded && (
-          <div className="px-4 pb-4 pt-0 border-t border-slate-100/50 bg-slate-50/30 rounded-b-xl">
-             <div className="pt-3 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-               {activity.description}
-             </div>
-             
-             {/* Dynamic Metadata Rendering */}
-             <div className="mt-4 flex flex-wrap gap-2">
-                {metadata.outcome && (
-                  <Badge variant="outline" className="bg-white border-slate-200 text-slate-600 font-normal">
-                    Outcome: <span className="font-semibold ml-1 capitalize">{metadata.outcome}</span>
-                  </Badge>
-                )}
-                {metadata.duration && (
-                  <Badge variant="outline" className="bg-white border-slate-200 text-slate-600 font-normal">
-                    Duration: <span className="font-semibold ml-1">{metadata.duration} min</span>
-                  </Badge>
-                )}
-                {metadata.priority && (
-                  <Badge variant="outline" className={cn(
-                    "bg-white border-slate-200 font-normal",
-                    metadata.priority === 'high' ? "text-red-600" : "text-slate-600"
-                  )}>
-                    Priority: <span className="font-semibold ml-1 capitalize">{metadata.priority}</span>
-                  </Badge>
-                )}
-             </div>
-
-             <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-200/60">
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-5 w-5">
-                    <AvatarImage src={creator.profile_picture_url} />
-                    <AvatarFallback className="text-[9px] bg-indigo-100 text-indigo-700">
-                      {creator.first_name?.[0]}{creator.last_name?.[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-xs text-slate-400">
-                    Created by {creator.first_name || 'System'}
-                  </span>
-                </div>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" className="h-7 text-xs text-teal-600 hover:text-teal-700 hover:bg-teal-50">
-                    Edit
-                  </Button>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50">
-                    Delete
-                  </Button>
-                </div>
-             </div>
-          </div>
-        )}
-      </Card>
+      </div>
     </div>
   );
 };
-// claude 5 UI
+
+// Metadata Badge Component
+const MetadataBadge = ({ label, value }: { label: string; value: string }) => (
+  <span className="inline-flex items-center gap-1 text-xs">
+    <span className="text-gray-400">{label}:</span>
+    <span className="text-gray-600 font-medium capitalize">{value}</span>
+  </span>
+);
+
+// Empty State Component
+const EmptyState = ({ onOpenModal }: { onOpenModal: (type: any) => void }) => (
+  <div className="py-12 text-center">
+    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+      <Clock size={20} className="text-gray-400" />
+    </div>
+    <p className="text-sm font-medium text-gray-900 mb-1">No activities yet</p>
+    <p className="text-xs text-gray-500 mb-4">
+      Start tracking your interactions with this contact
+    </p>
+    <div className="flex items-center justify-center gap-2">
+      <Button 
+        variant="outline" 
+        size="sm"
+        onClick={() => onOpenModal('note')}
+        className="text-xs"
+      >
+        <StickyNote size={12} className="mr-1.5" />
+        Add Note
+      </Button>
+      <Button 
+        variant="outline" 
+        size="sm"
+        onClick={() => onOpenModal('call')}
+        className="text-xs"
+      >
+        <PhoneCall size={12} className="mr-1.5" />
+        Log Call
+      </Button>
+    </div>
+  </div>
+);

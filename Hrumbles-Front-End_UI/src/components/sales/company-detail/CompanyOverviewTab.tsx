@@ -1,602 +1,555 @@
+// Hrumbles-Front-End_UI/src/components/sales/company-detail/CompanyOverviewTab.tsx
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
-  Building2, Globe, Users, DollarSign, Calendar, MapPin, TrendingUp,
-  Code, Linkedin, Twitter, Facebook, Award, Briefcase, PieChart,
-  ChevronDown, ChevronUp, Tag, Database, Landmark, Phone
+  Settings, ChevronUp, ChevronDown, Search, Filter, ChevronLeft, 
+  ChevronRight, Mail, Download, Sparkles, Star, Users
 } from 'lucide-react';
-import { 
-  extractCompanyFromRaw, 
-  hasCompanyData, 
-  formatCompanyCurrency, 
-  formatCompanyNumber,
-  groupCompanyTechnologies,
-  processDepartments
-} from '@/utils/companyDataExtractor';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 
-export const CompanyOverviewTab = ({ company }: any) => {
-  const [isOverviewExpanded, setIsOverviewExpanded] = useState(true);
-  const data = extractCompanyFromRaw(company);
-  
-  // Get enrichment data from normalized tables
+interface CompanyOverviewTabProps {
+  company: any;
+  refetchParent: () => void;
+}
+
+export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({ company, refetchParent }) => {
+  const navigate = useNavigate();
+  const [insightsOpen, setInsightsOpen] = useState(true);
+  const [leadsOpen, setLeadsOpen] = useState(true);
+  const [activeInsightTab, setActiveInsightTab] = useState('overview');
+  const [activeLeadFilter, setActiveLeadFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+
   const enrichment = company?.enrichment_organizations;
-  const departments = enrichment?.enrichment_org_departments || [];
-  const keywords = enrichment?.enrichment_org_keywords || [];
   const technologies = enrichment?.enrichment_org_technologies || [];
   const fundingEvents = enrichment?.enrichment_org_funding_events || [];
+  const departments = enrichment?.enrichment_org_departments || [];
 
-  const hasMetrics = hasCompanyData(data.estimatedEmployees) || hasCompanyData(data.annualRevenue) || hasCompanyData(data.foundedYear);
-  const hasTech = hasCompanyData(technologies);
-  const hasClassification = hasCompanyData(data.sicCodes) || hasCompanyData(data.naicsCodes) || hasCompanyData(data.industries);
-  const hasFunding = hasCompanyData(fundingEvents) || hasCompanyData(data.totalFunding);
-  const hasKeywords = hasCompanyData(keywords);
-  const hasDepartments = hasCompanyData(departments);
+  // Fetch suggested leads (people at this company)
+  const { data: suggestedLeads = [], isLoading: isLoadingLeads } = useQuery({
+    queryKey: ['suggested-leads', company.id, company.apollo_org_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('contacts')
+        .select(`
+          *,
+          enrichment_people(seniority, photo_url),
+          enrichment_contact_emails(email, email_status)
+        `)
+        .eq('company_id', company.id)
+        .limit(50);
+      return data || [];
+    },
+    enabled: !!company.id
+  });
 
-  const techGroups = groupCompanyTechnologies(technologies);
-  const departmentData = processDepartments(data.departmentalHeadCount);
+  // Filter leads
+  const filteredLeads = suggestedLeads.filter((lead: any) => {
+    const matchesSearch = !searchTerm || 
+      lead.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lead.job_title?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const seniority = lead.enrichment_people?.[0]?.seniority?.toLowerCase();
+    const matchesFilter = 
+      activeLeadFilter === 'all' ||
+      (activeLeadFilter === 'cxo' && ['c_suite', 'owner', 'founder'].includes(seniority)) ||
+      (activeLeadFilter === 'director' && ['director', 'vp', 'head'].includes(seniority));
+    
+    return matchesSearch && matchesFilter;
+  });
 
-  // Department colors for pie chart
-  const departmentColors = [
-    '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', 
-    '#06b6d4', '#f43f5e', '#6366f1', '#a855f7', '#14b8a6',
-    '#84cc16', '#eab308', '#ef4444', '#8b5cf6', '#06b6d4'
+  const insightTabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'news', label: 'News' },
+    { id: 'technologies', label: 'Technologies', count: technologies.length },
+    { id: 'funding', label: 'Funding' },
+    { id: 'jobs', label: 'Job postings' },
+    { id: 'trends', label: 'Employee trends', count: departments.filter((d: any) => d.head_count > 0).length },
+    { id: 'visitors', label: 'Website visitors' },
+  ];
+
+  const leadFilters = [
+    { id: 'all', label: 'All' },
+    { id: 'cxo', label: 'CXO', count: 0 },
+    { id: 'director', label: 'Director+', count: 0 },
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Company Overview Card */}
-      <Card className="border-none shadow-xl overflow-hidden bg-gradient-to-br from-white via-slate-50 to-slate-100">
-        <div 
-          className="cursor-pointer bg-gradient-to-r from-slate-900 to-slate-800 p-6"
-          onClick={() => setIsOverviewExpanded(!isOverviewExpanded)}
-        >
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-4 flex-1">
-              {data.logoUrl && (
-                <img 
-                  src={data.logoUrl} 
-                  alt={data.name}
-                  className="w-16 h-16 rounded-xl object-contain bg-white p-2 shadow-lg"
-                />
-              )}
-              <div className="flex-1">
-                <h2 className="text-xl font-black text-white mb-2 tracking-tight">
-                  {data.name}
-                </h2>
-                {data.industry && (
-                  <Badge className="bg-white/20 text-white border-white/30 text-[10px] font-bold backdrop-blur-sm">
-                    {data.industry}
-                  </Badge>
-                )}
-              </div>
-            </div>
-            <button className="text-white/70 hover:text-white transition-colors">
-              {isOverviewExpanded ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
-            </button>
+    <div className="space-y-4">
+      {/* Company Insights Section */}
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        {/* Header */}
+        <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
+          <span className="text-sm font-semibold text-gray-900">Company insights</span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400">
+              <Settings size={16} />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-8 w-8 p-0 text-gray-400"
+              onClick={() => setInsightsOpen(!insightsOpen)}
+            >
+              {insightsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </Button>
           </div>
         </div>
 
-        {isOverviewExpanded && (
-          <CardContent className="p-8 space-y-6">
-            {/* Description */}
-            {data.shortDescription && (
-              <div>
-                <p className="text-sm text-slate-700 leading-relaxed font-medium bg-white p-4 rounded-lg border border-slate-200">
-                  {data.shortDescription}
-                </p>
-              </div>
-            )}
-
-            {/* Key Metrics Grid */}
-            {hasMetrics && (
-              <div className="grid grid-cols-4 gap-4">
-                {data.estimatedEmployees && (
-                  <MetricCard 
-                    icon={<Users className="w-5 h-5" />}
-                    label="Employees"
-                    value={formatCompanyNumber(data.estimatedEmployees)}
-                    color="blue"
-                  />
-                )}
-                {(data.annualRevenue || data.annualRevenuePrinted) && (
-                  <MetricCard 
-                    icon={<DollarSign className="w-5 h-5" />}
-                    label="Annual Revenue"
-                    value={data.annualRevenuePrinted || formatCompanyCurrency(data.annualRevenue)}
-                    color="green"
-                  />
-                )}
-                {data.foundedYear && (
-                  <MetricCard 
-                    icon={<Calendar className="w-5 h-5" />}
-                    label="Founded"
-                    value={data.foundedYear}
-                    color="purple"
-                  />
-                )}
-                {(data.totalFunding || data.totalFundingPrinted) && (
-                  <MetricCard 
-                    icon={<TrendingUp className="w-5 h-5" />}
-                    label="Total Funding"
-                    value={data.totalFundingPrinted || formatCompanyCurrency(data.totalFunding)}
-                    color="amber"
-                  />
-                )}
-              </div>
-            )}
-
-            {/* Contact & Location */}
-            <div className="grid grid-cols-2 gap-4">
-              {(data.websiteUrl || data.primaryDomain) && (
-                <ContactCard 
-                  icon={<Globe className="w-4 h-4" />}
-                  label="Website"
-                  value={data.primaryDomain || data.websiteUrl}
-                  link={data.websiteUrl}
-                />
-              )}
-              {data.phoneNumber && (
-                <ContactCard 
-                  icon={<Phone className="w-4 h-4" />}
-                  label="Phone"
-                  value={data.phoneNumber}
-                />
-              )}
-              {(data.city || data.state || data.country) && (
-                <ContactCard 
-                  icon={<MapPin className="w-4 h-4" />}
-                  label="Location"
-                  value={[data.city, data.state, data.country].filter(Boolean).join(', ')}
-                />
-              )}
-              {data.alexaRanking && (
-                <ContactCard 
-                  icon={<Award className="w-4 h-4" />}
-                  label="Alexa Rank"
-                  value={`#${formatCompanyNumber(data.alexaRanking)}`}
-                />
-              )}
-            </div>
-
-            {/* Social Links */}
-            {(data.linkedinUrl || data.twitterUrl || data.facebookUrl) && (
-              <div className="flex gap-3 pt-4 border-t border-slate-200">
-                {data.linkedinUrl && (
-                  <SocialButton icon={<Linkedin size={16} />} url={data.linkedinUrl} color="bg-blue-600" />
-                )}
-                {data.twitterUrl && (
-                  <SocialButton icon={<Twitter size={16} />} url={data.twitterUrl} color="bg-sky-500" />
-                )}
-                {data.facebookUrl && (
-                  <SocialButton icon={<Facebook size={16} />} url={data.facebookUrl} color="bg-blue-700" />
-                )}
-              </div>
-            )}
-          </CardContent>
-        )}
-      </Card>
-
-      {/* Sub-tabs for detailed data */}
-      <Tabs defaultValue="departments" className="w-full">
-        <TabsList className="grid w-full grid-cols-5 bg-slate-100 p-1 h-11">
-          {hasDepartments && (
-            <TabsTrigger value="departments" className="text-xs font-bold">
-              Departments ({departmentData.active.length})
-            </TabsTrigger>
-          )}
-          {hasTech && (
-            <TabsTrigger value="tech" className="text-xs font-bold">
-              Technology ({technologies.length})
-            </TabsTrigger>
-          )}
-          {hasKeywords && (
-            <TabsTrigger value="keywords" className="text-xs font-bold">
-              Keywords ({keywords.length})
-            </TabsTrigger>
-          )}
-          {hasClassification && (
-            <TabsTrigger value="classification" className="text-xs font-bold">
-              Classification
-            </TabsTrigger>
-          )}
-          {hasFunding && (
-            <TabsTrigger value="funding" className="text-xs font-bold">
-              Funding
-            </TabsTrigger>
-          )}
-        </TabsList>
-
-        {/* Departments with Pie Chart */}
-        {hasDepartments && (
-          <TabsContent value="departments" className="mt-6">
-            <div className="grid grid-cols-2 gap-6">
-              {/* Pie Chart */}
-              <Card className="border-none shadow-lg overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-violet-50 to-purple-50 border-b-2 border-violet-100 pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-violet-600 rounded-lg">
-                      <PieChart className="w-5 h-5 text-white" />
-                    </div>
-                    <CardTitle className="text-slate-800 text-sm font-black uppercase tracking-wider">
-                      Department Distribution
-                    </CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <DepartmentPieChart departments={departmentData.active} colors={departmentColors} />
-                  <div className="mt-4 text-center">
-                    <p className="text-xs text-slate-500 font-medium">
-                      Total Employees Tracked: <span className="font-black text-slate-700">{departmentData.total}</span>
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Department List */}
-              <Card className="border-none shadow-lg overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-violet-50 to-purple-50 border-b-2 border-violet-100 pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-violet-600 rounded-lg">
-                      <Briefcase className="w-5 h-5 text-white" />
-                    </div>
-                    <CardTitle className="text-slate-800 text-sm font-black uppercase tracking-wider">
-                      Department Breakdown
-                    </CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {departmentData.active.map((dept: any, idx: number) => {
-                      const percentage = ((dept.head_count / departmentData.total) * 100).toFixed(1);
-                      return (
-                        <div key={idx} className="group">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="w-3 h-3 rounded-full"
-                                style={{ backgroundColor: departmentColors[idx % departmentColors.length] }}
-                              />
-                              <span className="text-xs font-bold text-slate-700 capitalize">
-                                {dept.department_name.replace(/_/g, ' ')}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-500 font-medium">{percentage}%</span>
-                              <Badge className="bg-violet-100 text-violet-700 text-[9px] font-black">
-                                {dept.head_count}
-                              </Badge>
-                            </div>
-                          </div>
-                          <div className="w-full bg-slate-100 rounded-full h-1.5">
-                            <div 
-                              className="h-1.5 rounded-full transition-all"
-                              style={{ 
-                                width: `${percentage}%`,
-                                backgroundColor: departmentColors[idx % departmentColors.length]
-                              }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        )}
-
-        {/* Technology Stack */}
-        {hasTech && (
-          <TabsContent value="tech" className="mt-6">
-            <Card className="border-none shadow-lg overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b-2 border-emerald-100 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-emerald-600 rounded-lg">
-                    <Code className="w-5 h-5 text-white" />
-                  </div>
-                  <CardTitle className="text-slate-800 text-sm font-black uppercase tracking-wider">
-                    Technology Stack ({technologies.length} Technologies)
-                  </CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6 space-y-6">
-                {Object.entries(techGroups).map(([category, techs]: [string, any]) => (
-                  <div key={category}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-2">
-                        <Code size={12} />
-                        {category}
-                      </h4>
-                      <Badge variant="outline" className="text-[8px] font-bold bg-emerald-50 text-emerald-700 border-emerald-200">
-                        {techs.length} items
-                      </Badge>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {techs.map((tech: any, idx: number) => (
-                        <Badge 
-                          key={idx}
-                          className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold hover:bg-emerald-100 transition-colors"
-                        >
-                          {tech.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
+        {insightsOpen && (
+          <>
+            {/* Insight Tabs */}
+            <div className="border-b border-gray-100 px-4">
+              <div className="flex gap-0 overflow-x-auto">
+                {insightTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveInsightTab(tab.id)}
+                    className={cn(
+                      "px-3 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors",
+                      activeInsightTab === tab.id
+                        ? "border-gray-900 text-gray-900"
+                        : "border-transparent text-gray-500 hover:text-gray-700"
+                    )}
+                  >
+                    {tab.label}
+                    {tab.count !== undefined && tab.count > 0 && (
+                      <span className="ml-1.5 text-xs text-gray-400">{tab.count}</span>
+                    )}
+                  </button>
                 ))}
-              </CardContent>
-            </Card>
-          </TabsContent>
+              </div>
+            </div>
+
+            {/* Insight Content */}
+            <div className="p-4">
+              {activeInsightTab === 'overview' && (
+                <OverviewInsights company={company} />
+              )}
+              {activeInsightTab === 'technologies' && (
+                <TechnologiesInsights technologies={technologies} />
+              )}
+              {activeInsightTab === 'trends' && (
+                <EmployeeTrendsInsights departments={departments} />
+              )}
+              {activeInsightTab === 'funding' && (
+                <FundingInsights fundingEvents={fundingEvents} company={company} />
+              )}
+              {['news', 'jobs', 'visitors'].includes(activeInsightTab) && (
+                <EmptyInsight tab={activeInsightTab} />
+              )}
+            </div>
+          </>
         )}
+      </div>
 
-        {/* Keywords */}
-        {hasKeywords && (
-          <TabsContent value="keywords" className="mt-6">
-            <Card className="border-none shadow-lg overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 border-b-2 border-orange-100 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-orange-600 rounded-lg">
-                    <Tag className="w-5 h-5 text-white" />
-                  </div>
-                  <CardTitle className="text-slate-800 text-sm font-black uppercase tracking-wider">
-                    Company Keywords & Specializations ({keywords.length})
-                  </CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="flex flex-wrap gap-2">
-                  {keywords.map((kw: any, idx: number) => (
-                    <Badge 
-                      key={idx}
-                      variant="outline"
-                      className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] font-medium hover:bg-amber-100 transition-colors"
-                    >
-                      {kw.keyword}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
+      {/* Suggested Leads Section */}
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        {/* Header */}
+        <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
+          <span className="text-sm font-semibold text-gray-900">Suggested leads</span>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-8 w-8 p-0 text-gray-400"
+            onClick={() => setLeadsOpen(!leadsOpen)}
+          >
+            {leadsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </Button>
+        </div>
 
-        {/* Classification */}
-        {hasClassification && (
-          <TabsContent value="classification" className="mt-6">
-            <Card className="border-none shadow-lg overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 border-b-2 border-purple-100 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-600 rounded-lg">
-                    <Database className="w-5 h-5 text-white" />
-                  </div>
-                  <CardTitle className="text-slate-800 text-sm font-black uppercase tracking-wider">
-                    Industry Classification
-                  </CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6 space-y-6">
-                {hasCompanyData(data.industries) && (
-                  <div>
-                    <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-3">
-                      Industries
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {data.industries.map((industry: string, idx: number) => (
-                        <Badge key={idx} className="bg-purple-100 text-purple-700 border-purple-200 text-[10px] font-bold">
-                          {industry}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {hasCompanyData(data.secondaryIndustries) && (
-                  <div>
-                    <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-3">
-                      Secondary Industries
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {data.secondaryIndustries.map((industry: string, idx: number) => (
-                        <Badge key={idx} variant="outline" className="bg-pink-50 text-pink-700 border-pink-200 text-[10px] font-bold">
-                          {industry}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
+        {leadsOpen && (
+          <>
+            {/* Filters */}
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-4">
+              <div className="flex items-center gap-1">
+                {leadFilters.map((filter) => (
+                  <button
+                    key={filter.id}
+                    onClick={() => setActiveLeadFilter(filter.id)}
+                    className={cn(
+                      "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                      activeLeadFilter === filter.id
+                        ? "bg-gray-100 text-gray-900"
+                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                    )}
+                  >
+                    {filter.label}
+                    {filter.count > 0 && (
+                      <span className="ml-1 text-xs text-gray-400">{filter.count}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-200">
-                  {hasCompanyData(data.sicCodes) && (
-                    <div>
-                      <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">
-                        SIC Codes
-                      </h4>
-                      <div className="flex flex-wrap gap-1">
-                        {data.sicCodes.map((code: string, idx: number) => (
-                          <Badge key={idx} className="bg-slate-700 text-white text-[9px] font-mono">
-                            {code}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
+              <div className="flex items-center gap-2 ml-auto">
+                <Button variant="outline" size="sm" className="h-8 text-xs">
+                  <Filter size={12} className="mr-1.5" />
+                  Show Filters
+                </Button>
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    placeholder="Search people"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="h-8 w-48 pl-9 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Leads Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="w-10 px-4 py-3">
+                      <Checkbox />
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Name
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Reason
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Emails
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Location
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredLeads.length > 0 ? (
+                    filteredLeads.map((lead: any) => (
+                      <LeadRow key={lead.id} lead={lead} navigate={navigate} />
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-12 text-center">
+                        <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">No leads found</p>
+                      </td>
+                    </tr>
                   )}
-                  
-                  {hasCompanyData(data.naicsCodes) && (
-                    <div>
-                      <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">
-                        NAICS Codes
-                      </h4>
-                      <div className="flex flex-wrap gap-1">
-                        {data.naicsCodes.map((code: string, idx: number) => (
-                          <Badge key={idx} className="bg-slate-700 text-white text-[9px] font-mono">
-                            {code}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
+                </tbody>
+              </table>
+            </div>
 
-        {/* Funding */}
-        {hasFunding && (
-          <TabsContent value="funding" className="mt-6">
-            <Card className="border-none shadow-lg overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-amber-50 to-orange-50 border-b-2 border-amber-100 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-amber-600 rounded-lg">
-                    <TrendingUp className="w-5 h-5 text-white" />
-                  </div>
-                  <CardTitle className="text-slate-800 text-sm font-black uppercase tracking-wider">
-                    Funding History
-                  </CardTitle>
+            {/* Pagination */}
+            {filteredLeads.length > 0 && (
+              <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled>
+                    <ChevronLeft size={16} />
+                  </Button>
+                  <select className="h-8 px-2 text-sm border border-gray-200 rounded-md">
+                    <option>1</option>
+                  </select>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                    <ChevronRight size={16} />
+                  </Button>
+                  <span className="text-sm text-gray-500">
+                    1 - {filteredLeads.length} of {suggestedLeads.length}
+                  </span>
                 </div>
-              </CardHeader>
-              <CardContent className="p-6">
-                {hasCompanyData(fundingEvents) ? (
-                  <div className="space-y-4">
-                    {fundingEvents.map((event: any, idx: number) => (
-                      <div key={idx} className="bg-amber-50 rounded-lg p-4 border border-amber-100">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <Badge className="bg-amber-600 text-white text-[9px] font-bold mb-2">
-                              {event.type}
-                            </Badge>
-                            <p className="text-sm font-black text-slate-900">
-                              {event.amount} {event.currency}
-                            </p>
-                          </div>
-                          {event.date && (
-                            <span className="text-xs text-slate-500 font-medium">
-                              {new Date(event.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                            </span>
-                          )}
-                        </div>
-                        {event.investors && (
-                          <p className="text-xs text-slate-600 font-medium">
-                            Investors: {event.investors}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-slate-500 font-medium">
-                      Total Funding: <span className="font-black text-slate-700">{data.totalFundingPrinted || formatCompanyCurrency(data.totalFunding)}</span>
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                <Button 
+                  variant="default"
+                  size="sm"
+                  className="h-8 bg-blue-600 hover:bg-blue-700"
+                >
+                  View all
+                </Button>
+              </div>
+            )}
+          </>
         )}
-      </Tabs>
+      </div>
     </div>
   );
 };
 
-// Department Pie Chart Component
-const DepartmentPieChart = ({ departments, colors }: any) => {
-  const total = departments.reduce((sum: number, d: any) => sum + d.head_count, 0);
-  let currentAngle = 0;
+// Lead Row Component
+const LeadRow = ({ lead, navigate }: { lead: any; navigate: any }) => {
+  const seniority = lead.enrichment_people?.[0]?.seniority;
+  const hasEmail = lead.email || (lead.enrichment_contact_emails?.length > 0);
+  const location = [lead.city, lead.state].filter(Boolean).join(', ');
 
   return (
-    <div className="relative w-full max-w-sm mx-auto">
-      <svg viewBox="0 0 200 200" className="w-full h-auto">
-        {departments.map((dept: any, idx: number) => {
-          const percentage = (dept.head_count / total) * 100;
-          const angle = (percentage / 100) * 360;
-          const largeArcFlag = angle > 180 ? 1 : 0;
-          
-          const startX = 100 + 80 * Math.cos((currentAngle * Math.PI) / 180);
-          const startY = 100 + 80 * Math.sin((currentAngle * Math.PI) / 180);
-          
-          currentAngle += angle;
-          
-          const endX = 100 + 80 * Math.cos((currentAngle * Math.PI) / 180);
-          const endY = 100 + 80 * Math.sin((currentAngle * Math.PI) / 180);
-          
-          const pathData = `
-            M 100 100
-            L ${startX} ${startY}
-            A 80 80 0 ${largeArcFlag} 1 ${endX} ${endY}
-            Z
-          `;
-          
-          return (
-            <g key={idx}>
-              <path
-                d={pathData}
-                fill={colors[idx % colors.length]}
-                className="hover:opacity-80 transition-opacity cursor-pointer"
-                strokeWidth="2"
-                stroke="white"
-              />
-            </g>
-          );
-        })}
-        <circle cx="100" cy="100" r="50" fill="white" />
-        <text x="100" y="95" textAnchor="middle" className="text-xs font-black fill-slate-700">
-          {total}
-        </text>
-        <text x="100" y="110" textAnchor="middle" className="text-[8px] font-medium fill-slate-500">
-          Employees
-        </text>
-      </svg>
+    <tr className="hover:bg-gray-50 transition-colors group">
+      <td className="px-4 py-3">
+        <Checkbox />
+      </td>
+      <td className="px-4 py-3">
+        <div 
+          className="flex items-center gap-3 cursor-pointer"
+          onClick={() => navigate(`/contacts/${lead.id}`)}
+        >
+          <Avatar className="h-8 w-8">
+            <AvatarImage src={lead.photo_url || lead.enrichment_people?.[0]?.photo_url} />
+            <AvatarFallback className="bg-gray-100 text-gray-600 text-xs">
+              {lead.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <p className="text-sm font-medium text-gray-900 hover:text-blue-600">
+              {lead.name}
+            </p>
+            <p className="text-xs text-gray-500 truncate max-w-[200px]">
+              {lead.job_title}
+            </p>
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex flex-wrap gap-1">
+          <Badge 
+            variant="secondary"
+            className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200"
+          >
+            <Sparkles size={10} className="mr-1" />
+            Similar to past prospects
+          </Badge>
+          {seniority && (
+            <Badge 
+              variant="secondary"
+              className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200"
+            >
+              <Star size={10} className="mr-1" />
+              Seniority
+            </Badge>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        {hasEmail ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs font-medium text-green-700 border-green-300 bg-green-50 hover:bg-green-100"
+          >
+            <Mail size={12} className="mr-1" />
+            Access email
+          </Button>
+        ) : (
+          <span className="text-xs text-gray-400">No email</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        <span className="text-sm text-gray-600">{location || '—'}</span>
+      </td>
+    </tr>
+  );
+};
+
+// Overview Insights Component
+const OverviewInsights = ({ company }: { company: any }) => {
+  const enrichment = company?.enrichment_organizations;
+  
+  return (
+    <div className="space-y-4">
+      <InsightRow label="Score">
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-1">
+            {[1, 2, 3].map((row) => (
+              <div key={row} className="flex gap-0.5">
+                {[1, 2, 3, 4].map((col) => (
+                  <div 
+                    key={col}
+                    className={cn(
+                      "w-5 h-1.5 rounded-sm",
+                      row === 2 && col <= 2 ? "bg-green-500" : "bg-gray-200"
+                    )}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-900">No scores found</p>
+            <Button variant="outline" size="sm" className="h-7 text-xs mt-1">
+              Create score
+            </Button>
+          </div>
+        </div>
+      </InsightRow>
+
+      <InsightRow label="Relevant Jobs">
+        <span className="text-sm text-gray-500">No relevant jobs</span>
+      </InsightRow>
+
+      <InsightRow label="Relevant Technology">
+        <span className="text-sm text-gray-500">No relevant technologies</span>
+      </InsightRow>
+
+      <InsightRow label="Personas">
+        <span className="text-sm text-gray-500">No relevant personas</span>
+      </InsightRow>
+
+      <InsightRow label="Recent Funding">
+        <span className="text-sm text-gray-500">
+          {enrichment?.total_funding_printed || 'No relevant funding'}
+        </span>
+      </InsightRow>
     </div>
   );
 };
 
-// Helper Components
-const MetricCard = ({ icon, label, value, color }: any) => {
-  const colors = {
-    blue: 'from-blue-500 to-blue-600',
-    green: 'from-green-500 to-green-600',
-    purple: 'from-purple-500 to-purple-600',
-    amber: 'from-amber-500 to-amber-600'
+// Technologies Insights Component
+const TechnologiesInsights = ({ technologies }: { technologies: any[] }) => {
+  if (technologies.length === 0) {
+    return <EmptyInsight tab="technologies" />;
+  }
+
+  // Group by category
+  const grouped = technologies.reduce((acc: any, tech: any) => {
+    const category = tech.category || 'Other';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(tech);
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-4">
+      {Object.entries(grouped).map(([category, techs]: [string, any]) => (
+        <div key={category}>
+          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+            {category}
+          </h4>
+          <div className="flex flex-wrap gap-1.5">
+            {techs.map((tech: any, idx: number) => (
+              <Badge 
+                key={idx}
+                variant="secondary"
+                className="text-xs font-normal bg-gray-100 text-gray-700"
+              >
+                {tech.name}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Employee Trends Insights Component
+const EmployeeTrendsInsights = ({ departments }: { departments: any[] }) => {
+  const activeDepts = departments
+    .filter((d: any) => d.head_count > 0)
+    .sort((a: any, b: any) => b.head_count - a.head_count);
+
+  if (activeDepts.length === 0) {
+    return <EmptyInsight tab="trends" />;
+  }
+
+  const total = activeDepts.reduce((sum: number, d: any) => sum + d.head_count, 0);
+
+  return (
+    <div className="space-y-3">
+      {activeDepts.slice(0, 10).map((dept: any, idx: number) => {
+        const percentage = ((dept.head_count / total) * 100).toFixed(1);
+        return (
+          <div key={idx}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm text-gray-700 capitalize">
+                {dept.department_name.replace(/_/g, ' ')}
+              </span>
+              <span className="text-sm text-gray-500">
+                {dept.head_count} ({percentage}%)
+              </span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2">
+              <div 
+                className="h-2 rounded-full bg-blue-500 transition-all"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// Funding Insights Component
+const FundingInsights = ({ fundingEvents, company }: { fundingEvents: any[]; company: any }) => {
+  const enrichment = company?.enrichment_organizations;
+
+  if (fundingEvents.length === 0 && !enrichment?.total_funding_printed) {
+    return <EmptyInsight tab="funding" />;
+  }
+
+  return (
+    <div className="space-y-4">
+      {enrichment?.total_funding_printed && (
+        <InsightRow label="Total Funding">
+          <span className="text-lg font-semibold text-gray-900">
+            {enrichment.total_funding_printed}
+          </span>
+        </InsightRow>
+      )}
+
+      {fundingEvents.map((event: any, idx: number) => (
+        <div key={idx} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+          <div className="flex items-center justify-between">
+            <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">
+              {event.type || 'Funding Round'}
+            </Badge>
+            {event.date && (
+              <span className="text-xs text-gray-500">
+                {new Date(event.date).toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  year: 'numeric' 
+                })}
+              </span>
+            )}
+          </div>
+          {event.amount && (
+            <p className="text-sm font-semibold text-gray-900 mt-2">
+              {event.amount_printed || event.amount}
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Empty Insight Component
+const EmptyInsight = ({ tab }: { tab: string }) => {
+  const messages: Record<string, string> = {
+    overview: 'No overview data available',
+    news: 'No relevant news',
+    technologies: 'No technologies detected',
+    funding: 'No relevant funding',
+    jobs: 'No relevant jobs',
+    trends: 'No employee trends data',
+    visitors: 'No website visitor data',
   };
 
   return (
-    <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-      <div className={cn("inline-flex p-2 rounded-lg bg-gradient-to-br text-white mb-3", colors[color as keyof typeof colors])}>
-        {icon}
-      </div>
-      <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">{label}</p>
-      <p className="text-lg font-black text-slate-900">{value}</p>
+    <div className="py-8 text-center">
+      <p className="text-sm text-gray-500">{messages[tab] || 'No data available'}</p>
     </div>
   );
 };
 
-const ContactCard = ({ icon, label, value, link }: any) => (
-  <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-    <div className="flex items-center gap-2 text-slate-400 mb-2">
-      {icon}
-      <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
-    </div>
-    {link ? (
-      <a href={link} target="_blank" rel="noreferrer" className="text-sm font-bold text-indigo-600 hover:underline break-all">
-        {value}
-      </a>
-    ) : (
-      <p className="text-sm font-bold text-slate-700 break-all">{value}</p>
-    )}
+// Insight Row Component
+const InsightRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div className="flex items-start gap-4 py-2">
+    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider w-32 flex-shrink-0 pt-1">
+      {label}
+    </span>
+    <div className="flex-1">{children}</div>
   </div>
-);
-
-const SocialButton = ({ icon, url, color }: any) => (
-  <a 
-    href={url}
-    target="_blank"
-    rel="noreferrer"
-    className={cn("p-3 rounded-lg text-white hover:scale-110 transition-transform shadow-md", color)}
-  >
-    {icon}
-  </a>
 );

@@ -19,12 +19,61 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
   const from = (currentPage - 1) * perPage;
   const to = from + perPage - 1;
 
+  // Helper to apply simple filters to any query builder
+  const applyCommonFilters = (query: any, f: any) => {
+    if (!f) return query;
+
+    // Text Search (Simple OR logic)
+    if (f.search) {
+      query = query.or(`name.ilike.%${f.search}%,email.ilike.%${f.search}%,job_title.ilike.%${f.search}%`);
+    }
+
+    // Job Title Filter
+    if (f.jobTitles?.length) {
+      query = query.in('job_title', f.jobTitles);
+    }
+
+    // Direct Column Filters
+    if (f.stages?.length) query = query.in('contact_stage', f.stages);
+    if (f.sources?.length) query = query.in('medium', f.sources);
+    
+    // Location Filters - Updated to handle arrays
+    if (f.countries?.length) {
+      query = query.in('country', f.countries);
+    }
+    if (f.cities?.length) {
+      // For cities, we need to match the full location string format
+      // Assuming city filter stores values like "City, State Country"
+      // We'll use a contains approach for flexibility
+      const cityConditions = f.cities.map((city: string) => {
+        // Extract just the city name (before first comma)
+        const cityName = city.split(',')[0].trim();
+        return `city.ilike.%${cityName}%`;
+      }).join(',');
+      query = query.or(cityConditions);
+    }
+    
+    // Company Filter
+    if (f.companyIds?.length) {
+      query = query.in('company_id', f.companyIds);
+    }
+    
+    // Existence Checks
+    if (f.hasEmail) query = query.not('email', 'is', null);
+    if (f.hasPhone) query = query.not('mobile', 'is', null);
+    if (f.isEnriched) query = query.not('apollo_person_id', 'is', null);
+
+    return query;
+  };
+
   return useQuery({
     queryKey: ['contacts-unified', { isDiscoveryMode, filters, currentPage, perPage, fileId, organization_id, fetchUnfiled }],
-    placeholderData: keepPreviousData, // <--- CRITICAL: Prevents loader flash & table unmount on page change
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       
+      // =======================================================
       // MODE 1: GLOBAL DISCOVERY (API)
+      // =======================================================
       if (isDiscoveryMode) {
         const hasFilters = filters && Object.keys(filters).length > 0;
         
@@ -39,7 +88,6 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
         
         if (error) throw error;
         
-        // Dispatch to Redux to keep state in sync
         dispatch(setSearchResults(data)); 
         
         const mappedData = (data.people || []).map((p: any) => ({
@@ -64,71 +112,126 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
         return { data: mappedData, count: data.total_entries || 0 };
       }
 
-      // --- LOCAL CRM MODES (Apply .range(from, to)) ---
+      // =======================================================
+      // MODE 2 & 4: LOCAL CRM (Supabase)
+      // =======================================================
       
-      let query = supabase.from('contacts').select(`
-          *,
-          companies(name, logo_url, industry),
-          created_by_employee:hr_employees!created_by(first_name, last_name, profile_picture_url),
-          updated_by_employee:hr_employees!updated_by(first_name, last_name, profile_picture_url),
-          intel_person:enrichment_people!contact_id(
-            apollo_person_id,
-            enrichment_person_metadata(seniority, departments, functions),
-            enrichment_organizations(industry, estimated_num_employees, annual_revenue_printed)
-          ),
-          enrichment_contact_emails(email, email_status, is_primary, source),
-          enrichment_contact_phones(phone_number, type, status, source_name)
-        `, { count: 'exact' }); // Request total count
+      // Determine if we need to filter by enriched data (requires Inner Join)
+      const hasDeepFilters = 
+        filters?.seniorities?.length > 0 || 
+        filters?.industries?.length > 0 || 
+        filters?.departments?.length > 0 ||
+        filters?.functions?.length > 0 ||
+        filters?.employeeCounts?.length > 0;
 
-      // MODE 2: File Specific
+      // Construct the SELECT string dynamically based on filters
+      const intelRelation = hasDeepFilters 
+        ? 'intel_person:enrichment_people!contact_id!inner' 
+        : 'intel_person:enrichment_people!contact_id';
+
+      const commonSelect = `
+        *,
+        companies(id, name, logo_url, industry, domain),
+        created_by_employee:hr_employees!created_by(first_name, last_name, profile_picture_url),
+        updated_by_employee:hr_employees!updated_by(first_name, last_name, profile_picture_url),
+        ${intelRelation}(
+          apollo_person_id,
+          enrichment_person_metadata!apollo_person_id(seniority, departments, functions),
+          enrichment_organizations(industry, estimated_num_employees, annual_revenue_printed)
+        ),
+        enrichment_contact_emails(email, email_status, is_primary, source),
+        enrichment_contact_phones(phone_number, type, status, source_name)
+      `;
+
+      // --- MODE 2: File Specific (Junction Table) ---
       if (fileId) {
-        // Need a slightly different query structure for junction table
-        const junctionQuery = supabase
-          .from('contact_workspace_files')
-          .select(`
-            id,
-            contact_id,
-            file_id,
-            added_at,
-            added_by,
-            contacts (
-              *,
-              companies(name, logo_url, industry),
-              created_by_employee:hr_employees!created_by(first_name, last_name, profile_picture_url),
-              updated_by_employee:hr_employees!updated_by(first_name, last_name, profile_picture_url),
-              intel_person:enrichment_people!contact_id(
-                apollo_person_id,
-                enrichment_person_metadata(seniority, departments, functions),
-                enrichment_organizations(industry, estimated_num_employees, annual_revenue_printed)
-              ),
-              enrichment_contact_emails(email, email_status, is_primary, source),
-              enrichment_contact_phones(phone_number, type, status, source_name)
-            )
-          `, { count: 'exact' })
-          .eq('file_id', fileId)
-          .order('added_at', { ascending: false })
-          .range(from, to); // <--- PAGINATION APPLIED
+        const hasAnyContactFilter = Object.keys(filters || {}).length > 0;
+        const contactRelation = hasAnyContactFilter ? 'contacts!inner' : 'contacts';
 
-        const { data, error, count } = await junctionQuery;
+        const junctionSelect = `
+          id, contact_id, file_id, added_at, added_by,
+          ${contactRelation} (
+            ${commonSelect}
+          )
+        `;
+
+        let query = supabase
+          .from('contact_workspace_files')
+          .select(junctionSelect, { count: 'exact' })
+          .eq('file_id', fileId)
+          .order('added_at', { ascending: false });
+
+        // Apply filters to the nested 'contacts' relation
+        if (filters) {
+          if (filters.search) {
+             query = query.or(`name.ilike.%${filters.search}%,email.ilike.%${filters.search}%`, { foreignTable: 'contacts' });
+          }
+          if (filters.jobTitles?.length) {
+            query = query.in('contacts.job_title', filters.jobTitles);
+          }
+          if (filters.stages?.length) query = query.in('contacts.contact_stage', filters.stages);
+          if (filters.sources?.length) query = query.in('contacts.medium', filters.sources);
+          
+          // Location filters for junction table
+          if (filters.countries?.length) {
+            query = query.in('contacts.country', filters.countries);
+          }
+          if (filters.cities?.length) {
+            const cityConditions = filters.cities.map((city: string) => {
+              const cityName = city.split(',')[0].trim();
+              return `city.ilike.%${cityName}%`;
+            }).join(',');
+            query = query.or(cityConditions, { foreignTable: 'contacts' });
+          }
+          
+          // Company Filter for junction table queries
+          if (filters.companyIds?.length) {
+            query = query.in('contacts.company_id', filters.companyIds);
+          }
+          
+          // Enrichment filters
+          if (filters.seniorities?.length) {
+            query = query.in('contacts.intel_person.enrichment_person_metadata.seniority', filters.seniorities);
+          }
+          
+          if (filters.departments?.length) {
+            query = query.overlaps('contacts.intel_person.enrichment_person_metadata.departments', filters.departments);
+          }
+          
+          if (filters.functions?.length) {
+            query = query.overlaps('contacts.intel_person.enrichment_person_metadata.functions', filters.functions);
+          }
+          
+          if (filters.industries?.length) {
+             query = query.in('contacts.intel_person.enrichment_organizations.industry', filters.industries);
+          }
+        }
+
+        // Paginate
+        query = query.range(from, to);
+
+        const { data, error, count } = await query;
         if (error) throw error;
         
-        // Update Redux count
         if (count !== null) dispatch(setTotalEntries(count));
 
         const mapped = (data || []).map((item: any) => {
           const c = item.contacts;
           if (!c) return null;
           const intel = c.intel_person?.[0];
+          const metadata = intel?.enrichment_person_metadata?.[0];
           return {
             ...c,
             junction_id: item.id,
             added_at: item.added_at,
             added_by: item.added_by,
             company_name: c.companies?.name,
+            company_logo: c.companies?.logo_url,
+            company_domain: c.companies?.domain,
             is_discovery: false,
-            seniority: intel?.enrichment_person_metadata?.seniority,
-            departments: intel?.enrichment_person_metadata?.departments,
-            functions: intel?.enrichment_person_metadata?.functions,
+            seniority: metadata?.seniority,
+            departments: metadata?.departments,
+            functions: metadata?.functions,
             industry: intel?.enrichment_organizations?.industry,
             revenue: intel?.enrichment_organizations?.annual_revenue_printed,
             employee_count: intel?.enrichment_organizations?.estimated_num_employees,
@@ -140,50 +243,55 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
         return { data: mapped, count: count || 0 };
       }
 
-      // MODE 3: Unfiled Contacts
-      if (fetchUnfiled) {
-         // Note: .range() on filtered nested relations is tricky in Supabase.
-         // For 'Unfiled', we might need to fetch IDs first or accept client-side paging if list is small.
-         // Assuming unfiled list isn't massive, or we do a specific "not.is" query.
-         // Simplified approach for now (client-side filter on server fetched batch is hard).
-         // Better approach: Get all unfiled contacts with range is hard without a view.
-         // Fallback: Fetch basic info for all unfiled, then slice, then enrich.
-         // For now, let's keep Unfiled as is (client side limit) or apply standard query filters:
-         
-         const { data, error } = await supabase
-          .from('contacts')
-          .select('*, contact_workspace_files(id)', { count: 'exact' })
-          .eq('organization_id', organization_id)
-          .is('contact_workspace_files', null); // This might not work directly in JS SDK depending on version
-          
-         // If "Unfiled" is a critical heavy view, creating a DB View is best.
-         // Leaving logic similar to previous but returning structure:
-         
-         // ... (Keep existing Unfiled logic but wrap return)
-         return { data: [], count: 0 }; // Placeholder - Implement specific unfiled query if needed
+      // --- MODE 4: Default Local CRM (All Contacts) ---
+      let query = supabase
+        .from('contacts')
+        .select(commonSelect, { count: 'exact' })
+        .eq('organization_id', organization_id)
+        .order('created_at', { ascending: false });
+
+      // Apply Basic Filters
+      query = applyCommonFilters(query, filters);
+
+      // Apply Deep JSONB Filters (Seniority, Dept, etc.)
+      if (hasDeepFilters) {
+         if (filters.seniorities?.length) {
+            // Seniority is a text field in enrichment_person_metadata table
+            query = query.in('intel_person.enrichment_person_metadata.seniority', filters.seniorities);
+         }
+         if (filters.departments?.length) {
+            // departments is a text array, use overlap operator
+            query = query.overlaps('intel_person.enrichment_person_metadata.departments', filters.departments);
+         }
+         if (filters.functions?.length) {
+            // functions is a text array, use overlap operator
+            query = query.overlaps('intel_person.enrichment_person_metadata.functions', filters.functions);
+         }
+         if (filters.industries?.length) {
+             query = query.in('intel_person.enrichment_organizations.industry', filters.industries);
+         }
       }
 
-      // MODE 4: Default Local CRM
-      query = query
-        .eq('organization_id', organization_id)
-        .order('created_at', { ascending: false })
-        .range(from, to); // <--- PAGINATION APPLIED
+      // Paginate
+      query = query.range(from, to);
 
       const { data, error, count } = await query;
       if (error) throw error;
 
-      // Update Redux count
       if (count !== null) dispatch(setTotalEntries(count));
 
       const mapped = (data || []).map((c: any) => {
         const intel = c.intel_person?.[0];
+        const metadata = intel?.enrichment_person_metadata?.[0];
         return {
           ...c,
           company_name: c.companies?.name,
+          company_logo: c.companies?.logo_url,
+          company_domain: c.companies?.domain,
           is_discovery: false,
-          seniority: intel?.enrichment_person_metadata?.seniority,
-          departments: intel?.enrichment_person_metadata?.departments,
-          functions: intel?.enrichment_person_metadata?.functions,
+          seniority: metadata?.seniority,
+          departments: metadata?.departments,
+          functions: metadata?.functions,
           industry: intel?.enrichment_organizations?.industry,
           revenue: intel?.enrichment_organizations?.annual_revenue_printed,
           employee_count: intel?.enrichment_organizations?.estimated_num_employees,
@@ -197,4 +305,3 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
     enabled: !!organization_id
   });
 };
-// Final

@@ -1,16 +1,13 @@
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+// Hrumbles-Front-End_UI/src/components/sales/CompanyPrimaryDetails.tsx
+import React, { useState } from 'react';
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import { 
-  Building2, Calendar, Users, Globe, Linkedin, MapPin, 
-  Briefcase, DollarSign, Award, Phone, ShieldCheck
+  Building2, Globe, Linkedin, Facebook, ChevronDown, ChevronUp,
+  ExternalLink, Copy, Check
 } from 'lucide-react';
-import { 
-  extractCompanyFromRaw, 
-  hasCompanyData, 
-  formatCompanyNumber 
-} from '@/utils/companyDataExtractor';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 interface CompanyPrimaryDetailsProps {
@@ -18,295 +15,277 @@ interface CompanyPrimaryDetailsProps {
 }
 
 export const CompanyPrimaryDetails: React.FC<CompanyPrimaryDetailsProps> = ({ company }) => {
-  const data = extractCompanyFromRaw(company);
+  const { toast } = useToast();
+  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
   const enrichment = company?.enrichment_organizations;
-  const hasEnrichment = !!enrichment;
+  const keywords = enrichment?.enrichment_org_keywords || [];
+  
+  // Extract data from enrichment or company
+  const data = {
+    name: enrichment?.name || company.name,
+    description: enrichment?.short_description || company.about,
+    industry: enrichment?.industry || company.industry,
+    industries: enrichment?.industries || (company.industry ? [company.industry] : []),
+    keywords: keywords.map((k: any) => k.keyword),
+    subsidiaryOf: null, // Would need parent company data
+    subsidiaries: enrichment?.num_suborganizations || 0,
+    tradingSymbol: enrichment?.publicly_traded_symbol 
+      ? `${enrichment?.publicly_traded_exchange?.toUpperCase() || 'STOCK'}: ${enrichment?.publicly_traded_symbol}`
+      : null,
+    marketCap: null, // Not in current data
+    foundedYear: enrichment?.founded_year || company.start_date,
+    employees: enrichment?.estimated_num_employees || company.employee_count,
+    sicCodes: enrichment?.sic_codes || [],
+    naicsCodes: enrichment?.naics_codes || [],
+    website: enrichment?.website_url || company.website,
+    linkedinUrl: enrichment?.linkedin_url || company.linkedin,
+    facebookUrl: enrichment?.facebook_url || company.facebook,
+    twitterUrl: enrichment?.twitter_url || company.twitter,
+  };
+
+  const copyToClipboard = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+    toast({ title: "Copied", description: "Copied to clipboard" });
+  };
 
   return (
-    <div className="space-y-4 sticky top-24">
-      {/* Primary Card */}
-      <Card className="border-none shadow-lg overflow-hidden bg-white">
-        <CardHeader className="pb-4 bg-gradient-to-r from-slate-900 to-slate-800 p-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/10 backdrop-blur-sm rounded-lg">
-              <Building2 className="w-5 h-5 text-white" />
-            </div>
-            <CardTitle className="text-white text-sm font-black uppercase tracking-wider">
-              Company Profile
-            </CardTitle>
-            {hasEnrichment && (
-              <Badge className="ml-auto bg-green-500/20 text-green-300 border-green-400/30 text-[8px] font-black uppercase">
-                <ShieldCheck size={10} className="mr-1" />
-                Verified
-              </Badge>
+    <div className="divide-y divide-gray-200">
+      {/* Company Details Section */}
+      <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <CollapsibleTrigger className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
+          <span className="text-sm font-semibold text-gray-900">Company details</span>
+          {detailsOpen ? (
+            <ChevronUp size={16} className="text-gray-400" />
+          ) : (
+            <ChevronDown size={16} className="text-gray-400" />
+          )}
+        </CollapsibleTrigger>
+        
+        <CollapsibleContent>
+          <div className="px-4 pb-4 space-y-4">
+            {/* Description */}
+            {data.description && (
+              <div>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  {data.description.length > 200 
+                    ? `${data.description.substring(0, 200)}...` 
+                    : data.description
+                  }
+                </p>
+                {data.description.length > 200 && (
+                  <button className="text-sm text-blue-600 hover:text-blue-700 mt-1">
+                    Show More
+                  </button>
+                )}
+              </div>
             )}
-          </div>
-        </CardHeader>
-        <CardContent className="p-5 space-y-4">
-          {/* Core Details */}
-          {data.industry && (
-            <DetailRow 
-              icon={<Briefcase className="w-4 h-4" />}
-              label="Industry"
-              value={data.industry}
-            />
-          )}
 
-          {data.foundedYear && (
-            <DetailRow 
-              icon={<Calendar className="w-4 h-4" />}
-              label="Founded"
-              value={data.foundedYear}
-            />
-          )}
+            {/* Industries */}
+            {data.industries && data.industries.length > 0 && (
+              <DetailRow label="Industries">
+                <div className="flex flex-wrap gap-1.5">
+                  {data.industries.slice(0, 3).map((industry: string, idx: number) => (
+                    <Badge 
+                      key={idx}
+                      variant="secondary"
+                      className="text-xs font-normal bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+                    >
+                      {industry}
+                    </Badge>
+                  ))}
+                </div>
+              </DetailRow>
+            )}
 
-          {data.estimatedEmployees && (
-            <DetailRow 
-              icon={<Users className="w-4 h-4" />}
-              label="Company Size"
-              value={
-                <span className="flex items-center gap-2">
-                  <span className="font-bold">{formatCompanyNumber(data.estimatedEmployees)}</span>
-                  <Badge className="bg-blue-100 text-blue-700 border-none text-[8px] font-bold px-1.5 py-0">
-                    Employees
-                  </Badge>
-                </span>
-              }
-            />
-          )}
-
-          <Separator />
-
-          {/* Location */}
-          {(data.city || data.state || data.country) && (
-            <DetailRow 
-              icon={<MapPin className="w-4 h-4" />}
-              label="Headquarters"
-              value={
-                <div className="space-y-1">
-                  <p className="font-semibold">
-                    {[data.city, data.state, data.country].filter(Boolean).join(', ')}
-                  </p>
-                  {data.rawAddress && data.rawAddress !== [data.city, data.state, data.country].filter(Boolean).join(', ') && (
-                    <p className="text-[10px] text-slate-500">{data.rawAddress}</p>
+            {/* Keywords */}
+            {data.keywords && data.keywords.length > 0 && (
+              <DetailRow label="Keywords">
+                <div className="flex flex-wrap gap-1.5">
+                  {data.keywords.slice(0, 5).map((keyword: string, idx: number) => (
+                    <Badge 
+                      key={idx}
+                      variant="outline"
+                      className="text-xs font-normal bg-gray-50 text-gray-600 border-gray-200"
+                    >
+                      {keyword}
+                    </Badge>
+                  ))}
+                  {data.keywords.length > 5 && (
+                    <button className="text-xs text-blue-600 hover:text-blue-700">
+                      Show all {data.keywords.length} ↓
+                    </button>
                   )}
                 </div>
-              }
-            />
-          )}
+              </DetailRow>
+            )}
 
-          <Separator />
+            {/* Subsidiary Of */}
+            {data.subsidiaryOf && (
+              <DetailRow label="Subsidiary of">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 bg-gray-200 rounded flex items-center justify-center">
+                    <Building2 size={12} className="text-gray-500" />
+                  </div>
+                  <span className="text-sm text-gray-900">{data.subsidiaryOf}</span>
+                </div>
+              </DetailRow>
+            )}
 
-          {/* Contact Methods */}
-          {(data.websiteUrl || data.primaryDomain) && (
-            <DetailRow 
-              icon={<Globe className="w-4 h-4" />}
-              label="Website"
-              value={
-                <a 
-                  href={data.websiteUrl || `https://${data.primaryDomain}`}
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="text-indigo-600 hover:text-indigo-700 hover:underline font-semibold text-sm break-all"
-                >
-                  {data.primaryDomain || data.websiteUrl}
-                </a>
-              }
-            />
-          )}
+            {/* Subsidiaries */}
+            {data.subsidiaries > 0 && (
+              <DetailRow label="Subsidiaries">
+                <span className="text-sm text-gray-900">
+                  {data.name} has {data.subsidiaries} subsidiaries
+                </span>
+              </DetailRow>
+            )}
 
-          {data.phoneNumber && (
-            <DetailRow 
-              icon={<Phone className="w-4 h-4" />}
-              label="Phone"
-              value={
-                <a href={`tel:${data.phoneNumber}`} className="text-indigo-600 hover:underline font-semibold">
-                  {data.phoneNumber}
-                </a>
-              }
-            />
-          )}
+            {/* Trading Symbol */}
+            {data.tradingSymbol && (
+              <DetailRow label="Trading Symbol">
+                <span className="text-sm font-medium text-gray-900">{data.tradingSymbol}</span>
+              </DetailRow>
+            )}
 
-          {data.linkedinUrl && (
-            <DetailRow 
-              icon={<Linkedin className="w-4 h-4" />}
-              label="LinkedIn"
-              value={
-                <a 
-                  href={data.linkedinUrl}
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="text-blue-600 hover:underline font-semibold text-sm inline-flex items-center gap-1"
-                >
-                  View Profile
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
-              }
-            />
-          )}
-        </CardContent>
-      </Card>
+            {/* Market Cap */}
+            {data.marketCap && (
+              <DetailRow label="Market Cap">
+                <span className="text-sm font-medium text-gray-900">{data.marketCap}</span>
+              </DetailRow>
+            )}
 
-      {/* Financial Summary */}
-      {(data.annualRevenue || data.annualRevenuePrinted || data.totalFunding || data.totalFundingPrinted) && (
-        <Card className="border-none shadow-lg overflow-hidden bg-gradient-to-br from-white to-green-50">
-          <CardHeader className="pb-3 bg-gradient-to-r from-green-50 to-emerald-50 border-b-2 border-green-100 p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-1.5 bg-green-600 rounded-lg">
-                <DollarSign className="w-4 h-4 text-white" />
+            {/* Founding Year */}
+            {data.foundedYear && (
+              <DetailRow label="Founding Year">
+                <span className="text-sm text-gray-900">{data.foundedYear}</span>
+              </DetailRow>
+            )}
+
+            {/* Number of Employees */}
+            {data.employees && (
+              <DetailRow label="Number of Employees">
+                <span className="text-sm text-gray-900">
+                  {typeof data.employees === 'number' 
+                    ? data.employees.toLocaleString() 
+                    : data.employees
+                  } employees
+                </span>
+              </DetailRow>
+            )}
+
+            {/* SIC Codes */}
+            {data.sicCodes && data.sicCodes.length > 0 && (
+              <DetailRow label="SIC Codes">
+                <div className="flex flex-wrap gap-1.5">
+                  {data.sicCodes.map((code: string, idx: number) => (
+                    <Badge 
+                      key={idx}
+                      className="text-xs font-mono bg-gray-700 text-white border-none"
+                    >
+                      {code}
+                    </Badge>
+                  ))}
+                </div>
+              </DetailRow>
+            )}
+
+            {/* NAICS Codes */}
+            {data.naicsCodes && data.naicsCodes.length > 0 && (
+              <DetailRow label="NAICS Codes">
+                <div className="flex flex-wrap gap-1.5">
+                  {data.naicsCodes.map((code: string, idx: number) => (
+                    <Badge 
+                      key={idx}
+                      className="text-xs font-mono bg-gray-700 text-white border-none"
+                    >
+                      {code}
+                    </Badge>
+                  ))}
+                </div>
+              </DetailRow>
+            )}
+
+            {/* Links */}
+            <DetailRow label="Links">
+              <div className="flex items-center gap-2">
+                {data.website && (
+                  <a
+                    href={data.website}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Website"
+                  >
+                    <Globe size={18} className="text-gray-500" />
+                  </a>
+                )}
+                {data.linkedinUrl && (
+                  <a
+                    href={data.linkedinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="LinkedIn"
+                  >
+                    <Linkedin size={18} className="text-[#0A66C2]" />
+                  </a>
+                )}
+                {data.facebookUrl && (
+                  <a
+                    href={data.facebookUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Facebook"
+                  >
+                    <Facebook size={18} className="text-[#1877F2]" />
+                  </a>
+                )}
+                {data.twitterUrl && (
+                  <a
+                    href={data.twitterUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="X (Twitter)"
+                  >
+                    <XIcon />
+                  </a>
+                )}
               </div>
-              <CardTitle className="text-slate-800 text-xs font-black uppercase tracking-wider">
-                Financial Overview
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 space-y-3">
-            {data.annualRevenuePrinted && (
-              <MetricBox 
-                label="Annual Revenue"
-                value={data.annualRevenuePrinted}
-                color="text-green-600"
-              />
-            )}
-            {data.totalFundingPrinted && (
-              <MetricBox 
-                label="Total Funding"
-                value={data.totalFundingPrinted}
-                color="text-purple-600"
-              />
-            )}
-            {data.latestFundingStage && (
-              <MetricBox 
-                label="Latest Stage"
-                value={
-                  <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[9px] font-bold">
-                    {data.latestFundingStage}
-                  </Badge>
-                }
-              />
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Stock Information */}
-      {(data.publiclyTradedSymbol || data.publiclyTradedExchange) && (
-        <Card className="border-none shadow-lg overflow-hidden bg-gradient-to-br from-white to-blue-50">
-          <CardHeader className="pb-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-100 p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-1.5 bg-blue-600 rounded-lg">
-                <Award className="w-4 h-4 text-white" />
-              </div>
-              <CardTitle className="text-slate-800 text-xs font-black uppercase tracking-wider">
-                Public Company
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 space-y-3">
-            {data.publiclyTradedSymbol && (
-              <MetricBox 
-                label="Stock Symbol"
-                value={
-                  <Badge className="bg-blue-600 text-white border-none text-sm font-black px-3 py-1">
-                    {data.publiclyTradedSymbol}
-                  </Badge>
-                }
-              />
-            )}
-            {data.publiclyTradedExchange && (
-              <MetricBox 
-                label="Exchange"
-                value={data.publiclyTradedExchange}
-              />
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Additional Metrics */}
-      {(data.alexaRanking || data.numSuborganizations > 0 || data.retailLocationCount > 0) && (
-        <Card className="border-none shadow-lg overflow-hidden bg-white">
-          <CardHeader className="pb-3 bg-slate-50 border-b border-slate-100 p-4">
-            <CardTitle className="text-slate-700 text-xs font-black uppercase tracking-wider">
-              Additional Metrics
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 space-y-3">
-            {data.alexaRanking && (
-              <MetricBox 
-                label="Alexa Ranking"
-                value={`#${formatCompanyNumber(data.alexaRanking)}`}
-              />
-            )}
-            {data.numSuborganizations > 0 && (
-              <MetricBox 
-                label="Subsidiaries"
-                value={data.numSuborganizations}
-              />
-            )}
-            {data.retailLocationCount > 0 && (
-              <MetricBox 
-                label="Retail Locations"
-                value={data.retailLocationCount}
-              />
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Languages */}
-      {hasCompanyData(data.languages) && (
-        <Card className="border-none shadow-lg overflow-hidden bg-white">
-          <CardHeader className="pb-3 bg-slate-50 border-b border-slate-100 p-4">
-            <CardTitle className="text-slate-700 text-xs font-black uppercase tracking-wider">
-              Languages
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            <div className="flex flex-wrap gap-1.5">
-              {data.languages.map((lang: string, idx: number) => (
-                <Badge 
-                  key={idx} 
-                  variant="outline" 
-                  className="text-[9px] font-semibold bg-slate-50 text-slate-700"
-                >
-                  {lang}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </DetailRow>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 };
 
-// Helper Components
-const DetailRow = ({ icon, label, value }: any) => (
-  <div className="flex items-start gap-3">
-    <div className="text-slate-400 mt-0.5">
-      {icon}
-    </div>
-    <div className="flex-1 min-w-0">
-      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">
-        {label}
-      </p>
-      <div className="text-sm text-slate-900">{value || 'N/A'}</div>
-    </div>
+// Detail Row Component
+const DetailRow = ({ 
+  label, 
+  children 
+}: { 
+  label: string; 
+  children: React.ReactNode;
+}) => (
+  <div className="space-y-1.5">
+    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+      {label}
+    </span>
+    <div>{children}</div>
   </div>
 );
 
-const MetricBox = ({ label, value, color }: any) => (
-  <div className="flex items-center justify-between">
-    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-      {label}
-    </span>
-    <span className={cn("text-sm font-black", color || "text-slate-900")}>
-      {value}
-    </span>
-  </div>
+// X (Twitter) Icon
+const XIcon = () => (
+  <svg className="w-[18px] h-[18px] text-gray-800" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+  </svg>
 );
 
 export default CompanyPrimaryDetails;
