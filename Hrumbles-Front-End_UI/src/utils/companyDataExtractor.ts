@@ -1,103 +1,151 @@
-// Utility functions to extract company data from enrichment_org_raw_responses
-// Ensures we always show data even if it's not normalized in the database
+// Hrumbles-Front-End_UI/src/utils/companyDataExtractor.ts
 
-export const extractCompanyFromRaw = (company: any) => {
+/**
+ * Utility functions to extract and format data from company enrichment responses
+ */
+
+export interface ExtractedCompanyData {
+  // Basic Info
+  name: string | null;
+  shortDescription: string | null;
+  logoUrl: string | null;
+  
+  // Industry
+  industry: string | null;
+  industries: string[];
+  secondaryIndustries: string[];
+  
+  // Location
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  postalCode: string | null;
+  streetAddress: string | null;
+  rawAddress: string | null;
+  
+  // Contact
+  websiteUrl: string | null;
+  primaryDomain: string | null;
+  phoneNumber: string | null;
+  linkedinUrl: string | null;
+  twitterUrl: string | null;
+  facebookUrl: string | null;
+  
+  // Company Details
+  foundedYear: number | null;
+  estimatedEmployees: number | null;
+  
+  // Financial
+  annualRevenue: number | null;
+  annualRevenuePrinted: string | null;
+  totalFunding: number | null;
+  totalFundingPrinted: string | null;
+  latestFundingStage: string | null;
+  latestFundingRoundDate: string | null;
+  
+  // Public Company
+  publiclyTradedSymbol: string | null;
+  publiclyTradedExchange: string | null;
+  
+  // Classification
+  sicCodes: string[];
+  naicsCodes: string[];
+  
+  // Additional
+  alexaRanking: number | null;
+  numSuborganizations: number;
+  retailLocationCount: number;
+  languages: string[];
+  
+  // Technologies & Keywords (from enrichment tables)
+  technologies: any[];
+  keywords: string[];
+  departmentalHeadCount: any[];
+  fundingEvents: any[];
+  
+  // Raw
+  rawData: any;
+  isEnriched: boolean;
+}
+
+/**
+ * Extract normalized data from company with enrichment_organizations
+ */
+export const extractCompanyFromRaw = (company: any): ExtractedCompanyData => {
+  const enrichment = company?.enrichment_organizations;
   const rawResponse = company?.enrichment_org_raw_responses?.[0]?.raw_json;
   const org = rawResponse?.organization || {};
+  
+  const isEnriched = Boolean(enrichment || Object.keys(org).length > 0);
 
   return {
-    // Basic Information
-    name: org.name || company.name,
-    logoUrl: org.logo_url || company.logo_url,
-    primaryDomain: org.primary_domain || company.domain,
-    websiteUrl: org.website_url || company.website,
+    // Basic Info
+    name: enrichment?.name || company.name || null,
+    shortDescription: enrichment?.short_description || company.about || null,
+    logoUrl: enrichment?.logo_url || company.logo_url || null,
     
-    // Contact Information
-    primaryPhone: org.primary_phone?.sanitized_number || org.phone,
-    phoneNumber: org.primary_phone?.number,
+    // Industry
+    industry: enrichment?.industry || company.industry || null,
+    industries: enrichment?.industries || org.industries || (company.industry ? [company.industry] : []),
+    secondaryIndustries: enrichment?.secondary_industries || org.secondary_industries || [],
     
-    // Location Details
-    city: org.city,
-    state: org.state,
-    country: org.country,
-    postalCode: org.postal_code,
-    streetAddress: org.street_address,
-    rawAddress: org.raw_address,
+    // Location
+    city: enrichment?.city || org.city || company.location?.split(',')[0]?.trim() || null,
+    state: enrichment?.state || org.state || null,
+    country: enrichment?.country || org.country || null,
+    postalCode: enrichment?.postal_code || org.postal_code || null,
+    streetAddress: enrichment?.street_address || org.street_address || null,
+    rawAddress: org.raw_address || company.address || null,
+    
+    // Contact
+    websiteUrl: enrichment?.website_url || company.website || null,
+    primaryDomain: enrichment?.primary_domain || company.domain || null,
+    phoneNumber: enrichment?.primary_phone || org.phone || null,
+    linkedinUrl: enrichment?.linkedin_url || company.linkedin || null,
+    twitterUrl: enrichment?.twitter_url || company.twitter || null,
+    facebookUrl: enrichment?.facebook_url || company.facebook || null,
     
     // Company Details
-    industry: org.industry || company.industry,
-    industries: org.industries || [],
-    secondaryIndustries: org.secondary_industries || [],
-    shortDescription: org.short_description || company.about,
+    foundedYear: enrichment?.founded_year || (company.start_date ? parseInt(company.start_date) : null),
+    estimatedEmployees: enrichment?.estimated_num_employees || company.employee_count || null,
     
-    // Social Links
-    linkedinUrl: org.linkedin_url || company.linkedin,
-    linkedinUid: org.linkedin_uid,
-    twitterUrl: org.twitter_url || company.twitter,
-    facebookUrl: org.facebook_url || company.facebook,
-    blogUrl: org.blog_url,
-    angellistUrl: org.angellist_url,
-    crunchbaseUrl: org.crunchbase_url,
+    // Financial
+    annualRevenue: enrichment?.annual_revenue || company.revenue || null,
+    annualRevenuePrinted: enrichment?.annual_revenue_printed || null,
+    totalFunding: enrichment?.total_funding || null,
+    totalFundingPrinted: enrichment?.total_funding_printed || null,
+    latestFundingStage: org.latest_funding_stage || null,
+    latestFundingRoundDate: org.latest_funding_round_date || null,
     
-    // Metrics
-    estimatedEmployees: org.estimated_num_employees || company.employee_count,
-    annualRevenue: org.annual_revenue,
-    annualRevenuePrinted: org.annual_revenue_printed || company.revenue,
-    totalFunding: org.total_funding,
-    totalFundingPrinted: org.total_funding_printed,
-    foundedYear: org.founded_year || company.start_date,
-    alexaRanking: org.alexa_ranking,
+    // Public Company
+    publiclyTradedSymbol: enrichment?.publicly_traded_symbol || null,
+    publiclyTradedExchange: enrichment?.publicly_traded_exchange || null,
     
-    // Stock Information
-    publiclyTradedSymbol: org.publicly_traded_symbol,
-    publiclyTradedExchange: org.publicly_traded_exchange,
-    
-    // Classifications
-    sicCodes: org.sic_codes || [],
-    naicsCodes: org.naics_codes || [],
-    
-    // Technology & Data
-    technologies: org.current_technologies || [],
-    technologyNames: org.technology_names || [],
-    keywords: org.keywords || [],
-    languages: org.languages || [],
-    
-    // Funding
-    fundingEvents: org.funding_events || [],
-    latestFundingStage: org.latest_funding_stage,
-    latestFundingRoundDate: org.latest_funding_round_date,
-    
-    // Structure
-    suborganizations: org.suborganizations || [],
-    numSuborganizations: org.num_suborganizations || 0,
-    retailLocationCount: org.retail_location_count || 0,
-    
-    // Departments
-    departmentalHeadCount: org.departmental_head_count || {},
-    
-    // Chart & Organization
-    orgChartSector: org.org_chart_sector,
-    ownedByOrganizationId: org.owned_by_organization_id,
+    // Classification
+    sicCodes: enrichment?.sic_codes || org.sic_codes || [],
+    naicsCodes: enrichment?.naics_codes || org.naics_codes || [],
     
     // Additional
-    timezone: org.time_zone,
-    snippetsLoaded: org.snippets_loaded,
+    alexaRanking: enrichment?.alexa_ranking || org.alexa_ranking || null,
+    numSuborganizations: org.num_suborganizations || 0,
+    retailLocationCount: org.retail_location_count || 0,
+    languages: org.languages || [],
     
-    // Account Information (if present)
-    account: org.account || null,
+    // From related enrichment tables
+    technologies: enrichment?.enrichment_org_technologies || [],
+    keywords: (enrichment?.enrichment_org_keywords || []).map((k: any) => k.keyword),
+    departmentalHeadCount: enrichment?.enrichment_org_departments || [],
+    fundingEvents: enrichment?.enrichment_org_funding_events || [],
     
-    // Raw data for complete access
-    rawOrganization: org,
-    fullRaw: rawResponse
+    // Raw
+    rawData: rawResponse,
+    isEnriched,
   };
 };
 
-// Helper to safely get nested values
-export const safeCompanyGet = (obj: any, path: string, defaultValue: any = null) => {
-  return path.split('.').reduce((acc, part) => acc?.[part], obj) ?? defaultValue;
-};
-
-// Helper to check if company data exists
+/**
+ * Check if a value contains meaningful data
+ */
 export const hasCompanyData = (value: any): boolean => {
   if (value === null || value === undefined || value === '') return false;
   if (Array.isArray(value)) return value.length > 0;
@@ -105,14 +153,22 @@ export const hasCompanyData = (value: any): boolean => {
   return true;
 };
 
-// Format currency for companies
+/**
+ * Format currency values
+ */
 export const formatCompanyCurrency = (amount: number | string | null): string => {
   if (!amount) return 'N/A';
   if (typeof amount === 'string') return amount;
   
-  if (Math.abs(amount) >= 1e9) return `$${(amount / 1e9).toFixed(1)}B`;
-  if (Math.abs(amount) >= 1e6) return `$${(amount / 1e6).toFixed(1)}M`;
-  if (Math.abs(amount) >= 1e3) return `$${(amount / 1e3).toFixed(1)}K`;
+  if (amount >= 1000000000) {
+    return `$${(amount / 1000000000).toFixed(1)}B`;
+  }
+  if (amount >= 1000000) {
+    return `$${(amount / 1000000).toFixed(1)}M`;
+  }
+  if (amount >= 1000) {
+    return `$${(amount / 1000).toFixed(0)}K`;
+  }
   
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -122,15 +178,20 @@ export const formatCompanyCurrency = (amount: number | string | null): string =>
   }).format(amount);
 };
 
-// Format large numbers for companies
+/**
+ * Format large numbers with K, M, B suffixes
+ */
 export const formatCompanyNumber = (num: number | null): string => {
   if (!num) return 'N/A';
+  if (num >= 1000000000) return `${(num / 1000000000).toFixed(1)}B`;
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return num.toLocaleString();
 };
 
-// Group technologies by category
+/**
+ * Group technologies by category
+ */
 export const groupCompanyTechnologies = (technologies: any[]): Record<string, any[]> => {
   const grouped: Record<string, any[]> = {};
   
@@ -140,69 +201,47 @@ export const groupCompanyTechnologies = (technologies: any[]): Record<string, an
     grouped[category].push(tech);
   });
   
-  return grouped;
+  // Sort categories by count (descending)
+  return Object.fromEntries(
+    Object.entries(grouped).sort((a, b) => b[1].length - a[1].length)
+  );
 };
 
-// Process department data for visualization
-export const processDepartments = (deptData: Record<string, number>) => {
-  if (!deptData || Object.keys(deptData).length === 0) {
-    return { active: [], inactive: [], total: 0 };
-  }
-
-  const entries = Object.entries(deptData);
-  const active = entries
-    .filter(([_, count]) => count > 0)
-    .map(([name, count]) => ({ department_name: name, head_count: count }))
-    .sort((a, b) => b.head_count - a.head_count);
+/**
+ * Process departments for display
+ */
+export const processDepartments = (departments: any[]): { 
+  active: any[]; 
+  total: number; 
+} => {
+  const active = (departments || [])
+    .filter((d: any) => d.head_count > 0)
+    .sort((a: any, b: any) => b.head_count - a.head_count);
   
-  const inactive = entries
-    .filter(([_, count]) => count === 0)
-    .map(([name]) => name);
+  const total = active.reduce((sum: number, d: any) => sum + d.head_count, 0);
   
-  const total = active.reduce((sum, d) => sum + d.head_count, 0);
-  
-  return { active, inactive, total };
+  return { active, total };
 };
 
-// Calculate employee growth
-export const calculateEmployeeGrowth = (company: any) => {
-  const raw = company?.enrichment_org_raw_responses?.[0]?.raw_json?.organization;
-  
-  return {
-    sixMonth: raw?.organization_headcount_six_month_growth || null,
-    twelveMonth: raw?.organization_headcount_twelve_month_growth || null,
-    twentyFourMonth: raw?.organization_headcount_twenty_four_month_growth || null
-  };
+/**
+ * Get company initials for avatar fallback
+ */
+export const getCompanyInitials = (name: string | null): string => {
+  if (!name) return '?';
+  return name.charAt(0).toUpperCase();
 };
 
-// Group keywords by relevance
-export const groupKeywordsByTheme = (keywords: string[]) => {
-  const groups: Record<string, string[]> = {
-    'Core Business': [],
-    'Technology & Tools': [],
-    'Services & Solutions': [],
-    'Industries': [],
-    'Specializations': [],
-    'Other': []
-  };
+/**
+ * Format address from components
+ */
+export const formatCompanyAddress = (data: ExtractedCompanyData): string | null => {
+  const parts = [
+    data.streetAddress,
+    data.city,
+    data.state,
+    data.postalCode,
+    data.country
+  ].filter(Boolean);
   
-  keywords.forEach((keyword: string) => {
-    if (keyword.match(/recruitment|staffing|hiring|talent|hr/i)) {
-      groups['Core Business'].push(keyword);
-    } else if (keyword.match(/technology|tech|software|platform|tool|ai|machine learning|cloud/i)) {
-      groups['Technology & Tools'].push(keyword);
-    } else if (keyword.match(/service|solution|consulting|management|strategy|process/i)) {
-      groups['Services & Solutions'].push(keyword);
-    } else if (keyword.match(/healthcare|finance|energy|oil|gas|retail|construction/i)) {
-      groups['Industries'].push(keyword);
-    } else if (keyword.match(/specialist|expert|professional|senior|executive|global/i)) {
-      groups['Specializations'].push(keyword);
-    } else {
-      groups['Other'].push(keyword);
-    }
-  });
-  
-  return Object.entries(groups)
-    .filter(([_, kws]) => kws.length > 0)
-    .reduce((acc, [key, val]) => ({ ...acc, [key]: val }), {});
+  return parts.length > 0 ? parts.join(', ') : null;
 };

@@ -1,0 +1,368 @@
+/* Hrumbles-Front-End_UI/src/components/sales/contact-detail/editor/hubspot-editor.css */
+
+/* =====================
+   EDITOR CONTAINER
+   ===================== */
+
+.hubspot-editor-container {
+  width: 100%;
+}
+
+/* =====================
+   EDITOR CONTENT AREA
+   ===================== */
+
+.hubspot-editor-content {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1f2937;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.hubspot-editor-content:empty::before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.hubspot-editor-content:focus {
+  outline: none;
+}
+
+/* =====================
+   TEXT FORMATTING
+   ===================== */
+
+.hubspot-editor-content p {
+  margin: 0 0 0.5em 0;
+}
+
+.hubspot-editor-content p:last-child {
+  margin-bottom: 0;
+}
+
+.hubspot-editor-content strong,
+.hubspot-editor-content b {
+  font-weight: 600;
+}
+
+.hubspot-editor-content em,
+.hubspot-editor-content i {
+  font-style: italic;
+}
+
+.hubspot-editor-content u {
+  text-decoration: underline;
+}
+
+.hubspot-editor-content s,
+.hubspot-editor-content strike,
+.hubspot-editor-content del {
+  text-decoration: line-through;
+}
+
+.hubspot-editor-content sub {
+  font-size: 0.75em;
+  vertical-align: sub;
+}
+
+.hubspot-editor-content sup {
+  font-size: 0.75em;
+  vertical-align: super;
+}
+
+/* =====================
+   LINKS
+   ===================== */
+
+.hubspot-editor-content a {
+  color: #0891b2;
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.hubspot-editor-content a:hover {
+  color: #0e7490;
+}
+
+/* =====================
+   LISTS
+   ===================== */
+
+.hubspot-editor-content ul {
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.hubspot-editor-content ol {
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.hubspot-editor-content li {
+  margin: 0.25em 0;
+  padding-left: 0.25em;
+}
+
+.hubspot-editor-content li::marker {
+  color: #6b7280;
+}
+
+/* Nested lists */
+.hubspot-editor-content ul ul,
+.hubspot-editor-content ol ol,
+.hubspot-editor-content ul ol,
+.hubspot-editor-content ol ul {
+  margin: 0.25em 0;
+}
+
+.hubspot-editor-content ul ul {
+  list-style-type: circle;
+}
+
+.hubspot-editor-content ul ul ul {
+  list-style-type: square;
+}
+
+/* =====================
+   BLOCKQUOTE
+   ===================== */
+
+.hubspot-editor-content blockquote {
+  border-left: 4px solid #0891b2;
+  padding: 0.5em 1em;
+  margin: 0.5em 0;
+  background-color: #f8fafc;
+  color: #475569;
+  font-style: italic;
+}
+
+.hubspot-editor-content blockquote p {
+  margin: 0;
+}
+
+/* =====================
+   IMAGES
+   ===================== */
+
+.hubspot-editor-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 0.5em 0;
+  display: block;
+}
+
+.hubspot-editor-content img:hover {
+  box-shadow: 0 0 0 2px #0891b2;
+}
+
+/* =====================
+   CODE
+   ===================== */
+
+.hubspot-editor-content code {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+  background-color: #f1f5f9;
+  padding: 0.125em 0.375em;
+  border-radius: 4px;
+  color: #be185d;
+}
+
+.hubspot-editor-content pre {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+  background-color: #1e293b;
+  color: #e2e8f0;
+  padding: 1em;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.hubspot-editor-content pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+/* =====================
+   HORIZONTAL RULE
+   ===================== */
+
+.hubspot-editor-content hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 1em 0;
+}
+
+/* =====================
+   SELECTION
+   ===================== */
+
+.hubspot-editor-content ::selection {
+  background-color: #bae6fd;
+}
+
+/* =====================
+   ALIGNMENT
+   ===================== */
+
+.hubspot-editor-content [style*="text-align: left"],
+.hubspot-editor-content .text-left {
+  text-align: left;
+}
+
+.hubspot-editor-content [style*="text-align: center"],
+.hubspot-editor-content .text-center {
+  text-align: center;
+}
+
+.hubspot-editor-content [style*="text-align: right"],
+.hubspot-editor-content .text-right {
+  text-align: right;
+}
+
+.hubspot-editor-content [style*="text-align: justify"],
+.hubspot-editor-content .text-justify {
+  text-align: justify;
+}
+
+/* =====================
+   HEADINGS (if used)
+   ===================== */
+
+.hubspot-editor-content h1 {
+  font-size: 2em;
+  font-weight: 700;
+  margin: 0.67em 0;
+  line-height: 1.2;
+}
+
+.hubspot-editor-content h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  margin: 0.75em 0;
+  line-height: 1.3;
+}
+
+.hubspot-editor-content h3 {
+  font-size: 1.17em;
+  font-weight: 600;
+  margin: 0.83em 0;
+  line-height: 1.3;
+}
+
+.hubspot-editor-content h4 {
+  font-size: 1em;
+  font-weight: 600;
+  margin: 1em 0;
+}
+
+/* =====================
+   TABLES (if pasted)
+   ===================== */
+
+.hubspot-editor-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+}
+
+.hubspot-editor-content th,
+.hubspot-editor-content td {
+  border: 1px solid #e5e7eb;
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+
+.hubspot-editor-content th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+
+.hubspot-editor-content tr:hover td {
+  background-color: #f8fafc;
+}
+
+/* =====================
+   TOOLBAR ENHANCEMENTS
+   ===================== */
+
+/* Dropdown menu items hover state */
+[data-radix-popper-content-wrapper] [role="menuitem"]:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* Active toolbar button state */
+.toolbar-button-active {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Color picker buttons */
+.color-picker-button {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.color-picker-button:hover {
+  transform: scale(1.1);
+}
+
+/* =====================
+   RESPONSIVE
+   ===================== */
+
+@media (max-width: 640px) {
+  .hubspot-editor-content {
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+}
+
+/* =====================
+   PRINT STYLES
+   ===================== */
+
+@media print {
+  .hubspot-editor-container {
+    border: none !important;
+  }
+  
+  .hubspot-editor-content {
+    min-height: auto !important;
+    padding: 0 !important;
+  }
+}
+
+/* =====================
+   ANIMATIONS
+   ===================== */
+
+@keyframes editorFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.hubspot-editor-content {
+  animation: editorFadeIn 0.2s ease;
+}
+
+/* Focus ring animation */
+.hubspot-editor-container .border-teal-500 {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}

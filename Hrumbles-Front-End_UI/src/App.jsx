@@ -81,7 +81,9 @@ import Jobs from "./pages/jobs/Jobs";
 import JobView from "./pages/jobs/JobView";
 import JobDescription from "./pages/jobs/JobDescription";
 import Career from "./pages/careerPage/Index";
+import TalentView from "./pages/careerPage/TalentView/Index";
 import CareerJobDetail from "./pages/careerPage/JobDetail";
+import JobDetailTalent from "./pages/careerPage/TalentView/JobDetailTalent.tsx";
 import CareerJobApplication from "./pages/careerPage/JobApplication";
 import StatusSettings from "./pages/jobs/StatusSettings";
 import ResumeAnalysisDetailView from "./pages/jobs/ResumeAnalysisDetailView";
@@ -211,7 +213,7 @@ function AppContent() {
   // --- Define Public Routes ---
   const publicPaths = [
     '/login', '/signup', '/set-password', '/forgot-password',
-    '/careers', '/job/', '/share/', '/consent/'
+    '/careers', '/job/', '/share/', '/consent/', '/talentcareers'
   ];
 
 
@@ -439,7 +441,8 @@ const validateCurrentSession = useCallback(async () => {
 
         {/* career page */}
         <Route path="/careers" element={<Career />} />
-        <Route path="/job/:jobId" element={<CareerJobDetail />} />
+        <Route path="/talentcareers" element={<TalentView />} />
+        <Route path="/job/:jobId" element={<JobDetailTalent />} />
         <Route path="/job/:jobId/apply" element={<CareerJobApplication />} />
 
         {/* Candidate Profile Magic Link */}

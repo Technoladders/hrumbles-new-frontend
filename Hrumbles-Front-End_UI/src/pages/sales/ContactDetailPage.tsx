@@ -1,5 +1,5 @@
 // Hrumbles-Front-End_UI/src/pages/sales/ContactDetailPage.tsx
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useSelector } from 'react-redux';
 
-// Modular Components
+// Tab Components
 import { ContactDetailHeader } from '@/components/sales/contact-detail/ContactDetailHeader';
 import { ContactDetailSidebar } from '@/components/sales/contact-detail/ContactDetailSidebar';
 import { ProspectTab } from '@/components/sales/contact-detail/ProspectTab';
@@ -15,23 +15,21 @@ import { ProspectCompanyTab } from '@/components/sales/contact-detail/ProspectCo
 import { ActivityTimelineTab } from '@/components/sales/contact-detail/ActivityTimelineTab';
 import { MasterRecordTab } from '@/components/sales/contact-detail/MasterRecordTab';
 
+// Dialog Components - All using the new HubSpot-style rich text editor
+import { 
+  LogCallDialog, 
+  LogEmailDialog, 
+  CreateNoteDialog, 
+  CreateTaskDialog, 
+  LogMeetingDialog,
+  ActivityLogData
+} from '@/components/sales/contact-detail/dialogs';
+
 // UI Components
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { 
-  PhoneCall, StickyNote, Mail, Calendar, CheckSquare, 
-  Clock, Loader2, User, Building2, Database, FileText
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { User, Building2, Clock, Database } from 'lucide-react';
 
-// Activity Types
+// Types
 type ActivityModalType = 'call' | 'note' | 'email' | 'task' | 'meeting' | null;
 
 const ContactDetailPage = () => {
@@ -40,42 +38,17 @@ const ContactDetailPage = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const user = useSelector((state: any) => state.auth.user);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
 
   // Modal States
   const [activeModal, setActiveModal] = useState<ActivityModalType>(null);
   const [isEnriching, setIsEnriching] = useState(false);
   const [isRequestingPhone, setIsRequestingPhone] = useState(false);
-  const [createFollowUp, setCreateFollowUp] = useState(false);
 
-  // Form States
-  const [noteContent, setNoteContent] = useState('');
-  const [callDetails, setCallDetails] = useState({
-    outcome: '',
-    direction: 'outbound',
-    notes: '',
-    duration: '15'
-  });
-  const [emailDetails, setEmailDetails] = useState({
-    subject: '',
-    body: ''
-  });
-  const [taskDetails, setTaskDetails] = useState({
-    title: '',
-    description: '',
-    dueDate: new Date().toISOString().split('T')[0],
-    dueTime: '09:00',
-    priority: 'none',
-    taskType: 'to-do'
-  });
-  const [meetingDetails, setMeetingDetails] = useState({
-    title: '',
-    outcome: '',
-    startTime: new Date().toISOString().slice(0, 16),
-    duration: '30',
-    notes: ''
-  });
+  // =====================
+  // QUERIES
+  // =====================
 
-  // Fetch Contact Data
   const { data: contact, isLoading, refetch } = useQuery({
     queryKey: ['contact-full-detail', id],
     queryFn: async () => {
@@ -98,170 +71,177 @@ const ContactDetailPage = () => {
           ),
           enrichment_contact_emails (*),
           enrichment_contact_phones (*),
-          contact_activities(*, creator:created_by(
-      id, first_name, last_name, profile_picture_url
-    )),
+          contact_activities(
+            *,
+            creator:created_by(id, first_name, last_name, profile_picture_url)
+          ),
           enrichment_raw_responses(*)
         `)
         .eq('id', id)
         .single();
+      
       if (error) throw error;
       return data;
-    }
+    },
+    enabled: !!id
   });
 
-  // Log Activity Mutation
-  const logActivity = useMutation({
-    mutationFn: async (payload: any) => {
-      const { error } = await supabase.from('contact_activities').insert({
-        contact_id: id,
-        created_by: user?.id,
-        ...payload
-      });
-      if (error) throw error;
+  // =====================
+  // MUTATIONS
+  // =====================
+
+  // Log Activity with Follow-up Support
+  const logActivityMutation = useMutation({
+    mutationFn: async (payload: ActivityLogData) => {
+      // Use RPC function if follow-up is requested
+      if (payload.createFollowUp) {
+        const { data, error } = await supabase.rpc('log_activity_with_followup', {
+          p_contact_id: id,
+          p_organization_id: organizationId,
+          p_created_by: user?.id,
+          p_type: payload.type,
+          p_title: payload.title,
+          p_description: payload.description,
+          p_description_html: payload.descriptionHtml,
+          p_metadata: payload.metadata || {},
+          p_create_followup: true,
+          p_followup_task_type: payload.createFollowUp.taskType,
+          p_followup_due_date: payload.createFollowUp.dueDate,
+          p_followup_due_time: payload.createFollowUp.dueTime || '09:00:00'
+        });
+        if (error) throw error;
+        return data;
+      } else {
+        // Direct insert
+        const { error } = await supabase.from('contact_activities').insert({
+          contact_id: id,
+          organization_id: organizationId,
+          created_by: user?.id,
+          type: payload.type,
+          title: payload.title,
+          description: payload.description,
+          description_html: payload.descriptionHtml,
+          metadata: payload.metadata,
+          outcome: payload.metadata?.outcome,
+          direction: payload.metadata?.direction,
+          duration_minutes: payload.metadata?.duration ? parseInt(payload.metadata.duration) : null,
+          activity_date: payload.metadata?.activityDate || payload.metadata?.startTime || new Date().toISOString(),
+          due_date: payload.metadata?.dueDate,
+          due_time: payload.metadata?.dueTime,
+          priority: payload.metadata?.priority,
+          task_type: payload.metadata?.taskType
+        });
+        if (error) throw error;
+      }
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['contact-full-detail', id] });
-      closeModal();
-      toast({ title: "Activity Logged", description: `${variables.type} has been recorded.` });
+      const activityName = variables.type.charAt(0).toUpperCase() + variables.type.slice(1);
+      const hasFollowUp = variables.createFollowUp ? ' Follow-up task created.' : '';
+      toast({ 
+        title: "Activity Logged", 
+        description: `${activityName} has been recorded.${hasFollowUp}`
+      });
     },
     onError: (error: any) => {
       toast({ variant: "destructive", title: "Error", description: error.message });
     }
   });
 
-  // Enrich Contact
-  const handleEnrich = async () => {
+  // Complete Task Mutation
+  const completeTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      const { error } = await supabase.rpc('complete_task', {
+        p_task_id: taskId,
+        p_completed_by: user?.id
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contact-full-detail', id] });
+      toast({ title: "Task Completed", description: "Task marked as complete." });
+    },
+    onError: (error: any) => {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  });
+
+  // Delete Activity Mutation
+  const deleteActivityMutation = useMutation({
+    mutationFn: async (activityId: string) => {
+      const { error } = await supabase
+        .from('contact_activities')
+        .delete()
+        .eq('id', activityId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contact-full-detail', id] });
+      toast({ title: "Activity Deleted", description: "Activity has been removed." });
+    },
+    onError: (error: any) => {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  });
+
+  // =====================
+  // HANDLERS
+  // =====================
+
+  const handleActivitySubmit = useCallback(async (data: ActivityLogData) => {
+    await logActivityMutation.mutateAsync(data);
+  }, [logActivityMutation]);
+
+  const handleEnrich = useCallback(async () => {
     setIsEnriching(true);
     try {
       if (contact?.apollo_person_id) {
         const { error } = await supabase.functions.invoke('enrich-contact', {
-          body: { 
-            contactId: id, 
-            apolloPersonId: contact.apollo_person_id 
+          body: { contactId: id, apolloPersonId: contact.apollo_person_id }
+        });
+        if (error) throw error;
+        toast({ title: "Intelligence Refreshed", description: "Contact data updated." });
+      } else {
+        const { error } = await supabase.functions.invoke('old-contact-enrich', {
+          body: {
+            contactId: id,
+            email: contact?.email,
+            name: contact?.name,
+            linkedin_url: contact?.linkedin_url,
+            organization_name: contact?.company_name || contact?.companies?.name,
+            domain: contact?.companies?.website 
           }
         });
         if (error) throw error;
-        toast({ title: "Intelligence Refreshed", description: "Contact data updated via Apollo ID." });
-      } else {
-        console.log("Missing Apollo ID, attempting to match...");
-        
-        const payload = {
-          contactId: id,
-          email: contact?.email,
-          name: contact?.name,
-          linkedin_url: contact?.linkedin_url,
-          organization_name: contact?.company_name || contact?.companies?.name,
-          domain: contact?.companies?.website 
-        };
-
-        const { error } = await supabase.functions.invoke('old-contact-enrich', {
-          body: payload
-        });
-
-        if (error) throw error;
-        toast({ title: "Contact Matched & Enriched", description: "We found this person in Apollo and linked their ID." });
+        toast({ title: "Contact Enriched", description: "Data has been updated." });
       }
-
       refetch();
     } catch (err: any) {
-      console.error(err);
       toast({ variant: "destructive", title: "Enrichment Failed", description: err.message });
     } finally { 
       setIsEnriching(false); 
     }
-  };
+  }, [contact, id, refetch, toast]);
 
-  // Request Phone
-  const handleRequestPhone = async () => {
+  const handleRequestPhone = useCallback(async () => {
     setIsRequestingPhone(true);
     try {
       const { error } = await supabase.functions.invoke('request-phone', {
         body: { contactId: id, apolloPersonId: contact?.apollo_person_id }
       });
       if (error) throw error;
-      toast({ title: "Verification Requested", description: "System is verifying phone networks." });
+      toast({ title: "Phone Requested", description: "Verifying phone networks." });
       refetch();
     } catch (err: any) {
       toast({ variant: "destructive", title: "Action Failed", description: err.message });
     } finally { 
       setIsRequestingPhone(false); 
     }
-  };
+  }, [contact, id, refetch, toast]);
 
-  // Close Modal & Reset Forms
-  const closeModal = () => {
-    setActiveModal(null);
-    setNoteContent('');
-    setCreateFollowUp(false);
-    setCallDetails({ outcome: '', direction: 'outbound', notes: '', duration: '15' });
-    setEmailDetails({ subject: '', body: '' });
-    setTaskDetails({ title: '', description: '', dueDate: new Date().toISOString().split('T')[0], dueTime: '09:00', priority: 'none', taskType: 'to-do' });
-    setMeetingDetails({ title: '', outcome: '', startTime: new Date().toISOString().slice(0, 16), duration: '30', notes: '' });
-  };
-
-  // Submit Handlers
-  const handleLogNote = () => {
-    if (!noteContent.trim()) return;
-    logActivity.mutate({ 
-      type: 'note', 
-      title: 'Note', 
-      description: noteContent 
-    });
-  };
-
-  const handleLogCall = () => {
-    if (!callDetails.notes.trim()) return;
-    logActivity.mutate({ 
-      type: 'call', 
-      title: `Call: ${callDetails.outcome || 'Logged'}`,
-      description: callDetails.notes,
-      metadata: {
-        outcome: callDetails.outcome,
-        direction: callDetails.direction,
-        duration: callDetails.duration
-      }
-    });
-  };
-
-  const handleLogEmail = () => {
-    if (!emailDetails.subject.trim()) return;
-    logActivity.mutate({ 
-      type: 'email', 
-      title: emailDetails.subject,
-      description: emailDetails.body
-    });
-  };
-
-  const handleCreateTask = () => {
-    if (!taskDetails.title.trim()) return;
-    logActivity.mutate({ 
-      type: 'task', 
-      title: taskDetails.title,
-      description: taskDetails.description,
-      metadata: {
-        dueDate: taskDetails.dueDate,
-        dueTime: taskDetails.dueTime,
-        priority: taskDetails.priority,
-        taskType: taskDetails.taskType,
-        status: 'pending'
-      }
-    });
-  };
-
-  const handleLogMeeting = () => {
-    if (!meetingDetails.notes.trim()) return;
-    logActivity.mutate({ 
-      type: 'meeting', 
-      title: meetingDetails.title || `Meeting: ${meetingDetails.outcome || 'Logged'}`,
-      description: meetingDetails.notes,
-      metadata: {
-        outcome: meetingDetails.outcome,
-        startTime: meetingDetails.startTime,
-        duration: meetingDetails.duration
-      }
-    });
-  };
+  // =====================
+  // RENDER
+  // =====================
 
   if (isLoading || !contact) {
     return (
@@ -283,7 +263,7 @@ const ContactDetailPage = () => {
 
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
-      {/* Header - Apollo Style */}
+      {/* Header */}
       <ContactDetailHeader 
         contact={contact} 
         onBack={() => navigate(-1)} 
@@ -293,9 +273,9 @@ const ContactDetailPage = () => {
         refetch={refetch}
       />
 
-      {/* Main Content - Two Column Layout */}
+      {/* Main Content */}
       <div className="flex">
-        {/* LEFT SIDEBAR - Contact Info (Fixed Width) */}
+        {/* Sidebar */}
         <aside className="w-[380px] min-w-[380px] border-r border-gray-200 bg-white min-h-[calc(100vh-65px)] overflow-y-auto">
           <ContactDetailSidebar 
             contact={contact} 
@@ -306,594 +286,107 @@ const ContactDetailPage = () => {
           />
         </aside>
 
-        {/* MAIN WORKSPACE - Tabs Content */}
+        {/* Main */}
         <main className="flex-1 min-w-0 overflow-y-auto">
-              <Tabs defaultValue="prospect" className="w-full">
-                {/* Tab Navigation */}
-                <div className="border-b border-slate-200 bg-slate-50/50">
-                  <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1.5 shadow-inner">
-                    <TabsTrigger 
-                      value="prospect" 
-                      className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-                    >
-                      <div className="flex items-center gap-2">
-                      <User size={16}  />  Prospect
-                      </div>
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="company"
-                     className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-                    >
-                       <div className="flex items-center gap-2">
-                      <Building2 size={16} className="mr-2" />
-                      Company
-                      </div>
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="activities"
-                      className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-                    >
-                       <div className="flex items-center gap-2">
-                      <Clock size={16} className="mr-2" />
-                      Activities
-                      </div>
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="fields"
-                      className="px-6 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
-                    >
-                       <div className="flex items-center gap-2">
-                      <Database size={16} className="mr-2" />
-                      Data Fields
-                      </div>
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
+          <Tabs defaultValue="prospect" className="w-full">
+            <div className="border-b border-gray-200 bg-white">
+              <TabsList className="h-auto p-0 bg-transparent">
+                <TabsTrigger 
+                  value="prospect" 
+                  className="px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent"
+                >
+                  <User size={16} className="mr-2" /> Prospect
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="company" 
+                  className="px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent"
+                >
+                  <Building2 size={16} className="mr-2" /> Company
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="activities" 
+                  className="px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent"
+                >
+                  <Clock size={16} className="mr-2" /> Activities
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="fields" 
+                  className="px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent"
+                >
+                  <Database size={16} className="mr-2" /> Data Fields
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-                {/* Tab Content */}
-                <div className="p-6">
-                  <TabsContent value="prospect" className="mt-0 focus-visible:outline-none">
-                    <ProspectTab contact={contact} />
-                  </TabsContent>
-                  <TabsContent value="company" className="mt-0 focus-visible:outline-none">
-                    <ProspectCompanyTab contact={contact} />
-                  </TabsContent>
-                  <TabsContent value="activities" className="mt-0 focus-visible:outline-none">
-                    <ActivityTimelineTab 
-                      contact={contact} 
-                      onOpenModal={(m: ActivityModalType) => setActiveModal(m)}
-                    />
-                  </TabsContent>
-                  <TabsContent value="fields" className="mt-0 focus-visible:outline-none">
-                    <MasterRecordTab contact={contact} />
-                  </TabsContent>
-                </div>
-              </Tabs>
-          
+            <div className="p-6">
+              <TabsContent value="prospect" className="mt-0">
+                <ProspectTab contact={contact} />
+              </TabsContent>
+              <TabsContent value="company" className="mt-0">
+                <ProspectCompanyTab contact={contact} />
+              </TabsContent>
+              <TabsContent value="activities" className="mt-0">
+                <ActivityTimelineTab 
+                  contact={contact} 
+                  onOpenModal={(m: ActivityModalType) => setActiveModal(m)}
+                  onCompleteTask={(taskId) => completeTaskMutation.mutate(taskId)}
+                  onDeleteActivity={(activityId) => deleteActivityMutation.mutate(activityId)}
+                />
+              </TabsContent>
+              <TabsContent value="fields" className="mt-0">
+                <MasterRecordTab contact={contact} />
+              </TabsContent>
+            </div>
+          </Tabs>
         </main>
       </div>
 
-      {/* ========== MODALS ========== */}
+      {/* ========== ACTIVITY DIALOGS ========== */}
       
-      {/* NOTE MODAL */}
-      <Dialog open={activeModal === 'note'} onOpenChange={() => closeModal()}>
-        <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-lg">
-          <DialogHeader className="px-5 py-4 bg-white border-b border-gray-200">
-            <DialogTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
-              <div className="p-1.5 bg-blue-100 rounded">
-                <StickyNote size={16} className="text-blue-600" />
-              </div>
-              Create Note
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="p-5 space-y-4 bg-gray-50">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">For:</span>
-              <span className="font-medium text-gray-900">{contact.name}</span>
-            </div>
-            
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                Note Content
-              </Label>
-              <Textarea 
-                placeholder="Write your note here..."
-                className="min-h-[160px] resize-none bg-white border-gray-200 focus:border-blue-500 focus:ring-blue-500"
-                value={noteContent}
-                onChange={(e) => setNoteContent(e.target.value)}
-              />
-            </div>
+      {/* Log Call Dialog */}
+      <LogCallDialog
+        open={activeModal === 'call'}
+        onOpenChange={(open) => !open && setActiveModal(null)}
+        contact={contact}
+        onSubmit={handleActivitySubmit}
+        isSubmitting={logActivityMutation.isPending}
+      />
 
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="followup-note" 
-                checked={createFollowUp}
-                onCheckedChange={(checked) => setCreateFollowUp(!!checked)}
-                className="border-gray-300"
-              />
-              <label htmlFor="followup-note" className="text-sm text-gray-600 cursor-pointer">
-                Create a follow-up task in 3 business days
-              </label>
-            </div>
-          </div>
+      {/* Log Email Dialog */}
+      <LogEmailDialog
+        open={activeModal === 'email'}
+        onOpenChange={(open) => !open && setActiveModal(null)}
+        contact={contact}
+        onSubmit={handleActivitySubmit}
+        isSubmitting={logActivityMutation.isPending}
+      />
 
-          <DialogFooter className="px-5 py-3 bg-white border-t border-gray-200">
-            <Button variant="ghost" onClick={closeModal} className="text-gray-600">
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleLogNote}
-              disabled={!noteContent.trim() || logActivity.isPending}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              {logActivity.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create Note
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Create Note Dialog */}
+      <CreateNoteDialog
+        open={activeModal === 'note'}
+        onOpenChange={(open) => !open && setActiveModal(null)}
+        contact={contact}
+        onSubmit={handleActivitySubmit}
+        isSubmitting={logActivityMutation.isPending}
+      />
 
-      {/* CALL MODAL */}
-      <Dialog open={activeModal === 'call'} onOpenChange={() => closeModal()}>
-        <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-lg">
-          <DialogHeader className="px-5 py-4 bg-white border-b border-gray-200">
-            <DialogTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
-              <div className="p-1.5 bg-amber-100 rounded">
-                <PhoneCall size={16} className="text-amber-600" />
-              </div>
-              Log Call
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="p-5 space-y-4 bg-gray-50">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">Contacted:</span>
-              <span className="font-medium text-gray-900">{contact.name}</span>
-            </div>
+      {/* Create Task Dialog */}
+      <CreateTaskDialog
+        open={activeModal === 'task'}
+        onOpenChange={(open) => !open && setActiveModal(null)}
+        contact={contact}
+        onSubmit={handleActivitySubmit}
+        isSubmitting={logActivityMutation.isPending}
+      />
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Call Outcome
-                </Label>
-                <Select 
-                  value={callDetails.outcome}
-                  onValueChange={(v) => setCallDetails(p => ({...p, outcome: v}))}
-                >
-                  <SelectTrigger className="bg-white border-gray-200">
-                    <SelectValue placeholder="Select outcome" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="connected">Connected</SelectItem>
-                    <SelectItem value="no_answer">No Answer</SelectItem>
-                    <SelectItem value="busy">Busy</SelectItem>
-                    <SelectItem value="voicemail">Left Voicemail</SelectItem>
-                    <SelectItem value="wrong_number">Wrong Number</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Call Direction
-                </Label>
-                <Select 
-                  value={callDetails.direction}
-                  onValueChange={(v) => setCallDetails(p => ({...p, direction: v}))}
-                >
-                  <SelectTrigger className="bg-white border-gray-200">
-                    <SelectValue placeholder="Select direction" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="outbound">Outbound</SelectItem>
-                    <SelectItem value="inbound">Inbound</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Activity Date
-                </Label>
-                <Input 
-                  type="datetime-local" 
-                  defaultValue={new Date().toISOString().slice(0, 16)}
-                  className="bg-white border-gray-200"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Duration
-                </Label>
-                <Select 
-                  value={callDetails.duration}
-                  onValueChange={(v) => setCallDetails(p => ({...p, duration: v}))}
-                >
-                  <SelectTrigger className="bg-white border-gray-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="5">5 minutes</SelectItem>
-                    <SelectItem value="10">10 minutes</SelectItem>
-                    <SelectItem value="15">15 minutes</SelectItem>
-                    <SelectItem value="30">30 minutes</SelectItem>
-                    <SelectItem value="45">45 minutes</SelectItem>
-                    <SelectItem value="60">1 hour</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                Call Notes
-              </Label>
-              <Textarea 
-                placeholder="Start typing to log a call..."
-                className="min-h-[100px] resize-none bg-white border-gray-200"
-                value={callDetails.notes}
-                onChange={(e) => setCallDetails(p => ({...p, notes: e.target.value}))}
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="followup-call" 
-                checked={createFollowUp}
-                onCheckedChange={(checked) => setCreateFollowUp(!!checked)}
-                className="border-gray-300"
-              />
-              <label htmlFor="followup-call" className="text-sm text-gray-600 cursor-pointer">
-                Create a follow-up task in 3 business days
-              </label>
-            </div>
-          </div>
-
-          <DialogFooter className="px-5 py-3 bg-white border-t border-gray-200">
-            <Button variant="ghost" onClick={closeModal} className="text-gray-600">
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleLogCall}
-              disabled={!callDetails.notes.trim() || logActivity.isPending}
-              className="bg-amber-500 hover:bg-amber-600 text-white"
-            >
-              {logActivity.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Log Call
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* EMAIL MODAL */}
-      <Dialog open={activeModal === 'email'} onOpenChange={() => closeModal()}>
-        <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-lg">
-          <DialogHeader className="px-5 py-4 bg-white border-b border-gray-200">
-            <DialogTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
-              <div className="p-1.5 bg-indigo-100 rounded">
-                <Mail size={16} className="text-indigo-600" />
-              </div>
-              Log Email
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="p-5 space-y-4 bg-gray-50">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">To:</span>
-              <span className="font-medium text-gray-900">{contact.email || contact.name}</span>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                Subject
-              </Label>
-              <Input 
-                placeholder="Enter email subject..."
-                value={emailDetails.subject}
-                onChange={(e) => setEmailDetails(p => ({...p, subject: e.target.value}))}
-                className="bg-white border-gray-200"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                Email Body
-              </Label>
-              <Textarea 
-                placeholder="Enter email content..."
-                className="min-h-[160px] resize-none bg-white border-gray-200"
-                value={emailDetails.body}
-                onChange={(e) => setEmailDetails(p => ({...p, body: e.target.value}))}
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="followup-email" 
-                checked={createFollowUp}
-                onCheckedChange={(checked) => setCreateFollowUp(!!checked)}
-                className="border-gray-300"
-              />
-              <label htmlFor="followup-email" className="text-sm text-gray-600 cursor-pointer">
-                Create a follow-up task in 3 business days
-              </label>
-            </div>
-          </div>
-
-          <DialogFooter className="px-5 py-3 bg-white border-t border-gray-200">
-            <Button variant="ghost" onClick={closeModal} className="text-gray-600">
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleLogEmail}
-              disabled={!emailDetails.subject.trim() || logActivity.isPending}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white"
-            >
-              {logActivity.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Log Email
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* TASK MODAL */}
-      <Dialog open={activeModal === 'task'} onOpenChange={() => closeModal()}>
-        <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-lg">
-          <DialogHeader className="px-5 py-4 bg-white border-b border-gray-200">
-            <DialogTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
-              <div className="p-1.5 bg-emerald-100 rounded">
-                <CheckSquare size={16} className="text-emerald-600" />
-              </div>
-              Create Task
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="p-5 space-y-4 bg-gray-50">
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                Task Title *
-              </Label>
-              <Input 
-                placeholder="Enter your task..."
-                value={taskDetails.title}
-                onChange={(e) => setTaskDetails(p => ({...p, title: e.target.value}))}
-                className="bg-white border-gray-200"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Due Date
-                </Label>
-                <Input 
-                  type="date" 
-                  value={taskDetails.dueDate}
-                  onChange={(e) => setTaskDetails(p => ({...p, dueDate: e.target.value}))}
-                  className="bg-white border-gray-200"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Due Time
-                </Label>
-                <Input 
-                  type="time" 
-                  value={taskDetails.dueTime}
-                  onChange={(e) => setTaskDetails(p => ({...p, dueTime: e.target.value}))}
-                  className="bg-white border-gray-200"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Task Type
-                </Label>
-                <Select 
-                  value={taskDetails.taskType}
-                  onValueChange={(v) => setTaskDetails(p => ({...p, taskType: v}))}
-                >
-                  <SelectTrigger className="bg-white border-gray-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="to-do">To-do</SelectItem>
-                    <SelectItem value="call">Call</SelectItem>
-                    <SelectItem value="email">Email</SelectItem>
-                    <SelectItem value="meeting">Meeting</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Priority
-                </Label>
-                <Select 
-                  value={taskDetails.priority}
-                  onValueChange={(v) => setTaskDetails(p => ({...p, priority: v}))}
-                >
-                  <SelectTrigger className="bg-white border-gray-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                Description
-              </Label>
-              <Textarea 
-                placeholder="Add task notes..."
-                className="min-h-[80px] resize-none bg-white border-gray-200"
-                value={taskDetails.description}
-                onChange={(e) => setTaskDetails(p => ({...p, description: e.target.value}))}
-              />
-            </div>
-
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">Associated with:</span>
-              <span className="font-medium text-gray-900">{contact.name}</span>
-            </div>
-          </div>
-
-          <DialogFooter className="px-5 py-3 bg-white border-t border-gray-200">
-            <Button variant="ghost" onClick={closeModal} className="text-gray-600">
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleCreateTask}
-              disabled={!taskDetails.title.trim() || logActivity.isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              {logActivity.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create Task
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* MEETING MODAL */}
-      <Dialog open={activeModal === 'meeting'} onOpenChange={() => closeModal()}>
-        <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-lg">
-          <DialogHeader className="px-5 py-4 bg-white border-b border-gray-200">
-            <DialogTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
-              <div className="p-1.5 bg-purple-100 rounded">
-                <Calendar size={16} className="text-purple-600" />
-              </div>
-              Log Meeting
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="p-5 space-y-4 bg-gray-50">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">Attendees:</span>
-              <span className="font-medium text-gray-900">{contact.name}</span>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                Meeting Title
-              </Label>
-              <Input 
-                placeholder="Enter meeting title..."
-                value={meetingDetails.title}
-                onChange={(e) => setMeetingDetails(p => ({...p, title: e.target.value}))}
-                className="bg-white border-gray-200"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Meeting Outcome
-                </Label>
-                <Select 
-                  value={meetingDetails.outcome}
-                  onValueChange={(v) => setMeetingDetails(p => ({...p, outcome: v}))}
-                >
-                  <SelectTrigger className="bg-white border-gray-200">
-                    <SelectValue placeholder="Select outcome" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="scheduled">Scheduled</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="rescheduled">Rescheduled</SelectItem>
-                    <SelectItem value="no_show">No Show</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Duration
-                </Label>
-                <Select 
-                  value={meetingDetails.duration}
-                  onValueChange={(v) => setMeetingDetails(p => ({...p, duration: v}))}
-                >
-                  <SelectTrigger className="bg-white border-gray-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="15">15 minutes</SelectItem>
-                    <SelectItem value="30">30 minutes</SelectItem>
-                    <SelectItem value="45">45 minutes</SelectItem>
-                    <SelectItem value="60">1 hour</SelectItem>
-                    <SelectItem value="90">1.5 hours</SelectItem>
-                    <SelectItem value="120">2 hours</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                Meeting Start Time
-              </Label>
-              <Input 
-                type="datetime-local" 
-                value={meetingDetails.startTime}
-                onChange={(e) => setMeetingDetails(p => ({...p, startTime: e.target.value}))}
-                className="bg-white border-gray-200"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                Meeting Notes
-              </Label>
-              <Textarea 
-                placeholder="Start typing to log a meeting..."
-                className="min-h-[100px] resize-none bg-white border-gray-200"
-                value={meetingDetails.notes}
-                onChange={(e) => setMeetingDetails(p => ({...p, notes: e.target.value}))}
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="followup-meeting" 
-                checked={createFollowUp}
-                onCheckedChange={(checked) => setCreateFollowUp(!!checked)}
-                className="border-gray-300"
-              />
-              <label htmlFor="followup-meeting" className="text-sm text-gray-600 cursor-pointer">
-                Create a follow-up task in 3 business days
-              </label>
-            </div>
-          </div>
-
-          <DialogFooter className="px-5 py-3 bg-white border-t border-gray-200">
-            <Button variant="ghost" onClick={closeModal} className="text-gray-600">
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleLogMeeting}
-              disabled={!meetingDetails.notes.trim() || logActivity.isPending}
-              className="bg-purple-600 hover:bg-purple-700 text-white"
-            >
-              {logActivity.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Log Meeting
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Log Meeting Dialog */}
+      <LogMeetingDialog
+        open={activeModal === 'meeting'}
+        onOpenChange={(open) => !open && setActiveModal(null)}
+        contact={contact}
+        onSubmit={handleActivitySubmit}
+        isSubmitting={logActivityMutation.isPending}
+      />
     </div>
   );
 };

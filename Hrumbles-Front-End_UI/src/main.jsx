@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './components/sales/contact-detail/editor/editor-styles.css';
 import App from './App.jsx'
 import { ChakraProvider, ColorModeScript } from "@chakra-ui/react";
 import theme from "./theme/theme";

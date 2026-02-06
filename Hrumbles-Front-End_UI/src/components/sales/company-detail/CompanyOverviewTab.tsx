@@ -40,7 +40,7 @@ export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({ company,
         .from('contacts')
         .select(`
           *,
-          enrichment_people(seniority, photo_url),
+          enrichment_people(photo_url),
           enrichment_contact_emails(email, email_status)
         `)
         .eq('company_id', company.id)
