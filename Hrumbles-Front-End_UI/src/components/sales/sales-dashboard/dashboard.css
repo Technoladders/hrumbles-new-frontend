@@ -1,0 +1,349 @@
+/* Hrumbles-Front-End_UI/src/components/sales/sales-dashboard/dashboard.css */
+
+/* =====================
+   DASHBOARD BASE STYLES
+   ===================== */
+
+.sales-dashboard {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* =====================
+   CARD STYLES
+   ===================== */
+
+.dashboard-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #E5E7EB;
+  transition: all 0.2s ease;
+}
+
+.dashboard-card:hover {
+  border-color: #D1D5DB;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
+
+/* =====================
+   METRIC CARD ANIMATIONS
+   ===================== */
+
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.metric-value {
+  animation: countUp 0.4s ease-out;
+}
+
+/* =====================
+   SPARKLINE STYLES
+   ===================== */
+
+.sparkline-container {
+  position: relative;
+}
+
+.sparkline-container::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  opacity: 0.1;
+}
+
+/* =====================
+   CHART STYLES
+   ===================== */
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: #E5E7EB;
+}
+
+.recharts-tooltip-wrapper {
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+}
+
+/* Custom scrollbar for chart containers */
+.chart-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.chart-container::-webkit-scrollbar-track {
+  background: #F3F4F6;
+  border-radius: 3px;
+}
+
+.chart-container::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 3px;
+}
+
+.chart-container::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* =====================
+   HEATMAP STYLES
+   ===================== */
+
+.heatmap-cell {
+  transition: all 0.2s ease;
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* =====================
+   LEADERBOARD STYLES
+   ===================== */
+
+.leaderboard-item {
+  transition: all 0.2s ease;
+}
+
+.leaderboard-item:hover {
+  background-color: #F9FAFB;
+}
+
+.leaderboard-rank-1 {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+}
+
+.leaderboard-rank-2 {
+  background: linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%);
+}
+
+.leaderboard-rank-3 {
+  background: linear-gradient(135deg, #FED7AA 0%, #FDBA74 100%);
+}
+
+/* =====================
+   TASK LIST STYLES
+   ===================== */
+
+.task-item {
+  transition: all 0.2s ease;
+}
+
+.task-item:hover {
+  background-color: #F9FAFB;
+}
+
+.task-item.overdue {
+  border-left: 3px solid #EF4444;
+}
+
+.task-item.today {
+  border-left: 3px solid #3B82F6;
+}
+
+/* =====================
+   ACTIVITY TIMELINE
+   ===================== */
+
+.activity-timeline-item {
+  position: relative;
+}
+
+.activity-timeline-item::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: 36px;
+  bottom: -8px;
+  width: 1px;
+  background: #E5E7EB;
+}
+
+.activity-timeline-item:last-child::before {
+  display: none;
+}
+
+/* =====================
+   FUNNEL STYLES
+   ===================== */
+
+.funnel-stage {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.funnel-stage:hover {
+  transform: scaleX(1.02);
+}
+
+.funnel-stage::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid currentColor;
+  opacity: 0.3;
+}
+
+.funnel-stage:last-child::after {
+  display: none;
+}
+
+/* =====================
+   LOADING STATES
+   ===================== */
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* =====================
+   RESPONSIVE ADJUSTMENTS
+   ===================== */
+
+@media (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .metric-card {
+    padding: 16px;
+  }
+}
+
+/* =====================
+   PRINT STYLES
+   ===================== */
+
+@media print {
+  .sales-dashboard {
+    background: white;
+  }
+  
+  .dashboard-card {
+    break-inside: avoid;
+    box-shadow: none;
+    border: 1px solid #E5E7EB;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* =====================
+   DARK MODE SUPPORT (future)
+   ===================== */
+
+@media (prefers-color-scheme: dark) {
+  /* Dark mode styles can be added here */
+}
+
+/* =====================
+   ANIMATIONS
+   ===================== */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.animate-delay-1 { animation-delay: 0.1s; }
+.animate-delay-2 { animation-delay: 0.2s; }
+.animate-delay-3 { animation-delay: 0.3s; }
+.animate-delay-4 { animation-delay: 0.4s; }
+
+/* =====================
+   TOOLTIP STYLES
+   ===================== */
+
+.custom-tooltip {
+  background: white !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+  padding: 12px !important;
+}
+
+/* =====================
+   BADGE STYLES
+   ===================== */
+
+.priority-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.priority-high {
+  background-color: #FEE2E2;
+  color: #B91C1C;
+}
+
+.priority-medium {
+  background-color: #FEF3C7;
+  color: #B45309;
+}
+
+.priority-low {
+  background-color: #DCFCE7;
+  color: #15803D;
+}
+
+/* =====================
+   FOCUS STATES
+   ===================== */
+
+.dashboard-card:focus-within {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
+}

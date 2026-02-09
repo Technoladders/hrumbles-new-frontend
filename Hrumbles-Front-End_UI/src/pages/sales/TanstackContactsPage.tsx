@@ -70,11 +70,12 @@ const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
   country: false, 
   city: false,
   created_at: false, 
-  updated_at: false
+  updated_at: false,
+  data_availability: false
 };
 
 const DEFAULT_COLUMN_ORDER: ColumnOrderState = [
-  'select', 'name', 'email', 'mobile', 'job_title', 'company_name', 
+  'select', 'name', 'email', 'mobile', 'data_availability', 'job_title', 'company_name', 
   'actions', 'contact_stage', 'medium', 'created_by_employee', 
   'created_at', 'location', 'seniority', 'departments', 'functions',
   'industry', 'revenue', 'employee_count', 'updated_at'
@@ -237,10 +238,43 @@ export default function TanstackContactsPage() {
   const tableData = queryResult?.data || [];
   const totalRowCount = queryResult?.count || 0; // Get count from query
 
+   // --- NEW HELPER: Save Availability Stats ---
+  const saveContactAvailability = async (contactId: string, person: any) => {
+    try {
+      // Calculate flags based on raw Apollo data structure
+      const hasEmail = !!person.email || (Array.isArray(person.emails) && person.emails.length > 0);
+      const hasPhone = (Array.isArray(person.phone_numbers) && person.phone_numbers.length > 0) || !!person.mobile_phone || !!person.sanitized_phone;
+      const hasLocation = !!person.city || !!person.state || !!person.country;
+      const hasOrg = !!person.organization || !!person.organization_name || !!person.organization_id;
+
+      const { error } = await supabase.from('enrichment_availability').upsert({
+        contact_id: contactId,
+        has_email: hasEmail,
+        has_phone: hasPhone,
+        has_location: hasLocation,
+        has_org_details: hasOrg,
+        last_checked_at: new Date().toISOString()
+      }, {
+        onConflict: 'contact_id'
+      });
+
+      if (error) {
+        console.error("Error saving availability stats:", error);
+      }
+    } catch (err) {
+      console.error("Unexpected error saving availability:", err);
+    }
+  };
+
   // 10. Actions
   const handleSaveDiscovery = async (person: any, targetFileId?: string) => {
     try {
       const savedContact = await saveDiscoveryToCRM(person, organization_id, user.id);
+
+            // 2. Save Availability Data (New Requirement)
+      if (savedContact?.id) {
+         await saveContactAvailability(savedContact.id, person);
+      }
       
       // If fileId provided (from modal or current page), also add to list
       const finalFileId = targetFileId || fileId;
@@ -294,7 +328,10 @@ const handleListAdd = async (targetFileId: string) => {
         throw new Error("Contact was created but no ID returned");
       }
 
-      // 2. Add to the chosen list
+      // 2. Save Availability Data (New Requirement)
+      await saveContactAvailability(savedContact.id, person);
+
+      // 3. Add to the chosen list
       const { error } = await supabase
         .from('contact_workspace_files')
         .upsert({
@@ -467,22 +504,28 @@ const handleListAdd = async (targetFileId: string) => {
     if (isDiscoveryMode) {
       setColumnVisibility(prev => ({
         ...prev, 
+        email: false,
+        mobile: false,
         contact_stage: false, 
         medium: false, 
         created_by_employee: false, 
         created_at: false, 
         updated_at: false, 
         location: false, 
+        data_availability: true,
       }));
     } else {
       setColumnVisibility(prev => ({
         ...prev, 
+         email: true,
+        mobile: true,
         contact_stage: true, 
         medium: true, 
         created_by_employee: true, 
         created_at: true, 
         updated_at: false, 
         location: true,
+        data_availability: false,
       }));
     }
   }, [isDiscoveryMode]);

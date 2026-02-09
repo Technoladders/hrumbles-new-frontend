@@ -146,87 +146,6 @@ const DeliverabilityIndicator = ({ level }: { level: 'high' | 'medium' | 'low' |
   );
 };
 
-// --- DISCOVERY MODE: Availability Indicator Pills ---
-const DiscoveryAvailabilityPills = ({ contact }: { contact: any }) => {
-  const hasEmail = contact.has_email;
-  const hasPhone = contact.has_phone || contact.has_direct_phone === 'Yes';
-  const hasLocation = contact.city || contact.state || contact.country || 
-                      contact.original_data?.city || contact.original_data?.state || contact.original_data?.country;
-  const hasOrgDetails = contact.company_name || contact.organization?.name || contact.original_data?.organization?.name;
-
-  return (
-    <div className="flex items-center gap-1.5">
-      {/* Email Availability */}
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className={cn(
-              "flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-semibold transition-all cursor-default",
-              hasEmail 
-                ? "bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 border border-emerald-200/50" 
-                : "bg-slate-100 text-slate-400 border border-slate-200/50"
-            )}>
-              <Mail size={10} className={hasEmail ? "fill-emerald-200" : ""} />
-              {hasEmail ? "Email" : "No Email"}
-            </div>
-          </TooltipTrigger>
-          <TooltipContent className="text-xs">
-            {hasEmail ? 'Email available - will be revealed on add' : 'No email in database'}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      {/* Phone Availability */}
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className={cn(
-              "flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-semibold transition-all cursor-default",
-              hasPhone 
-                ? "bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 border border-blue-200/50" 
-                : "bg-slate-100 text-slate-400 border border-slate-200/50"
-            )}>
-              <Phone size={10} className={hasPhone ? "fill-blue-200" : ""} />
-              {hasPhone ? "Phone" : "No Phone"}
-            </div>
-          </TooltipTrigger>
-          <TooltipContent className="text-xs">
-            {hasPhone ? 'Direct dial available - will be revealed on add' : 'No phone in database'}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      {/* Location Indicator */}
-      {hasLocation && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center justify-center h-5 w-5 rounded-full bg-purple-100 text-purple-600 cursor-default">
-                <MapPin size={10} />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent className="text-xs">Location data available</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-
-      {/* Company Indicator */}
-      {hasOrgDetails && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center justify-center h-5 w-5 rounded-full bg-amber-100 text-amber-600 cursor-default">
-                <Building2 size={10} />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent className="text-xs">Company data available</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-    </div>
-  );
-};
-
 // Simple Column Header
 const SimpleColumnHeader = ({ column, title }: { column: any; title: string }) => (
   <div className="flex items-center">
@@ -324,22 +243,149 @@ const AddAssetDialog = ({ open, onOpenChange, type, onSave }: any) => {
   );
 };
 
+
+// --- EDIT ASSET DIALOG ---
+const EditAssetDialog = ({ open, onOpenChange, type, initialValue, initialType, initialStatus, onSave }: any) => {
+  const [value, setValue] = useState(initialValue || "");
+  const [subtype, setSubtype] = useState(initialType || (type === 'email' ? 'work' : 'mobile'));
+  const [status, setStatus] = useState(initialStatus || (type === 'email' ? 'unverified' : 'no_status'));
+
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (open) {
+      setValue(initialValue || "");
+      setSubtype(initialType || (type === 'email' ? 'work' : 'mobile'));
+      setStatus(initialStatus || (type === 'email' ? 'unverified' : 'no_status'));
+    }
+  }, [open, initialValue, initialType, initialStatus, type]);
+
+  const handleSave = () => {
+    onSave({ value, type: subtype, status });
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[340px] p-0 overflow-hidden">
+        {/* Header with gradient (keeps consistency with Add dialog) */}
+        <DialogHeader className={cn(
+          "px-4 py-3",
+          type === 'email' 
+            ? "bg-gradient-to-r from-indigo-600 to-blue-600" 
+            : "bg-gradient-to-r from-emerald-600 to-teal-600"
+        )}>
+          <DialogTitle className="text-sm font-bold text-white flex items-center gap-2">
+            <Pencil size={16} />
+            Edit {type === 'email' ? 'Email' : 'Phone'}
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Form Fields */}
+        <div className="p-4 space-y-3">
+          {/* Value Input */}
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase text-slate-500 font-semibold">Value</Label>
+            {type === "mobile" ? (
+              <PhoneInput 
+                international 
+                defaultCountry="US" 
+                value={value} 
+                onChange={(v) => setValue(v || "")} 
+                className="text-xs h-9 px-2 border rounded-md w-full"
+              />
+            ) : (
+              <Input 
+                value={value} 
+                onChange={(e) => setValue(e.target.value)} 
+                className="h-9 text-xs" 
+                placeholder={type === 'email' ? "name@example.com" : "+1 555 000 0000"}
+              />
+            )}
+          </div>
+
+          {/* Type Select */}
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase text-slate-500 font-semibold">Type</Label>
+            <Select value={subtype} onValueChange={setSubtype}>
+              <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {type === 'email' ? (
+                  <>
+                    <SelectItem value="work" className="text-xs">Work</SelectItem>
+                    <SelectItem value="personal" className="text-xs">Personal</SelectItem>
+                    <SelectItem value="other" className="text-xs">Other</SelectItem>
+                  </>
+                ) : (
+                  <>
+                    <SelectItem value="mobile" className="text-xs">Mobile</SelectItem>
+                    <SelectItem value="work_hq" className="text-xs">Office / HQ</SelectItem>
+                    <SelectItem value="other" className="text-xs">Other</SelectItem>
+                  </>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Status Select */}
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase text-slate-500 font-semibold">Status</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {type === 'email' ? (
+                  <>
+                    <SelectItem value="verified" className="text-xs">Verified</SelectItem>
+                    <SelectItem value="unverified" className="text-xs">Unverified</SelectItem>
+                    <SelectItem value="incorrect" className="text-xs">Incorrect</SelectItem>
+                  </>
+                ) : (
+                  <>
+                    <SelectItem value="valid_number" className="text-xs">Valid</SelectItem>
+                    <SelectItem value="no_status" className="text-xs">No Status</SelectItem>
+                    <SelectItem value="invalid" className="text-xs">Invalid</SelectItem>
+                  </>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Footer Buttons */}
+        <div className="px-4 pb-4 flex gap-2">
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => onOpenChange(false)} 
+            className="h-9 text-xs flex-1"
+          >
+            Cancel
+          </Button>
+          <Button 
+            size="sm" 
+            onClick={handleSave} 
+            className={cn(
+              "h-9 text-xs flex-1 font-semibold",
+              type === 'email' ? "bg-indigo-600 hover:bg-indigo-700" : "bg-emerald-600 hover:bg-emerald-700"
+            )}
+          >
+            Save Changes
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 // --- CONTACT ASSET ROW (HoverCard Content) ---
+
 const ContactAssetRow = ({ value, type, label, isPrimary, source, status, onSetPrimary, onDelete, onUpdateFull, onFlag }: any) => {
   const [isHovered, setIsHovered] = useState(false);
   const { toast } = useToast();
-  const [editMode, setEditMode] = useState(false);
-  const [editVal, setEditVal] = useState(value);
-  const [editStatus, setEditStatus] = useState(status);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const handleCopy = () => { 
     navigator.clipboard.writeText(value); 
     toast({ title: "Copied!", description: `${type === 'email' ? 'Email' : 'Phone'} copied to clipboard` }); 
-  };
-  
-  const handleSaveEdit = () => { 
-    onUpdateFull({ value: editVal, type: label, status: editStatus }); 
-    setEditMode(false); 
   };
   
   const handleFlagToggle = () => {
@@ -359,101 +405,83 @@ const ContactAssetRow = ({ value, type, label, isPrimary, source, status, onSetP
   const deliverability = getDeliverability();
 
   return (
-    <div 
-      className={cn(
-        "flex items-start justify-between p-2.5 rounded-lg group transition-all",
-        isPrimary 
-          ? "bg-gradient-to-r from-emerald-50/80 to-teal-50/50 border border-emerald-200/50" 
-          : "hover:bg-slate-50 border border-transparent hover:border-slate-200/50"
-      )} 
-      onMouseEnter={() => setIsHovered(true)} 
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <div className="flex items-start gap-3 overflow-hidden w-full">
-        <div className="mt-0.5 flex-shrink-0">
-          {type === 'phone' ? (
-            <div className="w-6 h-6 flex items-center justify-center rounded-lg bg-blue-100">
-              <PhoneFlag number={value} />
+    <>
+      <div 
+        className={cn(
+          "flex items-start justify-between p-2.5 rounded-lg group transition-all",
+          isPrimary 
+            ? "bg-emerald-50/80 border border-emerald-200/50" 
+            : "hover:bg-slate-50 border border-transparent hover:border-slate-200/50"
+        )} 
+        onMouseEnter={() => setIsHovered(true)} 
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <div className="flex items-start gap-3 overflow-hidden w-full">
+          {/* Icon */}
+          <div className="mt-0.5 flex-shrink-0">
+            {type === 'phone' ? (
+              <div className="w-6 h-6 flex items-center justify-center rounded-lg bg-blue-100">
+                <PhoneFlag number={value} />
+              </div>
+            ) : (
+              <div className={cn(
+                "flex h-6 w-6 items-center justify-center rounded-lg",
+                isPrimary ? "bg-emerald-100 text-emerald-600" : "bg-indigo-100 text-indigo-600"
+              )}>
+                <Mail size={12} />
+              </div>
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="flex flex-col min-w-0 w-full">
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "text-xs font-medium truncate select-all",
+                (status === 'incorrect' || status === 'invalid') ? 'line-through text-slate-400' : 'text-slate-800'
+              )}>
+                {value}
+              </span>
+              {deliverability && <DeliverabilityIndicator level={deliverability} />}
+              {type === 'phone' && <StatusIcon status={status} />}
             </div>
-          ) : (
-            <div className={cn(
-              "flex h-6 w-6 items-center justify-center rounded-lg",
-              isPrimary ? "bg-emerald-100 text-emerald-600" : "bg-indigo-100 text-indigo-600"
-            )}>
-              <Mail size={12} />
+            <div className="flex items-center gap-1.5 text-[9px] text-slate-400 mt-1">
+              <Badge variant="outline" className="text-[8px] h-4 px-1.5 py-0 font-medium border-slate-200 text-slate-500 capitalize bg-white">
+                {label || (type === 'email' ? 'Work' : 'Mobile')}
+              </Badge>
+              <span className="text-slate-300">•</span>
+              <span className={cn(source?.toLowerCase().includes('manual') ? "text-blue-600 font-semibold" : "text-slate-400")}>
+                {source?.toLowerCase().includes('manual') ? 'Manual' : 'CRM'}
+              </span>
+              {isPrimary && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                    <Star size={8} className="fill-emerald-600" /> Primary
+                  </span>
+                </>
+              )}
             </div>
-          )}
+          </div>
         </div>
-        <div className="flex flex-col min-w-0 w-full">
-          {editMode ? (
-            <div className="flex flex-col gap-2 w-full animate-in fade-in zoom-in-95">
-              <Input className="h-7 text-xs" value={editVal} onChange={e => setEditVal(e.target.value)} autoFocus />
-              <div className="flex gap-1">
-                <Select value={editStatus} onValueChange={setEditStatus}>
-                  <SelectTrigger className="h-7 text-[10px] w-24"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {type === 'email' ? (
-                      <><SelectItem value="verified" className="text-xs">Verified</SelectItem><SelectItem value="unverified" className="text-xs">Unverified</SelectItem><SelectItem value="incorrect" className="text-xs">Incorrect</SelectItem></>
-                    ) : (
-                      <><SelectItem value="valid_number" className="text-xs">Valid</SelectItem><SelectItem value="no_status" className="text-xs">No Status</SelectItem><SelectItem value="invalid" className="text-xs">Invalid</SelectItem></>
-                    )}
-                  </SelectContent>
-                </Select>
-                <Button size="icon" className="h-7 w-7 bg-emerald-600 hover:bg-emerald-700" onClick={handleSaveEdit}>
-                  <Check size={12} />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditMode(false)}>
-                  <X size={12} />
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center gap-2">
-                <span className={cn(
-                  "text-xs font-medium truncate select-all",
-                  (status === 'incorrect' || status === 'invalid') ? 'line-through text-slate-400' : 'text-slate-800'
-                )}>
-                  {value}
-                </span>
-                {deliverability && <DeliverabilityIndicator level={deliverability} />}
-                {type === 'phone' && <StatusIcon status={status} />}
-              </div>
-              <div className="flex items-center gap-1.5 text-[9px] text-slate-400 mt-1">
-                <Badge variant="outline" className="text-[8px] h-4 px-1.5 py-0 font-medium border-slate-200 text-slate-500 capitalize bg-white">
-                  {label || (type === 'email' ? 'Work' : 'Mobile')}
-                </Badge>
-                <span className="text-slate-300">•</span>
-                <span className={cn(source?.toLowerCase().includes('manual') ? "text-blue-600 font-semibold" : "text-slate-400")}>
-                  {source?.toLowerCase().includes('manual') ? 'Manual' : 'CRM'}
-                </span>
-                {isPrimary && (
-                  <>
-                    <span className="text-slate-300">•</span>
-                    <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                      <Star size={8} className="fill-emerald-600" /> Primary
-                    </span>
-                  </>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-      {!editMode && (
+
+        {/* Action Buttons */}
         <div className={cn("flex items-center gap-0.5 transition-opacity", isHovered ? "opacity-100" : "opacity-0")}>
+          {/* Copy */}
           <TooltipProvider><Tooltip><TooltipTrigger asChild>
             <button onClick={handleCopy} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400 hover:text-slate-700 transition-colors">
               <Copy size={11} />
             </button>
           </TooltipTrigger><TooltipContent className="text-xs">Copy</TooltipContent></Tooltip></TooltipProvider>
           
+          {/* Edit - Opens Dialog */}
           <TooltipProvider><Tooltip><TooltipTrigger asChild>
-            <button onClick={() => setEditMode(true)} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400 hover:text-slate-700 transition-colors">
+            <button onClick={() => setEditDialogOpen(true)} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400 hover:text-slate-700 transition-colors">
               <Pencil size={11} />
             </button>
           </TooltipTrigger><TooltipContent className="text-xs">Edit</TooltipContent></Tooltip></TooltipProvider>
           
+          {/* Set Primary */}
           {!isPrimary && (
             <TooltipProvider><Tooltip><TooltipTrigger asChild>
               <button onClick={onSetPrimary} className="p-1.5 hover:bg-amber-100 rounded-md text-slate-400 hover:text-amber-600 transition-colors">
@@ -462,6 +490,7 @@ const ContactAssetRow = ({ value, type, label, isPrimary, source, status, onSetP
             </TooltipTrigger><TooltipContent className="text-xs">Set Primary</TooltipContent></Tooltip></TooltipProvider>
           )}
           
+          {/* Flag */}
           <TooltipProvider><Tooltip><TooltipTrigger asChild>
             <button 
               onClick={handleFlagToggle} 
@@ -476,14 +505,26 @@ const ContactAssetRow = ({ value, type, label, isPrimary, source, status, onSetP
             </button>
           </TooltipTrigger><TooltipContent className="text-xs">{(status === 'incorrect' || status === 'invalid') ? 'Unflag' : 'Flag Incorrect'}</TooltipContent></Tooltip></TooltipProvider>
           
+          {/* Delete */}
           <TooltipProvider><Tooltip><TooltipTrigger asChild>
             <button onClick={onDelete} className="p-1.5 hover:bg-red-50 rounded-md text-slate-400 hover:text-red-600 transition-colors">
               <Trash2 size={11} />
             </button>
           </TooltipTrigger><TooltipContent className="text-xs">Delete</TooltipContent></Tooltip></TooltipProvider>
         </div>
-      )}
-    </div>
+      </div>
+      
+      {/* Edit Dialog */}
+      <EditAssetDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        type={type}
+        initialValue={value}
+        initialType={label}
+        initialStatus={status}
+        onSave={onUpdateFull}
+      />
+    </>
   );
 };
 
@@ -492,29 +533,11 @@ const SmartEmailCell = ({ row, table }: any) => {
   const c = row.original;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  // Discovery mode - show stylized availability indicator
-  if (c.is_discovery) {
-    const hasEmail = c.has_email;
-    return (
-      <div className="flex items-center justify-center">
-        <div className={cn(
-          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-semibold transition-all",
-          hasEmail 
-            ? "bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 border border-emerald-200/60 shadow-sm shadow-emerald-100" 
-            : "bg-slate-100 text-slate-400 border border-slate-200/50"
-        )}>
-          <Mail size={11} className={hasEmail ? "fill-emerald-200" : ""} />
-          {hasEmail ? (
-            <span className="flex items-center gap-1">
-              Available
-              <Sparkles size={9} className="text-emerald-500" />
-            </span>
-          ) : "Unavailable"}
-        </div>
-      </div>
-    );
-  }
-  
+  // Note: Discovery rows will fall through and likely hit the "Access Email" button state 
+  // or return null if they have no ID/CRM data. 
+  // For the discovery table specifically, this cell will be hidden by parent configuration, 
+  // and the new 'data_availability' column will be used instead.
+
   // CRM Contact - Show actual emails with deliverability
   const emails = [
     ...(c.email ? [{ email: c.email, type: 'work', is_primary: true, source: 'Manual', email_status: 'verified' }] : []),
@@ -617,28 +640,8 @@ const SmartPhoneCell = ({ row, table }: any) => {
   const c = row.original;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  // Discovery mode
-  if (c.is_discovery) {
-    const hasPhone = c.has_phone || c.has_direct_phone === 'Yes';
-    return (
-      <div className="flex items-center justify-center">
-        <div className={cn(
-          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-semibold transition-all",
-          hasPhone 
-            ? "bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 border border-blue-200/60 shadow-sm shadow-blue-100" 
-            : "bg-slate-100 text-slate-400 border border-slate-200/50"
-        )}>
-          <Phone size={11} className={hasPhone ? "fill-blue-200" : ""} />
-          {hasPhone ? (
-            <span className="flex items-center gap-1">
-              Direct Dial
-              <Zap size={9} className="text-blue-500" />
-            </span>
-          ) : "Unavailable"}
-        </div>
-      </div>
-    );
-  }
+  // Note: Removing the 'is_discovery' pill logic. 
+  // Discovery rows will use the dedicated 'data_availability' column instead.
 
   // CRM Contact
   const phones = [
@@ -740,19 +743,41 @@ const SmartPhoneCell = ({ row, table }: any) => {
 // --- OTHER CELLS ---
 
 export const EditableCell: React.FC<any> = ({ getValue, row, column, table }) => {
+  const value = getValue() as string || '';
+  
+  // Discovery or grouped rows → read-only truncated display
   if (row.getIsGrouped() || isDiscoveryRow(row)) {
-    return <span className="text-xs text-slate-600 truncate">{getValue()}</span>;
+    return (
+      <div 
+        className="truncate text-xs text-slate-600 min-w-0"
+        title={value}
+      >
+        {value || '-'}
+      </div>
+    );
   }
-  const initialValue = getValue() || "";
-  const [value, setValue] = useState(initialValue);
-  const onBlur = () => { if (value !== initialValue) table.options.meta?.updateData(row.index, column.id, value); };
-  useEffect(() => setValue(initialValue), [initialValue]);
+
+  // Normal editable mode
+  const initialValue = value;
+  const [localValue, setLocalValue] = useState(initialValue);
+
+  const onBlur = () => {
+    if (localValue !== initialValue) {
+      table.options.meta?.updateData(row.index, column.id, localValue);
+    }
+  };
+
+  useEffect(() => {
+    setLocalValue(initialValue);
+  }, [initialValue]);
+
   return (
-    <Input 
-      value={value} 
-      onChange={(e) => setValue(e.target.value)} 
-      onBlur={onBlur} 
-      className="h-full text-xs border-none bg-transparent rounded-none p-0 truncate focus-visible:ring-1 focus-visible:ring-indigo-500/50" 
+    <Input
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={onBlur}
+      className="h-full text-xs border-none bg-transparent rounded-none p-0 truncate focus-visible:ring-1 focus-visible:ring-indigo-500/50 min-w-0"
+      title={localValue} // tooltip on hover shows full value
     />
   );
 };
@@ -764,17 +789,30 @@ const ActionCell = ({ row, table }: any) => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Discovery mode – prominent ADD button with gradient
-  if (c.is_discovery) {
+ if (c.is_discovery) {
     return (
-      <div className="flex justify-center">
+     <div className="flex justify-center">
+                      {/* <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200"> */}
+<TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
         <Button
-          size="sm"
+          variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
           onClick={() => table.options.meta?.openListModal(c, true)}
-          className="h-7 px-4 text-[10px] font-bold bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-md shadow-violet-200 active:scale-95 transition-all rounded-lg"
         >
-          <Plus size={12} className="mr-1.5" />
-          ADD
+          <ListPlus size={12} className="mr-1.5" />
+        
         </Button>
+        </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">Add to List</TooltipContent>
+
+        </Tooltip>
+</TooltipProvider>
+
+
+      {/* </div> */}
       </div>
     );
   }
@@ -881,12 +919,14 @@ const ActionCell = ({ row, table }: any) => {
   );
 };
 
+
+// --- COMPANY CELL (Professional Discovery Mode) ---
 const CompanyCell: React.FC<any> = ({ getValue, row, table }) => {
   if (isDiscoveryRow(row)) {
     const companyName = getValue() || row.original.original_data?.organization?.name;
     return (
       <div className="flex items-center gap-2">
-        <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 text-amber-600">
+        <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-slate-100 text-slate-600">
           <Building2 size={12} />
         </div>
         <span className="text-xs text-slate-700 truncate font-medium">{companyName || '-'}</span>
@@ -990,6 +1030,57 @@ const DisplayDateCell: React.FC<any> = ({ getValue }) => {
   return <span className="text-slate-600 text-xs">{new Date(date).toLocaleDateString()}</span>;
 };
 
+
+// --- NAME COLUMN (Professional Discovery Mode) ---
+// In the NAME column definition, update the cell like this:
+cell: ({ row }) => {
+  const c = row.original;
+  const isDiscovery = c.is_discovery;
+  
+  return (
+    <div className="flex items-center gap-3 py-1">
+      <Avatar className={cn(
+        "h-8 w-8 border-2 rounded-xl flex-shrink-0 shadow-sm border-slate-200"
+      )}>
+        <AvatarImage src={c.photo_url} />
+        <AvatarFallback className={cn(
+          "text-[10px] font-bold bg-slate-100 text-slate-600"
+        )}>
+          {c.name?.[0]?.toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex flex-col min-w-0">
+        {isDiscovery ? (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-900 truncate" title={c.name}>{c.name}</span>
+            <Badge className="h-4 px-1 text-[8px] font-bold bg-slate-100 text-slate-600 border-slate-200">
+              DISCOVERY
+            </Badge>
+          </div>
+        ) : (
+          <Link 
+            to={`/contacts/${c.id}`} 
+            className="text-xs font-bold text-slate-800 hover:text-indigo-600 hover:underline truncate transition-colors" 
+            title={c.name}
+          >
+            {c.name}
+          </Link>
+        )}
+        {c.linkedin_url && (
+          <a 
+            href={c.linkedin_url} 
+            target="_blank" 
+            rel="noreferrer" 
+            className="flex items-center gap-1 text-[9px] text-slate-400 hover:text-[#0A66C2] transition-colors"
+          >
+            <Linkedin size={9} /> LinkedIn
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // --- EXPORTED COLUMNS ---
 
 export const columns: ColumnDef<any>[] = [
@@ -1020,8 +1111,141 @@ export const columns: ColumnDef<any>[] = [
     enableHiding: false,
     enableSorting: false,
   },
+
+  // 2. DATA AVAILABILITY (For Discovery)
+  {
+    id: 'data_availability',
+    header: () => (
+      <SimpleColumnHeader column={null} title="Data Availability" />
+    ),
+    size: 160,
+    minSize: 140,
+    maxSize: 220,
+    enableSorting: false,
+    enableHiding: true, // Controlled by parent
+    cell: ({ row }) => {
+      // Only render for discovery rows (CRM rows return null or could be handled differently)
+      if (!row.original.is_discovery) return null;
+
+      const c = row.original;
+      const hasEmail = !!c.has_email;
+      const hasPhone = !!c.has_phone || c.has_direct_phone === "Yes";
+      const hasLocation = !!(c.city || c.state || c.country ||
+        c.original_data?.has_city || c.original_data?.has_state || c.original_data?.has_country);
+      const hasCompany = !!(
+        c.company_name ||
+        c.original_data?.organization?.name ||
+        c.original_data?.organization?.has_employee_count ||
+        c.original_data?.organization?.has_industry
+      );
+
+      return (
+       <div className="flex justify-center">
+  <div 
+    className="
+      flex items-center space-x-1 
+      rounded-full bg-slate-50/90 p-1 
+      shadow-sm border border-slate-200/70
+    "
+  >
+    {/* Email */}
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className={cn(
+              "flex items-center justify-center h-7 w-7 rounded-full transition-all duration-200",
+              hasEmail
+                ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white"
+                : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+            )}
+          >
+            <Mail className="h-4 w-4" />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs font-medium">
+          {hasEmail 
+            ? "Email available (revealed on add)" 
+            : "No email found"}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+
+    {/* Phone */}
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className={cn(
+              "flex items-center justify-center h-7 w-7 rounded-full transition-all duration-200",
+              hasPhone
+                ? "bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white"
+                : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+            )}
+          >
+            <Phone className="h-4 w-4" />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs font-medium">
+          {hasPhone 
+            ? "Direct phone / mobile available" 
+            : "No phone found"}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+
+    {/* Location */}
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className={cn(
+              "flex items-center justify-center h-7 w-7 rounded-full transition-all duration-200",
+              hasLocation
+                ? "bg-amber-50 text-amber-700 hover:bg-amber-600 hover:text-white"
+                : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+            )}
+          >
+            <MapPin className="h-4 w-4" />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs font-medium">
+          {hasLocation 
+            ? "Location data available" 
+            : "No location data"}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+
+    {/* Company / Organization */}
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className={cn(
+              "flex items-center justify-center h-7 w-7 rounded-full transition-all duration-200",
+              hasCompany
+                ? "bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white"
+                : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+            )}
+          >
+            <Building2 className="h-4 w-4" />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs font-medium">
+          {hasCompany 
+            ? "Company information available" 
+            : "Limited company data"}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  </div>
+</div>
+      );
+    }
+  },
   
-  // 2. NAME (Sticky)
+  // 3. NAME (Sticky)
   {
     accessorKey: 'name',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Name" />,
@@ -1084,7 +1308,7 @@ export const columns: ColumnDef<any>[] = [
     }
   },
 
-  // 3. EMAIL
+  // 4. EMAIL
   {
     accessorKey: 'email',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Email" />,
@@ -1093,7 +1317,7 @@ export const columns: ColumnDef<any>[] = [
     cell: SmartEmailCell
   },
   
-  // 4. PHONE
+  // 5. PHONE
   {
     accessorKey: 'mobile',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Phone" />,
@@ -1102,7 +1326,7 @@ export const columns: ColumnDef<any>[] = [
     cell: SmartPhoneCell
   },
 
-  // 5. JOB TITLE
+  // 6. JOB TITLE
   {
     accessorKey: 'job_title',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Job Title" />,
@@ -1111,7 +1335,7 @@ export const columns: ColumnDef<any>[] = [
     cell: EditableCell
   },
   
-  // 6. COMPANY
+  // 7. COMPANY
   {
     accessorKey: 'company_name',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Company" />,
@@ -1120,7 +1344,7 @@ export const columns: ColumnDef<any>[] = [
     cell: CompanyCell
   },
 
-  // 7. ACTIONS
+  // 8. ACTIONS
   {
     id: 'actions',
     header: () => <div className="text-center text-[10px] font-semibold uppercase tracking-wider text-white/90">Actions</div>,
@@ -1130,7 +1354,7 @@ export const columns: ColumnDef<any>[] = [
     enableSorting: false,
   },
 
-  // 8. CRM SPECIFIC
+  // 9. CRM SPECIFIC
   {
     accessorKey: 'contact_stage',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Stage" />,
@@ -1184,7 +1408,7 @@ export const columns: ColumnDef<any>[] = [
     enableHiding: true,
   },
   
-  // 9. LOCATION
+  // 10. LOCATION
   {
     id: 'location',
     header: ({ column }) => <SimpleColumnHeader column={column} title="Location" />,
@@ -1197,7 +1421,7 @@ export const columns: ColumnDef<any>[] = [
     enableHiding: true,
   },
 
-  // 10. HIDDEN METADATA
+  // 11. HIDDEN METADATA
   { id: 'seniority', accessorKey: 'seniority', enableHiding: true, size: 0 },
   { id: 'departments', accessorKey: 'departments', enableHiding: true, size: 0 },
   { id: 'functions', accessorKey: 'functions', enableHiding: true, size: 0 },

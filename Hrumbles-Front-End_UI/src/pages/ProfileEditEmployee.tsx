@@ -258,7 +258,7 @@ const initialFormData: EmployeeFormData = {
     ifscCode: "",
     accountType: "Savings",
     branchAddress: "",
-    country: "India",
+    country: "",
     state: "",
     city: "",
     zipCode: ""
@@ -2824,7 +2824,7 @@ const bloodGroupOptions = [
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Select country" />
                         </SelectTrigger>
                         <SelectContent>
                           {countries.map((country) => (

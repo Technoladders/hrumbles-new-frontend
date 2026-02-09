@@ -75,10 +75,25 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
       // MODE 1: GLOBAL DISCOVERY (API)
       // =======================================================
       if (isDiscoveryMode) {
-        const hasFilters = filters && Object.keys(filters).length > 0;
+        // Check if any meaningful filters are set
+        const hasFilters = filters && (
+          filters.q_keywords || 
+          filters.person_titles?.length > 0 ||
+          filters.person_locations?.length > 0 ||
+          filters.person_seniorities?.length > 0 ||
+          filters.organization_names?.length > 0 ||
+          filters.organization_locations?.length > 0 ||
+          filters.organization_num_employees_ranges?.length > 0 ||
+          filters.contact_email_status?.length > 0 ||
+          filters.currently_using_any_of_technology_uids?.length > 0 ||
+          filters.q_organization_job_titles?.length > 0 ||
+          filters.organization_job_locations?.length > 0
+        );
         
+        // Return empty state if no filters
         if (!hasFilters) {
           dispatch(setSearchResults({ people: [], total_entries: 0 }));
+          dispatch(setTotalEntries(0));
           return { data: [], count: 0 };
         }
 
@@ -89,6 +104,7 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
         if (error) throw error;
         
         dispatch(setSearchResults(data)); 
+        dispatch(setTotalEntries(data.total_entries || 0));
         
         const mappedData = (data.people || []).map((p: any) => ({
           id: `temp-${p.id}`,

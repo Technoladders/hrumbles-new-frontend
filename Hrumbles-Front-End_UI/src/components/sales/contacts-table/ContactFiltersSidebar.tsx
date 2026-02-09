@@ -53,16 +53,14 @@ const EMPLOYEE_COUNT_OPTIONS = [
   { id: '10001+', label: '10,000+' },
 ];
 
-
-
 const SOURCE_OPTIONS = [
-  { id: 'LinkedIn', label: 'LinkedIn' },
-  { id: 'Cold Call', label: 'Cold Call' },
-  { id: 'Email Campaign', label: 'Email Campaign' },
+  { id: 'Website', label: 'Website' },
   { id: 'Referral', label: 'Referral' },
-  { id: 'Website Form', label: 'Website Form' },
-  { id: 'Other', label: 'Other' },
- 
+  { id: 'LinkedIn', label: 'LinkedIn' },
+  { id: 'Cold Outreach', label: 'Cold Outreach' },
+  { id: 'Event', label: 'Event' },
+  { id: 'Inbound', label: 'Inbound' },
+  { id: 'Discovery', label: 'Discovery' },
 ];
 
 export function ContactFiltersSidebar({ 

@@ -265,6 +265,7 @@ const masterMenuItems = [
   { icon: BsGraphUpArrow, label: "Analytics", path: "/bg-verification/analytics", suite: "VERIFICATION", permission: "view_bgv_analytics" },
 
   // --- SALES SUITE ---
+  { icon: MdDashboardCustomize, label: "Dashboard", path: "/sales/dashboard", suite: "SALES", permission: "access_sales_dashboard" },
   { icon: GoOrganization, label: "Companies", path: "/companies", suite: "SALES", permission: "access_companies" },
   { icon: VscOrganization, label: "People", path: "/contacts", suite: "SALES", permission: "access_people" },
   { icon: FiList, label: "Lists", path: "/lists", suite: "SALES", permission: "access_lists" },

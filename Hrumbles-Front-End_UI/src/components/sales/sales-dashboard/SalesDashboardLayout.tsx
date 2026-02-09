@@ -1,238 +1,547 @@
 // Hrumbles-Front-End_UI/src/components/sales/sales-dashboard/SalesDashboardLayout.tsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2 } from 'lucide-react';
+import { useSelector } from 'react-redux';
+import { Skeleton } from '@/components/ui/skeleton';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { 
+  Search, 
+  Bell, 
+  Calendar,
+  Download,
+  RefreshCw,
+  Filter,
+  Users,
+  TrendingUp,
+  TrendingDown,
+  Phone,
+  Mail,
+  CheckSquare,
+  StickyNote,
+  Target,
+  Award,
+  Zap
+} from 'lucide-react';
+import { format, subDays, startOfWeek, startOfMonth, startOfQuarter, isToday, isTomorrow, isPast, parseISO } from 'date-fns';
 
 // Dashboard Components
-import { DashboardHeader } from './DashboardHeader';
-import { MetricsGrid } from './MetricsGrid';
-import { PipelineChart } from './PipelineChart';
-import { RecentContacts } from './RecentContacts';
-import { TopCompanies } from './TopCompanies';
-import { ActivityFeed } from './ActivityFeed';
-import { TasksWidget } from './TasksWidget';
-import { QuickActions } from './QuickActions';
+import { MetricCard } from './MetricCard';
+import { ActivityChart } from './ActivityChart';
+import { PerformanceChart } from './PerformanceChart';
+import { TeamLeaderboard } from './TeamLeaderboard';
+import { UpcomingTasks } from './UpcomingTasks';
+import { RecentActivities } from './RecentActivities';
+import { ActivityHeatmap } from './ActivityHeatmap';
+import { ConversionFunnel } from './ConversionFunnel';
+import { MiniSparkline } from './MiniSparkline';
+import { EmployeeSelector } from './EmployeeSelector';
 
-interface SalesDashboardLayoutProps {
-  userId?: string;
-  organizationId?: string;
-  role?: string;
-}
+// Styles
+import './dashboard.css';
 
-export const SalesDashboardLayout: React.FC<SalesDashboardLayoutProps> = ({
-  userId,
-  organizationId,
-  role
-}) => {
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'quarter'>('month');
+type DateRange = 'today' | 'week' | 'month' | 'quarter' | 'all';
 
-  // Fetch dashboard metrics
-  const { data: metrics, isLoading: metricsLoading } = useQuery({
-    queryKey: ['sales-dashboard-metrics', organizationId, dateRange],
+export const SalesDashboardLayout: React.FC = () => {
+  const user = useSelector((state: any) => state.auth.user);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
+  const userRole = useSelector((state: any) => state.auth.role);
+  
+  const [dateRange, setDateRange] = useState<DateRange>('month');
+  const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Check if user is admin/superadmin
+  const isAdmin = useMemo(() => {
+    return ['admin', 'organization_superadmin', 'superadmin'].includes(userRole?.name?.toLowerCase() || '');
+  }, [userRole]);
+
+  // Get date range filter
+  const getDateFilter = useMemo(() => {
+    const now = new Date();
+    switch (dateRange) {
+      case 'today':
+        return format(now, 'yyyy-MM-dd');
+      case 'week':
+        return format(startOfWeek(now), 'yyyy-MM-dd');
+      case 'month':
+        return format(startOfMonth(now), 'yyyy-MM-dd');
+      case 'quarter':
+        return format(startOfQuarter(now), 'yyyy-MM-dd');
+      default:
+        return null;
+    }
+  }, [dateRange]);
+
+  // =====================
+  // DATA QUERIES
+  // =====================
+
+  // Fetch team members (for admin view)
+  const { data: teamMembers } = useQuery({
+    queryKey: ['team-members', organizationId],
     queryFn: async () => {
-      const now = new Date();
-      let startDate: Date;
+      const { data, error } = await supabase
+        .from('hr_employees')
+        .select('id, first_name, last_name, email, profile_picture_url, role_id, hr_roles(name)')
+        .eq('organization_id', organizationId)
+        .eq('status', 'active');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!organizationId && isAdmin
+  });
 
-      switch (dateRange) {
-        case 'today':
-          startDate = new Date(now.setHours(0, 0, 0, 0));
-          break;
-        case 'week':
-          startDate = new Date(now.setDate(now.getDate() - 7));
-          break;
-        case 'month':
-          startDate = new Date(now.setMonth(now.getMonth() - 1));
-          break;
-        case 'quarter':
-          startDate = new Date(now.setMonth(now.getMonth() - 3));
-          break;
-        default:
-          startDate = new Date(now.setMonth(now.getMonth() - 1));
+  // Fetch activities with filters
+  const { data: activities, isLoading: activitiesLoading, refetch: refetchActivities } = useQuery({
+    queryKey: ['dashboard-activities', organizationId, dateRange, selectedEmployee],
+    queryFn: async () => {
+      let query = supabase
+        .from('contact_activities')
+        .select(`
+          *,
+          contact:contact_id(id, name, email, photo_url, company_id, companies(name)),
+          creator:created_by(id, first_name, last_name, profile_picture_url)
+        `)
+        .eq('organization_id', organizationId)
+        .order('created_at', { ascending: false });
+
+      // Date filter
+      if (getDateFilter) {
+        query = query.gte('created_at', getDateFilter);
       }
 
-      // Fetch contacts count
+      // Employee filter (for admin) or current user (for employee)
+      if (!isAdmin) {
+        query = query.eq('created_by', user?.id);
+      } else if (selectedEmployee) {
+        query = query.eq('created_by', selectedEmployee);
+      }
+
+      const { data, error } = await query.limit(500);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!organizationId
+  });
+
+  // Fetch tasks (upcoming & overdue)
+  const { data: tasks, isLoading: tasksLoading } = useQuery({
+    queryKey: ['dashboard-tasks', organizationId, selectedEmployee],
+    queryFn: async () => {
+      let query = supabase
+        .from('contact_activities')
+        .select(`
+          *,
+          contact:contact_id(id, name, email, photo_url),
+          creator:created_by(id, first_name, last_name, profile_picture_url)
+        `)
+        .eq('organization_id', organizationId)
+        .eq('type', 'task')
+        .eq('is_completed', false)
+        .order('due_date', { ascending: true });
+
+      if (!isAdmin) {
+        query = query.or(`created_by.eq.${user?.id},assigned_to.eq.${user?.id}`);
+      } else if (selectedEmployee) {
+        query = query.or(`created_by.eq.${selectedEmployee},assigned_to.eq.${selectedEmployee}`);
+      }
+
+      const { data, error } = await query.limit(50);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!organizationId
+  });
+
+  // Fetch contacts count
+  const { data: contactsStats } = useQuery({
+    queryKey: ['dashboard-contacts', organizationId, dateRange],
+    queryFn: async () => {
+      // Total contacts
       const { count: totalContacts } = await supabase
         .from('contacts')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', organizationId);
 
-      // Fetch companies count
-      const { count: totalCompanies } = await supabase
-        .from('companies')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId);
-
-      // Fetch new contacts this period
-      const { count: newContacts } = await supabase
+      // New contacts this period
+      let newContactsQuery = supabase
         .from('contacts')
         .select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId)
-        .gte('created_at', startDate.toISOString());
-
-      // Fetch contacts by stage
-      const { data: stageData } = await supabase
-        .from('contacts')
-        .select('contact_stage')
         .eq('organization_id', organizationId);
+      
+      if (getDateFilter) {
+        newContactsQuery = newContactsQuery.gte('created_at', getDateFilter);
+      }
+      const { count: newContacts } = await newContactsQuery;
 
-      const stageCounts = (stageData || []).reduce((acc: any, contact: any) => {
-        const stage = contact.contact_stage || 'Unassigned';
-        acc[stage] = (acc[stage] || 0) + 1;
-        return acc;
-      }, {});
-
-      // Fetch enriched contacts count
+      // Enriched contacts
       const { count: enrichedContacts } = await supabase
         .from('contacts')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', organizationId)
         .not('apollo_person_id', 'is', null);
 
+      // Contacts by stage
+      const { data: stageData } = await supabase
+        .from('contacts')
+        .select('stage')
+        .eq('organization_id', organizationId);
+
+      const stageCounts = stageData?.reduce((acc: any, c: any) => {
+        const stage = c.stage || 'lead';
+        acc[stage] = (acc[stage] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
       return {
-        totalContacts: totalContacts || 0,
-        totalCompanies: totalCompanies || 0,
-        newContacts: newContacts || 0,
-        enrichedContacts: enrichedContacts || 0,
-        stageCounts,
-        enrichmentRate: totalContacts ? Math.round((enrichedContacts || 0) / totalContacts * 100) : 0,
+        total: totalContacts || 0,
+        new: newContacts || 0,
+        enriched: enrichedContacts || 0,
+        stageCounts
       };
     },
-    enabled: !!organizationId,
+    enabled: !!organizationId
   });
 
-  // Fetch recent contacts
-  const { data: recentContacts, isLoading: contactsLoading } = useQuery({
-    queryKey: ['recent-contacts', organizationId],
+  // Fetch companies count
+  const { data: companiesStats } = useQuery({
+    queryKey: ['dashboard-companies', organizationId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('contacts')
-        .select(`
-          id, name, email, job_title, photo_url, contact_stage, created_at,
-          companies(id, name, logo_url)
-        `)
-        .eq('organization_id', organizationId)
-        .order('created_at', { ascending: false })
-        .limit(8);
-      return data || [];
-    },
-    enabled: !!organizationId,
-  });
-
-  // Fetch top companies
-  const { data: topCompanies, isLoading: companiesLoading } = useQuery({
-    queryKey: ['top-companies', organizationId],
-    queryFn: async () => {
-      const { data } = await supabase
+      const { count } = await supabase
         .from('companies')
-        .select(`
-          id, name, logo_url, industry, stage, website,
-          enrichment_organizations(estimated_num_employees, industry)
-        `)
-        .eq('organization_id', organizationId)
-        .order('updated_at', { ascending: false })
-        .limit(6);
-      return data || [];
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organizationId);
+      return count || 0;
     },
-    enabled: !!organizationId,
+    enabled: !!organizationId
   });
 
-  // Fetch recent activities
-  const { data: activities, isLoading: activitiesLoading } = useQuery({
-    queryKey: ['recent-activities', organizationId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('contact_activities')
-        .select(`
-          id, activity_type, title, description, created_at,
-          contacts(id, name, photo_url)
-        `)
-        .eq('organization_id', organizationId)
-        .order('created_at', { ascending: false })
-        .limit(10);
-      return data || [];
-    },
-    enabled: !!organizationId,
-  });
+  // =====================
+  // COMPUTED METRICS
+  // =====================
 
-  // Fetch tasks
-  const { data: tasks, isLoading: tasksLoading } = useQuery({
-    queryKey: ['sales-tasks', organizationId, userId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('contact_activities')
-        .select(`
-          id, title, description, due_date, priority, is_completed,
-          contacts(id, name)
-        `)
-        .eq('organization_id', organizationId)
-        .eq('activity_type', 'task')
-        .eq('is_completed', false)
-        .order('due_date', { ascending: true })
-        .limit(5);
-      return data || [];
-    },
-    enabled: !!organizationId,
-  });
+  const metrics = useMemo(() => {
+    if (!activities) return null;
 
-  const isLoading = metricsLoading;
+    const activityCounts = activities.reduce((acc: any, a: any) => {
+      acc[a.type] = (acc[a.type] || 0) + 1;
+      return acc;
+    }, {});
 
-  if (isLoading) {
+    const completedTasks = activities.filter((a: any) => a.type === 'task' && a.is_completed).length;
+    const totalTasks = activities.filter((a: any) => a.type === 'task').length;
+
+    // Group by employee for leaderboard
+    const byEmployee = activities.reduce((acc: any, a: any) => {
+      const empId = a.created_by;
+      if (!acc[empId]) {
+        acc[empId] = {
+          id: empId,
+          name: a.creator ? `${a.creator.first_name} ${a.creator.last_name}` : 'Unknown',
+          avatar: a.creator?.profile_picture_url,
+          activities: 0,
+          calls: 0,
+          emails: 0,
+          meetings: 0,
+          tasks: 0,
+          notes: 0
+        };
+      }
+      acc[empId].activities++;
+      acc[empId][a.type + 's'] = (acc[empId][a.type + 's'] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Daily activity trend (last 7 days)
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = subDays(new Date(), 6 - i);
+      return format(date, 'yyyy-MM-dd');
+    });
+
+    const dailyTrend = last7Days.map(date => {
+      const dayActivities = activities.filter((a: any) => 
+        format(new Date(a.created_at), 'yyyy-MM-dd') === date
+      );
+      return {
+        date,
+        label: format(parseISO(date), 'EEE'),
+        total: dayActivities.length,
+        calls: dayActivities.filter((a: any) => a.type === 'call').length,
+        emails: dayActivities.filter((a: any) => a.type === 'email').length,
+        meetings: dayActivities.filter((a: any) => a.type === 'meeting').length,
+      };
+    });
+
+    // Activity by type for pie/donut chart
+    const activityByType = Object.entries(activityCounts).map(([type, count]) => ({
+      type,
+      count: count as number,
+      color: getActivityColor(type)
+    }));
+
+    return {
+      total: activities.length,
+      calls: activityCounts.call || 0,
+      emails: activityCounts.email || 0,
+      meetings: activityCounts.meeting || 0,
+      tasks: activityCounts.task || 0,
+      notes: activityCounts.note || 0,
+      completedTasks,
+      totalTasks,
+      taskCompletionRate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+      byEmployee: Object.values(byEmployee).sort((a: any, b: any) => b.activities - a.activities),
+      dailyTrend,
+      activityByType
+    };
+  }, [activities]);
+
+  // Pending tasks
+  const pendingTasks = useMemo(() => {
+    if (!tasks) return { overdue: [], today: [], upcoming: [] };
+    
+    const now = new Date();
+    return {
+      overdue: tasks.filter((t: any) => t.due_date && isPast(parseISO(t.due_date)) && !isToday(parseISO(t.due_date))),
+      today: tasks.filter((t: any) => t.due_date && isToday(parseISO(t.due_date))),
+      upcoming: tasks.filter((t: any) => t.due_date && !isPast(parseISO(t.due_date)) && !isToday(parseISO(t.due_date)))
+    };
+  }, [tasks]);
+
+  // =====================
+  // LOADING STATE
+  // =====================
+
+  if (activitiesLoading || tasksLoading) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto text-gray-400" />
-          <p className="text-sm text-gray-500 mt-4">Loading dashboard...</p>
+      <div className="min-h-screen bg-[#F8FAFC] p-6">
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
+        </div>
+        <div className="grid grid-cols-12 gap-6">
+          <Skeleton className="col-span-8 h-80 rounded-xl" />
+          <Skeleton className="col-span-4 h-80 rounded-xl" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    <div className="min-h-screen bg-[#F8FAFC]">
       {/* Header */}
-      <DashboardHeader 
-        dateRange={dateRange}
-        onDateRangeChange={setDateRange}
-      />
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">Sales Dashboard</h1>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {isAdmin ? 'Team Performance Overview' : 'Your Performance Overview'}
+              </p>
+            </div>
 
-      {/* Main Content */}
-      <main className="max-w-[1600px] mx-auto px-6 py-6 space-y-6">
-        {/* Metrics Row */}
-        <MetricsGrid metrics={metrics} />
+            <div className="flex items-center gap-4">
+              {/* Search */}
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Input
+                  placeholder="Search activities..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 w-64 h-9 bg-gray-50 border-gray-200"
+                />
+              </div>
 
-        {/* Quick Actions */}
-        <QuickActions />
+              {/* Date Range Filter */}
+              <Select value={dateRange} onValueChange={(v: DateRange) => setDateRange(v)}>
+                <SelectTrigger className="w-36 h-9 bg-gray-50 border-gray-200">
+                  <Calendar size={14} className="mr-2 text-gray-500" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="week">This Week</SelectItem>
+                  <SelectItem value="month">This Month</SelectItem>
+                  <SelectItem value="quarter">This Quarter</SelectItem>
+                  <SelectItem value="all">All Time</SelectItem>
+                </SelectContent>
+              </Select>
 
-        {/* Charts and Widgets Row */}
-        <div className="grid grid-cols-12 gap-6">
-          {/* Pipeline Chart - Takes 8 columns */}
-          <div className="col-span-12 lg:col-span-8">
-            <PipelineChart stageCounts={metrics?.stageCounts || {}} />
-          </div>
+              {/* Employee Selector (Admin only) */}
+              {isAdmin && teamMembers && (
+                <EmployeeSelector
+                  employees={teamMembers}
+                  selectedEmployee={selectedEmployee}
+                  onSelect={setSelectedEmployee}
+                />
+              )}
 
-          {/* Tasks Widget - Takes 4 columns */}
-          <div className="col-span-12 lg:col-span-4">
-            <TasksWidget tasks={tasks || []} isLoading={tasksLoading} />
+              {/* Refresh */}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-9"
+                onClick={() => refetchActivities()}
+              >
+                <RefreshCw size={14} className="mr-2" />
+                Refresh
+              </Button>
+
+              {/* Notifications */}
+              <Button variant="ghost" size="sm" className="h-9 w-9 p-0 relative">
+                <Bell size={18} className="text-gray-600" />
+                {pendingTasks.overdue.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center">
+                    {pendingTasks.overdue.length}
+                  </span>
+                )}
+              </Button>
+
+              {/* User Avatar */}
+              <Avatar className="h-9 w-9 border-2 border-blue-100">
+                <AvatarImage src={user?.profile_picture_url} />
+                <AvatarFallback className="bg-blue-600 text-white text-xs">
+                  {user?.first_name?.[0]}{user?.last_name?.[0]}
+                </AvatarFallback>
+              </Avatar>
+            </div>
           </div>
         </div>
+      </header>
 
-        {/* Content Row */}
-        <div className="grid grid-cols-12 gap-6">
-          {/* Recent Contacts - Takes 8 columns */}
-          <div className="col-span-12 lg:col-span-8">
-            <RecentContacts contacts={recentContacts || []} isLoading={contactsLoading} />
-          </div>
-
-          {/* Activity Feed - Takes 4 columns */}
-          <div className="col-span-12 lg:col-span-4">
-            <ActivityFeed activities={activities || []} isLoading={activitiesLoading} />
-          </div>
+      {/* Dashboard Content */}
+      <div className="p-6 space-y-6">
+        {/* Top Metrics Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <MetricCard
+            title="Total Activities"
+            value={metrics?.total || 0}
+            icon={<Zap className="text-blue-600" size={20} />}
+            trend={12}
+            trendLabel="vs last period"
+            color="blue"
+            sparklineData={metrics?.dailyTrend.map(d => d.total) || []}
+          />
+          <MetricCard
+            title="Calls Made"
+            value={metrics?.calls || 0}
+            icon={<Phone className="text-amber-600" size={20} />}
+            trend={8}
+            color="amber"
+            sparklineData={metrics?.dailyTrend.map(d => d.calls) || []}
+          />
+          <MetricCard
+            title="Emails Sent"
+            value={metrics?.emails || 0}
+            icon={<Mail className="text-indigo-600" size={20} />}
+            trend={-3}
+            color="indigo"
+            sparklineData={metrics?.dailyTrend.map(d => d.emails) || []}
+          />
+          <MetricCard
+            title="Meetings"
+            value={metrics?.meetings || 0}
+            icon={<Calendar className="text-green-600" size={20} />}
+            trend={15}
+            color="green"
+            sparklineData={metrics?.dailyTrend.map(d => d.meetings) || []}
+          />
+          <MetricCard
+            title="Tasks Completed"
+            value={`${metrics?.taskCompletionRate || 0}%`}
+            icon={<CheckSquare className="text-emerald-600" size={20} />}
+            subtitle={`${metrics?.completedTasks || 0}/${metrics?.totalTasks || 0} tasks`}
+            color="emerald"
+          />
+          <MetricCard
+            title="Total Contacts"
+            value={contactsStats?.total || 0}
+            icon={<Users className="text-violet-600" size={20} />}
+            subtitle={`+${contactsStats?.new || 0} new`}
+            color="violet"
+          />
         </div>
 
-        {/* Companies Row */}
-        <TopCompanies companies={topCompanies || []} isLoading={companiesLoading} />
-      </main>
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-12 gap-6">
+          {/* Activity Trend Chart */}
+          <div className="col-span-12 lg:col-span-8">
+            <ActivityChart 
+              data={metrics?.dailyTrend || []}
+              title="Activity Trend"
+            />
+          </div>
+
+          {/* Activity Breakdown */}
+          <div className="col-span-12 lg:col-span-4">
+            <PerformanceChart 
+              data={metrics?.activityByType || []}
+              title="Activity Breakdown"
+            />
+          </div>
+
+          {/* Tasks Section */}
+          <div className="col-span-12 lg:col-span-4">
+            <UpcomingTasks 
+              overdue={pendingTasks.overdue}
+              today={pendingTasks.today}
+              upcoming={pendingTasks.upcoming}
+            />
+          </div>
+
+          {/* Recent Activities */}
+          <div className="col-span-12 lg:col-span-4">
+            <RecentActivities 
+              activities={activities?.slice(0, 10) || []}
+            />
+          </div>
+
+          {/* Conversion Funnel or Team Leaderboard */}
+          <div className="col-span-12 lg:col-span-4">
+            {isAdmin ? (
+              <TeamLeaderboard 
+                data={metrics?.byEmployee || []}
+              />
+            ) : (
+              <ConversionFunnel 
+                stageCounts={contactsStats?.stageCounts || {}}
+              />
+            )}
+          </div>
+
+          {/* Activity Heatmap (Full Width) */}
+          {isAdmin && (
+            <div className="col-span-12">
+              <ActivityHeatmap 
+                activities={activities || []}
+                teamMembers={teamMembers || []}
+              />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
+
+// Helper function for activity colors
+function getActivityColor(type: string): string {
+  const colors: Record<string, string> = {
+    call: '#F59E0B',
+    email: '#6366F1',
+    meeting: '#10B981',
+    task: '#8B5CF6',
+    note: '#EC4899'
+  };
+  return colors[type] || '#6B7280';
+}
+
+export default SalesDashboardLayout;
