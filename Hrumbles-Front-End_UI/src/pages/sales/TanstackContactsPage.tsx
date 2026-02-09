@@ -24,6 +24,7 @@ import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import { ContactFiltersSidebar } from '@/components/sales/contacts-table/ContactFiltersSidebar';
 import { DiscoverySidebar } from '@/components/sales/discovery/DiscoverySidebar'; 
 import { AddToListModal } from '@/components/sales/contacts-table/AddToListModal';
+import { ContactImportDialog } from '@/components/sales/contacts-table/ContactImportDialog';
 import { columns } from '@/components/sales/contacts-table/columns';
 
 // Redux & Services
@@ -35,7 +36,7 @@ import { useToast } from '@/hooks/use-toast';
 // Icons & UI
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, Filter, Settings2, Zap, RotateCcw, Check, ArrowLeft, FolderOpen } from 'lucide-react';
+import { Search, Filter, Settings2, Zap, RotateCcw, Check, ArrowLeft, FolderOpen, UploadCloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Spinner } from "@chakra-ui/react";
 import {
@@ -143,6 +144,7 @@ export default function TanstackContactsPage() {
   const [selectedContact, setSelectedContact] = useState<any>(null);
   const [isFromDiscovery, setIsFromDiscovery] = useState(false);
   const [viewSettingsOpen, setViewSettingsOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
 
   // 4. Table Preferences State
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(DEFAULT_COLUMN_VISIBILITY);
@@ -632,13 +634,25 @@ const handleListAdd = async (targetFileId: string) => {
                       isDiscoveryMode ? "bg-white text-indigo-600 shadow-md" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
-                    Discovery
+                    Search People
                   </button>
                </div>
              )}
           </div>
           
           <div className="flex items-center gap-3">
+
+             {fileId && !isDiscoveryMode && (
+               <Button 
+                 variant="secondary" 
+                 size="sm" 
+                 onClick={() => setIsImportOpen(true)}
+                 className="h-9 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200"
+               >
+                 <UploadCloud size={14} className="mr-2" />
+                 Import CSV
+               </Button>
+             )}
              <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
                 <Input 
@@ -767,6 +781,13 @@ const handleListAdd = async (targetFileId: string) => {
             isFromDiscovery={isFromDiscovery}
           />
         )}
+
+         {/* IMPORT DIALOG - RENDERED HERE */}
+        <ContactImportDialog 
+          open={isImportOpen} 
+          onOpenChange={setIsImportOpen} 
+          fileId={fileId || null} 
+        />
 
         {/* VIEW SETTINGS DIALOG */}
         <Dialog open={viewSettingsOpen} onOpenChange={setViewSettingsOpen}>

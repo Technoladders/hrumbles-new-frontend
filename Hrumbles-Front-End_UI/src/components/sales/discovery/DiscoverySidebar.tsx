@@ -146,7 +146,7 @@ export function DiscoverySidebar() {
           <div className="flex items-center gap-2">
             <Globe className="h-4 w-4 text-indigo-600" />
             <span className="text-xs font-black uppercase tracking-widest text-indigo-900">
-              Global Search
+               Search People
             </span>
           </div>
           <Button variant="ghost" size="sm" onClick={handleReset} className="h-6 text-[10px] text-red-500 font-bold hover:bg-red-50">

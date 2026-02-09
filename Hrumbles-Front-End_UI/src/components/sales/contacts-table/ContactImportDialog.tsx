@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx'; // Import the new library
-import { useSelector } from 'react-redux';
+import * as XLSX from 'xlsx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +10,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useImportCsvData } from '@/hooks/sales/useImportCsvData';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { lookupViaCity, findFromCityStateProvince, findFromIsoCode } from 'city-timezones'; // Import timezone finders
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Plus, Trash2 } from 'lucide-react';
 
 interface ContactImportDialogProps {
   open: boolean;
@@ -19,17 +19,25 @@ interface ContactImportDialogProps {
   fileId: string | null;
 }
 
-type ColumnMapping = {
-  [key: string]: string; // Allow any string key for flexibility
-};
+// Standard fields 1-to-1 mapping
+const STANDARD_FIELDS = [
+  { key: 'name', label: 'Contact Name', required: true },
+  { key: 'job_title', label: 'Job Title' },
+  { key: 'linkedin_url', label: 'Person LinkedIn' },
+  { key: 'contact_stage', label: 'Stage' },
+  { key: 'country', label: 'Country' },
+  { key: 'state', label: 'State' },
+  { key: 'city', label: 'City' },
+  { key: 'notes', label: 'Notes' },
+];
 
-interface ImportResult {
-    imported: number;
-    skipped_summary: {
-        count: number;
-        records: any[];
-    }
-}
+// Company fields
+const COMPANY_FIELDS = [
+  { key: 'company_name', label: 'Company Name' },
+  { key: 'company_linkedin', label: 'Company LinkedIn' }, // New
+  { key: 'company_industry', label: 'Industry' }, // New
+  { key: 'company_employees', label: 'Employee Count' }, // New
+];
 
 export const ContactImportDialog: React.FC<ContactImportDialogProps> = ({ open, onOpenChange, fileId }) => {
   const { toast } = useToast();
@@ -38,16 +46,16 @@ export const ContactImportDialog: React.FC<ContactImportDialogProps> = ({ open, 
   const [step, setStep] = useState(1);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [csvData, setCsvData] = useState<any[]>([]);
-  const [mapping, setMapping] = useState<ColumnMapping>({});
-  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  
+  // State for Mappings
+  const [standardMapping, setStandardMapping] = useState<Record<string, string>>({});
+  
+  // State for Dynamic Multi-Selects (Phones/Emails)
+  const [emailColumns, setEmailColumns] = useState<{ csvHeader: string, isPrimary: boolean }[]>([]);
+  const [phoneColumns, setPhoneColumns] = useState<{ csvHeader: string, type: string, isPrimary: boolean }[]>([]);
+  
+  const [importResult, setImportResult] = useState<any>(null);
 
-  // [MODIFIED] Add all new native fields to the mappable list.
-  const dbFields = [
-    'name', 'email', 'mobile', 'alt_mobile', 'job_title', 'linkedin_url',
-    'company_name', 'contact_stage', 'country', 'state', 'city', 'notes'
-  ];
-
-  // [MODIFIED] A completely new, robust file handler.
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -68,196 +76,287 @@ export const ContactImportDialog: React.FC<ContactImportDialogProps> = ({ open, 
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
           jsonData = XLSX.utils.sheet_to_json(worksheet);
-          // Get headers from the first row if jsonData is not empty
-          if (jsonData.length > 0) {
-              headers = Object.keys(jsonData[0]);
-          }
-        } else {
-          toast({
-            title: "Unsupported File Type",
-            description: "Please upload a .csv or .xlsx file.",
-            variant: "destructive",
-          });
-          return;
+          if (jsonData.length > 0) headers = Object.keys(jsonData[0]);
         }
 
         setCsvData(jsonData);
         setCsvHeaders(headers);
         setStep(2);
       } catch (error) {
-        console.error("File parsing error:", error);
-        toast({
-          title: "File Read Error",
-          description: "Could not read the file. Please ensure it is not corrupted and is a valid .csv or .xlsx file.",
-          variant: "destructive",
-        });
+        toast({ title: "File Error", description: "Could not read file.", variant: "destructive" });
       }
     };
-    reader.onerror = () => {
-        toast({ title: "File Read Error", description: "There was an issue reading the file.", variant: "destructive" });
-    };
-
-    // Use readAsArrayBuffer for XLSX and readAsText for CSV
-    if (file.name.endsWith('.xlsx')) {
-        reader.readAsArrayBuffer(file);
-    } else {
-        reader.readAsText(file);
-    }
+    
+    if (file.name.endsWith('.xlsx')) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
   };
 
-  // [MODIFIED] Add timezone calculation before sending to the backend.
-  const handleImport = () => {
-    if (!fileId) {
-      toast({ title: "Error", description: "A file must be selected to import contacts.", variant: "destructive" });
-      return;
-    }
-    if (!mapping.name) {
-      toast({ title: "Mapping Incomplete", description: "Please map the column for 'Name'.", variant: "destructive" });
-      return;
-    }
-    
-    // Add timezone to each row before mutation.
-    const dataWithTimezone = csvData.map(row => {
-        const country = row[mapping.country || ''];
-        const state = row[mapping.state || ''];
-        const city = row[mapping.city || ''];
-        let timezone = null;
-        
-        try {
-            if (city) {
-                const matches = lookupViaCity(city);
-                if (matches.length > 0) timezone = matches[0].timezone;
-            }
-            if (!timezone && state && country) {
-                // Note: This function is not ideal, may need a better one if issues persist
-                const matches = findFromCityStateProvince(`${state} ${country}`);
-                if (matches.length > 0) timezone = matches[0].timezone;
-            }
-            if (!timezone && country) {
-                const matches = findFromIsoCode(country);
-                if (matches.length > 0) timezone = matches[0].timezone;
-            }
-        } catch(e) { /* Fail silently */ }
+  const addPhoneColumn = () => {
+    setPhoneColumns([...phoneColumns, { csvHeader: '', type: 'mobile', isPrimary: phoneColumns.length === 0 }]);
+  };
 
-        // Use a special key to avoid conflicts with user data
-        return { ...row, '__timezone': timezone };
+  const addEmailColumn = () => {
+    setEmailColumns([...emailColumns, { csvHeader: '', isPrimary: emailColumns.length === 0 }]);
+  };
+
+  const handleImport = () => {
+    if (!standardMapping.name) {
+      toast({ title: "Required", description: "Please map the 'Contact Name' field.", variant: "destructive" });
+      return;
+    }
+
+    // Transform Data for Backend
+    const processedData = csvData.map(row => {
+      // 1. Standard Fields
+      const cleanRow: any = {};
+      [...STANDARD_FIELDS, ...COMPANY_FIELDS].forEach(field => {
+        if (standardMapping[field.key]) {
+          cleanRow[field.key] = row[standardMapping[field.key]];
+        }
+      });
+
+      // 2. Process Phones
+      const phones = phoneColumns
+        .filter(col => col.csvHeader && row[col.csvHeader])
+        .map(col => ({
+          number: row[col.csvHeader],
+          type: col.type,
+          is_primary: col.isPrimary
+        }));
+      
+      const primaryPhoneObj = phones.find(p => p.is_primary) || phones[0];
+      cleanRow.phones = phones;
+      cleanRow.primary_phone = primaryPhoneObj?.number;
+
+      // 3. Process Emails
+      const emails = emailColumns
+        .filter(col => col.csvHeader && row[col.csvHeader])
+        .map(col => ({
+          email: row[col.csvHeader],
+          is_primary: col.isPrimary
+        }));
+      
+      const primaryEmailObj = emails.find(e => e.is_primary) || emails[0];
+      cleanRow.emails = emails;
+      cleanRow.primary_email = primaryEmailObj?.email;
+
+      return cleanRow;
     });
 
     importMutation.mutate(
-      { 
-        fileId, 
-        csvData: dataWithTimezone, 
-        // Tell the backend to get the timezone value from our special key
-        mapping: { ...mapping, timezone: '__timezone' } 
-      },
+      { fileId: fileId!, processedData },
       {
         onSuccess: (data) => {
-          setImportResult(data as any);
+          setImportResult(data);
           setStep(3);
-        },
-        onError: (err: any) => {
-          toast({ title: "Import Failed", description: err.message, variant: "destructive" });
-        },
+        }
       }
     );
   };
-          
+
   const resetState = () => {
     onOpenChange(false);
     setTimeout(() => {
       setStep(1);
       setCsvData([]);
-      setCsvHeaders([]);
-      setMapping({});
+      setStandardMapping({});
+      setPhoneColumns([]);
+      setEmailColumns([]);
       setImportResult(null);
     }, 300);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onInteractOutside={(e) => e.preventDefault()} className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[800px] h-[90vh] overflow-auto flex flex-col">
         <DialogHeader>
           <DialogTitle>Import Contacts</DialogTitle>
-          <DialogDescription>
-            {step === 1 && "Upload a CSV or Excel file to begin."}
-            {step === 2 && "Map your file's columns to the database fields. 'Name' is required."}
-            {step === 3 && "Your import has been processed."}
-          </DialogDescription>
+          <DialogDescription>Map columns to import contacts, enrichment data, and company info.</DialogDescription>
         </DialogHeader>
 
         {step === 1 && (
-            <div className="py-4">
-                <Label htmlFor="csv-file">CSV or Excel File</Label>
-                {/* [MODIFIED] Accept both CSV and XLSX formats */}
-                <Input id="csv-file" type="file" accept=".csv, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" onChange={handleFileChange} />
-            </div>
-        )}
-
-        {step === 2 && (
-          <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-4">
-            <p className="text-sm text-muted-foreground">Found {csvData.length} rows. Select the corresponding column for each field.</p>
-            {dbFields.map(field => (
-              <div key={field} className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor={`map-${field}`} className="text-right capitalize">
-                  {field.replace(/_/g, ' ')}
-                  {field === 'name' && <span className="text-red-500 ml-1">*</span>}
-                </Label>
-                <Select onValueChange={(value) => setMapping(prev => ({ ...prev, [field]: value }))}>
-                  <SelectTrigger className="col-span-3"><SelectValue placeholder="Select Column..." /></SelectTrigger>
-                  <SelectContent>
-                    {csvHeaders.map(header => <SelectItem key={header} value={header}>{header}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            ))}
+          <div className="py-8 text-center">
+            <Label htmlFor="file-upload" className="cursor-pointer bg-slate-100 hover:bg-slate-200 p-8 rounded-lg border-2 border-dashed border-slate-300 block">
+              <span className="block text-lg font-medium text-slate-700">Click to Upload CSV or Excel</span>
+              <span className="text-sm text-slate-500">Supported formats: .csv, .xlsx</span>
+              <Input id="file-upload" type="file" className="hidden" accept=".csv, .xlsx" onChange={handleFileChange} />
+            </Label>
           </div>
         )}
 
-       {step === 3 && importResult && (
-            <div className="py-4 space-y-4">
-                <div className="text-center">
-                    <h3 className="text-2xl font-bold text-green-600">Import Complete!</h3>
-                    <p className="mt-1 text-lg">{importResult.imported} contacts were successfully added.</p>
-                </div>
-                {importResult.skipped_summary?.records.length > 0 && (
-                    <div className="space-y-2">
-                        <p className="font-semibold text-center text-muted-foreground">
-                           {importResult.skipped_summary.count} contacts were skipped (e.g., duplicates or missing name):
-                        </p>
-                        <ScrollArea className="h-48 w-full rounded-md border p-2">
-                            <div className="space-y-2">
-                               {importResult.skipped_summary.records.map((record, index) => {
-                                    const name = record[mapping.name || ''] || 'No Name Provided';
-                                    const email = record[mapping.email || ''] || 'No Email Provided';
-                                    const fallback = String(name).substring(0, 2).toUpperCase();
-
-                                    return (
-                                        <div key={index} className="flex items-center gap-3 p-2 bg-slate-50 rounded-md">
-                                            <Avatar className="h-8 w-8"><AvatarFallback>{fallback}</AvatarFallback></Avatar>
-                                            <div>
-                                                <p className="text-sm font-medium text-gray-800">{name}</p>
-                                                <p className="text-xs text-muted-foreground">{email}</p>
-                                            </div>
-                                        </div>
-                                    );
-                               })}
-                            </div>
-                        </ScrollArea>
+        {step === 2 && (
+          <ScrollArea className="flex-1 pr-4 -mr-4">
+            <div className="space-y-6 py-2 px-1">
+              
+              {/* SECTION 1: CONTACT INFO */}
+              <div className="bg-slate-50 p-4 rounded-lg border">
+                <h3 className="font-semibold mb-3 text-indigo-700">1. Contact Details</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {STANDARD_FIELDS.map(field => (
+                    <div key={field.key}>
+                      <Label className="text-xs font-semibold text-slate-500 mb-1 block">
+                        {field.label} {field.required && <span className="text-red-500">*</span>}
+                      </Label>
+                      <Select onValueChange={(val) => setStandardMapping(prev => ({...prev, [field.key]: val}))}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Column" /></SelectTrigger>
+                        <SelectContent>
+                          {csvHeaders.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
-                )}
+                  ))}
+                </div>
+              </div>
+
+              {/* SECTION 2: COMPANY INFO */}
+              <div className="bg-slate-50 p-4 rounded-lg border">
+                <h3 className="font-semibold mb-3 text-indigo-700">2. Company Details</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {COMPANY_FIELDS.map(field => (
+                    <div key={field.key}>
+                      <Label className="text-xs font-semibold text-slate-500 mb-1 block">{field.label}</Label>
+                      <Select onValueChange={(val) => setStandardMapping(prev => ({...prev, [field.key]: val}))}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Column" /></SelectTrigger>
+                        <SelectContent>
+                          {csvHeaders.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* SECTION 3: PHONES & EMAILS */}
+              <div className="bg-slate-50 p-4 rounded-lg border space-y-4">
+                
+                {/* Emails */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-semibold text-indigo-700">3. Email Addresses</h3>
+                    <Button size="sm" variant="ghost" onClick={addEmailColumn} className="h-6 text-xs text-indigo-600"><Plus size={12} className="mr-1"/> Add Email Column</Button>
+                  </div>
+                  {emailColumns.length === 0 && <p className="text-xs text-slate-400 italic">No email columns mapped.</p>}
+                  
+                  {emailColumns.map((col, idx) => (
+                    <div key={idx} className="flex gap-2 items-center mb-2">
+                      <Select onValueChange={(val) => {
+                         const newCols = [...emailColumns];
+                         newCols[idx].csvHeader = val;
+                         setEmailColumns(newCols);
+                      }}>
+                        <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Select Email Column" /></SelectTrigger>
+                        <SelectContent>{csvHeaders.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                      </Select>
+                      
+                      <div className="flex items-center space-x-2">
+                         <input 
+                            type="radio" 
+                            name="primary_email" 
+                            checked={col.isPrimary} 
+                            onChange={() => {
+                                const newCols = emailColumns.map((c, i) => ({ ...c, isPrimary: i === idx }));
+                                setEmailColumns(newCols);
+                            }}
+                         />
+                         <span className="text-xs text-slate-600">Primary</span>
+                      </div>
+
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400" onClick={() => {
+                        setEmailColumns(emailColumns.filter((_, i) => i !== idx));
+                      }}><Trash2 size={14}/></Button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t border-slate-200 my-2"></div>
+
+                {/* Phones */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-semibold text-indigo-700">4. Phone Numbers</h3>
+                    <Button size="sm" variant="ghost" onClick={addPhoneColumn} className="h-6 text-xs text-indigo-600"><Plus size={12} className="mr-1"/> Add Phone Column</Button>
+                  </div>
+                  {phoneColumns.length === 0 && <p className="text-xs text-slate-400 italic">No phone columns mapped.</p>}
+
+                  {phoneColumns.map((col, idx) => (
+                    <div key={idx} className="grid grid-cols-12 gap-2 items-center mb-2">
+                      <div className="col-span-5">
+                        <Select onValueChange={(val) => {
+                          const newCols = [...phoneColumns];
+                          newCols[idx].csvHeader = val;
+                          setPhoneColumns(newCols);
+                        }}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Column" /></SelectTrigger>
+                          <SelectContent>{csvHeaders.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="col-span-4">
+                         <Select defaultValue={col.type} onValueChange={(val) => {
+                            const newCols = [...phoneColumns];
+                            newCols[idx].type = val;
+                            setPhoneColumns(newCols);
+                         }}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="mobile">Mobile</SelectItem>
+                                <SelectItem value="work">Work</SelectItem>
+                                <SelectItem value="home">Home</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                         </Select>
+                      </div>
+
+                      <div className="col-span-2 flex items-center space-x-1">
+                         <input 
+                            type="radio" 
+                            name="primary_phone" 
+                            checked={col.isPrimary} 
+                            onChange={() => {
+                                const newCols = phoneColumns.map((c, i) => ({ ...c, isPrimary: i === idx }));
+                                setPhoneColumns(newCols);
+                            }}
+                         />
+                         <span className="text-[10px] text-slate-600">Primary</span>
+                      </div>
+
+                      <div className="col-span-1">
+                         <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400" onClick={() => {
+                          setPhoneColumns(phoneColumns.filter((_, i) => i !== idx));
+                        }}><Trash2 size={14}/></Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+              </div>
             </div>
+          </ScrollArea>
         )}
-        
-       <DialogFooter>
+
+        {step === 3 && importResult && (
+          <div className="py-8 text-center space-y-4">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-600">
+               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <h3 className="text-xl font-bold text-slate-800">Import Complete</h3>
+            <p className="text-slate-600">Successfully imported <strong className="text-indigo-600">{importResult.imported}</strong> contacts.</p>
+            {importResult.skipped_summary?.count > 0 && (
+                <p className="text-xs text-red-500">Skipped {importResult.skipped_summary.count} duplicates.</p>
+            )}
+          </div>
+        )}
+
+        <DialogFooter className="mt-4 pt-2 border-t">
           {step === 2 && (
             <>
-                <Button type="button" variant="outline" onClick={() => setStep(1)}>Back</Button>
-                <Button type="submit" onClick={handleImport} disabled={importMutation.isPending}>
-                    {importMutation.isPending ? 'Importing...' : `Import ${csvData.length} Contacts`}
-                </Button>
+              <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
+              <Button onClick={handleImport} disabled={importMutation.isPending}>
+                {importMutation.isPending ? "Importing..." : "Run Import"}
+              </Button>
             </>
           )}
-         {(step === 1 || step === 3) && <Button type="button" variant="outline" onClick={resetState}>Close</Button>}
+          {(step === 1 || step === 3) && <Button variant="outline" onClick={resetState}>Close</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
