@@ -11,7 +11,8 @@ import { useImportCsvData } from '@/hooks/sales/useImportCsvData';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Download, CheckCircle, AlertCircle } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ContactImportDialogProps {
   open: boolean;
@@ -152,6 +153,18 @@ export const ContactImportDialog: React.FC<ContactImportDialogProps> = ({ open, 
         }
       }
     );
+  };
+
+   // NEW: Download Logic
+  const downloadLog = (data: any[], filename: string) => {
+    if (!data || data.length === 0) {
+      toast({ title: "No Data", description: "List is empty.", variant: "outline" });
+      return;
+    }
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Log");
+    XLSX.writeFile(wb, `${filename}_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
   const resetState = () => {
@@ -334,16 +347,81 @@ export const ContactImportDialog: React.FC<ContactImportDialogProps> = ({ open, 
           </ScrollArea>
         )}
 
+        {/* STEP 3: RESULTS WITH TABS AND DOWNLOADS */}
         {step === 3 && importResult && (
-          <div className="py-8 text-center space-y-4">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-600">
-               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <div className="flex-1 flex flex-col py-4 overflow-hidden">
+            <div className="text-center mb-6">
+               <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-600 mb-2">
+                 <CheckCircle className="h-6 w-6" />
+               </div>
+               <h3 className="text-xl font-bold text-slate-800">Import Processed</h3>
+               <p className="text-sm text-slate-500">Review the results below</p>
             </div>
-            <h3 className="text-xl font-bold text-slate-800">Import Complete</h3>
-            <p className="text-slate-600">Successfully imported <strong className="text-indigo-600">{importResult.imported}</strong> contacts.</p>
-            {importResult.skipped_summary?.count > 0 && (
-                <p className="text-xs text-red-500">Skipped {importResult.skipped_summary.count} duplicates.</p>
-            )}
+
+            <Tabs defaultValue="success" className="flex-1 flex flex-col min-h-0 w-full">
+              <div className="px-4">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="success" className="data-[state=active]:bg-green-50 data-[state=active]:text-green-700">
+                    Success ({importResult.imported_count})
+                  </TabsTrigger>
+                  <TabsTrigger value="skipped" className="data-[state=active]:bg-red-50 data-[state=active]:text-red-700">
+                    Skipped/Duplicate ({importResult.skipped_summary?.count || 0})
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+
+              {/* SUCCESS TAB */}
+              <TabsContent value="success" className="flex-1 flex flex-col min-h-0 mt-2">
+                <div className="flex justify-between items-center px-4 py-2 bg-slate-50 border-y">
+                   <span className="text-xs font-semibold text-slate-500 uppercase">Successfully Added</span>
+                   <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => downloadLog(importResult.imported_records, 'Import_Success')}>
+                     <Download size={12} /> Download List
+                   </Button>
+                </div>
+                <ScrollArea className="flex-1">
+                   <div className="p-4 space-y-2">
+                      {importResult.imported_records.map((rec: any, i: number) => (
+                        <div key={rec.id || i} className="flex justify-between items-center p-2 bg-white border rounded-md shadow-sm">
+                           <div>
+                              <div className="font-medium text-sm">{rec.name}</div>
+                              <div className="text-xs text-slate-500">{rec.email || rec.mobile || 'No contact info'}</div>
+                           </div>
+                           <div className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">Imported</div>
+                        </div>
+                      ))}
+                      {importResult.imported_count === 0 && <p className="text-center text-sm text-slate-400 py-8">No records imported.</p>}
+                   </div>
+                </ScrollArea>
+              </TabsContent>
+
+              {/* SKIPPED TAB */}
+              <TabsContent value="skipped" className="flex-1 flex flex-col min-h-0 mt-2">
+                <div className="flex justify-between items-center px-4 py-2 bg-slate-50 border-y">
+                   <span className="text-xs font-semibold text-slate-500 uppercase">Duplicates / Skipped</span>
+                   <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-red-600 hover:text-red-700" onClick={() => downloadLog(importResult.skipped_summary.records, 'Import_Skipped')}>
+                     <Download size={12} /> Download List
+                   </Button>
+                </div>
+                <ScrollArea className="flex-1">
+                   <div className="p-4 space-y-2">
+                      {importResult.skipped_summary?.records.map((rec: any, i: number) => (
+                        <div key={i} className="flex justify-between items-start p-2 bg-white border rounded-md shadow-sm border-l-4 border-l-red-200">
+                           <div className="flex-1 min-w-0">
+                              <div className="font-medium text-sm truncate">{rec.name || 'Unknown Name'}</div>
+                              <div className="text-xs text-slate-500 truncate" title={JSON.stringify(rec)}>
+                                {rec.email || rec.phone || JSON.stringify(rec).slice(0, 50)}...
+                              </div>
+                           </div>
+                           <div className="text-xs px-2 py-1 bg-red-50 text-red-700 rounded-full flex items-center gap-1">
+                              <AlertCircle size={10} /> Duplicate
+                           </div>
+                        </div>
+                      ))}
+                      {importResult.skipped_summary?.count === 0 && <p className="text-center text-sm text-slate-400 py-8">No records skipped.</p>}
+                   </div>
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
           </div>
         )}
 

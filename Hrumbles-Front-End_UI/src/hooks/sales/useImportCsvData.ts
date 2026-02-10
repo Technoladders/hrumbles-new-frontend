@@ -4,10 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSelector } from 'react-redux';
 
 interface ImportResult {
-    imported: number;
+    imported_count: number;
+    imported_records: any[]; // New field containing success data
     skipped_summary: {
         count: number;
-        records: any[];
+        records: any[]; // Field containing skipped/duplicate data
     }
 }
 
