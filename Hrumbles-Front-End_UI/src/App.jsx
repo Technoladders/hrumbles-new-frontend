@@ -131,6 +131,7 @@ import StatementDetailPage from "./pages/finance/accounts/StatementDetailPage.ts
 
 // Sales Companies and Contacts
 import CompaniesPage from "./pages/sales/CompaniesPage";
+import CompanyIntelligenceSearchPage from "./pages/sales/CompanyIntelligenceSearchPage";
 import CompanyDetail from "./pages/sales/CompanyDetail";
 import CompanyEdit from "./pages/sales/CompanyEdit";
 import ContactsPage from "./pages/sales/ContactsPage";
@@ -579,7 +580,7 @@ const validateCurrentSession = useCallback(async () => {
           <Route path="/sales/dashboard" element={<SalesDashboard />} />
 
 
-              <Route path="/companies" element={<CompaniesPage />} />
+              <Route path="/companies" element={<CompanyIntelligenceSearchPage />} />
               <Route path="/lists/companies/file/:fileId" element={<CompaniesPage />} />
               <Route path="/contacts" element={<TanstackContactsPage />} />
               <Route path="/sales/kanban" element={<KanbanView />} />

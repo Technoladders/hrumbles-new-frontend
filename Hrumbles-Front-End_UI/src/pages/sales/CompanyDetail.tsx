@@ -383,3 +383,4 @@ const CompanyDetail = () => {
 };
 
 export default CompanyDetail;
+// UI

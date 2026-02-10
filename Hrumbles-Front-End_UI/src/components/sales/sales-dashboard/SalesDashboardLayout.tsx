@@ -60,10 +60,25 @@ export const SalesDashboardLayout: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Check if user is admin/superadmin
-  const isAdmin = useMemo(() => {
-    return ['admin', 'organization_superadmin', 'superadmin'].includes(userRole?.name?.toLowerCase() || '');
-  }, [userRole]);
+  console.log("userrole", userRole)
+
+console.log("Full user from Redux:", user);
+console.log("Full userRole from Redux:", userRole);
+console.log("userRole?.name:", userRole?.name);
+
+const isAdmin = useMemo(() => {
+  if (typeof userRole !== 'string') return false;
+
+  const role = userRole
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_');   // handles spaces if they ever appear
+
+  console.log('Normalized role string:', role);
+  console.log('isAdmin:', role === 'organization_superadmin');
+
+  return role === 'organization_superadmin';
+}, [userRole]);
 
   // Get date range filter
   const getDateFilter = useMemo(() => {
@@ -268,6 +283,7 @@ export const SalesDashboardLayout: React.FC = () => {
       return format(date, 'yyyy-MM-dd');
     });
 
+
     const dailyTrend = last7Days.map(date => {
       const dayActivities = activities.filter((a: any) => 
         format(new Date(a.created_at), 'yyyy-MM-dd') === date
@@ -304,6 +320,7 @@ export const SalesDashboardLayout: React.FC = () => {
       activityByType
     };
   }, [activities]);
+    console.log("metrics", metrics)
 
   // Pending tasks
   const pendingTasks = useMemo(() => {
