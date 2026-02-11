@@ -25,6 +25,11 @@ interface ActivityHeatmapProps {
 }
 
 export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ activities, teamMembers }) => {
+
+
+console.log('teamMembers', teamMembers);
+console.log('activities', activities);
+
   // Generate last 14 days
   const dates = useMemo(() => {
     return Array.from({ length: 14 }, (_, i) => {

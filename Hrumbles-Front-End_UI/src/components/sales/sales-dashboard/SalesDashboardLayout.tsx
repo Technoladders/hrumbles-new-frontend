@@ -102,19 +102,32 @@ const isAdmin = useMemo(() => {
   // =====================
 
   // Fetch team members (for admin view)
-  const { data: teamMembers } = useQuery({
-    queryKey: ['team-members', organizationId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('hr_employees')
-        .select('id, first_name, last_name, email, profile_picture_url, role_id, hr_roles(name)')
-        .eq('organization_id', organizationId)
-        .eq('status', 'active');
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!organizationId && isAdmin
-  });
+const { data: teamMembers } = useQuery({
+  // It is good practice to add the filter to the queryKey so it caches separately
+  queryKey: ['team-members', organizationId, 'sales-marketing'], 
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from('hr_employees')
+      .select(`
+        id, 
+        first_name, 
+        last_name, 
+        email, 
+        profile_picture_url, 
+        role_id, 
+        hr_roles(name), 
+        hr_departments!inner(name)
+      `) // <--- Note the !inner here
+      .eq('organization_id', organizationId)
+      .eq('status', 'active')
+      // Filter by the nested relationship column
+      .eq('hr_departments.name', 'Sales & Marketing'); 
+
+    if (error) throw error;
+    return data;
+  },
+  enabled: !!organizationId && isAdmin
+});
 
   // Fetch activities with filters
   const { data: activities, isLoading: activitiesLoading, refetch: refetchActivities } = useQuery({
@@ -128,6 +141,7 @@ const isAdmin = useMemo(() => {
           creator:created_by(id, first_name, last_name, profile_picture_url)
         `)
         .eq('organization_id', organizationId)
+        .neq('type', 'stage_change')
         .order('created_at', { ascending: false });
 
       // Date filter
@@ -299,11 +313,14 @@ const isAdmin = useMemo(() => {
     });
 
     // Activity by type for pie/donut chart
-    const activityByType = Object.entries(activityCounts).map(([type, count]) => ({
-      type,
-      count: count as number,
-      color: getActivityColor(type)
-    }));
+   const activityByType = Object.entries(activityCounts)
+      // FILTER HERE: Exclude 'task' and 'note'
+      .filter(([type]) => type !== 'task' && type !== 'note') 
+      .map(([type, count]) => ({
+        type,
+        count: count as number,
+        color: getActivityColor(type)
+      }));
 
     return {
       total: activities.length,

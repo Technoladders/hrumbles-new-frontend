@@ -64,6 +64,7 @@ import {
   type ApolloCompanySearchFilters,
   type ApolloSearchResponseV2,
 } from "@/services/sales/apolloCompanySearch";
+import { AddToCompanyListModal } from '@/components/sales/company-search/AddToCompanyListModal';
 import { Skeleton } from "@/components/ui/skeleton";
 import PhoneInput, { parsePhoneNumber, isValidPhoneNumber } from 'react-phone-number-input';
 import flags from 'react-phone-number-input/flags';
@@ -234,6 +235,10 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
   // View Mode State
   const [viewMode, setViewMode] = useState<ViewMode>("database");
 
+//   Add List State
+    const [listModalOpen, setListModalOpen] = useState(false);
+  const [selectedCompanyForList, setSelectedCompanyForList] = useState<any>(null);
+
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [selectedOrgs, setSelectedOrgs] = useState<Set<string>>(new Set());
@@ -276,24 +281,34 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
   // ============================================================================
   // Workspace Files Query
   // ============================================================================
-  const { data: workspaceFiles = [] } = useQuery({
-    queryKey: ["workspace-files-for-lists", organizationId],
+  const { data: currentFile } = useQuery({
+    queryKey: ['workspace-file-companies', fileId],
     queryFn: async () => {
+      if (!fileId) return null;
       const { data, error } = await supabase
-        .from("workspace_files")
-        .select("id, name, workspaces(name)")
-        .eq("organization_id", organizationId)
-        .order("name");
+        .from('workspace_files')
+        .select(`id, name, type, workspace_id, workspaces(id, name)`)
+        .eq('id', fileId)
+        .single();
       if (error) throw error;
-      return data || [];
+      return data;
     },
-    enabled: !!organizationId,
+    enabled: !!fileId
   });
+
+  const pageTitle = fileId && currentFile ? currentFile.name : "My Companies";
+
+    // Force database view when in file mode
+  useEffect(() => {
+    if (fileId) {
+        setViewMode("database");
+    }
+  }, [fileId]);
 
   // ============================================================================
   // Database Companies Query
   // ============================================================================
-  const {
+ const {
     data: databaseCompanies,
     isLoading: isLoadingDatabase,
     isFetching: isFetchingDatabase,
@@ -301,11 +316,22 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
   } = useQuery({
     queryKey: ["database-companies", organizationId, dbFilters, dbPage, dbPerPage, fileId],
     queryFn: async () => {
-      let query = supabase
+      let query;
+      
+      // Select string construction based on fileId presence (M:M relationship)
+      const selectString = fileId 
+        ? `*, created_by_employee:hr_employees!companies_created_by_fkey(first_name, last_name), company_workspace_files!inner(file_id)`
+        : `*, created_by_employee:hr_employees!companies_created_by_fkey(first_name, last_name)`;
+
+      query = supabase
         .from("companies")
-        .select(`*, created_by_employee:hr_employees!companies_created_by_fkey(first_name, last_name)`, { count: "exact" })
+        .select(selectString, { count: "exact" })
         .eq("organization_id", organizationId)
         .order("created_at", { ascending: false });
+
+      if (fileId) {
+          query = query.eq('company_workspace_files.file_id', fileId);
+      }
 
       if (dbFilters.search?.trim()) {
         const searchTerm = dbFilters.search.trim();
@@ -323,7 +349,6 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
       else if (dbFilters.isPromoted === false) query = query.neq("status", "Active");
       if (dbFilters.foundedYearMin !== null) query = query.gte("founded_year", dbFilters.foundedYearMin);
       if (dbFilters.foundedYearMax !== null) query = query.lte("founded_year", dbFilters.foundedYearMax);
-      if (fileId) query = query.eq("file_id", fileId);
 
       const from = (dbPage - 1) * dbPerPage;
       query = query.range(from, from + dbPerPage - 1);
@@ -376,6 +401,21 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
       setIsSearching(false);
     }
   }, [apiPerPage, fileId, toast, queryClient]);
+
+    const { data: workspaceFiles = [] } = useQuery({
+    queryKey: ["workspace-files-for-lists", organizationId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("workspace_files")
+        .select("id, name, workspaces(name)")
+        .eq("organization_id", organizationId)
+        .eq("type", "companies") // Ensure we only get company lists
+        .order("name");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!organizationId,
+  });
 
   // ============================================================================
   // Stage Change Mutation
@@ -567,6 +607,77 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
   useEffect(() => {
     if (viewMode === "database" && !isLoadingDatabase) initialLoadDone.current = true;
   }, [viewMode, isLoadingDatabase]);
+
+
+
+  const handleListAdd = async (fileId: string) => {
+    if (!selectedCompanyForList || !fileId) return;
+
+    try {
+      let companyId = selectedCompanyForList.id;
+
+      // Scenario A: Company is from Search (doesn't have a numeric ID in our DB yet)
+      if (viewMode === 'search' && !companyId) {
+        // We need to save the company first
+        const { data: newCompany, error: createError } = await supabase
+          .from('companies')
+          .insert({
+            name: selectedCompanyForList.name,
+            website: selectedCompanyForList.website || selectedCompanyForList.website_url,
+            domain: selectedCompanyForList.domain || selectedCompanyForList.primary_domain,
+            apollo_org_id: selectedCompanyForList.apollo_org_id || selectedCompanyForList.id, // Handle Apollo ID mapping
+            logo_url: selectedCompanyForList.logo_url,
+            industry: selectedCompanyForList.industry,
+            location: selectedCompanyForList.location || [selectedCompanyForList.city, selectedCompanyForList.state, selectedCompanyForList.country].filter(Boolean).join(', '),
+            employee_count: selectedCompanyForList.estimated_num_employees || selectedCompanyForList.employee_count,
+            revenue: selectedCompanyForList.annual_revenue || selectedCompanyForList.revenue,
+            organization_id: organizationId,
+            created_by: currentUserId,
+            stage: 'Identified', // Default stage
+            status: 'Active',
+          })
+          .select('id')
+          .single();
+
+        if (createError) throw createError;
+        companyId = newCompany.id;
+      }
+
+      // Scenario B: Company exists (or was just created) - Link to File
+      if (companyId) {
+        const { error: linkError } = await supabase
+          .from('company_workspace_files')
+          .upsert({ 
+            company_id: companyId, 
+            file_id: fileId, 
+            added_by: currentUserId 
+          }, { 
+            onConflict: 'company_id,file_id' 
+          });
+
+        if (linkError) throw linkError;
+
+        toast({ 
+          title: "Added to List", 
+          description: `${selectedCompanyForList.name} has been added successfully.` 
+        });
+        
+        // Refresh to show status changes if needed
+        queryClient.invalidateQueries({ queryKey: ["database-companies"] });
+      }
+
+    } catch (error: any) {
+      toast({ 
+        title: "Failed to add to list", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    } finally {
+        // Reset selection
+        setListModalOpen(false);
+        setSelectedCompanyForList(null);
+    }
+  };
 
   // ============================================================================
   // Render
@@ -1005,17 +1116,17 @@ const timezoneLookupStr = [displayPrimary, displaySecondary]
                                     {workspaceFiles.length > 0 && (
                                       <>
                                         <DropdownMenuLabel className="text-xs text-slate-500 px-3 py-2">Add to List</DropdownMenuLabel>
-                                        {workspaceFiles.slice(0, 6).map((file: any) => (
-                                          <DropdownMenuItem key={file.id} onClick={async () => {
-                                            if (!company.id) { toast({ title: "Error", description: "Company must be saved first", variant: "destructive" }); return; }
-                                            try {
-                                              await supabase.from("company_workspace_files").upsert({ company_id: company.id, file_id: file.id, added_by: currentUserId }, { onConflict: "company_id,file_id" });
-                                              toast({ title: "Added", description: `Added to ${file.name}` });
-                                            } catch (e: any) { toast({ title: "Failed", description: e.message, variant: "destructive" }); }
-                                          }}>
-                                            <ListPlus className="h-4 w-4 mr-2" /><span className="truncate">{file.name}</span>
-                                          </DropdownMenuItem>
-                                        ))}
+                                       
+                                          <DropdownMenuItem 
+                onClick={() => {
+                setSelectedCompanyForList(company);
+                setListModalOpen(true);
+                }}
+            >
+                <ListPlus className="h-4 w-4 mr-2" /> 
+                Add to List...
+            </DropdownMenuItem>
+                                    
                                         <DropdownMenuSeparator />
                                       </>
                                     )}
@@ -1130,6 +1241,20 @@ const timezoneLookupStr = [displayPrimary, displaySecondary]
         </div>
       </div>
 
+     {/* ADD MODAL AT THE BOTTOM OF THE COMPONENT (Outside the loop) */}
+       {selectedCompanyForList && (
+        <AddToCompanyListModal
+            open={listModalOpen}
+            onOpenChange={(val) => {
+                setListModalOpen(val);
+                if (!val) setSelectedCompanyForList(null);
+            }}
+            onConfirm={handleListAdd}
+            companyName={selectedCompanyForList.name}
+            isFromSearch={viewMode === 'search'}
+        />
+      )}
+
       {/* Organization Details Dialog */}
       <Dialog open={!!viewingOrgDetails} onOpenChange={() => setViewingOrgDetails(null)}>
         <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -1182,3 +1307,5 @@ const timezoneLookupStr = [displayPrimary, displaySecondary]
 };
 
 export default CompanyIntelligenceSearchPage;
+
+// List view table

@@ -30,6 +30,9 @@ const activityLabels: Record<string, string> = {
 };
 
 export const PerformanceChart: React.FC<PerformanceChartProps> = ({ data, title }) => {
+  
+console.log("Performance chart data", data)
+
   const total = data.reduce((sum, item) => sum + item.count, 0);
   
   const CustomTooltip = ({ active, payload }: any) => {

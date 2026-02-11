@@ -581,7 +581,7 @@ const validateCurrentSession = useCallback(async () => {
 
 
               <Route path="/companies" element={<CompanyIntelligenceSearchPage />} />
-              <Route path="/lists/companies/file/:fileId" element={<CompaniesPage />} />
+              <Route path="/lists/companies/file/:fileId" element={<CompanyIntelligenceSearchPage />} />
               <Route path="/contacts" element={<TanstackContactsPage />} />
               <Route path="/sales/kanban" element={<KanbanView />} />
               <Route path="/companies/:id" element={<CompanyDetail />} />
