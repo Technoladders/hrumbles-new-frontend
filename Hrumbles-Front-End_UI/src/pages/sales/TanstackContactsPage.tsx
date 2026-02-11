@@ -300,7 +300,7 @@ export default function TanstackContactsPage() {
   const handleEnrich = async (contactId: string, apolloId: string, type: 'email' | 'phone') => {
     try {
       toast({ title: "Request Sent", description: "Verifying data assets..." });
-      await supabase.functions.invoke('enrich-contact', { 
+      await supabase.functions.invoke('enrich-contact-master', { 
         body: { contactId, apolloPersonId: apolloId, revealType: type } 
       });
       queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
