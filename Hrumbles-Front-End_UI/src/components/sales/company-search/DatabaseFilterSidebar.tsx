@@ -322,14 +322,14 @@ export const DatabaseFilterSidebar: React.FC<DatabaseFilterSidebarProps> = ({
               <div className="space-y-2">
                 <FilterCheckbox
                   id="has-apollo"
-                  label="Has Apollo Data"
+                  label="Has Cloud Data"
                   count={stats?.hasApolloData || 0}
                   checked={filters.hasApolloId === true}
                   onChange={(checked) => updateFilter("hasApolloId", checked ? true : null)}
                 />
                 <FilterCheckbox
                   id="no-apollo"
-                  label="No Apollo Data"
+                  label="No Cloud Data"
                   count={(stats?.total || 0) - (stats?.hasApolloData || 0)}
                   checked={filters.hasApolloId === false}
                   onChange={(checked) => updateFilter("hasApolloId", checked ? false : null)}

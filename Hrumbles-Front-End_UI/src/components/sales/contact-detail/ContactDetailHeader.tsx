@@ -165,12 +165,7 @@ const companyWebsite =
             size="sm" 
             onClick={onEnrich} 
             disabled={isEnriching} 
-            className={cn(
-              "h-9 px-4 text-sm font-semibold",
-              "bg-[#FFDE59] hover:bg-[#FFD633] text-gray-900",
-              "border border-[#E5C84F] shadow-sm",
-              "transition-all duration-150"
-            )}
+            className="h-10 px-6 font-semibold text-white whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200 flex items-center gap-2"
           >
             {isEnriching ? (
               <>

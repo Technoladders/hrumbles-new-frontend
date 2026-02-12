@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -34,7 +35,9 @@ import {
   User,
   Clock,
   Bell,
-  Linkedin
+  Linkedin,
+  Search,
+  UserPlus,
 } from 'lucide-react';
 import { HubSpotRichTextEditor, HubSpotEditorRef } from '../editor/HubSpotRichTextEditor';
 import { cn } from '@/lib/utils';
@@ -50,6 +53,7 @@ import '../editor/hubspot-editor.css';
 export type ActivityType = 'call' | 'email' | 'note' | 'task' | 'meeting' | 'linkedin';
 
 export interface ActivityLogData {
+  id?: string;
   type: ActivityType;
   title: string;
   description: string;
@@ -68,12 +72,20 @@ interface BaseDialogProps {
   contact: any;
   onSubmit: (data: ActivityLogData) => Promise<void>;
   isSubmitting?: boolean;
+  teamMembers?: any[];
+  activity?: any;
+}
+
+interface DashboardTaskDialogProps extends Omit<BaseDialogProps, 'contact'> {
+  contact?: any; // optional — can be pre-selected
+  task?: any; // for edit mode
+  teamMembers?: any[];
+  contacts?: any[]; // full list for association
 }
 
 // =====================
 // CONSTANTS
 // =====================
-
 const CALL_OUTCOMES = [
   { value: 'connected', label: 'Connected' },
   { value: 'busy', label: 'Busy' },
@@ -139,7 +151,6 @@ const REMINDER_OPTIONS = [
   { value: '1440', label: '1 day before' },
 ];
 
-// LinkedIn specific constants
 const LINKEDIN_ACTIVITY_TYPES = [
   { value: 'connection_request', label: 'Connection Request Sent' },
   { value: 'connection_accepted', label: 'Connection Accepted' },
@@ -165,63 +176,424 @@ const LINKEDIN_OUTCOMES = [
 // =====================
 // HELPER FUNCTIONS
 // =====================
-
-const getInitials = (name: string) => {
-  return name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
-};
+const getInitials = (name: string) =>
+  name?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || '?';
 
 const getActivityConfig = (type: ActivityType) => {
   const configs = {
-    call: { 
-      icon: Phone, 
-      color: 'text-amber-600', 
+    call: {
+      icon: Phone,
+      color: 'text-amber-600',
       bg: 'bg-amber-100',
       headerBg: 'bg-slate-700',
       buttonBg: 'bg-amber-500 hover:bg-amber-600',
-      title: 'Log Call'
+      title: 'Log Call',
     },
-    email: { 
-      icon: Mail, 
-      color: 'text-blue-600', 
+    email: {
+      icon: Mail,
+      color: 'text-blue-600',
       bg: 'bg-blue-100',
       headerBg: 'bg-slate-700',
       buttonBg: 'bg-blue-600 hover:bg-blue-700',
-      title: 'Log Email'
+      title: 'Log Email',
     },
-    note: { 
-      icon: StickyNote, 
-      color: 'text-purple-600', 
+    note: {
+      icon: StickyNote,
+      color: 'text-purple-600',
       bg: 'bg-purple-100',
       headerBg: 'bg-slate-700',
       buttonBg: 'bg-purple-600 hover:bg-purple-700',
-      title: 'Create Note'
+      title: 'Create Note',
     },
-    task: { 
-      icon: CheckSquare, 
-      color: 'text-green-600', 
+    task: {
+      icon: CheckSquare,
+      color: 'text-green-600',
       bg: 'bg-green-100',
       headerBg: 'bg-slate-700',
       buttonBg: 'bg-green-600 hover:bg-green-700',
-      title: 'Create Task'
+      title: 'Create Task',
     },
-    meeting: { 
-      icon: Calendar, 
-      color: 'text-indigo-600', 
+    meeting: {
+      icon: Calendar,
+      color: 'text-indigo-600',
       bg: 'bg-indigo-100',
       headerBg: 'bg-slate-700',
       buttonBg: 'bg-indigo-600 hover:bg-indigo-700',
-      title: 'Log Meeting'
+      title: 'Log Meeting',
     },
-    linkedin: { 
-      icon: Linkedin, 
-      color: 'text-[#0A66C2]', 
+    linkedin: {
+      icon: Linkedin,
+      color: 'text-[#0A66C2]',
       bg: 'bg-[#0A66C2]/10',
       headerBg: 'bg-[#0A66C2]',
       buttonBg: 'bg-[#0A66C2] hover:bg-[#004182]',
-      title: 'Log LinkedIn Activity'
+      title: 'Log LinkedIn Activity',
     },
   };
   return configs[type];
+};
+
+// =====================
+// DASHBOARD TASK DIALOG (NEW)
+// =====================
+export const DashboardTaskDialog: React.FC<DashboardTaskDialogProps> = ({
+  open,
+  onOpenChange,
+  task,
+  contact,
+  teamMembers = [],
+  contacts = [],
+  onSubmit,
+  isSubmitting = false
+}) => {
+  const editorRef = useRef<HubSpotEditorRef>(null);
+  
+  // State
+  const [title, setTitle] = useState('');
+  const [taskType, setTaskType] = useState('to-do');
+  const [priority, setPriority] = useState('none');
+  const [dueDate, setDueDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [dueTime, setDueTime] = useState('09:00');
+  const [reminder, setReminder] = useState('none');
+  
+  // Selection State
+  const [selectedContactId, setSelectedContactId] = useState<string>('');
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>('');
+  const [contactSearch, setContactSearch] = useState('');
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+
+  // UI State
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const config = getActivityConfig('task');
+
+  // Initialize form when opening
+  useEffect(() => {
+    if (open) {
+      if (task) {
+        setTitle(task.title || '');
+        setTaskType(task.task_type || 'to-do');
+        setPriority(task.priority || 'none');
+        setDueDate(task.due_date || format(new Date(), 'yyyy-MM-dd'));
+        setDueTime(task.due_time || '09:00');
+        setReminder(task.metadata?.reminder || 'none');
+        setSelectedContactId(task.contact_id || '');
+        setSelectedAssigneeId(task.assigned_to || '');
+        // Note: Editor content population would need to happen after mount, 
+        // usually passed as initialContent prop to editor
+      } else {
+        // Defaults
+        setTitle('');
+        setTaskType('to-do');
+        setPriority('none');
+        setDueDate(format(new Date(), 'yyyy-MM-dd'));
+        setDueTime('09:00');
+        setReminder('none');
+        setSelectedContactId(contact?.id || ''); // Pre-select if contact passed
+        setSelectedAssigneeId('');
+      }
+    }
+  }, [open, task, contact]);
+
+  // Handle Submit
+  const handleSubmit = async () => {
+    if (!title.trim()) return;
+
+    const html = editorRef.current?.getHTML() || '';
+    const text = editorRef.current?.getText() || '';
+
+    const data: ActivityLogData = {
+      type: 'task',
+      title,
+      description: text,
+      descriptionHtml: html,
+      metadata: {
+        taskType,
+        priority,
+        dueDate,
+        dueTime,
+        reminder,
+        assignedTo: selectedAssigneeId,
+        contactId: selectedContactId,
+        status: 'pending'
+      }
+    };
+
+    await onSubmit(data);
+    onOpenChange(false);
+  };
+
+  // Filtering
+  const filteredContacts = contacts.filter(c => 
+    c.name?.toLowerCase().includes(contactSearch.toLowerCase()) || 
+    c.email?.toLowerCase().includes(contactSearch.toLowerCase())
+  ).slice(0, 20);
+
+  const filteredTeam = teamMembers.filter(m => 
+    `${m.first_name} ${m.last_name}`.toLowerCase().includes(assigneeSearch.toLowerCase()) ||
+    m.email?.toLowerCase().includes(assigneeSearch.toLowerCase())
+  );
+
+  const selectedContact = contacts.find(c => c.id === selectedContactId);
+  const selectedAssignee = teamMembers.find(m => m.id === selectedAssigneeId);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent 
+        className={cn(
+          "p-0 gap-0 overflow-hidden flex flex-col transition-all duration-200",
+          isFullscreen 
+            ? "w-screen h-screen max-w-none rounded-none" 
+            : "sm:max-w-[650px] max-h-[85vh] rounded-lg", // Constrained height for responsiveness
+          isMinimized && "h-auto"
+        )}
+        onInteractOutside={(e) => e.preventDefault()} // Prevent closing when interacting with popovers
+      >
+        {/* Header - Fixed */}
+        <DialogHeader 
+          title={task ? "Edit Task" : "Create Task"}
+          icon={<config.icon size={16} />}
+          bgClass={config.headerBg}
+          isMinimized={isMinimized}
+          isFullscreen={isFullscreen}
+          onMinimize={() => setIsMinimized(!isMinimized)}
+          onFullscreen={() => setIsFullscreen(!isFullscreen)}
+          onClose={() => onOpenChange(false)}
+        />
+
+        {!isMinimized && (
+          <>
+            {/* Scrollable Content Area */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="p-5 space-y-4">
+                
+                {/* Title */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-gray-500 uppercase">Task Title *</Label>
+                  <Input 
+                    placeholder="Enter task title..." 
+                    value={title} 
+                    onChange={(e) => setTitle(e.target.value)} 
+                    className="font-medium"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Association & Assignment Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Assignee Selection */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1">
+                      <UserPlus size={12} /> Assigned To
+                    </Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left h-10 px-3 border-dashed border-gray-300">
+                          {selectedAssignee ? (
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <Avatar className="h-5 w-5">
+                                <AvatarImage src={selectedAssignee.profile_picture_url} />
+                                <AvatarFallback className="text-[9px] bg-blue-100 text-blue-700">
+                                  {getInitials(`${selectedAssignee.first_name} ${selectedAssignee.last_name}`)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="truncate text-sm">{selectedAssignee.first_name} {selectedAssignee.last_name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-sm">Select assignee...</span>
+                          )}
+                          <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[280px] p-0" align="start">
+                        <div className="p-2 border-b">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-gray-500" />
+                            <Input 
+                              placeholder="Search team..." 
+                              className="h-8 pl-7 text-xs" 
+                              value={assigneeSearch}
+                              onChange={(e) => setAssigneeSearch(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <ScrollArea className="h-[200px]">
+                          <div className="p-1">
+                            {filteredTeam.map(member => (
+                              <DropdownMenuItem 
+                                key={member.id} 
+                                onClick={() => setSelectedAssigneeId(member.id)}
+                                className="flex items-center gap-2 cursor-pointer"
+                              >
+                                <Avatar className="h-6 w-6">
+                                  <AvatarImage src={member.profile_picture_url} />
+                                  <AvatarFallback className="text-[10px]">{getInitials(member.first_name)}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex flex-col overflow-hidden">
+                                  <span className="truncate font-medium">{member.first_name} {member.last_name}</span>
+                                  <span className="truncate text-xs text-gray-500">{member.email}</span>
+                                </div>
+                                {selectedAssigneeId === member.id && <CheckSquare size={14} className="ml-auto text-green-600" />}
+                              </DropdownMenuItem>
+                            ))}
+                            {filteredTeam.length === 0 && (
+                              <div className="p-4 text-center text-xs text-gray-500">No team members found</div>
+                            )}
+                          </div>
+                        </ScrollArea>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  {/* Contact Selection */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1">
+                      <User size={12} /> Related Contact
+                    </Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left h-10 px-3 border-dashed border-gray-300">
+                           {selectedContact ? (
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <Avatar className="h-5 w-5">
+                                <AvatarImage src={selectedContact.photo_url} />
+                                <AvatarFallback className="text-[9px] bg-green-100 text-green-700">
+                                  {getInitials(selectedContact.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="truncate text-sm">{selectedContact.name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-sm">Search contact...</span>
+                          )}
+                          <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[280px] p-0" align="start">
+                        <div className="p-2 border-b">
+                           <div className="relative">
+                            <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-gray-500" />
+                            <Input 
+                              placeholder="Search contacts..." 
+                              className="h-8 pl-7 text-xs" 
+                              value={contactSearch}
+                              onChange={(e) => setContactSearch(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <ScrollArea className="h-[200px]">
+                          <div className="p-1">
+                            {filteredContacts.map(c => (
+                              <DropdownMenuItem 
+                                key={c.id} 
+                                onClick={() => setSelectedContactId(c.id)}
+                                className="flex items-center gap-2 cursor-pointer"
+                              >
+                                <Avatar className="h-6 w-6">
+                                  <AvatarImage src={c.photo_url} />
+                                  <AvatarFallback className="text-[10px]">{getInitials(c.name)}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex flex-col overflow-hidden">
+                                  <span className="truncate font-medium">{c.name}</span>
+                                  <span className="truncate text-xs text-gray-500">{c.email}</span>
+                                </div>
+                                {selectedContactId === c.id && <CheckSquare size={14} className="ml-auto text-green-600" />}
+                              </DropdownMenuItem>
+                            ))}
+                            {filteredContacts.length === 0 && (
+                               <div className="p-4 text-center text-xs text-gray-500">No contacts found</div>
+                            )}
+                          </div>
+                        </ScrollArea>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+
+                {/* Date & Time Row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField label="Due Date">
+                    <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="h-9 text-sm" />
+                  </FormField>
+                  <FormField label="Due Time">
+                    <Input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} className="h-9 text-sm" />
+                  </FormField>
+                </div>
+
+                {/* Metadata Row */}
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField label="Task Type">
+                    <Select value={taskType} onValueChange={setTaskType}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {TASK_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                  <FormField label="Priority">
+                    <Select value={priority} onValueChange={setPriority}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PRIORITIES.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                  <FormField label="Reminder" icon={<Bell size={12} />}>
+                    <Select value={reminder} onValueChange={setReminder}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {REMINDER_OPTIONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                </div>
+
+                {/* Rich Text Editor - Scrollable handled by parent */}
+                <div className="pt-2">
+                  <Label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">Notes</Label>
+                  <div className="border rounded-md shadow-sm">
+                    <HubSpotRichTextEditor
+                      ref={editorRef}
+                      placeholder="Add task details, context, or instructions..."
+                      minHeight="150px"
+                      initialContent={task?.description_html || task?.description || ''}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer - Fixed */}
+            <div className="px-5 py-3 bg-gray-50 border-t border-gray-200 mt-auto">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-gray-500">
+                   {selectedContact ? (
+                     <span>Linked to: <strong>{selectedContact.name}</strong></span>
+                   ) : (
+                     <span className="italic">No contact linked</span>
+                   )}
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={isSubmitting || !title.trim()}
+                    className={cn("px-6", config.buttonBg)}
+                  >
+                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {task ? 'Update Task' : 'Create Task'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 };
 
 // =====================
@@ -229,11 +601,7 @@ const getActivityConfig = (type: ActivityType) => {
 // =====================
 
 export const LogCallDialog: React.FC<BaseDialogProps> = ({
-  open,
-  onOpenChange,
-  contact,
-  onSubmit,
-  isSubmitting = false
+  open, onOpenChange, contact, onSubmit, isSubmitting = false, activity
 }) => {
   const editorRef = useRef<HubSpotEditorRef>(null);
   const [outcome, setOutcome] = useState('');
@@ -249,22 +617,26 @@ export const LogCallDialog: React.FC<BaseDialogProps> = ({
 
   const config = getActivityConfig('call');
 
-  const resetForm = useCallback(() => {
-    setOutcome('');
-    setDirection('outbound');
-    setDuration('');
-    setActivityDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-    setCreateFollowUp(false);
-    setFollowUpTaskType('to-do');
-    setFollowUpDays('3');
-    setHasContent(false);
-    editorRef.current?.clear();
-  }, []);
-
-  const handleClose = useCallback(() => {
-    resetForm();
-    onOpenChange(false);
-  }, [resetForm, onOpenChange]);
+  // Load data for edit
+  useEffect(() => {
+    if (open) {
+      if (activity) {
+        setOutcome(activity.outcome || activity.metadata?.outcome || '');
+        setDirection(activity.direction || activity.metadata?.direction || 'outbound');
+        setDuration(activity.duration_minutes?.toString() || activity.metadata?.duration || '');
+        const date = activity.activity_date || activity.created_at;
+        setActivityDate(date ? format(new Date(date), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+        // Note: Editor content should be set via initialContent prop
+      } else {
+        setOutcome('');
+        setDirection('outbound');
+        setDuration('');
+        setActivityDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+        setCreateFollowUp(false);
+        editorRef.current?.clear();
+      }
+    }
+  }, [open, activity]);
 
   const handleSubmit = useCallback(async () => {
     const html = editorRef.current?.getHTML() || '';
@@ -273,16 +645,12 @@ export const LogCallDialog: React.FC<BaseDialogProps> = ({
     if (!text.trim()) return;
 
     const data: ActivityLogData = {
+      id: activity?.id,
       type: 'call',
       title: `Call: ${CALL_OUTCOMES.find(o => o.value === outcome)?.label || 'Logged'}`,
       description: text,
       descriptionHtml: html,
-      metadata: {
-        outcome,
-        direction,
-        duration,
-        activityDate,
-      }
+      metadata: { outcome, direction, duration, activityDate }
     };
 
     if (createFollowUp) {
@@ -295,104 +663,69 @@ export const LogCallDialog: React.FC<BaseDialogProps> = ({
     }
 
     await onSubmit(data);
-    handleClose();
-  }, [outcome, direction, duration, activityDate, createFollowUp, followUpTaskType, followUpDays, onSubmit, handleClose]);
+    onOpenChange(false);
+  }, [outcome, direction, duration, activityDate, createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent 
-        className={cn(
-          "p-0 gap-0 overflow-hidden",
-          isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[620px] rounded-lg",
-          isMinimized && "h-auto"
-        )}
-      >
-        {/* Header */}
+      <DialogContent className={cn("p-0 gap-0 overflow-hidden flex flex-col transition-all duration-200", isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[620px] max-h-[85vh] rounded-lg", isMinimized && "h-auto")}>
         <DialogHeader 
-          title={config.title}
+          title={activity ? "Edit Call Log" : config.title}
           icon={<config.icon size={16} />}
           bgClass={config.headerBg}
-          isMinimized={isMinimized}
-          isFullscreen={isFullscreen}
-          onMinimize={() => setIsMinimized(!isMinimized)}
-          onFullscreen={() => setIsFullscreen(!isFullscreen)}
-          onClose={handleClose}
+          isMinimized={isMinimized} isFullscreen={isFullscreen}
+          onMinimize={() => setIsMinimized(!isMinimized)} onFullscreen={() => setIsFullscreen(!isFullscreen)} onClose={() => onOpenChange(false)}
         />
 
         {!isMinimized && (
           <>
-            {/* Form Fields */}
-            <div className="px-4 py-4 bg-white border-b border-gray-200 space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <FormField label="Contacted">
-                  <ContactSelector contact={contact} />
-                </FormField>
-                <FormField label="Call Outcome">
-                  <Select value={outcome} onValueChange={setOutcome}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select outcome" /></SelectTrigger>
-                    <SelectContent>
-                      {CALL_OUTCOMES.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-                <FormField label="Call Direction">
-                  <Select value={direction} onValueChange={setDirection}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {CALL_DIRECTIONS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </FormField>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="px-4 py-4 bg-white border-b border-gray-200 space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField label="Contacted"><ContactSelector contact={contact} /></FormField>
+                  <FormField label="Call Outcome">
+                    <Select value={outcome} onValueChange={setOutcome}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select outcome" /></SelectTrigger>
+                      <SelectContent>{CALL_OUTCOMES.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </FormField>
+                  <FormField label="Call Direction">
+                    <Select value={direction} onValueChange={setDirection}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>{CALL_DIRECTIONS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </FormField>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField label="Activity Date" icon={<Calendar size={12} />}><Input type="datetime-local" value={activityDate} onChange={(e) => setActivityDate(e.target.value)} className="h-9 text-sm" /></FormField>
+                  <FormField label="Duration" icon={<Clock size={12} />}>
+                    <Select value={duration} onValueChange={setDuration}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select duration" /></SelectTrigger>
+                      <SelectContent>{DURATIONS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </FormField>
+                </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormField label="Activity Date" icon={<Calendar size={12} />}>
-                  <Input type="datetime-local" value={activityDate} onChange={(e) => setActivityDate(e.target.value)} className="h-9 text-sm" />
-                </FormField>
-                <FormField label="Duration" icon={<Clock size={12} />}>
-                  <Select value={duration} onValueChange={setDuration}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select duration" /></SelectTrigger>
-                    <SelectContent>
-                      {DURATIONS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </FormField>
+              <div className="px-4 py-3 bg-gray-50">
+                <HubSpotRichTextEditor
+                  ref={editorRef}
+                  placeholder="Start typing to log a call..."
+                  initialContent={activity?.description_html || activity?.description || ''}
+                  onChange={(html, text) => setHasContent(text.trim().length > 0)}
+                  minHeight="120px"
+                />
               </div>
             </div>
-
-            {/* Editor */}
-            <div className="px-4 py-3 bg-gray-50">
-              <HubSpotRichTextEditor
-                ref={editorRef}
-                placeholder="Start typing to log a call..."
-                onChange={(html, text) => setHasContent(text.trim().length > 0)}
-                minHeight="120px"
-              />
-            </div>
-
-            {/* Footer */}
             <DialogFooter
               contact={contact}
-              createFollowUp={createFollowUp}
-              setCreateFollowUp={setCreateFollowUp}
-              followUpTaskType={followUpTaskType}
-              setFollowUpTaskType={setFollowUpTaskType}
-              followUpDays={followUpDays}
-              setFollowUpDays={setFollowUpDays}
-              onSubmit={handleSubmit}
-              isSubmitting={isSubmitting}
-              isDisabled={!hasContent}
-              buttonText="Log call"
+              createFollowUp={createFollowUp} setCreateFollowUp={setCreateFollowUp}
+              followUpTaskType={followUpTaskType} setFollowUpTaskType={setFollowUpTaskType}
+              followUpDays={followUpDays} setFollowUpDays={setFollowUpDays}
+              onSubmit={handleSubmit} isSubmitting={isSubmitting} isDisabled={!hasContent && !activity} // Allow edit if content exists
+              buttonText={activity ? "Update call" : "Log call"}
               buttonClass={config.buttonBg}
             />
           </>
-        )}
-
-        {isMinimized && (
-          <div className="px-4 py-2 bg-white flex items-center justify-between">
-            <span className="text-sm text-gray-600">Call with {contact?.name}</span>
-            <Badge variant="secondary" className="text-xs">Draft</Badge>
-          </div>
         )}
       </DialogContent>
     </Dialog>
@@ -404,11 +737,7 @@ export const LogCallDialog: React.FC<BaseDialogProps> = ({
 // =====================
 
 export const LogEmailDialog: React.FC<BaseDialogProps> = ({
-  open,
-  onOpenChange,
-  contact,
-  onSubmit,
-  isSubmitting = false
+  open, onOpenChange, contact, onSubmit, isSubmitting = false, activity
 }) => {
   const editorRef = useRef<HubSpotEditorRef>(null);
   const [subject, setSubject] = useState('');
@@ -422,20 +751,20 @@ export const LogEmailDialog: React.FC<BaseDialogProps> = ({
 
   const config = getActivityConfig('email');
 
-  const resetForm = useCallback(() => {
-    setSubject('');
-    setActivityDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-    setCreateFollowUp(false);
-    setFollowUpTaskType('to-do');
-    setFollowUpDays('3');
-    setHasContent(false);
-    editorRef.current?.clear();
-  }, []);
-
-  const handleClose = useCallback(() => {
-    resetForm();
-    onOpenChange(false);
-  }, [resetForm, onOpenChange]);
+  useEffect(() => {
+    if (open) {
+      if (activity) {
+        setSubject(activity.title || activity.metadata?.subject || '');
+        const date = activity.activity_date || activity.created_at;
+        setActivityDate(date ? format(new Date(date), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+      } else {
+        setSubject('');
+        setActivityDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+        setCreateFollowUp(false);
+        editorRef.current?.clear();
+      }
+    }
+  }, [open, activity]);
 
   const handleSubmit = useCallback(async () => {
     const html = editorRef.current?.getHTML() || '';
@@ -444,14 +773,12 @@ export const LogEmailDialog: React.FC<BaseDialogProps> = ({
     if (!subject.trim()) return;
 
     const data: ActivityLogData = {
+      id: activity?.id,
       type: 'email',
       title: subject,
       description: text,
       descriptionHtml: html,
-      metadata: {
-        subject,
-        activityDate,
-      }
+      metadata: { subject, activityDate }
     };
 
     if (createFollowUp) {
@@ -464,64 +791,46 @@ export const LogEmailDialog: React.FC<BaseDialogProps> = ({
     }
 
     await onSubmit(data);
-    handleClose();
-  }, [subject, activityDate, createFollowUp, followUpTaskType, followUpDays, onSubmit, handleClose]);
+    onOpenChange(false);
+  }, [subject, activityDate, createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn(
-        "p-0 gap-0 overflow-hidden",
-        isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[620px] rounded-lg",
-        isMinimized && "h-auto"
-      )}>
+      <DialogContent className={cn("p-0 gap-0 overflow-hidden flex flex-col transition-all duration-200", isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[620px] max-h-[85vh] rounded-lg", isMinimized && "h-auto")}>
         <DialogHeader 
-          title={config.title}
-          icon={<config.icon size={16} />}
-          bgClass={config.headerBg}
-          isMinimized={isMinimized}
-          isFullscreen={isFullscreen}
-          onMinimize={() => setIsMinimized(!isMinimized)}
-          onFullscreen={() => setIsFullscreen(!isFullscreen)}
-          onClose={handleClose}
+          title={activity ? "Edit Email Log" : config.title}
+          icon={<config.icon size={16} />} bgClass={config.headerBg}
+          isMinimized={isMinimized} isFullscreen={isFullscreen}
+          onMinimize={() => setIsMinimized(!isMinimized)} onFullscreen={() => setIsFullscreen(!isFullscreen)} onClose={() => onOpenChange(false)}
         />
 
         {!isMinimized && (
           <>
-            <div className="px-4 py-4 bg-white border-b border-gray-200 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <FormField label="To">
-                  <ContactSelector contact={contact} />
-                </FormField>
-                <FormField label="Activity Date" icon={<Calendar size={12} />}>
-                  <Input type="datetime-local" value={activityDate} onChange={(e) => setActivityDate(e.target.value)} className="h-9 text-sm" />
-                </FormField>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="px-4 py-4 bg-white border-b border-gray-200 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField label="To"><ContactSelector contact={contact} /></FormField>
+                  <FormField label="Activity Date" icon={<Calendar size={12} />}><Input type="datetime-local" value={activityDate} onChange={(e) => setActivityDate(e.target.value)} className="h-9 text-sm" /></FormField>
+                </div>
+                <FormField label="Subject"><Input placeholder="Email subject..." value={subject} onChange={(e) => setSubject(e.target.value)} className="h-9 text-sm" /></FormField>
               </div>
-              <FormField label="Subject">
-                <Input placeholder="Email subject..." value={subject} onChange={(e) => setSubject(e.target.value)} className="h-9 text-sm" />
-              </FormField>
+              <div className="px-4 py-3 bg-gray-50">
+                <HubSpotRichTextEditor
+                  ref={editorRef}
+                  placeholder="Enter email content..."
+                  initialContent={activity?.description_html || activity?.description || ''}
+                  onChange={(html, text) => setHasContent(text.trim().length > 0)}
+                  minHeight="150px"
+                />
+              </div>
             </div>
-
-            <div className="px-4 py-3 bg-gray-50">
-              <HubSpotRichTextEditor
-                ref={editorRef}
-                placeholder="Enter email content..."
-                onChange={(html, text) => setHasContent(text.trim().length > 0)}
-                minHeight="150px"
-              />
-            </div>
-
             <DialogFooter
               contact={contact}
-              createFollowUp={createFollowUp}
-              setCreateFollowUp={setCreateFollowUp}
-              followUpTaskType={followUpTaskType}
-              setFollowUpTaskType={setFollowUpTaskType}
-              followUpDays={followUpDays}
-              setFollowUpDays={setFollowUpDays}
-              onSubmit={handleSubmit}
-              isSubmitting={isSubmitting}
-              isDisabled={!subject.trim()}
-              buttonText="Log email"
+              createFollowUp={createFollowUp} setCreateFollowUp={setCreateFollowUp}
+              followUpTaskType={followUpTaskType} setFollowUpTaskType={setFollowUpTaskType}
+              followUpDays={followUpDays} setFollowUpDays={setFollowUpDays}
+              onSubmit={handleSubmit} isSubmitting={isSubmitting} isDisabled={!subject.trim()}
+              buttonText={activity ? "Update email" : "Log email"}
               buttonClass={config.buttonBg}
             />
           </>
@@ -536,11 +845,7 @@ export const LogEmailDialog: React.FC<BaseDialogProps> = ({
 // =====================
 
 export const CreateNoteDialog: React.FC<BaseDialogProps> = ({
-  open,
-  onOpenChange,
-  contact,
-  onSubmit,
-  isSubmitting = false
+  open, onOpenChange, contact, onSubmit, isSubmitting = false, activity
 }) => {
   const editorRef = useRef<HubSpotEditorRef>(null);
   const [createFollowUp, setCreateFollowUp] = useState(false);
@@ -552,19 +857,6 @@ export const CreateNoteDialog: React.FC<BaseDialogProps> = ({
 
   const config = getActivityConfig('note');
 
-  const resetForm = useCallback(() => {
-    setCreateFollowUp(false);
-    setFollowUpTaskType('to-do');
-    setFollowUpDays('3');
-    setHasContent(false);
-    editorRef.current?.clear();
-  }, []);
-
-  const handleClose = useCallback(() => {
-    resetForm();
-    onOpenChange(false);
-  }, [resetForm, onOpenChange]);
-
   const handleSubmit = useCallback(async () => {
     const html = editorRef.current?.getHTML() || '';
     const text = editorRef.current?.getText() || '';
@@ -572,6 +864,7 @@ export const CreateNoteDialog: React.FC<BaseDialogProps> = ({
     if (!text.trim()) return;
 
     const data: ActivityLogData = {
+      id: activity?.id,
       type: 'note',
       title: 'Note',
       description: text,
@@ -589,57 +882,42 @@ export const CreateNoteDialog: React.FC<BaseDialogProps> = ({
     }
 
     await onSubmit(data);
-    handleClose();
-  }, [createFollowUp, followUpTaskType, followUpDays, onSubmit, handleClose]);
+    onOpenChange(false);
+  }, [createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn(
-        "p-0 gap-0 overflow-hidden",
-        isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[620px] rounded-lg",
-        isMinimized && "h-auto"
-      )}>
+      <DialogContent className={cn("p-0 gap-0 overflow-hidden flex flex-col transition-all duration-200", isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[620px] max-h-[85vh] rounded-lg", isMinimized && "h-auto")}>
         <DialogHeader 
-          title={config.title}
-          icon={<config.icon size={16} />}
-          bgClass={config.headerBg}
-          isMinimized={isMinimized}
-          isFullscreen={isFullscreen}
-          onMinimize={() => setIsMinimized(!isMinimized)}
-          onFullscreen={() => setIsFullscreen(!isFullscreen)}
-          onClose={handleClose}
+          title={activity ? "Edit Note" : config.title}
+          icon={<config.icon size={16} />} bgClass={config.headerBg}
+          isMinimized={isMinimized} isFullscreen={isFullscreen}
+          onMinimize={() => setIsMinimized(!isMinimized)} onFullscreen={() => setIsFullscreen(!isFullscreen)} onClose={() => onOpenChange(false)}
         />
 
         {!isMinimized && (
           <>
-            <div className="px-4 py-3 bg-white border-b border-gray-200">
-              <div className="text-sm">
-                <span className="text-gray-500">For: </span>
-                <span className="font-medium text-gray-900">{contact?.name}</span>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="px-4 py-3 bg-white border-b border-gray-200">
+                <div className="text-sm"><span className="text-gray-500">For: </span><span className="font-medium text-gray-900">{contact?.name}</span></div>
+              </div>
+              <div className="px-4 py-3 bg-gray-50">
+                <HubSpotRichTextEditor
+                  ref={editorRef}
+                  placeholder="Write your note here..."
+                  initialContent={activity?.description_html || activity?.description || ''}
+                  onChange={(html, text) => setHasContent(text.trim().length > 0)}
+                  minHeight="180px"
+                />
               </div>
             </div>
-
-            <div className="px-4 py-3 bg-gray-50">
-              <HubSpotRichTextEditor
-                ref={editorRef}
-                placeholder="Write your note here..."
-                onChange={(html, text) => setHasContent(text.trim().length > 0)}
-                minHeight="180px"
-              />
-            </div>
-
             <DialogFooter
               contact={contact}
-              createFollowUp={createFollowUp}
-              setCreateFollowUp={setCreateFollowUp}
-              followUpTaskType={followUpTaskType}
-              setFollowUpTaskType={setFollowUpTaskType}
-              followUpDays={followUpDays}
-              setFollowUpDays={setFollowUpDays}
-              onSubmit={handleSubmit}
-              isSubmitting={isSubmitting}
-              isDisabled={!hasContent}
-              buttonText="Create note"
+              createFollowUp={createFollowUp} setCreateFollowUp={setCreateFollowUp}
+              followUpTaskType={followUpTaskType} setFollowUpTaskType={setFollowUpTaskType}
+              followUpDays={followUpDays} setFollowUpDays={setFollowUpDays}
+              onSubmit={handleSubmit} isSubmitting={isSubmitting} isDisabled={!hasContent && !activity}
+              buttonText={activity ? "Update note" : "Create note"}
               buttonClass={config.buttonBg}
             />
           </>
@@ -654,11 +932,7 @@ export const CreateNoteDialog: React.FC<BaseDialogProps> = ({
 // =====================
 
 export const CreateTaskDialog: React.FC<BaseDialogProps> = ({
-  open,
-  onOpenChange,
-  contact,
-  onSubmit,
-  isSubmitting = false
+  open, onOpenChange, contact, onSubmit, isSubmitting = false, teamMembers = [], activity
 }) => {
   const editorRef = useRef<HubSpotEditorRef>(null);
   const [title, setTitle] = useState('');
@@ -667,25 +941,35 @@ export const CreateTaskDialog: React.FC<BaseDialogProps> = ({
   const [dueDate, setDueDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [dueTime, setDueTime] = useState('09:00');
   const [reminder, setReminder] = useState('none');
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>('');
+  const [assigneeSearch, setAssigneeSearch] = useState('');
   const [isMinimized, setIsMinimized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const config = getActivityConfig('task');
 
-  const resetForm = useCallback(() => {
-    setTitle('');
-    setTaskType('to-do');
-    setPriority('none');
-    setDueDate(format(new Date(), 'yyyy-MM-dd'));
-    setDueTime('09:00');
-    setReminder('none');
-    editorRef.current?.clear();
-  }, []);
-
-  const handleClose = useCallback(() => {
-    resetForm();
-    onOpenChange(false);
-  }, [resetForm, onOpenChange]);
+  useEffect(() => {
+    if (open) {
+      if (activity) {
+        setTitle(activity.title || '');
+        setTaskType(activity.task_type || 'to-do');
+        setPriority(activity.priority || 'none');
+        setDueDate(activity.due_date || format(new Date(), 'yyyy-MM-dd'));
+        setDueTime(activity.due_time || '09:00');
+        setReminder(activity.metadata?.reminder || 'none');
+        setSelectedAssigneeId(activity.assigned_to || '');
+      } else {
+        setTitle('');
+        setTaskType('to-do');
+        setPriority('none');
+        setDueDate(format(new Date(), 'yyyy-MM-dd'));
+        setDueTime('09:00');
+        setReminder('none');
+        setSelectedAssigneeId('');
+        editorRef.current?.clear();
+      }
+    }
+  }, [open, activity]);
 
   const handleSubmit = useCallback(async () => {
     if (!title.trim()) return;
@@ -694,107 +978,117 @@ export const CreateTaskDialog: React.FC<BaseDialogProps> = ({
     const text = editorRef.current?.getText() || '';
 
     const data: ActivityLogData = {
+      id: activity?.id,
       type: 'task',
       title,
       description: text,
       descriptionHtml: html,
-      metadata: {
-        taskType,
-        priority,
-        dueDate,
-        dueTime,
-        reminder,
-        status: 'pending'
-      }
+      metadata: { taskType, priority, dueDate, dueTime, reminder, assignedTo: selectedAssigneeId, status: 'pending' }
     };
 
     await onSubmit(data);
-    handleClose();
-  }, [title, taskType, priority, dueDate, dueTime, reminder, onSubmit, handleClose]);
+    onOpenChange(false);
+  }, [title, taskType, priority, dueDate, dueTime, reminder, selectedAssigneeId, onSubmit, onOpenChange, activity]);
+
+  const filteredTeam = teamMembers.filter(m => 
+    `${m.first_name} ${m.last_name}`.toLowerCase().includes(assigneeSearch.toLowerCase()) ||
+    m.email?.toLowerCase().includes(assigneeSearch.toLowerCase())
+  );
+  const selectedAssignee = teamMembers.find(m => m.id === selectedAssigneeId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn(
-        "p-0 gap-0 overflow-hidden",
-        isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[620px] rounded-lg",
-        isMinimized && "h-auto"
-      )}>
+      <DialogContent className={cn("p-0 gap-0 overflow-hidden flex flex-col transition-all duration-200", isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[650px] max-h-[85vh] rounded-lg", isMinimized && "h-auto")}>
         <DialogHeader 
-          title={config.title}
-          icon={<config.icon size={16} />}
-          bgClass={config.headerBg}
-          isMinimized={isMinimized}
-          isFullscreen={isFullscreen}
-          onMinimize={() => setIsMinimized(!isMinimized)}
-          onFullscreen={() => setIsFullscreen(!isFullscreen)}
-          onClose={handleClose}
+          title={activity ? "Edit Task" : config.title}
+          icon={<config.icon size={16} />} bgClass={config.headerBg}
+          isMinimized={isMinimized} isFullscreen={isFullscreen}
+          onMinimize={() => setIsMinimized(!isMinimized)} onFullscreen={() => setIsFullscreen(!isFullscreen)} onClose={() => onOpenChange(false)}
         />
 
         {!isMinimized && (
           <>
-            <div className="px-4 py-4 bg-white border-b border-gray-200 space-y-4">
-              <FormField label="Task Title *">
-                <Input placeholder="Enter your task..." value={title} onChange={(e) => setTitle(e.target.value)} className="h-9 text-sm" />
-              </FormField>
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormField label="Due Date">
-                  <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="h-9 text-sm" />
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="px-4 py-4 bg-white border-b border-gray-200 space-y-4">
+                <FormField label="Task Title *">
+                  <Input placeholder="Enter your task..." value={title} onChange={(e) => setTitle(e.target.value)} className="h-9 text-sm" />
                 </FormField>
-                <FormField label="Due Time">
-                  <Input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} className="h-9 text-sm" />
-                </FormField>
+                <div className="grid grid-cols-1 gap-4">
+                   <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1"><UserPlus size={12} /> Assigned To</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start text-left h-10 px-3 border-dashed border-gray-300">
+                          {selectedAssignee ? (
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <Avatar className="h-5 w-5"><AvatarImage src={selectedAssignee.profile_picture_url} /><AvatarFallback className="text-[9px] bg-blue-100 text-blue-700">{getInitials(`${selectedAssignee.first_name} ${selectedAssignee.last_name}`)}</AvatarFallback></Avatar>
+                              <span className="truncate text-sm">{selectedAssignee.first_name} {selectedAssignee.last_name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-sm">Select assignee (Optional)...</span>
+                          )}
+                          <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[300px] p-0" align="start">
+                        <div className="p-2 border-b"><div className="relative"><Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-gray-500" /><Input placeholder="Search team..." className="h-8 pl-7 text-xs" value={assigneeSearch} onChange={(e) => setAssigneeSearch(e.target.value)} /></div></div>
+                        <ScrollArea className="h-[200px]">
+                          <div className="p-1">
+                            {filteredTeam.map(member => (
+                              <DropdownMenuItem key={member.id} onClick={() => setSelectedAssigneeId(member.id)} className="flex items-center gap-2 cursor-pointer">
+                                <Avatar className="h-6 w-6"><AvatarImage src={member.profile_picture_url} /><AvatarFallback className="text-[10px]">{getInitials(member.first_name)}</AvatarFallback></Avatar>
+                                <div className="flex flex-col overflow-hidden"><span className="truncate font-medium">{member.first_name} {member.last_name}</span><span className="truncate text-xs text-gray-500">{member.email}</span></div>
+                                {selectedAssigneeId === member.id && <CheckSquare size={14} className="ml-auto text-green-600" />}
+                              </DropdownMenuItem>
+                            ))}
+                            {filteredTeam.length === 0 && <div className="p-4 text-center text-xs text-gray-500">No team members found</div>}
+                          </div>
+                        </ScrollArea>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField label="Due Date"><Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="h-9 text-sm" /></FormField>
+                  <FormField label="Due Time"><Input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} className="h-9 text-sm" /></FormField>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField label="Task Type">
+                    <Select value={taskType} onValueChange={setTaskType}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>{TASK_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </FormField>
+                  <FormField label="Priority">
+                    <Select value={priority} onValueChange={setPriority}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>{PRIORITIES.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </FormField>
+                  <FormField label="Reminder" icon={<Bell size={12} />}>
+                    <Select value={reminder} onValueChange={setReminder}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>{REMINDER_OPTIONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </FormField>
+                </div>
               </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <FormField label="Task Type">
-                  <Select value={taskType} onValueChange={setTaskType}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TASK_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-                <FormField label="Priority">
-                  <Select value={priority} onValueChange={setPriority}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {PRIORITIES.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-                <FormField label="Reminder" icon={<Bell size={12} />}>
-                  <Select value={reminder} onValueChange={setReminder}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {REMINDER_OPTIONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </FormField>
+              <div className="px-4 py-3 bg-gray-50">
+                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">Notes</Label>
+                <HubSpotRichTextEditor
+                  ref={editorRef}
+                  placeholder="Add task notes..."
+                  initialContent={activity?.description_html || activity?.description || ''}
+                  minHeight="100px"
+                />
               </div>
             </div>
-
-            <div className="px-4 py-3 bg-gray-50">
-              <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">Notes</Label>
-              <HubSpotRichTextEditor
-                ref={editorRef}
-                placeholder="Add task notes..."
-                minHeight="100px"
-              />
-            </div>
-
             <div className="px-4 py-3 bg-white border-t border-gray-200">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-500">
-                  Associated with: <span className="font-medium text-gray-900">{contact?.name}</span>
-                </div>
-                <Button
-                  onClick={handleSubmit}
-                  disabled={isSubmitting || !title.trim()}
-                  className={cn("h-9 px-6", config.buttonBg)}
-                >
+                <div className="text-sm text-gray-500">Associated with: <span className="font-medium text-gray-900">{contact?.name}</span></div>
+                <Button onClick={handleSubmit} disabled={isSubmitting || !title.trim()} className={cn("h-9 px-6", config.buttonBg)}>
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Create task
+                  {activity ? "Update task" : "Create task"}
                 </Button>
               </div>
             </div>
@@ -810,11 +1104,7 @@ export const CreateTaskDialog: React.FC<BaseDialogProps> = ({
 // =====================
 
 export const LogMeetingDialog: React.FC<BaseDialogProps> = ({
-  open,
-  onOpenChange,
-  contact,
-  onSubmit,
-  isSubmitting = false
+  open, onOpenChange, contact, onSubmit, isSubmitting = false, activity
 }) => {
   const editorRef = useRef<HubSpotEditorRef>(null);
   const [title, setTitle] = useState('');
@@ -830,22 +1120,24 @@ export const LogMeetingDialog: React.FC<BaseDialogProps> = ({
 
   const config = getActivityConfig('meeting');
 
-  const resetForm = useCallback(() => {
-    setTitle('');
-    setOutcome('');
-    setDuration('30');
-    setStartTime(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-    setCreateFollowUp(false);
-    setFollowUpTaskType('to-do');
-    setFollowUpDays('3');
-    setHasContent(false);
-    editorRef.current?.clear();
-  }, []);
-
-  const handleClose = useCallback(() => {
-    resetForm();
-    onOpenChange(false);
-  }, [resetForm, onOpenChange]);
+  useEffect(() => {
+    if (open) {
+      if (activity) {
+        setTitle(activity.title || '');
+        setOutcome(activity.outcome || activity.metadata?.outcome || '');
+        setDuration(activity.duration_minutes?.toString() || activity.metadata?.duration || '30');
+        const date = activity.activity_date || activity.metadata?.startTime || activity.created_at;
+        setStartTime(date ? format(new Date(date), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+      } else {
+        setTitle('');
+        setOutcome('');
+        setDuration('30');
+        setStartTime(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+        setCreateFollowUp(false);
+        editorRef.current?.clear();
+      }
+    }
+  }, [open, activity]);
 
   const handleSubmit = useCallback(async () => {
     const html = editorRef.current?.getHTML() || '';
@@ -854,15 +1146,12 @@ export const LogMeetingDialog: React.FC<BaseDialogProps> = ({
     if (!text.trim()) return;
 
     const data: ActivityLogData = {
+      id: activity?.id,
       type: 'meeting',
       title: title || `Meeting: ${MEETING_OUTCOMES.find(o => o.value === outcome)?.label || 'Logged'}`,
       description: text,
       descriptionHtml: html,
-      metadata: {
-        outcome,
-        duration,
-        startTime,
-      }
+      metadata: { outcome, duration, startTime }
     };
 
     if (createFollowUp) {
@@ -875,83 +1164,48 @@ export const LogMeetingDialog: React.FC<BaseDialogProps> = ({
     }
 
     await onSubmit(data);
-    handleClose();
-  }, [title, outcome, duration, startTime, createFollowUp, followUpTaskType, followUpDays, onSubmit, handleClose]);
+    onOpenChange(false);
+  }, [title, outcome, duration, startTime, createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn(
-        "p-0 gap-0 overflow-hidden",
-        isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[620px] rounded-lg",
-        isMinimized && "h-auto"
-      )}>
+      <DialogContent className={cn("p-0 gap-0 overflow-hidden flex flex-col transition-all duration-200", isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[620px] max-h-[85vh] rounded-lg", isMinimized && "h-auto")}>
         <DialogHeader 
-          title={config.title}
-          icon={<config.icon size={16} />}
-          bgClass={config.headerBg}
-          isMinimized={isMinimized}
-          isFullscreen={isFullscreen}
-          onMinimize={() => setIsMinimized(!isMinimized)}
-          onFullscreen={() => setIsFullscreen(!isFullscreen)}
-          onClose={handleClose}
+          title={activity ? "Edit Meeting" : config.title}
+          icon={<config.icon size={16} />} bgClass={config.headerBg}
+          isMinimized={isMinimized} isFullscreen={isFullscreen}
+          onMinimize={() => setIsMinimized(!isMinimized)} onFullscreen={() => setIsFullscreen(!isFullscreen)} onClose={() => onOpenChange(false)}
         />
 
         {!isMinimized && (
           <>
-            <div className="px-4 py-4 bg-white border-b border-gray-200 space-y-4">
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-gray-500">Attendees:</span>
-                <span className="font-medium text-gray-900">{contact?.name}</span>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="px-4 py-4 bg-white border-b border-gray-200 space-y-4">
+                <div className="flex items-center gap-2 text-sm"><span className="text-gray-500">Attendees:</span><span className="font-medium text-gray-900">{contact?.name}</span></div>
+                <FormField label="Meeting Title"><Input placeholder="Enter meeting title..." value={title} onChange={(e) => setTitle(e.target.value)} className="h-9 text-sm" /></FormField>
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField label="Outcome"><Select value={outcome} onValueChange={setOutcome}><SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select outcome" /></SelectTrigger><SelectContent>{MEETING_OUTCOMES.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></FormField>
+                  <FormField label="Duration"><Select value={duration} onValueChange={setDuration}><SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger><SelectContent>{DURATIONS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}</SelectContent></Select></FormField>
+                  <FormField label="Start Time"><Input type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-9 text-sm" /></FormField>
+                </div>
               </div>
-
-              <FormField label="Meeting Title">
-                <Input placeholder="Enter meeting title..." value={title} onChange={(e) => setTitle(e.target.value)} className="h-9 text-sm" />
-              </FormField>
-
-              <div className="grid grid-cols-3 gap-4">
-                <FormField label="Outcome">
-                  <Select value={outcome} onValueChange={setOutcome}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select outcome" /></SelectTrigger>
-                    <SelectContent>
-                      {MEETING_OUTCOMES.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-                <FormField label="Duration">
-                  <Select value={duration} onValueChange={setDuration}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {DURATIONS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-                <FormField label="Start Time">
-                  <Input type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-9 text-sm" />
-                </FormField>
+              <div className="px-4 py-3 bg-gray-50">
+                <HubSpotRichTextEditor
+                  ref={editorRef}
+                  placeholder="Start typing to log a meeting..."
+                  initialContent={activity?.description_html || activity?.description || ''}
+                  onChange={(html, text) => setHasContent(text.trim().length > 0)}
+                  minHeight="120px"
+                />
               </div>
             </div>
-
-            <div className="px-4 py-3 bg-gray-50">
-              <HubSpotRichTextEditor
-                ref={editorRef}
-                placeholder="Start typing to log a meeting..."
-                onChange={(html, text) => setHasContent(text.trim().length > 0)}
-                minHeight="120px"
-              />
-            </div>
-
             <DialogFooter
               contact={contact}
-              createFollowUp={createFollowUp}
-              setCreateFollowUp={setCreateFollowUp}
-              followUpTaskType={followUpTaskType}
-              setFollowUpTaskType={setFollowUpTaskType}
-              followUpDays={followUpDays}
-              setFollowUpDays={setFollowUpDays}
-              onSubmit={handleSubmit}
-              isSubmitting={isSubmitting}
-              isDisabled={!hasContent}
-              buttonText="Log meeting"
+              createFollowUp={createFollowUp} setCreateFollowUp={setCreateFollowUp}
+              followUpTaskType={followUpTaskType} setFollowUpTaskType={setFollowUpTaskType}
+              followUpDays={followUpDays} setFollowUpDays={setFollowUpDays}
+              onSubmit={handleSubmit} isSubmitting={isSubmitting} isDisabled={!hasContent && !activity}
+              buttonText={activity ? "Update meeting" : "Log meeting"}
               buttonClass={config.buttonBg}
             />
           </>
@@ -962,15 +1216,11 @@ export const LogMeetingDialog: React.FC<BaseDialogProps> = ({
 };
 
 // =====================
-// LOG LINKEDIN DIALOG (NEW)
+// LOG LINKEDIN DIALOG
 // =====================
 
 export const LogLinkedInDialog: React.FC<BaseDialogProps> = ({
-  open,
-  onOpenChange,
-  contact,
-  onSubmit,
-  isSubmitting = false
+  open, onOpenChange, contact, onSubmit, isSubmitting = false, activity
 }) => {
   const editorRef = useRef<HubSpotEditorRef>(null);
   const [linkedinActivityType, setLinkedinActivityType] = useState('message_sent');
@@ -986,29 +1236,24 @@ export const LogLinkedInDialog: React.FC<BaseDialogProps> = ({
 
   const config = getActivityConfig('linkedin');
 
-  // Pre-fill LinkedIn URL from contact if available
   useEffect(() => {
-    if (contact?.linkedin_url) {
-      setLinkedinUrl(contact.linkedin_url);
+    if (open) {
+      if (activity) {
+        setLinkedinActivityType(activity.metadata?.linkedinActivityType || 'message_sent');
+        setOutcome(activity.outcome || activity.metadata?.outcome || 'pending');
+        const date = activity.activity_date || activity.metadata?.activityDate || activity.created_at;
+        setActivityDate(date ? format(new Date(date), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+        setLinkedinUrl(activity.metadata?.linkedinUrl || contact?.linkedin_url || '');
+      } else {
+        setLinkedinActivityType('message_sent');
+        setOutcome('pending');
+        setActivityDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+        setLinkedinUrl(contact?.linkedin_url || '');
+        setCreateFollowUp(false);
+        editorRef.current?.clear();
+      }
     }
-  }, [contact]);
-
-  const resetForm = useCallback(() => {
-    setLinkedinActivityType('message_sent');
-    setOutcome('pending');
-    setActivityDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-    setLinkedinUrl(contact?.linkedin_url || '');
-    setCreateFollowUp(false);
-    setFollowUpTaskType('linkedin');
-    setFollowUpDays('3');
-    setHasContent(false);
-    editorRef.current?.clear();
-  }, [contact]);
-
-  const handleClose = useCallback(() => {
-    resetForm();
-    onOpenChange(false);
-  }, [resetForm, onOpenChange]);
+  }, [open, activity, contact]);
 
   const handleSubmit = useCallback(async () => {
     const html = editorRef.current?.getHTML() || '';
@@ -1017,16 +1262,12 @@ export const LogLinkedInDialog: React.FC<BaseDialogProps> = ({
     const activityLabel = LINKEDIN_ACTIVITY_TYPES.find(t => t.value === linkedinActivityType)?.label || 'LinkedIn Activity';
     
     const data: ActivityLogData = {
+      id: activity?.id,
       type: 'linkedin',
       title: `LinkedIn: ${activityLabel}`,
       description: text,
       descriptionHtml: html,
-      metadata: {
-        linkedinActivityType,
-        outcome,
-        activityDate,
-        linkedinUrl,
-      }
+      metadata: { linkedinActivityType, outcome, activityDate, linkedinUrl }
     };
 
     if (createFollowUp) {
@@ -1039,128 +1280,57 @@ export const LogLinkedInDialog: React.FC<BaseDialogProps> = ({
     }
 
     await onSubmit(data);
-    handleClose();
-  }, [linkedinActivityType, outcome, activityDate, linkedinUrl, createFollowUp, followUpTaskType, followUpDays, onSubmit, handleClose]);
+    onOpenChange(false);
+  }, [linkedinActivityType, outcome, activityDate, linkedinUrl, createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn(
-        "p-0 gap-0 overflow-hidden",
-        isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[620px] rounded-lg",
-        isMinimized && "h-auto"
-      )}>
+      <DialogContent className={cn("p-0 gap-0 overflow-hidden flex flex-col transition-all duration-200", isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[620px] max-h-[85vh] rounded-lg", isMinimized && "h-auto")}>
         <DialogHeader 
-          title={config.title}
-          icon={<config.icon size={16} />}
-          bgClass={config.headerBg}
-          isMinimized={isMinimized}
-          isFullscreen={isFullscreen}
-          onMinimize={() => setIsMinimized(!isMinimized)}
-          onFullscreen={() => setIsFullscreen(!isFullscreen)}
-          onClose={handleClose}
+          title={activity ? "Edit LinkedIn Log" : config.title}
+          icon={<config.icon size={16} />} bgClass={config.headerBg}
+          isMinimized={isMinimized} isFullscreen={isFullscreen}
+          onMinimize={() => setIsMinimized(!isMinimized)} onFullscreen={() => setIsFullscreen(!isFullscreen)} onClose={() => onOpenChange(false)}
         />
 
         {!isMinimized && (
           <>
-            <div className="px-4 py-4 bg-white border-b border-gray-200 space-y-4">
-              {/* Contact with LinkedIn badge */}
-              <div className="flex items-center gap-3 p-3 bg-[#0A66C2]/5 rounded-lg border border-[#0A66C2]/20">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={contact?.photo_url} />
-                  <AvatarFallback className="bg-[#0A66C2] text-white text-sm">
-                    {getInitials(contact?.name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">{contact?.name}</p>
-                  <p className="text-xs text-gray-500">{contact?.title || contact?.email}</p>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="px-4 py-4 bg-white border-b border-gray-200 space-y-4">
+                <div className="flex items-center gap-3 p-3 bg-[#0A66C2]/5 rounded-lg border border-[#0A66C2]/20">
+                  <Avatar className="h-10 w-10"><AvatarImage src={contact?.photo_url} /><AvatarFallback className="bg-[#0A66C2] text-white text-sm">{getInitials(contact?.name)}</AvatarFallback></Avatar>
+                  <div className="flex-1"><p className="text-sm font-medium text-gray-900">{contact?.name}</p><p className="text-xs text-gray-500">{contact?.title || contact?.email}</p></div>
+                  <Linkedin size={20} className="text-[#0A66C2]" />
                 </div>
-                <Linkedin size={20} className="text-[#0A66C2]" />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField label="Activity Type"><Select value={linkedinActivityType} onValueChange={setLinkedinActivityType}><SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select type" /></SelectTrigger><SelectContent>{LINKEDIN_ACTIVITY_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></FormField>
+                  <FormField label="Outcome"><Select value={outcome} onValueChange={setOutcome}><SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select outcome" /></SelectTrigger><SelectContent>{LINKEDIN_OUTCOMES.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></FormField>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField label="Activity Date" icon={<Calendar size={12} />}><Input type="datetime-local" value={activityDate} onChange={(e) => setActivityDate(e.target.value)} className="h-9 text-sm" /></FormField>
+                  <FormField label="LinkedIn Profile URL" icon={<Linkedin size={12} />}><Input placeholder="https://linkedin.com/in/..." value={linkedinUrl} onChange={(e) => setLinkedinUrl(e.target.value)} className="h-9 text-sm" /></FormField>
+                </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormField label="Activity Type">
-                  <Select value={linkedinActivityType} onValueChange={setLinkedinActivityType}>
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {LINKEDIN_ACTIVITY_TYPES.map(t => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-                <FormField label="Outcome">
-                  <Select value={outcome} onValueChange={setOutcome}>
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="Select outcome" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {LINKEDIN_OUTCOMES.map(o => (
-                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormField label="Activity Date" icon={<Calendar size={12} />}>
-                  <Input 
-                    type="datetime-local" 
-                    value={activityDate} 
-                    onChange={(e) => setActivityDate(e.target.value)} 
-                    className="h-9 text-sm" 
-                  />
-                </FormField>
-                <FormField label="LinkedIn Profile URL" icon={<Linkedin size={12} />}>
-                  <Input 
-                    placeholder="https://linkedin.com/in/..." 
-                    value={linkedinUrl} 
-                    onChange={(e) => setLinkedinUrl(e.target.value)} 
-                    className="h-9 text-sm" 
-                  />
-                </FormField>
+              <div className="px-4 py-3 bg-gray-50">
+                <HubSpotRichTextEditor
+                  ref={editorRef}
+                  placeholder="Add details about the LinkedIn interaction..."
+                  initialContent={activity?.description_html || activity?.description || ''}
+                  onChange={(html, text) => setHasContent(text.trim().length > 0)}
+                  minHeight="120px"
+                />
               </div>
             </div>
-
-            {/* Editor */}
-            <div className="px-4 py-3 bg-gray-50">
-              <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
-                Activity Notes
-              </Label>
-              <HubSpotRichTextEditor
-                ref={editorRef}
-                placeholder="Add details about the LinkedIn interaction..."
-                onChange={(html, text) => setHasContent(text.trim().length > 0)}
-                minHeight="120px"
-              />
-            </div>
-
-            {/* Footer */}
             <DialogFooter
               contact={contact}
-              createFollowUp={createFollowUp}
-              setCreateFollowUp={setCreateFollowUp}
-              followUpTaskType={followUpTaskType}
-              setFollowUpTaskType={setFollowUpTaskType}
-              followUpDays={followUpDays}
-              setFollowUpDays={setFollowUpDays}
-              onSubmit={handleSubmit}
-              isSubmitting={isSubmitting}
-              isDisabled={false}
-              buttonText="Log LinkedIn activity"
+              createFollowUp={createFollowUp} setCreateFollowUp={setCreateFollowUp}
+              followUpTaskType={followUpTaskType} setFollowUpTaskType={setFollowUpTaskType}
+              followUpDays={followUpDays} setFollowUpDays={setFollowUpDays}
+              onSubmit={handleSubmit} isSubmitting={isSubmitting} isDisabled={false}
+              buttonText={activity ? "Update activity" : "Log LinkedIn activity"}
               buttonClass={config.buttonBg}
             />
           </>
-        )}
-
-        {isMinimized && (
-          <div className="px-4 py-2 bg-white flex items-center justify-between">
-            <span className="text-sm text-gray-600">LinkedIn with {contact?.name}</span>
-            <Badge variant="secondary" className="text-xs bg-[#0A66C2]/10 text-[#0A66C2]">Draft</Badge>
-          </div>
         )}
       </DialogContent>
     </Dialog>
@@ -1183,22 +1353,50 @@ interface DialogHeaderProps {
 }
 
 const DialogHeader: React.FC<DialogHeaderProps> = ({
-  title, icon, bgClass, isMinimized, isFullscreen, onMinimize, onFullscreen, onClose
+  title,
+  icon,
+  bgClass,
+  isMinimized,
+  isFullscreen,
+  onMinimize,
+  onFullscreen,
+  onClose,
 }) => (
-  <div className={cn("flex items-center justify-between px-4 py-3 text-white", bgClass)}>
-    <div className="flex items-center gap-2">
+  <div
+    className={cn(
+      'flex items-center justify-between px-5 py-3.5 text-white shrink-0',
+      bgClass,
+      isFullscreen ? 'rounded-none' : 'rounded-t-lg'
+    )}
+  >
+    <div className="flex items-center gap-2.5">
       {icon}
-      <span className="font-medium text-sm">{title}</span>
+      <span className="font-medium text-base">{title}</span>
     </div>
     <div className="flex items-center gap-1">
-      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-white/70 hover:text-white hover:bg-white/10" onClick={onMinimize}>
-        <Minus size={14} />
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10"
+        onClick={onMinimize}
+      >
+        <Minus size={16} />
       </Button>
-      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-white/70 hover:text-white hover:bg-white/10" onClick={onFullscreen}>
-        <Maximize2 size={14} />
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10"
+        onClick={onFullscreen}
+      >
+        <Maximize2 size={16} />
       </Button>
-      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-white/70 hover:text-white hover:bg-white/10" onClick={onClose}>
-        <X size={14} />
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10"
+        onClick={onClose}
+      >
+        <X size={16} />
       </Button>
     </div>
   </div>
@@ -1332,3 +1530,4 @@ const DialogFooter: React.FC<DialogFooterProps> = ({
     </div>
   </div>
 );
+// Task log updated for dashboard

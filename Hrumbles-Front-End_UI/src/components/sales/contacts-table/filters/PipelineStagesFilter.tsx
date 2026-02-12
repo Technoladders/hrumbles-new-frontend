@@ -84,7 +84,7 @@ export const PipelineStagesFilter: React.FC<PipelineStagesFilterProps> = ({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-4">
-        <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+        <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
         <span className="ml-2 text-xs text-slate-500">Loading stages...</span>
       </div>
     );

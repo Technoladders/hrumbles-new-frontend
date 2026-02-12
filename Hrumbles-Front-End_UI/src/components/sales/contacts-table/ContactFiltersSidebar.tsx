@@ -287,7 +287,7 @@ export function ContactFiltersSidebar({
               Filters
             </span>
             {activeFiltersCount > 0 && (
-              <Badge className="h-5 px-1.5 text-[10px] bg-indigo-600 text-white">
+              <Badge className="h-5 px-1.5 text-[10px] bg-white text-white">
                 {activeFiltersCount}
               </Badge>
             )}
@@ -332,25 +332,25 @@ export function ContactFiltersSidebar({
         </div>
 
         {/* Stats Card */}
-        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100 rounded-lg p-3">
+        <div className="bg-gradient-to-r from-purple-500 to-pink-500 border border-purple-100 rounded-lg p-3">
           {statsLoading ? (
             <div className="flex items-center justify-center py-2">
-              <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
-              <span className="ml-2 text-xs text-indigo-600">Loading stats...</span>
+              <Loader2 className="h-4 w-4 animate-spin text-white" />
+              <span className="ml-2 text-xs text-white">Loading stats...</span>
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-3 text-center">
               <div>
-                <div className="text-lg font-bold text-indigo-900">{(stats?.total || 0).toLocaleString()}</div>
-                <div className="text-[9px] text-indigo-600 uppercase font-semibold">Total</div>
+                <div className="text-lg font-bold text-white">{(stats?.total || 0).toLocaleString()}</div>
+                <div className="text-[9px] text-white uppercase font-semibold">Total</div>
               </div>
               <div>
-                <div className="text-lg font-bold text-indigo-900">{(stats?.enriched || 0).toLocaleString()}</div>
-                <div className="text-[9px] text-indigo-600 uppercase font-semibold">Enriched</div>
+                <div className="text-lg font-bold text-white">{(stats?.enriched || 0).toLocaleString()}</div>
+                <div className="text-[9px] text-white uppercase font-semibold">Enriched</div>
               </div>
               <div>
-                <div className="text-lg font-bold text-indigo-900">{table.getFilteredRowModel().rows.length}</div>
-                <div className="text-[9px] text-indigo-600 uppercase font-semibold">On Page</div>
+                <div className="text-lg font-bold text-white">{table.getFilteredRowModel().rows.length}</div>
+                <div className="text-[9px] text-white uppercase font-semibold">On Page</div>
               </div>
             </div>
           )}
@@ -460,11 +460,11 @@ export function ContactFiltersSidebar({
             <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
               <div className="flex items-center justify-between w-full pr-2">
                 <div className="flex items-center gap-2">
-                  <Tag size={14} className="text-indigo-500" />
+                  <Tag size={14} className="text-purple-500" />
                   Pipeline Stage
                 </div>
                 {filters.stages.length > 0 && (
-                  <Badge className="h-4 px-1.5 text-[9px] bg-indigo-100 text-indigo-700">
+                  <Badge className="h-4 px-1.5 text-[9px] bg-purple-100 text-purple-700">
                     {filters.stages.length}
                   </Badge>
                 )}
@@ -676,7 +676,7 @@ export function ContactFiltersSidebar({
         <div className="flex-shrink-0 p-3 border-t border-slate-200 bg-slate-50">
           <Button
             onClick={applyFilters}
-            className="w-full h-9 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700"
+            className="w-full h-9 text-xs font-semibold bg-white hover:bg-purple-700"
           >
             Apply {activeFiltersCount} Filter{activeFiltersCount !== 1 ? 's' : ''}
           </Button>

@@ -239,7 +239,7 @@ export const LocationFilterSelect: React.FC<LocationFilterSelectProps> = ({
           <ScrollArea className="max-h-[240px] overflow-y-auto">
             {isLoading ? (
               <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
+                <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
                 <span className="ml-2 text-xs text-slate-500">Searching...</span>
               </div>
             ) : locations.length === 0 ? (

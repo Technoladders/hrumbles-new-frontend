@@ -677,7 +677,7 @@ const handleListAdd = async (targetFileId: string) => {
                     onClick={() => dispatch(resetSearch())} 
                     className={cn(
                       "px-6 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all", 
-                      !isDiscoveryMode ? "bg-white text-indigo-600 shadow-md" : "text-slate-500 hover:text-slate-700"
+                      !isDiscoveryMode ? "bg-white text-purple-600 shadow-md" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
                     CRM Records
@@ -686,7 +686,7 @@ const handleListAdd = async (targetFileId: string) => {
                     onClick={() => dispatch(setDiscoveryMode(true))} 
                     className={cn(
                       "px-6 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all", 
-                      isDiscoveryMode ? "bg-white text-indigo-600 shadow-md" : "text-slate-500 hover:text-slate-700"
+                      isDiscoveryMode ? "bg-white text-purple-600 shadow-md" : "text-slate-500 hover:text-slate-700"
                     )}
                   >
                     Search People
@@ -702,7 +702,7 @@ const handleListAdd = async (targetFileId: string) => {
                  variant="secondary" 
                  size="sm" 
                  onClick={() => setIsImportOpen(true)}
-                 className="h-9 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200"
+                 className="h-9 text-xs font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200"
                >
                  <UploadCloud size={14} className="mr-2" />
                  Import CSV
@@ -775,12 +775,12 @@ const handleListAdd = async (targetFileId: string) => {
       */}
      {isLoading ? (
   <div className="flex-1 flex flex-col items-center justify-center ...">
-    <Spinner size="xl" color="indigo.500" />
+    <Spinner size="xl" color="purple.500" />
     <p>Loading Contacts...</p>
   </div>
 ) : isPendingFilterChange ? (
   <div className="flex-1 flex flex-col items-center justify-center ... opacity-70">
-    <Spinner size="lg" color="indigo.500" />
+    <Spinner size="lg" color="purple.500" />
     <p className="mt-4 text-xs font-black text-slate-500 uppercase tracking-widest">
       Applying filters...
     </p>
@@ -796,8 +796,8 @@ const handleListAdd = async (targetFileId: string) => {
     {tableData.length === 0 ? (
       isDiscoveryMode ? (
         <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-          <div className="bg-indigo-50 p-4 rounded-full mb-4">
-            <Zap className="h-8 w-8 text-indigo-600" />
+          <div className="bg-purple-50 p-4 rounded-full mb-4">
+            <Zap className="h-8 w-8 text-purple-600" />
           </div>
           <h3 className="text-lg font-bold text-slate-800">Global Intelligence Search</h3>
           <p className="text-sm text-slate-500 max-w-md mt-2">
@@ -976,7 +976,7 @@ const handleListAdd = async (targetFileId: string) => {
                     savePreferences();
                     setViewSettingsOpen(false);
                   }}
-                  className="bg-indigo-600 hover:bg-indigo-700"
+                  className="bg-purple-600 hover:bg-purple-700"
                 >
                   <Check className="h-4 w-4 mr-2" />
                   Save Preferences

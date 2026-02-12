@@ -289,7 +289,7 @@ export const CompanyPrimaryDetails: React.FC<CompanyPrimaryDetailsProps> = ({
             )}
 
             {/* Links */}
-            <DetailRow label="Links" icon={<Link2 size={12} />}>
+            {/* <DetailRow label="Links" icon={<Link2 size={12} />}>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {data.website && (
                   <a href={data.website} target="_blank" rel="noreferrer" className="p-1.5 hover:bg-gray-100 rounded-md transition-colors border border-gray-200" title="Website">
@@ -317,7 +317,7 @@ export const CompanyPrimaryDetails: React.FC<CompanyPrimaryDetailsProps> = ({
                   </a>
                 )}
               </div>
-            </DetailRow>
+            </DetailRow> */}
           </div>
         </CollapsibleContent>
       </Collapsible>

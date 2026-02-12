@@ -11,13 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, ChevronLeft, Edit, RefreshCw, ListPlus, Sparkles, Link2, MapPin } from 'lucide-react';
+import { Loader2, ChevronLeft, Edit, RefreshCw, ListPlus, Sparkles, Link2, MapPin, Globe, Linkedin, Twitter, Facebook } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
 // Tab Content & Detail Components
 import { CompanyPrimaryDetails } from "@/components/sales/CompanyPrimaryDetails";
 import { CompanyOverviewTab } from "@/components/sales/company-detail/CompanyOverviewTab";
 import EmployeesTab from "@/components/sales/EmployeesTab";
+import { AddToCompanyListModal } from '@/components/sales/company-search/AddToCompanyListModal';
 
 // Dialog Forms
 import CompanyEditForm from "@/components/sales/CompanyEditForm";
@@ -32,6 +33,8 @@ const CompanyDetail = () => {
   const user = useSelector((state: any) => state.auth.user);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCompanyEditDialogOpen, setIsCompanyEditDialogOpen] = useState(false);
+
+  const [listModalOpen, setListModalOpen] = useState(false);
 
   // Fetch company with all enrichment data
   const { data: company, isLoading, error: companyError, refetch: refetchCompany } = useQuery({
@@ -172,6 +175,40 @@ const CompanyDetail = () => {
     refetchContacts();
   };
 
+   // --- Add to List Handler ---
+  const handleListAdd = async (fileId: string) => {
+    if (!company?.id || !fileId) return;
+
+    try {
+      const { error: linkError } = await supabase
+        .from('company_workspace_files')
+        .upsert({ 
+          company_id: company.id, 
+          file_id: fileId, 
+          added_by: user?.id 
+        }, { 
+          onConflict: 'company_id,file_id' 
+        });
+
+      if (linkError) throw linkError;
+
+      toast({ 
+        title: "Added to List", 
+        description: `${company.name} has been added successfully.` 
+      });
+      
+    } catch (error: any) {
+      toast({ 
+        title: "Failed to add to list", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    } finally {
+        setListModalOpen(false);
+    }
+  };
+
+
   const handleRefreshIntelligence = async () => {
     setIsSyncing(true);
     try {
@@ -236,6 +273,12 @@ const CompanyDetail = () => {
     enrichment?.country
   ].filter(Boolean).join(', ');
 
+   // Extract links for header
+  const website = company.website || company.domain || enrichment?.website_url;
+  const linkedin = company.linkedin_url || company.linkedin || enrichment?.linkedin_url;
+  const twitter = company.twitter_url || company.twitter || enrichment?.twitter_url;
+  const facebook = company.facebook_url || company.facebook || enrichment?.facebook_url;
+
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
       {/* Header - Apollo Style */}
@@ -264,15 +307,33 @@ const CompanyDetail = () => {
               </Avatar>
               
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <h1 className="text-xl font-semibold text-gray-900">{company.name}</h1>
-                  <button className="p-1 hover:bg-gray-100 rounded">
-                    <ListPlus size={16} className="text-gray-400" />
-                  </button>
-                  <button className="p-1 hover:bg-gray-100 rounded">
-                    <Link2 size={16} className="text-gray-400" />
-                  </button>
-                </div>
+                  
+                  {/* Social Links */}
+                  <div className="flex items-center gap-1">
+                    {website && (
+                       <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-blue-600 transition-colors">
+                         <Globe size={15} />
+                       </a>
+                    )}
+                    {linkedin && (
+                       <a href={linkedin} target="_blank" rel="noreferrer" className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-[#0A66C2] transition-colors">
+                         <Linkedin size={15} />
+                       </a>
+                    )}
+                    {twitter && (
+                       <a href={twitter} target="_blank" rel="noreferrer" className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-[#1DA1F2] transition-colors">
+                         <Twitter size={15} />
+                       </a>
+                    )}
+                    {facebook && (
+                       <a href={facebook} target="_blank" rel="noreferrer" className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-[#1877F2] transition-colors">
+                         <Facebook size={15} />
+                       </a>
+                    )}
+                  </div>
+                  </div>
                 <p className="text-sm text-gray-500 flex items-center gap-2">
                   <span>{enrichment?.industry || company.industry}</span>
                   {location && (
@@ -289,10 +350,11 @@ const CompanyDetail = () => {
             </div>
             
             <div className="flex items-center gap-2">
-              <Button
+               <Button
                 variant="outline"
                 size="sm"
                 className="h-9 px-3 text-sm font-medium"
+                onClick={() => setListModalOpen(true)}
               >
                 <ListPlus size={14} className="mr-1.5" />
                 Add to list
@@ -303,7 +365,7 @@ const CompanyDetail = () => {
                 size="sm"
                 onClick={handleRefreshIntelligence}
                 disabled={isSyncing}
-                className="h-9 px-4 bg-[#FFDE59] hover:bg-[#FFD633] text-gray-900 border border-[#E5C84F]"
+                className="h-10 px-6 font-semibold text-white whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200 flex items-center gap-2"
               >
                 {isSyncing ? (
                   <>
@@ -378,6 +440,16 @@ const CompanyDetail = () => {
           />
         </DialogContent>
       </Dialog>
+
+       {company && (
+        <AddToCompanyListModal
+            open={listModalOpen}
+            onOpenChange={setListModalOpen}
+            onConfirm={handleListAdd}
+            companyName={company.name}
+            isFromSearch={false} 
+        />
+      )}
     </div>
   );
 };

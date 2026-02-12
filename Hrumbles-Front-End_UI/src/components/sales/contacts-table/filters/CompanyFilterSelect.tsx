@@ -154,7 +154,7 @@ export const CompanyFilterSelect: React.FC<CompanyFilterSelectProps> = ({
             className={cn(
               'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all text-xs',
               filterMode === 'any'
-                ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                ? 'bg-purple-50 border-purple-300 text-purple-700'
                 : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
             )}
             onClick={() => setFilterMode('any')}
@@ -162,11 +162,11 @@ export const CompanyFilterSelect: React.FC<CompanyFilterSelectProps> = ({
             <div
               className={cn(
                 'w-3 h-3 rounded-full border-2 flex items-center justify-center',
-                filterMode === 'any' ? 'border-indigo-600' : 'border-slate-300'
+                filterMode === 'any' ? 'border-purple-600' : 'border-slate-300'
               )}
             >
               {filterMode === 'any' && (
-                <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
               )}
             </div>
             <span className="font-medium">Is any of</span>
@@ -214,7 +214,7 @@ export const CompanyFilterSelect: React.FC<CompanyFilterSelectProps> = ({
             <ScrollArea className="max-h-[240px] overflow-y-auto">
               {isLoading ? (
                 <div className="flex items-center justify-center py-6">
-                  <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
+                  <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
                   <span className="ml-2 text-xs text-slate-500">Searching...</span>
                 </div>
               ) : companies.length === 0 ? (
@@ -234,7 +234,7 @@ export const CompanyFilterSelect: React.FC<CompanyFilterSelectProps> = ({
                         className={cn(
                           'flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors',
                           isSelected
-                            ? 'bg-indigo-50 hover:bg-indigo-100'
+                            ? 'bg-purple-50 hover:bg-purple-100'
                             : 'hover:bg-slate-50'
                         )}
                         onClick={() => toggleCompany(company.id)}
@@ -282,7 +282,7 @@ export const CompanyFilterSelect: React.FC<CompanyFilterSelectProps> = ({
                           className={cn(
                             'flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all',
                             isSelected
-                              ? 'bg-indigo-600 border-indigo-600'
+                              ? 'bg-purple-600 border-purple-600'
                               : 'border-slate-300'
                           )}
                         >
@@ -305,7 +305,7 @@ export const CompanyFilterSelect: React.FC<CompanyFilterSelectProps> = ({
             <Badge
               key={company.id}
               variant="secondary"
-              className="pl-1.5 pr-1 py-1 bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] font-medium flex items-center gap-1.5"
+              className="pl-1.5 pr-1 py-1 bg-purple-50 text-purple-700 border-purple-200 text-[10px] font-medium flex items-center gap-1.5"
             >
               {company.logo_url ? (
                 <img
@@ -314,14 +314,14 @@ export const CompanyFilterSelect: React.FC<CompanyFilterSelectProps> = ({
                   className="w-4 h-4 rounded object-cover"
                 />
               ) : (
-                <div className="w-4 h-4 rounded bg-indigo-200 flex items-center justify-center">
-                  <Building2 size={8} className="text-indigo-600" />
+                <div className="w-4 h-4 rounded bg-purple-200 flex items-center justify-center">
+                  <Building2 size={8} className="text-purple-600" />
                 </div>
               )}
               <span className="truncate max-w-[100px]">{company.name}</span>
               <button
                 onClick={() => removeCompany(company.id)}
-                className="ml-0.5 hover:bg-indigo-200 rounded-full p-0.5 transition-colors"
+                className="ml-0.5 hover:bg-purple-200 rounded-full p-0.5 transition-colors"
               >
                 <X size={10} />
               </button>
@@ -415,11 +415,11 @@ export const CompanyFilterSelect: React.FC<CompanyFilterSelectProps> = ({
             <div
               className={cn(
                 'w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center',
-                filterMode === 'known' ? 'border-indigo-600' : 'border-slate-300'
+                filterMode === 'known' ? 'border-purple-600' : 'border-slate-300'
               )}
             >
               {filterMode === 'known' && (
-                <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
               )}
             </div>
             <span className="text-[10px] text-slate-600">Is known</span>
@@ -434,11 +434,11 @@ export const CompanyFilterSelect: React.FC<CompanyFilterSelectProps> = ({
             <div
               className={cn(
                 'w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center',
-                filterMode === 'unknown' ? 'border-indigo-600' : 'border-slate-300'
+                filterMode === 'unknown' ? 'border-purple-600' : 'border-slate-300'
               )}
             >
               {filterMode === 'unknown' && (
-                <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
               )}
             </div>
             <span className="text-[10px] text-slate-600">Is unknown</span>
@@ -448,7 +448,7 @@ export const CompanyFilterSelect: React.FC<CompanyFilterSelectProps> = ({
 
       {/* Include/Exclude List Link */}
       <div className="pt-2 border-t border-slate-100">
-        <button className="text-[10px] text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1">
+        <button className="text-[10px] text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1">
           <Plus size={10} />
           Include / exclude list of companies
         </button>

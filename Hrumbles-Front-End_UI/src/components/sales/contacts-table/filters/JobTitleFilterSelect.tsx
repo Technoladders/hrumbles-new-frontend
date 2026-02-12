@@ -188,7 +188,7 @@ export const JobTitleFilterSelect: React.FC<JobTitleFilterSelectProps> = ({
           className={cn(
             "flex-1 px-3 py-1.5 text-[10px] font-semibold uppercase rounded-md transition-all",
             mode === 'simple'
-              ? "bg-white text-indigo-600 shadow-sm"
+              ? "bg-white text-purple-600 shadow-sm"
               : "text-slate-600 hover:text-slate-800"
           )}
         >
@@ -199,7 +199,7 @@ export const JobTitleFilterSelect: React.FC<JobTitleFilterSelectProps> = ({
           className={cn(
             "flex-1 px-3 py-1.5 text-[10px] font-semibold uppercase rounded-md transition-all",
             mode === 'advanced'
-              ? "bg-white text-indigo-600 shadow-sm"
+              ? "bg-white text-purple-600 shadow-sm"
               : "text-slate-600 hover:text-slate-800"
           )}
         >
@@ -277,7 +277,7 @@ export const JobTitleFilterSelect: React.FC<JobTitleFilterSelectProps> = ({
           </div>
 
           {/* Past Job Titles Link */}
-          {/* <button className="text-[10px] text-indigo-600 hover:text-indigo-700 font-medium">
+          {/* <button className="text-[10px] text-purple-600 hover:text-purple-700 font-medium">
             Past job titles →
           </button> */}
         </div>
@@ -310,7 +310,7 @@ export const JobTitleFilterSelect: React.FC<JobTitleFilterSelectProps> = ({
             Create New Persona
           </Button>
 
-          <button className="w-full text-[10px] text-indigo-600 hover:text-indigo-700 font-medium">
+          <button className="w-full text-[10px] text-purple-600 hover:text-purple-700 font-medium">
             What's a Persona?
           </button>
         </div>
@@ -330,7 +330,7 @@ export const JobTitleFilterSelect: React.FC<JobTitleFilterSelectProps> = ({
           <ScrollArea className="max-h-[240px] overflow-y-auto">
             {isLoading ? (
               <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
+                <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
                 <span className="ml-2 text-xs text-slate-500">Searching...</span>
               </div>
             ) : jobTitles.length === 0 ? (

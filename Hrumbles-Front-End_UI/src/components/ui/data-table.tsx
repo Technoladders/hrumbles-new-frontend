@@ -37,8 +37,8 @@ export function DataTable<TData, TValue>({
               className={cn(
                 "transition-all",
                 isDiscoveryMode 
-                  ? "bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800"
-                  : "bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800"
+                  ? "bg-gradient-to-r from-purple-600 to-violet-600"
+                  : "bg-gradient-to-r from-purple-600 to-violet-600"
               )}
             >
               {headerGroup.headers.map((header: any) => {
@@ -63,12 +63,12 @@ export function DataTable<TData, TValue>({
                       "border-r border-white/10 last:border-r-0",
                       isStickyColumn && "z-50",
                       header.column.id === 'select' && (isDiscoveryMode 
-                        ? "bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800"
-                        : "bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800"
+                        ? "bg-gradient-to-r from-purple-600 to-violet-600"
+                        : "bg-gradient-to-r from-purple-600 to-violet-600"
                       ),
                       header.column.id === 'name' && (isDiscoveryMode 
-                        ? "bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.2)]"
-                        : "bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.2)]"
+                        ? "bg-gradient-to-r from-purple-600 to-violet-600 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.2)]"
+                        : "bg-gradient-to-r from-purple-600 to-violet-600 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.2)]"
                       )
                     )}
                   >

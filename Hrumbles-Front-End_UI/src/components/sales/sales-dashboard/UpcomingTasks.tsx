@@ -47,6 +47,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useSelector } from 'react-redux';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { DashboardTaskDialog, ActivityLogData } from '@/components/sales/contact-detail/dialogs/ActivityDialogs';
 
 // =====================
 // TYPES
@@ -507,74 +508,76 @@ export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({
   const [activeTab, setActiveTab] = useState<'overdue' | 'today' | 'upcoming'>('today');
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  
   const queryClient = useQueryClient();
   const user = useSelector((state: any) => state.auth.user);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
-  // Fetch team members if not provided
-  const { data: fetchedTeamMembers } = useQuery({
-    queryKey: ['team-members-tasks', organizationId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('hr_employees')
-        .select('id, first_name, last_name, email, profile_picture_url')
-        .eq('organization_id', organizationId)
-        .eq('status', 'active');
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!organizationId && teamMembers.length === 0
-  });
-
-  // Fetch contacts if not provided
-  const { data: fetchedContacts } = useQuery({
-    queryKey: ['contacts-tasks', organizationId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('contacts')
-        .select('id, name, email, photo_url')
-        .eq('organization_id', organizationId)
-        .limit(100);
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!organizationId && contacts.length === 0
-  });
-
-  const allTeamMembers = teamMembers.length > 0 ? teamMembers : (fetchedTeamMembers || []);
-  const allContacts = contacts.length > 0 ? contacts : (fetchedContacts || []);
-
-  // Complete task mutation
+  // Mutations (Keep existing logic)
   const completeTask = useMutation({
     mutationFn: async (taskId: string) => {
-      const { error } = await supabase.rpc('complete_task', {
-        p_task_id: taskId,
-        p_completed_by: user?.id
-      });
+      const { error } = await supabase.rpc('complete_task', { p_task_id: taskId, p_completed_by: user?.id });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-activities'] });
       onRefresh?.();
     }
   });
 
-  // Delete task mutation
   const deleteTask = useMutation({
     mutationFn: async (taskId: string) => {
-      const { error } = await supabase
-        .from('contact_activities')
-        .delete()
-        .eq('id', taskId);
+      const { error } = await supabase.from('contact_activities').delete().eq('id', taskId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-activities'] });
       onRefresh?.();
     }
   });
+
+  // Handle Create/Update from the new DashboardTaskDialog
+  const handleTaskSubmit = async (data: ActivityLogData) => {
+    try {
+      const taskPayload = {
+        title: data.title,
+        description: data.description,
+        description_html: data.descriptionHtml,
+        type: 'task',
+        task_type: data.metadata.taskType,
+        priority: data.metadata.priority,
+        due_date: data.metadata.dueDate,
+        due_time: data.metadata.dueTime,
+        contact_id: data.metadata.contactId || null,
+        assigned_to: data.metadata.assignedTo || null,
+        metadata: { reminder: data.metadata.reminder },
+        organization_id: organizationId,
+        created_by: user?.id,
+        is_completed: false,
+      };
+
+      if (editingTask?.id) {
+        // Update
+        const { error } = await supabase
+          .from('contact_activities')
+          .update(taskPayload)
+          .eq('id', editingTask.id);
+        if (error) throw error;
+      } else {
+        // Insert
+        const { error } = await supabase
+          .from('contact_activities')
+          .insert(taskPayload);
+        if (error) throw error;
+      }
+
+      onRefresh?.();
+      queryClient.invalidateQueries({ queryKey: ['dashboard-tasks'] });
+      setTaskDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving task:', error);
+    }
+  };
 
   const tabs = [
     { key: 'overdue' as const, label: 'Overdue', count: overdue.length, color: 'text-red-600' },
@@ -587,23 +590,8 @@ export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({
       case 'overdue': return overdue;
       case 'today': return today;
       case 'upcoming': return upcoming;
+      default: return [];
     }
-  };
-
-  const handleEditTask = (task: Task) => {
-    setEditingTask(task);
-    setTaskDialogOpen(true);
-  };
-
-  const handleCreateTask = () => {
-    setEditingTask(null);
-    setTaskDialogOpen(true);
-  };
-
-  const handleTaskSuccess = () => {
-    queryClient.invalidateQueries({ queryKey: ['dashboard-tasks'] });
-    queryClient.invalidateQueries({ queryKey: ['dashboard-activities'] });
-    onRefresh?.();
   };
 
   return (
@@ -626,7 +614,7 @@ export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({
               variant="outline" 
               size="sm" 
               className="h-8 gap-1"
-              onClick={handleCreateTask}
+              onClick={() => { setEditingTask(null); setTaskDialogOpen(true); }}
             >
               <Plus size={14} />
               New Task
@@ -672,48 +660,29 @@ export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({
                 task={task}
                 isOverdue={activeTab === 'overdue'}
                 onComplete={() => completeTask.mutate(task.id)}
-                onEdit={() => handleEditTask(task)}
+                onEdit={() => { setEditingTask(task); setTaskDialogOpen(true); }}
                 onDelete={() => deleteTask.mutate(task.id)}
-                teamMembers={allTeamMembers}
+                teamMembers={teamMembers}
               />
             ))}
-
             {getActiveData().length === 0 && (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                  <CheckSquare size={20} className="text-gray-400" />
-                </div>
-                <p className="text-sm font-medium text-gray-500">
-                  {activeTab === 'overdue' ? 'No overdue tasks!' : 
-                   activeTab === 'today' ? 'No tasks due today' : 
-                   'No upcoming tasks'}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {activeTab === 'overdue' ? 'Great job staying on track!' : 'Tasks will appear here'}
-                </p>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="mt-4 gap-1"
-                  onClick={handleCreateTask}
-                >
-                  <Plus size={14} />
-                  Create Task
-                </Button>
+              <div className="flex flex-col items-center justify-center py-8 text-center text-gray-400">
+                <CheckSquare size={32} className="mb-2 opacity-20" />
+                <p className="text-sm font-medium">No tasks found</p>
               </div>
             )}
           </div>
         </ScrollArea>
       </div>
 
-      {/* Create/Edit Task Dialog */}
-      <TaskDialog
+      {/* NEW Responsive Task Dialog */}
+      <DashboardTaskDialog
         open={taskDialogOpen}
         onOpenChange={setTaskDialogOpen}
         task={editingTask}
-        teamMembers={allTeamMembers}
-        contacts={allContacts}
-        onSuccess={handleTaskSuccess}
+        teamMembers={teamMembers}
+        contacts={contacts}
+        onSubmit={handleTaskSubmit}
       />
     </>
   );

@@ -777,7 +777,7 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
               <h2 className="text-3xl font-bold text-slate-900 mb-4">Search</h2>
               <p className="text-lg text-slate-600 max-w-lg mb-10">Use the filters on the left to discover companies. All matching results are automatically saved to your database.</p>
               <div className="flex gap-10 text-base text-slate-500">
-                <div className="flex items-center gap-3"><Zap className="h-6 w-6 text-amber-500" />Credits used</div>
+                <div className="flex items-center gap-3"><Zap className="h-6 w-6 text-amber-500" />Find Companies</div>
                 <div className="flex items-center gap-3"><Database className="h-6 w-6 text-blue-500" />Auto-saved</div>
               </div>
             </div>
@@ -800,10 +800,10 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
               <div className="flex-1 overflow-hidden bg-white border border-slate-200 shadow-sm">
                 <div className="h-full overflow-y-auto">
                   <table className="w-full min-w-max divide-y divide-slate-200 table-fixed">
-                <thead className="sticky top-0 z-10 bg-gradient-to-r from-slate-800 to-slate-700 shadow-sm">
+                <thead className="sticky top-0 z-10 bg-gradient-to-r from-purple-600 to-violet-600 shadow-sm">
   <tr>
     {/* 1. Company + checkbox */}
-    <th className="sticky left-0 z-30 bg-gradient-to-r from-slate-800 to-slate-700 px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider border-r border-slate-600/40 shadow-[2px_0_6px_-3px_rgba(0,0,0,0.25)] w-[260px]">
+    <th className="sticky left-0 z-30 bg-gradient-to-r from-purple-600 to-violet-600 px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider border-r border-slate-600/40 shadow-[2px_0_6px_-3px_rgba(0,0,0,0.25)] w-[260px]">
       <div className="flex items-center gap-2">
         <Checkbox
           checked={displayCompanies.length > 0 && displayCompanies.every((c: any) => selectedOrgs.has(c.id?.toString() || c.apollo_org_id || ""))}

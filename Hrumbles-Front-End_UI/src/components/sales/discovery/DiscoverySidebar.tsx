@@ -141,11 +141,11 @@ export function DiscoverySidebar() {
   return (
     <div className="flex flex-col h-full bg-white border-r border-slate-200 shadow-xl z-30 w-full">
       {/* HEADER */}
-      <div className="p-4 border-b bg-gradient-to-r from-indigo-50 to-white flex flex-col gap-3">
+      <div className="p-4 border-b bg-gradient-to-r from-purple-100 to-white flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Globe className="h-4 w-4 text-indigo-600" />
-            <span className="text-xs font-black uppercase tracking-widest text-indigo-900">
+            <Globe className="h-4 w-4 text-purple-600" />
+            <span className="text-xs font-black uppercase tracking-widest text-purple-900">
                Search People
             </span>
           </div>
@@ -156,17 +156,17 @@ export function DiscoverySidebar() {
 
         {/* MAIN KEYWORD SEARCH */}
         <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 text-indigo-400" size={14} />
+            <Search className="absolute left-2.5 top-2.5 text-purple-400" size={14} />
             <Input 
                 placeholder="Search Name or Keywords..." 
-                className="pl-8 h-9 text-xs border-indigo-200 bg-white focus-visible:ring-indigo-500"
+                className="pl-8 h-9 text-xs border-purple-200 bg-white focus-visible:ring-purple-500"
                 value={local.q_keywords}
                 onChange={(e) => setLocal({...local, q_keywords: e.target.value})}
                 onKeyDown={(e) => e.key === 'Enter' && handleRunSearch()}
             />
         </div>
         
-        <Button onClick={handleRunSearch} size="sm" className="w-full bg-indigo-600 hover:bg-indigo-700 text-xs font-bold shadow-sm">
+        <Button onClick={handleRunSearch} size="sm" className="w-full bg-purple-600 hover:bg-purple-700 text-xs font-bold shadow-sm">
             <Play size={10} className="mr-2 fill-current"/> Run Search
         </Button>
       </div>

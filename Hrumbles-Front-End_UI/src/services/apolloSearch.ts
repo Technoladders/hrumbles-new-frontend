@@ -95,7 +95,7 @@ export async function searchPeopleInApollo(
   perPage: number = 10
 ): Promise<ApolloSearchResponse> {
   try {
-    console.log('🔍 Searching Apollo.io (API Search - No Credits) with filters:', filters);
+    console.log('🔍 Searching  (API Search) with filters:', filters);
 
     // Call NEW edge function that uses mixed_people/api_search endpoint
     const { data, error } = await supabase.functions.invoke('apollo-people-search-v1', {
@@ -108,12 +108,12 @@ export async function searchPeopleInApollo(
 
     if (error) {
       console.error('❌ Supabase function error:', error);
-      throw new Error(error.message || 'Failed to search Apollo.io');
+      throw new Error(error.message || 'Failed to search cloud');
     }
 
     // Handle empty or invalid response
     if (!data || !data.people) {
-      console.log('⚠️ No data returned from Apollo.io');
+      console.log('⚠️ No data returned from cloud');
       return {
         people: [],
         pagination: {
@@ -155,7 +155,7 @@ export async function searchPeopleInApollo(
       },
     };
   } catch (error: any) {
-    console.error('❌ Apollo search error:', error);
+    console.error('❌ cloud search error:', error);
     throw error;
   }
 }

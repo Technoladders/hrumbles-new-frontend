@@ -139,7 +139,7 @@ export const CompanySearchDialog: React.FC<CompanySearchDialogProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5" />
-            Search Companies in Apollo.io
+            Search Companies in Cloud
           </DialogTitle>
           <DialogDescription>
             Target specific companies by industry and location.
@@ -240,7 +240,7 @@ export const CompanySearchDialog: React.FC<CompanySearchDialogProps> = ({
 
           <Button onClick={handleSearch} disabled={isLoading} className="w-full bg-purple-600 hover:bg-purple-700">
             <Search className="h-4 w-4 mr-2" />
-            {isLoading ? 'Searching...' : 'Search Apollo.io'}
+            {isLoading ? 'Searching...' : 'Search Cloud'}
           </Button>
         </div>
 

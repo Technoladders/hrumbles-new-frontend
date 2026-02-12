@@ -866,7 +866,7 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
           ) : (
             <>
               <Search className="h-4 w-4 mr-2" />
-              Search Apollo.io
+              Search Cloud
             </>
           )}
         </Button>

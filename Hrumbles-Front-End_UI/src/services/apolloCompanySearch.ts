@@ -64,12 +64,12 @@ export async function searchCompaniesInApollo(
 
     if (error) {
       console.error('❌ Supabase function error:', error);
-      throw new Error(error.message || 'Failed to search Apollo.io');
+      throw new Error(error.message || 'Failed to search Cloud');
     }
 
     // Handle empty or invalid response
     if (!data || !data.organizations) {
-      console.log('⚠️ No data returned from Apollo.io');
+      console.log('⚠️ No data returned from Cloud');
       return {
         organizations: [],
         pagination: {
@@ -180,7 +180,7 @@ export async function enrichCompanyFromApollo(
   organizationId: string
 ): Promise<ApolloOrganization | null> {
   try {
-    console.log('🔍 Enriching company from Apollo.io:', companyDomain);
+    console.log('🔍 Enriching company from cloud:', companyDomain);
 
     const { data, error } = await supabase.functions.invoke('apollo-company-enrich', {
       body: {
@@ -195,7 +195,7 @@ export async function enrichCompanyFromApollo(
     }
 
     if (!data) {
-      throw new Error('No data returned from Apollo');
+      throw new Error('No data returned from cloud');
     }
 
     console.log('✅ Enrichment successful, saving to database...');
@@ -248,7 +248,7 @@ export async function getCachedCompanyApolloData(
 
     return data.apollo_data as ApolloOrganization;
   } catch (error) {
-    console.error('Error fetching cached company Apollo data:', error);
+    console.error('Error fetching cached company cloud data:', error);
     return null;
   }
 }
