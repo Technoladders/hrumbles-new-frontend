@@ -1,9 +1,26 @@
 // Hrumbles-Front-End_UI/src/components/sales/sales-dashboard/UpcomingTasks.tsx
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { 
   CheckSquare, 
   AlertCircle, 
@@ -12,35 +29,95 @@ import {
   ChevronRight,
   Phone,
   Mail,
-  MessageSquare
+  MessageSquare,
+  Plus,
+  Pencil,
+  Trash2,
+  MoreVertical,
+  User,
+  Users,
+  Search,
+  X,
+  Loader2,
+  UserPlus
 } from 'lucide-react';
-import { format, parseISO, isToday, isTomorrow } from 'date-fns';
+import { format, parseISO, isToday, isTomorrow, isPast } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useSelector } from 'react-redux';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
+// =====================
+// TYPES
+// =====================
 
 interface Task {
   id: string;
   title: string;
   description?: string;
+  description_html?: string;
   due_date: string;
   due_time?: string;
   priority: string;
   task_type: string;
+  created_by: string;
+  assigned_to?: string;
+  contact_id?: string;
   contact?: {
     id: string;
     name: string;
     email: string;
     photo_url?: string;
   };
+  creator?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    profile_picture_url?: string;
+  };
+  assignee?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    profile_picture_url?: string;
+  };
+}
+
+interface TeamMember {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  profile_picture_url?: string;
 }
 
 interface UpcomingTasksProps {
   overdue: Task[];
   today: Task[];
   upcoming: Task[];
+  teamMembers?: TeamMember[];
+  contacts?: any[];
+  onRefresh?: () => void;
 }
+
+// =====================
+// CONSTANTS
+// =====================
+
+const TASK_TYPES = [
+  { value: 'to-do', label: 'To-do', icon: CheckSquare },
+  { value: 'call', label: 'Call', icon: Phone },
+  { value: 'email', label: 'Email', icon: Mail },
+  { value: 'meeting', label: 'Meeting', icon: Calendar },
+];
+
+const PRIORITIES = [
+  { value: 'none', label: 'None', color: 'bg-gray-50 text-gray-600 border-gray-200' },
+  { value: 'low', label: 'Low', color: 'bg-green-50 text-green-700 border-green-200' },
+  { value: 'medium', label: 'Medium', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  { value: 'high', label: 'High', color: 'bg-red-50 text-red-700 border-red-200' },
+];
 
 const taskTypeIcons: Record<string, React.ReactNode> = {
   'to-do': <CheckSquare size={12} />,
@@ -56,10 +133,416 @@ const priorityStyles: Record<string, string> = {
   none: 'bg-gray-50 text-gray-600 border-gray-200'
 };
 
-export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({ overdue, today, upcoming }) => {
+// =====================
+// HELPER FUNCTIONS
+// =====================
+
+const getInitials = (name: string) => {
+  return name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
+};
+
+const formatDueDate = (date: string, time?: string) => {
+  const parsedDate = parseISO(date);
+  if (isToday(parsedDate)) {
+    return time ? `Today at ${time}` : 'Today';
+  }
+  if (isTomorrow(parsedDate)) {
+    return time ? `Tomorrow at ${time}` : 'Tomorrow';
+  }
+  return format(parsedDate, 'MMM d');
+};
+
+// =====================
+// CREATE/EDIT TASK DIALOG
+// =====================
+
+interface TaskDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  task?: Task | null;
+  teamMembers: TeamMember[];
+  contacts: any[];
+  onSuccess: () => void;
+}
+
+const TaskDialog: React.FC<TaskDialogProps> = ({
+  open,
+  onOpenChange,
+  task,
+  teamMembers,
+  contacts,
+  onSuccess
+}) => {
+  const user = useSelector((state: any) => state.auth.user);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
+  
+  const [title, setTitle] = useState(task?.title || '');
+  const [description, setDescription] = useState(task?.description || '');
+  const [taskType, setTaskType] = useState(task?.task_type || 'to-do');
+  const [priority, setPriority] = useState(task?.priority || 'none');
+  const [dueDate, setDueDate] = useState(task?.due_date || format(new Date(), 'yyyy-MM-dd'));
+  const [dueTime, setDueTime] = useState(task?.due_time || '09:00');
+  const [assignedTo, setAssignedTo] = useState<string[]>(task?.assigned_to ? [task.assigned_to] : []);
+  const [contactId, setContactId] = useState(task?.contact_id || '');
+  const [contactSearch, setContactSearch] = useState('');
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Reset form when dialog opens/closes
+  React.useEffect(() => {
+    if (open) {
+      setTitle(task?.title || '');
+      setDescription(task?.description || '');
+      setTaskType(task?.task_type || 'to-do');
+      setPriority(task?.priority || 'none');
+      setDueDate(task?.due_date || format(new Date(), 'yyyy-MM-dd'));
+      setDueTime(task?.due_time || '09:00');
+      setAssignedTo(task?.assigned_to ? [task.assigned_to] : []);
+      setContactId(task?.contact_id || '');
+    }
+  }, [open, task]);
+
+  const filteredContacts = contacts?.filter(c => 
+    c.name?.toLowerCase().includes(contactSearch.toLowerCase()) ||
+    c.email?.toLowerCase().includes(contactSearch.toLowerCase())
+  ).slice(0, 10) || [];
+
+  const filteredAssignees = teamMembers?.filter(m => 
+    `${m.first_name} ${m.last_name}`.toLowerCase().includes(assigneeSearch.toLowerCase()) ||
+    m.email?.toLowerCase().includes(assigneeSearch.toLowerCase())
+  ) || [];
+
+  const handleSubmit = async () => {
+    if (!title.trim()) return;
+    
+    setIsSubmitting(true);
+    try {
+      const taskData = {
+        title,
+        description,
+        type: 'task',
+        task_type: taskType,
+        priority,
+        due_date: dueDate,
+        due_time: dueTime,
+        contact_id: contactId || null,
+        assigned_to: assignedTo[0] || null, // For now, single assignee
+        organization_id: organizationId,
+        created_by: user?.id,
+        is_completed: false,
+      };
+
+      if (task?.id) {
+        // Update existing task
+        const { error } = await supabase
+          .from('contact_activities')
+          .update(taskData)
+          .eq('id', task.id);
+        if (error) throw error;
+      } else {
+        // Create new task
+        const { error } = await supabase
+          .from('contact_activities')
+          .insert(taskData);
+        if (error) throw error;
+      }
+
+      onSuccess();
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Error saving task:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const toggleAssignee = (memberId: string) => {
+    setAssignedTo(prev => 
+      prev.includes(memberId) 
+        ? prev.filter(id => id !== memberId)
+        : [...prev, memberId]
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[550px]">
+        <DialogHeader>
+          <DialogTitle>{task ? 'Edit Task' : 'Create Task'}</DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4">
+          {/* Title */}
+          <div className="space-y-2">
+            <Label htmlFor="title">Task Title *</Label>
+            <Input
+              id="title"
+              placeholder="Enter task title..."
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+
+          {/* Description */}
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <textarea
+              id="description"
+              placeholder="Add details..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full min-h-[80px] px-3 py-2 text-sm border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Due Date & Time */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="dueDate">Due Date</Label>
+              <Input
+                id="dueDate"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dueTime">Due Time</Label>
+              <Input
+                id="dueTime"
+                type="time"
+                value={dueTime}
+                onChange={(e) => setDueTime(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Task Type & Priority */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Task Type</Label>
+              <Select value={taskType} onValueChange={setTaskType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TASK_TYPES.map(t => (
+                    <SelectItem key={t.value} value={t.value}>
+                      <div className="flex items-center gap-2">
+                        <t.icon size={14} />
+                        {t.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Priority</Label>
+              <Select value={priority} onValueChange={setPriority}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRIORITIES.map(p => (
+                    <SelectItem key={p.value} value={p.value}>
+                      <Badge variant="outline" className={cn("text-xs", p.color)}>
+                        {p.label}
+                      </Badge>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Associate Contact */}
+          <div className="space-y-2">
+            <Label>Associate Contact (Optional)</Label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Input
+                placeholder="Search contacts..."
+                value={contactSearch}
+                onChange={(e) => setContactSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            {contactSearch && filteredContacts.length > 0 && (
+              <ScrollArea className="h-32 border rounded-md">
+                {filteredContacts.map(contact => (
+                  <div
+                    key={contact.id}
+                    onClick={() => {
+                      setContactId(contact.id);
+                      setContactSearch(contact.name);
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50",
+                      contactId === contact.id && "bg-blue-50"
+                    )}
+                  >
+                    <Avatar className="h-6 w-6">
+                      <AvatarImage src={contact.photo_url} />
+                      <AvatarFallback className="text-[9px]">
+                        {getInitials(contact.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{contact.name}</p>
+                      <p className="text-xs text-gray-500 truncate">{contact.email}</p>
+                    </div>
+                  </div>
+                ))}
+              </ScrollArea>
+            )}
+            {contactId && (
+              <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-md">
+                <User size={14} className="text-blue-600" />
+                <span className="text-sm text-blue-700">
+                  {contacts?.find(c => c.id === contactId)?.name || 'Contact selected'}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 ml-auto"
+                  onClick={() => {
+                    setContactId('');
+                    setContactSearch('');
+                  }}
+                >
+                  <X size={12} />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Assign To */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <UserPlus size={14} />
+              Assign To
+            </Label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Input
+                placeholder="Search team members..."
+                value={assigneeSearch}
+                onChange={(e) => setAssigneeSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <ScrollArea className="h-32 border rounded-md">
+              {filteredAssignees.map(member => (
+                <div
+                  key={member.id}
+                  onClick={() => toggleAssignee(member.id)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50",
+                    assignedTo.includes(member.id) && "bg-green-50"
+                  )}
+                >
+                  <Checkbox checked={assignedTo.includes(member.id)} />
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src={member.profile_picture_url} />
+                    <AvatarFallback className="text-[9px]">
+                      {getInitials(`${member.first_name} ${member.last_name}`)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {member.first_name} {member.last_name}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">{member.email}</p>
+                  </div>
+                </div>
+              ))}
+            </ScrollArea>
+            {assignedTo.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {assignedTo.map(id => {
+                  const member = teamMembers?.find(m => m.id === id);
+                  return (
+                    <Badge key={id} variant="secondary" className="gap-1">
+                      {member?.first_name} {member?.last_name}
+                      <X 
+                        size={10} 
+                        className="cursor-pointer" 
+                        onClick={() => toggleAssignee(id)} 
+                      />
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={isSubmitting || !title.trim()}>
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {task ? 'Update Task' : 'Create Task'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// =====================
+// MAIN COMPONENT
+// =====================
+
+export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({ 
+  overdue, 
+  today, 
+  upcoming,
+  teamMembers = [],
+  contacts = [],
+  onRefresh
+}) => {
   const [activeTab, setActiveTab] = useState<'overdue' | 'today' | 'upcoming'>('today');
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const queryClient = useQueryClient();
   const user = useSelector((state: any) => state.auth.user);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
+
+  // Fetch team members if not provided
+  const { data: fetchedTeamMembers } = useQuery({
+    queryKey: ['team-members-tasks', organizationId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('hr_employees')
+        .select('id, first_name, last_name, email, profile_picture_url')
+        .eq('organization_id', organizationId)
+        .eq('status', 'active');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!organizationId && teamMembers.length === 0
+  });
+
+  // Fetch contacts if not provided
+  const { data: fetchedContacts } = useQuery({
+    queryKey: ['contacts-tasks', organizationId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('id, name, email, photo_url')
+        .eq('organization_id', organizationId)
+        .limit(100);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!organizationId && contacts.length === 0
+  });
+
+  const allTeamMembers = teamMembers.length > 0 ? teamMembers : (fetchedTeamMembers || []);
+  const allContacts = contacts.length > 0 ? contacts : (fetchedContacts || []);
 
   // Complete task mutation
   const completeTask = useMutation({
@@ -73,6 +556,23 @@ export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({ overdue, today, up
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-tasks'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-activities'] });
+      onRefresh?.();
+    }
+  });
+
+  // Delete task mutation
+  const deleteTask = useMutation({
+    mutationFn: async (taskId: string) => {
+      const { error } = await supabase
+        .from('contact_activities')
+        .delete()
+        .eq('id', taskId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-activities'] });
+      onRefresh?.();
     }
   });
 
@@ -90,155 +590,282 @@ export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({ overdue, today, up
     }
   };
 
-  const getInitials = (name: string) => {
-    return name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+    setTaskDialogOpen(true);
   };
 
-  const formatDueDate = (date: string, time?: string) => {
-    const parsedDate = parseISO(date);
-    if (isToday(parsedDate)) {
-      return time ? `Today at ${time}` : 'Today';
-    }
-    if (isTomorrow(parsedDate)) {
-      return time ? `Tomorrow at ${time}` : 'Tomorrow';
-    }
-    return format(parsedDate, 'MMM d');
+  const handleCreateTask = () => {
+    setEditingTask(null);
+    setTaskDialogOpen(true);
+  };
+
+  const handleTaskSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ['dashboard-tasks'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-activities'] });
+    onRefresh?.();
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-5 h-full flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-violet-100 rounded-lg">
-            <CheckSquare size={18} className="text-violet-600" />
+    <>
+      <div className="bg-white rounded-xl border border-gray-100 p-5 h-full flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-violet-100 rounded-lg">
+              <CheckSquare size={18} className="text-violet-600" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">Tasks</h3>
+              <p className="text-xs text-gray-500">{overdue.length + today.length + upcoming.length} pending</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-base font-semibold text-gray-900">Tasks</h3>
-            <p className="text-xs text-gray-500">{overdue.length + today.length + upcoming.length} pending</p>
+          
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-8 gap-1"
+              onClick={handleCreateTask}
+            >
+              <Plus size={14} />
+              New Task
+            </Button>
+            <Button variant="ghost" size="sm" className="text-xs text-blue-600">
+              View All <ChevronRight size={14} className="ml-1" />
+            </Button>
           </div>
         </div>
-        
-        <Button variant="ghost" size="sm" className="text-xs text-blue-600">
-          View All <ChevronRight size={14} className="ml-1" />
-        </Button>
+
+        {/* Tabs */}
+        <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg mb-4">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition-all",
+                activeTab === tab.key
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              )}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span className={cn(
+                  "w-5 h-5 rounded-full text-[10px] flex items-center justify-center",
+                  tab.key === 'overdue' && tab.count > 0 ? "bg-red-100 text-red-600" : "bg-gray-200 text-gray-600"
+                )}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Task List */}
+        <ScrollArea className="flex-1">
+          <div className="space-y-2 pr-2">
+            {getActiveData().map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                isOverdue={activeTab === 'overdue'}
+                onComplete={() => completeTask.mutate(task.id)}
+                onEdit={() => handleEditTask(task)}
+                onDelete={() => deleteTask.mutate(task.id)}
+                teamMembers={allTeamMembers}
+              />
+            ))}
+
+            {getActiveData().length === 0 && (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                  <CheckSquare size={20} className="text-gray-400" />
+                </div>
+                <p className="text-sm font-medium text-gray-500">
+                  {activeTab === 'overdue' ? 'No overdue tasks!' : 
+                   activeTab === 'today' ? 'No tasks due today' : 
+                   'No upcoming tasks'}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {activeTab === 'overdue' ? 'Great job staying on track!' : 'Tasks will appear here'}
+                </p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="mt-4 gap-1"
+                  onClick={handleCreateTask}
+                >
+                  <Plus size={14} />
+                  Create Task
+                </Button>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg mb-4">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition-all",
-              activeTab === tab.key
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
+      {/* Create/Edit Task Dialog */}
+      <TaskDialog
+        open={taskDialogOpen}
+        onOpenChange={setTaskDialogOpen}
+        task={editingTask}
+        teamMembers={allTeamMembers}
+        contacts={allContacts}
+        onSuccess={handleTaskSuccess}
+      />
+    </>
+  );
+};
+
+// =====================
+// TASK CARD COMPONENT
+// =====================
+
+interface TaskCardProps {
+  task: Task;
+  isOverdue: boolean;
+  onComplete: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  teamMembers: TeamMember[];
+}
+
+const TaskCard: React.FC<TaskCardProps> = ({
+  task,
+  isOverdue,
+  onComplete,
+  onEdit,
+  onDelete,
+  teamMembers
+}) => {
+  const creator = task.creator || teamMembers.find(m => m.id === task.created_by);
+  const assignee = task.assignee || teamMembers.find(m => m.id === task.assigned_to);
+
+  return (
+    <div 
+      className={cn(
+        "p-3 rounded-lg border transition-all group",
+        isOverdue 
+          ? "bg-red-50/50 border-red-100 hover:border-red-200" 
+          : "bg-gray-50/50 border-gray-100 hover:border-gray-200"
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <Checkbox
+          className={cn(
+            "mt-0.5",
+            isOverdue && "border-red-300"
+          )}
+          onCheckedChange={onComplete}
+        />
+        
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-medium text-gray-900 line-clamp-1">
+              {task.title}
+            </p>
+            <div className="flex items-center gap-1">
+              {task.priority && task.priority !== 'none' && (
+                <Badge 
+                  variant="outline" 
+                  className={cn("text-[10px] capitalize shrink-0", priorityStyles[task.priority])}
+                >
+                  {task.priority}
+                </Badge>
+              )}
+              
+              {/* Actions Menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <MoreVertical size={14} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-36">
+                  <DropdownMenuItem onClick={onEdit}>
+                    <Pencil size={12} className="mr-2" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onDelete} className="text-red-600">
+                    <Trash2 size={12} className="mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            {/* Task Type */}
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+              {taskTypeIcons[task.task_type] || taskTypeIcons['to-do']}
+              <span className="capitalize">{task.task_type || 'Task'}</span>
+            </span>
+
+            {/* Due Date */}
+            <span className={cn(
+              "inline-flex items-center gap-1 text-xs",
+              isOverdue ? "text-red-600" : "text-gray-500"
+            )}>
+              {isOverdue ? (
+                <AlertCircle size={10} />
+              ) : (
+                <Clock size={10} />
+              )}
+              {formatDueDate(task.due_date, task.due_time)}
+            </span>
+          </div>
+
+          {/* Contact & Assignee Info */}
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            {/* Contact */}
+            {task.contact && (
+              <div className="flex items-center gap-1.5">
+                <Avatar className="h-5 w-5">
+                  <AvatarImage src={task.contact.photo_url} />
+                  <AvatarFallback className="text-[8px] bg-gray-200">
+                    {getInitials(task.contact.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-xs text-gray-500 truncate max-w-[100px]">
+                  {task.contact.name}
+                </span>
+              </div>
             )}
-          >
-            {tab.label}
-            {tab.count > 0 && (
-              <span className={cn(
-                "w-4 h-4 rounded-full text-[10px] flex items-center justify-center",
-                tab.key === 'overdue' && tab.count > 0 ? "bg-red-100 text-red-600" : "bg-gray-200 text-gray-600"
-              )}>
-                {tab.count}
+
+            {/* Assigned To */}
+            {assignee && (
+              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-50 rounded-full">
+                <Avatar className="h-4 w-4">
+                  <AvatarImage src={assignee.profile_picture_url} />
+                  <AvatarFallback className="text-[7px] bg-blue-200 text-blue-700">
+                    {getInitials(`${assignee.first_name} ${assignee.last_name}`)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-[10px] text-blue-700 font-medium">
+                  Assigned to {assignee.first_name}
+                </span>
+              </div>
+            )}
+
+            {/* Created By */}
+            {creator && (
+              <span className="text-[10px] text-gray-400">
+                by {creator.first_name} {creator.last_name}
               </span>
             )}
-          </button>
-        ))}
-      </div>
-
-      {/* Task List */}
-      <div className="flex-1 overflow-y-auto space-y-2">
-        {getActiveData().map((task) => (
-          <div 
-            key={task.id}
-            className={cn(
-              "p-3 rounded-lg border transition-all",
-              activeTab === 'overdue' 
-                ? "bg-red-50/50 border-red-100" 
-                : "bg-gray-50/50 border-gray-100 hover:border-gray-200"
-            )}
-          >
-            <div className="flex items-start gap-3">
-              <Checkbox
-                className={cn(
-                  "mt-0.5",
-                  activeTab === 'overdue' && "border-red-300"
-                )}
-                onCheckedChange={() => completeTask.mutate(task.id)}
-              />
-              
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-gray-900 line-clamp-1">
-                    {task.title}
-                  </p>
-                  {task.priority && task.priority !== 'none' && (
-                    <Badge 
-                      variant="outline" 
-                      className={cn("text-[10px] capitalize shrink-0", priorityStyles[task.priority])}
-                    >
-                      {task.priority}
-                    </Badge>
-                  )}
-                </div>
-                
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  {/* Task Type */}
-                  <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                    {taskTypeIcons[task.task_type] || taskTypeIcons['to-do']}
-                    <span className="capitalize">{task.task_type || 'Task'}</span>
-                  </span>
-
-                  {/* Due Date */}
-                  <span className={cn(
-                    "inline-flex items-center gap-1 text-xs",
-                    activeTab === 'overdue' ? "text-red-600" : "text-gray-500"
-                  )}>
-                    {activeTab === 'overdue' ? (
-                      <AlertCircle size={10} />
-                    ) : (
-                      <Clock size={10} />
-                    )}
-                    {formatDueDate(task.due_date, task.due_time)}
-                  </span>
-                </div>
-
-                {/* Contact */}
-                {task.contact && (
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <Avatar className="h-5 w-5">
-                      <AvatarImage src={task.contact.photo_url} />
-                      <AvatarFallback className="text-[8px] bg-gray-200">
-                        {getInitials(task.contact.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="text-xs text-gray-500 truncate">{task.contact.name}</span>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
-        ))}
-
-        {getActiveData().length === 0 && (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-              <CheckSquare size={20} className="text-gray-400" />
-            </div>
-            <p className="text-sm font-medium text-gray-500">
-              {activeTab === 'overdue' ? 'No overdue tasks!' : 
-               activeTab === 'today' ? 'No tasks due today' : 
-               'No upcoming tasks'}
-            </p>
-            <p className="text-xs text-gray-400 mt-1">
-              {activeTab === 'overdue' ? 'Great job staying on track!' : 'Tasks will appear here'}
-            </p>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
 };
+
+export default UpcomingTasks;

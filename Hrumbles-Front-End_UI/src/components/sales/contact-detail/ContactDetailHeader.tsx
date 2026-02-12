@@ -3,7 +3,7 @@ import React from 'react';
 import { 
   ChevronLeft, Sparkles, PhoneCall, Mail, 
   StickyNote, Calendar, CheckSquare, MoreHorizontal,
-  ExternalLink, Building2, ListPlus, Download
+  ExternalLink, Building2, ListPlus, Download, Linkedin
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -22,7 +22,7 @@ interface ContactDetailHeaderProps {
   onBack: () => void;
   onEnrich: () => void;
   isEnriching: boolean;
-  onOpenModal: (type: 'call' | 'note' | 'email' | 'task' | 'meeting') => void;
+  onOpenModal: (type: 'call' | 'note' | 'email' | 'linkedin' | 'task' | 'meeting') => void;
   refetch: () => void;
 }
 
@@ -127,6 +127,12 @@ const companyWebsite =
               onClick={() => onOpenModal('email')}
             />
             <ActionIconButton 
+              icon={<Linkedin size={16} />}
+              tooltip="Log LinkedIn"
+              onClick={() => onOpenModal('linkedin')}
+            />
+
+            <ActionIconButton 
               icon={<StickyNote size={16} />}
               tooltip="Create Note"
               onClick={() => onOpenModal('note')}
@@ -192,6 +198,9 @@ const companyWebsite =
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onOpenModal('email')} className="md:hidden">
                 <Mail size={14} className="mr-2" /> Log Email
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onOpenModal('linkedin')} className="md:hidden">
+                <Linkedin size={14} className="mr-2" /> LinkedIn Log
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onOpenModal('note')} className="md:hidden">
                 <StickyNote size={14} className="mr-2" /> Create Note

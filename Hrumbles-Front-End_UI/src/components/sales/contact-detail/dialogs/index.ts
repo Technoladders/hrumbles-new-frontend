@@ -6,7 +6,8 @@ export {
   LogEmailDialog, 
   CreateNoteDialog, 
   CreateTaskDialog, 
-  LogMeetingDialog 
+  LogMeetingDialog ,
+  LogLinkedInDialog
 } from './ActivityDialogs';
 
 export type { ActivityLogData, ActivityType } from './ActivityDialogs';

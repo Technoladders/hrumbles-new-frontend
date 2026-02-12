@@ -107,6 +107,16 @@ export default function TanstackContactsPage() {
   
   // Get fileId from route params
   const { fileId } = useParams<{ fileId?: string }>();
+
+  useEffect(() => {
+    if (fileId) {
+      dispatch(setDiscoveryMode(false));
+      // Optional but recommended: also clear search/filter state
+      dispatch(resetSearch());
+      // Optional: reset page to 1 when switching context
+      dispatch(setPage(1));
+    }
+  }, [fileId, dispatch]);
   
 
   const organization_id = useSelector((state: any) => state.auth.organization_id);
@@ -237,6 +247,8 @@ export default function TanstackContactsPage() {
 
   const tableData = queryResult?.data || [];
   const totalRowCount = queryResult?.count || 0; // Get count from query
+
+  const isPendingFilterChange = isFetching && !isLoading;
 
    // --- NEW HELPER: Save Availability Stats ---
   const saveContactAvailability = async (contactId: string, person: any) => {
@@ -761,47 +773,55 @@ const handleListAdd = async (targetFileId: string) => {
          CHANGE 1: Only show full Spinner on INITIAL load (isLoading).
          On updates (isFetching), keep the table mounted but dimmed.
       */}
-      {isLoading ? (
-        <div className="flex-1 flex flex-col items-center justify-center bg-white rounded-2xl border border-dashed">
-          <Spinner size="xl" color="indigo.500" />
-          <p className="mt-4 text-xs font-black text-slate-400 uppercase tracking-widest">
-            Loading Contacts...
+     {isLoading ? (
+  <div className="flex-1 flex flex-col items-center justify-center ...">
+    <Spinner size="xl" color="indigo.500" />
+    <p>Loading Contacts...</p>
+  </div>
+) : isPendingFilterChange ? (
+  <div className="flex-1 flex flex-col items-center justify-center ... opacity-70">
+    <Spinner size="lg" color="indigo.500" />
+    <p className="mt-4 text-xs font-black text-slate-500 uppercase tracking-widest">
+      Applying filters...
+    </p>
+    <p className="mt-2 text-xs text-slate-400">
+      This usually takes a few seconds
+    </p>
+  </div>
+) : (
+  <div className={cn(
+    "flex-1 bg-white rounded-t-2xl border shadow-sm overflow-hidden ...",
+    isFetching ? "opacity-60 pointer-events-none" : "opacity-100"
+  )}>
+    {tableData.length === 0 ? (
+      isDiscoveryMode ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
+          <div className="bg-indigo-50 p-4 rounded-full mb-4">
+            <Zap className="h-8 w-8 text-indigo-600" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800">Global Intelligence Search</h3>
+          <p className="text-sm text-slate-500 max-w-md mt-2">
+            Search over 275M+ verified contacts.
           </p>
         </div>
       ) : (
-        <div className={cn(
-            "flex-1 bg-white rounded-t-2xl border shadow-sm overflow-hidden flex flex-col transition-opacity duration-200",
-            // Dim the table while fetching new page/rows
-            isFetching ? "opacity-60 pointer-events-none" : "opacity-100"
-        )}>
-           {isDiscoveryMode && tableData.length === 0 ? (
-             <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-                 <div className="bg-indigo-50 p-4 rounded-full mb-4">
-                   <Zap className="h-8 w-8 text-indigo-600" />
-                 </div>
-                 <h3 className="text-lg font-bold text-slate-800">Global Intelligence Search</h3>
-                 <p className="text-sm text-slate-500 max-w-md mt-2">
-                   Search over 275M+ verified contacts.
-                 </p>
-             </div>
-           ) : tableData.length === 0 ? (
-             <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-                 <div className="bg-slate-100 p-4 rounded-full mb-4">
-                   <FolderOpen className="h-8 w-8 text-slate-400" />
-                 </div>
-                 <h3 className="text-lg font-bold text-slate-800">No Contacts Yet</h3>
-                 <p className="text-sm text-slate-500 max-w-md mt-2">
-                   {fileId 
-                     ? "This list is empty. Add contacts from the Discovery mode or your CRM."
-                     : "Start by adding contacts or searching in Discovery mode."
-                   }
-                 </p>
-             </div>
-           ) : (
-             <DataTable table={table} />
-           )}
+        <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
+          <div className="bg-slate-100 p-4 rounded-full mb-4">
+            <FolderOpen className="h-8 w-8 text-slate-400" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800">No Contacts Yet</h3>
+          <p className="text-sm text-slate-500 max-w-md mt-2">
+            {fileId
+              ? "This list is empty. Add contacts from Discovery mode or your CRM."
+              : "Start by adding contacts or searching in Discovery mode."}
+          </p>
         </div>
-      )}
+      )
+    ) : (
+      <DataTable table={table} />
+    )}
+  </div>
+)}
 
       {/* Pagination Bar */}
       <div className="bg-white border-x border-b rounded-b-2xl px-6 py-3 flex justify-between items-center shadow-sm mb-6">

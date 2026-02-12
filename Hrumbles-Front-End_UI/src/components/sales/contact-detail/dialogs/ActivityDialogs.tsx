@@ -33,7 +33,8 @@ import {
   Loader2,
   User,
   Clock,
-  Bell
+  Bell,
+  Linkedin
 } from 'lucide-react';
 import { HubSpotRichTextEditor, HubSpotEditorRef } from '../editor/HubSpotRichTextEditor';
 import { cn } from '@/lib/utils';
@@ -46,7 +47,7 @@ import '../editor/hubspot-editor.css';
 // TYPES
 // =====================
 
-export type ActivityType = 'call' | 'email' | 'note' | 'task' | 'meeting';
+export type ActivityType = 'call' | 'email' | 'note' | 'task' | 'meeting' | 'linkedin';
 
 export interface ActivityLogData {
   type: ActivityType;
@@ -111,6 +112,7 @@ const TASK_TYPES = [
   { value: 'call', label: 'Call' },
   { value: 'email', label: 'Email' },
   { value: 'meeting', label: 'Meeting' },
+  { value: 'linkedin', label: 'LinkedIn' },
 ];
 
 const PRIORITIES = [
@@ -135,6 +137,29 @@ const REMINDER_OPTIONS = [
   { value: '30', label: '30 minutes before' },
   { value: '60', label: '1 hour before' },
   { value: '1440', label: '1 day before' },
+];
+
+// LinkedIn specific constants
+const LINKEDIN_ACTIVITY_TYPES = [
+  { value: 'connection_request', label: 'Connection Request Sent' },
+  { value: 'connection_accepted', label: 'Connection Accepted' },
+  { value: 'message_sent', label: 'Message Sent' },
+  { value: 'message_received', label: 'Message Received' },
+  { value: 'inmail_sent', label: 'InMail Sent' },
+  { value: 'inmail_received', label: 'InMail Received' },
+  { value: 'profile_viewed', label: 'Profile Viewed' },
+  { value: 'post_engagement', label: 'Post Engagement' },
+  { value: 'comment', label: 'Comment' },
+  { value: 'endorsement', label: 'Endorsement Given' },
+];
+
+const LINKEDIN_OUTCOMES = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'accepted', label: 'Accepted' },
+  { value: 'replied', label: 'Replied' },
+  { value: 'no_response', label: 'No Response' },
+  { value: 'declined', label: 'Declined' },
+  { value: 'engaged', label: 'Engaged' },
 ];
 
 // =====================
@@ -186,6 +211,14 @@ const getActivityConfig = (type: ActivityType) => {
       headerBg: 'bg-slate-700',
       buttonBg: 'bg-indigo-600 hover:bg-indigo-700',
       title: 'Log Meeting'
+    },
+    linkedin: { 
+      icon: Linkedin, 
+      color: 'text-[#0A66C2]', 
+      bg: 'bg-[#0A66C2]/10',
+      headerBg: 'bg-[#0A66C2]',
+      buttonBg: 'bg-[#0A66C2] hover:bg-[#004182]',
+      title: 'Log LinkedIn Activity'
     },
   };
   return configs[type];
@@ -929,6 +962,212 @@ export const LogMeetingDialog: React.FC<BaseDialogProps> = ({
 };
 
 // =====================
+// LOG LINKEDIN DIALOG (NEW)
+// =====================
+
+export const LogLinkedInDialog: React.FC<BaseDialogProps> = ({
+  open,
+  onOpenChange,
+  contact,
+  onSubmit,
+  isSubmitting = false
+}) => {
+  const editorRef = useRef<HubSpotEditorRef>(null);
+  const [linkedinActivityType, setLinkedinActivityType] = useState('message_sent');
+  const [outcome, setOutcome] = useState('pending');
+  const [activityDate, setActivityDate] = useState(() => format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [createFollowUp, setCreateFollowUp] = useState(false);
+  const [followUpTaskType, setFollowUpTaskType] = useState('linkedin');
+  const [followUpDays, setFollowUpDays] = useState('3');
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [hasContent, setHasContent] = useState(false);
+
+  const config = getActivityConfig('linkedin');
+
+  // Pre-fill LinkedIn URL from contact if available
+  useEffect(() => {
+    if (contact?.linkedin_url) {
+      setLinkedinUrl(contact.linkedin_url);
+    }
+  }, [contact]);
+
+  const resetForm = useCallback(() => {
+    setLinkedinActivityType('message_sent');
+    setOutcome('pending');
+    setActivityDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+    setLinkedinUrl(contact?.linkedin_url || '');
+    setCreateFollowUp(false);
+    setFollowUpTaskType('linkedin');
+    setFollowUpDays('3');
+    setHasContent(false);
+    editorRef.current?.clear();
+  }, [contact]);
+
+  const handleClose = useCallback(() => {
+    resetForm();
+    onOpenChange(false);
+  }, [resetForm, onOpenChange]);
+
+  const handleSubmit = useCallback(async () => {
+    const html = editorRef.current?.getHTML() || '';
+    const text = editorRef.current?.getText() || '';
+    
+    const activityLabel = LINKEDIN_ACTIVITY_TYPES.find(t => t.value === linkedinActivityType)?.label || 'LinkedIn Activity';
+    
+    const data: ActivityLogData = {
+      type: 'linkedin',
+      title: `LinkedIn: ${activityLabel}`,
+      description: text,
+      descriptionHtml: html,
+      metadata: {
+        linkedinActivityType,
+        outcome,
+        activityDate,
+        linkedinUrl,
+      }
+    };
+
+    if (createFollowUp) {
+      const futureDate = addBusinessDays(new Date(), parseInt(followUpDays));
+      data.createFollowUp = {
+        taskType: followUpTaskType,
+        dueDate: format(futureDate, 'yyyy-MM-dd'),
+        dueTime: '09:00',
+      };
+    }
+
+    await onSubmit(data);
+    handleClose();
+  }, [linkedinActivityType, outcome, activityDate, linkedinUrl, createFollowUp, followUpTaskType, followUpDays, onSubmit, handleClose]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className={cn(
+        "p-0 gap-0 overflow-hidden",
+        isFullscreen ? "w-screen h-screen max-w-none rounded-none" : "sm:max-w-[620px] rounded-lg",
+        isMinimized && "h-auto"
+      )}>
+        <DialogHeader 
+          title={config.title}
+          icon={<config.icon size={16} />}
+          bgClass={config.headerBg}
+          isMinimized={isMinimized}
+          isFullscreen={isFullscreen}
+          onMinimize={() => setIsMinimized(!isMinimized)}
+          onFullscreen={() => setIsFullscreen(!isFullscreen)}
+          onClose={handleClose}
+        />
+
+        {!isMinimized && (
+          <>
+            <div className="px-4 py-4 bg-white border-b border-gray-200 space-y-4">
+              {/* Contact with LinkedIn badge */}
+              <div className="flex items-center gap-3 p-3 bg-[#0A66C2]/5 rounded-lg border border-[#0A66C2]/20">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={contact?.photo_url} />
+                  <AvatarFallback className="bg-[#0A66C2] text-white text-sm">
+                    {getInitials(contact?.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">{contact?.name}</p>
+                  <p className="text-xs text-gray-500">{contact?.title || contact?.email}</p>
+                </div>
+                <Linkedin size={20} className="text-[#0A66C2]" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Activity Type">
+                  <Select value={linkedinActivityType} onValueChange={setLinkedinActivityType}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LINKEDIN_ACTIVITY_TYPES.map(t => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+                <FormField label="Outcome">
+                  <Select value={outcome} onValueChange={setOutcome}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Select outcome" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LINKEDIN_OUTCOMES.map(o => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Activity Date" icon={<Calendar size={12} />}>
+                  <Input 
+                    type="datetime-local" 
+                    value={activityDate} 
+                    onChange={(e) => setActivityDate(e.target.value)} 
+                    className="h-9 text-sm" 
+                  />
+                </FormField>
+                <FormField label="LinkedIn Profile URL" icon={<Linkedin size={12} />}>
+                  <Input 
+                    placeholder="https://linkedin.com/in/..." 
+                    value={linkedinUrl} 
+                    onChange={(e) => setLinkedinUrl(e.target.value)} 
+                    className="h-9 text-sm" 
+                  />
+                </FormField>
+              </div>
+            </div>
+
+            {/* Editor */}
+            <div className="px-4 py-3 bg-gray-50">
+              <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
+                Activity Notes
+              </Label>
+              <HubSpotRichTextEditor
+                ref={editorRef}
+                placeholder="Add details about the LinkedIn interaction..."
+                onChange={(html, text) => setHasContent(text.trim().length > 0)}
+                minHeight="120px"
+              />
+            </div>
+
+            {/* Footer */}
+            <DialogFooter
+              contact={contact}
+              createFollowUp={createFollowUp}
+              setCreateFollowUp={setCreateFollowUp}
+              followUpTaskType={followUpTaskType}
+              setFollowUpTaskType={setFollowUpTaskType}
+              followUpDays={followUpDays}
+              setFollowUpDays={setFollowUpDays}
+              onSubmit={handleSubmit}
+              isSubmitting={isSubmitting}
+              isDisabled={false}
+              buttonText="Log LinkedIn activity"
+              buttonClass={config.buttonBg}
+            />
+          </>
+        )}
+
+        {isMinimized && (
+          <div className="px-4 py-2 bg-white flex items-center justify-between">
+            <span className="text-sm text-gray-600">LinkedIn with {contact?.name}</span>
+            <Badge variant="secondary" className="text-xs bg-[#0A66C2]/10 text-[#0A66C2]">Draft</Badge>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// =====================
 // SHARED COMPONENTS
 // =====================
 
@@ -1063,7 +1302,7 @@ const DialogFooter: React.FC<DialogFooterProps> = ({
         <label htmlFor="create-followup" className="text-sm text-gray-700 cursor-pointer flex items-center gap-2 flex-wrap">
           Create a
           <Select value={followUpTaskType} onValueChange={setFollowUpTaskType} disabled={!createFollowUp}>
-            <SelectTrigger className="h-7 w-20 text-xs inline-flex"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-7 w-24 text-xs inline-flex"><SelectValue /></SelectTrigger>
             <SelectContent>
               {TASK_TYPES.map(t => <SelectItem key={t.value} value={t.value} className="text-xs">{t.label}</SelectItem>)}
             </SelectContent>

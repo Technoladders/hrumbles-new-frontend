@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
-  PhoneCall, Mail, StickyNote, Calendar, CheckSquare, Clock,
+  PhoneCall, Mail, StickyNote, Calendar, CheckSquare, Clock, Linkedin,
   Plus, Filter, ChevronDown, MoreHorizontal, CheckCircle2, Circle,
   ArrowUpRight, ArrowDownLeft, AlertCircle
 } from 'lucide-react';
@@ -20,7 +20,7 @@ import { format, formatDistanceToNow, isToday, isYesterday, parseISO, isPast } f
 
 interface ActivityTimelineTabProps {
   contact: any;
-  onOpenModal: (type: 'call' | 'note' | 'email' | 'task' | 'meeting') => void;
+  onOpenModal: (type: 'call' | 'note' | 'email' | 'linkedin' | 'task' | 'meeting') => void;
   onCompleteTask?: (taskId: string) => void;
   onDeleteActivity?: (activityId: string) => void;
 }
@@ -68,6 +68,7 @@ export const ActivityTimelineTab: React.FC<ActivityTimelineTabProps> = ({
     { value: 'all', label: 'All Activities', count: activities.length },
     { value: 'call', label: 'Calls', count: activities.filter((a: any) => a.type === 'call').length },
     { value: 'email', label: 'Emails', count: activities.filter((a: any) => a.type === 'email').length },
+    { value: 'linkedin', label: 'LinkedIn Logs', count: activities.filter((a: any) => a.type === 'linkedin').length },
     { value: 'note', label: 'Notes', count: activities.filter((a: any) => a.type === 'note').length },
     { value: 'task', label: 'Tasks', count: activities.filter((a: any) => a.type === 'task').length },
     { value: 'meeting', label: 'Meetings', count: activities.filter((a: any) => a.type === 'meeting').length },
@@ -76,6 +77,7 @@ export const ActivityTimelineTab: React.FC<ActivityTimelineTabProps> = ({
   const quickActions = [
     { type: 'call' as const, icon: PhoneCall, label: 'Log Call', color: 'text-amber-600', bg: 'bg-amber-50 hover:bg-amber-100 border-amber-200' },
     { type: 'email' as const, icon: Mail, label: 'Log Email', color: 'text-blue-600', bg: 'bg-blue-50 hover:bg-blue-100 border-blue-200' },
+    { type: 'linkedin' as const, icon: Linkedin, label: 'Log LinkedIn', color: 'text-blue-600', bg: 'bg-blue-50 hover:bg-blue-100 border-blue-200' },
     { type: 'note' as const, icon: StickyNote, label: 'Create Note', color: 'text-purple-600', bg: 'bg-purple-50 hover:bg-purple-100 border-purple-200' },
     { type: 'task' as const, icon: CheckSquare, label: 'Create Task', color: 'text-green-600', bg: 'bg-green-50 hover:bg-green-100 border-green-200' },
     { type: 'meeting' as const, icon: Calendar, label: 'Log Meeting', color: 'text-indigo-600', bg: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200' },
@@ -203,6 +205,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
   const typeConfig: Record<string, { icon: any; color: string; bg: string; label: string }> = {
     call: { icon: PhoneCall, color: 'text-amber-600', bg: 'bg-amber-50', label: 'Call' },
     email: { icon: Mail, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Email' },
+    linkedin: { icon: Linkedin, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Log LinkedIn' },
     note: { icon: StickyNote, color: 'text-purple-600', bg: 'bg-purple-50', label: 'Note' },
     task: { icon: CheckSquare, color: 'text-green-600', bg: 'bg-green-50', label: 'Task' },
     meeting: { icon: Calendar, color: 'text-indigo-600', bg: 'bg-indigo-50', label: 'Meeting' },
@@ -383,7 +386,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
                 )}
                 <span className="text-xs text-gray-400 flex items-center gap-1">
                   <Clock size={10} />
-                  {formatDistanceToNow(new Date(activity.activity_date || activity.created_at), { addSuffix: true })}
+                  {formatDistanceToNow(new Date(activity.created_at || activity.activity_date), { addSuffix: true })}
                 </span>
               </div>
             </div>

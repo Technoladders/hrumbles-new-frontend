@@ -3,15 +3,15 @@
 import { useEffect, useState } from "react";
 import { Navigate, useLocation, Outlet } from "react-router-dom";
 import { useSelector } from "react-redux";
-// ✅ FIX #1: Change the import to the new, correct function
 import { calculateProfileCompletion } from "@/utils/profileCompletion";
+import { supabase } from "@/integrations/supabase/client";  // Adjust path if your supabase client is elsewhere
 
 const ProtectedRoute = () => {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [authStatus, setAuthStatus] = useState<{
     isAuthenticated: boolean;
-    canProceed: boolean; // Renamed for clarity
+    canProceed: boolean;
     redirectPath: string | null;
   }>({
     isAuthenticated: false,
@@ -21,6 +21,7 @@ const ProtectedRoute = () => {
 
   const user = useSelector((state: any) => state.auth.user);
   const role = useSelector((state: any) => state.auth.role);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
 
   useEffect(() => {
     const checkAccess = async () => {
@@ -35,46 +36,30 @@ const ProtectedRoute = () => {
         return;
       }
 
-      const FEATURE_LIVE_DATE = '2025-11-02'; 
-      // ------------------------------------------------
+      const FEATURE_LIVE_DATE = '2025-11-02';
 
-      // Make sure your Redux 'user' object includes 'created_at' from the database
+      // Old users exemption (created before feature live date)
       if (user.created_at) {
         const userCreationDate = new Date(user.created_at);
         const featureLiveDate = new Date(FEATURE_LIVE_DATE);
 
-        // If the user was created before the feature went live, they are exempt.
         if (userCreationDate < featureLiveDate) {
           setAuthStatus({
-            isAuthenticated: true,
-            canProceed: true, // Grant access immediately
-            redirectPath: null,
-          });
-          setLoading(false);
-          return; // <-- Important: Stop further checks for existing users
-        }
-      } 
-      if (role === 'organization_superadmin') {
-         setAuthStatus({
             isAuthenticated: true,
             canProceed: true,
             redirectPath: null,
           });
           setLoading(false);
           return;
-      }
-      else {
-          console.warn("ProtectedRoute: `user.created_at` is missing. Cannot determine if user is new or existing. Proceeding with completion check for all users.");
+        }
+      } else {
+        console.warn(
+          "ProtectedRoute: `user.created_at` is missing. Cannot determine if user is new or existing. Proceeding with completion check."
+        );
       }
 
-      // 2. Check if the current route should be exempt from profile checks
-      const profileRelatedPaths = ["/complete-profile", "/employee/"];
-      const isProfilePage = profileRelatedPaths.some((path) =>
-        location.pathname.startsWith(path)
-      );
-
-      if (isProfilePage) {
-        // If they are already on a profile-related page, let them proceed.
+      // Organization superadmin exemption
+      if (role === 'organization_superadmin') {
         setAuthStatus({
           isAuthenticated: true,
           canProceed: true,
@@ -84,21 +69,71 @@ const ProtectedRoute = () => {
         return;
       }
 
-      // 3. For all other protected routes, check the profile completion percentage
+      // ────────────────────────────────────────────────────────────────
+      // NEW: Organization-level toggle for mandatory profile completion
+      // ────────────────────────────────────────────────────────────────
+      let enforceProfileCompletion = true;
+
+      if (organizationId) {
+        try {
+          const { data, error } = await supabase
+            .from('hr_organizations')
+            .select('complete_profile')
+            .eq('id', organizationId)
+            .single();
+
+          if (error) {
+            console.error("Failed to fetch complete_profile flag:", error.message);
+            // Fail-safe: keep enforcement enabled if we cannot read the flag
+          } else if (data && data.complete_profile === false) {
+            enforceProfileCompletion = false;
+          }
+        } catch (err) {
+          console.error("Exception checking organization complete_profile:", err);
+          // Fail-safe: enforcement remains ON
+        }
+      }
+
+      // If organization disabled the requirement → allow full access
+      if (!enforceProfileCompletion) {
+        setAuthStatus({
+          isAuthenticated: true,
+          canProceed: true,
+          redirectPath: null,
+        });
+        setLoading(false);
+        return;
+      }
+
+      // 2. Check if current route is exempt from profile completion requirement
+      const profileRelatedPaths = ["/complete-profile", "/employee/"];
+      const isProfilePage = profileRelatedPaths.some((path) =>
+        location.pathname.startsWith(path)
+      );
+
+      if (isProfilePage) {
+        setAuthStatus({
+          isAuthenticated: true,
+          canProceed: true,
+          redirectPath: null,
+        });
+        setLoading(false);
+        return;
+      }
+
+      // 3. For all other protected routes: enforce profile completion percentage
       try {
-        // ✅ FIX #2: Call the new function
         const { completionPercentage } = await calculateProfileCompletion(user.id);
 
-        // ✅ FIX #3: Use the result to set the status
         if (completionPercentage < 40) {
-          // If profile is incomplete, block access and redirect
+          // Profile incomplete → redirect to completion page
           setAuthStatus({
             isAuthenticated: true,
             canProceed: false,
             redirectPath: "/complete-profile",
           });
         } else {
-          // If profile is complete enough, allow access
+          // Profile complete enough → allow access
           setAuthStatus({
             isAuthenticated: true,
             canProceed: true,
@@ -107,7 +142,7 @@ const ProtectedRoute = () => {
         }
       } catch (error) {
         console.error("Error checking profile access in ProtectedRoute:", error);
-        // On any error, it's safest to send the user back to the login page.
+        // Safety fallback: redirect to login on unexpected error
         setAuthStatus({
           isAuthenticated: false,
           canProceed: false,
@@ -119,7 +154,7 @@ const ProtectedRoute = () => {
     };
 
     checkAccess();
-  }, [user, location.pathname]); // Re-run this check if the user or URL changes
+  }, [user, role, organizationId, location.pathname]);
 
   if (loading) {
     return (
@@ -132,19 +167,18 @@ const ProtectedRoute = () => {
     );
   }
 
-  // If a redirect path was set, navigate the user away.
+  // Perform redirect if needed
   if (authStatus.redirectPath) {
     return (
       <Navigate
         to={authStatus.redirectPath}
-        state={{ from: location.pathname }} // This tells the next page where the user came from
+        state={{ from: location.pathname }}
         replace
       />
     );
   }
 
-  // If authenticated and can proceed, render the child routes (e.g., the Dashboard).
-  // Otherwise, render nothing while the redirect happens.
+  // Render child routes only if authenticated and allowed
   return authStatus.isAuthenticated && authStatus.canProceed ? <Outlet /> : null;
 };
 

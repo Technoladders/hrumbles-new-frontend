@@ -30,7 +30,8 @@ import {
   StickyNote,
   Target,
   Award,
-  Zap
+  Zap,
+  Linkedin
 } from 'lucide-react';
 import { format, subDays, startOfWeek, startOfMonth, startOfQuarter, isToday, isTomorrow, isPast, parseISO } from 'date-fns';
 
@@ -60,25 +61,12 @@ export const SalesDashboardLayout: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  console.log("userrole", userRole)
-
-console.log("Full user from Redux:", user);
-console.log("Full userRole from Redux:", userRole);
-console.log("userRole?.name:", userRole?.name);
-
-const isAdmin = useMemo(() => {
-  if (typeof userRole !== 'string') return false;
-
-  const role = userRole
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '_');   // handles spaces if they ever appear
-
-  console.log('Normalized role string:', role);
-  console.log('isAdmin:', role === 'organization_superadmin');
-
-  return role === 'organization_superadmin';
-}, [userRole]);
+  // Check if user is admin
+  const isAdmin = useMemo(() => {
+    if (typeof userRole !== 'string') return false;
+    const role = userRole.toLowerCase().trim().replace(/\s+/g, '_');
+    return role === 'organization_superadmin';
+  }, [userRole]);
 
   // Get date range filter
   const getDateFilter = useMemo(() => {
@@ -101,33 +89,46 @@ const isAdmin = useMemo(() => {
   // DATA QUERIES
   // =====================
 
-  // Fetch team members (for admin view)
-const { data: teamMembers } = useQuery({
-  // It is good practice to add the filter to the queryKey so it caches separately
-  queryKey: ['team-members', organizationId, 'sales-marketing'], 
-  queryFn: async () => {
-    const { data, error } = await supabase
-      .from('hr_employees')
-      .select(`
-        id, 
-        first_name, 
-        last_name, 
-        email, 
-        profile_picture_url, 
-        role_id, 
-        hr_roles(name), 
-        hr_departments!inner(name)
-      `) // <--- Note the !inner here
-      .eq('organization_id', organizationId)
-      .eq('status', 'active')
-      // Filter by the nested relationship column
-      .eq('hr_departments.name', 'Sales & Marketing'); 
+  // Fetch team members (for admin view - Sales & Marketing only)
+  const { data: teamMembers } = useQuery({
+    queryKey: ['team-members', organizationId, 'sales-marketing'], 
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('hr_employees')
+        .select(`
+          id, 
+          first_name, 
+          last_name, 
+          email, 
+          profile_picture_url, 
+          role_id, 
+          hr_roles(name), 
+          hr_departments!inner(name)
+        `)
+        .eq('organization_id', organizationId)
+        .eq('status', 'active')
+        .eq('hr_departments.name', 'Sales & Marketing'); 
 
-    if (error) throw error;
-    return data;
-  },
-  enabled: !!organizationId && isAdmin
-});
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!organizationId && isAdmin
+  });
+
+  // Fetch contacts for task creation
+  const { data: contacts } = useQuery({
+    queryKey: ['contacts-dashboard', organizationId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('id, name, email, photo_url')
+        .eq('organization_id', organizationId)
+        .limit(200);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!organizationId
+  });
 
   // Fetch activities with filters
   const { data: activities, isLoading: activitiesLoading, refetch: refetchActivities } = useQuery({
@@ -138,7 +139,8 @@ const { data: teamMembers } = useQuery({
         .select(`
           *,
           contact:contact_id(id, name, email, photo_url, company_id, companies(name)),
-          creator:created_by(id, first_name, last_name, profile_picture_url)
+          creator:created_by(id, first_name, last_name, profile_picture_url),
+          assignee:assigned_to(id, first_name, last_name, profile_picture_url)
         `)
         .eq('organization_id', organizationId)
         .neq('type', 'stage_change')
@@ -164,7 +166,7 @@ const { data: teamMembers } = useQuery({
   });
 
   // Fetch tasks (upcoming & overdue)
-  const { data: tasks, isLoading: tasksLoading } = useQuery({
+  const { data: tasks, isLoading: tasksLoading, refetch: refetchTasks } = useQuery({
     queryKey: ['dashboard-tasks', organizationId, selectedEmployee],
     queryFn: async () => {
       let query = supabase
@@ -172,7 +174,8 @@ const { data: teamMembers } = useQuery({
         .select(`
           *,
           contact:contact_id(id, name, email, photo_url),
-          creator:created_by(id, first_name, last_name, profile_picture_url)
+          creator:created_by(id, first_name, last_name, profile_picture_url),
+          assignee:assigned_to(id, first_name, last_name, profile_picture_url)
         `)
         .eq('organization_id', organizationId)
         .eq('type', 'task')
@@ -185,7 +188,7 @@ const { data: teamMembers } = useQuery({
         query = query.or(`created_by.eq.${selectedEmployee},assigned_to.eq.${selectedEmployee}`);
       }
 
-      const { data, error } = await query.limit(50);
+      const { data, error } = await query.limit(100);
       if (error) throw error;
       return data;
     },
@@ -242,19 +245,6 @@ const { data: teamMembers } = useQuery({
     enabled: !!organizationId
   });
 
-  // Fetch companies count
-  const { data: companiesStats } = useQuery({
-    queryKey: ['dashboard-companies', organizationId],
-    queryFn: async () => {
-      const { count } = await supabase
-        .from('companies')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId);
-      return count || 0;
-    },
-    enabled: !!organizationId
-  });
-
   // =====================
   // COMPUTED METRICS
   // =====================
@@ -283,7 +273,8 @@ const { data: teamMembers } = useQuery({
           emails: 0,
           meetings: 0,
           tasks: 0,
-          notes: 0
+          notes: 0,
+          linkedins: 0
         };
       }
       acc[empId].activities++;
@@ -297,7 +288,6 @@ const { data: teamMembers } = useQuery({
       return format(date, 'yyyy-MM-dd');
     });
 
-
     const dailyTrend = last7Days.map(date => {
       const dayActivities = activities.filter((a: any) => 
         format(new Date(a.created_at), 'yyyy-MM-dd') === date
@@ -309,12 +299,12 @@ const { data: teamMembers } = useQuery({
         calls: dayActivities.filter((a: any) => a.type === 'call').length,
         emails: dayActivities.filter((a: any) => a.type === 'email').length,
         meetings: dayActivities.filter((a: any) => a.type === 'meeting').length,
+        linkedins: dayActivities.filter((a: any) => a.type === 'linkedin').length,
       };
     });
 
-    // Activity by type for pie/donut chart
-   const activityByType = Object.entries(activityCounts)
-      // FILTER HERE: Exclude 'task' and 'note'
+    // Activity by type for pie/donut chart (exclude task and note)
+    const activityByType = Object.entries(activityCounts)
       .filter(([type]) => type !== 'task' && type !== 'note') 
       .map(([type, count]) => ({
         type,
@@ -329,6 +319,7 @@ const { data: teamMembers } = useQuery({
       meetings: activityCounts.meeting || 0,
       tasks: activityCounts.task || 0,
       notes: activityCounts.note || 0,
+      linkedins: activityCounts.linkedin || 0,
       completedTasks,
       totalTasks,
       taskCompletionRate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
@@ -337,19 +328,23 @@ const { data: teamMembers } = useQuery({
       activityByType
     };
   }, [activities]);
-    console.log("metrics", metrics)
 
   // Pending tasks
   const pendingTasks = useMemo(() => {
     if (!tasks) return { overdue: [], today: [], upcoming: [] };
     
-    const now = new Date();
     return {
       overdue: tasks.filter((t: any) => t.due_date && isPast(parseISO(t.due_date)) && !isToday(parseISO(t.due_date))),
       today: tasks.filter((t: any) => t.due_date && isToday(parseISO(t.due_date))),
       upcoming: tasks.filter((t: any) => t.due_date && !isPast(parseISO(t.due_date)) && !isToday(parseISO(t.due_date)))
     };
   }, [tasks]);
+
+  // Handle refresh
+  const handleRefresh = () => {
+    refetchActivities();
+    refetchTasks();
+  };
 
   // =====================
   // LOADING STATE
@@ -423,7 +418,7 @@ const { data: teamMembers } = useQuery({
                 variant="outline" 
                 size="sm" 
                 className="h-9"
-                onClick={() => refetchActivities()}
+                onClick={handleRefresh}
               >
                 <RefreshCw size={14} className="mr-2" />
                 Refresh
@@ -453,8 +448,8 @@ const { data: teamMembers } = useQuery({
 
       {/* Dashboard Content */}
       <div className="p-6 space-y-6">
-        {/* Top Metrics Row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        {/* Top Metrics Row - Now includes LinkedIn */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
           <MetricCard
             title="Total Activities"
             value={metrics?.total || 0}
@@ -487,6 +482,13 @@ const { data: teamMembers } = useQuery({
             trend={15}
             color="green"
             sparklineData={metrics?.dailyTrend.map(d => d.meetings) || []}
+          />
+          <MetricCard
+            title="LinkedIn"
+            value={metrics?.linkedins || 0}
+            icon={<Linkedin className="text-[#0A66C2]" size={20} />}
+            color="cyan"
+            sparklineData={metrics?.dailyTrend.map(d => d.linkedins) || []}
           />
           <MetricCard
             title="Tasks Completed"
@@ -522,24 +524,27 @@ const { data: teamMembers } = useQuery({
             />
           </div>
 
-          {/* Tasks Section */}
-          <div className="col-span-12 lg:col-span-4">
+          {/* Tasks Section - NOW 2/3 WIDTH (8 cols) */}
+          <div className="col-span-12 lg:col-span-8">
             <UpcomingTasks 
               overdue={pendingTasks.overdue}
               today={pendingTasks.today}
               upcoming={pendingTasks.upcoming}
+              teamMembers={teamMembers || []}
+              contacts={contacts || []}
+              onRefresh={handleRefresh}
             />
           </div>
 
-          {/* Recent Activities */}
+          {/* Recent Activities - NOW 1/3 WIDTH (4 cols) */}
           <div className="col-span-12 lg:col-span-4">
             <RecentActivities 
               activities={activities?.slice(0, 10) || []}
             />
           </div>
 
-          {/* Conversion Funnel or Team Leaderboard */}
-          <div className="col-span-12 lg:col-span-4">
+          {/* Conversion Funnel or Team Leaderboard - Full width below */}
+          <div className="col-span-12 lg:col-span-6">
             {isAdmin ? (
               <TeamLeaderboard 
                 data={metrics?.byEmployee || []}
@@ -551,7 +556,20 @@ const { data: teamMembers } = useQuery({
             )}
           </div>
 
-          {/* Activity Heatmap (Full Width) */}
+          {/* Additional widget for non-admins or extra space */}
+          <div className="col-span-12 lg:col-span-6">
+            {!isAdmin ? (
+              <TeamLeaderboard 
+                data={metrics?.byEmployee || []}
+              />
+            ) : (
+              <ConversionFunnel 
+                stageCounts={contactsStats?.stageCounts || {}}
+              />
+            )}
+          </div>
+
+          {/* Activity Heatmap (Full Width - Admin Only) */}
           {isAdmin && (
             <div className="col-span-12">
               <ActivityHeatmap 
@@ -566,14 +584,15 @@ const { data: teamMembers } = useQuery({
   );
 };
 
-// Helper function for activity colors
+// Helper function for activity colors (includes LinkedIn)
 function getActivityColor(type: string): string {
   const colors: Record<string, string> = {
     call: '#F59E0B',
     email: '#6366F1',
     meeting: '#10B981',
     task: '#8B5CF6',
-    note: '#EC4899'
+    note: '#EC4899',
+    linkedin: '#0A66C2'
   };
   return colors[type] || '#6B7280';
 }

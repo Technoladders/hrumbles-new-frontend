@@ -1,4 +1,5 @@
 // Hrumbles-Front-End_UI/src/pages/sales/ContactDetailPage.tsx
+// UPDATED: Added LinkedIn dialog support
 import React, { useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -16,12 +17,14 @@ import { ActivityTimelineTab } from '@/components/sales/contact-detail/ActivityT
 import { MasterRecordTab } from '@/components/sales/contact-detail/MasterRecordTab';
 
 // Dialog Components - All using the new HubSpot-style rich text editor
+// UPDATED: Added LogLinkedInDialog
 import { 
   LogCallDialog, 
   LogEmailDialog, 
   CreateNoteDialog, 
   CreateTaskDialog, 
   LogMeetingDialog,
+  LogLinkedInDialog, // NEW
   ActivityLogData
 } from '@/components/sales/contact-detail/dialogs';
 
@@ -29,8 +32,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Building2, Clock, Database } from 'lucide-react';
 
-// Types
-type ActivityModalType = 'call' | 'note' | 'email' | 'task' | 'meeting' | null;
+// Types - UPDATED: Added 'linkedin' type
+type ActivityModalType = 'call' | 'note' | 'email' | 'task' | 'meeting' | 'linkedin' | null;
 
 const ContactDetailPage = () => {
   const { id } = useParams();
@@ -90,7 +93,7 @@ const ContactDetailPage = () => {
   // MUTATIONS
   // =====================
 
-  // Log Activity with Follow-up Support
+  // Log Activity with Follow-up Support - UPDATED: Handles linkedin type
   const logActivityMutation = useMutation({
     mutationFn: async (payload: ActivityLogData) => {
       // Use RPC function if follow-up is requested
@@ -112,7 +115,7 @@ const ContactDetailPage = () => {
         if (error) throw error;
         return data;
       } else {
-        // Direct insert
+        // Direct insert - UPDATED: Handles linkedin-specific metadata
         const { error } = await supabase.from('contact_activities').insert({
           contact_id: id,
           organization_id: organizationId,
@@ -122,7 +125,7 @@ const ContactDetailPage = () => {
           description: payload.description,
           description_html: payload.descriptionHtml,
           metadata: payload.metadata,
-          outcome: payload.metadata?.outcome,
+          outcome: payload.metadata?.outcome || payload.metadata?.linkedinOutcome,
           direction: payload.metadata?.direction,
           duration_minutes: payload.metadata?.duration ? parseInt(payload.metadata.duration) : null,
           activity_date: payload.metadata?.activityDate || payload.metadata?.startTime || new Date().toISOString(),
@@ -382,6 +385,15 @@ const ContactDetailPage = () => {
       {/* Log Meeting Dialog */}
       <LogMeetingDialog
         open={activeModal === 'meeting'}
+        onOpenChange={(open) => !open && setActiveModal(null)}
+        contact={contact}
+        onSubmit={handleActivitySubmit}
+        isSubmitting={logActivityMutation.isPending}
+      />
+
+      {/* NEW: Log LinkedIn Dialog */}
+      <LogLinkedInDialog
+        open={activeModal === 'linkedin'}
         onOpenChange={(open) => !open && setActiveModal(null)}
         contact={contact}
         onSubmit={handleActivitySubmit}
