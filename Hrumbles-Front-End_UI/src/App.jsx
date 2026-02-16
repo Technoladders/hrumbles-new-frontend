@@ -91,6 +91,9 @@ import SharedProfile from "./pages/jobs/SharedProfile"
 import ReportsPage from "./pages/reports/Index";
 import EmployeeProfilePage from "./components/MagicLinkView/EmployeeProfileDrawer";
 import CandidateConsentPage from './components/MagicLinkView/CandidateConsentPage';
+import CandidateProfileV2 from "./components/MagicLinkView/candidate-profile-v2/CandidateProfileV2";
+import SharedProfileV2 from "./components/MagicLinkView/candidate-profile-v2/SharedProfileV2";
+
 
 // Job Route Handler
 import JobRouteHandler from "./components/jobs/JobRouteHandler";
@@ -214,7 +217,7 @@ function AppContent() {
   // --- Define Public Routes ---
   const publicPaths = [
     '/login', '/signup', '/set-password', '/forgot-password',
-    '/careers', '/job/', '/share/', '/consent/', '/talentcareers'
+    '/careers', '/job/', '/share/', '/share-v2/', '/consent/', '/talentcareers'
   ];
 
 
@@ -448,6 +451,8 @@ const validateCurrentSession = useCallback(async () => {
 
         {/* Candidate Profile Magic Link */}
         <Route path="/share/:shareId" element={<SharedProfile />} />
+        <Route path="/share-v2/:shareId" element={<SharedProfileV2 />} />
+
         <Route path="/consent/:consentId" element={<CandidateConsentPage />} />
 
         {/* Protected Routes */}
@@ -532,8 +537,8 @@ const validateCurrentSession = useCallback(async () => {
               <Route path="/jobs/:id/description" element={<JobDescription />} />
               <Route path="/jobs/edit/:id" element={<JobDescription />} />
               <Route path="/jobstatuses" element={<StatusSettings />} />
-              <Route path="/jobs/candidateprofile/:candidateId/:jobId" element={<EmployeeProfilePage />} />
-
+              <Route path="/jobs/candidateprofile/:candidateId/:jobId" element={<CandidateProfileV2 />} />
+              <Route path="/candidate-v2/:candidateId/:jobId" element={<EmployeeProfilePage />} />
               {/* Background Verification */}
               <Route path="/jobs/:jobId/candidate/:candidateId/bgv" element={<CandidateBgvProfilePage />} />
               <Route path="/all-candidates" element={<AllCandidatesPage />} /> 

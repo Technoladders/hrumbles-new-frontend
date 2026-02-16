@@ -98,13 +98,15 @@ const parsePastedText = (text: string) => {
   const noticePeriodLine = lines.find(l => l.toLowerCase().match(/(days|month|serving|available to join)/i));
   if (noticePeriodLine) data.notice_period = noticePeriodLine;
 
-  const roleHeaderIndex = lines.findIndex(l => l.toLowerCase().startsWith('current'));
+const roleHeaderIndex = lines.findIndex(l => l.match(/^(current|previous)/i));
   if (roleHeaderIndex !== -1) {
-    let combinedRoleLine = lines[roleHeaderIndex].replace(/current/i, '').trim();
+    let combinedRoleLine = lines[roleHeaderIndex].replace(/^(current|previous)/i, '').trim();
     if (combinedRoleLine.length === 0 && lines[roleHeaderIndex + 1]) {
       combinedRoleLine = lines[roleHeaderIndex + 1].trim();
     }
-    const sinceMatch = combinedRoleLine.match(/\s+since\s+\w{3}\s+'\d{2}/i);
+    
+    // Updated to match 'since', 'till', 'to' or hyphens followed by dates
+    const sinceMatch = combinedRoleLine.match(/\s+(since|till|to|-)\s+.*$/i);
     const roleAndCompany = sinceMatch ? combinedRoleLine.substring(0, sinceMatch.index).trim() : combinedRoleLine;
     
     if (roleAndCompany.includes(' at ')) {

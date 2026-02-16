@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
-import { Candidate, DocumentState, ResumeAnalysis } from "@/components/MagicLinkView/types"; // Assuming types are in lib/types.ts
+import { Candidate, DocumentState, ResumeAnalysis } from "@/components/MagicLinkView/types";
 import { getAuthDataFromLocalStorage } from '@/utils/localstorage';
 
 interface UseEmployeeProfileReturn {
@@ -26,7 +26,6 @@ interface UseEmployeeProfileReturn {
     }>
   >;
   setCandidate: React.Dispatch<React.SetStateAction<Candidate | null>>;
-  // Add other setters if needed for external manipulation
 }
 
 const isValidCandidate = (data: any): data is Candidate => {
@@ -42,9 +41,7 @@ const isValidCandidate = (data: any): data is Candidate => {
 };
 
 export const useEmployeeProfile = (
-  shareMode: boolean,
-  shareId?: string,
-  initialSharedDataOptions?: any
+  enabled: boolean
 ): UseEmployeeProfileReturn => {
   const { candidateId, jobId } = useParams<{
     candidateId: string;
@@ -98,51 +95,39 @@ export const useEmployeeProfile = (
   const [resumeAnalysis, setResumeAnalysis] = useState<ResumeAnalysis | null>(
     null
   );
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
 
-// hooks/useEmployeeProfile.ts
+  useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
 
-useEffect(() => {
     const fetchProfileData = async () => {
       setLoading(true);
       setError(null);
 
       const authData = getAuthDataFromLocalStorage();
-          if (!authData) {
-            throw new Error('Failed to retrieve authentication data');
-          }
-          const { organization_id, userId } = authData;
+      // authData may be null in share mode (unauthenticated user)
+      const organization_id = authData?.organization_id;
+      const userId = authData?.userId;
+
       try {
         let candidateData: Candidate | null = null;
         let uanVerificationData: any = null;
 
-        if (shareMode && shareId) {
-          const { data, error: shareError } = await supabase
-            .from("shares")
-            .select("data_options, candidate")
-            .eq("share_id", shareId)
-            .single();
-
-          if (shareError) {
-            throw shareError;
-          }
-
-          if (data && isValidCandidate(data.candidate)) {
-            candidateData = data.candidate;
-          } else {
-            throw new Error("Invalid shared data or link.");
-          }
-        } else if (candidateId) {
+        if (candidateId) {
+          // ─── NORMAL MODE: Fetch from hr_job_candidates ───
           const state = location.state as { candidate?: Candidate };
           if (state?.candidate && isValidCandidate(state.candidate)) {
             candidateData = state.candidate;
           } else {
             const { data, error: candidateError } = await supabase
-  .from("hr_job_candidates")
-  .select(`*`) // <-- Replace "*" with this explicit list
-  .eq("id", candidateId)
-  .single();
+              .from("hr_job_candidates")
+              .select(`*`)
+              .eq("id", candidateId)
+              .maybeSingle();
 
             if (candidateError || !data) {
               throw new Error(
@@ -158,12 +143,13 @@ useEffect(() => {
           }
         } else {
           throw new Error(
-            "No candidate data provided and no candidateId/shareId in URL"
+            "No candidate data provided and no candidateId in URL"
           );
         }
 
         setCandidate(candidateData);
 
+        // ─── UAN Verification ───
         if (candidateData?.id) {
           const { data: verificationData, error: verificationError } =
             await supabase
@@ -185,6 +171,7 @@ useEffect(() => {
           }
         }
 
+        // ─── Set Documents ───
         setDocuments((prev) => ({
           uan: {
             ...prev.uan,
@@ -210,68 +197,55 @@ useEffect(() => {
           },
         }));
 
-        // --- MODIFIED SECTION: Fetch resume analysis with fallback ---
- // --- START OF REVISED SECTION WITH DEBUGGING ---
-        if (!shareMode && jobId && candidateData?.id) {
+        // ─── RESUME ANALYSIS FETCH ───
+        const effectiveJobId = jobId;
+
+        if (effectiveJobId && candidateData?.id) {
           console.log("%c[Debug] Starting resume analysis fetch...", "color: blue; font-weight: bold;");
 
-          // 1. Primary Query
+          // 1. Primary Query: candidate_resume_analysis
           const { data: primaryDataArray, error: primaryResumeError } = await supabase
             .from("candidate_resume_analysis")
             .select("*")
             .eq("candidate_id", candidateData.id)
-            .eq("job_id", jobId);
+            .eq("job_id", effectiveJobId);
 
-          console.log("[Debug] Primary query to 'candidate_resume_analysis' returned:", {
+          console.log("[Debug] Primary query returned:", {
             data: primaryDataArray,
             error: primaryResumeError,
           });
 
-          // 2. The crucial check: Is the result array empty or null?
           if (primaryDataArray && primaryDataArray.length > 0) {
-            console.log("%c[Debug] Found data in primary table. Setting state.", "color: green;");
+            console.log("%c[Debug] Found data in primary table.", "color: green;");
             setResumeAnalysis(primaryDataArray[0] as ResumeAnalysis);
           } else {
-            // 3. This block now correctly runs if the primary query returns [] or null.
-            console.log("%c[Debug] Primary check failed. Attempting fallback.", "color: orange;");
+            // 2. Fallback: resume_analysis table
+            console.log("%c[Debug] Primary empty. Attempting fallback.", "color: orange;");
 
-            // Add a specific log to check the exact values being used for the fallback condition.
-            console.log("[Debug] Checking fallback conditions with:", {
-                email: candidateData.email,
-                organization_id: candidateData.organization_id,
-            });
+            const effectiveOrgId = organization_id;
 
-            if (candidateData.email && organization_id) {
-              console.log(`[Debug] Fallback triggered: Searching 'resume_analysis' for email: ${candidateData.email}`);
-
-              // 4. Fallback Query
+            if (candidateData.email && effectiveOrgId) {
               const { data: fallbackResumeData, error: fallbackResumeError } = await supabase
                 .from("resume_analysis")
                 .select("*")
-                .eq("job_id", jobId)
-                .eq("organization_id", organization_id)
+                .eq("job_id", effectiveJobId)
+                .eq("organization_id", effectiveOrgId)
                 .eq("email", candidateData.email)
                 .order("updated_at", { ascending: false })
-  .limit(1)
-  .maybeSingle();
+                .limit(1)
+                .maybeSingle();
 
-              console.log("[Debug] Fallback query to 'resume_analysis' returned:", {
-                  data: fallbackResumeData,
-                  error: fallbackResumeError,
+              console.log("[Debug] Fallback query returned:", {
+                data: fallbackResumeData,
+                error: fallbackResumeError,
               });
 
               if (fallbackResumeData) {
-                console.log("%c[Debug] Found data in fallback table. Setting state.", "color: green;");
                 setResumeAnalysis(fallbackResumeData as ResumeAnalysis);
-              } else {
-                console.log("[Debug] No data found in fallback table.");
               }
-            } else {
-              console.log("%c[Debug] Fallback skipped: Candidate is missing email or organization_id.", "color: red;");
             }
           }
         }
-        // --- END OF REVISED SECTION ---
 
       } catch (err: any) {
         console.error("Error fetching employee profile:", err);
@@ -287,7 +261,7 @@ useEffect(() => {
     };
 
     fetchProfileData();
-}, [candidateId, jobId, shareMode, shareId, location.state, toast]);
+  }, [enabled, candidateId, jobId, location.state, toast]);
 
   return { candidate, documents, resumeAnalysis, loading, error, setDocuments, setCandidate };
 };

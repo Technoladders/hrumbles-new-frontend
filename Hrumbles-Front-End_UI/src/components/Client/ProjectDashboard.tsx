@@ -92,6 +92,7 @@ interface AssignEmployee {
   working_days_config?: 'all_days' | 'weekdays_only' | 'saturday_working';
   salary_type?: string;
   salary_currency?: string;
+  working_hours?: number;
   hr_employees?: {
     first_name: string;
     last_name: string;
@@ -143,6 +144,80 @@ const formatINR = (number: number) => {
   }).format(number);
 };
 
+// --- CONSTANTS ---
+const EMPLOYEE_COLORS = [
+  "#7B43F1", // Purple
+  "#F97316", // Orange
+  "#3B82F6", // Blue
+  "#10B981", // Emerald
+  "#EC4899", // Pink
+  "#F59E0B", // Amber
+  "#6366F1", // Indigo
+  "#14B8A6", // Teal
+  "#8B5CF6", // Violet
+  "#EF4444", // Red
+];
+
+const countWorkingDays = (
+  startDate: Date,
+  endDate: Date,
+  config: 'all_days' | 'weekdays_only' | 'saturday_working' = 'all_days'
+): number => {
+  if (!startDate || !endDate || startDate > endDate) return 0;
+  const days = eachDayOfInterval({ start: startDate, end: endDate });
+  switch (config) {
+    case 'weekdays_only':
+      return days.filter(day => !isWeekend(day)).length;
+    case 'saturday_working':
+      return days.filter(day => !isSunday(day)).length;
+    case 'all_days':
+    default:
+      return days.length;
+  }
+};
+
+// --- CUSTOM TOOLTIP FOR LOGGED HOURS ---
+const CustomHoursTooltip = ({ active, payload, label, employees }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-xl text-sm min-w-[220px]">
+        <p className="font-bold text-gray-700 mb-2 border-b pb-1">{label}</p>
+        <div className="flex justify-between items-center mb-3">
+          <span className="font-semibold text-gray-600">Total Hours:</span>
+          <span className="text-gray-900 font-bold">{data.totalHours.toFixed(2)}</span>
+        </div>
+        <div className="space-y-1">
+           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+             Contributors
+           </p>
+           {employees.map((emp: AssignEmployee, index: number) => {
+              const hours = data[emp.assign_employee] || 0;
+              if (hours === 0) return null;
+              
+              const color = EMPLOYEE_COLORS[index % EMPLOYEE_COLORS.length];
+              const name = emp.hr_employees 
+                ? `${emp.hr_employees.first_name} ${emp.hr_employees.last_name}`
+                : "Unknown";
+
+              return (
+                <div key={emp.id} className="flex items-center justify-between border-b border-gray-50 last:border-0 py-1">
+                   <div className="flex items-center gap-2">
+                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                     <span className="text-gray-600">{name}</span>
+                   </div>
+                   <span className="font-medium text-gray-800">{hours.toFixed(1)}</span>
+                </div>
+              );
+           })}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+
 const ProjectDashboard = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -174,7 +249,7 @@ const ProjectDashboard = () => {
     );
   }
 
-  // Determine financial year from dateRange.endDate
+  // --- FINANCIAL YEAR LOGIC ---
   const getFinancialYear = (endDate: Date) => {
     const year = endDate.getMonth() < 3 ? endDate.getFullYear() - 1 : endDate.getFullYear();
     const startDate = new Date(year, 3, 1); // April 1
@@ -403,30 +478,28 @@ useEffect(() => {
 
   // Calculate employee hours for table (using tableTimeLogs)
 // CORRECTED: Calculate employee hours for table (using tableTimeLogs)
-const calculateEmployeeHoursForTable = (employeeId: string) => {
-  return tableTimeLogs
-    .filter((log) => log.employee_id === employeeId) // <-- This is the critical fix
-    .reduce((acc, log) => {
-      const projectEntry = log.project_time_data?.projects?.find(
-        (proj) => proj.projectId === id
-      );
-      return acc + (projectEntry?.hours || 0);
-    }, 0);
-};
+  const calculateEmployeeHoursForTable = (employeeId: string) => {
+    return tableTimeLogs
+      .filter((log) => log.employee_id === employeeId)
+      .reduce((acc, log) => {
+        const projectEntry = log.project_time_data?.projects?.find((proj: any) => proj.projectId === id);
+        return acc + (projectEntry?.hours || 0);
+      }, 0);
+  };
 
   // Calculate employee hours for revenue/profit (using unfilteredTimeLogs)
+  // --- REVENUE/PROFIT CALCULATIONS (Keep existing logic) ---
   const calculateEmployeeHoursForRevenueProfit = (employeeId: string) => {
     return unfilteredTimeLogs
       .filter((log) => log.employee_id === employeeId)
       .reduce((acc, log) => {
-        const projectEntry = log.project_time_data?.projects?.find(
-          (proj) => proj.projectId === id
-        );
+        const projectEntry = log.project_time_data?.projects?.find((proj: any) => proj.projectId === id);
         return acc + (projectEntry?.hours || 0);
       }, 0);
   };
 
   // Calculate total hours by interval for the chart (financial year, April to March)
+  // --- CALCULATIONS FOR CHART ---
   const calculateTotalHoursByInterval = () => {
     const intervals = [
       "Apr", "May", "Jun", "Jul", "Aug", "Sep",
@@ -439,25 +512,43 @@ const calculateEmployeeHoursForTable = (employeeId: string) => {
       const intervalStart = new Date(year, monthIndex, 1);
       const intervalEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
 
-      const totalHours = timeLogs
-        .filter((log) =>
+      // 1. Initialize data object for this month
+      // dynamic keys: 'totalHours', 'empId1', 'empId2'...
+      const intervalData: any = { name: month, totalHours: 0 };
+      
+      // Initialize 0 for all assigned employees to ensure keys exist
+      assignEmployee.forEach(emp => {
+        intervalData[emp.assign_employee] = 0; 
+      });
+
+      // 2. Filter logs for this month
+      const logsInInterval = timeLogs.filter((log) =>
           isWithinInterval(new Date(log.date), {
             start: intervalStart,
             end: intervalEnd,
           })
-        )
-        .reduce((acc, log) => {
-          const projectEntry = log.project_time_data?.projects?.find(
-            (proj) => proj.projectId === id
-          );
-          return acc + (projectEntry?.hours || 0);
-        }, 0);
+      );
 
-      return { name: month, hours: totalHours };
+      // 3. Aggregate hours by employee
+      logsInInterval.forEach(log => {
+          const projectEntry = log.project_time_data?.projects?.find(
+            (proj: any) => proj.projectId === id
+          );
+          const hours = projectEntry?.hours || 0;
+          
+          if (hours > 0) {
+              const empId = log.employee_id;
+              intervalData[empId] = (intervalData[empId] || 0) + hours;
+              intervalData.totalHours += hours;
+          }
+      });
+
+      return intervalData;
     });
 
     return hoursByInterval;
   };
+
 
   // Convert client_billing to LPA or per-hour for accrual calculations
   const convertToLPA = (employee: AssignEmployee, mode: "accrual" | "actual") => {
@@ -698,6 +789,8 @@ const calculateProfit = (employee: AssignEmployee, mode: "accrual" | "actual") =
     0
   ) || 0;
 
+  
+
   // Calculate employee counts (not affected by date range)
   const totalEmployees = assignEmployee.length;
   const workingCount = assignEmployee.filter((emp) => emp.status === "Working").length || 0;
@@ -866,6 +959,12 @@ const calculateProfitForTable = (employee: AssignEmployee) => {
       toast.error("Failed to update employee status.");
     },
   });
+
+
+  console.log("All assigned employees (hr_project_employees):", assignEmployee);
+  console.log("Unfiltered time logs (all time):", unfilteredTimeLogs);
+console.log("Financial-year filtered time logs (chart):", timeLogs);
+console.log("Date-range filtered time logs (table):", tableTimeLogs);
 
   const renderTable = (employees: AssignEmployee[]) => {
     if (employees.length === 0) {
@@ -1379,40 +1478,31 @@ console.log("pagiodkmndndu", assignEmployee)
                 </CardHeader>
                 <CardContent className="p-6">
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart
-                      data={calculateTotalHoursByInterval()}
-                      margin={{ top: 20, right: 20, left: 0, bottom: 10 }}
-                      className="animate-fade-in"
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis
-                        dataKey="name"
-                        angle={0}
-                        textAnchor="middle"
-                        interval={0}
-                        height={50}
-                        label={{ value: "Months", position: "insideBottom", offset: -10, fill: "#4b5563" }}
-                        className="text-sm font-medium purple-text-color"
-                        tick={{ fontSize: 12, fill: "#4b5563" }}
-                        tickFormatter={(value) => (value.length > 7 ? `${value.slice(0, 7)}...` : value)}
-                      />
-                      <YAxis
-                        label={{ value: "Hours", angle: -90, position: "insideLeft", offset: -10, fill: "#4b5563" }}
-                        className="text-sm font-medium purple-text-color"
-                        tick={{ fontSize: 12, fill: "#4b5563" }}
-                      />
-                      <RechartsTooltip
-                        contentStyle={{
-                          backgroundColor: "#fff",
-                          border: "1px solid oklch(62.7% 0.265 303.9)",
-                          borderRadius: "8px",
-                          boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                        }}
-                        formatter={(value: number) => `${value.toFixed(2)} hours`}
-                        itemStyle={{ color: "#4b5563" }}
-                        cursor={{ fill: "#f3e8ff" }}
-                      />
-                      <Bar dataKey="hours" fill="#7B43F1" name="Logged Hours" radius={[4, 4, 0, 0]} />
+                    <BarChart data={calculateTotalHoursByInterval()} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#6B7280" }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#6B7280" }} />
+                      
+                      <RechartsTooltip content={<CustomHoursTooltip employees={assignEmployee} />} cursor={{ fill: "#f3e8ff" }} />
+                      <Legend wrapperStyle={{ paddingTop: "10px" }} />
+
+                      {/* Dynamic Bars for Each Employee */}
+                      {assignEmployee.map((emp, index) => {
+                          const name = emp.hr_employees 
+                             ? `${emp.hr_employees.first_name} ${emp.hr_employees.last_name}` 
+                             : "Unknown";
+                             
+                          return (
+                            <Bar
+                                key={emp.id}
+                                dataKey={emp.assign_employee} // Key corresponds to data keys created in calculation
+                                name={name}
+                                stackId="a" // Makes them stack
+                                fill={EMPLOYEE_COLORS[index % EMPLOYEE_COLORS.length]}
+                                radius={[0, 0, 0, 0]}
+                            />
+                          );
+                      })}
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>

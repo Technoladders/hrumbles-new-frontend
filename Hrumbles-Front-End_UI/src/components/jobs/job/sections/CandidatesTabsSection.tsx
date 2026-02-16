@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Filter, X, Zap, Mail, User, Search } from "lucide-react";
+import { Filter, X, Zap, Mail, User, Search, Settings2 } from "lucide-react";
 import CandidatesList from "../CandidatesList";
 import { Candidate } from "@/lib/types";
 import StatusSettings from "@/pages/jobs/StatusSettings";
@@ -20,6 +20,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { AnalysisConfigDialog } from "../AnalysisConfigDialog";
+import { supabase } from "@/integrations/supabase/client";
 
 // --- ADDED: Define a type for the ref to get autocompletion ---
 // --- Update the ref handle interface ---
@@ -59,11 +61,31 @@ const CandidatesTabsSection = ({
     const userRole = useSelector((state: any) => state.auth.role);
     const isEmployee = userRole === 'employee';
 
+    // --- ADDED: State for the Analysis Config Dialog ---
+    const [showConfigDialog, setShowConfigDialog] = useState(false);
+    const [analysisConfig, setAnalysisConfig] = useState<any>(null);
+
   useEffect(() => {
     if (candidates.length > 0) {
       setLocalCandidates(candidates);
     }
   }, [candidates]);
+
+  // Add this effect to fetch config
+  useEffect(() => {
+    const fetchConfig = async () => {
+      const { data } = await supabase
+        .from('hr_jobs')
+        .select('analysis_config')
+        .eq('id', jobId)
+        .single();
+      
+      if (data?.analysis_config) {
+        setAnalysisConfig(data.analysis_config);
+      }
+    };
+    fetchConfig();
+  }, [jobId]);
   
   const fetchCandidates = async () => {
     try {
@@ -211,6 +233,24 @@ const CandidatesTabsSection = ({
                 </TooltipContent>
               </Tooltip>
             )}
+
+             {/* NEW: Configuration Button - Add before Batch Validate or Status Settings */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  onClick={() => setShowConfigDialog(true)} 
+                  size="sm" 
+                  variant="outline"
+                  className="flex-shrink-0 order-4 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-[#7731E8] hover:text-white border-transparent transition-all duration-200"
+                >
+                  <Settings2 size={16} className="mr-2" />
+                  AI Config
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start">
+                <p>Configure scoring weights</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
@@ -230,6 +270,16 @@ const CandidatesTabsSection = ({
             <StatusSettings onStatusChange={fetchCandidates} />
           </DialogContent>
         </Dialog>
+
+        <AnalysisConfigDialog 
+          open={showConfigDialog} 
+          onOpenChange={setShowConfigDialog}
+          jobId={jobId}
+          currentConfig={analysisConfig}
+          onSave={() => {
+            // Optional: Refresh parent or toast
+          }}
+        />
       </div>
     </TooltipProvider>
   );
