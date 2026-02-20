@@ -1,9 +1,14 @@
 // src/services/sales/apolloCompanySearch.ts
-// Updated to use V2 edge function with server-side storage
+// OPTIMIZED: Faster perceived performance with immediate display
+// Key changes:
+//   1. searchCompaniesInApolloV2 returns immediately with raw Apollo data
+//   2. DB save happens server-side (edge function handles it)
+//   3. No duplicate client-side save logic
+//   4. Cached getCurrentUserAndOrg to avoid repeated auth calls
 import { supabase } from "@/integrations/supabase/client";
 
 // ============================================================================
-// TYPES
+// TYPES (unchanged - full compatibility)
 // ============================================================================
 
 export interface PrimaryPhone {
@@ -165,17 +170,36 @@ export interface SaveResultsResponse {
 }
 
 // ============================================================================
-// HELPERS
+// CACHED USER/ORG LOOKUP (avoid repeated auth calls)
 // ============================================================================
 
+let _cachedUserOrg: { userId: string | null; organizationId: string | null; cachedAt: number } | null = null;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 async function getCurrentUserAndOrg(): Promise<{ userId: string | null; organizationId: string | null }> {
+  if (_cachedUserOrg && (Date.now() - _cachedUserOrg.cachedAt) < CACHE_TTL) {
+    return { userId: _cachedUserOrg.userId, organizationId: _cachedUserOrg.organizationId };
+  }
+
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { userId: null, organizationId: null };
-    const { data: profile } = await supabase.from('hr_employees').select('organization_id').eq('id', user.id).single();
-    return { userId: user.id, organizationId: profile?.organization_id || null };
-  } catch { return { userId: null, organizationId: null }; }
+    const { data: profile } = await supabase
+      .from('hr_employees')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    const result = { userId: user.id, organizationId: profile?.organization_id || null };
+    _cachedUserOrg = { ...result, cachedAt: Date.now() };
+    return result;
+  } catch {
+    return { userId: null, organizationId: null };
+  }
 }
+
+// Clear cache on auth state change
+supabase.auth.onAuthStateChange(() => { _cachedUserOrg = null; });
 
 function extractCountryCodeFromPhone(sanitizedPhone: string | null): string | null {
   if (!sanitizedPhone) return null;
@@ -191,8 +215,14 @@ function extractCountryCodeFromPhone(sanitizedPhone: string | null): string | nu
   return null;
 }
 
+function cleanPayload(data: Record<string, any>): Record<string, any> {
+  return Object.fromEntries(
+    Object.entries(data).filter(([_, v]) => v !== null && v !== undefined && v !== "")
+  );
+}
+
 // ============================================================================
-// V2: SEARCH COMPANIES (Server-side storage)
+// V2: SEARCH COMPANIES (Server handles all saving via batch ops)
 // ============================================================================
 
 export async function searchCompaniesInApolloV2(
@@ -205,7 +235,7 @@ export async function searchCompaniesInApolloV2(
   const { userId, organizationId } = await getCurrentUserAndOrg();
   if (!organizationId) throw new Error("No organization found. Please log in.");
 
-  const { data, error } = await supabase.functions.invoke("apollo-company-search-v2", {
+  const { data, error } = await supabase.functions.invoke("apollo-company-search-v3", {
     body: { filters, page, per_page: perPage, organization_id: organizationId, user_id: userId, file_id: fileId },
   });
 
@@ -238,7 +268,7 @@ export async function searchCompaniesInApollo(
 }
 
 // ============================================================================
-// SAVE RESULTS TO DATABASE (for manual saves / backward compatibility)
+// SAVE RESULTS TO DATABASE (Optimized with batch operations)
 // ============================================================================
 
 export async function saveAllSearchResultsToDatabase(
@@ -248,160 +278,267 @@ export async function saveAllSearchResultsToDatabase(
   fileId?: string | null
 ): Promise<SaveResultsResponse> {
   const results: SaveResultsResponse = { savedToEnrichment: 0, savedToCompanies: 0, errors: [] };
+  if (organizations.length === 0) return results;
 
-  for (const org of organizations) {
-    try {
-      const phoneNumber = org.primary_phone?.number || org.phone || null;
-      const sanitizedPhone = org.primary_phone?.sanitized_number || org.sanitized_phone || null;
-      const phoneSource = org.primary_phone?.source || null;
-      const phoneCountryCode = extractCountryCodeFromPhone(sanitizedPhone);
+  // ========================================================================
+  // BATCH 1: Upsert all enrichment records at once
+  // ========================================================================
+  const enrichmentRows = organizations.map(org => {
+    const phoneNumber = org.primary_phone?.number || org.phone || null;
+    const sanitizedPhone = org.primary_phone?.sanitized_number || org.sanitized_phone || null;
+    const phoneSource = org.primary_phone?.source || null;
 
-      let city = org.city, state = org.state, country = org.country;
-      let street_address = org.street_address || org.raw_address;
-      let postal_code = org.postal_code;
+    let city = org.city, state = org.state, country = org.country;
+    let street_address = org.street_address || org.raw_address;
+    let postal_code = org.postal_code;
 
-      if ((!city || !country) && org.locations?.length) {
-        const loc = org.locations.find(l => l.is_primary) || org.locations[0];
-        city = city || loc.city; state = state || loc.state; country = country || loc.country;
-        street_address = street_address || loc.street_address || loc.raw_address;
-        postal_code = postal_code || loc.postal_code;
+    if ((!city || !country) && org.locations?.length) {
+      const loc = org.locations.find(l => l.is_primary) || org.locations[0];
+      city = city || loc.city; state = state || loc.state; country = country || loc.country;
+      street_address = street_address || loc.street_address || loc.raw_address;
+      postal_code = postal_code || loc.postal_code;
+    }
+
+    return {
+      apollo_org_id: org.id, name: org.name, website_url: org.website_url,
+      linkedin_url: org.linkedin_url, twitter_url: org.twitter_url, facebook_url: org.facebook_url,
+      blog_url: org.blog_url, angellist_url: org.angellist_url, crunchbase_url: org.crunchbase_url,
+      primary_phone: phoneNumber, sanitized_phone: sanitizedPhone, phone_source: phoneSource,
+      industry: org.industry, industries: org.industries, secondary_industries: org.secondary_industries,
+      sic_codes: org.sic_codes, naics_codes: org.naics_codes,
+      estimated_num_employees: org.estimated_num_employees,
+      annual_revenue: org.annual_revenue || org.organization_revenue,
+      annual_revenue_printed: org.annual_revenue_printed || org.organization_revenue_printed,
+      market_cap: org.market_cap, publicly_traded_symbol: org.publicly_traded_symbol,
+      publicly_traded_exchange: org.publicly_traded_exchange, logo_url: org.logo_url,
+      primary_domain: org.primary_domain || org.domain, founded_year: org.founded_year,
+      languages: org.languages ? (Array.isArray(org.languages) ? org.languages.join(',') : org.languages) : null,
+      city, state, country, raw_address: street_address, street_address, postal_code,
+      short_description: org.short_description, seo_description: org.seo_description,
+      alexa_ranking: org.alexa_ranking, time_zone: org.time_zone,
+      headcount_growth_6m: org.organization_headcount_six_month_growth,
+      headcount_growth_12m: org.organization_headcount_twelve_month_growth,
+      headcount_growth_24m: org.organization_headcount_twenty_four_month_growth,
+      total_funding: org.total_funding, total_funding_printed: org.total_funding_printed,
+      latest_funding_stage: org.latest_funding_stage,
+      owned_by_organization_id: org.owned_by_organization_id,
+      organization_id: organizationId, updated_at: new Date().toISOString(),
+    };
+  });
+
+  const { error: enrichErr } = await supabase
+    .from("enrichment_organizations")
+    .upsert(enrichmentRows, { onConflict: "apollo_org_id" });
+  if (!enrichErr) results.savedToEnrichment = enrichmentRows.length;
+  else console.warn("[Batch Enrich] Error:", enrichErr.message);
+
+  // ========================================================================
+  // BATCH 2: Bulk lookup existing companies
+  // ========================================================================
+  const apolloIds = organizations.map(o => o.id).filter(Boolean);
+  const domains = organizations.map(o => o.primary_domain || o.domain).filter(Boolean) as string[];
+  const existingMap = new Map<string, { id: number; status: string; company_data: any }>();
+
+  if (apolloIds.length > 0) {
+    const { data: byApollo } = await supabase
+      .from("companies")
+      .select("id, status, company_data, apollo_org_id, domain, name")
+      .eq("organization_id", organizationId)
+      .in("apollo_org_id", apolloIds);
+
+    if (byApollo) {
+      for (const row of byApollo) {
+        if (row.apollo_org_id) existingMap.set(`apollo:${row.apollo_org_id}`, row);
+        if (row.domain) existingMap.set(`domain:${row.domain}`, row);
+        if (row.name) existingMap.set(`name:${row.name}`, row);
       }
-      const locationString = [city, state, country].filter(Boolean).join(", ") || null;
-
-      // Save to enrichment_organizations
-      const enrichmentData: Record<string, any> = {
-        apollo_org_id: org.id, name: org.name, website_url: org.website_url,
-        linkedin_url: org.linkedin_url, twitter_url: org.twitter_url, facebook_url: org.facebook_url,
-        blog_url: org.blog_url, angellist_url: org.angellist_url, crunchbase_url: org.crunchbase_url,
-        primary_phone: phoneNumber, sanitized_phone: sanitizedPhone, phone_source: phoneSource,
-        industry: org.industry, industries: org.industries, secondary_industries: org.secondary_industries,
-        sic_codes: org.sic_codes, naics_codes: org.naics_codes,
-        estimated_num_employees: org.estimated_num_employees,
-        annual_revenue: org.annual_revenue || org.organization_revenue,
-        annual_revenue_printed: org.annual_revenue_printed || org.organization_revenue_printed,
-        market_cap: org.market_cap, publicly_traded_symbol: org.publicly_traded_symbol,
-        publicly_traded_exchange: org.publicly_traded_exchange, logo_url: org.logo_url,
-        primary_domain: org.primary_domain || org.domain, founded_year: org.founded_year,
-        languages: org.languages ? (Array.isArray(org.languages) ? org.languages.join(',') : org.languages) : null,
-        city, state, country, raw_address: street_address, street_address, postal_code,
-        short_description: org.short_description, seo_description: org.seo_description,
-        alexa_ranking: org.alexa_ranking, time_zone: org.time_zone,
-        headcount_growth_6m: org.organization_headcount_six_month_growth,
-        headcount_growth_12m: org.organization_headcount_twelve_month_growth,
-        headcount_growth_24m: org.organization_headcount_twenty_four_month_growth,
-        total_funding: org.total_funding, total_funding_printed: org.total_funding_printed,
-        latest_funding_stage: org.latest_funding_stage, owned_by_organization_id: org.owned_by_organization_id,
-        organization_id: organizationId, updated_at: new Date().toISOString(),
-      };
-
-      const { error: enrichErr } = await supabase.from("enrichment_organizations").upsert(enrichmentData, { onConflict: "apollo_org_id" });
-      if (!enrichErr) results.savedToEnrichment++;
-
-      // Save to companies
-      const companyData: Record<string, any> = {
-        name: org.name, domain: org.primary_domain || org.domain, website: org.website_url,
-        linkedin: org.linkedin_url, twitter: org.twitter_url, facebook: org.facebook_url,
-        crunchbase: org.crunchbase_url, angellist: org.angellist_url, logo_url: org.logo_url,
-        industry: org.industry, employee_count: org.estimated_num_employees,
-        revenue: org.annual_revenue_printed || org.organization_revenue_printed,
-        market_cap: org.market_cap, location: locationString, city, state, country,
-        address: street_address, postal_code, phone: phoneNumber, sanitized_phone: sanitizedPhone,
-        phone_country_code: phoneCountryCode, stock_symbol: org.publicly_traded_symbol,
-        stock_exchange: org.publicly_traded_exchange, about: org.short_description,
-        description: org.short_description, founded_year: org.founded_year ? String(org.founded_year) : null,
-        apollo_org_id: org.id, organization_id: organizationId,
-        headcount_growth_6m: org.organization_headcount_six_month_growth,
-        headcount_growth_12m: org.organization_headcount_twelve_month_growth,
-        headcount_growth_24m: org.organization_headcount_twenty_four_month_growth,
-        alexa_ranking: org.alexa_ranking,
-        company_data: {
-          keywords: org.keywords, technologies: org.technology_names, funding_stage: org.latest_funding_stage,
-          total_funding: org.total_funding_printed, industries: org.industries,
-          headcount_growth: {
-            six_month: org.organization_headcount_six_month_growth,
-            twelve_month: org.organization_headcount_twelve_month_growth,
-            twenty_four_month: org.organization_headcount_twenty_four_month_growth,
-          },
-          phone_details: org.primary_phone, owned_by: org.owned_by_organization,
-        },
-      };
-
-      if (fileId) companyData.file_id = fileId;
-
-      const cleanPayload = (data: Record<string, any>) => Object.fromEntries(
-        Object.entries(data).filter(([_, v]) => v !== null && v !== undefined && v !== "")
-      );
-
-      const { data: existingByApollo } = await supabase.from("companies").select("id, status, company_data")
-        .eq("apollo_org_id", org.id).eq("organization_id", organizationId).maybeSingle();
-
-      let targetId = existingByApollo?.id;
-      let existingStatus = existingByApollo?.status;
-      let existingJson = existingByApollo?.company_data || {};
-
-      if (!targetId && (org.primary_domain || org.domain)) {
-        const { data: existingByDomain } = await supabase.from("companies").select("id, status, company_data")
-          .eq("domain", org.primary_domain || org.domain).eq("organization_id", organizationId).maybeSingle();
-        targetId = existingByDomain?.id;
-        existingStatus = existingByDomain?.status;
-        existingJson = existingByDomain?.company_data || {};
-      }
-
-      if (targetId) {
-        const patchData = cleanPayload(companyData);
-        if (existingStatus === "Active") { delete patchData.status; delete patchData.stage; }
-        patchData.company_data = { ...existingJson, ...companyData.company_data };
-        patchData.updated_by = userId;
-        patchData.updated_at = new Date().toISOString();
-        const { error } = await supabase.from("companies").update(patchData).eq("id", targetId);
-        if (!error) results.savedToCompanies++;
-        else results.errors.push(`${org.name}: ${error.message}`);
-      } else {
-        companyData.created_by = userId;
-        companyData.updated_by = userId;
-        companyData.status = "Intelligence";
-        companyData.stage = "Identified";
-        const { error } = await supabase.from("companies").insert(companyData);
-        if (!error) results.savedToCompanies++;
-        else if (!error.message?.includes("duplicate")) results.errors.push(`${org.name}: ${error.message}`);
-      }
-
-      // Save related data
-      if (org.keywords?.length) {
-        await supabase.from("enrichment_org_keywords").upsert(
-          org.keywords.map(k => ({ apollo_org_id: org.id, keyword: k })), { onConflict: "apollo_org_id,keyword" }
-        );
-      }
-      if (org.current_technologies?.length) {
-        await supabase.from("enrichment_org_technologies").upsert(
-          org.current_technologies.map(t => ({ apollo_org_id: org.id, uid: t.uid, name: t.name, category: t.category })),
-          { onConflict: "apollo_org_id,uid" }
-        );
-      } else if (org.technology_names?.length) {
-        await supabase.from("enrichment_org_technologies").upsert(
-          org.technology_names.map((t, i) => ({ apollo_org_id: org.id, uid: `${org.id}_tech_${i}`, name: t, category: null })),
-          { onConflict: "apollo_org_id,uid" }
-        );
-      }
-      if (org.funding_events?.length) {
-        await supabase.from("enrichment_org_funding_events").upsert(
-          org.funding_events.map(e => ({
-            id: e.id, apollo_org_id: org.id, date: e.date || e.announced_date,
-            type: e.type || e.funding_type, investors: e.investors, amount: String(e.amount || ''), currency: e.currency,
-          })), { onConflict: "id" }
-        );
-      }
-      if (org.departmental_head_count) {
-        await supabase.from("enrichment_org_departments").upsert(
-          Object.entries(org.departmental_head_count).map(([dept, count]) => ({
-            apollo_org_id: org.id, department_name: dept, head_count: count,
-          })), { onConflict: "apollo_org_id,department_name" }
-        );
-      }
-    } catch (err: any) {
-      results.errors.push(`${org.name}: ${err.message}`);
     }
   }
+
+  const unmatchedDomains = domains.filter(d => !existingMap.has(`domain:${d}`));
+  if (unmatchedDomains.length > 0) {
+    const { data: byDomain } = await supabase
+      .from("companies")
+      .select("id, status, company_data, apollo_org_id, domain, name")
+      .eq("organization_id", organizationId)
+      .in("domain", unmatchedDomains);
+    if (byDomain) {
+      for (const row of byDomain) {
+        if (row.domain) existingMap.set(`domain:${row.domain}`, row);
+        if (row.name) existingMap.set(`name:${row.name}`, row);
+      }
+    }
+  }
+
+  // Query 3: Find remaining by name (handles unique constraint: name + organization_id)
+  const companyNames = organizations.map(o => o.name).filter(Boolean);
+  const unmatchedNames = companyNames.filter(n => !existingMap.has(`name:${n}`));
+  if (unmatchedNames.length > 0) {
+    const { data: byName } = await supabase
+      .from("companies")
+      .select("id, status, company_data, apollo_org_id, domain, name")
+      .eq("organization_id", organizationId)
+      .in("name", unmatchedNames);
+    if (byName) {
+      for (const row of byName) {
+        if (row.name) existingMap.set(`name:${row.name}`, row);
+      }
+    }
+  }
+
+  // ========================================================================
+  // BATCH 3: Process inserts and updates
+  // ========================================================================
+  const toInsert: Record<string, any>[] = [];
+  const toUpdate: { id: number; data: Record<string, any> }[] = [];
+
+  for (const org of organizations) {
+    const phoneNumber = org.primary_phone?.number || org.phone || null;
+    const sanitizedPhone = org.primary_phone?.sanitized_number || org.sanitized_phone || null;
+    const phoneCountryCode = extractCountryCodeFromPhone(sanitizedPhone);
+
+    let city = org.city, state = org.state, country = org.country;
+    let street_address = org.street_address || org.raw_address;
+    let postal_code = org.postal_code;
+    if ((!city || !country) && org.locations?.length) {
+      const loc = org.locations.find(l => l.is_primary) || org.locations[0];
+      city = city || loc.city; state = state || loc.state; country = country || loc.country;
+      street_address = street_address || loc.street_address || loc.raw_address;
+      postal_code = postal_code || loc.postal_code;
+    }
+    const locationString = [city, state, country].filter(Boolean).join(", ") || null;
+
+    const companyData: Record<string, any> = {
+      name: org.name, domain: org.primary_domain || org.domain, website: org.website_url,
+      linkedin: org.linkedin_url, twitter: org.twitter_url, facebook: org.facebook_url,
+      crunchbase: org.crunchbase_url, angellist: org.angellist_url, logo_url: org.logo_url,
+      industry: org.industry, employee_count: org.estimated_num_employees,
+      revenue: org.annual_revenue_printed || org.organization_revenue_printed,
+      market_cap: org.market_cap, location: locationString, city, state, country,
+      address: street_address, postal_code, phone: phoneNumber, sanitized_phone: sanitizedPhone,
+      phone_country_code: phoneCountryCode, stock_symbol: org.publicly_traded_symbol,
+      stock_exchange: org.publicly_traded_exchange, about: org.short_description,
+      description: org.short_description, founded_year: org.founded_year ? String(org.founded_year) : null,
+      apollo_org_id: org.id, organization_id: organizationId,
+      headcount_growth_6m: org.organization_headcount_six_month_growth,
+      headcount_growth_12m: org.organization_headcount_twelve_month_growth,
+      headcount_growth_24m: org.organization_headcount_twenty_four_month_growth,
+      alexa_ranking: org.alexa_ranking,
+      company_data: {
+        keywords: org.keywords, technologies: org.technology_names, funding_stage: org.latest_funding_stage,
+        total_funding: org.total_funding_printed, industries: org.industries,
+        headcount_growth: {
+          six_month: org.organization_headcount_six_month_growth,
+          twelve_month: org.organization_headcount_twelve_month_growth,
+          twenty_four_month: org.organization_headcount_twenty_four_month_growth,
+        },
+        phone_details: org.primary_phone, owned_by: org.owned_by_organization,
+      },
+    };
+
+    if (fileId) companyData.file_id = fileId;
+
+    // Find existing: priority = apollo_org_id > domain > name (unique constraint)
+    const existing = existingMap.get(`apollo:${org.id}`) ||
+      (companyData.domain ? existingMap.get(`domain:${companyData.domain}`) : null) ||
+      existingMap.get(`name:${org.name}`);
+
+    if (existing) {
+      const patchData = cleanPayload(companyData);
+      if (existing.status === "Active") { delete patchData.status; delete patchData.stage; }
+      patchData.company_data = { ...(existing.company_data || {}), ...companyData.company_data };
+      patchData.updated_by = userId;
+      patchData.updated_at = new Date().toISOString();
+      // Don't change the unique constraint columns
+      delete patchData.name;
+      delete patchData.organization_id;
+      toUpdate.push({ id: existing.id, data: patchData });
+    } else {
+      companyData.created_by = userId;
+      companyData.updated_by = userId;
+      companyData.status = "Intelligence";
+      companyData.stage = "Identified";
+      toInsert.push(companyData);
+    }
+  }
+
+  // Batch insert
+  if (toInsert.length > 0) {
+    const cleaned = toInsert.map(r => cleanPayload(r));
+    const { data: inserted, error: insertErr } = await supabase.from("companies").insert(cleaned).select("id");
+    if (!insertErr) {
+      results.savedToCompanies += inserted?.length || 0;
+    } else {
+      // Fallback: insert individually, handling name+organization_id duplicates
+      for (const row of cleaned) {
+        const { data: single, error } = await supabase.from("companies").insert(row).select("id").maybeSingle();
+        if (!error && single) {
+          results.savedToCompanies++;
+        } else if (error?.code === '23505') {
+          // Duplicate name+organization_id — find existing and update
+          const { data: dup } = await supabase
+            .from("companies")
+            .select("id")
+            .eq("name", row.name)
+            .eq("organization_id", organizationId)
+            .maybeSingle();
+          if (dup) {
+            const patch = { ...row };
+            delete patch.name; delete patch.organization_id;
+            delete patch.created_by; delete patch.created_at;
+            delete patch.status; delete patch.stage;
+            patch.updated_by = userId;
+            patch.updated_at = new Date().toISOString();
+            await supabase.from("companies").update(cleanPayload(patch)).eq("id", dup.id);
+            results.savedToCompanies++;
+          }
+        } else if (error) {
+          results.errors.push(`${row.name}: ${error.message}`);
+        }
+      }
+    }
+  }
+
+  // Parallel updates
+  if (toUpdate.length > 0) {
+    const updateResults = await Promise.allSettled(
+      toUpdate.map(({ id, data }) => supabase.from("companies").update(data).eq("id", id))
+    );
+    results.savedToCompanies += updateResults.filter(r => r.status === "fulfilled" && !(r.value as any).error).length;
+  }
+
+  // ========================================================================
+  // BATCH 4: Related data in parallel
+  // ========================================================================
+  const allKeywords: any[] = [];
+  const allTechs: any[] = [];
+  const allFunding: any[] = [];
+  const allDepts: any[] = [];
+
+  for (const org of organizations) {
+    if (org.keywords?.length) {
+      for (const k of org.keywords) allKeywords.push({ apollo_org_id: org.id, keyword: k });
+    }
+    if (org.current_technologies?.length) {
+      for (const t of org.current_technologies) allTechs.push({ apollo_org_id: org.id, uid: t.uid, name: t.name, category: t.category });
+    } else if (org.technology_names?.length) {
+      org.technology_names.forEach((t, i) => allTechs.push({ apollo_org_id: org.id, uid: `${org.id}_tech_${i}`, name: t, category: null }));
+    }
+    if (org.funding_events?.length) {
+      for (const e of org.funding_events) allFunding.push({ id: e.id, apollo_org_id: org.id, date: e.date || e.announced_date, type: e.type || e.funding_type, investors: e.investors, amount: String(e.amount || ''), currency: e.currency });
+    }
+    if (org.departmental_head_count) {
+      for (const [dept, count] of Object.entries(org.departmental_head_count)) allDepts.push({ apollo_org_id: org.id, department_name: dept, head_count: count });
+    }
+  }
+
+  await Promise.allSettled([
+    allKeywords.length > 0 ? supabase.from("enrichment_org_keywords").upsert(allKeywords, { onConflict: "apollo_org_id,keyword" }) : Promise.resolve(),
+    allTechs.length > 0 ? supabase.from("enrichment_org_technologies").upsert(allTechs, { onConflict: "apollo_org_id,uid" }) : Promise.resolve(),
+    allFunding.length > 0 ? supabase.from("enrichment_org_funding_events").upsert(allFunding, { onConflict: "id" }) : Promise.resolve(),
+    allDepts.length > 0 ? supabase.from("enrichment_org_departments").upsert(allDepts, { onConflict: "apollo_org_id,department_name" }) : Promise.resolve(),
+  ]);
+
   console.log(`[Save] Enrichment: ${results.savedToEnrichment}, Companies: ${results.savedToCompanies}`);
   return results;
 }

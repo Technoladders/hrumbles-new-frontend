@@ -477,6 +477,7 @@ const CandidateProfileV2: React.FC<CandidateProfileV2Props> = ({
           --v2-amber: #F59E0B;
           --v2-red: #EF4444;
           --v2-bg: #F8F9FC;
+          --v2-bg-2: #F6F5F5;
           --v2-surface: rgba(255, 255, 255, 0.72);
           --v2-surface-solid: #FFFFFF;
           --v2-border: rgba(139, 92, 246, 0.1);
@@ -494,7 +495,7 @@ const CandidateProfileV2: React.FC<CandidateProfileV2Props> = ({
           --v2-mono: 'JetBrains Mono', monospace;
         }
         .v2-root * { box-sizing: border-box; }
-        .v2-root { font-family: var(--v2-font); background: var(--v2-bg); min-height: 100vh; color: var(--v2-text); background-image: radial-gradient(ellipse 80% 50% at 20% -10%, rgba(124,58,237,0.06) 0%, transparent 60%), radial-gradient(ellipse 60% 40% at 80% 100%, rgba(6,182,212,0.04) 0%, transparent 60%); }
+        .v2-root { font-family: var(--v2-font); background: var(--v2-bg-2); min-height: 100vh; color: var(--v2-text); background-image: none; }
         .v2-card { background: var(--v2-surface); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--v2-border); border-radius: var(--v2-radius); box-shadow: var(--v2-shadow); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
         .v2-card:hover { box-shadow: var(--v2-shadow-lg); }
         .v2-topnav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 0; padding: 0 28px; height: 56px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--v2-border2); }

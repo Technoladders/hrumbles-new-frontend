@@ -1,4 +1,3 @@
-// Hrumbles-Front-End_UI\src\components\sales\discovery\DiscoverySidebar.tsx
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -11,12 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Slider } from '@/components/ui/slider'; // Assuming you have a slider or use Inputs for ranges
 import { 
   Search, MapPin, Briefcase, Building2, Globe, Users, 
   DollarSign, Laptop, FilterX, Play, Briefcase as JobIcon 
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 // --- CONSTANTS ---
 const SENIORITIES = [
@@ -47,15 +44,18 @@ const EMAIL_STATUSES = [
     { id: 'unverified', label: 'Unverified' }
 ];
 
-export function DiscoverySidebar() {
+// Add props interface
+interface DiscoverySidebarProps {
+  initialFilters?: any;
+}
+
+export function DiscoverySidebar({ initialFilters = {} }: DiscoverySidebarProps) {
   const dispatch = useDispatch();
-  // Safe selector with fallbacks
   const reduxFilters = useSelector((state: any) => state.intelligenceSearch.filters || {});
   
-  // Local state for form handling before submission
   const [local, setLocal] = useState<any>({
     q_keywords: '',
-    person_titles: '', // String input, converted to array on submit
+    person_titles: '', 
     person_locations: '',
     person_seniorities: [],
     organization_names: '',
@@ -65,52 +65,61 @@ export function DiscoverySidebar() {
     revenue_max: '',
     technologies: '',
     contact_email_status: [],
-    include_similar_titles: true, // Default true
-    q_organization_job_titles: '', // Job postings
+    include_similar_titles: true,
+    q_organization_job_titles: '', 
     job_posting_locations: '',
   });
 
-  // Sync Redux state to local on mount/change
+  // Helper to safely join arrays for display (e.g. ["CEO", "CTO"] -> "CEO, CTO")
+  const joinArr = (arr: any) => Array.isArray(arr) ? arr.join(', ') : '';
+
+  // Initialize from Props (URL) or Redux
   useEffect(() => {
+    // Prefer initialFilters (from URL) on first load, otherwise fallback to Redux or defaults
+    const source = Object.keys(initialFilters).length > 0 ? initialFilters : reduxFilters;
+
     setLocal(prev => ({
         ...prev,
-        q_keywords: reduxFilters.q_keywords || '',
-        person_seniorities: reduxFilters.person_seniorities || [],
-        organization_num_employees_ranges: reduxFilters.organization_num_employees_ranges || [],
-        contact_email_status: reduxFilters.contact_email_status || [],
-        // Map arrays back to comma strings for display if needed, or keep empty
+        q_keywords: source.q_keywords || '',
+        person_titles: joinArr(source.person_titles),
+        person_locations: joinArr(source.person_locations),
+        person_seniorities: source.person_seniorities || [],
+        organization_names: joinArr(source.organization_names),
+        organization_locations: joinArr(source.organization_locations),
+        organization_num_employees_ranges: source.organization_num_employees_ranges || [],
+        revenue_min: source.revenue_range?.min || '',
+        revenue_max: source.revenue_range?.max || '',
+        technologies: joinArr(source.currently_using_any_of_technology_uids),
+        contact_email_status: source.contact_email_status || [],
+        include_similar_titles: source.include_similar_titles ?? true,
+        q_organization_job_titles: joinArr(source.q_organization_job_titles),
+        job_posting_locations: joinArr(source.organization_job_locations),
     }));
-  }, [reduxFilters]);
+  }, [initialFilters]); // Dependency on initialFilters ensures URL changes update inputs
 
   // --- HANDLERS ---
 
   const handleRunSearch = () => {
-    // 1. Convert comma-separated strings to Arrays
     const toArray = (str: string) => str ? str.split(',').map(s => s.trim()).filter(Boolean) : [];
     
-    // 2. Build Payload
     const payload = {
-        q_keywords: local.q_keywords, // Name search
+        q_keywords: local.q_keywords,
         person_titles: toArray(local.person_titles),
         person_locations: toArray(local.person_locations),
         person_seniorities: local.person_seniorities,
-        organization_names: toArray(local.organization_names),
+        organization_names: toArray(local.organization_names), // Sent to Redux, Edge function handles logic
         organization_locations: toArray(local.organization_locations),
         organization_num_employees_ranges: local.organization_num_employees_ranges,
-        q_organization_domains_list: [], // Can implement domain logic if needed
+        q_organization_domains_list: [], 
         contact_email_status: local.contact_email_status,
         include_similar_titles: local.include_similar_titles,
         
-        // Revenue Range
         revenue_range: {
-            min: local.revenue_min ? parseInt(local.revenue_min) : undefined,
-            max: local.revenue_max ? parseInt(local.revenue_max) : undefined
+            min: local.revenue_min ? parseInt(local.revenue_min) : null,
+            max: local.revenue_max ? parseInt(local.revenue_max) : null
         },
         
-        // Tech
         currently_using_any_of_technology_uids: toArray(local.technologies),
-
-        // Job Postings
         q_organization_job_titles: toArray(local.q_organization_job_titles),
         organization_job_locations: toArray(local.job_posting_locations),
     };
@@ -258,6 +267,9 @@ export function DiscoverySidebar() {
                             value={local.organization_names}
                             onChange={(e) => setLocal({...local, organization_names: e.target.value})}
                         />
+                        <p className="text-[9px] text-slate-400 mt-1">
+                            Matches keywords in company names.
+                        </p>
                     </div>
 
                     <div className="space-y-2">

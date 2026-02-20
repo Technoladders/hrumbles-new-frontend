@@ -1,6 +1,6 @@
 // src/pages/sales/CompanyIntelligenceSearchPage.tsx
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Link as RouterLink, useParams, useNavigate } from "react-router-dom";
+import { Link as RouterLink, useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSelector } from "react-redux";
@@ -226,14 +226,39 @@ type ViewMode = "database" | "search";
 const CompanyIntelligenceSearchPage: React.FC = () => {
   const { fileId } = useParams<{ fileId?: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const user = useSelector((state: any) => state.auth.user);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const currentUserId = user?.id || null;
 
+  // ============================================================================
+  // 1. PARSE URL PARAMS ON INITIAL LOAD
+  // ============================================================================
+  
+  // Helper to parse Apollo filters from URL
+  const getInitialApiFilters = (): ApolloCompanySearchFilters => {
+    try {
+      const filterParam = searchParams.get("filters");
+      if (filterParam) {
+        return JSON.parse(decodeURIComponent(filterParam));
+      }
+    } catch (e) {
+      console.error("Failed to parse filters from URL", e);
+    }
+    return {};
+  };
+
+  // Initialize State from URL
+  const initialViewMode = (searchParams.get("tab") as ViewMode) || (fileId ? "database" : "database");
+  const initialApiPage = parseInt(searchParams.get("page") || "1", 10);
+  const initialApiFilters = getInitialApiFilters();
+  const initialHasSearched = searchParams.get("tab") === "search" && !!searchParams.get("filters");
+
   // View Mode State
-  const [viewMode, setViewMode] = useState<ViewMode>("database");
+  const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
+
 
 //   Add List State
     const [listModalOpen, setListModalOpen] = useState(false);
@@ -248,10 +273,10 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
   const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
 
   // API Search State
-  const [apiFilters, setApiFilters] = useState<ApolloCompanySearchFilters>({});
-  const [apiPage, setApiPage] = useState(1);
+  const [apiFilters, setApiFilters] = useState<ApolloCompanySearchFilters>(initialApiFilters);
+  const [apiPage, setApiPage] = useState(initialApiPage);
   const [apiPerPage, setApiPerPage] = useState(100);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [hasSearched, setHasSearched] = useState(initialHasSearched);
   const [apiSearchResults, setApiSearchResults] = useState<{
     organizations: ApolloOrganization[];
     pagination: { page: number; per_page: number; total_entries: number; total_pages: number };
@@ -363,17 +388,60 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
   });
 
   // ============================================================================
+  // 2. SYNC STATE TO URL
+  // ============================================================================
+  
+  const updateUrlParams = useCallback((mode: ViewMode, page: number, filters: any) => {
+    const params: Record<string, string> = {};
+    
+    // Always set tab
+    params.tab = mode;
+    
+    // Set page
+    if (page > 1) params.page = page.toString();
+
+    // Set filters (Only for search mode)
+    if (mode === "search" && Object.keys(filters).length > 0) {
+      params.filters = encodeURIComponent(JSON.stringify(filters));
+    }
+
+    setSearchParams(params, { replace: true });
+  }, [setSearchParams]);
+
+  // ============================================================================
+  // 3. AUTO-TRIGGER SEARCH ON MOUNT (If params exist)
+  // ============================================================================
+  
+  const mountRef = useRef(false);
+
+  useEffect(() => {
+    if (!mountRef.current) {
+      mountRef.current = true;
+      // If we loaded into search mode with filters, execute the search immediately
+      if (initialViewMode === "search" && Object.keys(initialApiFilters).length > 0) {
+        handleApiSearch(initialApiFilters, initialApiPage);
+      }
+    }
+  }, []);
+
+
+  // ============================================================================
   // API Search Handler (V2 - Server-side storage)
   // ============================================================================
-  const handleApiSearch = useCallback(async (filters: ApolloCompanySearchFilters) => {
+  const handleApiSearch = useCallback(async (filters: ApolloCompanySearchFilters, pageOverride?: number) => {
     setIsSearching(true);
     setHasSearched(true);
     setApiFilters(filters);
-    setApiPage(1);
+    
+    const targetPage = pageOverride || 1;
+    setApiPage(targetPage);
+
+    // Update URL
+    updateUrlParams("search", targetPage, filters);
 
     try {
       // V2 handles storage server-side and returns saved companies
-      const result = await searchCompaniesInApolloV2(filters, 1, apiPerPage, fileId);
+      const result = await searchCompaniesInApolloV2(filters, targetPage, apiPerPage, fileId);
       
       const savedCount = result.saved?.companies || 0;
       const totalEntries = result.pagination?.total_entries || 0;
@@ -400,7 +468,7 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
     } finally {
       setIsSearching(false);
     }
-  }, [apiPerPage, fileId, toast, queryClient]);
+  }, [apiPerPage, fileId, toast, queryClient, updateUrlParams]);
 
     const { data: workspaceFiles = [] } = useQuery({
     queryKey: ["workspace-files-for-lists", organizationId],
@@ -474,6 +542,10 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
   // ============================================================================
   const handleApiPageChange = useCallback(async (newPage: number) => {
     if (!hasSearched || !apiFilters) return;
+    
+    // Update URL immediately
+    updateUrlParams("search", newPage, apiFilters);
+    
     setIsSearching(true);
     setApiPage(newPage);
     try {
@@ -491,7 +563,7 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
     } finally {
       setIsSearching(false);
     }
-  }, [hasSearched, apiFilters, apiPerPage, fileId, toast, queryClient]);
+  }, [hasSearched, apiFilters, apiPerPage, fileId, toast, queryClient, updateUrlParams]);
 
   // ============================================================================
   // Mutations
@@ -608,7 +680,14 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
     if (viewMode === "database" && !isLoadingDatabase) initialLoadDone.current = true;
   }, [viewMode, isLoadingDatabase]);
 
-
+  const handleTabChange = (v: string) => {
+    const newMode = v as ViewMode;
+    setViewMode(newMode);
+    setSelectedOrgs(new Set());
+    
+    // Reset URL to clean state when switching tabs
+    updateUrlParams(newMode, 1, newMode === "search" ? apiFilters : {}); 
+  };
 
   const handleListAdd = async (fileId: string) => {
     if (!selectedCompanyForList || !fileId) return;
@@ -692,7 +771,7 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
               {isSidebarOpen ? <X className="h-5 w-5" /> : <SlidersHorizontal className="h-5 w-5" />}
             </Button>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">My Companies</h1>
-            <Tabs value={viewMode} onValueChange={(v) => { setViewMode(v as ViewMode); setSelectedOrgs(new Set()); }} className="w-auto">
+           <Tabs value={viewMode} onValueChange={handleTabChange} className="w-auto">
               <TabsList className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200">
                 <TabsTrigger value="database" className={cn("flex items-center whitespace-nowrap px-6 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md text-slate-500 hover:text-slate-700")}>
                   <Database className="mr-2 h-3.5 w-3.5" />CRM Records
@@ -744,7 +823,7 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
             viewMode === "database" ? (
               <DatabaseFilterSidebar filters={dbFilters} onFiltersChange={(newFilters) => { setDbFilters(newFilters); setDbPage(1); }} isLoading={isFetchingDatabase} totalResults={totalResults} onClose={() => setIsSidebarOpen(false)} />
             ) : (
-              <CompanySearchFilterSidebar onSearch={handleApiSearch} isSearching={isSearching} totalResults={totalResults} onClose={() => setIsSidebarOpen(false)} />
+              <CompanySearchFilterSidebar onSearch={(f) => handleApiSearch(f, 1)} isSearching={isSearching} totalResults={totalResults} onClose={() => setIsSidebarOpen(false)} initialFilters={apiFilters} />
             )
           )}
         </div>

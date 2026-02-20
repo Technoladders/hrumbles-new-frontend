@@ -217,7 +217,7 @@ function AppContent() {
   // --- Define Public Routes ---
   const publicPaths = [
     '/login', '/signup', '/set-password', '/forgot-password',
-    '/careers', '/job/', '/share/', '/share-v2/', '/consent/', '/talentcareers'
+    '/careers', '/job/', '/share/', '/share-v2/', '/consent/', '/talentcareers', '/'
   ];
 
 
@@ -269,21 +269,36 @@ useEffect(() => {
  // --- Session Validation Logic ---
 // Inside App.jsx -> AppContent component
 
-const validateCurrentSession = useCallback(async () => {
-    if (isLoggingOut) return;
+// --- Session Validation Logic (CORRECTED) ---
+  const validateCurrentSession = useCallback(async () => {
+    // 1. CRITICAL: Identify if we are on a public path
+    const isPublic = publicPaths.some(p => {
+        if (p === '/') return location.pathname === '/';
+        return location.pathname.startsWith(p);
+    });
 
-     if (isOrgValidated !== true) return; 
+    // 2. If on a public path (like /login), STOP immediately.
+    // Do not check session, do not show modal.
+    if (isPublic) return;
 
+    // 3. Check direct store state for 'isLoggingOut'.
+    // This prevents stale closure issues during the logout transition.
+    const currentLoggingOutState = store.getState().auth.isLoggingOut;
+    if (currentLoggingOutState) return;
+
+    // 4. If org is not validated yet, wait.
+    if (isOrgValidated !== true) return; 
+
+    // 5. Check Session
     const { data: { session } } = await supabase.auth.getSession();
     
+    // 6. No Session + Not Public + Not Logging Out = EXPIRED
     if (!session) {
-       const isPublic = publicPaths.some(p => location.pathname.startsWith(p));
-       if(!isPublic) dispatch(showSessionExpiredModal());
+       dispatch(showSessionExpiredModal());
        return;
     }
 
     if (session?.user?.id) {
-       // 1. Fetch Status and Role Details
        const { data, error } = await supabase
          .from('hr_employees')
          .select(`
@@ -298,50 +313,34 @@ const validateCurrentSession = useCallback(async () => {
          .single();
          
        if (data) {
-          // --- SAFELY EXTRACT ROLE NAME ---
-          // Sometimes supabase returns an array for joins, sometimes an object. Handle both.
           const rawRole = data.hr_roles;
           const roleName = Array.isArray(rawRole) ? rawRole[0]?.name : rawRole?.name;
-
           const userStatus = data.status;
           const subStatus = data.hr_organizations?.subscription_status;
 
-          // 1. Check User Status (Inactive Employee)
           if (userStatus !== 'active') {
-              console.warn("User inactive. Logging out.");
               await supabase.auth.signOut();
               dispatch(logout());
               window.location.href = "/login";
               return;
           }
 
-          // 2. Check Subscription Status
           const isExpired = subStatus === 'expired' || subStatus === 'inactive' || subStatus === 'canceled';
-          
           if (isExpired) {
-              // DEBUG LOG: Check what the system sees
-              console.log(`Subscription is ${subStatus}. User Role is: ${roleName}`);
-
-              // --- CRITICAL CHECK ---
-              // If it IS a superadmin, DO NOT LOGOUT. Return immediately.
               if (roleName === 'organization_superadmin' || roleName === 'global_superadmin') {
-                  return; // Allow session to continue (MainLayout will show Lock Modal)
+                  return; 
               }
-
-              // If we get here, it's a regular user/admin. Logout them.
-              console.warn(`Subscription expired for ${roleName}. Logging out regular user.`);
               await supabase.auth.signOut();
               dispatch(logout());
               window.location.href = "/login";
           }
        }
     }
-  }, [dispatch, location.pathname, isLoggingOut, isOrgValidated]);
+  }, [dispatch, location.pathname, isOrgValidated]); // Removed isLoggingOut dependency to use store state
 
   useEffect(() => {
-    validateCurrentSession(); // Initial check
+    validateCurrentSession();
     
-    // Listeners
     const handleStorageChange = (e) => (e.key.startsWith('sb-') && e.key.endsWith('-auth-token')) && validateCurrentSession();
     const handleVisibilityChange = () => (document.visibilityState === 'visible') && validateCurrentSession();
     
@@ -349,11 +348,12 @@ const validateCurrentSession = useCallback(async () => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-
-            const loggingOut = store.getState().auth.isLoggingOut; // Directly check store state here
-      if (loggingOut) return;
+      // Direct store check for logout flag
+      const loggingOut = store.getState().auth.isLoggingOut;
+      if (loggingOut) return; 
 
       if (event === 'SIGNED_OUT') {
+        // Double check we aren't mistakenly showing it on public routes
         const isPublicRoute = publicPaths.some(path => window.location.pathname.startsWith(path));
         if (!isPublicRoute) {
           dispatch(showSessionExpiredModal());
@@ -361,7 +361,6 @@ const validateCurrentSession = useCallback(async () => {
       }
     });
 
-    // Cleanup
     return () => {
       subscription.unsubscribe();
       window.removeEventListener('storage', handleStorageChange);

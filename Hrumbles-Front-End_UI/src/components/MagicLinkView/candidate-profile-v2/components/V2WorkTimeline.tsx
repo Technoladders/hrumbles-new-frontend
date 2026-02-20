@@ -60,7 +60,7 @@ export const V2WorkTimeline: React.FC<V2WorkTimelineProps> = ({
             </span>
           </div>
         </div>
-        {!shareMode && (
+        {/* {!shareMode && (
           <button
             onClick={onVerifyAllCompanies}
             disabled={isVerifyingAll}
@@ -74,7 +74,7 @@ export const V2WorkTimeline: React.FC<V2WorkTimelineProps> = ({
           >
             {isVerifyingAll ? "⏳ Verifying…" : "⚡ Verify All"}
           </button>
-        )}
+        )} */}
       </div>
 
       {/* Timeline */}

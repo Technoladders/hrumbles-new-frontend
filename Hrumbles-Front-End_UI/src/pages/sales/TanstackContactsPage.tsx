@@ -309,17 +309,42 @@ export default function TanstackContactsPage() {
     }
   };
 
-  const handleEnrich = async (contactId: string, apolloId: string, type: 'email' | 'phone') => {
-    try {
-      toast({ title: "Request Sent", description: "Verifying data assets..." });
-      await supabase.functions.invoke('enrich-contact-master', { 
-        body: { contactId, apolloPersonId: apolloId, revealType: type } 
-      });
-      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Error", description: err.message });
-    }
-  };
+// TanstackContactsPage.tsx
+
+// 1. Update the function signature to accept the full 'person' object
+const handleEnrich = async (contactId: string, apolloId: string | null, type: 'email' | 'phone', personDetails?: any) => {
+  try {
+    toast({ title: "Request Sent", description: `Verifying ${type} via Apollo...` });
+    
+    // 2. Prepare the payload with fallback data for matching
+    const body = { 
+      contactId, 
+      apolloPersonId: apolloId, 
+      revealType: type,
+      // If apolloId is null, these fields will be used for matching:
+      email: personDetails?.email,
+      linkedin_url: personDetails?.linkedin_url,
+      name: personDetails?.name,
+      organization_name: personDetails?.company_name
+    };
+
+    // 3. Send to Edge Function
+    const { data, error } = await supabase.functions.invoke('enrich-contact-master', { 
+      body: body
+    });
+
+    if (error) throw new Error(error.message || "Function invocation failed");
+
+    const responseMsg = data?.message || "Enrichment processing";
+    toast({ title: "Success", description: responseMsg });
+    
+    // 4. Refresh data to show new results
+    queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+  } catch (err: any) {
+    console.error("Enrichment error:", err);
+    toast({ variant: "destructive", title: "Error", description: err.message });
+  }
+};
 
 // Replace the current handleListAdd completely
 const handleListAdd = async (targetFileId: string) => {
@@ -989,3 +1014,4 @@ const handleListAdd = async (targetFileId: string) => {
     </DndProvider>
   );
 }
+// 
