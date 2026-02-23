@@ -1014,4 +1014,4 @@ const handleListAdd = async (targetFileId: string) => {
     </DndProvider>
   );
 }
-// 
+// fix the people search not working from the previous git commit

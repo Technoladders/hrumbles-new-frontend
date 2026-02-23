@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -175,7 +176,7 @@ const handleSaveRecruiterReports = async () => {
     const config = recruiterConfigs[type];
     return (
       <div className="space-y-6 pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-        <div className="flex items-center justify-between p-4 border rounded-lg bg-slate-50">
+         <div className="flex items-center justify-between p-4 border rounded-lg bg-slate-50">
           <div className="space-y-0.5">
             <Label className="text-base font-semibold">Enable Automatic Sending</Label>
             <p className="text-sm text-muted-foreground">
@@ -193,14 +194,15 @@ const handleSaveRecruiterReports = async () => {
              <div className="flex gap-6 flex-wrap">
                 <div className="w-40">
                   <Label className="mb-2 block text-xs font-medium uppercase text-muted-foreground">Send Time (IST)</Label>
-                  <Select value={config.sendTime} onValueChange={(val) => updateRecruiterConfig(type, 'sendTime', val)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {['09:00', '13:00', '17:00', '19:00', '21:00'].map(t => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {/* CHANGED: Replaced Select with Input type="time" */}
+                  <div className="relative">
+                    <Input 
+                      type="time" 
+                      value={config.sendTime} 
+                      onChange={(e) => updateRecruiterConfig(type, 'sendTime', e.target.value)}
+                      className="w-full bg-white cursor-pointer"
+                    />
+                  </div>
                 </div>
                 {showDayPicker && (
                   <div className="w-40">
@@ -230,20 +232,8 @@ const handleSaveRecruiterReports = async () => {
                 These users will receive the report via email {showDayPicker ? `every ${config.sendDay}` : 'every day'} at {config.sendTime}.
               </p>
             </div>
-            <div className="flex items-center space-x-2 border p-3 rounded-md bg-white">
-  <Switch 
-    id={`recruiter-copy-${type}`}
-    checked={config.sendToRecruiters || false}
-    onCheckedChange={(val) => updateRecruiterConfig(type, 'sendToRecruiters', val)}
-  />
-  <div className="grid gap-1.5 leading-none">
-    <Label htmlFor={`recruiter-copy-${type}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-      Send individual copies to Recruiters
-    </Label>
-    <p className="text-xs text-muted-foreground">
-      If enabled, each recruiter mentioned in the report will receive a personalized email containing only their candidates.
-    </p>
-  </div>
+              <div className="grid gap-1.5 leading-none">
+
 </div>
           </div>
         )}
