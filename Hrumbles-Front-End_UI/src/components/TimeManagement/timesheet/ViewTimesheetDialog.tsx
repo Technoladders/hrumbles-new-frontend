@@ -360,6 +360,7 @@ if (!timesheet.is_submitted) {
           clock_in_time: timesheet.clock_in_time,
           clock_out_time: newClockOutTime,
         },
+        breakLogs: timesheet.break_logs || [],
         allRecipients: uniqueRecipients,
         csvContent: isRecruiter && submissions.length > 0 ? generateCSV(submissions) : null,
       };

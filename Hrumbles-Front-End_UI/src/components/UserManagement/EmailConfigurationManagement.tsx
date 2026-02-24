@@ -11,23 +11,27 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSelector } from 'react-redux';
 import { MultiSelect } from '@/components/ui/multi-selector';
 import { fetchEmployees } from '@/api/user';
-import { Clock, CalendarDays, CalendarRange, Calendar } from 'lucide-react';
+import { Clock, CalendarDays, CalendarRange, Calendar, Briefcase, RefreshCw } from 'lucide-react';
 
 interface EmployeeOption {
   value: string;
   label: string;
 }
 
-// Interface for the new Recruiter Report Configs
+// Interface for the Recruiter Report Configs
 interface RecruiterReportConfig {
   isActive: boolean;
   recipients: string[];
   sendTime: string;
   sendDay?: string;
-  sendToRecruiters?: boolean; // NEW
+  sendToRecruiters?: boolean;
 }
 
 const RECRUITER_REPORT_TYPES = ['daily_recruiter_report', 'weekly_recruiter_report', 'monthly_recruiter_report'];
+const LEAVE_REPORT_TYPE = 'leave_request_notify';
+const STATUS_UPDATE_REPORT_TYPE = 'status_update'; // NEW CONSTANT
+const JOB_CREATION_REPORT_TYPE = 'job_creation_notify';
+const JOB_UPDATE_REPORT_TYPE = 'job_update_notify';
 
 const EmailConfigurationManagement = () => {
   const { toast } = useToast();
@@ -42,68 +46,69 @@ const EmailConfigurationManagement = () => {
 
   // --- NEW STATE (Recruiter Reports) ---
   const [savingRecruiter, setSavingRecruiter] = useState(false);
-const [recruiterConfigs, setRecruiterConfigs] = useState<Record<string, RecruiterReportConfig>>({
-    daily_recruiter_report: { isActive: false, recipients: [], sendTime: "19:00", sendToRecruiters: false },
-    weekly_recruiter_report: { isActive: false, recipients: [], sendTime: "19:00", sendDay: "Friday", sendToRecruiters: false },
-    monthly_recruiter_report: { isActive: false, recipients: [], sendTime: "19:00", sendToRecruiters: false },
-});
+  const [recruiterConfigs, setRecruiterConfigs] = useState<Record<string, RecruiterReportConfig>>({
+      daily_recruiter_report: { isActive: false, recipients: [], sendTime: "19:00", sendToRecruiters: false },
+      weekly_recruiter_report: { isActive: false, recipients: [], sendTime: "19:00", sendDay: "Friday", sendToRecruiters: false },
+      monthly_recruiter_report: { isActive: false, recipients: [], sendTime: "19:00", sendToRecruiters: false },
+  });
 
-  useEffect(() => {
+  // --- STATE (Leave Notifications) ---
+  const [leaveRecipients, setLeaveRecipients] = useState<string[]>([]);
+  const [isLeaveActive, setIsLeaveActive] = useState(true);
+  const [savingLeave, setSavingLeave] = useState(false);
+
+  // --- NEW STATE (Status Update Notifications) ---
+  const [statusUpdateRecipients, setStatusUpdateRecipients] = useState<string[]>([]);
+  const [isStatusUpdateActive, setIsStatusUpdateActive] = useState(true);
+  const [savingStatusUpdate, setSavingStatusUpdate] = useState(false);
+
+  // job creation and update notifications
+
+  const [jobCreationRecipients, setJobCreationRecipients] = useState<string[]>([]);
+  const [isJobCreationActive, setIsJobCreationActive] = useState(true);
+  const [savingJobCreation, setSavingJobCreation] = useState(false);
+
+  const [jobUpdateRecipients, setJobUpdateRecipients] = useState<string[]>([]);
+  const [isJobUpdateActive, setIsJobUpdateActive] = useState(true);
+  const [savingJobUpdate, setSavingJobUpdate] = useState(false);
+
+ useEffect(() => {
     const loadData = async () => {
       if (!organization_id) return;
       setLoading(true);
       try {
-        // 1. Fetch Employees
         const employees = await fetchEmployees(organization_id);
-        setAllEmployees(employees.map(e => ({
-          value: e.id,
-          label: `${e.first_name} ${e.last_name} (${e.email})`
-        })));
+        setAllEmployees(employees.map(e => ({ value: e.id, label: `${e.first_name} ${e.last_name} (${e.email})` })));
 
-        // 2. Fetch All Configurations (EOD + Recruiter Reports)
         const { data: configs, error } = await supabase
           .from('hr_email_configurations')
           .select('*')
           .eq('organization_id', organization_id)
-          .in('report_type', ['eod_report', ...RECRUITER_REPORT_TYPES]);
+          .in('report_type', [LEAVE_REPORT_TYPE, STATUS_UPDATE_REPORT_TYPE, JOB_CREATION_REPORT_TYPE, JOB_UPDATE_REPORT_TYPE, 'eod_report', ...RECRUITER_REPORT_TYPES]);
         
         if (error) throw error;
 
-        // 3. Distribute Data to States
         const newRecruiterConfigs = { ...recruiterConfigs };
 
         configs?.forEach((conf) => {
-          // Handle Existing EOD Logic
-          if (conf.report_type === 'eod_report') {
-            setEodRecipients(conf.recipients || []);
-          }
-          // Handle New Recruiter Logic
+          if (conf.report_type === 'eod_report') setEodRecipients(conf.recipients || []);
+          else if (conf.report_type === LEAVE_REPORT_TYPE) { setLeaveRecipients(conf.recipients || []); setIsLeaveActive(conf.is_active); }
+          else if (conf.report_type === STATUS_UPDATE_REPORT_TYPE) { setStatusUpdateRecipients(conf.recipients || []); setIsStatusUpdateActive(conf.is_active); }
+          else if (conf.report_type === JOB_CREATION_REPORT_TYPE) { setJobCreationRecipients(conf.recipients || []); setIsJobCreationActive(conf.is_active); }
+          else if (conf.report_type === JOB_UPDATE_REPORT_TYPE) { setJobUpdateRecipients(conf.recipients || []); setIsJobUpdateActive(conf.is_active); }
           else if (newRecruiterConfigs[conf.report_type]) {
             newRecruiterConfigs[conf.report_type] = {
-              isActive: conf.is_active,
-              recipients: conf.recipients || [],
-              sendTime: conf.config?.sendTime || "19:00",
-              sendDay: conf.config?.sendDay || "Friday"
+              isActive: conf.is_active, recipients: conf.recipients || [], sendTime: conf.config?.sendTime || "19:00", sendDay: conf.config?.sendDay || "Friday", sendToRecruiters: conf.config?.sendToRecruiters || false
             };
           }
         });
-
         setRecruiterConfigs(newRecruiterConfigs);
-
-      } catch (error) {
-        console.error("Error loading email configurations:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load email configurations.",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-      }
+      } catch (error) { toast({ title: "Error", description: "Failed to load configs.", variant: "destructive" }); } 
+      finally { setLoading(false); }
     };
-
     loadData();
   }, [organization_id, toast]);
+
 
   // --- EXISTING HANDLER (EOD Report) ---
   const handleSaveEOD = async () => {
@@ -129,7 +134,7 @@ const [recruiterConfigs, setRecruiterConfigs] = useState<Record<string, Recruite
     }
   };
 
-  // --- NEW HANDLERS (Recruiter Reports) ---
+  // --- RECRUITER REPORTS HANDLERS ---
   const updateRecruiterConfig = (type: string, field: keyof RecruiterReportConfig, value: any) => {
     setRecruiterConfigs(prev => ({
       ...prev,
@@ -137,7 +142,7 @@ const [recruiterConfigs, setRecruiterConfigs] = useState<Record<string, Recruite
     }));
   };
 
-const handleSaveRecruiterReports = async () => {
+  const handleSaveRecruiterReports = async () => {
     if (!organization_id) return;
     setSavingRecruiter(true);
     try {
@@ -151,7 +156,7 @@ const handleSaveRecruiterReports = async () => {
           config: {
             sendTime: conf.sendTime,
             sendDay: conf.sendDay,
-            sendToRecruiters: conf.sendToRecruiters // <--- ADDED THIS LINE
+            sendToRecruiters: conf.sendToRecruiters
           }
         };
       });
@@ -170,6 +175,66 @@ const handleSaveRecruiterReports = async () => {
       setSavingRecruiter(false);
     }
   };
+
+  // --- LEAVE NOTIFICATIONS HANDLER ---
+  const handleSaveLeaveNotify = async () => {
+    if (!organization_id) return;
+    setSavingLeave(true);
+    try {
+      const { error } = await supabase
+        .from('hr_email_configurations')
+        .upsert({
+          organization_id,
+          report_type: 'leave_request_notify',
+          recipients: leaveRecipients,
+          is_active: isLeaveActive
+        }, { onConflict: 'organization_id,report_type' });
+      if (error) throw error;
+      toast({ title: "Success", description: "Leave notification settings saved." });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" });
+    } finally {
+      setSavingLeave(false);
+    }
+  };
+
+  // --- NEW: STATUS UPDATE NOTIFICATIONS HANDLER ---
+  const handleSaveStatusUpdateNotify = async () => {
+    if (!organization_id) return;
+    setSavingStatusUpdate(true);
+    try {
+      const { error } = await supabase
+        .from('hr_email_configurations')
+        .upsert({
+          organization_id,
+          report_type: 'status_update',
+          recipients: statusUpdateRecipients,
+          is_active: isStatusUpdateActive
+        }, { onConflict: 'organization_id,report_type' });
+      if (error) throw error;
+      toast({ title: "Success", description: "Status update notification settings saved." });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" });
+    } finally {
+      setSavingStatusUpdate(false);
+    }
+  };
+
+  // Save Handlers
+  const handleSaveConfig = async (type: string, recipients: string[], isActive: boolean, setSaving: (val: boolean) => void) => {
+    if (!organization_id) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('hr_email_configurations').upsert({
+        organization_id, report_type: type, recipients, is_active: isActive
+      }, { onConflict: 'organization_id,report_type' });
+      if (error) throw error;
+      toast({ title: "Success", description: "Settings saved successfully." });
+    } catch (error) { toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" }); } 
+    finally { setSaving(false); }
+  };
+
+
 
   // Helper to render the configuration UI for Daily/Weekly/Monthly
   const renderRecruiterConfigTab = (type: string, showDayPicker: boolean = false) => {
@@ -194,7 +259,6 @@ const handleSaveRecruiterReports = async () => {
              <div className="flex gap-6 flex-wrap">
                 <div className="w-40">
                   <Label className="mb-2 block text-xs font-medium uppercase text-muted-foreground">Send Time (IST)</Label>
-                  {/* CHANGED: Replaced Select with Input type="time" */}
                   <div className="relative">
                     <Input 
                       type="time" 
@@ -232,9 +296,21 @@ const handleSaveRecruiterReports = async () => {
                 These users will receive the report via email {showDayPicker ? `every ${config.sendDay}` : 'every day'} at {config.sendTime}.
               </p>
             </div>
+           <div className="flex items-center space-x-2 border p-3 rounded-md bg-white">
+              <Switch 
+                id={`recruiter-copy-${type}`}
+                checked={config.sendToRecruiters || false}
+                onCheckedChange={(val) => updateRecruiterConfig(type, 'sendToRecruiters', val)}
+              />
               <div className="grid gap-1.5 leading-none">
-
-</div>
+                <Label htmlFor={`recruiter-copy-${type}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Send individual copies to Recruiters
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  If enabled, each recruiter mentioned in the report will receive a personalized email containing only their candidates.
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -245,52 +321,111 @@ const handleSaveRecruiterReports = async () => {
     return <div className="p-4 text-center text-muted-foreground">Loading configurations...</div>;
   }
 
-  return (
-    <div className="space-y-8">
-      
-      {/* --- SECTION 1: EXISTING EOD REPORT --- */}
-      <Card>
+ return (
+    <div className="space-y-8 pb-10">
+
+      {/* EOD REPORT */}
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+       <Card>
         <CardHeader>
           <CardTitle>End of Day (EOD) Report</CardTitle>
-          <CardDescription>
-            Define a default list of recipients who will automatically receive the EOD report email whenever an employee submits their timesheet.
-          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <Label htmlFor="eod-recipients">Default Recipients</Label>
-            <MultiSelect
-              id="eod-recipients"
-              options={allEmployees}
-              selected={eodRecipients}
-              onChange={setEodRecipients}
-              placeholder="Select employees..."
-              className="w-full"
-            />
-            <p className="text-sm text-muted-foreground">
-              The submitting user will always receive a copy of their own report.
-            </p>
-          </div>
-        </CardContent>
-        <CardFooter>
-          <Button onClick={handleSaveEOD} disabled={savingEod}>
-            {savingEod ? "Saving..." : "Save EOD Changes"}
-          </Button>
-        </CardFooter>
+        <CardContent><MultiSelect options={allEmployees} selected={eodRecipients} onChange={setEodRecipients} placeholder="Select employees..." className="w-full" /></CardContent>
+        <CardFooter><Button onClick={() => handleSaveConfig('eod_report', eodRecipients, true, setSavingEod)} disabled={savingEod}>Save EOD</Button></CardFooter>
       </Card>
+      </div>
+      
+      {/* JOB ALERTS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2"><Briefcase className="w-5 h-5 text-indigo-600"/> Job Creation Alerts</CardTitle>
+                <CardDescription>Notify these users when a new Job is posted.</CardDescription>
+              </div>
+              <Switch checked={isJobCreationActive} onCheckedChange={setIsJobCreationActive} />
+            </div>
+          </CardHeader>
+          {isJobCreationActive && (
+            <CardContent className="animate-in fade-in slide-in-from-top-2">
+              <MultiSelect options={allEmployees} selected={jobCreationRecipients} onChange={setJobCreationRecipients} placeholder="Select HR/Admin employees..." className="w-full" />
+              <p className="text-xs text-muted-foreground mt-2">The Job Creator automatically receives a copy. Configured users will also receive it (with budget details).</p>
+            </CardContent>
+          )}
+          <CardFooter>
+            <Button onClick={() => handleSaveConfig(JOB_CREATION_REPORT_TYPE, jobCreationRecipients, isJobCreationActive, setSavingJobCreation)} disabled={savingJobCreation}>{savingJobCreation ? "Saving..." : "Save Config"}</Button>
+          </CardFooter>
+        </Card>
 
-      {/* --- SECTION 2: NEW AUTOMATED RECRUITER REPORTS --- */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-indigo-600"/> Job Update & Assignments</CardTitle>
+                <CardDescription>Notify users when a Job is updated or users are assigned.</CardDescription>
+              </div>
+              <Switch checked={isJobUpdateActive} onCheckedChange={setIsJobUpdateActive} />
+            </div>
+          </CardHeader>
+          {isJobUpdateActive && (
+            <CardContent className="animate-in fade-in slide-in-from-top-2">
+              <MultiSelect options={allEmployees} selected={jobUpdateRecipients} onChange={setJobUpdateRecipients} placeholder="Select HR/Admin employees..." className="w-full" />
+              <p className="text-xs text-muted-foreground mt-2">Assigned Recruiters receive a notification <b>without</b> budget details. Configured users and the Creator receive full details.</p>
+            </CardContent>
+          )}
+          <CardFooter>
+            <Button onClick={() => handleSaveConfig(JOB_UPDATE_REPORT_TYPE, jobUpdateRecipients, isJobUpdateActive, setSavingJobUpdate)} disabled={savingJobUpdate}>{savingJobUpdate ? "Saving..." : "Save Config"}</Button>
+          </CardFooter>
+        </Card>
+      </div>
+
+      {/* CANDIDATE STATUS & LEAVE */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+            <CardHeader>
+            <div className="flex items-center justify-between">
+                <div>
+                <CardTitle>Candidate Status Updates</CardTitle>
+                <CardDescription>Notify default recipients on candidate status change.</CardDescription>
+                </div>
+                <Switch checked={isStatusUpdateActive} onCheckedChange={setIsStatusUpdateActive} />
+            </div>
+            </CardHeader>
+            {isStatusUpdateActive && (
+            <CardContent><MultiSelect options={allEmployees} selected={statusUpdateRecipients} onChange={setStatusUpdateRecipients} placeholder="Select employees..." className="w-full" /></CardContent>
+            )}
+            <CardFooter><Button onClick={() => handleSaveConfig(STATUS_UPDATE_REPORT_TYPE, statusUpdateRecipients, isStatusUpdateActive, setSavingStatusUpdate)} disabled={savingStatusUpdate}>Save</Button></CardFooter>
+        </Card>
+
+        <Card>
+            <CardHeader>
+            <div className="flex items-center justify-between">
+                <div>
+                <CardTitle>Leave Request Notifications</CardTitle>
+                <CardDescription>HR recipients auto-added to leave requests.</CardDescription>
+                </div>
+                <Switch checked={isLeaveActive} onCheckedChange={setIsLeaveActive} />
+            </div>
+            </CardHeader>
+            {isLeaveActive && (
+            <CardContent><MultiSelect options={allEmployees} selected={leaveRecipients} onChange={setLeaveRecipients} placeholder="Select HR/Admin employees..." className="w-full" /></CardContent>
+            )}
+            <CardFooter><Button onClick={() => handleSaveConfig(LEAVE_REPORT_TYPE, leaveRecipients, isLeaveActive, setSavingLeave)} disabled={savingLeave}>Save</Button></CardFooter>
+        </Card>
+      </div>
+
+
+      {/* RECRUITER AUTOMATION (Your existing code here, omitted for brevity, keep what you had) */}
       <Card className="border-indigo-100 shadow-sm">
         <CardHeader className="bg-indigo-50/50 pb-4">
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-indigo-600" />
             <CardTitle className="text-indigo-950">Automated Recruiter Reports</CardTitle>
           </div>
-          <CardDescription>
-            Schedule consolidated reports for candidate activities (Creation & Status Updates) to be sent automatically.
-          </CardDescription>
+          <CardDescription>Schedule consolidated candidate activity reports.</CardDescription>
         </CardHeader>
-        <CardContent className="pt-6">
+       <CardContent className="pt-6">
           <Tabs defaultValue="daily" className="w-full">
             <TabsList className="grid w-full grid-cols-3 mb-4">
               <TabsTrigger value="daily" className="flex items-center gap-2">
@@ -326,10 +461,14 @@ const handleSaveRecruiterReports = async () => {
             {savingRecruiter ? "Saving..." : "Save Automation Settings"}
           </Button>
         </CardFooter>
+
       </Card>
+
+     
 
     </div>
   );
 };
 
 export default EmailConfigurationManagement;
+// job update and create mail

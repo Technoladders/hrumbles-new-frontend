@@ -41,7 +41,8 @@ interface LeaveRequestDialogProps {
   leaveTypes: LeaveType[];
   allEmployees: EmployeeOption[];
   isLoadingEmployees: boolean;
-  holidays?: Date[]; // NEW: Pass holidays for picker disabling
+  holidays?: Date[];
+  defaultRecipients?: string[];
 }
 
 interface MultiSelectProps {
@@ -149,7 +150,7 @@ function MultiSelect({ options, selected, onChange, placeholder, label }: MultiS
   );
 }
 
-export function LeaveRequestDialog({ open, onOpenChange, onSubmit, leaveTypes, allEmployees, isLoadingEmployees, holidays = [] }: LeaveRequestDialogProps) {
+export function LeaveRequestDialog({ open, onOpenChange, onSubmit, leaveTypes, allEmployees, isLoadingEmployees, holidays = [], defaultRecipients = [] }: LeaveRequestDialogProps) {
   const form = useForm<LeaveRequestFormValues>({
     defaultValues: {
       leave_type_id: "",
@@ -160,6 +161,20 @@ export function LeaveRequestDialog({ open, onOpenChange, onSubmit, leaveTypes, a
       cc_recipient: [],
     },
   });
+
+  // NEW: Auto-populate default recipients when dialog opens
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        leave_type_id: "",
+        date_range: { startDate: null, endDate: null },
+        day_breakdown: [],
+        reason: "",
+        additional_recipient: defaultRecipients, // Injects HR/Configured users automatically
+        cc_recipient: [],
+      });
+    }
+  }, [open, defaultRecipients, form]);
 
   const dateRange = form.watch("date_range");
   const dayBreakdown = useWatch({ control: form.control, name: "day_breakdown" }) as LeaveDayBreakdown[];

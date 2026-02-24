@@ -12,6 +12,7 @@ import { useLeaveRequests } from "@/hooks/TimeManagement/useLeaveRequests";
 import { useEmployeeLeaveBalances } from "@/hooks/TimeManagement/useEmployeeLeaveBalances";
 import { useHolidays } from "@/hooks/TimeManagement/useHolidays";
 import { useEmployeeEmail } from "@/hooks/TimeManagement/useEmployeeEmail";
+import { useLeaveEmailConfig } from "@/hooks/TimeManagement/useLeaveEmailConfig";
 import { LeaveRequest, LeaveRequestFormValues } from "@/types/leave-types";
 import { format } from "date-fns";
 import { toast } from 'sonner';
@@ -47,6 +48,9 @@ const Leave = () => {
 
   // Fetch all employees and get their loading state
   const { allEmployees, isLoading: isLoadingEmployees } = useEmployeeEmail();
+
+    // Fetch configured recipients
+  const { defaultRecipients } = useLeaveEmailConfig();
 
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
@@ -151,6 +155,7 @@ const Leave = () => {
         allEmployees={allEmployees}
         isLoadingEmployees={isLoadingEmployees} // Pass loading state
         holidays={holidays}
+        defaultRecipients={defaultRecipients}
       />
      
       <CancelLeaveDialog
