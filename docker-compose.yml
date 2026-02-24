@@ -6,17 +6,15 @@ networks:
 
 services:
   hrumble-new-frontend:
-    build:
-      context: ./Hrumbles-Front-End_UI
-      dockerfile: Dockerfile
-    container_name: hrumble-new-frontend
+    # We use a variable here so the same file works for Prod, Staging, and Dev
+    # GitHub Actions will need to export DOCKER_TAG before running 'docker compose up'
+    image: xrilictechnologies/hrumble-new-frontend:${DOCKER_TAG:-prod-latest}
+    container_name: ${CONTAINER_NAME:-hrumble-new-frontend}
     restart: unless-stopped
     networks:
       - zivelogin-network-prod
     ports:
-      - "5003:80"
-    volumes:
-      - ./frontend/dist:/dist
+      - "${PORT:-5003}:80"
     environment:
       VITE_SUPABASE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImticGV5ZmlldHJ3bGh3Y3dxaGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4NDA5NjEsImV4cCI6MjA1NDQxNjk2MX0.A-K4DO6D2qQZ66qIXY4BlmoHxc-W5B0itV-HAAM84YA"
       VITE_SUPABASE_URL: "https://kbpeyfietrwlhwcwqhjw.supabase.co"

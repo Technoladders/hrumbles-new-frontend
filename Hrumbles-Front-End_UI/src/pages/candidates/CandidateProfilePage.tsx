@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, FC } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useQuery } from "@tanstack/react-query";
@@ -48,6 +48,7 @@ import CompareWithJobDialog from "@/components/candidates/talent-pool/CompareWit
 import AnalysisHistoryDialog from "@/components/candidates/AnalysisHistoryDialog";
 import EnrichDataDialog from "@/components/candidates/talent-pool/EnrichDataDialog";
 import { generateDocx, generatePdf } from "@/utils/cvGenerator";
+import ResumeViewer from '@/components/candidates/talent-pool/ResumeViewer';
 
 
 // Highlight Component - Same as in search results
@@ -104,8 +105,28 @@ const CandidateProfilePage = () => {
 
 
 const highlightQuery = useMemo(() => {
-  const keywords = searchParams.get('keywords');
-  return keywords ? keywords.split(',').filter(Boolean) : [];
+  const stripQ = (v: string) => v.replace(/^"|"$/g, '').trim();
+  const terms: string[] = [];
+
+  // Read all search-context params forwarded from the results page
+  for (const key of ['keywords', 'skills', 'companies', 'educations', 'locations']) {
+    const mandatory = searchParams.get(`mandatory_${key}`)?.split(',') || [];
+    const optional  = searchParams.get(`optional_${key}`)?.split(',')  || [];
+    [...mandatory, ...optional].filter(Boolean).forEach(v => terms.push(stripQ(v)));
+  }
+
+  // Legacy support: plain ?keywords= param
+  const legacyKeywords = searchParams.get('keywords');
+  if (legacyKeywords) {
+    legacyKeywords.split(',').filter(Boolean).forEach(v => terms.push(stripQ(v)));
+  }
+
+  const cc = searchParams.get('current_company');
+  if (cc) terms.push(cc);
+  const cd = searchParams.get('current_designation');
+  if (cd) terms.push(cd);
+
+  return [...new Set(terms.filter(Boolean))];
 }, [searchParams]);
   
   const { data: candidate, isLoading } = useQuery({
@@ -1171,35 +1192,26 @@ return (
                 </Card>
               )}
 
-                          {candidate.resume_path && (
-              <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                      <div className="rounded-lg bg-pink-100 p-2">
-                        <FileText className="h-5 w-5 text-pink-600" /> 
-                        {/* Make sure to import FileText from lucide-react */}
-                      </div>
-                      Resume / CV
-                    </CardTitle>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="gap-2"
-                      onClick={() => window.open(candidate.resume_path, '_blank')}
-                    >
-                      <Download className="h-4 w-4" />
-                      Download Original
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-5">
-                  <div className="bg-slate-50 rounded-lg p-1">
-                     {renderResumeEmbed()}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+        {(candidate.resume_path || candidate.resume_text) && (
+  <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+    <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
+      <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
+        <div className="rounded-lg bg-pink-100 p-2">
+          <FileText className="h-5 w-5 text-pink-600" />
+        </div>
+        Resume / CV
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="p-4">
+      <ResumeViewer
+        resumePath={candidate.resume_path}
+        resumeText={candidate.resume_text}
+        highlightTerms={highlightQuery}
+        hasExportPermission={hasExportPermission}
+      />
+    </CardContent>
+  </Card>
+)}
 
           
 
@@ -1369,3 +1381,4 @@ return (
 };
 
 export default CandidateProfilePage;
+// 

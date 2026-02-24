@@ -1,13 +1,13 @@
 // src/pages/candidates/ZiveXSearchPage.tsx
+// REDESIGNED: Clean, refined search page header
 
 import { FC, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import RecentSearches from '@/components/candidates/zive-x/RecentSearches';
-import BookmarkedProfiles from '@/components/candidates/zive-x/BookmarkedProfiles';
 import CandidateSearchFilters from '@/components/candidates/zive-x/CandidateSearchFilters';
 import { SearchFilters, SearchTag, SearchHistory } from '@/types/candidateSearch';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Clock, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -30,7 +30,7 @@ const ZiveXSearchPage: FC = () => {
       if (mandatory.length) params.append(`mandatory_${key}`, mandatory.join(','));
       if (optional.length) params.append(`optional_${key}`, optional.join(','));
     };
-    
+
     processTags('name', newFilters.name);
     processTags('email', newFilters.email);
     processTags('keywords', newFilters.keywords);
@@ -51,8 +51,6 @@ const ZiveXSearchPage: FC = () => {
     if (newFilters.date_posted && newFilters.date_posted !== 'all_time') {
       params.append('date_posted', newFilters.date_posted);
     }
-    
-    // ADD JD METADATA TO URL
     if (newFilters.jd_text) params.append('jd_text', encodeURIComponent(newFilters.jd_text));
     if (newFilters.jd_job_title) params.append('jd_job_title', newFilters.jd_job_title);
     if (newFilters.jd_selected_job_id) params.append('jd_selected_job_id', newFilters.jd_selected_job_id);
@@ -62,7 +60,6 @@ const ZiveXSearchPage: FC = () => {
     if (newFilters.jd_is_boolean_mode !== undefined) {
       params.append('jd_is_boolean_mode', newFilters.jd_is_boolean_mode.toString());
     }
-    
     const searchQuery = params.toString();
     navigate(`/zive-x-search/results?${searchQuery}`);
   };
@@ -72,68 +69,124 @@ const ZiveXSearchPage: FC = () => {
     setShowRecentSearchesModal(false);
   };
 
-  const handleBack = () => {
-    navigate(-1);
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header with Back Button */}
-    <div className="bg-white border-b border-gray-200">
-        <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                onClick={handleBack}
-                className="flex items-center gap-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              >
-                <ArrowLeft className="w-5 h-5" />
-                <span className="font-medium">Back</span>
-              </Button>
-              <h1 className="text-4xl font-bold text-gray-600">Find Top Talent</h1>
+    <>
+      <style>{`
+        .zx-search-page {
+          min-height: 100vh;
+          background: #F8F9FB;
+        }
+        .zx-search-header {
+          background: white;
+          border-bottom: 1px solid #E5E7EB;
+          padding: 0 24px;
+          height: 56px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          position: sticky;
+          top: 0;
+          z-index: 20;
+        }
+        .zx-header-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .zx-header-back {
+          width: 34px;
+          height: 34px;
+          border-radius: 8px;
+          border: 1px solid #E5E7EB;
+          background: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.15s;
+          color: #6B7280;
+        }
+        .zx-header-back:hover {
+          border-color: #DDD6FE;
+          color: #6C2BD9;
+          background: #F5F0FF;
+        }
+        .zx-header-title {
+          font-size: 17px;
+          font-weight: 700;
+          color: #111827;
+          letter-spacing: -0.3px;
+        }
+        .zx-recent-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 7px 14px;
+          border-radius: 8px;
+          border: 1px solid #E5E7EB;
+          background: white;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 600;
+          color: #6B7280;
+          transition: all 0.15s;
+        }
+        .zx-recent-btn:hover {
+          border-color: #DDD6FE;
+          color: #6C2BD9;
+        }
+        .zx-recent-btn svg {
+          width: 15px;
+          height: 15px;
+        }
+        .zx-search-body {
+          padding: 24px;
+        }
+        .zx-search-body > div {
+          max-width: 1600px;
+          margin: 0 auto;
+        }
+      `}</style>
+
+      <div className="zx-search-page">
+        {/* Header */}
+        <div className="zx-search-header">
+          <div className="zx-header-left">
+            <button className="zx-header-back" onClick={() => navigate(-1)}>
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <span className="zx-header-title">Find Candidates</span>
+          </div>
+          <button className="zx-recent-btn" onClick={() => setShowRecentSearchesModal(true)}>
+            <Clock /> Recent Searches
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="zx-search-body">
+          <div>
+            <CandidateSearchFilters
+              onSearch={handleSearch}
+              isSearching={false}
+              organizationId={organizationId}
+              searchHistory={selectedHistory}
+            />
+          </div>
+        </div>
+
+        {/* Recent Searches Modal */}
+        <Dialog open={showRecentSearchesModal} onOpenChange={setShowRecentSearchesModal}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold text-gray-800">Recent Searches</DialogTitle>
+            </DialogHeader>
+            <div className="mt-4">
+              <RecentSearches onSelectSearch={handleRecentSearchSelect} isModal={true} />
             </div>
-            
-            {/* Recent Searches Button */}
-            <Button
-              variant="outline"
-              onClick={() => setShowRecentSearchesModal(true)}
-              className="flex items-center gap-2 text-gray-700 hover:text-[#7731E8] hover:border-[#7731E8]"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Recent Searches
-            </Button>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       </div>
-
-      {/* Main Content */}
-      <div className="py-8 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-9xl mx-auto">
-          {/* Single column layout - card always full width */}
-          <CandidateSearchFilters 
-            onSearch={handleSearch} 
-            isSearching={false} 
-            organizationId={organizationId}
-            searchHistory={selectedHistory}
-          />
-        </div>
-      </div>
-
-      {/* Recent Searches Modal */}
-      <Dialog open={showRecentSearchesModal} onOpenChange={setShowRecentSearchesModal}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-gray-800">Recent Searches</DialogTitle>
-          </DialogHeader>
-          <div className="mt-4">
-            <RecentSearches onSelectSearch={handleRecentSearchSelect} isModal={true} />
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </>
   );
 };
 
