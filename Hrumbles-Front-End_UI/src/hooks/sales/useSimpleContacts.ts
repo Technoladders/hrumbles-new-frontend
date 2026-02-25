@@ -105,6 +105,23 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
         
         dispatch(setSearchResults(data)); 
         dispatch(setTotalEntries(data.total_entries || 0));
+
+        if (currentPage === 1 && data.total_entries > 0) {
+  // We don't await this so it doesn't block the user's UI
+  const user = (await supabase.auth.getUser()).data.user;
+  
+  if (user) {
+    supabase.from('background_sync_jobs').insert({
+      organization_id: organization_id,
+      created_by: user.id, 
+      filters: filters,
+      total_entries: data.total_entries,
+      status: 'pending'
+    }).then(({error}) => {
+      if (error) console.error("Failed to queue background sync:", error);
+    });
+  }
+}
         
         const mappedData = (data.people || []).map((p: any) => ({
           id: `temp-${p.id}`,
@@ -301,7 +318,7 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
         const metadata = intel?.enrichment_person_metadata?.[0];
         return {
           ...c,
-          company_name: c.companies?.name,
+          company_name: c.companies?.name || c.company_name || null,
           company_logo: c.companies?.logo_url,
           company_domain: c.companies?.domain,
           is_discovery: false,

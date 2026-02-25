@@ -1,0 +1,11 @@
+📊 COMPANIES EXTRACTION REPORT
+📅 2/25/2026, 3:32:06 PM
+
+Expected: 3
+Processed: 3
+Inserted: 6
+
+Filters:
+{
+  "q_organization_name": "aquity solutions"
+}

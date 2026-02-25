@@ -144,11 +144,11 @@ export const SalesDashboardLayout: React.FC = () => {
         `)
         .eq('organization_id', organizationId)
         .neq('type', 'stage_change')
-        .order('created_at', { ascending: false });
+        .order('activity_date', { ascending: false });
 
       // Date filter
       if (getDateFilter) {
-        query = query.gte('created_at', getDateFilter);
+        query = query.gte('activity_date', getDateFilter);
       }
 
       // Employee filter (for admin) or current user (for employee)
@@ -290,7 +290,7 @@ export const SalesDashboardLayout: React.FC = () => {
 
     const dailyTrend = last7Days.map(date => {
       const dayActivities = activities.filter((a: any) => 
-        format(new Date(a.created_at), 'yyyy-MM-dd') === date
+        format(new Date(a.activity_date), 'yyyy-MM-dd') === date
       );
       return {
         date,

@@ -339,7 +339,7 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
           <div className="flex items-center gap-2">
             <ListFilter className="h-4 w-4 text-slate-600" />
             <span className="text-xs font-bold uppercase tracking-wide text-slate-700">
-              Apollo Search
+              Cloud Search
             </span>
             {activeFiltersCount > 0 && (
               <Badge className="h-5 px-1.5 text-[10px] bg-purple-600 text-white">

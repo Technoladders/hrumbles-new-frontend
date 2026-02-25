@@ -1,0 +1,15 @@
+{
+  "d0804a10979540da84e030040a27c26d": {
+    "date": "2026-02-25T10:02:06.763Z",
+    "type": "companies",
+    "filters": {
+      "q_organization_name": "aquity solutions"
+    },
+    "stats": {
+      "expected": 3,
+      "processed": 3,
+      "inserted": 6,
+      "pagesFetched": 1
+    }
+  }
+}

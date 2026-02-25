@@ -147,6 +147,7 @@ import ContactDetailPage from './pages/sales/ContactDetailPage.tsx'
 
 import SalesDashboard from "./pages/sales/SalesDashboard";
 import DiscoveryPage from "./pages/sales/DiscoveryPage";
+import SyncReportsPage from "./pages/sales/SyncReportsPage";
 
 
 // Clients
@@ -595,6 +596,7 @@ useEffect(() => {
               <Route path="/lead" element={<LeadsWorkspace />} />
               <Route path="/contacts/:id" element={<ContactDetailPage />} />
               <Route path="/discovery" element={<DiscoveryPage />} />
+              <Route path="/sales/reports" element={<SyncReportsPage />} />
 
 
 

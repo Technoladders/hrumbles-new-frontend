@@ -443,6 +443,23 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
       // V2 handles storage server-side and returns saved companies
       const result = await searchCompaniesInApolloV2(filters, targetPage, apiPerPage, fileId);
       
+ // ==========================================================
+      // NEW: TRIGGER BACKGROUND SYNC FOR COMPANIES
+      // ==========================================================
+      if (targetPage === 1 && result.pagination?.total_entries > 0) {
+        supabase.from('background_sync_jobs').insert({
+          organization_id: organizationId,
+          created_by: currentUserId,
+          filters: filters,
+          total_entries: result.pagination.total_entries,
+          status: 'pending',
+          job_type: 'companies' // Tells the scraper to use the Company endpoint
+        }).then(({error}) => {
+          if (error) console.error("Failed to queue background sync:", error);
+        });s
+      }
+      // ==========================================================
+
       const savedCount = result.saved?.companies || 0;
       const totalEntries = result.pagination?.total_entries || 0;
       
@@ -468,7 +485,7 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
     } finally {
       setIsSearching(false);
     }
-  }, [apiPerPage, fileId, toast, queryClient, updateUrlParams]);
+  }, [apiPerPage, fileId, toast, queryClient, updateUrlParams, organizationId, currentUserId]);
 
     const { data: workspaceFiles = [] } = useQuery({
     queryKey: ["workspace-files-for-lists", organizationId],

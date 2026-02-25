@@ -567,7 +567,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
                   <span className="text-xs text-gray-400 flex items-center gap-1">
                     <Clock size={10} />
                     {formatDistanceToNow(
-                      new Date(activity.created_at || activity.activity_date),
+                      new Date(activity.activity_date ||activity.created_at),
                       { addSuffix: true },
                     )}
                   </span>
@@ -579,7 +579,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
                   <Clock size={10} />
                   Created{" "}
                   {formatDistanceToNow(
-                    new Date(activity.created_at || activity.activity_date),
+                    new Date(activity.activity_date || activity.created_at),
                     { addSuffix: true },
                   )}{" "}
                   ago

@@ -920,23 +920,53 @@ const ActionCell = ({ row, table }: any) => {
 };
 
 
-// --- COMPANY CELL (Professional Discovery Mode) ---
+// --- COMPANY CELL - Final version with company_id fallback ---
 const CompanyCell: React.FC<any> = ({ getValue, row, table }) => {
-  if (isDiscoveryRow(row)) {
-    const companyName = getValue() || row.original.original_data?.organization?.name;
+  const isDiscovery = isDiscoveryRow(row);
+  const contact = row.original;
+
+  const companyId = contact.company_id;
+  const displayName = getValue() || contact.company_name || '-';
+
+  // DISCOVERY ROW (unchanged)
+  if (isDiscovery) {
     return (
       <div className="flex items-center gap-2">
         <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-slate-100 text-slate-600">
           <Building2 size={12} />
         </div>
-        <span className="text-xs text-slate-700 truncate font-medium">{companyName || '-'}</span>
+        <span className="text-xs text-slate-700 truncate font-medium" title={displayName}>
+          {displayName}
+        </span>
       </div>
     );
   }
-  const initialCompanyId = row.original.company_id;
-  const companyName = getValue() as string;
-  const onSelect = (id: number | null) => table.options.meta?.updateData(row.index, 'company_id', id);
-  return <CompanyCombobox value={initialCompanyId} onSelect={onSelect} initialName={companyName} />;
+
+  // CRM ROWS
+  if (companyId) {
+    // Has linked company → full combobox (editable + linked to companies table)
+    const onSelect = (id: number | null) => 
+      table.options.meta?.updateData(row.index, 'company_id', id);
+
+    return <CompanyCombobox 
+      value={companyId} 
+      onSelect={onSelect} 
+      initialName={displayName} 
+    />;
+  } 
+  else {
+    // No company_id → show the fallback company_name from contacts table
+    return (
+      <div className="flex items-center gap-2 py-1">
+        <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-amber-100 text-amber-600">
+          <Building2 size={12} />
+        </div>
+        <span className="text-xs text-slate-700 truncate font-medium" title={displayName}>
+          {displayName}
+        </span>
+      </div>
+    );
+  }
 };
 
 const StageSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
