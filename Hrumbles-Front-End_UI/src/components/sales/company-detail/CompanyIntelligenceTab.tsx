@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSelector } from 'react-redux';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +15,8 @@ import { useToast } from '@/hooks/use-toast';
 export const CompanyIntelligenceTab = ({ company, refetchParent }: any) => {
   const { toast } = useToast();
   const [isSyncing, setIsSyncing] = React.useState(false);
+    const user = useSelector((state: any) => state.auth.user);
+  
 
   const { data: intel, isLoading, refetch } = useQuery({
     queryKey: ['company-intelligence-deep', company.apollo_org_id],
@@ -42,19 +45,20 @@ const handleSync = async () => {
     // Check if we should use ID or Domain
     if (company.apollo_org_id) {
       // USE NEW ID-BASED FUNCTION
-      const result = await supabase.functions.invoke('enrich-org-by-id', {
+      const result = await supabase.functions.invoke('enrich-company', {
         body: { 
           apolloOrgId: company.apollo_org_id, 
           companyId: company.id,
-          internalOrgId: company.organization_id
+          organizationId: company.organization_id, 
+          userId: user.id
         }
       });
       error = result.error;
     } else if (company.website) {
       // USE OLD DOMAIN-BASED FUNCTION
       const domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
-      const result = await supabase.functions.invoke('enrich-organization', {
-        body: { domain, companyId: company.id }
+      const result = await supabase.functions.invoke('enrich-company', {
+        body: { domain, companyId: company.id, organizationId: company.organization_id, userId: user.id }
       });
       error = result.error;
     } else {

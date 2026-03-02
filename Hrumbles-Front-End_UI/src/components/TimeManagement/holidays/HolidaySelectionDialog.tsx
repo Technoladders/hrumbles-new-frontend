@@ -24,6 +24,7 @@ interface HolidaySelectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (holidays: Omit<Holiday, "id" | "created_at" | "updated_at">[]) => void;
+  organization_id: string;
 }
 
 export function HolidaySelectionDialog({
@@ -36,38 +37,41 @@ export function HolidaySelectionDialog({
   const [holidayType, setHolidayType] = useState("National");
   const [isCheckingDates, setIsCheckingDates] = useState(false);
 
-  const handleSelectDate = async (dates: Date[] | undefined) => {
-    if (!dates) return;
-    
-    setSelectedDates(dates);
-    
-    const existingDates = selectedDates;
-    const newDates = dates.filter(date => !existingDates.some(existing => 
-      format(existing, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
-    ));
+const handleSelectDate = async (dates: Date[] | undefined) => {
+  if (!dates) return;
+  
+  setSelectedDates(dates);
+  
+  const existingDates = selectedDates;
+  const newDates = dates.filter(date => !existingDates.some(existing => 
+    format(existing, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
+  ));
 
-    if (newDates.length > 0) {
-      setIsCheckingDates(true);
+  if (newDates.length > 0) {
+    setIsCheckingDates(true);
+    
+    for (const date of newDates) {
+      const formattedDate = format(date, "yyyy-MM-dd");
       
-      for (const date of newDates) {
-        const formattedDate = format(date, "yyyy-MM-dd");
-        
-        try {
-          // Using a raw query approach to avoid TypeScript issues
-          const { data } = await supabase
-            .rpc('is_date_holiday', { check_date: formattedDate });
+      try {
+        // Direct DB query (replaces RPC)
+        const { count } = await supabase
+          .from('official_holidays')
+          .select('*', { count: 'exact', head: true })
+          .eq('holiday_date', formattedDate)
+          .eq('organization_id', organization_id);   // scopes to current org
 
-          if (data === true) {
-            toast.warning(`${format(date, "MMMM d, yyyy")} is already marked as a holiday`);
-          }
-        } catch (error) {
-          console.error("Error checking date:", error);
+        if (count && count > 0) {
+          toast.warning(`${format(date, "MMMM d, yyyy")} is already marked as a holiday`);
         }
+      } catch (error) {
+        console.error("Error checking date:", error);
       }
-      
-      setIsCheckingDates(false);
     }
-  };
+    
+    setIsCheckingDates(false);
+  }
+};
 
   const removeDate = (index: number) => {
     const newDates = [...selectedDates];

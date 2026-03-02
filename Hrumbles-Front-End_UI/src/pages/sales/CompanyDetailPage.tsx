@@ -143,11 +143,12 @@ const CompanyDetail = () => {
       // Check if we should use ID or Domain
       if (company?.apollo_org_id) {
         // USE ID-BASED ENRICHMENT
-        const result = await supabase.functions.invoke('enrich-org-by-id', {
+        const result = await supabase.functions.invoke('enrich-company', {
           body: { 
             apolloOrgId: company.apollo_org_id, 
             companyId: company.id,
-            internalOrgId: company.organization_id
+            organizationId: company.organization_id,
+            userId: user?.id
           }
         });
         error = result.error;

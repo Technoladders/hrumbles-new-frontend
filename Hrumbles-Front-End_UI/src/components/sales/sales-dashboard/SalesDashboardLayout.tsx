@@ -33,7 +33,9 @@ import {
   Zap,
   Linkedin
 } from 'lucide-react';
-import { format, subDays, startOfWeek, startOfMonth, startOfQuarter, isToday, isTomorrow, isPast, parseISO } from 'date-fns';
+import { format, subDays, startOfDay, startOfWeek, startOfMonth, startOfQuarter, isToday, isTomorrow, isPast, parseISO, endOfMonth, endOfDay } from 'date-fns';
+
+import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 
 // Dashboard Components
 import { MetricCard } from './MetricCard';
@@ -50,16 +52,21 @@ import { EmployeeSelector } from './EmployeeSelector';
 // Styles
 import './dashboard.css';
 
-type DateRange = 'today' | 'week' | 'month' | 'quarter' | 'all';
+
 
 export const SalesDashboardLayout: React.FC = () => {
   const user = useSelector((state: any) => state.auth.user);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const userRole = useSelector((state: any) => state.auth.role);
   
-  const [dateRange, setDateRange] = useState<DateRange>('month');
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // date range state
+    const [dateRange, setDateRange] = useState<{ startDate: Date | null; endDate: Date | null }>({
+    startDate: startOfMonth(new Date()),
+    endDate: endOfMonth(new Date()),
+  });
 
   // Check if user is admin
   const isAdmin = useMemo(() => {
@@ -68,21 +75,18 @@ export const SalesDashboardLayout: React.FC = () => {
     return role === 'organization_superadmin';
   }, [userRole]);
 
-  // Get date range filter
-  const getDateFilter = useMemo(() => {
-    const now = new Date();
-    switch (dateRange) {
-      case 'today':
-        return format(now, 'yyyy-MM-dd');
-      case 'week':
-        return format(startOfWeek(now), 'yyyy-MM-dd');
-      case 'month':
-        return format(startOfMonth(now), 'yyyy-MM-dd');
-      case 'quarter':
-        return format(startOfQuarter(now), 'yyyy-MM-dd');
-      default:
-        return null;
+  // Safe date filter for Supabase (fixes "time zone not recognized" error)
+  const dateFilter = useMemo(() => {
+    if (!dateRange.startDate) {
+      return { start: null, end: null };
     }
+
+    const start = startOfDay(dateRange.startDate).toISOString();
+    const end = dateRange.endDate 
+      ? endOfDay(dateRange.endDate).toISOString() 
+      : null;
+
+    return { start, end };
   }, [dateRange]);
 
   // =====================
@@ -132,7 +136,7 @@ export const SalesDashboardLayout: React.FC = () => {
 
   // Fetch activities with filters
   const { data: activities, isLoading: activitiesLoading, refetch: refetchActivities } = useQuery({
-    queryKey: ['dashboard-activities', organizationId, dateRange, selectedEmployee],
+    queryKey: ['dashboard-activities', organizationId, dateFilter.start, dateFilter.end, selectedEmployee],
     queryFn: async () => {
       let query = supabase
         .from('contact_activities')
@@ -146,12 +150,11 @@ export const SalesDashboardLayout: React.FC = () => {
         .neq('type', 'stage_change')
         .order('activity_date', { ascending: false });
 
-      // Date filter
-      if (getDateFilter) {
-        query = query.gte('activity_date', getDateFilter);
-      }
+      // Date range filter (now safe ISO strings)
+      if (dateFilter.start) query = query.gte('activity_date', dateFilter.start);
+      if (dateFilter.end)   query = query.lte('activity_date', dateFilter.end);
 
-      // Employee filter (for admin) or current user (for employee)
+      // Employee filter
       if (!isAdmin) {
         query = query.eq('created_by', user?.id);
       } else if (selectedEmployee) {
@@ -389,20 +392,12 @@ export const SalesDashboardLayout: React.FC = () => {
                 />
               </div>
 
-              {/* Date Range Filter */}
-              <Select value={dateRange} onValueChange={(v: DateRange) => setDateRange(v)}>
-                <SelectTrigger className="w-36 h-9 bg-gray-50 border-gray-200">
-                  <Calendar size={14} className="mr-2 text-gray-500" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="week">This Week</SelectItem>
-                  <SelectItem value="month">This Month</SelectItem>
-                  <SelectItem value="quarter">This Quarter</SelectItem>
-                  <SelectItem value="all">All Time</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Enhanced Date Range Selector */}
+              <EnhancedDateRangeSelector
+                value={dateRange}
+                onChange={setDateRange}
+                onApply={handleRefresh}
+              />
 
               {/* Employee Selector (Admin only) */}
               {isAdmin && teamMembers && (

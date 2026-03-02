@@ -149,6 +149,8 @@ import SalesDashboard from "./pages/sales/SalesDashboard";
 import DiscoveryPage from "./pages/sales/DiscoveryPage";
 import SyncReportsPage from "./pages/sales/SyncReportsPage";
 
+import CreditUsageReport from '@/components/reports/CreditUsageReport.tsx';
+
 
 // Clients
 import ClientPage from "./pages/clients/ClientDashboard";
@@ -179,6 +181,7 @@ import RegularizationApproval from "./pages/TimeManagement/approvals/Regularizat
 import LeavePolicies from "./pages/TimeManagement/admin/LeavePolicies";
 import Holidays from "./pages/TimeManagement/admin/Holidays";
 import Projects from "./pages/TimeManagement/admin/Projects";
+import LeaveAudit from "./pages/TimeManagement/admin/LeaveAudit";
 
 // Bench Profiles
 import BenchProfilesPage from "./pages/bench-profiles/BenchProfilesPage";
@@ -496,6 +499,8 @@ useEffect(() => {
               <Route path="/organization/:organizationId/clients" element={<DetailedResourceView resourceType="clients" />} />
               <Route path="/reports/organization-talent-trends" element={<OrganizationTalentTrendsReport />} />
               <Route path="/organization/invoices" element={<GlobalInvoicesPage />} />
+              <Route path="/reports/credit-usage" element={<CreditUsageReport />} />
+
               
               <Route path="/projects" element={<ProjectManagement />} />
               <Route path="/client/:id" element={<ClientDashboard />} />
@@ -600,6 +605,7 @@ useEffect(() => {
 
 
 
+
               {/* TimeTracker, Timesheet, Attendance and Leave */}
               {/* Employee routes */}
               <Route path="/employee/time-tracker" element={<TimeTracker />} />
@@ -617,6 +623,7 @@ useEffect(() => {
               
               {/* Admin routes */}
               <Route path="/admin/leave-policies" element={<LeavePolicies />} />
+              <Route path="/admin/leave-audit" element={<LeaveAudit />} />
               <Route path="/admin/holidays" element={<Holidays />} />
               <Route path="/admin/projects" element={<Projects />} />
 

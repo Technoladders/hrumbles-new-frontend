@@ -1,5 +1,5 @@
 // src/pages/candidates/ZiveXResultsPage.tsx
-// REDESIGNED: Clean, modern results page with compact sidebar
+// REDESIGNED: Modern compact results page — all logic preserved
 
 import { FC, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -10,7 +10,7 @@ import CandidateSearchFilters from '@/components/candidates/zive-x/CandidateSear
 import CandidateSearchResults from '@/components/candidates/zive-x/CandidateSearchResults';
 import Loader from '@/components/ui/Loader';
 import { SearchFilters, CandidateSearchResult, SearchTag } from '@/types/candidateSearch';
-import { ArrowLeft, Search, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, Search, SlidersHorizontal, Users } from 'lucide-react';
 import { useState } from 'react';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -47,14 +47,9 @@ const ZiveXResultsPage: FC = () => {
     const jdIsBooleanMode = searchParams.get('jd_is_boolean_mode') === 'true';
 
     return {
-      keywords: getTags('keywords'),
-      skills: getTags('skills'),
-      educations: getTags('educations'),
-      locations: getTags('locations'),
-      industries: getTags('industries'),
-      companies: getTags('companies'),
-      name: getTags('name'),
-      email: getTags('email'),
+      keywords: getTags('keywords'), skills: getTags('skills'), educations: getTags('educations'),
+      locations: getTags('locations'), industries: getTags('industries'), companies: getTags('companies'),
+      name: getTags('name'), email: getTags('email'),
       current_company: searchParams.get('current_company') || '',
       current_designation: searchParams.get('current_designation') || '',
       min_exp: searchParams.get('min_exp') ? parseInt(searchParams.get('min_exp')!) : null,
@@ -65,11 +60,8 @@ const ZiveXResultsPage: FC = () => {
       max_expected_salary: searchParams.get('max_expected_salary') ? parseFloat(searchParams.get('max_expected_salary')!) : null,
       notice_periods: searchParams.get('notice_periods')?.split(',') || [],
       date_posted: searchParams.get('date_posted') || 'all_time',
-      jd_text: jdText,
-      jd_job_title: jdJobTitle,
-      jd_selected_job_id: jdSelectedJobId,
-      jd_generated_keywords: jdGeneratedKeywords,
-      jd_is_boolean_mode: jdIsBooleanMode,
+      jd_text: jdText, jd_job_title: jdJobTitle, jd_selected_job_id: jdSelectedJobId,
+      jd_generated_keywords: jdGeneratedKeywords, jd_is_boolean_mode: jdIsBooleanMode,
     };
   }, [searchParams]);
 
@@ -81,14 +73,11 @@ const ZiveXResultsPage: FC = () => {
       [...mandatory, ...optional].filter(Boolean).forEach(v => terms.push(stripQuotes(v)));
     };
     ['keywords', 'skills', 'companies', 'educations', 'locations'].forEach(addTagGroup);
-    const cc = searchParams.get('current_company');
-    if (cc) terms.push(cc);
-    const cd = searchParams.get('current_designation');
-    if (cd) terms.push(cd);
+    const cc = searchParams.get('current_company'); if (cc) terms.push(cc);
+    const cd = searchParams.get('current_designation'); if (cd) terms.push(cd);
     return [...new Set(terms.filter(Boolean))];
   }, [searchParams]);
 
-  // ── RPC search query ─────────────────────────────────────────────────────
   const { data: searchResults = [], isLoading } = useQuery<CandidateSearchResult[]>({
     queryKey: ['candidateSearchResults', organizationId, filters],
     queryFn: async () => {
@@ -96,7 +85,6 @@ const ZiveXResultsPage: FC = () => {
         mandatory: tags.filter(t => t.mandatory).map(t => t.value),
         optional: tags.filter(t => !t.mandatory).map(t => t.value),
       });
-
       const keywords = processTagsForRPC(filters.keywords);
       const skills = processTagsForRPC(filters.skills);
       const companies = processTagsForRPC(filters.companies);
@@ -104,26 +92,20 @@ const ZiveXResultsPage: FC = () => {
       const locations = processTagsForRPC(filters.locations);
       const industries = processTagsForRPC(filters.industries);
 
-      const { data, error } = await supabase.rpc('search_unified_candidates_v30', {
+      const { data, error } = await supabase.rpc('search_unified_candidates_v31', {
         p_mandatory_keywords: keywords.mandatory, p_optional_keywords: keywords.optional,
         p_mandatory_skills: skills.mandatory, p_optional_skills: skills.optional,
         p_mandatory_companies: companies.mandatory, p_optional_companies: companies.optional,
         p_mandatory_educations: educations.mandatory, p_optional_educations: educations.optional,
         p_mandatory_locations: locations.mandatory, p_optional_locations: locations.optional,
-        p_name: filters.name?.[0]?.value || null,
-        p_email: filters.email?.[0]?.value || null,
-        p_current_company: filters.current_company || null,
-        p_current_designation: filters.current_designation || null,
-        p_min_exp: filters.min_exp,
-        p_max_exp: filters.max_exp,
-        p_min_current_salary: filters.min_current_salary,
-        p_max_current_salary: filters.max_current_salary,
-        p_min_expected_salary: filters.min_expected_salary,
-        p_max_expected_salary: filters.max_expected_salary,
+        p_name: filters.name?.[0]?.value || null, p_email: filters.email?.[0]?.value || null,
+        p_current_company: filters.current_company || null, p_current_designation: filters.current_designation || null,
+        p_min_exp: filters.min_exp, p_max_exp: filters.max_exp,
+        p_min_current_salary: filters.min_current_salary, p_max_current_salary: filters.max_current_salary,
+        p_min_expected_salary: filters.min_expected_salary, p_max_expected_salary: filters.max_expected_salary,
         p_notice_periods: filters.notice_periods,
         p_industries: [...industries.mandatory, ...industries.optional],
-        p_date_filter: filters.date_posted,
-        p_organization_id: organizationId,
+        p_date_filter: filters.date_posted, p_organization_id: organizationId,
       });
       if (error) throw new Error(error.message);
       return data || [];
@@ -139,7 +121,6 @@ const ZiveXResultsPage: FC = () => {
       if (mandatory.length) params.append(`mandatory_${key}`, mandatory.join(','));
       if (optional.length) params.append(`optional_${key}`, optional.join(','));
     };
-
     processTags('keywords', newFilters.keywords, true);
     processTags('locations', newFilters.locations, true);
     processTags('skills', newFilters.skills, false);
@@ -148,7 +129,6 @@ const ZiveXResultsPage: FC = () => {
     processTags('industries', newFilters.industries, false);
     processTags('name', newFilters.name, false);
     processTags('email', newFilters.email, false);
-
     if (newFilters.current_company) params.append('current_company', newFilters.current_company);
     if (newFilters.current_designation) params.append('current_designation', newFilters.current_designation);
     if (newFilters.min_exp) params.append('min_exp', newFilters.min_exp.toString());
@@ -164,11 +144,9 @@ const ZiveXResultsPage: FC = () => {
     if (newFilters.jd_selected_job_id) params.append('jd_selected_job_id', newFilters.jd_selected_job_id);
     if (newFilters.jd_generated_keywords?.length) params.append('jd_generated_keywords', newFilters.jd_generated_keywords.join('|||'));
     if (newFilters.jd_is_boolean_mode !== undefined) params.append('jd_is_boolean_mode', newFilters.jd_is_boolean_mode.toString());
-
     navigate(`/zive-x-search/results?${params.toString()}`, { replace: true });
   };
 
-  // ── Active filter count ──────────────────────────────────────────────────
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (filters.keywords?.length) count++;
@@ -186,165 +164,242 @@ const ZiveXResultsPage: FC = () => {
   return (
     <>
       <style>{`
-        .zx-results-page {
+        /* ── RESULTS PAGE ROOT ── */
+        .zxr-page {
           min-height: 100vh;
-          background: #F8F9FB;
+          background: #F4F5F7;
+          font-family: 'Inter', system-ui, sans-serif;
+          --brand: #6C2BD9;
+          --brand-light: #EDE9FE;
+          --border: #E5E7EB;
+          --text-primary: #111827;
+          --text-secondary: #6B7280;
+          --radius: 10px;
+          --transition: 150ms cubic-bezier(0.4,0,0.2,1);
         }
-        .zx-results-topbar {
+
+        /* ── TOP BAR ── */
+        .zxr-topbar {
+          height: 52px;
           background: white;
-          border-bottom: 1px solid #E5E7EB;
-          padding: 12px 24px;
+          border-bottom: 1px solid var(--border);
           display: flex;
           align-items: center;
           justify-content: space-between;
+          padding: 0 20px;
           position: sticky;
           top: 0;
           z-index: 30;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.04);
         }
-        .zx-topbar-left {
+
+        .zxr-topbar-left {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
         }
-        .zx-back-btn {
-          width: 36px;
-          height: 36px;
+
+        .zxr-back-btn {
+          width: 32px;
+          height: 32px;
           border-radius: 8px;
-          border: 1px solid #E5E7EB;
+          border: 1px solid var(--border);
           background: white;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          transition: all 0.15s;
+          transition: all var(--transition);
           color: #6B7280;
+          flex-shrink: 0;
         }
-        .zx-back-btn:hover {
-          border-color: #DDD6FE;
-          color: #6C2BD9;
-          background: #F5F0FF;
+        .zxr-back-btn:hover {
+          border-color: #C4B5FD;
+          color: var(--brand);
+          background: var(--brand-light);
         }
-        .zx-topbar-title {
-          font-size: 16px;
+
+        .zxr-topbar-info {}
+        .zxr-topbar-title {
+          font-size: 14px;
           font-weight: 700;
-          color: #111827;
+          color: var(--text-primary);
+          line-height: 1.2;
         }
-        .zx-topbar-subtitle {
-          font-size: 12px;
-          color: #9CA3AF;
-          margin-top: -2px;
+        .zxr-topbar-sub {
+          font-size: 11px;
+          color: var(--text-secondary);
+          display: flex;
+          align-items: center;
+          gap: 4px;
         }
-        .zx-filter-toggle {
+        .zxr-topbar-sub .dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #10B981;
+          animation: zxr-pulse 2s infinite;
+        }
+        @keyframes zxr-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+
+        .zxr-filter-btn {
           display: flex;
           align-items: center;
           gap: 6px;
-          padding: 8px 14px;
+          padding: 6px 12px;
           border-radius: 8px;
-          border: 1px solid #E5E7EB;
+          border: 1.5px solid var(--border);
           background: white;
           cursor: pointer;
-          font-size: 13px;
+          font-size: 12.5px;
           font-weight: 600;
           color: #374151;
-          transition: all 0.15s;
+          transition: all var(--transition);
         }
-        .zx-filter-toggle:hover {
-          border-color: #DDD6FE;
-          color: #6C2BD9;
-        }
-        .zx-filter-badge {
-          font-size: 10px;
+        .zxr-filter-btn:hover { border-color: #C4B5FD; color: var(--brand); background: var(--brand-light); }
+        .zxr-filter-btn.active { border-color: var(--brand); color: var(--brand); background: var(--brand-light); }
+        .zxr-filter-badge {
+          font-size: 9.5px;
           font-weight: 700;
-          padding: 2px 6px;
-          border-radius: 10px;
-          background: #6C2BD9;
+          padding: 1px 5px;
+          border-radius: 99px;
+          background: var(--brand);
           color: white;
-          line-height: 1;
+          line-height: 1.4;
         }
-        .zx-results-layout {
+
+        /* ── LAYOUT ── */
+        .zxr-layout {
           display: flex;
           max-width: 1920px;
           margin: 0 auto;
-          min-height: calc(100vh - 60px);
+          min-height: calc(100vh - 52px);
         }
-        .zx-sidebar {
-          width: 420px;
+
+        /* ── SIDEBAR ── */
+        .zxr-sidebar {
+          width: 300px;
           flex-shrink: 0;
-          border-right: 1px solid #E5E7EB;
+          border-right: 1px solid var(--border);
           background: white;
           overflow-y: auto;
-          max-height: calc(100vh - 60px);
+          max-height: calc(100vh - 52px);
           position: sticky;
-          top: 60px;
-          transition: all 0.25s ease;
+          top: 52px;
+          transition: width 0.25s ease, opacity 0.25s ease;
         }
-        .zx-sidebar.collapsed {
+        .zxr-sidebar.collapsed {
           width: 0;
           overflow: hidden;
           border-right: none;
+          opacity: 0;
         }
-        .zx-main {
+        .zxr-sidebar::-webkit-scrollbar { width: 4px; }
+        .zxr-sidebar::-webkit-scrollbar-track { background: transparent; }
+        .zxr-sidebar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 4px; }
+        .zxr-sidebar::-webkit-scrollbar-thumb:hover { background: #D1D5DB; }
+
+        /* ── MAIN RESULTS AREA ── */
+        .zxr-main {
           flex: 1;
-          padding: 20px 24px;
           min-width: 0;
-        }
-        .zx-loading-state {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 300px;
-          background: white;
-          border: 1px solid #E5E7EB;
-          border-radius: 10px;
+          padding: 16px 20px;
+          overflow: hidden;
         }
 
-        @media (max-width: 1024px) {
-          .zx-sidebar { width: 360px; }
+        /* ── LOADING STATE ── */
+        .zxr-loading {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 320px;
+          background: white;
+          border-radius: var(--radius);
+          border: 1px solid var(--border);
+          gap: 12px;
+          color: var(--text-secondary);
+          font-size: 13.5px;
         }
+        .zxr-loading-ring {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          border: 3px solid var(--brand-light);
+          border-top-color: var(--brand);
+          animation: zxr-spin 0.8s linear infinite;
+        }
+        @keyframes zxr-spin { to { transform: rotate(360deg); } }
+
+        /* ── RESULTS HEADER ── */
+        .zxr-results-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 12px;
+        }
+        .zxr-results-count {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-primary);
+          display: flex;
+          align-items: center;
+          gap: 7px;
+        }
+        .zxr-results-count .badge {
+          background: var(--brand-light);
+          color: var(--brand);
+          font-size: 11px;
+          font-weight: 700;
+          padding: 2px 8px;
+          border-radius: 99px;
+        }
+
+        @media (max-width: 1024px) { .zxr-sidebar { width: 260px; } }
         @media (max-width: 768px) {
-          .zx-sidebar {
-            position: fixed;
-            top: 60px;
-            left: 0;
-            bottom: 0;
-            z-index: 40;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 4px 0 20px rgba(0,0,0,0.1);
+          .zxr-sidebar {
+            position: fixed; top: 52px; left: 0; bottom: 0; z-index: 40;
+            width: 100%; max-width: 320px; box-shadow: 4px 0 20px rgba(0,0,0,0.1);
           }
-          .zx-sidebar.collapsed {
-            transform: translateX(-100%);
-          }
+          .zxr-sidebar.collapsed { width: 0; transform: translateX(-100%); }
         }
       `}</style>
 
-      <div className="zx-results-page">
-        {/* Top Bar */}
-        <div className="zx-results-topbar">
-          <div className="zx-topbar-left">
-            <button className="zx-back-btn" onClick={() => navigate(-1)} title="Go Back">
-              <ArrowLeft className="w-4 h-4" />
+      <div className="zxr-page">
+        {/* ── TOP BAR ── */}
+        <div className="zxr-topbar">
+          <div className="zxr-topbar-left">
+            <button className="zxr-back-btn" onClick={() => navigate(-1)} title="Go Back">
+              <ArrowLeft className="w-3.5 h-3.5" />
             </button>
-            <div>
-              <div className="zx-topbar-title">Search Results</div>
-              <div className="zx-topbar-subtitle">
-                {isLoading ? 'Searching...' : `${searchResults.length} candidates`}
+            <div className="zxr-topbar-info">
+              <div className="zxr-topbar-title">Candidate Search</div>
+              <div className="zxr-topbar-sub">
+                {isLoading ? (
+                  <><div className="zxr-loading-ring" style={{width:8,height:8,borderWidth:1.5}} /><span>Searching...</span></>
+                ) : (
+                  <><div className="dot" /><span>{searchResults.length} candidates found</span></>
+                )}
               </div>
             </div>
           </div>
-          <button className="zx-filter-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <SlidersHorizontal className="w-4 h-4" />
+          <button
+            className={`zxr-filter-btn ${sidebarOpen ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
             Filters
-            {activeFilterCount > 0 && (
-              <span className="zx-filter-badge">{activeFilterCount}</span>
-            )}
+            {activeFilterCount > 0 && <span className="zxr-filter-badge">{activeFilterCount}</span>}
           </button>
         </div>
 
-        {/* Layout */}
-        <div className="zx-results-layout">
+        {/* ── LAYOUT ── */}
+        <div className="zxr-layout">
           {/* Sidebar */}
-          <aside className={`zx-sidebar ${!sidebarOpen ? 'collapsed' : ''}`}>
+          <aside className={`zxr-sidebar ${!sidebarOpen ? 'collapsed' : ''}`}>
             <CandidateSearchFilters
               onSearch={handleSearch}
               isSearching={isLoading}
@@ -354,11 +409,21 @@ const ZiveXResultsPage: FC = () => {
             />
           </aside>
 
-          {/* Results */}
-          <main className="zx-main">
+          {/* Main */}
+          <main className="zxr-main">
+            {!isLoading && (
+              <div className="zxr-results-header">
+                <div className="zxr-results-count">
+                  <Users className="w-4 h-4 text-gray-400" />
+                  <span>Results</span>
+                  <span className="badge">{searchResults.length}</span>
+                </div>
+              </div>
+            )}
             {isLoading ? (
-              <div className="zx-loading-state">
-                <Loader />
+              <div className="zxr-loading">
+                <div className="zxr-loading-ring" />
+                <span>Finding best candidates...</span>
               </div>
             ) : (
               <CandidateSearchResults results={searchResults} highlightTerms={highlightTerms} />

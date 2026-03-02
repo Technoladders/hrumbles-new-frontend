@@ -61,12 +61,16 @@ export interface LeaveType {
   name: string;
   icon: string;
   color: string;
+  description?: string;
   annual_allowance: number;
+  gender_eligibility: string[]; // ['Male', 'Female', 'Other']
+  is_active: boolean;
   monthly_allowance: number;
   allow_carryforward: boolean;
-  is_active: boolean;
+  policy_settings: LeavePolicySettings;
   created_at: string | null;
   updated_at: string | null;
+  organization_id?: string;
 }
 
 export interface EmployeeLeaveBalance {
@@ -88,4 +92,15 @@ export interface LeavePolicyPeriod {
   start_month: number;
   created_at: string | null;
   updated_at: string | null;
+}
+
+export interface LeavePolicySettings {
+  proration: boolean;
+  probation_period_days: number;
+  can_apply_during_probation: boolean;
+  max_consecutive_days: number;
+  requires_approval: boolean;
+  carry_forward_limit: number;
+  encashment_allowed: boolean;
+  accrual_frequency: 'annual_upfront' | 'monthly';
 }

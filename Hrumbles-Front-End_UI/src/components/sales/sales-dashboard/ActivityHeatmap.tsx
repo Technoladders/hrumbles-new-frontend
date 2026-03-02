@@ -8,6 +8,7 @@ interface Activity {
   id: string;
   created_at: string;
   created_by: string;
+  activity_date: string;
   type: string;
 }
 
@@ -56,7 +57,7 @@ console.log('activities', activities);
 
     activities.forEach(activity => {
       const userId = activity.created_by;
-      const activityDate = format(parseISO(activity.created_at), 'yyyy-MM-dd');
+      const activityDate = format(parseISO(activity.activity_date), 'yyyy-MM-dd');
       
       if (data[userId] && data[userId][activityDate] !== undefined) {
         data[userId][activityDate]++;

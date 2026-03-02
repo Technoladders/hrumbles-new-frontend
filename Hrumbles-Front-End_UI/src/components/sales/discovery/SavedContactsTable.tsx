@@ -21,6 +21,8 @@ export const SavedContactsTable = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { savedSearchTerm } = useSelector((state: any) => state.intelligenceSearch);
+    const user = useSelector((state: any) => state.auth.user);
+  
   
   // State for List Modal
   const [listModalOpen, setListModalOpen] = React.useState(false);
@@ -52,11 +54,13 @@ const handleEnrich = async (contactId: string, apolloId: string, mode: 'email' |
       // NOTE: We now use ONLY 'enrich-contact' for both actions
       // 'request-phone' function is deprecated in favor of this unified logic
       
-      const { error } = await supabase.functions.invoke('enrich-contact-master', { 
+      const { error } = await supabase.functions.invoke('enrich-contact', { 
         body: { 
           contactId: contactId, 
           apolloPersonId: apolloId,
-          revealType: mode // 'email' or 'phone'
+          revealType: mode,
+          organizationId: contact.organization_id,
+          userId: user?.id
         } 
       });
 

@@ -1,4 +1,3 @@
-// Updated Leave.tsx - Minor changes: Added overlap validation feedback via toast in handleLeaveRequestSubmit
 import { useState, useCallback } from "react";
 import { useSelector } from 'react-redux';
 import { LeaveHeader } from "@/components/TimeManagement/leave/LeaveHeader";
@@ -26,7 +25,7 @@ const Leave = () => {
   const {
     leaveRequests,
     loading: leaveRequestsLoading,
-    isLoading,
+    isLoading, // Alias for loading
     createLeaveRequest,
     cancelLeaveRequest,
     isRequestDialogOpen,
@@ -41,15 +40,8 @@ const Leave = () => {
     initializeLeaveBalances
   } = useEmployeeLeaveBalances(employeeId);
 
-  const {
-    holidays,
-    isLoading: isHolidaysLoading
-  } = useHolidays();
-
-  // Fetch all employees and get their loading state
+  const { holidays } = useHolidays();
   const { allEmployees, isLoading: isLoadingEmployees } = useEmployeeEmail();
-
-    // Fetch configured recipients
   const { defaultRecipients } = useLeaveEmailConfig();
 
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
@@ -57,7 +49,6 @@ const Leave = () => {
   const [selectedLeaveRequest, setSelectedLeaveRequest] = useState<LeaveRequest | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // ... (the rest of the component's functions are unchanged)
   const handleCancelRequest = useCallback((request: LeaveRequest) => {
     setSelectedLeaveRequest(request);
     setIsCancelDialogOpen(true);
@@ -71,13 +62,14 @@ const Leave = () => {
   const handleSubmitCancellation = useCallback(async (reason: string) => {
     if (!selectedLeaveRequest) return;
     
-    const success = await cancelLeaveRequest({ id: selectedLeaveRequest.id, reason });
-    
-    if (success) {
+    try {
+      await cancelLeaveRequest({ id: selectedLeaveRequest.id, reason });
       setIsCancelDialogOpen(false);
-      refetchLeaveBalances();
+      // Balance refetch handled by hook invalidation
+    } catch (error) {
+      // Error handled by hook
     }
-  }, [selectedLeaveRequest, cancelLeaveRequest, refetchLeaveBalances]);
+  }, [selectedLeaveRequest, cancelLeaveRequest]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -90,35 +82,29 @@ const Leave = () => {
       toast.error("Please select a valid date range.");
       return; 
     }
-    // Check for overlaps before submitting
-    const hasOverlap = leaveRequests.some((req) => {
-      if (req.status === 'rejected') return false;
-      const reqStart = new Date(req.start_date);
-      const reqEnd = new Date(req.end_date);
-      const newStart = values.date_range.startDate;
-      const newEnd = values.date_range.endDate;
-      return newStart <= reqEnd && newEnd >= reqStart;
-    });
-    if (hasOverlap) {
-      toast.error("Cannot request leave for dates that overlap with existing pending or approved requests. Rejected requests are allowed.");
-      return;
-    }
+
+    // Prepare Payload
     const formData = {
       leaveTypeId: values.leave_type_id,
       startDate: format(values.date_range.startDate, "yyyy-MM-dd"),
       endDate: format(values.date_range.endDate, "yyyy-MM-dd"),
       notes: values.reason,
-      dayBreakdown: values.day_breakdown, // Pass the breakdown
+      dayBreakdown: values.day_breakdown,
       additionalRecipients: values.additional_recipient,
       ccRecipients: values.cc_recipient,
     };
    
-    await createLeaveRequest(formData);
-  }, [createLeaveRequest, leaveRequests]);
+    // Submit (Validation happens inside the hook via DB RPC)
+    try {
+      await createLeaveRequest(formData);
+      // Dialog closing and Success Toast are handled in the hook onSuccess
+    } catch (error) {
+      // Error Toast handled in hook onError
+    }
+  }, [createLeaveRequest]);
 
   const handleInitializeBalances = useCallback(() => {
     if (!employeeId || !leaveTypes) return;
-    
     const leaveTypeIds = leaveTypes.map(type => type.id);
     initializeLeaveBalances({ employeeId, leaveTypeIds });
   }, [employeeId, leaveTypes, initializeLeaveBalances]);
@@ -153,8 +139,8 @@ const Leave = () => {
         onSubmit={handleLeaveRequestSubmit}
         leaveTypes={leaveTypes}
         allEmployees={allEmployees}
-        isLoadingEmployees={isLoadingEmployees} // Pass loading state
-        holidays={holidays}
+        isLoadingEmployees={isLoadingEmployees}
+        holidays={holidays.map(h => new Date(h.date))} // Pass dates only
         defaultRecipients={defaultRecipients}
       />
      
@@ -162,7 +148,7 @@ const Leave = () => {
         open={isCancelDialogOpen}
         onOpenChange={setIsCancelDialogOpen}
         request={selectedLeaveRequest}
-        onConfirm={(reason) => handleSubmitCancellation(reason)} // Adjusted to pass reason correctly
+        onConfirm={(id, reason) => handleSubmitCancellation(reason)}
       />
      
       <LeaveRequestDetailsDialog

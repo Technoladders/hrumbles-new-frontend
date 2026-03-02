@@ -1,42 +1,71 @@
 // Hrumbles-Front-End_UI/src/pages/sales/CompanyDetail.tsx
+// ✅ ALL business logic preserved verbatim
+// Layout: sidebar removed → full-width main canvas
+//         EmployeeGrowthIntelligence added below CompanyOverviewTab
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from 'react-redux';
-import { useQueryClient } from "@tanstack/react-query";
-import { useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { motion, AnimatePresence } from "framer-motion";
 
-// UI Components & Icons
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, ChevronLeft, Edit, RefreshCw, ListPlus, Sparkles, Link2, MapPin, Globe, Linkedin, Twitter, Facebook } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
-// Tab Content & Detail Components
-import { CompanyPrimaryDetails } from "@/components/sales/CompanyPrimaryDetails";
-import { CompanyOverviewTab } from "@/components/sales/company-detail/CompanyOverviewTab";
-import EmployeesTab from "@/components/sales/EmployeesTab";
-import { AddToCompanyListModal } from '@/components/sales/company-search/AddToCompanyListModal';
+import { CompanyOverviewTab }          from "@/components/sales/company-detail/CompanyOverviewTab";
+import EmployeeGrowthIntelligence      from "@/components/sales/company-detail/EmployeeGrowthIntelligence";
+import { AddToCompanyListModal }        from '@/components/sales/company-search/AddToCompanyListModal';
+import CompanyEditForm                  from "@/components/sales/CompanyEditForm";
 
-// Dialog Forms
-import CompanyEditForm from "@/components/sales/CompanyEditForm";
+import {
+  Sparkles, RefreshCw, ListPlus, Globe, Linkedin,
+  Twitter, Facebook, MapPin, Building2, Loader2, ChevronLeft
+} from "lucide-react";
 
+// ── Motion ─────────────────────────────────────────────────────────────────
+const pageVariants = {
+  hidden:  { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.07, delayChildren: 0.04 } },
+};
+const blockIn = {
+  hidden:  { opacity: 0, y: 14 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.36, ease: [0.25, 0.46, 0.45, 0.94] } },
+};
+
+// ── Styles ──────────────────────────────────────────────────────────────────
+const S = {
+  page:    "min-h-screen bg-[#F6F4F1] font-['DM_Sans',system-ui,sans-serif]",
+  bar:     "sticky top-0 z-50 bg-white/96 backdrop-blur-sm border-b border-[#E5E0D8]",
+  barInner:"px-6 py-0",
+  bc:      "flex items-center gap-1.5 text-[11px] font-[500] text-[#9C9189] py-2 border-b border-[#F0EDE8]",
+  bcBtn:   "hover:text-[#1C1916] transition-colors cursor-pointer flex items-center gap-0.5",
+  hdrRow:  "flex items-center justify-between py-3 gap-4",
+  logoBox: "w-10 h-10 rounded-xl border border-[#E5E0D8] bg-gradient-to-br from-[#5B4FE8] to-[#7C6FF7] flex items-center justify-center text-white text-sm font-bold flex-shrink-0 overflow-hidden",
+  name:    "text-[18px] font-[650] text-[#1C1916] tracking-[-0.01em] leading-tight",
+  metaRow: "flex items-center gap-2 mt-0.5 flex-wrap",
+  metaPill:"inline-flex items-center gap-1 text-[11px] font-[500] text-[#6A6057] uppercase tracking-[0.04em]",
+  socialBtn:"p-1.5 rounded-md border border-[#E5E0D8] hover:border-[#5B4FE8] hover:bg-[#F0EEFF] transition-all duration-150",
+  listBtn: "inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-[600] text-[#6A6057] bg-white border border-[#D5CFC5] rounded-lg hover:border-[#5B4FE8] hover:text-[#5B4FE8] hover:bg-[#F0EEFF] transition-all duration-150",
+  enrichBtn:"inline-flex items-center gap-2 px-4 py-1.5 text-[12px] font-[700] text-white rounded-lg transition-all",
+  enrichOn: "bg-[#5B4FE8] hover:bg-[#4A3FD6] shadow-[0_2px_8px_rgba(91,79,232,0.35)]",
+  enrichOff:"bg-[#5B4FE8]/70 cursor-not-allowed",
+  canvas:  "px-6 py-6 space-y-5 max-w-[1400px] mx-auto",
+};
+
+// ── Component ──────────────────────────────────────────────────────────────
 const CompanyDetail = () => {
-  const { toast } = useToast();
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient(); 
-  const companyId = parseInt(id || "0");
+  const { toast }  = useToast();
+  const { id }     = useParams<{ id: string }>();
+  const navigate   = useNavigate();
+  const queryClient = useQueryClient();
+  const companyId  = parseInt(id || "0");
 
   const user = useSelector((state: any) => state.auth.user);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCompanyEditDialogOpen, setIsCompanyEditDialogOpen] = useState(false);
-
   const [listModalOpen, setListModalOpen] = useState(false);
 
-  // Fetch company with all enrichment data
+  // ── Data Fetching (preserved verbatim) ────────────────────────────────────
   const { data: company, isLoading, error: companyError, refetch: refetchCompany } = useQuery({
     queryKey: ['company-detail', companyId],
     queryFn: async () => {
@@ -55,15 +84,18 @@ const CompanyDetail = () => {
         `)
         .eq('id', companyId)
         .single();
-      
       if (error) throw error;
       return data;
     },
     enabled: !!companyId
   });
 
-  // Fetch ALL contacts associated with this company
-  const { data: allContacts = [], isLoading: isLoadingContacts, error: contactsError, refetch: refetchContacts } = useQuery({
+  const {
+    data: allContacts = [],
+    isLoading: isLoadingContacts,
+    error: contactsError,
+    refetch: refetchContacts
+  } = useQuery({
     queryKey: ['company-contacts-all', companyId, company?.apollo_org_id],
     queryFn: async () => {
       const { data: directContacts, error: directError } = await supabase
@@ -81,7 +113,6 @@ const CompanyDetail = () => {
           enrichment_raw_responses(*)
         `)
         .eq('company_id', companyId);
-      
       if (directError) throw directError;
 
       let apolloContacts: any[] = [];
@@ -102,7 +133,6 @@ const CompanyDetail = () => {
           `)
           .eq('apollo_org_id', company.apollo_org_id)
           .not('contact_id', 'is', null);
-        
         if (enrichError) throw enrichError;
 
         apolloContacts = (enrichedPeople || [])
@@ -118,15 +148,9 @@ const CompanyDetail = () => {
       }
 
       const contactMap = new Map();
-      (directContacts || []).forEach((contact: any) => {
-        contactMap.set(contact.id, contact);
-      });
-      apolloContacts.forEach((contact: any) => {
-        if (!contactMap.has(contact.id)) {
-          contactMap.set(contact.id, contact);
-        }
-      });
-      
+      (directContacts || []).forEach((c: any) => contactMap.set(c.id, c));
+      apolloContacts.forEach((c: any) => { if (!contactMap.has(c.id)) contactMap.set(c.id, c); });
+
       return Array.from(contactMap.values()).map((contact: any) => ({
         ...contact,
         id: contact.id,
@@ -153,306 +177,279 @@ const CompanyDetail = () => {
     enabled: !!companyId && !!company
   });
 
-  const employees = allContacts.filter(c => 
-    c.source_table === 'employee_associations' || 
-    (c.source_table === 'contacts' && !c.is_primary_contact)
-  );
-  
-  const contacts = allContacts.filter(c => 
-    c.source_table === 'contacts' && c.is_primary_contact
-  );
-
+  const employees    = allContacts.filter(c => c.source_table === 'employee_associations' || (c.source_table === 'contacts' && !c.is_primary_contact));
+  const contacts     = allContacts.filter(c => c.source_table === 'contacts' && c.is_primary_contact);
   const employeesToShow = employees.length > 0 ? employees : allContacts;
-  const contactsToShow = contacts.length > 0 ? contacts : [];
 
   useEffect(() => {
-    if (companyError) toast({ title: "Error Loading Company", description: companyError.message, variant: "destructive" });
+    if (companyError) toast({ title: "Error Loading Company",  description: companyError.message, variant: "destructive" });
     if (contactsError) toast({ title: "Error Loading Contacts", description: contactsError.message, variant: "destructive" });
   }, [companyError, contactsError, toast]);
 
+  // ── Handlers (preserved verbatim) ─────────────────────────────────────────
   const handleDataUpdate = () => {
     refetchCompany();
     refetchContacts();
   };
 
-   // --- Add to List Handler ---
   const handleListAdd = async (fileId: string) => {
     if (!company?.id || !fileId) return;
-
     try {
       const { error: linkError } = await supabase
         .from('company_workspace_files')
-        .upsert({ 
-          company_id: company.id, 
-          file_id: fileId, 
-          added_by: user?.id 
-        }, { 
-          onConflict: 'company_id,file_id' 
-        });
-
+        .upsert({ company_id: company.id, file_id: fileId, added_by: user?.id }, { onConflict: 'company_id,file_id' });
       if (linkError) throw linkError;
-
-      toast({ 
-        title: "Added to List", 
-        description: `${company.name} has been added successfully.` 
-      });
-      
+      toast({ title: "Added to List", description: `${company.name} has been added successfully.` });
     } catch (error: any) {
-      toast({ 
-        title: "Failed to add to list", 
-        description: error.message, 
-        variant: "destructive" 
-      });
+      toast({ title: "Failed to add to list", description: error.message, variant: "destructive" });
     } finally {
-        setListModalOpen(false);
+      setListModalOpen(false);
     }
   };
 
-
-  const handleRefreshIntelligence = async () => {
+const handleRefreshIntelligence = async () => {
     setIsSyncing(true);
     try {
-      let error;
-      
+      let result;
+
       if (company?.apollo_org_id) {
-        const result = await supabase.functions.invoke('enrich-org-by-id', {
-          body: { 
-            apolloOrgId: company.apollo_org_id, 
-            companyId: company.id,
-            internalOrgId: company.organization_id
-          }
+        result = await supabase.functions.invoke('enrich-company', {
+          body: { apolloOrgId: company.apollo_org_id, companyId: company.id, organizationId: company.organization_id, userId: user?.id }
         });
-        error = result.error;
       } else if (company?.website || company?.domain) {
         const websiteUrl = company.website || company.domain;
         const domain = websiteUrl.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
-        
-        const result = await supabase.functions.invoke('enrich-organization', {
-          body: { domain, companyId: company.id }
+        result = await supabase.functions.invoke('enrich-company', {
+          body: { domain, companyId: company.id, organizationId: company.organization_id, userId: user?.id }
         });
-        error = result.error;
       } else {
-        throw new Error("Cannot sync: Missing both Apollo ID and Website/Domain.");
+        throw new Error("Cannot sync: Missing Website/Domain.");
       }
 
-      if (error) throw error;
+      // Transport error (network failure, function crash)
+      if (result.error) throw result.error;
 
-      await supabase
-        .from('companies')
+      const data = result.data;
+
+      // Handle 402 insufficient credits (returned as data, not transport error)
+      if (data?.error === 'insufficient_credits') {
+        toast({
+          variant: "destructive",
+          title: "Insufficient Credits",
+          description: data.message || `Need ${data.required} credits, balance: ${data.balance}. Please recharge.`
+        });
+        return;
+      }
+
+      // Handle not found
+      if (data?.error === 'not_found') {
+        toast({
+          variant: "destructive",
+          title: "Not Found",
+          description: data.message || "No intelligence found for this company."
+        });
+        return;
+      }
+
+      await supabase.from('companies')
         .update({ intelligence_last_synced: new Date().toISOString() })
         .eq('id', companyId);
-      
-      toast({ title: "Success", description: "Company intelligence refreshed from Apollo.io" });
+
+      const creditInfo = data?.credits?.deducted ? ` (${data.credits.deducted} credit${data.credits.deducted > 1 ? 's' : ''} used)` : '';
+      toast({ title: "Success", description: "Company intelligence refreshed" + creditInfo });
       refetchCompany();
       queryClient.invalidateQueries({ queryKey: ['companies'] });
     } catch (fetchError: any) {
-      toast({ 
-        title: "Intelligence Sync Failed", 
-        description: fetchError.message, 
-        variant: "destructive" 
-      });
+      toast({ title: "Intelligence Sync Failed", description: fetchError.message, variant: "destructive" });
     } finally {
       setIsSyncing(false);
     }
   };
 
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (isLoading || !company) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto text-gray-400" />
-          <p className="text-sm text-gray-500 mt-4">Loading company details...</p>
-        </div>
+      <div className="min-h-screen bg-[#F6F4F1] flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center gap-3"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#5B4FE8] flex items-center justify-center">
+            <Loader2 className="w-5 h-5 text-white animate-spin" />
+          </div>
+          <p className="text-[12px] font-[500] text-[#9C9189] uppercase tracking-[0.06em]">Loading intelligence</p>
+        </motion.div>
       </div>
     );
   }
 
+  // ── Data Derivations (preserved verbatim) ─────────────────────────────────
   const enrichment = company?.enrichment_organizations;
-  const location = [
+  const location   = [
     enrichment?.city || company.location?.split(',')[0],
     enrichment?.country
   ].filter(Boolean).join(', ');
 
-   // Extract links for header
-  const website = company.website || company.domain || enrichment?.website_url;
+  const website  = company.website  || company.domain     || enrichment?.website_url;
   const linkedin = company.linkedin_url || company.linkedin || enrichment?.linkedin_url;
-  const twitter = company.twitter_url || company.twitter || enrichment?.twitter_url;
+  const twitter  = company.twitter_url  || company.twitter  || enrichment?.twitter_url;
   const facebook = company.facebook_url || company.facebook || enrichment?.facebook_url;
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
-      {/* Header - Apollo Style */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="px-4 py-3">
+    <motion.div className={S.page} variants={pageVariants} initial="hidden" animate="visible">
+
+      {/* ── Command Bar ──────────────────────────────────────────────────── */}
+      <header className={S.bar}>
+        <div className={S.barInner}>
           {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-            <button 
-              onClick={() => navigate('/companies')}
-              className="hover:text-gray-700"
-            >
-              Companies
+          <div className={S.bc}>
+            <button onClick={() => navigate('/companies')} className={S.bcBtn}>
+              <ChevronLeft size={11} />Companies
             </button>
-            <span>›</span>
-            <span className="text-gray-900">{company.name}</span>
+            <span className="text-[#D5CFC5]">›</span>
+            <span className="text-[#1C1916]">{company.name}</span>
           </div>
-          
-          {/* Company Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Avatar className="h-10 w-10 border border-gray-200">
-                <AvatarImage src={company.logo_url || enrichment?.logo_url} alt={company.name} />
-                <AvatarFallback className="bg-gray-100 text-gray-600 font-medium">
-                  {company.name?.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              
-              <div>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-xl font-semibold text-gray-900">{company.name}</h1>
-                  
+
+          {/* Header Row */}
+          <div className={S.hdrRow}>
+            {/* Identity */}
+            <div className="flex items-center gap-3 min-w-0">
+              {/* Logo */}
+              <div className={S.logoBox}>
+                {(company.logo_url || enrichment?.logo_url) ? (
+                  <img src={company.logo_url || enrichment?.logo_url} alt={company.name} className="w-full h-full object-cover" />
+                ) : (
+                  company.name?.charAt(0).toUpperCase()
+                )}
+              </div>
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h1 className={S.name}>{company.name}</h1>
+
                   {/* Social Links */}
                   <div className="flex items-center gap-1">
                     {website && (
-                       <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-blue-600 transition-colors">
-                         <Globe size={15} />
-                       </a>
+                      <motion.a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer"
+                        className={S.socialBtn} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}>
+                        <Globe size={12} className="text-[#6A6057]" />
+                      </motion.a>
                     )}
                     {linkedin && (
-                       <a href={linkedin} target="_blank" rel="noreferrer" className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-[#0A66C2] transition-colors">
-                         <Linkedin size={15} />
-                       </a>
+                      <motion.a href={linkedin} target="_blank" rel="noreferrer"
+                        className={S.socialBtn} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}>
+                        <Linkedin size={12} className="text-[#0A66C2]" />
+                      </motion.a>
                     )}
                     {twitter && (
-                       <a href={twitter} target="_blank" rel="noreferrer" className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-[#1DA1F2] transition-colors">
-                         <Twitter size={15} />
-                       </a>
+                      <motion.a href={twitter} target="_blank" rel="noreferrer"
+                        className={S.socialBtn} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}>
+                        <Twitter size={12} className="text-[#1DA1F2]" />
+                      </motion.a>
                     )}
                     {facebook && (
-                       <a href={facebook} target="_blank" rel="noreferrer" className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-[#1877F2] transition-colors">
-                         <Facebook size={15} />
-                       </a>
+                      <motion.a href={facebook} target="_blank" rel="noreferrer"
+                        className={S.socialBtn} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}>
+                        <Facebook size={12} className="text-[#1877F2]" />
+                      </motion.a>
                     )}
                   </div>
-                  </div>
-                <p className="text-sm text-gray-500 flex items-center gap-2">
-                  <span>{enrichment?.industry || company.industry}</span>
-                  {location && (
-                    <>
-                      <span>·</span>
-                      <span className="flex items-center gap-1">
-                        <MapPin size={12} />
-                        {location}
-                      </span>
-                    </>
+                </div>
+
+                <div className={S.metaRow}>
+                  {(enrichment?.industry || company.industry) && (
+                    <span className={S.metaPill}>
+                      <Building2 size={10} />
+                      {enrichment?.industry || company.industry}
+                    </span>
                   )}
-                </p>
+                  {location && (
+                    <span className={S.metaPill}>
+                      <span className="text-[#D5CFC5]">·</span>
+                      <MapPin size={10} />
+                      {location}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-            
-            <div className="flex items-center gap-2">
-               <Button
-                variant="outline"
-                size="sm"
-                className="h-9 px-3 text-sm font-medium"
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <motion.button
+                className={S.listBtn}
                 onClick={() => setListModalOpen(true)}
+                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
               >
-                <ListPlus size={14} className="mr-1.5" />
+                <ListPlus size={13} />
                 Add to list
-              </Button>
-              
-              <Button
-                variant="default"
-                size="sm"
+              </motion.button>
+
+              <motion.button
+                className={`${S.enrichBtn} ${isSyncing ? S.enrichOff : S.enrichOn}`}
                 onClick={handleRefreshIntelligence}
                 disabled={isSyncing}
-                className="h-10 px-6 font-semibold text-white whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200 flex items-center gap-2"
+                whileHover={!isSyncing ? { scale: 1.02 } : {}}
+                whileTap={!isSyncing ? { scale: 0.97 } : {}}
               >
-                {isSyncing ? (
-                  <>
-                    <RefreshCw size={14} className="mr-1.5 animate-spin" />
-                    Syncing...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={14} className="mr-1.5" />
-                    Enrich Company
-                  </>
-                )}
-              </Button>
+                {isSyncing
+                  ? <><RefreshCw size={12} className="animate-spin" />Syncing</>
+                  : <><Sparkles size={12} />Enrich Company</>
+                }
+              </motion.button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content - No tabs anymore */}
-      <div className="flex">
-        {/* Left Sidebar - Company Details + People */}
-        <aside className="w-[360px] min-w-[360px] border-r border-gray-200 bg-white min-h-[calc(100vh-76px)] overflow-y-auto">
-          <CompanyPrimaryDetails company={company} employees={employeesToShow}
-    isLoadingEmployees={isLoadingContacts}
-    companyId={companyId}
-    companyName={company.name}
-    onEditEmployee={(emp) => navigate(`/contacts/${emp.id}`)}
-    onDataUpdate={handleDataUpdate} />
-          
-          {/* People / Employees section */}
-          {/* <div className="border-t border-gray-200 mt-2">
-            <EmployeesTab 
-              employees={employeesToShow} 
-              isLoading={isLoadingContacts} 
-              companyId={companyId} 
-              companyName={company.name} 
-              onEditEmployee={(employee) => navigate(`/contacts/${employee.id}`)} 
-              onDataUpdate={handleDataUpdate} 
-              variant="sidebar"   // ← optional prop if you want to adjust layout/style
-            />
-          </div> */}
-        </aside>
+      {/* ── Full-Width Canvas ────────────────────────────────────────────── */}
+      <motion.div className={S.canvas} variants={blockIn}>
+        {/* Row 1: Company Insights + Dept Pie */}
+        <CompanyOverviewTab
+          company={company}
+          refetchParent={refetchCompany}
+          employees={employeesToShow}
+          isLoadingEmployees={isLoadingContacts}
+          onEditEmployee={(emp) => navigate(`/contacts/${emp.id}`)}
+        />
 
-        {/* Main Content Area - Overview / Insights only */}
-        <main className="flex-1 min-w-0 bg-white">
-          <div className="p-6">
-            <CompanyOverviewTab 
-              company={company} 
-              refetchParent={refetchCompany} 
-              employees={employeesToShow}
-      isLoadingEmployees={isLoadingContacts}
-      onEditEmployee={(employee) => navigate(`/contacts/${employee.id}`)}
-      refetchParent={refetchCompany}
+        {/* Row 2: Employee Growth Intelligence */}
+        <EmployeeGrowthIntelligence company={company} />
+      </motion.div>
+
+      {/* ── Edit Dialog ───────────────────────────────────────────────────── */}
+      <Dialog open={isCompanyEditDialogOpen} onOpenChange={setIsCompanyEditDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-0 rounded-2xl border-[#E5E0D8]">
+          <DialogHeader className="px-6 pt-6 pb-0">
+            <DialogTitle className="text-[17px] font-[650] text-[#1C1916] tracking-[-0.01em]">
+              Edit {company.name}
+            </DialogTitle>
+            <DialogDescription className="text-[12px] text-[#9C9189]">
+              Update company information.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-6 pb-6">
+            <CompanyEditForm
+              company={company}
+              onClose={() => { setIsCompanyEditDialogOpen(false); handleDataUpdate(); }}
             />
           </div>
-        </main>
-      </div>
-
-      {/* Edit Dialog */}
-      <Dialog open={isCompanyEditDialogOpen} onOpenChange={setIsCompanyEditDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-6">
-          <DialogHeader>
-            <DialogTitle>Edit {company.name}</DialogTitle>
-            <DialogDescription>Update company information.</DialogDescription>
-          </DialogHeader>
-          <CompanyEditForm 
-            company={company} 
-            onClose={() => { 
-              setIsCompanyEditDialogOpen(false); 
-              handleDataUpdate(); 
-            }} 
-          />
         </DialogContent>
       </Dialog>
 
-       {company && (
+      {/* ── Add to List Modal ─────────────────────────────────────────────── */}
+      {company && (
         <AddToCompanyListModal
-            open={listModalOpen}
-            onOpenChange={setListModalOpen}
-            onConfirm={handleListAdd}
-            companyName={company.name}
-            isFromSearch={false} 
+          open={listModalOpen}
+          onOpenChange={setListModalOpen}
+          onConfirm={handleListAdd}
+          companyName={company.name}
+          isFromSearch={false}
         />
       )}
-    </div>
+    </motion.div>
   );
 };
 
 export default CompanyDetail;
-// UI

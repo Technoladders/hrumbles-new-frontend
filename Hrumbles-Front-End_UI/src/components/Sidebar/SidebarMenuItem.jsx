@@ -240,6 +240,7 @@ const masterMenuItems = [
     dropdown: [
       { icon: TbCheckbox, label: "Leave Approval", path: "/approvals/leave", permission: "approve_leave" },
       { icon: FiSettings, label: "Leave Policies", path: "/admin/leave-policies", permission: "manage_leave_policies" },
+      { icon: LuCalendarCog, label: "Leave Audit", path: "/admin/leave-audit", permission: "view_leave_audit" },
     ],
   },
   { icon: MdOutlineManageAccounts, label: "User Management", path: "/user-management", suite: "GENERAL", permission: "access_user_management" },
@@ -301,6 +302,7 @@ export const menuItemsByRole = {
             path: "/reports",
             dropdown: [
                 { icon: TrendingUp, label: "Org. Talent Trends", path: "/reports/organization-talent-trends" },
+                { icon: TrendingUp, label: "Credit Usage", path: "/reports/credit-usage" },
             ],
         },
         { icon: FiSettings, label: "Settings", path: "/settings" },

@@ -205,10 +205,10 @@ const SingleOrganizationDashboard: FC = () => {
                     </div>
                     
                     <div className="flex items-center gap-3">
-                        <Button variant="outline" className="gap-2 bg-white" onClick={() => setIsPricingModalOpen(true)}>
-                            <Coins className="h-4 w-4 text-yellow-600" />
-                            Credit Balance
-                        </Button>
+<Button variant="outline" className="gap-2 bg-white" onClick={() => setIsPricingModalOpen(true)}>
+    <Coins className="h-4 w-4 text-yellow-600" />
+    Credits & Pricing
+</Button>
                         <Button className="gap-2 bg-purple-600 hover:bg-purple-700" onClick={() => setIsManageSubscriptionModalOpen(true)}>
                             <BriefcaseBusiness className="h-4 w-4" />
                             Manage Subscription

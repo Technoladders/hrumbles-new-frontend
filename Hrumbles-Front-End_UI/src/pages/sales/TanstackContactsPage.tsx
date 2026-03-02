@@ -314,32 +314,51 @@ export default function TanstackContactsPage() {
 // 1. Update the function signature to accept the full 'person' object
 const handleEnrich = async (contactId: string, apolloId: string | null, type: 'email' | 'phone', personDetails?: any) => {
   try {
-    toast({ title: "Request Sent", description: `Verifying ${type} via Apollo...` });
+    toast({ title: "Request Sent", description: `Verifying ${type}...` });
     
-    // 2. Prepare the payload with fallback data for matching
-    const body = { 
-      contactId, 
-      apolloPersonId: apolloId, 
-      revealType: type,
-      // If apolloId is null, these fields will be used for matching:
-      email: personDetails?.email,
-      linkedin_url: personDetails?.linkedin_url,
-      name: personDetails?.name,
-      organization_name: personDetails?.company_name
-    };
-
-    // 3. Send to Edge Function
-    const { data, error } = await supabase.functions.invoke('enrich-contact-master', { 
-      body: body
+    const { data, error } = await supabase.functions.invoke('enrich-contact', { 
+      body: { 
+        contactId, 
+        apolloPersonId: apolloId, 
+        revealType: type, 
+        organizationId: organization_id, 
+        userId: user.id,
+        // Matching criteria for contacts without apolloId (was built but never sent before)
+        email: personDetails?.email,
+        name: personDetails?.name,
+        linkedin_url: personDetails?.linkedin_url,
+        organization_name: personDetails?.company_name,
+        domain: personDetails?.company_domain
+      }
     });
 
     if (error) throw new Error(error.message || "Function invocation failed");
 
-    const responseMsg = data?.message || "Enrichment processing";
-    toast({ title: "Success", description: responseMsg });
+    // Handle 402 insufficient credits
+    if (data?.error === 'insufficient_credits') {
+      toast({ 
+        variant: "destructive", 
+        title: "Insufficient Credits", 
+        description: data.message || `Need ${data.required} credits, balance: ${data.balance}. Please recharge.`
+      });
+      return;
+    }
+
+    // Handle no match
+    if (data?.error === 'no_match') {
+      toast({ 
+        variant: "destructive", 
+        title: "No Match Found", 
+        description: data.message || "Apollo could not identify this person." 
+      });
+      return;
+    }
+
+    const creditInfo = data?.credits?.deducted ? ` (${data.credits.deducted} credit${data.credits.deducted > 1 ? 's' : ''})` : '';
+    toast({ title: "Success", description: (data?.message || "Enrichment complete") + creditInfo });
     
-    // 4. Refresh data to show new results
     queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+    queryClient.invalidateQueries({ queryKey: ['contact-full-detail', contactId] });
   } catch (err: any) {
     console.error("Enrichment error:", err);
     toast({ variant: "destructive", title: "Error", description: err.message });

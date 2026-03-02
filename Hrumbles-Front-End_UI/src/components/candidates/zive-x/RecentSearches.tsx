@@ -1,4 +1,5 @@
 // src/components/candidates/zive-x/RecentSearches.tsx
+// UI REFRESH: Modern compact recent searches — all logic preserved
 
 import { FC, useState } from 'react';
 import { useSelector } from 'react-redux';
@@ -25,7 +26,6 @@ const RecentSearches: FC<RecentSearchesProps> = ({ onSelectSearch, isModal = fal
         p_organization_id: organizationId,
         p_limit: isModal ? 20 : 5
       });
-      
       if (error) throw error;
       return data as SearchHistory[];
     },
@@ -33,11 +33,7 @@ const RecentSearches: FC<RecentSearchesProps> = ({ onSelectSearch, isModal = fal
   });
 
   const handleClick = async (history: SearchHistory) => {
-    // Update usage stats
-    await supabase.rpc('update_search_history_usage', {
-      p_search_id: history.id
-    });
-    
+    await supabase.rpc('update_search_history_usage', { p_search_id: history.id });
     onSelectSearch(history);
   };
 
@@ -48,7 +44,6 @@ const RecentSearches: FC<RecentSearchesProps> = ({ onSelectSearch, isModal = fal
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
-
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
@@ -57,183 +52,269 @@ const RecentSearches: FC<RecentSearchesProps> = ({ onSelectSearch, isModal = fal
 
   const getDisplayTitle = (history: SearchHistory) => {
     if (history.job_title) return history.job_title;
-    
-    // Extract first 3 keywords as title
     const keywords = history.generated_keywords.slice(0, 3).join(', ');
     return keywords || 'Untitled Search';
   };
 
-  // Filter searches based on query
   const filteredSearches = recentSearches.filter(search => {
     if (!searchQuery.trim()) return true;
-    
     const query = searchQuery.toLowerCase();
     const jobTitle = (search.job_title || '').toLowerCase();
     const keywords = search.generated_keywords.map(k => k.toLowerCase()).join(' ');
-    
     return jobTitle.includes(query) || keywords.includes(query);
   });
 
   if (isLoading) {
     return (
-      <div className={cn(
-        "flex items-center justify-center",
-        isModal ? "py-12" : "bg-white rounded-xl shadow-sm p-6"
-      )}>
-        <div className="flex items-center gap-2 text-gray-500">
-          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#7731E8]"></div>
-          <span>Loading searches...</span>
+      <div className={cn("flex items-center justify-center", isModal ? "py-10" : "p-5")}>
+        <style>{`.rs-spin { width:20px;height:20px;border-radius:50%;border:2px solid #EDE9FE;border-top-color:#6C2BD9;animation:rs-spin 0.7s linear infinite; } @keyframes rs-spin{to{transform:rotate(360deg);}}`}</style>
+        <div className="flex items-center gap-2 text-gray-500 text-sm">
+          <div className="rs-spin" />
+          <span>Loading...</span>
         </div>
       </div>
     );
   }
 
-  // Modal style (Google-like)
   if (isModal) {
     return (
-      <div className="space-y-4">
-        {/* Google-style search input */}
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search your recent searches..."
-            className="pl-12 pr-10 h-14 text-base border-2 border-gray-300 focus:border-[#7731E8] rounded-full shadow-sm"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          )}
-        </div>
+      <div>
+        <style>{`
+          .rs-root {
+            --brand: #6C2BD9;
+            --brand-light: #EDE9FE;
+            --brand-mid: #DDD6FE;
+            --border: #E5E7EB;
+            --text-primary: #111827;
+            --text-secondary: #6B7280;
+            font-family: 'Inter', system-ui, sans-serif;
+          }
 
-        {/* Search results count */}
-        {searchQuery && (
-          <div className="text-sm text-gray-500 px-2">
-            About {filteredSearches.length} result{filteredSearches.length !== 1 ? 's' : ''}
-          </div>
-        )}
+          /* Search bar */
+          .rs-search-wrap {
+            position: relative;
+            margin-bottom: 14px;
+          }
+          .rs-search-icon {
+            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+            color: #9CA3AF; width: 15px; height: 15px; pointer-events: none;
+          }
+          .rs-search-input {
+            width: 100%;
+            height: 40px;
+            padding: 0 36px 0 36px;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            font-size: 13px;
+            color: var(--text-primary);
+            background: #F9FAFB;
+            transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+          }
+          .rs-search-input:focus {
+            outline: none;
+            border-color: var(--brand);
+            box-shadow: 0 0 0 3px rgba(108,43,217,0.1);
+            background: white;
+          }
+          .rs-search-clear {
+            position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            color: #9CA3AF; cursor: pointer; transition: color 0.15s;
+            background: none; border: none; padding: 2px;
+          }
+          .rs-search-clear:hover { color: #374151; }
 
-        {/* Search results */}
-        <div className="space-y-2">
-          {filteredSearches.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <Clock className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p className="text-lg font-medium mb-1">
-                {searchQuery ? 'No searches found' : 'No recent searches yet'}
-              </p>
-              <p className="text-sm">
-                {searchQuery ? 'Try a different search term' : 'Your search history will appear here'}
-              </p>
-            </div>
-          ) : (
-            filteredSearches.map((history) => (
-              <button
-                key={history.id}
-                onClick={() => handleClick(history)}
-                className="w-full text-left p-4 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-200 group"
-              >
-                <div className="flex items-start gap-3">
-                  <Clock className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      {history.is_boolean_mode && (
-                        <Sparkles className="w-4 h-4 text-[#7731E8] flex-shrink-0" />
-                      )}
-                      <span className="font-semibold text-gray-900 group-hover:text-[#7731E8] transition-colors">
-                        {getDisplayTitle(history)}            
-                      </span>
-                      <span className="text-xs text-gray-500 ml-auto flex-shrink-0">
-                        {formatDate(history.last_used_at)}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
-                      <span>{history.use_count} {history.use_count === 1 ? 'use' : 'uses'}</span>
-                    </div>
-                    
-                    {history.generated_keywords.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {history.generated_keywords.slice(0, 5).map((keyword, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-block px-2.5 py-1 text-xs font-medium bg-purple-50 text-[#7731E8] rounded-full border border-purple-100"
-                          >
-                            {keyword}
-                          </span>
-                        ))}
-                        {history.generated_keywords.length > 5 && (
-                          <span className="inline-block px-2.5 py-1 text-xs font-medium text-gray-500">
-                            +{history.generated_keywords.length - 5} more
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
+          /* Count */
+          .rs-count { font-size: 11px; color: var(--text-secondary); padding: 0 2px; margin-bottom: 8px; }
+
+          /* List */
+          .rs-list { display: flex; flex-direction: column; gap: 2px; }
+
+          /* Item */
+          .rs-item {
+            width: 100%;
+            text-align: left;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1.5px solid transparent;
+            background: white;
+            cursor: pointer;
+            transition: all 0.15s;
+          }
+          .rs-item:hover {
+            background: #FAFAFA;
+            border-color: var(--border);
+          }
+          .rs-item:active { background: var(--brand-light); border-color: var(--brand-mid); }
+
+          .rs-item-top {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+          }
+          .rs-item-icon { color: #D1D5DB; flex-shrink: 0; }
+          .rs-item-icon-sparkle { color: var(--brand); flex-shrink: 0; }
+          .rs-item-title {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            transition: color 0.15s;
+          }
+          .rs-item:hover .rs-item-title { color: var(--brand); }
+          .rs-item-time { font-size: 11px; color: #9CA3AF; flex-shrink: 0; }
+
+          .rs-item-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 6px;
+            padding-left: 24px;
+          }
+          .rs-item-uses {
+            font-size: 11px;
+            color: #9CA3AF;
+            background: #F3F4F6;
+            padding: 1px 7px;
+            border-radius: 99px;
+          }
+
+          /* Tags */
+          .rs-tags { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 24px; }
+          .rs-tag {
+            font-size: 11px;
+            font-weight: 500;
+            background: var(--brand-light);
+            color: var(--brand);
+            border: 1px solid var(--brand-mid);
+            padding: 2px 8px;
+            border-radius: 99px;
+          }
+          .rs-tag-more { font-size: 11px; color: #9CA3AF; padding: 2px 4px; }
+
+          /* Empty */
+          .rs-empty {
+            text-align: center;
+            padding: 40px 16px;
+            color: var(--text-secondary);
+          }
+          .rs-empty-icon { width: 40px; height: 40px; color: #D1D5DB; margin: 0 auto 10px; }
+          .rs-empty-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: #374151; }
+          .rs-empty-sub { font-size: 12px; }
+        `}</style>
+
+        <div className="rs-root">
+          <div className="rs-search-wrap">
+            <Search className="rs-search-icon" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search recent searches..."
+              className="rs-search-input"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="rs-search-clear">
+                <X className="w-3.5 h-3.5" />
               </button>
-            ))
+            )}
+          </div>
+
+          {searchQuery && (
+            <div className="rs-count">{filteredSearches.length} result{filteredSearches.length !== 1 ? 's' : ''}</div>
           )}
+
+          <div className="rs-list">
+            {filteredSearches.length === 0 ? (
+              <div className="rs-empty">
+                <Clock className="rs-empty-icon" />
+                <div className="rs-empty-title">{searchQuery ? 'No matches' : 'No recent searches'}</div>
+                <div className="rs-empty-sub">{searchQuery ? 'Try a different term' : 'Your history will appear here'}</div>
+              </div>
+            ) : (
+              filteredSearches.map((history) => (
+                <button key={history.id} onClick={() => handleClick(history)} className="rs-item">
+                  <div className="rs-item-top">
+                    <Clock className="rs-item-icon w-4 h-4" />
+                    {history.is_boolean_mode && <Sparkles className="rs-item-icon-sparkle w-3.5 h-3.5" />}
+                    <span className="rs-item-title">{getDisplayTitle(history)}</span>
+                    <span className="rs-item-time">{formatDate(history.last_used_at)}</span>
+                  </div>
+                  <div className="rs-item-meta">
+                    <span className="rs-item-uses">{history.use_count} {history.use_count === 1 ? 'use' : 'uses'}</span>
+                  </div>
+                  {history.generated_keywords.length > 0 && (
+                    <div className="rs-tags">
+                      {history.generated_keywords.slice(0, 5).map((keyword, idx) => (
+                        <span key={idx} className="rs-tag">{keyword}</span>
+                      ))}
+                      {history.generated_keywords.length > 5 && (
+                        <span className="rs-tag-more">+{history.generated_keywords.length - 5}</span>
+                      )}
+                    </div>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
         </div>
       </div>
     );
   }
 
-  // Card style (original sidebar view)
+  // ── Card/sidebar style (non-modal) ──
   if (recentSearches.length === 0) {
     return (
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Clock className="w-5 h-5 text-[#7731E8]" />
+      <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <Clock className="w-4 h-4 text-[#6C2BD9]" />
           Recent Searches
         </h2>
-        <p className="text-sm text-gray-500">No recent searches yet</p>
+        <p className="text-xs text-gray-400">No recent searches yet</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm p-6">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-        <Clock className="w-5 h-5 text-[#7731E8]" />
+    <div className="bg-white rounded-xl border border-gray-100 p-4">
+      <style>{`
+        .rs-card-item {
+          width: 100%; text-align: left; padding: 8px 10px;
+          border-radius: 8px; border: 1.5px solid transparent;
+          background: white; cursor: pointer; transition: all 0.15s; display: block;
+        }
+        .rs-card-item:hover { background: #F5F0FF; border-color: #DDD6FE; }
+        .rs-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
+        .rs-card-title { font-size: 12.5px; font-weight: 600; color: #111827; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+        .rs-card-item:hover .rs-card-title { color: #6C2BD9; }
+        .rs-card-meta { display: flex; align-items: center; justify-content: space-between; font-size: 10.5px; color: #9CA3AF; margin-bottom: 4px; }
+        .rs-card-tags { display: flex; flex-wrap: wrap; gap: 3px; }
+        .rs-card-tag { font-size: 10px; background: #EDE9FE; color: #6C2BD9; padding: 1px 7px; border-radius: 99px; }
+        .rs-card-more { font-size: 10px; color: #9CA3AF; }
+      `}</style>
+      <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <Clock className="w-4 h-4 text-[#6C2BD9]" />
         Recent Searches
       </h2>
-      <div className="space-y-3">
+      <div className="flex flex-col gap-1">
         {recentSearches.map((history) => (
-          <button
-            key={history.id}
-            onClick={() => handleClick(history)}
-            className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-[#7731E8] hover:bg-purple-50 transition-all group"
-          >
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <h3 className="font-medium text-gray-900 text-sm line-clamp-1 group-hover:text-[#7731E8]">
-                {getDisplayTitle(history)}
-              </h3>
-              {history.is_boolean_mode && (
-                <Sparkles className="w-4 h-4 text-[#7731E8] flex-shrink-0" />
-              )}        
+          <button key={history.id} onClick={() => handleClick(history)} className="rs-card-item">
+            <div className="rs-card-head">
+              <h3 className="rs-card-title">{getDisplayTitle(history)}</h3>
+              {history.is_boolean_mode && <Sparkles className="w-3 h-3 text-[#6C2BD9] flex-shrink-0" />}
             </div>
-            <div className="flex items-center justify-between text-xs text-gray-500">
+            <div className="rs-card-meta">
               <span>{formatDate(history.last_used_at)}</span>
-              <span>{history.use_count} {history.use_count === 1 ? 'use' : 'uses'}</span>
+              <span>{history.use_count} use{history.use_count !== 1 ? 's' : ''}</span>
             </div>
-            <div className="mt-2 flex flex-wrap gap-1">
+            <div className="rs-card-tags">
               {history.generated_keywords.slice(0, 3).map((keyword, idx) => (
-                <span 
-                  key={idx}
-                  className="text-xs bg-purple-100 text-[#7731E8] px-2 py-0.5 rounded-full"
-                >
-                  {keyword}
-                </span>
+                <span key={idx} className="rs-card-tag">{keyword}</span>
               ))}
               {history.generated_keywords.length > 3 && (
-                <span className="text-xs text-gray-400">
-                  +{history.generated_keywords.length - 3} more
-                </span>
+                <span className="rs-card-more">+{history.generated_keywords.length - 3}</span>
               )}
             </div>
           </button>

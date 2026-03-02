@@ -1,8 +1,6 @@
-
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/hooks/use-toast';
-import { updateLeaveBalance } from '@/utils/leaveBalanceUtils';
+import { toast } from 'sonner';
 
 export const useLeaveRequestActions = (approverId?: string) => {
   const queryClient = useQueryClient();
@@ -12,16 +10,6 @@ export const useLeaveRequestActions = (approverId?: string) => {
     mutationFn: async (requestId: string) => {
       if (!approverId) throw new Error("Approver ID is required");
       
-      // First, get the leave request details
-      const { data: requestData, error: requestError } = await supabase
-        .from('leave_requests')
-        .select('*')
-        .eq('id', requestId)
-        .single();
-      
-      if (requestError) throw requestError;
-      
-      // Update the leave request status
       const { data, error } = await supabase
         .from('leave_requests')
         .update({
@@ -34,40 +22,15 @@ export const useLeaveRequestActions = (approverId?: string) => {
         .single();
       
       if (error) throw error;
-      
-      // Update the leave balance - deduct days
-      try {
-        console.log(`Updating leave balance: employeeId=${requestData.employee_id}, leaveTypeId=${requestData.leave_type_id}, workingDays=${requestData.working_days}, isDeduction=true`);
-        await updateLeaveBalance(
-          requestData.employee_id, 
-          requestData.leave_type_id, 
-          requestData.working_days, 
-          true // isDeduction = true
-        );
-      } catch (error) {
-        console.error('Failed to update leave balance:', error);
-        throw error;
-      }
-      
       return data;
     },
     onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Leave request approved successfully",
-      });
-      // Invalidate all related queries to ensure fresh data is fetched
-      queryClient.invalidateQueries({ queryKey: ['pendingLeaveRequests'] });
-      queryClient.invalidateQueries({ queryKey: ['recentLeaveApprovals'] });
-      queryClient.invalidateQueries({ queryKey: ['employeeLeaveBalances'] });
-      queryClient.invalidateQueries({ queryKey: ['leaveRequests'] });
+      toast.success("Leave request approved");
+      // The DB Trigger handles the balance deduction automatically!
+      invalidateQueries();
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: `Failed to approve leave request: ${error.message}`,
-        variant: "destructive",
-      });
+      toast.error(`Failed to approve: ${error.message}`);
     }
   });
 
@@ -92,40 +55,19 @@ export const useLeaveRequestActions = (approverId?: string) => {
       return data;
     },
     onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Leave request rejected successfully",
-      });
-      queryClient.invalidateQueries({ queryKey: ['pendingLeaveRequests'] });
-      queryClient.invalidateQueries({ queryKey: ['recentLeaveApprovals'] });
+      toast.success("Leave request rejected");
+      invalidateQueries();
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: `Failed to reject leave request: ${error.message}`,
-        variant: "destructive",
-      });
+      toast.error(`Failed to reject: ${error.message}`);
     }
   });
 
-  // Cancel an approved leave request (admin function)
+  // Cancel an approved leave request
   const cancelApprovedLeaveRequestMutation = useMutation({
     mutationFn: async ({ requestId, reason }: { requestId: string; reason: string }) => {
       if (!approverId) throw new Error("Approver ID is required");
       
-      // First, get the leave request details
-      const { data: requestData, error: requestError } = await supabase
-        .from('leave_requests')
-        .select('*')
-        .eq('id', requestId)
-        .single();
-      
-      if (requestError) throw requestError;
-      
-      // Only proceed with balance adjustment if the request was previously approved
-      const needsBalanceAdjustment = requestData.status === 'approved';
-      
-      // Update the leave request status
       const { data, error } = await supabase
         .from('leave_requests')
         .update({
@@ -139,44 +81,24 @@ export const useLeaveRequestActions = (approverId?: string) => {
         .single();
       
       if (error) throw error;
-      
-      // If it was previously approved, we need to add the days back to the balance
-      if (needsBalanceAdjustment) {
-        try {
-          console.log(`Adjusting leave balance: employeeId=${requestData.employee_id}, leaveTypeId=${requestData.leave_type_id}, workingDays=${requestData.working_days}, isDeduction=false`);
-          await updateLeaveBalance(
-            requestData.employee_id, 
-            requestData.leave_type_id, 
-            requestData.working_days, 
-            false // isDeduction = false (adding days back)
-          );
-        } catch (error) {
-          console.error('Failed to adjust leave balance:', error);
-          throw error;
-        }
-      }
-      
       return data;
     },
     onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Approved leave has been cancelled",
-      });
-      // Invalidate all related queries to ensure fresh data is fetched
-      queryClient.invalidateQueries({ queryKey: ['pendingLeaveRequests'] });
-      queryClient.invalidateQueries({ queryKey: ['recentLeaveApprovals'] });
-      queryClient.invalidateQueries({ queryKey: ['employeeLeaveBalances'] });
-      queryClient.invalidateQueries({ queryKey: ['leaveRequests'] });
+      toast.success("Leave cancelled and balance refunded");
+      // The DB Trigger detects 'approved' -> 'cancelled' and inserts a credit Ledger entry automatically.
+      invalidateQueries();
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: `Failed to cancel approved leave: ${error.message}`,
-        variant: "destructive",
-      });
+      toast.error(`Failed to cancel: ${error.message}`);
     }
   });
+
+  const invalidateQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['pendingLeaveRequests'] });
+    queryClient.invalidateQueries({ queryKey: ['recentLeaveApprovals'] });
+    queryClient.invalidateQueries({ queryKey: ['employeeLeaveBalances'] });
+    queryClient.invalidateQueries({ queryKey: ['leaveLedger'] });
+  };
 
   return {
     approveLeaveRequest: approveLeaveRequestMutation.mutate,

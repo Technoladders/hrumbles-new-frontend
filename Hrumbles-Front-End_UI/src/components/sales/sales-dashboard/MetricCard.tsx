@@ -81,6 +81,15 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   const colors = colorClasses[color];
   const isPositive = trend && trend > 0;
   const isNegative = trend && trend < 0;
+  
+  console.log('title', title)
+  console.log('value', value)
+  console.log('icon', icon)
+  console.log('trend', trend)
+  console.log('trendLabel', trendLabel)
+  console.log('subtitle', subtitle)
+  console.log('color', color)
+  console.log('sparklineData', sparklineData)
 
   return (
     <div 

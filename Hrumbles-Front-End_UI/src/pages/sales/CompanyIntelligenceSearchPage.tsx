@@ -456,7 +456,7 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
           job_type: 'companies' // Tells the scraper to use the Company endpoint
         }).then(({error}) => {
           if (error) console.error("Failed to queue background sync:", error);
-        });s
+        });
       }
       // ==========================================================
 

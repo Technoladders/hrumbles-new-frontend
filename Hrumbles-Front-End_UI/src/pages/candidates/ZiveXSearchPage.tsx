@@ -1,5 +1,5 @@
 // src/pages/candidates/ZiveXSearchPage.tsx
-// REDESIGNED: Clean, refined search page header
+// REDESIGNED: Modern compact search page header
 
 import { FC, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -72,115 +72,134 @@ const ZiveXSearchPage: FC = () => {
   return (
     <>
       <style>{`
-        .zx-search-page {
+        .zxsp-root {
           min-height: 100vh;
-          background: #F8F9FB;
+          background: #F4F5F7;
+          font-family: 'Inter', system-ui, sans-serif;
+          --brand: #6C2BD9;
+          --brand-light: #EDE9FE;
+          --brand-mid: #DDD6FE;
+          --border: #E5E7EB;
+          --text-primary: #111827;
+          --text-secondary: #6B7280;
+          --transition: 150ms cubic-bezier(0.4,0,0.2,1);
         }
-        .zx-search-header {
+
+        /* ── TOP BAR ── */
+        .zxsp-header {
+          height: 52px;
           background: white;
-          border-bottom: 1px solid #E5E7EB;
-          padding: 0 24px;
-          height: 56px;
+          border-bottom: 1px solid var(--border);
+          padding: 0 20px;
           display: flex;
           align-items: center;
           justify-content: space-between;
           position: sticky;
           top: 0;
           z-index: 20;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.04);
         }
-        .zx-header-left {
+
+        .zxsp-header-left {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
         }
-        .zx-header-back {
-          width: 34px;
-          height: 34px;
+
+        .zxsp-back-btn {
+          width: 32px;
+          height: 32px;
           border-radius: 8px;
-          border: 1px solid #E5E7EB;
+          border: 1.5px solid var(--border);
           background: white;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          transition: all 0.15s;
+          transition: all var(--transition);
           color: #6B7280;
+          flex-shrink: 0;
         }
-        .zx-header-back:hover {
-          border-color: #DDD6FE;
-          color: #6C2BD9;
-          background: #F5F0FF;
+        .zxsp-back-btn:hover {
+          border-color: #C4B5FD;
+          color: var(--brand);
+          background: var(--brand-light);
         }
-        .zx-header-title {
-          font-size: 17px;
+
+        .zxsp-header-title {
+          font-size: 15px;
           font-weight: 700;
-          color: #111827;
-          letter-spacing: -0.3px;
+          color: var(--text-primary);
+          letter-spacing: -0.2px;
         }
-        .zx-recent-btn {
+
+        .zxsp-recent-btn {
           display: flex;
           align-items: center;
           gap: 6px;
-          padding: 7px 14px;
+          padding: 6px 12px;
           border-radius: 8px;
-          border: 1px solid #E5E7EB;
+          border: 1.5px solid var(--border);
           background: white;
           cursor: pointer;
-          font-size: 13px;
+          font-size: 12.5px;
           font-weight: 600;
-          color: #6B7280;
-          transition: all 0.15s;
+          color: var(--text-secondary);
+          transition: all var(--transition);
         }
-        .zx-recent-btn:hover {
-          border-color: #DDD6FE;
-          color: #6C2BD9;
+        .zxsp-recent-btn:hover {
+          border-color: #C4B5FD;
+          color: var(--brand);
+          background: var(--brand-light);
         }
-        .zx-recent-btn svg {
-          width: 15px;
-          height: 15px;
-        }
-        .zx-search-body {
-          padding: 24px;
-        }
-        .zx-search-body > div {
-          max-width: 1600px;
+        .zxsp-recent-btn svg { width: 14px; height: 14px; }
+
+        /* ── BODY ── */
+        .zxsp-body {
+          max-width: 960px;
           margin: 0 auto;
+          padding: 0 16px 40px;
+        }
+
+        /* Dialog tweaks */
+        .zxsp-dialog-title {
+          font-size: 15px;
+          font-weight: 700;
+          color: var(--text-primary);
         }
       `}</style>
 
-      <div className="zx-search-page">
+      <div className="zxsp-root">
         {/* Header */}
-        <div className="zx-search-header">
-          <div className="zx-header-left">
-            <button className="zx-header-back" onClick={() => navigate(-1)}>
-              <ArrowLeft className="w-4 h-4" />
+        <div className="zxsp-header">
+          <div className="zxsp-header-left">
+            <button className="zxsp-back-btn" onClick={() => navigate(-1)}>
+              <ArrowLeft className="w-3.5 h-3.5" />
             </button>
-            <span className="zx-header-title">Find Candidates</span>
+            <span className="zxsp-header-title">Find Candidates</span>
           </div>
-          <button className="zx-recent-btn" onClick={() => setShowRecentSearchesModal(true)}>
+          <button className="zxsp-recent-btn" onClick={() => setShowRecentSearchesModal(true)}>
             <Clock /> Recent Searches
           </button>
         </div>
 
         {/* Body */}
-        <div className="zx-search-body">
-          <div>
-            <CandidateSearchFilters
-              onSearch={handleSearch}
-              isSearching={false}
-              organizationId={organizationId}
-              searchHistory={selectedHistory}
-            />
-          </div>
+        <div className="zxsp-body">
+          <CandidateSearchFilters
+            onSearch={handleSearch}
+            isSearching={false}
+            organizationId={organizationId}
+            searchHistory={selectedHistory}
+          />
         </div>
 
         {/* Recent Searches Modal */}
         <Dialog open={showRecentSearchesModal} onOpenChange={setShowRecentSearchesModal}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-lg font-bold text-gray-800">Recent Searches</DialogTitle>
+              <DialogTitle className="zxsp-dialog-title">Recent Searches</DialogTitle>
             </DialogHeader>
-            <div className="mt-4">
+            <div className="mt-3">
               <RecentSearches onSelectSearch={handleRecentSearchSelect} isModal={true} />
             </div>
           </DialogContent>
