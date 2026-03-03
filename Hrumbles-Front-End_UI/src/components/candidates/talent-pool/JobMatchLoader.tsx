@@ -656,3 +656,4 @@ const JobMatchLoader: FC<JobMatchLoaderProps> = ({
 };
  
 export default JobMatchLoader;
+// UI changes 1

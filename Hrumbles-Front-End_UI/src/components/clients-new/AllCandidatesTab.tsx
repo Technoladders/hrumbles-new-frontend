@@ -392,7 +392,7 @@ useEffect(() => {
             </CardContent>
         </Card>
         <Card>
-            <CardHeader><CardTitle className="text-base font-semibold">Pofiles by Recruiter</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base font-semibold">Profiles by Recruiter</CardTitle></CardHeader>
             <CardContent className="space-y-3">
                 {recruiterPerformance.length > 0 ? recruiterPerformance.slice(0, 5).map(r => (
                     <div key={r.name}>

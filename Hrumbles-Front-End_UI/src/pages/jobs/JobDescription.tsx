@@ -75,13 +75,13 @@ const ModernJobDescription = ({ job, candidatesLength, onEditJob, isSaved, onTog
               <button className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-600">
                 <Share2 className="w-5 h-5" />
               </button>
-              <button 
+              {/* <button 
                 onClick={onEditJob}
                 className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl hover:shadow-lg hover:scale-105 transition-all flex items-center gap-2"
               >
                 <Edit className="w-4 h-4" />
                 Edit
-              </button>
+              </button> */}
             </div>
           </div>
         </div>

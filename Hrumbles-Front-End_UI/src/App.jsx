@@ -189,6 +189,9 @@ import BenchProfilesPage from "./pages/bench-profiles/BenchProfilesPage";
 // reports detail page
 import UserActivityDetailsPage from "./components/reports/UserActivityDetailsPage";
 
+// Job Board Integrations
+import JobBoardIntegrations from "./pages/integrations/JobBoardIntegrations.tsx";
+
 // --- Simple Loader for Organization Check ---
 const FullScreenLoader = () => (
   <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
@@ -547,8 +550,10 @@ useEffect(() => {
               {/* Background Verification */}
               <Route path="/jobs/:jobId/candidate/:candidateId/bgv" element={<CandidateBgvProfilePage />} />
               <Route path="/all-candidates" element={<AllCandidatesPage />} /> 
-        
               <Route path="/bg-verification/analytics" element={<BgvAnalyticsDashboard />} />
+
+              {/* Job Board Integrations */}
+              <Route path="/integrations/job-boards" element={<JobBoardIntegrations />} />
 
 
 

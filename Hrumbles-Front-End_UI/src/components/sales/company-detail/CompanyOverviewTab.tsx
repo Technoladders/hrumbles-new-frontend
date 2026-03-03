@@ -1,8 +1,8 @@
 // Hrumbles-Front-End_UI/src/components/sales/company-detail/CompanyOverviewTab.tsx
 // ✅ ALL business logic preserved verbatim — UI restructured
-// Changes: removed headcount/trends tab → replaced by EmployeeGrowthIntelligence
-//          added DeptPiePanel on the right of insights card
-import React, { useState, useMemo } from 'react';
+// Changes: Dynamic Seniority Filters from enrichment_person_metadata
+//          Fallback display for Email/Phone from enrichment tables
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,7 +11,7 @@ import {
   Settings, ChevronUp, ChevronDown, Search,
   Mail, Sparkles, Users, TrendingUp,
   DollarSign, Code2, Briefcase, Calendar,
-  BarChart3, Activity, PieChart as PieIcon
+  BarChart3, Activity, PieChart as PieIcon, Phone, Copy, ChevronLeft, ChevronRight, Eye
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer
@@ -41,6 +41,136 @@ interface CompanyOverviewTabProps {
   isLoadingEmployees?: boolean;
   onEditEmployee?: (emp: any) => void;
 }
+
+
+// ── Contact Hover Tooltip + Copy ───────────────────────────────────────────
+// ── Updated ContactCell (Tooltip now appears ABOVE the icons) ──────────────
+const ContactCell = ({ email, phone }: { email?: string | null; phone?: string | null }) => {
+  const [copied, setCopied] = useState<'email' | 'phone' | null>(null);
+
+  const copy = (text: string, type: 'email' | 'phone', e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(type);
+      setTimeout(() => setCopied(null), 1400);
+    });
+  };
+
+  if (!email && !phone) return <span className="text-[#D5CFC5]">—</span>;
+
+  return (
+    <div className="relative group/contact">
+      {/* Trigger Icons */}
+      <div className="flex items-center gap-2">
+        {email && (
+          <div className="w-6 h-6 bg-[#F0FDF4] text-[#16A34A] rounded-lg flex items-center justify-center border border-[#BBF7D0]">
+            <Mail size={13} />
+          </div>
+        )}
+        {phone && (
+          <div className="w-6 h-6 bg-[#F0EEFF] text-[#5B4FE8] rounded-lg flex items-center justify-center border border-[#D9D4FF]">
+            <Phone size={13} />
+          </div>
+        )}
+      </div>
+
+      {/* Tooltip – NOW APPEARS ABOVE */}
+      <div className="absolute left-0 bottom-full mb-2 hidden group-hover/contact:block z-100 w-80 bg-white border border-[#E5E0D8] rounded-2xl shadow-2xl p-4">
+        <div className="space-y-4">
+          {email && (
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="uppercase text-[10px] font-[700] tracking-[0.5px] text-[#9C9189]">EMAIL</div>
+                <div className="text-[13px] text-[#1C1916] font-medium break-all mt-0.5 pr-2">{email}</div>
+              </div>
+              <button
+                onClick={(e) => copy(email, 'email', e)}
+                className="ml-3 flex-shrink-0 p-2 rounded-xl hover:bg-[#F0FDF4] transition-colors"
+              >
+                {copied === 'email' ? (
+                  <span className="text-emerald-600 text-xs font-semibold">✓ Copied</span>
+                ) : (
+                  <Copy size={15} className="text-[#16A34A]" />
+                )}
+              </button>
+            </div>
+          )}
+
+          {phone && (
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="uppercase text-[10px] font-[700] tracking-[0.5px] text-[#9C9189]">PHONE</div>
+                <div className="text-[13px] text-[#1C1916] font-medium mt-0.5">{phone}</div>
+              </div>
+              <button
+                onClick={(e) => copy(phone, 'phone', e)}
+                className="ml-3 flex-shrink-0 p-2 rounded-xl hover:bg-[#F0EEFF] transition-colors"
+              >
+                {copied === 'phone' ? (
+                  <span className="text-emerald-600 text-xs font-semibold">✓ Copied</span>
+                ) : (
+                  <Copy size={15} className="text-[#5B4FE8]" />
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Arrow pointing DOWN (now at bottom of tooltip) */}
+        <div className="absolute -bottom-1 left-6 w-3 h-3 bg-white border-r border-b border-[#E5E0D8] rotate-45" />
+      </div>
+    </div>
+  );
+};
+
+// ── Pagination Controls ────────────────────────────────────────────────────
+const PaginationControls = ({
+  currentPage,
+  totalPages,
+  onPageChange,
+  totalItems,
+}: {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  totalItems: number;
+}) => {
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="flex items-center justify-between px-5 py-3.5 border-t border-[#F0EDE8] bg-[#FAFAF9]">
+      <div className="text-[11px] text-[#9C9189]">
+        Showing {(currentPage - 1) * 12 + 1}–{Math.min(currentPage * 12, totalItems)} of {totalItems}
+      </div>
+
+      <div className="flex items-center gap-1">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+          disabled={currentPage === 1}
+          className="p-2 rounded-xl hover:bg-white disabled:opacity-40 transition-colors"
+        >
+          <ChevronLeft size={17} />
+        </motion.button>
+
+        <div className="px-4 py-1 bg-white border border-[#E5E0D8] rounded-2xl text-[13px] font-medium text-[#6A6057]">
+          Page {currentPage} of {totalPages}
+        </div>
+
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+          disabled={currentPage === totalPages}
+          className="p-2 rounded-xl hover:bg-white disabled:opacity-40 transition-colors"
+        >
+          <ChevronRight size={17} />
+        </motion.button>
+      </div>
+    </div>
+  );
+};
 
 // ── Pie Tooltip ────────────────────────────────────────────────────────────
 const PieTooltip = ({ active, payload }: any) => {
@@ -160,12 +290,6 @@ const fadeUp = {
   }),
 };
 
-const tabContent = {
-  hidden:  { opacity: 0, y: 6 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.22, ease: 'easeOut' } },
-  exit:    { opacity: 0, y: -4, transition: { duration: 0.14 } },
-};
-
 // ── Main Component ─────────────────────────────────────────────────────────
 export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({
   company,
@@ -181,7 +305,11 @@ export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({
   const [activeLeadFilter, setActiveLeadFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // ── All logic preserved verbatim ─────────────────────────────────────────
+    // ── Pagination state ───────────────────────────────────────────────────
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 12;
+
+  // ── All logic preserved ─────────────────────────────────────────
   const enrichment  = company?.enrichment_organizations;
   const companyData = company?.company_data || {};
 
@@ -197,55 +325,98 @@ export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({
   const keywords = enrichment?.enrichment_org_keywords?.map((k: any) => k.keyword) ||
     companyData?.keywords || [];
 
-  const employeeMetrics = companyData?.employee_metrics || [];
-
+  // Combine passed employees with internal query for suggestions
   const { data: suggestedLeads = [], isLoading: isLoadingLeads } = useQuery({
     queryKey: ['suggested-leads', company.id, company.apollo_org_id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('contacts')
-        .select(`
-          *,
-          enrichment_people(photo_url, seniority),
-          enrichment_contact_emails(email, email_status)
-        `)
-        .eq('company_id', company.id)
-        .limit(50);
-      return data || [];
+      // Just a fallback in case parent didn't pass employees, but usually parent handles this now
+      return []; 
     },
-    enabled: !!company.id
+    enabled: false // Logic moved to parent
   });
 
   const allPeople = useMemo(() => {
-    const peopleMap = new Map();
-    employees.forEach(e => peopleMap.set(e.id, e));
-    suggestedLeads.forEach((l: any) => { if (!peopleMap.has(l.id)) peopleMap.set(l.id, l); });
-    return Array.from(peopleMap.values());
-  }, [employees, suggestedLeads]);
+    // Parent passes 'employees' which contains both direct and apollo ones
+    return employees; 
+  }, [employees]);
 
-  const filteredLeads = allPeople.filter((lead: any) => {
-    const matchesSearch = !searchTerm ||
-      lead.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.job_title?.toLowerCase().includes(searchTerm.toLowerCase());
-    const seniority = lead.enrichment_people?.[0]?.seniority?.toLowerCase() || lead.seniority?.toLowerCase();
-    const matchesFilter =
-      activeLeadFilter === 'all' ||
-      (activeLeadFilter === 'cxo'      && ['c_suite', 'owner', 'founder', 'cxo'].includes(seniority)) ||
-      (activeLeadFilter === 'director' && ['director', 'vp', 'head', 'manager'].includes(seniority));
-    return matchesSearch && matchesFilter;
-  });
+  // ── Dynamic Filters Calculation ──────────────────────────────────────────
+  // Extracts unique seniority levels from enrichment metadata or raw fields
+  const { leadFilters, seniorityCounts } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const seniorityMap = new Map();
 
-  const seniorityCount = useMemo(() => {
-    const counts = { cxo: 0, director: 0 };
     allPeople.forEach((lead: any) => {
-      const s = lead.enrichment_people?.[0]?.seniority?.toLowerCase() || lead.seniority?.toLowerCase() || '';
-      if (['c_suite', 'owner', 'founder', 'cxo'].includes(s)) counts.cxo++;
-      if (['director', 'vp', 'head', 'manager'].includes(s)) counts.director++;
+      // Prioritize enrichment metadata -> direct seniority -> unknown
+      let s = lead.enrichment_people?.[0]?.enrichment_person_metadata?.seniority || 
+              lead.seniority || 
+              'other';
+      
+      s = s.toLowerCase().replace(/_/g, ' ');
+
+      // Normalize common terms
+      if (s === 'c_suite' || s === 'owner' || s === 'founder' || s === 'cxo' || s === 'partner') s = 'cxo';
+      if (s === 'vice president') s = 'vp';
+      if (!s) s = 'other';
+
+      counts[s] = (counts[s] || 0) + 1;
+      
+      // Store normalized seniority back on the object for filtering speed (optional, good for perf)
+      lead._normalizedSeniority = s;
     });
-    return counts;
+
+    // Define display order and labels
+    const priority = ['cxo', 'vp', 'director', 'manager', 'senior', 'entry', 'other'];
+    const labels: Record<string, string> = {
+      cxo: 'CXO', vp: 'VP', director: 'Director', manager: 'Manager', senior: 'Senior', entry: 'Entry', other: 'Other'
+    };
+
+    const filters = [
+      { id: 'all', label: 'All', count: allPeople.length },
+      ...priority
+        .filter(key => counts[key] > 0)
+        .map(key => ({
+          id: key,
+          label: labels[key] || key,
+          count: counts[key]
+        }))
+    ];
+
+    return { leadFilters: filters, seniorityCounts: counts };
   }, [allPeople]);
 
-  // 'trends' tab removed — headcount now in EmployeeGrowthIntelligence
+  // ── Filter Logic ─────────────────────────────────────────────────────────
+  // ── Filtered Leads ─────────────────────────────────────────────────────
+  const filteredLeads = useMemo(() => {
+    return allPeople.filter((lead: any) => {
+      const matchesSearch = !searchTerm ||
+        lead.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lead.job_title?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const normalizedSeniority = lead._normalizedSeniority;
+      
+      const matchesFilter =
+        activeLeadFilter === 'all' ||
+        normalizedSeniority === activeLeadFilter;
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [allPeople, searchTerm, activeLeadFilter]);
+
+  // ── Pagination ─────────────────────────────────────────────────────────
+  const totalPages = Math.ceil(filteredLeads.length / PAGE_SIZE);
+  const paginatedLeads = useMemo(() => {
+    return filteredLeads.slice(
+      (currentPage - 1) * PAGE_SIZE,
+      currentPage * PAGE_SIZE
+    );
+  }, [filteredLeads, currentPage]);
+
+  // Reset page when filter/search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeLeadFilter, searchTerm]);
+
   const insightTabs = [
     { id: 'overview',     label: 'Overview' },
     { id: 'technologies', label: 'Tech',    count: technologies.length },
@@ -253,44 +424,34 @@ export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({
     { id: 'keywords',     label: 'Keywords',count: keywords.length },
   ];
 
-  const leadFilters = [
-    { id: 'all',      label: 'All',  count: allPeople.length },
-    { id: 'cxo',      label: 'CXO',  count: seniorityCount.cxo },
-    { id: 'director', label: 'Dir+', count: seniorityCount.director },
-  ];
-
   return (
     <div className="space-y-5 font-['DM_Sans',system-ui,sans-serif]">
 
       {/* ── Top: Insights Card + Pie Panel ────────────────────────────────── */}
-      <div className="flex gap-5 items-start">
+      <div className="flex gap-6 items-stretch min-h-[460px]">
 
-        {/* Insights — flex-1 */}
+        {/* Company Insights */}
         <motion.div
-          className={`${T.card} flex-1 min-w-0`}
+          className={`${T.card} flex-1 min-w-0 overflow-hidden flex flex-col`}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
           <div className={T.sectionHeader}>
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#F0EEFF] flex items-center justify-center">
-                <BarChart3 size={14} className="text-[#5B4FE8]" />
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-2xl bg-violet-100 flex items-center justify-center">
+                <BarChart3 size={16} className="text-violet-600" />
               </div>
-              <span className="text-[13px] font-[650] text-[#1C1916] tracking-[-0.01em]">Company Insights</span>
+              <span className="text-[14px] font-semibold text-slate-900 tracking-tight">Company Insights</span>
             </div>
-            <div className="flex items-center gap-1">
-              <motion.button className="w-7 h-7 rounded-lg hover:bg-[#F0EDE8] transition-colors flex items-center justify-center" whileTap={{ scale: 0.9 }}>
-                <Settings size={13} className="text-[#9C9189]" />
-              </motion.button>
-              <motion.button
-                className="w-7 h-7 rounded-lg hover:bg-[#F0EDE8] transition-colors flex items-center justify-center"
-                onClick={() => setInsightsOpen(!insightsOpen)}
-                whileTap={{ scale: 0.9 }}
-              >
-                {insightsOpen ? <ChevronUp size={13} className="text-[#9C9189]" /> : <ChevronDown size={13} className="text-[#9C9189]" />}
-              </motion.button>
-            </div>
+
+            <motion.button
+              className="w-8 h-8 rounded-2xl hover:bg-slate-100 transition-all flex items-center justify-center"
+              onClick={() => setInsightsOpen(!insightsOpen)}
+              whileTap={{ scale: 0.92 }}
+            >
+              {insightsOpen ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
+            </motion.button>
           </div>
 
           <AnimatePresence initial={false}>
@@ -300,20 +461,24 @@ export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.26, ease: [0.25, 0.46, 0.45, 0.94] }}
-                style={{ overflow: 'hidden' }}
+                transition={{ duration: 0.28 }}
+                className="flex-1 flex flex-col min-h-0 overflow-hidden"
               >
-                {/* Tab nav */}
-                <div className="flex border-b border-[#F0EDE8] px-5 bg-[#FAFAF9] overflow-x-auto">
+                {/* Modern Tab Navigation */}
+                <div className="flex border-b border-slate-100 bg-slate-50/80 px-6 overflow-x-auto no-scrollbar">
                   {insightTabs.map(tab => (
                     <button
                       key={tab.id}
                       onClick={() => setActiveInsightTab(tab.id)}
-                      className={`flex items-center gap-1.5 px-3 py-2.5 text-[12px] font-[600] whitespace-nowrap transition-colors duration-150 ${activeInsightTab === tab.id ? T.tabActive : T.tabInactive}`}
+                      className={`flex items-center gap-2 px-6 py-3.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-all
+                        ${activeInsightTab === tab.id 
+                          ? 'border-violet-600 text-violet-700' 
+                          : 'border-transparent text-slate-600 hover:text-slate-900'
+                        }`}
                     >
                       {tab.label}
                       {tab.count !== undefined && tab.count > 0 && (
-                        <span className={`text-[9px] font-[700] px-1.5 py-0.5 rounded-full ${activeInsightTab === tab.id ? 'bg-[#F0EEFF] text-[#5B4FE8]' : 'bg-[#F0EDE8] text-[#9C9189]'}`}>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${activeInsightTab === tab.id ? 'bg-violet-100 text-violet-700' : 'bg-slate-200 text-slate-600'}`}>
                           {tab.count}
                         </span>
                       )}
@@ -321,9 +486,16 @@ export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({
                   ))}
                 </div>
 
-                <div className="p-5">
+                {/* Content Area */}
+                <div className="flex-1 p-6 overflow-auto bg-white">
                   <AnimatePresence mode="wait">
-                    <motion.div key={activeInsightTab} variants={tabContent} initial="hidden" animate="visible" exit="exit">
+                    <motion.div 
+                      key={activeInsightTab} 
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.2 }}
+                    >
                       {activeInsightTab === 'overview'     && <OverviewInsights company={company} enrichment={enrichment} companyData={companyData} />}
                       {activeInsightTab === 'technologies' && <TechnologiesInsights technologies={technologies} />}
                       {activeInsightTab === 'funding'      && <FundingInsights fundingEvents={fundingEvents} enrichment={enrichment} companyData={companyData} />}
@@ -336,13 +508,13 @@ export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({
           </AnimatePresence>
         </motion.div>
 
-        {/* Dept Pie — 260px fixed */}
+        {/* Dept Pie Panel */}
         {departments.length > 0 && (
           <motion.div
-            className={`${T.card} w-[260px] min-w-[260px] flex-shrink-0`}
+            className={`${T.card} w-[272px] min-w-[272px] flex-shrink-0 h-full flex flex-col`}
             initial={{ opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.35, delay: 0.08, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.35, delay: 0.08 }}
           >
             <DeptPiePanel departments={departments} />
           </motion.div>
@@ -381,12 +553,12 @@ export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({
             >
               {/* Filter bar */}
               <div className="flex items-center gap-3 px-5 py-3 border-b border-[#F0EDE8] bg-[#FAFAF9]">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
                   {leadFilters.map(f => (
                     <motion.button
                       key={f.id}
                       onClick={() => setActiveLeadFilter(f.id)}
-                      className={`px-2.5 py-1 text-[11px] font-[600] rounded-lg transition-colors duration-120 ${activeLeadFilter === f.id ? T.filterActive : T.filterInactive}`}
+                      className={`px-2.5 py-1 text-[11px] font-[600] rounded-lg transition-colors duration-120 whitespace-nowrap ${activeLeadFilter === f.id ? T.filterActive : T.filterInactive}`}
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
                     >
                       {f.label}
@@ -394,7 +566,7 @@ export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({
                     </motion.button>
                   ))}
                 </div>
-                <div className="ml-auto relative">
+                <div className="ml-auto relative flex-shrink-0">
                   <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9C9189]" />
                   <input
                     type="text"
@@ -407,49 +579,62 @@ export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({
               </div>
 
               {/* Table */}
+              {/* Table */}
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-[#F0EDE8] bg-[#FAFAF9]">
-                      {['Name','Title','Email','Location'].map((h, i) => (
-                        <th key={i} className="text-left px-5 py-2.5 text-[10px] font-[700] text-[#9C9189] uppercase tracking-[0.08em]">{h}</th>
+                      {['Name', 'Title', 'Contact', 'Location', 'Actions'].map((h, i) => (
+                        <th key={i} className="text-left px-5 py-3 text-[10px] font-[700] text-[#9C9189] uppercase tracking-[0.08em]">
+                          {h}
+                        </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F8F6F3]">
-                    {(isLoadingLeads || isLoadingEmployees) ? (
-                      <tr><td colSpan={4} className="px-5 py-10 text-center">
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="w-7 h-7 rounded-full border-2 border-[#E5E0D8] border-t-[#5B4FE8] animate-spin" />
-                          <p className="text-[11px] text-[#9C9189]">Loading people...</p>
-                        </div>
-                      </td></tr>
-                    ) : filteredLeads.length > 0 ? (
-                      filteredLeads.slice(0, 10).map((lead: any, idx: number) => (
-                        <LeadRow key={lead.id} lead={lead} onEdit={onEditEmployee} navigate={navigate} index={idx} />
+                    {isLoadingEmployees ? (
+                      <tr>
+                        <td colSpan={5} className="px-5 py-12 text-center">
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="w-7 h-7 rounded-full border-2 border-[#E5E0D8] border-t-[#5B4FE8] animate-spin" />
+                            <p className="text-[11px] text-[#9C9189]">Loading people...</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : paginatedLeads.length > 0 ? (
+                      paginatedLeads.map((lead: any, idx: number) => (
+                        <LeadRow
+                          key={lead.id || idx}
+                          lead={lead}
+                          onEdit={onEditEmployee}
+                          index={idx}
+                        />
                       ))
                     ) : (
-                      <tr><td colSpan={4} className="px-5 py-10 text-center">
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="w-12 h-12 rounded-2xl bg-[#F0EDE8] flex items-center justify-center">
-                            <Users size={18} className="text-[#D5CFC5]" />
+                      <tr>
+                        <td colSpan={5} className="px-5 py-12 text-center">
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="w-12 h-12 rounded-2xl bg-[#F0EDE8] flex items-center justify-center">
+                              <Users size={18} className="text-[#D5CFC5]" />
+                            </div>
+                            <p className="text-[12px] text-[#9C9189]">No people found matching filters</p>
                           </div>
-                          <p className="text-[12px] text-[#9C9189]">No people found</p>
-                        </div>
-                      </td></tr>
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                 </table>
               </div>
 
-              {filteredLeads.length > 10 && (
-                <div className="flex items-center justify-between px-5 py-3 border-t border-[#F0EDE8] bg-[#FAFAF9]">
-                  <span className="text-[11px] text-[#9C9189]">Showing 10 of {filteredLeads.length}</span>
-                  <motion.button className="px-3 py-1.5 text-[11px] font-[600] text-[#5B4FE8] border border-[#D9D4FF] bg-[#F0EEFF] rounded-lg hover:bg-[#E8E4FF] transition-colors" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
-                    View all {filteredLeads.length} people
-                  </motion.button>
-                </div>
-              )}
+              {/* Pagination */}
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={filteredLeads.length}
+              />
+
+             
             </motion.div>
           )}
         </AnimatePresence>
@@ -459,29 +644,40 @@ export const CompanyOverviewTab: React.FC<CompanyOverviewTabProps> = ({
 };
 
 // ── Lead Row ───────────────────────────────────────────────────────────────
-const LeadRow = ({ lead, onEdit, navigate, index }: any) => {
-  const seniority = lead.enrichment_people?.[0]?.seniority || lead.seniority;
-  const hasEmail  = lead.email || (lead.enrichment_contact_emails?.length > 0);
-  const location  = [lead.city, lead.state].filter(Boolean).join(', ') || lead.country;
+// ── Lead Row (Updated – Actions column only) ───────────────────────────────
+const LeadRow = ({ lead, onEdit, index }: any) => {
+  const seniority = lead.enrichment_people?.[0]?.enrichment_person_metadata?.seniority || lead.seniority;
+  
+  const email = lead.email || (lead.enrichment_contact_emails?.length > 0 ? lead.enrichment_contact_emails[0].email : null);
+  const phone = lead.mobile || lead.phone_number || (lead.enrichment_contact_phones?.length > 0 ? lead.enrichment_contact_phones[0].number : null);
+  
+  const location = [lead.city, lead.state].filter(Boolean).join(', ') || lead.country || '—';
+  const photo = lead.photo_url || lead.enrichment_people?.[0]?.photo_url;
+
   return (
     <motion.tr
-      className="group hover:bg-[#F8F6F3] transition-colors duration-100 cursor-pointer"
-      custom={index} variants={fadeUp} initial="hidden" animate="visible"
-      onClick={() => onEdit?.(lead)}
+      className="group hover:bg-[#F8F6F3] transition-colors duration-100"
+      custom={index}
+      variants={fadeUp}
+      initial="hidden"
+      animate="visible"
     >
-      <td className="px-5 py-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-[#F0EDE8] border border-[#E5E0D8] flex-shrink-0 overflow-hidden">
-            {(lead.photo_url || lead.enrichment_people?.[0]?.photo_url) ? (
-              <img src={lead.photo_url || lead.enrichment_people?.[0]?.photo_url} alt={lead.name} className="w-full h-full object-cover" />
+      {/* Name */}
+      <td className="px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-2xl bg-[#F0EDE8] border border-[#E5E0D8] flex-shrink-0 overflow-hidden">
+            {photo ? (
+              <img src={photo} alt={lead.name} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-[9px] font-[700] text-[#6A6057]">
+              <div className="w-full h-full flex items-center justify-center text-[10px] font-[700] text-[#6A6057]">
                 {lead.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
               </div>
             )}
           </div>
           <div>
-            <p className="text-[12px] font-[600] text-[#1C1916] group-hover:text-[#5B4FE8] transition-colors leading-tight">{lead.name}</p>
+            <p className="text-[13px] font-semibold text-[#1C1916] group-hover:text-[#5B4FE8] transition-colors">
+              {lead.name}
+            </p>
             {seniority && (
               <span className="text-[9px] font-[600] px-1.5 py-0.5 bg-[#F0EDE8] text-[#9C9189] rounded-md uppercase tracking-[0.04em]">
                 {seniority.replace(/_/g, ' ')}
@@ -490,18 +686,38 @@ const LeadRow = ({ lead, onEdit, navigate, index }: any) => {
           </div>
         </div>
       </td>
-      <td className="px-5 py-3">
-        <p className="text-[12px] text-[#6A6057] truncate max-w-[200px]">{lead.job_title || lead.designation || <span className="text-[#D5CFC5]">—</span>}</p>
+
+      {/* Title */}
+      <td className="px-5 py-4">
+        <p className="text-[13px] text-[#6A6057] truncate max-w-[240px]">
+          {lead.job_title || lead.designation || <span className="text-[#D5CFC5]">—</span>}
+        </p>
       </td>
-      <td className="px-5 py-3">
-        {hasEmail ? (
-          <span className="inline-flex items-center gap-1 text-[10px] font-[600] px-2 py-1 bg-[#F0FDF4] text-[#16A34A] border border-[#BBF7D0] rounded-md">
-            <Mail size={9} />Available
-          </span>
-        ) : <span className="text-[12px] text-[#D5CFC5]">—</span>}
+
+      {/* Contact – Hover Tooltip */}
+      <td className="px-5 py-4">
+        <ContactCell email={email} phone={phone} />
       </td>
-      <td className="px-5 py-3">
-        <span className="text-[12px] text-[#6A6057]">{location || <span className="text-[#D5CFC5]">—</span>}</span>
+
+      {/* Location */}
+      <td className="px-5 py-4">
+        <span className="text-[13px] text-[#6A6057]">{location}</span>
+      </td>
+
+      {/* Actions Column */}
+      <td className="px-5 py-4 text-right">
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit?.(lead);
+          }}
+          className="p-2.5 text-[#9C9189] hover:text-[#5B4FE8] hover:bg-[#F0EEFF] rounded-2xl transition-all"
+          title="View / Edit"
+        >
+          <Eye size={17} />
+        </motion.button>
       </td>
     </motion.tr>
   );
@@ -522,49 +738,76 @@ const OverviewInsights = ({ company, enrichment, companyData }: any) => {
   const tradingExchange = enrichment?.publicly_traded_exchange || companyData?.publicly_traded_exchange;
 
   return (
-    <div className="space-y-5">
-      {stats.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {stats.map((stat, idx) => {
-            const Icon = stat.icon;
-            const val = (stat as any).format ? (stat as any).format(stat.value) : stat.value;
-            return (
-              <motion.div key={idx} custom={idx} variants={fadeUp} initial="hidden" animate="visible"
-                className={`rounded-xl p-4 border ${stat.bg} ${stat.border}`} whileHover={{ scale: 1.02, transition: { duration: 0.15 } }}>
-                <Icon size={14} className={`${stat.color} mb-2`} />
-                <p className="text-[9px] font-[700] text-[#9C9189] uppercase tracking-[0.08em]">{stat.label}</p>
-                <p className="text-[18px] font-[800] text-[#1C1916] mt-1 font-['DM_Mono',monospace] leading-none tracking-[-0.02em]">{val}</p>
-              </motion.div>
-            );
-          })}
-        </div>
-      )}
-      <div className="grid grid-cols-2 gap-4">
-        {tradingSymbol && (
-          <div className="rounded-xl p-4 border border-[#BBF7D0] bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7]">
-            <Activity size={13} className="text-[#16A34A] mb-2" />
-            <p className="text-[9px] font-[700] text-[#16A34A] uppercase tracking-[0.08em]">Listed</p>
-            <p className="text-[14px] font-[800] text-[#14532D] font-['DM_Mono',monospace]">{tradingExchange?.toUpperCase()}: {tradingSymbol}</p>
-          </div>
-        )}
-        {industries.length > 0 && (
-          <div className="rounded-xl p-4 border border-[#D9D4FF] bg-gradient-to-br from-[#F0EEFF] to-[#EDE9FE]">
-            <Briefcase size={13} className="text-[#5B4FE8] mb-2" />
-            <p className="text-[9px] font-[700] text-[#5B4FE8] uppercase tracking-[0.08em]">Industries</p>
-            <div className="flex flex-wrap gap-1 mt-1">
-              {industries.slice(0, 3).map((ind: string, idx: number) => (
-                <span key={idx} className="text-[10px] font-[500] px-2 py-0.5 bg-white text-[#5B4FE8] border border-[#D9D4FF] rounded-md">{ind}</span>
-              ))}
-            </div>
-          </div>
+ <div className="space-y-3">
+  {/* SINGLE LINE ROW */}
+  <div className="flex flex-wrap items-center gap-2">
+    {/* Stats */}
+    {stats.map((stat, idx) => {
+      const Icon = stat.icon;
+      const val = (stat as any).format
+        ? (stat as any).format(stat.value)
+        : stat.value;
+
+      return (
+        <motion.div
+          key={idx}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border ${stat.bg} ${stat.border}`}
+          whileHover={{ scale: 1.04 }}
+        >
+          <Icon size={11} className={stat.color} />
+          <span className="text-[9px] font-[700] uppercase tracking-wide text-[#9C9189]">
+            {stat.label}
+          </span>
+          <span className="text-[11px] font-[800] text-[#1C1916] font-['DM_Mono',monospace]">
+            {val}
+          </span>
+        </motion.div>
+      );
+    })}
+
+    {/* Trading Info */}
+    {tradingSymbol && (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#BBF7D0] bg-[#F0FDF4]">
+        <Activity size={11} className="text-[#16A34A]" />
+        <span className="text-[9px] font-[700] uppercase text-[#16A34A]">
+          {tradingExchange?.toUpperCase()}
+        </span>
+        <span className="text-[11px] font-[800] text-[#14532D] font-['DM_Mono',monospace]">
+          {tradingSymbol}
+        </span>
+      </div>
+    )}
+
+    {/* Industries */}
+    {industries.length > 0 && (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#D9D4FF] bg-[#F0EEFF]">
+        <Briefcase size={11} className="text-[#5B4FE8]" />
+        {industries.slice(0, 2).map((ind: string, idx: number) => (
+          <span
+            key={idx}
+            className="text-[9px] font-[600] px-1.5 py-0.5 rounded bg-white text-[#5B4FE8] border border-[#D9D4FF]"
+          >
+            {ind}
+          </span>
+        ))}
+        {industries.length > 2 && (
+          <span className="text-[9px] font-[700] text-[#5B4FE8]">
+            +{industries.length - 2}
+          </span>
         )}
       </div>
-      {(enrichment?.short_description || company?.about) && (
-        <div className="bg-[#F8F6F3] rounded-xl p-4 border border-[#EDE9E3]">
-          <p className="text-[12px] text-[#6A6057] leading-[1.65]">{enrichment?.short_description || company?.about}</p>
-        </div>
-      )}
+    )}
+  </div>
+
+  {/* DESCRIPTION */}
+  {(enrichment?.short_description || company?.about) && (
+    <div className="bg-[#F0EEFF] rounded-xl p-4 border border-[#EDE9E3]">
+      <p className="text-[12px] text-[#6A6057] leading-[1.65]">
+        {enrichment?.short_description || company?.about}
+      </p>
     </div>
+  )}
+</div>
   );
 };
 
@@ -588,7 +831,6 @@ const TechnologiesInsights = ({ technologies }: { technologies: any[] }) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 px-4 py-3 bg-[#F0EEFF] border border-[#D9D4FF] rounded-xl">
-        <Code2 size={15} className="text-[#5B4FE8]" />
         <span className="text-[13px] font-[650] text-[#5B4FE8]">{technologies.length} technologies detected</span>
       </div>
       {Object.entries(grouped).slice(0, 6).map(([cat, techs]: [string, any]) => {
@@ -682,4 +924,4 @@ const EmptyState = ({ message, icon }: { message: string; icon: React.ReactNode 
 );
 
 export default CompanyOverviewTab;
-// 2
+// ── Company Overview Tab ───────────────────────────────────────────────────

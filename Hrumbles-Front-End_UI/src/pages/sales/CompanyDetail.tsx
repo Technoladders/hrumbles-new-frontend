@@ -2,6 +2,8 @@
 // ✅ ALL business logic preserved verbatim
 // Layout: sidebar removed → full-width main canvas
 //         EmployeeGrowthIntelligence added below CompanyOverviewTab
+// Changes: Updated contacts query to fetch by company_id OR (company_id is null AND company_name matches)
+
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from 'react-redux';
@@ -34,7 +36,7 @@ const blockIn = {
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 const S = {
-  page:    "min-h-screen bg-[#F6F4F1] font-['DM_Sans',system-ui,sans-serif]",
+  page:    "min-h-screen font-['DM_Sans',system-ui,sans-serif]",
   bar:     "sticky top-0 z-50 bg-white/96 backdrop-blur-sm border-b border-[#E5E0D8]",
   barInner:"px-6 py-0",
   bc:      "flex items-center gap-1.5 text-[11px] font-[500] text-[#9C9189] py-2 border-b border-[#F0EDE8]",
@@ -65,7 +67,7 @@ const CompanyDetail = () => {
   const [isCompanyEditDialogOpen, setIsCompanyEditDialogOpen] = useState(false);
   const [listModalOpen, setListModalOpen] = useState(false);
 
-  // ── Data Fetching (preserved verbatim) ────────────────────────────────────
+  // ── Data Fetching ─────────────────────────────────────────────────────────
   const { data: company, isLoading, error: companyError, refetch: refetchCompany } = useQuery({
     queryKey: ['company-detail', companyId],
     queryFn: async () => {
@@ -96,8 +98,12 @@ const CompanyDetail = () => {
     error: contactsError,
     refetch: refetchContacts
   } = useQuery({
-    queryKey: ['company-contacts-all', companyId, company?.apollo_org_id],
+    queryKey: ['company-contacts-all', companyId, company?.apollo_org_id, company?.name],
     queryFn: async () => {
+      // 1. Fetch Direct Contacts (Matched by ID OR Matched by Name if ID is null)
+      // We escape the company name to safely put it in the filter string
+      const safeCompanyName = company.name.replace(/"/g, ''); 
+      
       const { data: directContacts, error: directError } = await supabase
         .from('contacts')
         .select(`
@@ -112,10 +118,14 @@ const CompanyDetail = () => {
           enrichment_contact_phones(*),
           enrichment_raw_responses(*)
         `)
-        .eq('company_id', companyId);
+        // Logic: company_id = ID OR (company_id IS NULL AND company_name = Name)
+        .or(`company_id.eq.${companyId},and(company_id.is.null,company_name.eq."${safeCompanyName}")`);
+        
       if (directError) throw directError;
 
       let apolloContacts: any[] = [];
+      
+      // 2. Fetch Apollo enriched people if org ID exists (for suggestions)
       if (company?.apollo_org_id) {
         const { data: enrichedPeople, error: enrichError } = await supabase
           .from('enrichment_people')
@@ -139,7 +149,7 @@ const CompanyDetail = () => {
           .filter((ep: any) => ep.contact)
           .map((ep: any) => ({
             ...ep.contact,
-            enrichment_people: [ep],
+            enrichment_people: [ep], // wrap in array to match structure
             enrichment_contact_emails: ep.contact.enrichment_contact_emails,
             enrichment_contact_phones: ep.contact.enrichment_contact_phones,
             enrichment_raw_responses: ep.contact.enrichment_raw_responses,
@@ -147,6 +157,7 @@ const CompanyDetail = () => {
           }));
       }
 
+      // 3. Deduplicate
       const contactMap = new Map();
       (directContacts || []).forEach((c: any) => contactMap.set(c.id, c));
       apolloContacts.forEach((c: any) => { if (!contactMap.has(c.id)) contactMap.set(c.id, c); });
@@ -178,7 +189,7 @@ const CompanyDetail = () => {
   });
 
   const employees    = allContacts.filter(c => c.source_table === 'employee_associations' || (c.source_table === 'contacts' && !c.is_primary_contact));
-  const contacts     = allContacts.filter(c => c.source_table === 'contacts' && c.is_primary_contact);
+  // If we have specific employees use them, otherwise use all contacts found
   const employeesToShow = employees.length > 0 ? employees : allContacts;
 
   useEffect(() => {
@@ -186,7 +197,7 @@ const CompanyDetail = () => {
     if (contactsError) toast({ title: "Error Loading Contacts", description: contactsError.message, variant: "destructive" });
   }, [companyError, contactsError, toast]);
 
-  // ── Handlers (preserved verbatim) ─────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleDataUpdate = () => {
     refetchCompany();
     refetchContacts();
@@ -207,7 +218,7 @@ const CompanyDetail = () => {
     }
   };
 
-const handleRefreshIntelligence = async () => {
+  const handleRefreshIntelligence = async () => {
     setIsSyncing(true);
     try {
       let result;
@@ -226,12 +237,9 @@ const handleRefreshIntelligence = async () => {
         throw new Error("Cannot sync: Missing Website/Domain.");
       }
 
-      // Transport error (network failure, function crash)
       if (result.error) throw result.error;
-
       const data = result.data;
 
-      // Handle 402 insufficient credits (returned as data, not transport error)
       if (data?.error === 'insufficient_credits') {
         toast({
           variant: "destructive",
@@ -241,7 +249,6 @@ const handleRefreshIntelligence = async () => {
         return;
       }
 
-      // Handle not found
       if (data?.error === 'not_found') {
         toast({
           variant: "destructive",
@@ -269,7 +276,7 @@ const handleRefreshIntelligence = async () => {
   // ── Loading ────────────────────────────────────────────────────────────────
   if (isLoading || !company) {
     return (
-      <div className="min-h-screen bg-[#F6F4F1] flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -284,7 +291,7 @@ const handleRefreshIntelligence = async () => {
     );
   }
 
-  // ── Data Derivations (preserved verbatim) ─────────────────────────────────
+  // ── Data Derivations ──────────────────────────────────────────────────────
   const enrichment = company?.enrichment_organizations;
   const location   = [
     enrichment?.city || company.location?.split(',')[0],

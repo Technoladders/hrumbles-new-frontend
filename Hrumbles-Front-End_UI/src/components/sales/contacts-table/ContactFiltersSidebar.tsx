@@ -1,7 +1,8 @@
 // src/components/sales/contacts-table/ContactFiltersSidebar.tsx
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Table } from '@tanstack/react-table';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
+import { useSearchParams } from 'react-router-dom';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { 
@@ -73,6 +74,7 @@ export function ContactFiltersSidebar({
   
   // Fetch statistics from database
   const { data: stats, isLoading: statsLoading } = useFilterStatistics({ fileId });
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Single accordion value state - only one section open at a time
   const [openSection, setOpenSection] = useState<string>('job-titles');
@@ -131,8 +133,16 @@ export function ContactFiltersSidebar({
     filters.jobTitles,
     filters.managementLevels,
     filters.departments,
-    filters.functions
+    filters.functions,
   ]);
+
+  // NEW: Debounce search effect to trigger server-side search
+useEffect(() => {
+  const timer = setTimeout(() => {
+    applyFilters();
+  }, 500); // 500ms debounce
+  return () => clearTimeout(timer);
+}, [filters.search]); // Run only when search text changes
 
   // Toggle array item helper
   const toggleArrayItem = (field: keyof typeof filters, value: string) => {
@@ -146,6 +156,7 @@ export function ContactFiltersSidebar({
   };
 
   // Apply filters - update both table and Redux
+  // Apply filters - update both table and Redux
   const applyFilters = useCallback(() => {
     // Reset table filters first
     table.resetColumnFilters();
@@ -154,7 +165,8 @@ export function ContactFiltersSidebar({
     const reduxFilters: any = {};
 
     if (filters.search) {
-      table.getColumn('name')?.setFilterValue(filters.search);
+      // NOTE: We do NOT set client-side column filter here for search,
+      // because we want the server to handle the search across all records.
       reduxFilters.search = filters.search;
     }
 
@@ -226,8 +238,16 @@ export function ContactFiltersSidebar({
 
     // Dispatch to Redux for server-side filtering
     dispatch(setReduxFilters(reduxFilters));
-  }, [filters, table, dispatch]);
 
+    // CRITICAL: Reset pagination to page 1 when filters change
+    // This prevents Tanstack table from staying on old page (e.g. page 25)
+    setSearchParams(prev => {
+      prev.set('page', '1');
+      return prev;
+    });
+  }, [filters, table, dispatch, setSearchParams]);   // ← setSearchParams added to deps
+
+  // Reset all filters
   // Reset all filters
   const handleReset = () => {
     setFilters({
@@ -250,6 +270,12 @@ export function ContactFiltersSidebar({
     });
     table.resetColumnFilters();
     dispatch(setReduxFilters({}));
+
+    // ALSO reset pagination URL when clearing all filters
+    setSearchParams(prev => {
+      prev.set('page', '1');
+      return prev;
+    });
   };
 
   // Count active filters
@@ -324,10 +350,11 @@ export function ContactFiltersSidebar({
             placeholder="Search contacts..." 
             className="pl-8 h-9 text-xs border-slate-200 bg-white"
             value={filters.search}
-            onChange={(e) => {
-              setFilters(prev => ({ ...prev, search: e.target.value }));
-              table.getColumn('name')?.setFilterValue(e.target.value || undefined);
-            }}
+onChange={(e) => {
+  // Update local state only.
+  // The useEffect hook will debounce this and call applyFilters() to update Redux/Server.
+  setFilters(prev => ({ ...prev, search: e.target.value }));
+}}
           />
         </div>
 
@@ -676,7 +703,7 @@ export function ContactFiltersSidebar({
         <div className="flex-shrink-0 p-3 border-t border-slate-200 bg-slate-50">
           <Button
             onClick={applyFilters}
-            className="w-full h-9 text-xs font-semibold bg-white hover:bg-purple-700"
+            className="w-full h-9 text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700"
           >
             Apply {activeFiltersCount} Filter{activeFiltersCount !== 1 ? 's' : ''}
           </Button>
