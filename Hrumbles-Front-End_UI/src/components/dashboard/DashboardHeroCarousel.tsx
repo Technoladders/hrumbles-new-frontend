@@ -5,42 +5,46 @@ import { GreetingSlide, EventsSlide, CelebrationsSlide } from './DashboardCarous
 
 interface DashboardHeroCarouselProps {
   organizationId: string;
-  employeeId?: string; // Optional: for employee-specific data
+  employeeId?: string;
   user: any;
 }
 
-export const DashboardHeroCarousel: React.FC<DashboardHeroCarouselProps> = ({ organizationId, employeeId, user }) => {
-  // The hook now receives the optional employeeId
-  const { data: dashboardData, isLoading: dashboardDataLoading } = useDashboardData(organizationId, employeeId);
+export const DashboardHeroCarousel: React.FC<DashboardHeroCarouselProps> = ({
+  organizationId,
+  employeeId,
+  user,
+}) => {
+  const { data: dashboardData, isLoading: dashboardDataLoading } = useDashboardData(
+    organizationId,
+    employeeId
+  );
 
   const heroSlides: CarouselSlide[] = useMemo(() => {
     if (!dashboardData) return [];
 
-     const { events, celebrations } = dashboardData;
-    
-    // --- START: Conditional Logic ---
+    const { events, celebrations } = dashboardData;
+
     const hasEvents = events && events.length > 0;
-    const hasCelebrations = celebrations && (
-      celebrations.birthdays.length > 0 ||
-      celebrations.anniversaries.length > 0 ||
-      celebrations.newJoiners.length > 0
-    );
-  // If there are no events AND no celebrations, only show the greeting.
+    const hasCelebrations =
+      celebrations &&
+      (celebrations.birthdays.length > 0 ||
+        celebrations.anniversaries.length > 0 ||
+        celebrations.newJoiners.length > 0);
+
     if (!hasEvents && !hasCelebrations) {
       return [
         {
           content: <GreetingSlide user={user} />,
-          gradient: 'bg-gradient-to-br from-purple-600 to-indigo-700',
-        }
+          gradient: 'bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700',
+        },
       ];
     }
-    
-    // Otherwise, build the full list of slides.
-    const slides = [
+
+    const slides: CarouselSlide[] = [
       {
         content: <GreetingSlide user={user} />,
-        gradient: 'bg-gradient-to-br from-purple-600 to-indigo-700',
-      }
+        gradient: 'bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700',
+      },
     ];
 
     if (hasEvents) {
@@ -56,14 +60,9 @@ export const DashboardHeroCarousel: React.FC<DashboardHeroCarouselProps> = ({ or
         gradient: 'bg-gradient-to-br from-emerald-500 to-teal-600',
       });
     }
-    
-    return slides;
-  }, [dashboardData]);
 
-  return (
-    <HeroCarousel 
-      slides={heroSlides} 
-      isLoading={dashboardDataLoading}
-    />
-  );
+    return slides;
+  }, [dashboardData, user]);
+
+  return <HeroCarousel slides={heroSlides} isLoading={dashboardDataLoading} />;
 };

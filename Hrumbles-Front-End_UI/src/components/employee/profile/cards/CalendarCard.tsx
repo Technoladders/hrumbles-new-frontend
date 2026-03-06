@@ -1,547 +1,373 @@
-import React, { useState, useEffect } from 'react';
-import { Card } from '@/components/ui/card';
-import { Calendar, Users, Sun } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, format, addDays, isWithinInterval, startOfWeek, endOfWeek } from 'date-fns';
-import { CalendarHeader } from './calendar/CalendarHeader';
-import { CalendarGrid } from './calendar/CalendarGrid';
-import { InterviewsList } from './calendar/InterviewsList';
-import { CalendarDay } from './calendar/types';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  isSameDay,
+  isSameMonth,
+  isToday,
+  addMonths,
+  subMonths,
+  getDay,
+} from "date-fns";
+import { ChevronLeft, ChevronRight, CalendarDays, Video, MapPin, Clock } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { Link } from "react-router-dom";
+
+interface Interview {
+  name: string;
+  interview_date: string;
+  interview_time: string;
+  interview_location: string;
+  interview_type: string;
+  round: string;
+  employee_name?: string;
+  candidate_id?: string;
+  job_id?: string;
+}
 
 interface CalendarCardProps {
   employeeId: string;
   isHumanResourceEmployee: boolean;
   role?: string;
-  organizationId?: string;
+  organizationId: string;
 }
 
-interface Holiday {
-  date: string;
-  localName: string;
-  name: string;
-}
+const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
-interface LeaveRequest {
-  id: string;
-  start_date: string;
-  end_date: string;
-  status: 'approved' | 'pending' | 'rejected' | 'cancelled';
-  notes: string | null;
-  employee_id?: string;
-}
-
-const mockHolidays: Holiday[] = [
-  { date: '2025-01-01', localName: "New Year's Day", name: "New Year's Day" },
-  { date: '2025-01-26', localName: 'Republic Day', name: 'Republic Day' },
-  { date: '2025-08-15', localName: 'Independence Day', name: 'Independence Day' },
-  { date: '2025-10-02', localName: 'Gandhi Jayanti', name: 'Gandhi Jayanti' },
-  { date: '2025-12-25', localName: 'Christmas Day', name: 'Christmas Day' },
-];
-
-const mockLeaves: LeaveRequest[] = [];
-
-// --- SUB-COMPONENT: Holidays List ---
-const HolidaysList: React.FC<{ holidays: Holiday[], leaves: LeaveRequest[], selectedDate: Date }> = ({ holidays, leaves, selectedDate }) => {
-  const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
-  const filteredHolidays = holidays.filter(holiday => holiday.date === selectedDateString);
-  const filteredLeaves = leaves.filter(leave => {
-    const start = new Date(leave.start_date);
-    const end = new Date(leave.end_date);
-    return isSameDay(selectedDate, start) || isSameDay(selectedDate, end) || (selectedDate >= start && selectedDate <= end);
-  });
-
-  const today = new Date();
-  const next30Days = addDays(today, 30);
-  const upcomingHolidays = holidays
-    .filter(holiday => {
-      const holidayDate = new Date(holiday.date);
-      return holidayDate >= today && holidayDate <= next30Days && holiday.date !== selectedDateString;
-    })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  const upcomingLeaves = leaves
-    .filter(leave => {
-      const start = new Date(leave.start_date);
-      const end = new Date(leave.end_date);
-      return (start >= today && start <= next30Days) || (end >= today && end <= next30Days) || isWithinInterval(today, { start, end });
-    })
-    .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
-
-  return (
-    <div className="overflow-y-auto max-h-[250px] pr-2 overflow-x-hidden">
-      <h4 className="text-[10px] font-semibold mb-2">Festivals & Leaves for {format(selectedDate, 'MMMM d, yyyy')}</h4>
-      {filteredHolidays.length === 0 && filteredLeaves.length === 0 ? (
-       <div className="mb-4 p-3 bg-red-50 rounded-lg">
-          <p className="text-[10px] italic text-gray-600">No Festivals or leaves on this date</p>
-        </div>
-      ) : (
-        <>
-          {filteredHolidays.map((holiday, index) => (
-            <div key={`holiday-${index}`} className="mb-2 p-3 bg-blue-50 rounded-lg">
-              <p className="text-[10px] font-semibold">{holiday.localName}</p>
-              <p className="text-[8px] text-gray-600">{holiday.name}</p>
-            </div>
-          ))}
-          {filteredLeaves.map((leave, index) => (
-            <div key={`leave-${index}`} className={`mb-2 p-3 ${leave.status === 'approved' ? 'bg-green-50' : 'bg-amber-50'} rounded-lg`}>
-              <p className="text-[10px] font-semibold">Leave ({leave.status})</p>
-              <p className="text-[8px] text-gray-600">{leave.notes || 'No notes provided'}</p>
-              <p className="text-[8px] text-gray-600">
-                {leave.start_date === leave.end_date
-                  ? leave.start_date
-                  : `${leave.start_date} to ${leave.end_date}`}
-              </p>
-            </div>
-          ))}
-        </>
-      )}
-      <h4 className="text-[10px] font-semibold mb-2">Upcoming Festivals & Leaves (Next 30 Days)</h4>
-      {upcomingHolidays.length > 0 || upcomingLeaves.length > 0 ? (
-        <>
-          {upcomingHolidays.map((holiday, index) => (
-            <div key={`upcoming-holiday-${index}`} className="mb-2 p-3 bg-blue-50 rounded-lg">
-              <p className="text-[10px] font-semibold">{holiday.localName}</p>
-              <p className="text-[8px] text-gray-600">{holiday.name} - {holiday.date}</p>
-            </div>
-          ))}
-          {upcomingLeaves.map((leave, index) => (
-            <div key={`upcoming-leave-${index}`} className={`mb-2 p-3 ${leave.status === 'approved' ? 'bg-green-50' : 'bg-amber-50'} rounded-lg`}>
-              <p className="text-[10px] font-semibold">Leave ({leave.status})</p>
-              <p className="text-[8px] text-gray-600">{leave.notes || 'No notes provided'}</p>
-              <p className="text-[8px] text-gray-600">
-                {leave.start_date === leave.end_date
-                  ? leave.start_date
-                  : `${leave.start_date} to ${leave.end_date}`}
-              </p>
-            </div>
-          ))}
-        </>
-      ) : (
-        <div className="text-gray-500 italic text-[10px]">No upcoming festivals or leaves</div>
-      )}
-    </div>
-  );
-};
-
-// --- SUB-COMPONENT: All Events List ---
-const AllEventsList: React.FC<{ interviewDates: string[], holidays: Holiday[], leaves: LeaveRequest[], selectedDate: Date, isHumanResourceEmployee: boolean }> = ({ interviewDates, holidays, leaves, selectedDate, isHumanResourceEmployee }) => {
-  const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
-  const hasInterviews = isHumanResourceEmployee && interviewDates.includes(selectedDateString);
-  const filteredHolidays = holidays.filter(holiday => holiday.date === selectedDateString);
-  const filteredLeaves = leaves.filter(leave => {
-    const start = new Date(leave.start_date);
-    const end = new Date(leave.end_date);
-    return isSameDay(selectedDate, start) || isSameDay(selectedDate, end) || (selectedDate >= start && selectedDate <= end);
-  });
-
-  const today = new Date();
-  const next30Days = addDays(today, 30);
-  const upcomingInterviews = isHumanResourceEmployee
-    ? interviewDates
-        .filter(date => {
-          const interviewDate = new Date(date);
-          return interviewDate >= today && interviewDate <= next30Days && !isSameDay(interviewDate, selectedDate);
-        })
-        .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
-    : [];
-  const upcomingHolidays = holidays
-    .filter(holiday => {
-      const holidayDate = new Date(holiday.date);
-      return holidayDate >= today && holidayDate <= next30Days && holiday.date !== selectedDateString;
-    })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  const upcomingLeaves = leaves
-    .filter(leave => {
-      const start = new Date(leave.start_date);
-      const end = new Date(leave.end_date);
-      return (start >= today && start <= next30Days) || (end >= today && end <= next30Days) || isWithinInterval(today, { start, end });
-    })
-    .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
-
-  return (
-    <div className="overflow-y-auto max-h-[320px] pr-2 overflow-x-hidden">
-      <h4 className="text-[10px] font-semibold mb-2">Events for {format(selectedDate, 'MMMM d, yyyy')}</h4>
-      {hasInterviews || filteredHolidays.length > 0 || filteredLeaves.length > 0 ? (
-        <>
-          {hasInterviews && (
-            <div className="mb-2 p-3 bg-purple-50 rounded-lg">
-              <p className="text-[10px] font-semibold">Interview Scheduled</p>
-              <p className="text-[8px] text-gray-600">Check Interviews tab for details</p>
-            </div>
-          )}
-          {filteredHolidays.map((holiday, index) => (
-            <div key={`holiday-${index}`} className="mb-2 p-3 bg-blue-50 rounded-lg">
-              <p className="text-[10px] font-semibold">{holiday.localName}</p>
-              <p className="text-[8px] text-gray-600">{holiday.name}</p>
-            </div>
-          ))}
-          {filteredLeaves.map((leave, index) => (
-            <div key={`leave-${index}`} className={`mb-2 p-3 ${leave.status === 'approved' ? 'bg-green-50' : 'bg-amber-50'} rounded-lg`}>
-              <p className="text-[10px] font-semibold">Leave ({leave.status})</p>
-              <p className="text-[8px] text-gray-600">{leave.notes || 'No notes provided'}</p>
-              <p className="text-[8px] text-gray-600">
-                {leave.start_date === leave.end_date
-                  ? leave.start_date
-                  : `${leave.start_date} to ${leave.end_date}`}
-              </p>
-            </div>
-          ))}
-        </>
-      ) : (
-         <div className="mb-4 p-3 bg-red-50 rounded-lg">
-          <p className="text-[10px] italic text-gray-600">No events on this date</p>
-        </div>
-      )}
-      <h4 className="text-[10px] font-semibold mb-2">Upcoming Events (Next 30 Days)</h4>
-      {upcomingInterviews.length > 0 || upcomingHolidays.length > 0 || upcomingLeaves.length > 0 ? (
-        <>
-          {upcomingInterviews.map((date, index) => (
-            <div key={`upcoming-interview-${index}`} className="mb-2 p-3 bg-purple-50 rounded-lg">
-              <p className="text-[10px] font-semibold">Interview Scheduled</p>
-              <p className="text-[8px] text-gray-600">Date: {date}</p>
-            </div>
-          ))}
-          {upcomingHolidays.map((holiday, index) => (
-            <div key={`upcoming-holiday-${index}`} className="mb-2 p-3 bg-blue-50 rounded-lg">
-              <p className="text-[10px] font-semibold">{holiday.localName}</p>
-              <p className="text-[8px] text-gray-600">{holiday.name} - {holiday.date}</p>
-            </div>
-          ))}
-          {upcomingLeaves.map((leave, index) => (
-            <div key={`upcoming-leave-${index}`} className={`mb-2 p-3 ${leave.status === 'approved' ? 'bg-green-50' : 'bg-amber-50'} rounded-lg`}>
-              <p className="text-[10px] font-semibold">Leave ({leave.status})</p>
-              <p className="text-[8px] text-gray-600">{leave.notes || 'No notes provided'}</p>
-              <p className="text-[8px] text-gray-600">
-                {leave.start_date === leave.end_date
-                  ? leave.start_date
-                  : `${leave.start_date} to ${leave.end_date}`}
-              </p>
-            </div>
-          ))}
-        </>
-      ) : (
-        <div className="text-gray-500 italic text-[10px]">No upcoming events</div>
-      )}
-    </div>
-  );
-};
-
-// --- MAIN COMPONENT ---
-export const CalendarCard: React.FC<CalendarCardProps> = ({ employeeId, isHumanResourceEmployee, role, organizationId }) => {
+export const CalendarCard: React.FC<CalendarCardProps> = ({
+  employeeId,
+  isHumanResourceEmployee,
+  role,
+  organizationId,
+}) => {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [interviewDates, setInterviewDates] = useState<string[]>([]);
-  const [holidays, setHolidays] = useState<Holiday[]>([]);
-  const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('events');
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [interviews, setInterviews] = useState<Interview[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
+  // Fetch interviews
   useEffect(() => {
-    const fetchData = async () => {
-      if (!organizationId) {
-        setIsLoading(false);
-        return;
-      }
-
+    const fetchInterviews = async () => {
+      setIsLoading(true);
       try {
-        setIsLoading(true);
-        console.log('Fetching data for employeeId:', employeeId, 'role:', role, 'organizationId:', organizationId);
+        const { data: allInterviews, error } = await supabase.rpc("get_upcoming_interviews", {
+          p_organization_id: organizationId,
+        });
+        if (error) throw error;
+        if (!allInterviews) { setInterviews([]); return; }
 
-        let fullName = '';
-        if (role !== 'organization_superadmin') {
-          const { data: employeeData, error: employeeError } = await supabase
-            .from('hr_employees')
-            .select('first_name, last_name')
-            .eq('id', employeeId)
+        let list = allInterviews as Interview[];
+        if (role !== "organization_superadmin") {
+          const { data: emp } = await supabase
+            .from("hr_employees")
+            .select("first_name, last_name")
+            .eq("id", employeeId)
             .single();
-
-          if (employeeError || !employeeData) {
-            throw new Error(`Employee fetch failed: ${employeeError?.message || 'No employee found'}`);
+          if (emp) {
+            const fullName = `${emp.first_name} ${emp.last_name}`;
+            list = list.filter((i) => i.employee_name === fullName);
+          } else {
+            list = [];
           }
-          fullName = `${employeeData.first_name} ${employeeData.last_name}`;
         }
 
-        // Fetch interview dates
-        if (isHumanResourceEmployee || role === 'organization_superadmin') {
-          const { data: statusData, error: statusError } = await supabase
-            .from("job_statuses")
-            .select("id")
-            .eq("organization_id", organizationId)
-            .in("name", ["Interview", "Interviews"])
-            .single();
+        list.sort((a, b) => {
+          const dA = new Date(`${a.interview_date}T${a.interview_time || "00:00:00"}+05:30`);
+          const dB = new Date(`${b.interview_date}T${b.interview_time || "00:00:00"}+05:30`);
+          return dA.getTime() - dB.getTime();
+        });
 
-          if (statusError) {
-            console.warn("Could not find the interview status for this organization.", statusError);
-            setInterviewDates([]); 
-          } else if (statusData) {
-            const interviewStatusId = statusData.id;
-            const query = supabase
-              .from('hr_job_candidates')
-              .select('interview_date')
-              .eq('main_status_id', interviewStatusId)
-              .not('interview_date', 'is', null)
-              .eq('organization_id', organizationId);
-
-            if (role !== 'organization_superadmin') {
-              query.eq('applied_from', fullName);
-            }
-
-            const { data: candidatesData, error: candidatesError } = await query;
-            if (candidatesError) throw new Error(`Candidates fetch failed: ${candidatesError.message}`);
-            
-            const interviewDatesData = candidatesData.map(candidate => candidate.interview_date);
-            setInterviewDates(interviewDatesData);
-          }
-        } else {
-          setInterviewDates([]);
-        }
-
-        // Fetch holidays
-        const year = 2025;
-        const apiKey = import.meta.env.VITE_GOOGLE_CALENDAR_KEY;
-        const calendarId = 'in.indian%23holiday@group.v.calendar.google.com';
-        const timeMin = `${year}-01-01T00:00:00Z`;
-        const timeMax = `${year}-12-31T23:59:59Z`;
-        try {
-          const response = await fetch(
-            `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?` +
-            `timeMin=${timeMin}&timeMax=${timeMax}&key=${apiKey}`
-          );
-          if (!response.ok) throw new Error(`Google Calendar API failed: ${response.statusText}`);
-          const data = await response.json();
-          const holidayData = data.items
-            .filter((event: any) => event.start?.date && event.summary)
-            .map((event: any) => ({
-              date: event.start.date,
-              localName: event.summary,
-              name: event.summary,
-            }));
-          setHolidays(holidayData.length > 0 ? holidayData : mockHolidays);
-        } catch (holidayError: any) {
-          console.error('Holiday fetch error:', holidayError.message);
-          setHolidays(mockHolidays);
-        }
-
-        // Fetch leave requests
-        const leaveQuery = supabase
-          .from('leave_requests')
-          .select('id, start_date, end_date, status, notes, employee_id')
-          .in('status', ['approved', 'pending']);
-
-        if (role !== 'organization_superadmin') {
-          leaveQuery.eq('employee_id', employeeId);
-        }
-
-        const { data: leaveData, error: leaveError } = await leaveQuery;
-        if (leaveError) throw new Error(`Leave requests fetch failed: ${leaveError.message}`);
-        setLeaves(leaveData.length > 0 ? leaveData : mockLeaves);
-
-      } catch (error: any) {
-        console.error('Failed to fetch data:', error.message);
-        toast.error(`Failed to load calendar data: ${error.message}`);
-        setInterviewDates([]);
-        setHolidays(mockHolidays);
-        setLeaves(mockLeaves);
+        setInterviews(list);
+      } catch (err) {
+        console.error("Error fetching interviews:", err);
+        toast.error("Failed to load interviews");
       } finally {
         setIsLoading(false);
       }
     };
+    fetchInterviews();
+  }, [employeeId, role, organizationId]);
 
-    fetchData();
-  }, [employeeId, isHumanResourceEmployee, role]);
+  // Build calendar grid
+  const monthStart = startOfMonth(currentDate);
+  const monthEnd = endOfMonth(currentDate);
+  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const startPad = getDay(monthStart); // 0=Sun
+  const paddedDays = [...Array(startPad).fill(null), ...days];
 
-  const generateMonth = (date: Date): CalendarDay[] => {
-    const start = startOfWeek(startOfMonth(date));
-    const end = endOfWeek(endOfMonth(date));
-    const days = eachDayOfInterval({ start, end });
+  // Interview date set for fast lookup
+  const interviewDates = new Set(
+    interviews.map((i) => format(new Date(i.interview_date), "yyyy-MM-dd"))
+  );
 
-    return days.map(day => ({
-      date: day,
-      isCurrentMonth: isSameMonth(day, date),
-      isToday: isSameDay(day, new Date()),
-      isSunday: day.getDay() === 0,
-      hasInterview: (isHumanResourceEmployee || role === 'organization_superadmin') && isInterviewDay(day),
-      hasHoliday: isHolidayDay(day),
-      hasLeave: isLeaveDay(day),
-      leaveStatus: getLeaveStatus(day),
-    }));
+  // Selected day's interviews
+  const selectedInterviews = interviews.filter((i) =>
+    isSameDay(new Date(i.interview_date), selectedDate)
+  );
+
+  const formatTime = (time: string) => {
+    if (!time) return "";
+    const [h, m] = time.split(":");
+    const d = new Date();
+    d.setHours(parseInt(h), parseInt(m));
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   };
-
-  const isInterviewDay = (date: Date) => {
-    const dateString = format(date, 'yyyy-MM-dd');
-    return interviewDates.includes(dateString);
-  };
-
-  const isHolidayDay = (date: Date) => {
-    const dateString = format(date, 'yyyy-MM-dd');
-    return holidays.some(holiday => holiday.date === dateString);
-  };
-
-  const isLeaveDay = (date: Date) => {
-    const dateString = format(date, 'yyyy-MM-dd');
-    return leaves.some(leave => {
-      const start = new Date(leave.start_date);
-      const end = new Date(leave.end_date);
-      return dateString >= format(start, 'yyyy-MM-dd') && dateString <= format(end, 'yyyy-MM-dd');
-    });
-  };
-
-  const getLeaveStatus = (date: Date): 'approved' | 'pending' | null => {
-    const dateString = format(date, 'yyyy-MM-dd');
-    const leave = leaves.find(leave => {
-      const start = new Date(leave.start_date);
-      const end = new Date(leave.end_date);
-      return dateString >= format(start, 'yyyy-MM-dd') && dateString <= format(end, 'yyyy-MM-dd');
-    });
-    return leave ? leave.status as 'approved' | 'pending' : null;
-  };
-
-  const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
-  const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
-
-  const handleDateSelect = (date: Date, hasInterview: boolean, hasHoliday: boolean, hasLeave: boolean) => {
-    setSelectedDate(date);
-    if ((isHumanResourceEmployee || role === 'organization_superadmin') && hasInterview) {
-      setActiveTab('interviews');
-    } else if (hasHoliday || hasLeave) {
-      setActiveTab('holidays');
-    } else {
-      setActiveTab('events');
-    }
-  };
-
-  const days = generateMonth(currentDate);
-
-  if (isLoading) {
-    return <div className="text-center text-sm text-gray-500">Loading calendar data...</div>;
-  }
 
   return (
-    <Card className="p-4 hover:shadow-md transition-shadow h-[350px] overflow-hidden ">
-      <div className="grid grid-cols-[2fr_3fr] gap-4 h-full">
-        <div className="bg-white rounded-lg p-5 flex flex-col space-y-2 min-w-0">
-          <CalendarHeader 
-            currentDate={currentDate}
-            onPrevMonth={prevMonth}
-            onNextMonth={nextMonth}
-          />
-          <CalendarGrid 
-            days={days}
-            selectedDate={selectedDate}
-            onSelectDate={handleDateSelect}
-          />
+    <div className="h-[320px] flex flex-col bg-white rounded-2xl overflow-hidden">
+      {/* ── Top bar ── */}
+      <div
+        className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 flex-shrink-0"
+        style={{
+          background: "linear-gradient(135deg, rgba(124,58,237,0.04) 0%, rgba(79,70,229,0.02) 100%)",
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <div
+            className="flex items-center justify-center w-7 h-7 rounded-lg"
+            style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }}
+          >
+            <CalendarDays className="w-3.5 h-3.5 text-white" />
+          </div>
+          <div>
+            <span className="text-xs font-semibold text-gray-800 block">Calendar</span>
+            <span className="text-[9px] text-purple-400 font-medium">Schedule & Interviews</span>
+          </div>
         </div>
-        
-        <div className="bg-white/80 backdrop-blur-sm rounded-lg p-2 flex flex-col h-full min-w-0">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-            
-<TabsList className={`grid ${isHumanResourceEmployee || role === 'organization_superadmin' ? 'grid-cols-3' : 'grid-cols-2'} gap-1 bg-purple-50/50 p-1 rounded-xl mb-2 relative`}>
-  
-  {/* --- EVENTS TAB --- */}
-  <TabsTrigger 
-    value="events" 
-    className="relative z-10 flex items-center justify-center gap-1.5 text-xs font-medium h-9 rounded-lg transition-colors duration-200 text-gray-500 hover:text-purple-700 data-[state=active]:text-white data-[state=active]:bg-transparent shadow-none data-[state=active]:shadow-none border-none outline-none"
-  >
-    {activeTab === "events" && (
-      <motion.div
-        layoutId="active-tab-indicator"
-        className="absolute inset-0 bg-purple-600 rounded-lg shadow-sm -z-10"
-        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-      />
-    )}
-    <Calendar className="w-3.5 h-3.5 flex-shrink-0 relative z-20" />
-    <span className="truncate relative z-20">All Events</span>
-  </TabsTrigger>
-  
-  {/* --- FESTIVALS TAB (Fixed the line issue here) --- */}
-  <TabsTrigger 
-    value="holidays" 
-    className="relative z-10 flex items-center justify-center gap-1.5 text-xs font-medium h-9 rounded-lg transition-colors duration-200 text-gray-500 hover:text-purple-700 data-[state=active]:text-white data-[state=active]:bg-transparent shadow-none data-[state=active]:shadow-none border-none outline-none"
-  >
-    {activeTab === "holidays" && (
-      <motion.div
-        layoutId="active-tab-indicator"
-        className="absolute inset-0 bg-purple-600 rounded-lg shadow-sm -z-10"
-        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-      />
-    )}
-    <Sun className="w-3.5 h-3.5 flex-shrink-0 relative z-20" />
-    <span className="truncate relative z-20">Festivals</span>
-  </TabsTrigger>
-  
-  {/* --- INTERVIEWS TAB --- */}
-  {(isHumanResourceEmployee || role === 'organization_superadmin') && (
-    <TabsTrigger 
-      value="interviews" 
-      className="relative z-10 flex items-center justify-center gap-1.5 text-xs font-medium h-9 rounded-lg transition-colors duration-200 text-gray-500 hover:text-purple-700 data-[state=active]:text-white data-[state=active]:bg-transparent shadow-none data-[state=active]:shadow-none border-none outline-none"
-    >
-      {activeTab === "interviews" && (
-        <motion.div
-          layoutId="active-tab-indicator"
-          className="absolute inset-0 bg-purple-600 rounded-lg shadow-sm -z-10"
-          transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-        />
-      )}
-      <Users className="w-3.5 h-3.5 flex-shrink-0 relative z-20" />
-      <span className="truncate relative z-20">Interviews</span>
-    </TabsTrigger>
-  )}
 
-</TabsList>
-            
-            {/* --- SMOOTH CONTENT TRANSITIONS --- */}
-            <div className="flex-1 overflow-hidden mt-2">
-              
-              <TabsContent value="events" className="h-full mt-0 outline-none data-[state=inactive]:hidden">
-                <motion.div
-                  key="events"
-                  initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                  className="h-full"
-                >
-                  <AllEventsList 
-                    interviewDates={interviewDates}
-                    holidays={holidays}
-                    leaves={leaves}
-                    selectedDate={selectedDate}
-                    isHumanResourceEmployee={isHumanResourceEmployee || role === 'organization_superadmin'}
-                  />
-                </motion.div>
-              </TabsContent>
-
-              <TabsContent value="holidays" className="h-full mt-0 outline-none data-[state=inactive]:hidden">
-                <motion.div
-                  key="holidays"
-                  initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                  className="h-full"
-                >
-                  <HolidaysList holidays={holidays} leaves={leaves} selectedDate={selectedDate} />
-                </motion.div>
-              </TabsContent>
-
-              {(isHumanResourceEmployee || role === 'organization_superadmin') && (
-                <TabsContent value="interviews" className="h-full mt-0 outline-none data-[state=inactive]:hidden">
-                  <motion.div
-                    key="interviews"
-                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.3, ease: "easeOut" }}
-                    className="h-full"
-                  >
-                    <InterviewsList employeeId={employeeId} selectedDate={selectedDate} role={role} organizationId={organizationId} />
-                  </motion.div>
-                </TabsContent>
-              )}
-            </div>
-
-          </Tabs>
+        {/* Month nav */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCurrentDate(subMonths(currentDate, 1))}
+            className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-purple-50 text-gray-400 hover:text-purple-600 transition-colors"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+          <span className="text-xs font-semibold text-gray-700 min-w-[90px] text-center">
+            {format(currentDate, "MMMM yyyy")}
+          </span>
+          <button
+            onClick={() => setCurrentDate(addMonths(currentDate, 1))}
+            className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-purple-50 text-gray-400 hover:text-purple-600 transition-colors"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
-    </Card>
+
+      {/* ── Body: calendar + interview list side by side ── */}
+      <div className="flex flex-1 min-h-0 divide-x divide-gray-100">
+
+        {/* LEFT — calendar grid */}
+        <div className="flex-1 p-4 flex flex-col">
+          {/* Weekday headers */}
+          <div className="grid grid-cols-7 mb-2">
+            {WEEKDAYS.map((d, i) => (
+              <div
+                key={d + i}
+                className={cn(
+                  "text-center text-[10px] font-semibold py-1",
+                  i === 0 ? "text-amber-500" : "text-gray-400"
+                )}
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {/* Day cells */}
+          <div className="grid grid-cols-7 gap-y-1 flex-1">
+            {paddedDays.map((day, idx) => {
+              if (!day) return <div key={`pad-${idx}`} />;
+
+              const dateKey = format(day, "yyyy-MM-dd");
+              const hasInterview = interviewDates.has(dateKey);
+              const isSelected = isSameDay(day, selectedDate);
+              const isTodayDay = isToday(day);
+              const isSun = getDay(day) === 0;
+              const isCurrentMon = isSameMonth(day, currentDate);
+
+              return (
+                <motion.button
+                  key={dateKey}
+                  whileTap={{ scale: 0.88 }}
+                  onClick={() => setSelectedDate(day)}
+                  className={cn(
+                    "relative mx-auto w-7 h-7 flex items-center justify-center text-[11px] rounded-full transition-all duration-150 font-medium",
+                    !isCurrentMon && "opacity-30",
+                    isSelected
+                      ? "text-white shadow-md"
+                      : isTodayDay
+                      ? "text-purple-700 bg-purple-50"
+                      : hasInterview
+                      ? "text-purple-600 bg-purple-100"
+                      : isSun
+                      ? "text-amber-500 hover:bg-amber-50"
+                      : "text-gray-700 hover:bg-gray-100"
+                  )}
+                  style={
+                    isSelected
+                      ? { background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }
+                      : {}
+                  }
+                >
+                  {format(day, "d")}
+
+                  {/* Interview dot */}
+                  {hasInterview && !isSelected && (
+                    <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-purple-500" />
+                  )}
+                  {/* Today ring */}
+                  {isTodayDay && !isSelected && (
+                    <span className="absolute inset-0 rounded-full ring-1 ring-purple-300" />
+                  )}
+                </motion.button>
+              );
+            })}
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-50">
+            <div className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-purple-400 inline-block" />
+              <span className="text-[9px] text-gray-400">Interview</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full ring-1 ring-purple-300 inline-block" />
+              <span className="text-[9px] text-gray-400">Today</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full inline-block" style={{ background: "linear-gradient(135deg,#7c3aed,#4f46e5)" }} />
+              <span className="text-[9px] text-gray-400">Selected</span>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT — interview list for selected date */}
+        <div className="w-56 xl:w-64 flex flex-col flex-shrink-0 min-h-0">
+          <div className="px-4 py-3 border-b border-gray-50 flex-shrink-0">
+            <p className="text-[10px] font-semibold text-gray-700">
+              {format(selectedDate, "EEE, MMM d")}
+            </p>
+            <p className="text-[9px] text-purple-400 font-medium">
+              {selectedInterviews.length} interview{selectedInterviews.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+            <AnimatePresence mode="popLayout">
+              {isLoading ? (
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="h-16 rounded-xl bg-gray-50 animate-pulse" />
+                  ))}
+                </div>
+              ) : selectedInterviews.length === 0 ? (
+                <motion.div
+                  key="empty"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex flex-col items-center justify-center h-32 text-center"
+                >
+                  <CalendarDays className="w-8 h-8 text-gray-100 mb-2" />
+                  <p className="text-[10px] text-gray-300 font-medium">No interviews</p>
+                  <p className="text-[9px] text-gray-200">for this date</p>
+                </motion.div>
+              ) : (
+                selectedInterviews.map((interview, idx) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ delay: idx * 0.05 }}
+                  >
+                    {interview.candidate_id && interview.job_id ? (
+                      <Link
+                        to={`/jobs/candidateprofile/${interview.candidate_id}/${interview.job_id}`}
+                        className="block"
+                      >
+                        <InterviewCard interview={interview} role={role} formatTime={formatTime} />
+                      </Link>
+                    ) : (
+                      <InterviewCard interview={interview} role={role} formatTime={formatTime} />
+                    )}
+                  </motion.div>
+                ))
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
+
+// ── Sub-component: single interview card ──
+const InterviewCard: React.FC<{
+  interview: Interview;
+  role?: string;
+  formatTime: (t: string) => string;
+}> = ({ interview, role, formatTime }) => (
+  <div
+    className="rounded-xl p-2.5 border transition-all duration-150 hover:shadow-sm cursor-pointer group"
+    style={{
+      background: "linear-gradient(135deg, rgba(124,58,237,0.04), rgba(79,70,229,0.02))",
+      borderColor: "rgba(124,58,237,0.12)",
+    }}
+  >
+    {/* Candidate name */}
+    <p className="text-[11px] font-semibold text-gray-800 truncate group-hover:text-purple-700 transition-colors">
+      {interview.name}
+    </p>
+
+    {/* Employee (superadmin only) */}
+    {role === "organization_superadmin" && interview.employee_name && (
+      <p className="text-[9px] text-gray-400 truncate mb-1">{interview.employee_name}</p>
+    )}
+
+    <div className="space-y-0.5 mt-1">
+      {/* Time */}
+      {interview.interview_time && (
+        <div className="flex items-center gap-1">
+          <Clock className="w-2.5 h-2.5 text-purple-400 flex-shrink-0" />
+          <span className="text-[9px] text-gray-500">{formatTime(interview.interview_time)}</span>
+        </div>
+      )}
+
+      {/* Location */}
+      {interview.interview_location && (
+        <div className="flex items-center gap-1">
+          <MapPin className="w-2.5 h-2.5 text-indigo-400 flex-shrink-0" />
+          <span className="text-[9px] text-gray-500 truncate">{interview.interview_location}</span>
+        </div>
+      )}
+
+      {/* Type + round */}
+      <div className="flex items-center gap-1 mt-1">
+        <span
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-semibold"
+          style={{
+            background: "rgba(124,58,237,0.08)",
+            color: "#7c3aed",
+          }}
+        >
+          <Video className="w-2 h-2" />
+          {interview.interview_type || "Interview"}
+        </span>
+        {interview.round && (
+          <span className="text-[8px] text-gray-400 px-1 py-0.5 rounded bg-gray-50 border border-gray-100">
+            {interview.round}
+          </span>
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+export default CalendarCard;

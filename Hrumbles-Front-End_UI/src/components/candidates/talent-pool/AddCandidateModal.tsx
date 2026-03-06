@@ -225,7 +225,8 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
           padding: '0'
         },
         overlay: {
-          backgroundColor: 'rgba(0, 0, 0, 0.75)'
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          zIndex: 50
         }
       }}
       contentLabel="Add Candidate Modal"

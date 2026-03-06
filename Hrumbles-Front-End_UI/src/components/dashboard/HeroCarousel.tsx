@@ -1,7 +1,10 @@
-// src/components/dashboard/HeroCarousel.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card } from "@/components/ui/card";
-import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+} from "@/components/ui/carousel";
 import { Loader2 } from 'lucide-react';
 import Autoplay from "embla-carousel-autoplay";
 import { type EmblaCarouselType } from 'embla-carousel-react';
@@ -11,20 +14,33 @@ export interface CarouselSlide {
   gradient: string;
 }
 
-const DotButton = ({ selected, onClick }) => (
+const DotButton = ({ selected, onClick }: { selected: boolean; onClick: () => void }) => (
   <button
-    className={`h-2 w-2 rounded-full transition-all duration-300 ${selected ? 'w-4 bg-white' : 'bg-white/50'}`}
+    className={`rounded-full transition-all duration-300 ${
+      selected
+        ? 'w-6 h-2 bg-white shadow-sm'
+        : 'w-2 h-2 bg-white/40 hover:bg-white/60'
+    }`}
     type="button"
     onClick={onClick}
   />
 );
 
-export const HeroCarousel = ({ slides, isLoading }) => {
+export const HeroCarousel = ({
+  slides,
+  isLoading,
+}: {
+  slides: CarouselSlide[];
+  isLoading: boolean;
+}) => {
   const [emblaApi, setEmblaApi] = useState<EmblaCarouselType | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scrollSnaps, setScrollSnaps] = useState<number[]>([]);
 
-  const scrollTo = useCallback((index: number) => emblaApi?.scrollTo(index), [emblaApi]);
+  const scrollTo = useCallback(
+    (index: number) => emblaApi?.scrollTo(index),
+    [emblaApi]
+  );
 
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
@@ -35,53 +51,64 @@ export const HeroCarousel = ({ slides, isLoading }) => {
     if (!emblaApi) return;
     setScrollSnaps(emblaApi.scrollSnapList());
     emblaApi.on('select', onSelect);
-    return () => { emblaApi.off('select', onSelect) };
+    return () => {
+      emblaApi.off('select', onSelect);
+    };
   }, [emblaApi, onSelect]);
 
   if (isLoading) {
     return (
-      <Card className="shadow-lg border-none flex items-center justify-center h-[230px] lg:col-span-1">
-        <Loader2 className="h-10 w-10 animate-spin text-indigo-500"/>
+      <Card className="shadow-md border-none flex items-center justify-center h-[200px] bg-gradient-to-br from-slate-50 to-slate-100">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
       </Card>
     );
   }
 
   if (!slides || slides.length === 0) {
     return (
-      <Card className="shadow-lg border-none flex items-center justify-center h-[230px] lg:col-span-1 bg-gradient-to-br from-gray-500 to-gray-600">
-        <p className="text-white font-semibold">No highlights to display.</p>
+      <Card className="shadow-md border-none flex items-center justify-center h-[200px] bg-gradient-to-br from-slate-100 to-slate-200">
+        <p className="text-gray-500 font-medium text-sm">No highlights to display.</p>
       </Card>
     );
   }
 
   return (
-     <Card className="shadow-lg border-none p-0 overflow-hidden min-h-[230px] lg:col-span-1 relative flex flex-col">
-            <Carousel 
-                className="w-full flex-grow" // Add flex-grow to fill the available space
-                plugins={[Autoplay({ delay: 5000, stopOnInteraction: true })]}
-                setApi={setEmblaApi}
-            >
-                <CarouselContent className="h-full">
-                    {slides.map((slide, index) => (
-                        <CarouselItem key={index} className="h-full p-0">
-                            <div className={`h-full w-full ${slide.gradient}`}>
-                                <div className="h-[280px] p-4 flex flex-col"> {/* Add flex and flex-col */}
-                                    {slide.content}
-                                </div>
-                            </div>
-                        </CarouselItem>
-                    ))}
-                </CarouselContent>
-            </Carousel>
-      <div className="absolute bottom-3 left-0 right-0 flex justify-center items-center gap-2">
-        {scrollSnaps.map((_, index) => (
-          <DotButton
-            key={index}
-            selected={index === selectedIndex}
-            onClick={() => scrollTo(index)}
-          />
-        ))}
-      </div>
+    <Card className="shadow-md border-none p-0 overflow-hidden relative">
+      <Carousel
+        className="w-full"
+        plugins={[Autoplay({ delay: 6000, stopOnInteraction: true })]}
+        setApi={setEmblaApi}
+      >
+        <CarouselContent>
+          {slides.map((slide, index) => (
+            <CarouselItem key={index} className="p-0">
+              <div className={`w-full ${slide.gradient} relative overflow-hidden`}>
+                {/* Subtle decorative elements */}
+                <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/4" />
+                <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full bg-white/5 translate-y-1/3 -translate-x-1/4" />
+                <div className="absolute top-1/2 right-1/4 w-32 h-32 rounded-full bg-white/[0.03]" />
+                
+                <div className="relative z-10 h-[200px] p-5 flex flex-col">
+                  {slide.content}
+                </div>
+              </div>
+            </CarouselItem>
+          ))}
+        </CarouselContent>
+      </Carousel>
+
+      {/* Dot indicators */}
+      {scrollSnaps.length > 1 && (
+        <div className="absolute bottom-3 left-0 right-0 flex justify-center items-center gap-1.5">
+          {scrollSnaps.map((_, index) => (
+            <DotButton
+              key={index}
+              selected={index === selectedIndex}
+              onClick={() => scrollTo(index)}
+            />
+          ))}
+        </div>
+      )}
     </Card>
   );
 };
