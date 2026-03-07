@@ -10,6 +10,7 @@ import workspaceReducer from "./workspaceSlice";
 import uiReducer from './uiSlice';
 import permissionsReducer from './permissionSlice';
 import intelligenceSearchReducer from './intelligenceSearchSlice';
+import contactsV2Reducer from './contactsV2Slice';
 
 
 
@@ -26,6 +27,7 @@ const store = configureStore({
     ui: uiReducer,
     permissions: permissionsReducer,
     intelligenceSearch: intelligenceSearchReducer,
+    contactsV2: contactsV2Reducer,
   },
 });
 

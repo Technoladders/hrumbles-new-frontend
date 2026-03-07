@@ -1,431 +1,258 @@
 // src/components/sales/contacts-table/filters/JobTitleFilterSelect.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useSelector } from 'react-redux';
-import { 
-  Briefcase, Search, X, Check, Loader2, Users
-} from 'lucide-react';
+import { Briefcase, Search, X, MinusCircle, Sparkles } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { ManagementLevelFilter } from './ManagementLevelFilter';
-import { DepartmentsFilter } from './DepartmentsFilter';
 
-interface JobTitle {
-  title: string;
-  count: number;
+// ── Above-opening portal (avoids sidebar bottom clip) ────────────────────────
+interface AbovePortalProps {
+  anchorRef: React.RefObject<HTMLDivElement>;
+  isOpen:    boolean;
+  children:  React.ReactNode;
+  maxH?:     number;
+}
+function AbovePortal({ anchorRef, isOpen, children, maxH = 220 }: AbovePortalProps) {
+  const [style, setStyle] = useState<React.CSSProperties>({});
+
+  useEffect(() => {
+    if (!isOpen || !anchorRef.current) return;
+    let rafId: number;
+    const update = () => {
+      rafId = requestAnimationFrame(() => {
+        if (!anchorRef.current) return;
+        const r = anchorRef.current.getBoundingClientRect();
+        const desiredWidth = Math.max(r.width, 200);
+        const left = Math.min(r.left, window.innerWidth - desiredWidth - 8);
+        setStyle({
+          position:  'fixed',
+          bottom:    window.innerHeight - r.top + 4,
+          left:      Math.max(4, left),
+          width:     desiredWidth,
+          zIndex:    99999,
+          maxHeight: maxH,
+          overflow:  'hidden',
+        });
+      });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [isOpen, anchorRef, maxH]);
+
+  if (!isOpen) return null;
+  return ReactDOM.createPortal(
+    <div style={style} className="bg-white border border-slate-200 rounded-xl shadow-2xl flex flex-col overflow-hidden">
+      {children}
+    </div>,
+    document.body,
+  );
 }
 
+// ── Tag chip ─────────────────────────────────────────────────────────────────
+function TitleTag({ label, variant, onRemove }: {
+  label: string; variant: 'include' | 'exclude'; onRemove: () => void;
+}) {
+  return (
+    <span className={cn(
+      'inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[10px] font-medium border',
+      variant === 'include'
+        ? 'bg-blue-50 text-blue-700 border-blue-200'
+        : 'bg-red-50 text-red-700 border-red-200',
+    )}>
+      <Briefcase size={8} className={variant === 'include' ? 'text-blue-400' : 'text-red-400'} />
+      <span className="truncate max-w-[100px]">{label}</span>
+      <button onMouseDown={e => { e.preventDefault(); onRemove(); }} className="hover:opacity-60">
+        <X size={9} />
+      </button>
+    </span>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 interface JobTitleFilterSelectProps {
-  selectedTitles: string[];
-  onSelectionChange: (titles: string[]) => void;
-  // Advanced mode filters
+  selectedTitles:      string[];
+  onSelectionChange:   (v: string[]) => void;
+  excludeTitles?:      string[];
+  onExcludeChange?:    (v: string[]) => void;
+  // legacy props kept for compat (unused in new design)
   selectedManagementLevels?: string[];
-  onManagementLevelsChange?: (levels: string[]) => void;
-  selectedDepartments?: string[];
-  onDepartmentsChange?: (departments: string[]) => void;
-  selectedFunctions?: string[];
-  onFunctionsChange?: (functions: string[]) => void;
+  onManagementLevelsChange?: (v: string[]) => void;
+  selectedDepartments?:      string[];
+  onDepartmentsChange?:      (v: string[]) => void;
+  selectedFunctions?:        string[];
+  onFunctionsChange?:        (v: string[]) => void;
   fileId?: string | null;
 }
 
 export const JobTitleFilterSelect: React.FC<JobTitleFilterSelectProps> = ({
   selectedTitles,
   onSelectionChange,
-  selectedManagementLevels = [],
-  onManagementLevelsChange = () => {},
-  selectedDepartments = [],
-  onDepartmentsChange = () => {},
-  selectedFunctions = [],
-  onFunctionsChange = () => {},
-  fileId = null,
+  excludeTitles    = [],
+  onExcludeChange  = () => {},
 }) => {
   const organization_id = useSelector((state: any) => state.auth.organization_id);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
-  const [mode, setMode] = useState<'simple' | 'advanced'>('simple');
-  const [includeSimilar, setIncludeSimilar] = useState(false);
-  const [excludeTitles, setExcludeTitles] = useState<string[]>([]);
-  
-  const inputRef = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [tab,     setTab]     = useState<'include' | 'exclude'>('include');
+  const [q,       setQ]       = useState('');
+  const [open,    setOpen]    = useState(false);
+  const wrapRef   = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const inputRef  = useRef<HTMLInputElement>(null);
 
-  // Calculate dropdown position when opening
-  useEffect(() => {
-    if (isOpen && inputRef.current) {
-      const rect = inputRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.left + window.scrollX,
-        width: rect.width
-      });
-    } else {
-      setDropdownPosition(null);
-    }
-  }, [isOpen]);
-
-  // Handle click outside to close dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (
-        inputRef.current && !inputRef.current.contains(target) &&
-        dropdownRef.current && !dropdownRef.current.contains(target) &&
-        containerRef.current && !containerRef.current.contains(target)
-      ) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen]);
-
-  // Fetch job title suggestions with counts
-  const { data: jobTitles = [], isLoading } = useQuery({
-    queryKey: ['job-title-suggestions', organization_id, searchTerm, fileId],
+  // Suggestions from org's contacts — only fetch when typing
+  const { data: suggestions = [] } = useQuery({
+    queryKey: ['job-title-suggestions-crm', organization_id, q],
     queryFn: async () => {
-      let query;
-      
-      if (fileId) {
-        // For file-specific view
-        query = supabase
-          .from('contact_workspace_files')
-          .select(`
-            contacts!inner (
-              job_title
-            )
-          `)
-          .eq('file_id', fileId)
-          .not('contacts.job_title', 'is', null);
-      } else {
-        // For all contacts view
-        query = supabase
-          .from('contacts')
-          .select('job_title')
-          .eq('organization_id', organization_id)
-          .not('job_title', 'is', null);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      // Process data based on file query structure
-      const contacts = fileId 
-        ? (data || []).map((item: any) => item.contacts).filter(Boolean)
-        : (data || []);
-
-      // Group and count job titles
-      const titleMap = new Map<string, number>();
-
-      contacts.forEach((contact: any) => {
-        const title = contact.job_title?.trim();
-        if (!title) return;
-        
-        titleMap.set(title, (titleMap.get(title) || 0) + 1);
-      });
-
-      // Convert to array and sort by count
-      let titleArray = Array.from(titleMap.entries())
-        .map(([title, count]) => ({ title, count }))
-        .sort((a, b) => b.count - a.count);
-
-      // Filter by search term
-      if (searchTerm.trim()) {
-        const searchLower = searchTerm.toLowerCase();
-        titleArray = titleArray.filter(item => 
-          item.title.toLowerCase().includes(searchLower)
-        );
-      }
-
-      return titleArray.slice(0, 50); // Limit to top 50
+      if (!q.trim()) return [];
+      const { data } = await supabase
+        .from('contacts')
+        .select('job_title')
+        .eq('organization_id', organization_id)
+        .not('job_title', 'is', null)
+        .ilike('job_title', `%${q}%`)
+        .limit(200);
+      const unique = [...new Set((data || []).map((r: any) => r.job_title?.trim()).filter(Boolean))];
+      return unique.sort().slice(0, 40) as string[];
     },
-    enabled: !!organization_id,
-    staleTime: 30000,
+    enabled: !!organization_id && q.trim().length > 0,
+    staleTime: 60_000,
   });
 
-  const toggleTitle = (title: string) => {
-    const newTitles = selectedTitles.includes(title)
-      ? selectedTitles.filter(t => t !== title)
-      : [...selectedTitles, title];
-    
-    onSelectionChange(newTitles);
+  // Close on outside click
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false); setQ('');
+      }
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  const activeList    = tab === 'include' ? selectedTitles : excludeTitles;
+  const setActiveList = tab === 'include' ? onSelectionChange : onExcludeChange;
+
+  const addTitle = useCallback((val: string) => {
+    const t = val.trim();
+    if (!t || activeList.includes(t)) return;
+    setActiveList([...activeList, t]);
+    setQ('');
+    inputRef.current?.focus();
+  }, [activeList, setActiveList]);
+
+  const removeTitle = (val: string, list: string[], setList: (v: string[]) => void) => {
+    setList(list.filter(x => x !== val));
   };
 
-  const removeTitle = (title: string) => {
-    onSelectionChange(selectedTitles.filter(t => t !== title));
-  };
-
-  const clearAll = () => {
-    onSelectionChange([]);
-    setExcludeTitles([]);
-    setSearchTerm('');
-  };
-
-  const toggleExclude = (title: string) => {
-    if (excludeTitles.includes(title)) {
-      setExcludeTitles(excludeTitles.filter(t => t !== title));
-    } else {
-      setExcludeTitles([...excludeTitles, title]);
-    }
-  };
+  const filtered    = suggestions.filter(s => !activeList.includes(s));
+  const showManual  = q.trim() && !activeList.includes(q.trim());
+  const hasIncludes = selectedTitles.length > 0;
+  const hasExcludes = excludeTitles.length > 0;
 
   return (
-    <div className="space-y-3" ref={containerRef}>
-      {/* Mode Toggle */}
-      <div className="flex gap-1 p-1 bg-slate-100 rounded-lg">
-        <button
-          onClick={() => setMode('simple')}
-          className={cn(
-            "flex-1 px-3 py-1.5 text-[10px] font-semibold uppercase rounded-md transition-all",
-            mode === 'simple'
-              ? "bg-white text-purple-600 shadow-sm"
-              : "text-slate-600 hover:text-slate-800"
-          )}
-        >
-          Simple
-        </button>
-        <button
-          onClick={() => setMode('advanced')}
-          className={cn(
-            "flex-1 px-3 py-1.5 text-[10px] font-semibold uppercase rounded-md transition-all",
-            mode === 'advanced'
-              ? "bg-white text-purple-600 shadow-sm"
-              : "text-slate-600 hover:text-slate-800"
-          )}
-        >
-          Advanced
-        </button>
+    <div ref={wrapRef} className="space-y-2 pt-1">
+
+      {/* Include / Exclude tab toggle */}
+      <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+        {(['include', 'exclude'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={cn(
+              'flex-1 py-1 text-[10px] font-semibold rounded-md transition-all flex items-center justify-center gap-1',
+              tab === t
+                ? t === 'include'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'bg-white text-red-600 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700',
+            )}
+          >
+            {t === 'exclude' && <MinusCircle size={10} />}
+            {t === 'include' ? 'Include' : 'Exclude'}
+            {t === 'include' && hasIncludes && (
+              <span className="bg-blue-100 text-blue-700 text-[9px] rounded-full px-1.5">{selectedTitles.length}</span>
+            )}
+            {t === 'exclude' && hasExcludes && (
+              <span className="bg-red-100 text-red-700 text-[9px] rounded-full px-1.5">{excludeTitles.length}</span>
+            )}
+          </button>
+        ))}
       </div>
 
-      {mode === 'simple' ? (
-        // SIMPLE MODE
-        <div className="space-y-3">
-          {/* Include Section */}
-          <div className="space-y-2">
-            <Label className="text-[10px] uppercase text-slate-500 font-semibold">
-              Include
-            </Label>
-            
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 text-slate-400" size={14} />
-              <Input
-                ref={inputRef}
-                placeholder="Search for a job title"
-                className="pl-8 pr-8 h-9 text-xs border-slate-200"
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setIsOpen(true);
-                }}
-                onFocus={() => setIsOpen(true)}
-              />
-              {searchTerm && (
-                <button 
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            <p className="text-[10px] text-slate-500">
-              Use "quotation marks" to return exact matches
-            </p>
-
-            {/* Include Similar Checkbox */}
-            <div className="flex items-center gap-2">
-              <Checkbox 
-                id="include-similar"
-                checked={includeSimilar}
-                onCheckedChange={(checked) => setIncludeSimilar(!!checked)}
-                className="h-3.5 w-3.5"
-              />
-              <Label htmlFor="include-similar" className="text-[10px] text-slate-600 cursor-pointer flex items-center gap-1">
-                Include people with similar titles
-                <span className="text-slate-400">ⓘ</span>
-              </Label>
-            </div>
-          </div>
-
-          {/* Exclude Section */}
-          <div className="space-y-2">
-            <Label className="text-[10px] uppercase text-slate-500 font-semibold">
-              Exclude
-            </Label>
-            <Input
-              placeholder="Enter titles to exclude"
-              className="h-9 text-xs border-slate-200"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && e.currentTarget.value) {
-                  toggleExclude(e.currentTarget.value);
-                  e.currentTarget.value = '';
-                }
-              }}
-            />
-          </div>
-
-          {/* Past Job Titles Link */}
-          {/* <button className="text-[10px] text-purple-600 hover:text-purple-700 font-medium">
-            Past job titles →
-          </button> */}
-        </div>
-      ) : (
-        // ADVANCED MODE
-        <div className="space-y-3">
-          {/* Management Level - Self-contained with collapsible header */}
-          <ManagementLevelFilter
-            selectedLevels={selectedManagementLevels}
-            onSelectionChange={onManagementLevelsChange}
-            fileId={fileId}
-          />
-
-          {/* Departments & Job Function - Self-contained with collapsible header */}
-          <DepartmentsFilter
-            selectedDepartments={selectedDepartments}
-            selectedFunctions={selectedFunctions}
-            onDepartmentsChange={onDepartmentsChange}
-            onFunctionsChange={onFunctionsChange}
-            fileId={fileId}
-          />
-
-          {/* Create New Persona */}
-          <Button 
-            variant="outline" 
-            className="w-full text-xs h-9"
-            onClick={() => {/* Handle persona creation */}}
-          >
-            <Users size={14} className="mr-2" />
-            Create New Persona
-          </Button>
-
-          <button className="w-full text-[10px] text-purple-600 hover:text-purple-700 font-medium">
-            What's a Persona?
-          </button>
-        </div>
-      )}
-
-      {/* Dropdown Results */}
-      {isOpen && dropdownPosition && (
-        <div 
-          ref={dropdownRef}
-          className="fixed z-[9999] bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden"
-          style={{
-            top: `${dropdownPosition.top}px`,
-            left: `${dropdownPosition.left}px`,
-            width: `${dropdownPosition.width}px`
+      {/* Search input + above portal */}
+      <div ref={anchorRef} className="relative">
+        <Briefcase className="absolute left-2.5 top-2 text-slate-400 pointer-events-none" size={11} />
+        <Input
+          ref={inputRef}
+          placeholder={tab === 'include' ? 'Type to search titles…' : 'Type titles to exclude…'}
+          className={cn(
+            'pl-7 h-8 text-xs border-slate-200',
+            tab === 'exclude' && 'border-red-200 focus:border-red-400',
+          )}
+          value={q}
+          onChange={e => { setQ(e.target.value); if (e.target.value.trim()) setOpen(true); else setOpen(false); }}
+          onFocus={() => { if (q.trim()) setOpen(true); }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && q.trim()) { addTitle(q); setOpen(false); }
+            if (e.key === 'Backspace' && !q) {
+              if (tab === 'include' && selectedTitles.length) onSelectionChange(selectedTitles.slice(0, -1));
+              if (tab === 'exclude' && excludeTitles.length)  onExcludeChange(excludeTitles.slice(0, -1));
+            }
           }}
-        >
-          <ScrollArea className="max-h-[240px] overflow-y-auto">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
-                <span className="ml-2 text-xs text-slate-500">Searching...</span>
-              </div>
-            ) : jobTitles.length === 0 ? (
-              <div className="py-6 text-center">
-                <Briefcase className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs text-slate-500">
-                  {searchTerm ? 'No job titles found' : 'Type to search job titles'}
-                </p>
-              </div>
-            ) : (
-              <div className="py-1">
-                {jobTitles.map((jobTitle) => {
-                  const isSelected = selectedTitles.includes(jobTitle.title);
-                  
-                  return (
-                    <div
-                      key={jobTitle.title}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors",
-                        isSelected 
-                          ? "bg-blue-50 hover:bg-blue-100" 
-                          : "hover:bg-slate-50"
-                      )}
-                      onClick={() => toggleTitle(jobTitle.title)}
-                    >
-                      {/* Icon */}
-                      <div className="flex-shrink-0">
-                        <div className={cn(
-                          "w-8 h-8 rounded-lg flex items-center justify-center",
-                          isSelected 
-                            ? "bg-blue-100" 
-                            : "bg-gradient-to-br from-slate-100 to-slate-200"
-                        )}>
-                          <Briefcase size={14} className={isSelected ? "text-blue-600" : "text-slate-500"} />
-                        </div>
-                      </div>
+          onBlur={() => setTimeout(() => { setOpen(false); setQ(''); }, 150)}
+        />
 
-                      {/* Title Info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-slate-800 truncate">
-                          {jobTitle.title}
-                        </p>
-                      </div>
-
-                      {/* Count Badge */}
-                      <Badge 
-                        variant="secondary" 
-                        className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5"
-                      >
-                        {jobTitle.count}
-                      </Badge>
-
-                      {/* Selection Indicator */}
-                      <div className={cn(
-                        "flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
-                        isSelected 
-                          ? "bg-blue-600 border-blue-600" 
-                          : "border-slate-300"
-                      )}>
-                        {isSelected && <Check size={12} className="text-white" />}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </ScrollArea>
-        </div>
-      )}
-
-      {/* Selected Titles Tags */}
-      {selectedTitles.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {selectedTitles.map((title) => (
-            <Badge
-              key={title}
-              variant="secondary"
-              className="pl-1.5 pr-1 py-1 bg-blue-50 text-blue-700 border-blue-200 text-[10px] font-medium flex items-center gap-1.5"
-            >
-              <div className="w-4 h-4 rounded bg-blue-200 flex items-center justify-center">
-                <Briefcase size={8} className="text-blue-600" />
-              </div>
-              <span className="truncate max-w-[150px]">{title}</span>
-              <button
-                onClick={() => removeTitle(title)}
-                className="ml-0.5 hover:bg-blue-200 rounded-full p-0.5 transition-colors"
-              >
-                <X size={10} />
+        <AbovePortal anchorRef={anchorRef} isOpen={open && q.trim().length > 0 && (filtered.length > 0 || !!showManual)} maxH={220}>
+          <div className="overflow-y-auto flex-1">
+            {showManual && (
+              <button type="button" onMouseDown={e => { e.preventDefault(); addTitle(q); setOpen(false); }}
+                className={cn(
+                  'w-full flex items-center gap-2 px-3 py-2 border-b border-slate-100 text-left',
+                  tab === 'include' ? 'hover:bg-blue-50' : 'hover:bg-red-50',
+                )}>
+                <Sparkles size={10} className={tab === 'include' ? 'text-blue-500' : 'text-red-500'} />
+                <span className={cn('text-[11px] font-medium', tab === 'include' ? 'text-blue-700' : 'text-red-700')}>
+                  {tab === 'include' ? 'Add' : 'Exclude'} "<b>{q.trim()}</b>"
+                </span>
               </button>
-            </Badge>
+            )}
+            {filtered.map(title => (
+              <button key={title} type="button" onMouseDown={e => { e.preventDefault(); addTitle(title); }}
+                className={cn(
+                  'w-full flex items-center gap-2 px-3 py-1.5 text-left',
+                  tab === 'include' ? 'hover:bg-blue-50' : 'hover:bg-red-50',
+                )}>
+                <Briefcase size={10} className="text-slate-400 flex-shrink-0" />
+                <span className="text-[11px] text-slate-700 truncate">{title}</span>
+              </button>
+            ))}
+          </div>
+        </AbovePortal>
+      </div>
+
+      {/* Selected tags */}
+      {(hasIncludes || hasExcludes) && (
+        <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+          {selectedTitles.map(t => (
+            <TitleTag key={`inc-${t}`} label={t} variant="include"
+              onRemove={() => removeTitle(t, selectedTitles, onSelectionChange)} />
           ))}
-          {selectedTitles.length > 1 && (
+          {excludeTitles.map(t => (
+            <TitleTag key={`exc-${t}`} label={t} variant="exclude"
+              onRemove={() => removeTitle(t, excludeTitles, onExcludeChange)} />
+          ))}
+          {(selectedTitles.length + excludeTitles.length) > 1 && (
             <button
-              onClick={clearAll}
-              className="text-[10px] text-red-600 hover:text-red-700 font-medium px-1.5"
+              onMouseDown={e => { e.preventDefault(); onSelectionChange([]); onExcludeChange([]); }}
+              className="text-[10px] text-red-500 hover:text-red-700 font-medium px-1 self-center"
             >
               Clear all
             </button>
@@ -433,31 +260,7 @@ export const JobTitleFilterSelect: React.FC<JobTitleFilterSelectProps> = ({
         </div>
       )}
 
-      {/* Excluded Titles */}
-      {excludeTitles.length > 0 && (
-        <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase text-slate-500 font-semibold">
-            Excluded Titles
-          </Label>
-          <div className="flex flex-wrap gap-1.5">
-            {excludeTitles.map((title) => (
-              <Badge
-                key={title}
-                variant="secondary"
-                className="pl-1.5 pr-1 py-1 bg-red-50 text-red-700 border-red-200 text-[10px] font-medium flex items-center gap-1.5"
-              >
-                <span className="truncate max-w-[120px]">{title}</span>
-                <button
-                  onClick={() => toggleExclude(title)}
-                  className="ml-0.5 hover:bg-red-200 rounded-full p-0.5 transition-colors"
-                >
-                  <X size={10} />
-                </button>
-              </Badge>
-            ))}
-          </div>
-        </div>
-      )}
+      <p className="text-[9px] text-slate-400">From your CRM · Enter to add any title</p>
     </div>
   );
 };

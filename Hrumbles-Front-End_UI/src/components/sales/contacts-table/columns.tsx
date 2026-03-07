@@ -11,12 +11,10 @@ import { useContactStages } from '@/hooks/sales/useContactStages';
 import { Badge } from '@/components/ui/badge';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Label } from '@/components/ui/label';
-import { 
-  ChevronDown, Link as LinkIcon, Trash2, 
-  Linkedin, Phone, Mail, UserPlus, Globe, MoreHorizontal, 
-  Copy, Check, Loader2, Plus, ShieldCheck, ListPlus, Eye, Building2, Clock, 
-  CheckCircle2, Flag, Star, Pencil, AlertCircle, HelpCircle, X, XCircle,
-  MapPin, Sparkles, Zap, Signal, SignalHigh, SignalLow, SignalMedium
+import {
+  Trash2, Linkedin, Phone, Mail, Globe, Copy, Loader2, Plus,
+  ShieldCheck, ListPlus, Eye, Building2, Flag, Star, Pencil,
+  MapPin, Zap, DatabaseZap, Check, X, CheckCircle2, XCircle, HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -31,975 +29,774 @@ import PhoneInput, { parsePhoneNumber } from "react-phone-number-input";
 import flags from 'react-phone-number-input/flags';
 import "react-phone-number-input/style.css";
 
-// --- UTILITIES ---
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type AvailState = 'yes' | 'maybe' | 'no';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const isDiscoveryRow = (row: any) => row.original?.is_discovery === true;
 
-// Phone Flag Component
 const PhoneFlag = ({ number }: { number: string }) => {
   if (!number) return <Globe size={10} className="text-slate-400" />;
   try {
     const parsed = parsePhoneNumber(number);
-    if (parsed && parsed.country) {
-      const FlagComponent = flags[parsed.country];
-      return FlagComponent ? <FlagComponent title={parsed.country} className="w-4 h-3 shadow-sm rounded-[1px]" /> : <Globe size={10} />;
+    if (parsed?.country) {
+      const F = (flags as any)[parsed.country];
+      return F ? <F title={parsed.country} className="w-4 h-3 rounded-[1px]" /> : <Globe size={10} />;
     }
-  } catch (e) { return <Globe size={10} />; }
+  } catch { /* ignore */ }
   return <Globe size={10} />;
 };
 
-// Status Icons with Colors
-const StatusIcon = ({ status }: { status?: string }) => {
-  if (status === 'verified' || status === 'valid_number') {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger>
-            <div className="flex items-center justify-center h-4 w-4 rounded-full bg-emerald-100">
-              <CheckCircle2 size={10} className="text-emerald-600 fill-emerald-100" />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent className="text-xs">Verified</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-  if (status === 'incorrect' || status === 'invalid') {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger>
-            <div className="flex items-center justify-center h-4 w-4 rounded-full bg-red-100">
-              <XCircle size={10} className="text-red-500 fill-red-100" />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent className="text-xs">Invalid</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger>
-          <div className="flex items-center justify-center h-4 w-4 rounded-full bg-slate-100">
-            <HelpCircle size={10} className="text-slate-400" />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent className="text-xs">Unverified</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-};
-
-// Deliverability Indicator Component
-const DeliverabilityIndicator = ({ level }: { level: 'high' | 'medium' | 'low' | 'none' }) => {
-  const configs = {
-    high: {
-      icon: SignalHigh,
-      color: 'text-emerald-600',
-      bgColor: 'bg-emerald-100',
-      fillColor: 'fill-emerald-600',
-      label: 'Highly Deliverable',
-      bars: 3,
-    },
-    medium: {
-      icon: SignalMedium,
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-100',
-      fillColor: 'fill-amber-600',
-      label: 'Likely Deliverable',
-      bars: 2,
-    },
-    low: {
-      icon: SignalLow,
-      color: 'text-orange-500',
-      bgColor: 'bg-orange-100',
-      fillColor: 'fill-orange-500',
-      label: 'Low Deliverability',
-      bars: 1,
-    },
-    none: {
-      icon: Signal,
-      color: 'text-slate-400',
-      bgColor: 'bg-slate-100',
-      fillColor: 'fill-slate-400',
-      label: 'Unknown',
-      bars: 0,
-    },
+const DeliverabilityDot = ({ status }: { status?: string }) => {
+  const map: Record<string, { color: string; label: string }> = {
+    verified:   { color: 'bg-emerald-500', label: 'Verified' },
+    likely:     { color: 'bg-blue-400',    label: 'Likely valid' },
+    unverified: { color: 'bg-amber-400',   label: 'Unverified' },
+    incorrect:  { color: 'bg-red-400',     label: 'Invalid' },
   };
-
-  const config = configs[level];
-  const Icon = config.icon;
-
+  const cfg = map[status || ''] ?? { color: 'bg-slate-300', label: 'Unknown' };
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className={cn("flex items-center justify-center h-5 w-5 rounded-full transition-all", config.bgColor)}>
-            <Icon size={12} className={cn(config.color, config.fillColor)} />
-          </div>
+          <span className={cn('inline-block h-2 w-2 rounded-full flex-shrink-0 cursor-default', cfg.color)} />
         </TooltipTrigger>
-        <TooltipContent className="text-xs font-medium">{config.label}</TooltipContent>
+        <TooltipContent className="text-xs">{cfg.label}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
 };
 
-// Simple Column Header
-const SimpleColumnHeader = ({ column, title }: { column: any; title: string }) => (
-  <div className="flex items-center">
-    <span className="text-[10px] font-semibold uppercase tracking-wider text-white/90">
-      {title}
-    </span>
-  </div>
+const ColHeader = ({ title }: { title: string }) => (
+  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{title}</span>
 );
 
-// --- ADD ASSET DIALOG ---
+// Small icon-button used inside asset rows
+const Btn = ({ onClick, tip, children, hoverColor = 'hover:text-slate-700' }: any) => (
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          onClick={onClick}
+          className={cn(
+            'p-1.5 rounded-lg text-slate-400 transition-colors hover:bg-slate-100',
+            hoverColor,
+          )}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="text-xs">{tip}</TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);
+
+// ── Manual entry dialogs ──────────────────────────────────────────────────────
+
 const AddAssetDialog = ({ open, onOpenChange, type, onSave }: any) => {
-  const [value, setValue] = useState("");
-  const [phone, setPhone] = useState("");
-  const [extension, setExtension] = useState("");
+  const [value,   setValue]   = useState('');
+  const [phone,   setPhone]   = useState('');
   const [subtype, setSubtype] = useState(type === 'email' ? 'work' : 'mobile');
-  const [status, setStatus] = useState(type === 'email' ? 'unverified' : 'no_status');
+  const [status,  setStatus]  = useState(type === 'email' ? 'unverified' : 'no_status');
+
+  const isEmail     = type === 'email';
+  const accentFrom  = isEmail ? 'from-indigo-600' : 'from-emerald-600';
+  const accentTo    = isEmail ? 'to-violet-600'   : 'to-teal-600';
+  const btnCls      = isEmail ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700';
 
   const handleSave = () => {
-    let finalValue = value;
-    if (type === 'mobile' && subtype === 'mobile') {
-      finalValue = extension ? `${phone} ext ${extension}` : phone;
-    } else if (type === 'mobile' && subtype !== 'mobile') {
-      finalValue = value;
-    }
-    onSave(finalValue, { type: subtype, status });
+    const v = type === 'mobile' ? phone : value;
+    if (!v?.trim()) return;
+    onSave(v.trim(), { type: subtype, status });
     onOpenChange(false);
-    setValue(""); setPhone(""); setExtension("");
+    setValue(''); setPhone('');
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[340px] p-0 overflow-hidden">
-        <DialogHeader className={cn(
-          "px-4 py-3",
-          type === 'email' 
-            ? "bg-gradient-to-r from-indigo-600 to-blue-600" 
-            : "bg-gradient-to-r from-emerald-600 to-teal-600"
-        )}>
-          <DialogTitle className="text-sm font-bold text-white flex items-center gap-2">
-            {type === 'email' ? <Mail size={16} /> : <Phone size={16} />}
-            Add {type === 'email' ? 'Email' : 'Phone'}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="p-4 space-y-3">
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500 font-semibold">Type</Label>
-            <Select value={subtype} onValueChange={setSubtype}>
-              <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {type === 'email' ? (
-                  <><SelectItem value="work" className="text-xs">Work</SelectItem><SelectItem value="personal" className="text-xs">Personal</SelectItem><SelectItem value="other" className="text-xs">Other</SelectItem></>
-                ) : (
-                  <><SelectItem value="mobile" className="text-xs">Mobile</SelectItem><SelectItem value="work_hq" className="text-xs">Office / HQ</SelectItem><SelectItem value="other" className="text-xs">Other</SelectItem></>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500 font-semibold">Value</Label>
-            {type === "mobile" && subtype === "mobile" ? (
-              <div className="flex gap-2">
-                <PhoneInput international defaultCountry="US" value={phone} onChange={(v) => setPhone(v || "")} className="text-xs h-9 px-2 border rounded-md flex-1" />
-                <Input placeholder="Ext" value={extension} onChange={(e) => setExtension(e.target.value)} className="h-9 w-16 text-xs" />
-              </div>
-            ) : type === "mobile" ? (
-              <Input placeholder="+1 555 000 0000" value={value} onChange={(e) => setValue(e.target.value)} className="h-9 text-xs" />
-            ) : (
-              <Input placeholder="name@example.com" value={value} onChange={(e) => setValue(e.target.value)} className="h-9 text-xs" />
-            )}
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500 font-semibold">Status</Label>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {type === 'email' ? (
-                  <><SelectItem value="verified" className="text-xs">Verified</SelectItem><SelectItem value="unverified" className="text-xs">Unverified</SelectItem><SelectItem value="incorrect" className="text-xs">Incorrect</SelectItem></>
-                ) : (
-                  <><SelectItem value="valid_number" className="text-xs">Valid</SelectItem><SelectItem value="no_status" className="text-xs">No Status</SelectItem><SelectItem value="invalid" className="text-xs">Invalid</SelectItem></>
-                )}
-              </SelectContent>
-            </Select>
+      <DialogContent className="sm:max-w-[340px] p-0 overflow-hidden rounded-2xl shadow-2xl border-0">
+        {/* Gradient header */}
+        <div className={cn('px-5 pt-5 pb-4 bg-gradient-to-br', accentFrom, accentTo)}>
+          <div className="flex items-center gap-2.5 mb-0.5">
+            <div className="h-8 w-8 rounded-xl bg-white/20 flex items-center justify-center">
+              {isEmail ? <Mail size={16} className="text-white" /> : <Phone size={16} className="text-white" />}
+            </div>
+            <div>
+              <p className="text-sm font-bold text-white">Add {isEmail ? 'Email Address' : 'Phone Number'}</p>
+              <p className="text-[10px] text-white/70">Manually enter contact details</p>
+            </div>
           </div>
         </div>
-        <div className="px-4 pb-4">
-          <Button size="sm" onClick={handleSave} className={cn(
-            "h-9 text-xs w-full font-semibold",
-            type === 'email' ? "bg-indigo-600 hover:bg-indigo-700" : "bg-emerald-600 hover:bg-emerald-700"
-          )}>
-            Save {type === 'email' ? 'Email' : 'Phone'}
-          </Button>
+
+        <div className="p-5 space-y-4 bg-white">
+          {/* Value input */}
+          <div>
+            <Label className="text-[10px] uppercase tracking-widest text-slate-400 font-bold block mb-1.5">
+              {isEmail ? 'Email Address' : 'Phone Number'}
+            </Label>
+            {!isEmail ? (
+              <div className="relative">
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 focus-within:bg-white focus-within:border-emerald-400 focus-within:ring-2 focus-within:ring-emerald-400/20 transition-all">
+                  <PhoneInput
+                    international
+                    defaultCountry="US"
+                    value={phone}
+                    onChange={v => setPhone(v || '')}
+                    className="h-10 px-3 text-sm w-full bg-transparent"
+                  />
+                </div>
+              </div>
+            ) : (
+              <Input
+                className="h-10 text-sm border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 transition-all"
+                placeholder="name@company.com"
+                value={value}
+                onChange={e => setValue(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSave()}
+              />
+            )}
+          </div>
+
+          {/* Type + Status row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-[10px] uppercase tracking-widest text-slate-400 font-bold block mb-1.5">Type</Label>
+              <Select value={subtype} onValueChange={setSubtype}>
+                <SelectTrigger className="h-10 text-xs border-slate-200 rounded-xl bg-slate-50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                 {(
+  isEmail
+    ? [['work', 'Work'], ['personal', 'Personal'], ['other', 'Other']]
+    : [['mobile', 'Mobile'], ['work_hq', 'Office/HQ'], ['other', 'Other']]
+).map(([v, l]) => (
+  <SelectItem key={v} value={v} className="text-xs">{l}</SelectItem>
+))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-[10px] uppercase tracking-widest text-slate-400 font-bold block mb-1.5">Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="h-10 text-xs border-slate-200 rounded-xl bg-slate-50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                 {(
+  isEmail
+    ? [['verified', '✓ Verified'], ['unverified', 'Unverified'], ['incorrect', '✗ Invalid']]
+    : [['valid_number', '✓ Valid'], ['no_status', 'Unknown'], ['invalid', '✗ Invalid']]
+).map(([v, l]) => (
+  <SelectItem key={v} value={v} className="text-xs">{l}</SelectItem>
+))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2.5 pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              className="flex-1 h-10 text-xs rounded-xl border-slate-200 text-slate-600"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              className={cn('flex-1 h-10 text-xs rounded-xl text-white shadow-sm', btnCls)}
+            >
+              {isEmail ? 'Add Email' : 'Add Phone'}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 };
 
-
-// --- EDIT ASSET DIALOG ---
 const EditAssetDialog = ({ open, onOpenChange, type, initialValue, initialType, initialStatus, onSave }: any) => {
-  const [value, setValue] = useState(initialValue || "");
-  const [subtype, setSubtype] = useState(initialType || (type === 'email' ? 'work' : 'mobile'));
-  const [status, setStatus] = useState(initialStatus || (type === 'email' ? 'unverified' : 'no_status'));
+  const [value,   setValue]   = useState(initialValue   || '');
+  const [subtype, setSubtype] = useState(initialType    || (type === 'email' ? 'work' : 'mobile'));
+  const [status,  setStatus]  = useState(initialStatus  || (type === 'email' ? 'unverified' : 'no_status'));
 
-  // Reset form when dialog opens
   useEffect(() => {
     if (open) {
-      setValue(initialValue || "");
-      setSubtype(initialType || (type === 'email' ? 'work' : 'mobile'));
+      setValue(initialValue   || '');
+      setSubtype(initialType  || (type === 'email' ? 'work' : 'mobile'));
       setStatus(initialStatus || (type === 'email' ? 'unverified' : 'no_status'));
     }
   }, [open, initialValue, initialType, initialStatus, type]);
 
-  const handleSave = () => {
-    onSave({ value, type: subtype, status });
-    onOpenChange(false);
-  };
+  const isEmail = type === 'email';
+  const accentFrom = isEmail ? 'from-indigo-600' : 'from-emerald-600';
+  const accentTo   = isEmail ? 'to-violet-600'   : 'to-teal-600';
+  const btnCls     = isEmail ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[340px] p-0 overflow-hidden">
-        {/* Header with gradient (keeps consistency with Add dialog) */}
-        <DialogHeader className={cn(
-          "px-4 py-3",
-          type === 'email' 
-            ? "bg-gradient-to-r from-indigo-600 to-blue-600" 
-            : "bg-gradient-to-r from-emerald-600 to-teal-600"
-        )}>
-          <DialogTitle className="text-sm font-bold text-white flex items-center gap-2">
-            <Pencil size={16} />
-            Edit {type === 'email' ? 'Email' : 'Phone'}
-          </DialogTitle>
-        </DialogHeader>
-
-        {/* Form Fields */}
-        <div className="p-4 space-y-3">
-          {/* Value Input */}
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500 font-semibold">Value</Label>
-            {type === "mobile" ? (
-              <PhoneInput 
-                international 
-                defaultCountry="US" 
-                value={value} 
-                onChange={(v) => setValue(v || "")} 
-                className="text-xs h-9 px-2 border rounded-md w-full"
-              />
-            ) : (
-              <Input 
-                value={value} 
-                onChange={(e) => setValue(e.target.value)} 
-                className="h-9 text-xs" 
-                placeholder={type === 'email' ? "name@example.com" : "+1 555 000 0000"}
-              />
-            )}
-          </div>
-
-          {/* Type Select */}
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500 font-semibold">Type</Label>
-            <Select value={subtype} onValueChange={setSubtype}>
-              <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {type === 'email' ? (
-                  <>
-                    <SelectItem value="work" className="text-xs">Work</SelectItem>
-                    <SelectItem value="personal" className="text-xs">Personal</SelectItem>
-                    <SelectItem value="other" className="text-xs">Other</SelectItem>
-                  </>
-                ) : (
-                  <>
-                    <SelectItem value="mobile" className="text-xs">Mobile</SelectItem>
-                    <SelectItem value="work_hq" className="text-xs">Office / HQ</SelectItem>
-                    <SelectItem value="other" className="text-xs">Other</SelectItem>
-                  </>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Status Select */}
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500 font-semibold">Status</Label>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {type === 'email' ? (
-                  <>
-                    <SelectItem value="verified" className="text-xs">Verified</SelectItem>
-                    <SelectItem value="unverified" className="text-xs">Unverified</SelectItem>
-                    <SelectItem value="incorrect" className="text-xs">Incorrect</SelectItem>
-                  </>
-                ) : (
-                  <>
-                    <SelectItem value="valid_number" className="text-xs">Valid</SelectItem>
-                    <SelectItem value="no_status" className="text-xs">No Status</SelectItem>
-                    <SelectItem value="invalid" className="text-xs">Invalid</SelectItem>
-                  </>
-                )}
-              </SelectContent>
-            </Select>
+      <DialogContent className="sm:max-w-[340px] p-0 overflow-hidden rounded-2xl shadow-2xl border-0">
+        <div className={cn('px-5 pt-5 pb-4 bg-gradient-to-br', accentFrom, accentTo)}>
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-xl bg-white/20 flex items-center justify-center">
+              <Pencil size={15} className="text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-white">Edit {isEmail ? 'Email' : 'Phone'}</p>
+              <p className="text-[10px] text-white/70">Update contact details</p>
+            </div>
           </div>
         </div>
 
-        {/* Footer Buttons */}
-        <div className="px-4 pb-4 flex gap-2">
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => onOpenChange(false)} 
-            className="h-9 text-xs flex-1"
-          >
-            Cancel
-          </Button>
-          <Button 
-            size="sm" 
-            onClick={handleSave} 
-            className={cn(
-              "h-9 text-xs flex-1 font-semibold",
-              type === 'email' ? "bg-indigo-600 hover:bg-indigo-700" : "bg-emerald-600 hover:bg-emerald-700"
+        <div className="p-5 space-y-4 bg-white">
+          <div>
+            <Label className="text-[10px] uppercase tracking-widest text-slate-400 font-bold block mb-1.5">
+              {isEmail ? 'Email Address' : 'Phone Number'}
+            </Label>
+            {!isEmail ? (
+              <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 focus-within:bg-white focus-within:border-emerald-400 focus-within:ring-2 focus-within:ring-emerald-400/20 transition-all">
+                <PhoneInput international defaultCountry="US" value={value} onChange={v => setValue(v || '')} className="h-10 px-3 text-sm w-full bg-transparent" />
+              </div>
+            ) : (
+              <Input value={value} onChange={e => setValue(e.target.value)} className="h-10 text-sm border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20" />
             )}
-          >
-            Save Changes
-          </Button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-[10px] uppercase tracking-widest text-slate-400 font-bold block mb-1.5">Type</Label>
+              <Select value={subtype} onValueChange={setSubtype}>
+                <SelectTrigger className="h-10 text-xs border-slate-200 rounded-xl bg-slate-50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(
+  isEmail
+    ? [['work','Work'],['personal','Personal'],['other','Other']]
+    : [['mobile','Mobile'],['work_hq','Office/HQ'],['other','Other']]
+).map(([v,l]) => (
+  <SelectItem key={v} value={v} className="text-xs">{l}</SelectItem>
+))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-[10px] uppercase tracking-widest text-slate-400 font-bold block mb-1.5">Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="h-10 text-xs border-slate-200 rounded-xl bg-slate-50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(
+  isEmail
+    ? [['verified','✓ Verified'],['unverified','Unverified'],['incorrect','✗ Invalid']]
+    : [['valid_number','✓ Valid'],['no_status','Unknown'],['invalid','✗ Invalid']]
+).map(([v,l]) => (
+  <SelectItem key={v} value={v} className="text-xs">{l}</SelectItem>
+))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex gap-2.5 pt-1">
+            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} className="flex-1 h-10 text-xs rounded-xl border-slate-200">Cancel</Button>
+            <Button size="sm" onClick={() => { onSave({ value, type: subtype, status }); onOpenChange(false); }} className={cn('flex-1 h-10 text-xs rounded-xl text-white', btnCls)}>
+              Save Changes
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 };
 
-// --- CONTACT ASSET ROW (HoverCard Content) ---
+// ── ContactAssetRow ───────────────────────────────────────────────────────────
 
-const ContactAssetRow = ({ value, type, label, isPrimary, source, status, onSetPrimary, onDelete, onUpdateFull, onFlag }: any) => {
-  const [isHovered, setIsHovered] = useState(false);
+const ContactAssetRow = ({
+  value, type, label, isPrimary, source, status,
+  onSetPrimary, onDelete, onUpdateFull, onFlag,
+}: any) => {
+  const [hovered,  setHovered]  = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const { toast } = useToast();
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
-  const handleCopy = () => { 
-    navigator.clipboard.writeText(value); 
-    toast({ title: "Copied!", description: `${type === 'email' ? 'Email' : 'Phone'} copied to clipboard` }); 
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value);
+    toast({ title: 'Copied!' });
   };
-  
   const handleFlagToggle = () => {
-    const isIncorrect = status === 'incorrect' || status === 'invalid';
-    onFlag(isIncorrect ? (type === 'email' ? 'unverified' : 'no_status') : (type === 'email' ? 'incorrect' : 'invalid'));
+    const bad = status === 'incorrect' || status === 'invalid';
+    onFlag(bad
+      ? (type === 'email' ? 'unverified' : 'no_status')
+      : (type === 'email' ? 'incorrect'  : 'invalid'));
   };
-
-  // Determine deliverability level for emails
-  const getDeliverability = () => {
-    if (type !== 'email') return null;
-    if (status === 'verified') return 'high';
-    if (status === 'likely' || status === 'unverified') return 'medium';
-    if (status === 'incorrect') return 'none';
-    return 'low';
-  };
-
-  const deliverability = getDeliverability();
 
   return (
     <>
-      <div 
+      <div
         className={cn(
-          "flex items-start justify-between p-2.5 rounded-lg group transition-all",
-          isPrimary 
-            ? "bg-emerald-50/80 border border-emerald-200/50" 
-            : "hover:bg-slate-50 border border-transparent hover:border-slate-200/50"
-        )} 
-        onMouseEnter={() => setIsHovered(true)} 
-        onMouseLeave={() => setIsHovered(false)}
+          'flex items-start justify-between p-2.5 rounded-xl transition-all',
+          isPrimary
+            ? 'bg-gradient-to-r from-emerald-50 to-teal-50/60 border border-emerald-100'
+            : 'hover:bg-slate-50 border border-transparent',
+        )}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
       >
-        <div className="flex items-start gap-3 overflow-hidden w-full">
+        <div className="flex items-start gap-2.5 overflow-hidden">
           {/* Icon */}
-          <div className="mt-0.5 flex-shrink-0">
-            {type === 'phone' ? (
-              <div className="w-6 h-6 flex items-center justify-center rounded-lg bg-blue-100">
-                <PhoneFlag number={value} />
-              </div>
-            ) : (
-              <div className={cn(
-                "flex h-6 w-6 items-center justify-center rounded-lg",
-                isPrimary ? "bg-emerald-100 text-emerald-600" : "bg-indigo-100 text-indigo-600"
-              )}>
-                <Mail size={12} />
-              </div>
-            )}
+          <div className={cn(
+            'flex h-7 w-7 items-center justify-center rounded-lg flex-shrink-0 mt-0.5',
+            type === 'phone'
+              ? 'bg-emerald-100'
+              : isPrimary ? 'bg-indigo-100' : 'bg-slate-100',
+          )}>
+            {type === 'phone'
+              ? <PhoneFlag number={value} />
+              : <Mail size={11} className={isPrimary ? 'text-indigo-600' : 'text-slate-400'} />
+            }
           </div>
-
-          {/* Content */}
-          <div className="flex flex-col min-w-0 w-full">
-            <div className="flex items-center gap-2">
+          {/* Value + meta */}
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-1.5">
               <span className={cn(
-                "text-xs font-medium truncate select-all",
-                (status === 'incorrect' || status === 'invalid') ? 'line-through text-slate-400' : 'text-slate-800'
+                'text-xs font-medium truncate max-w-[185px]',
+                (status === 'incorrect' || status === 'invalid')
+                  ? 'line-through text-slate-400'
+                  : 'text-slate-800',
               )}>
                 {value}
               </span>
-              {deliverability && <DeliverabilityIndicator level={deliverability} />}
-              {type === 'phone' && <StatusIcon status={status} />}
+              {type === 'email' && <DeliverabilityDot status={status} />}
             </div>
-            <div className="flex items-center gap-1.5 text-[9px] text-slate-400 mt-1">
-              <Badge variant="outline" className="text-[8px] h-4 px-1.5 py-0 font-medium border-slate-200 text-slate-500 capitalize bg-white">
-                {label || (type === 'email' ? 'Work' : 'Mobile')}
-              </Badge>
-              <span className="text-slate-300">•</span>
-              <span className={cn(source?.toLowerCase().includes('manual') ? "text-blue-600 font-semibold" : "text-slate-400")}>
-                {source?.toLowerCase().includes('manual') ? 'Manual' : 'CRM'}
-              </span>
+            <div className="flex items-center gap-1 text-[9px] text-slate-400 mt-0.5">
+              <span className="capitalize">{label || (type === 'email' ? 'work' : 'mobile')}</span>
               {isPrimary && (
-                <>
-                  <span className="text-slate-300">•</span>
-                  <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                    <Star size={8} className="fill-emerald-600" /> Primary
-                  </span>
-                </>
+                <><span>·</span><span className="text-emerald-600 font-semibold">Primary</span></>
+              )}
+              {source?.toLowerCase?.()?.includes('manual') && (
+                <><span>·</span><span className="text-blue-500">Manual</span></>
               )}
             </div>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className={cn("flex items-center gap-0.5 transition-opacity", isHovered ? "opacity-100" : "opacity-0")}>
-          {/* Copy */}
-          <TooltipProvider><Tooltip><TooltipTrigger asChild>
-            <button onClick={handleCopy} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400 hover:text-slate-700 transition-colors">
-              <Copy size={11} />
-            </button>
-          </TooltipTrigger><TooltipContent className="text-xs">Copy</TooltipContent></Tooltip></TooltipProvider>
-          
-          {/* Edit - Opens Dialog */}
-          <TooltipProvider><Tooltip><TooltipTrigger asChild>
-            <button onClick={() => setEditDialogOpen(true)} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400 hover:text-slate-700 transition-colors">
-              <Pencil size={11} />
-            </button>
-          </TooltipTrigger><TooltipContent className="text-xs">Edit</TooltipContent></Tooltip></TooltipProvider>
-          
-          {/* Set Primary */}
+        {/* Hover actions */}
+        <div className={cn('flex items-center gap-0.5 transition-opacity flex-shrink-0 ml-1', hovered ? 'opacity-100' : 'opacity-0')}>
+          <Btn onClick={handleCopy} tip="Copy"><Copy size={10} /></Btn>
+          <Btn onClick={() => setEditOpen(true)} tip="Edit"><Pencil size={10} /></Btn>
           {!isPrimary && (
-            <TooltipProvider><Tooltip><TooltipTrigger asChild>
-              <button onClick={onSetPrimary} className="p-1.5 hover:bg-amber-100 rounded-md text-slate-400 hover:text-amber-600 transition-colors">
-                <Star size={11} />
-              </button>
-            </TooltipTrigger><TooltipContent className="text-xs">Set Primary</TooltipContent></Tooltip></TooltipProvider>
+            <Btn onClick={onSetPrimary} tip="Set Primary" hoverColor="hover:text-amber-500"><Star size={10} /></Btn>
           )}
-          
-          {/* Flag */}
-          <TooltipProvider><Tooltip><TooltipTrigger asChild>
-            <button 
-              onClick={handleFlagToggle} 
-              className={cn(
-                "p-1.5 rounded-md transition-colors",
-                (status === 'incorrect' || status === 'invalid') 
-                  ? "text-red-600 bg-red-50 hover:bg-red-100" 
-                  : "text-slate-400 hover:text-red-500 hover:bg-red-50"
-              )}
-            >
-              <Flag size={11} fill={(status === 'incorrect' || status === 'invalid') ? "currentColor" : "none"} />
-            </button>
-          </TooltipTrigger><TooltipContent className="text-xs">{(status === 'incorrect' || status === 'invalid') ? 'Unflag' : 'Flag Incorrect'}</TooltipContent></Tooltip></TooltipProvider>
-          
-          {/* Delete */}
-          <TooltipProvider><Tooltip><TooltipTrigger asChild>
-            <button onClick={onDelete} className="p-1.5 hover:bg-red-50 rounded-md text-slate-400 hover:text-red-600 transition-colors">
-              <Trash2 size={11} />
-            </button>
-          </TooltipTrigger><TooltipContent className="text-xs">Delete</TooltipContent></Tooltip></TooltipProvider>
+          <Btn
+            onClick={handleFlagToggle}
+            tip={status === 'incorrect' || status === 'invalid' ? 'Unflag' : 'Flag bad'}
+            hoverColor="hover:text-red-500"
+          >
+            <Flag size={10} fill={status === 'incorrect' || status === 'invalid' ? 'currentColor' : 'none'} />
+          </Btn>
+          <Btn onClick={onDelete} tip="Delete" hoverColor="hover:text-red-500"><Trash2 size={10} /></Btn>
         </div>
       </div>
-      
-      {/* Edit Dialog */}
+
       <EditAssetDialog
-        open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
-        type={type}
-        initialValue={value}
-        initialType={label}
-        initialStatus={status}
+        open={editOpen} onOpenChange={setEditOpen}
+        type={type} initialValue={value} initialType={label} initialStatus={status}
         onSave={onUpdateFull}
       />
     </>
   );
 };
 
-// --- SMART EMAIL CELL ---
-const SmartEmailCell = ({ row, table }: any) => {
-  const c = row.original;
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
-  // Note: Discovery rows will fall through and likely hit the "Access Email" button state 
-  // or return null if they have no ID/CRM data. 
-  // For the discovery table specifically, this cell will be hidden by parent configuration, 
-  // and the new 'data_availability' column will be used instead.
+// ── Availability badge used inside popovers ───────────────────────────────────
 
-  // CRM Contact - Show actual emails with deliverability
-  const emails = [
-    ...(c.email ? [{ email: c.email, type: 'work', is_primary: true, source: 'Manual', email_status: 'verified' }] : []),
-    ...(c.all_emails || []).filter((e:any) => e.email !== c.email).map((e:any) => ({ ...e, source: e.source || 'CRM' }))
-  ];
-  const primaryEmail = emails[0]?.email;
-  const primaryStatus = emails[0]?.email_status;
-  const count = emails.length;
-
-  const handleAdd = (val: string, meta: any) => { table.options.meta?.handleAssetAction(row.index, 'email', 'add', val, meta); };
-  const execAction = (action: string, val: string, payload?: any) => { table.options.meta?.handleAssetAction(row.index, 'email', action, val, payload); };
-
-  // No emails - show access button
-  if (count === 0) {
-    return (
-      <div className="flex items-center gap-2 group w-full">
-        <Button 
-          onClick={() => table.options.meta?.enrichContact(c.id, c.apollo_person_id, 'email')} 
-          variant="outline" 
-          size="sm" 
-          className="h-7 px-2.5 text-[10px] font-medium bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200/60 text-indigo-700 hover:from-indigo-100 hover:to-blue-100 w-full justify-start shadow-sm"
-        >
-          <Zap size={10} className="mr-1.5 text-indigo-500" /> 
-          Access Email
-        </Button>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-indigo-600 rounded-full hover:bg-indigo-50" onClick={() => setIsDialogOpen(true)}>
-                <Plus size={12} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="text-xs">Add manually</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <AddAssetDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} type="email" onSave={handleAdd} />
-      </div>
-    );
-  }
-
-  // Determine deliverability display
-  const getDeliverabilityLevel = (status: string) => {
-    if (status === 'verified') return 'high';
-    if (status === 'likely' || status === 'unverified') return 'medium';
-    return 'low';
-  };
-
-  return (
-    <HoverCard openDelay={150} closeDelay={200}>
-      <HoverCardTrigger asChild>
-        <div className="flex items-center justify-between w-full group cursor-pointer py-1 relative">
-          <div className="flex items-center gap-2 overflow-hidden pr-8">
-            <DeliverabilityIndicator level={getDeliverabilityLevel(primaryStatus)} />
-            <span className="text-xs text-slate-700 truncate font-medium">{primaryEmail}</span>
-          </div>
-          {count > 1 && (
-            <Badge className="absolute right-0 h-5 min-w-[20px] px-1.5 text-[9px] font-semibold bg-gradient-to-r from-indigo-100 to-blue-100 text-indigo-700 border-indigo-200/50 rounded-full">
-              +{count-1}
-            </Badge>
-          )}
-        </div>
-      </HoverCardTrigger>
-      <HoverCardContent align="start" className="w-[360px] p-0 shadow-xl border-slate-200 rounded-xl overflow-hidden" sideOffset={5}>
-        <div className="px-3 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 flex justify-between items-center">
-          <span className="text-[10px] font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-            <Mail size={12} /> Emails
-          </span>
-          <div className="flex items-center gap-2">
-            <Badge className="bg-white/20 text-white text-[9px] font-semibold border-0">{count}</Badge>
-            <Button variant="ghost" size="icon" className="h-5 w-5 text-white/80 hover:text-white hover:bg-white/20" onClick={() => setIsDialogOpen(true)}>
-              <Plus size={12} />
-            </Button>
-          </div>
-        </div>
-        <div className="p-2 max-h-[280px] overflow-y-auto bg-white space-y-1">
-          {emails.map((e: any, idx: number) => (
-            <ContactAssetRow 
-              key={idx} 
-              value={e.email} 
-              type="email" 
-              label={e.type} 
-              isPrimary={idx === 0} 
-              status={e.email_status} 
-              source={e.source}
-              onSetPrimary={() => execAction('set_primary', e.email)} 
-              onDelete={() => execAction('delete', e.email)} 
-              onFlag={(status: string) => execAction('flag', e.email, status)} 
-              onUpdateFull={(payload: any) => execAction('edit', e.email, payload)} 
-            />
-          ))}
-        </div>
-        <AddAssetDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} type="email" onSave={handleAdd} />
-      </HoverCardContent>
-    </HoverCard>
+const AvailBadge = ({ state, label }: { state: AvailState; label: string }) => {
+  if (state === 'yes') return (
+    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-100">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+      <span className="text-[11px] font-semibold text-emerald-700">{label} available to reveal</span>
+    </div>
   );
-};
-
-// --- SMART PHONE CELL ---
-const SmartPhoneCell = ({ row, table }: any) => {
-  const c = row.original;
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
-  // Note: Removing the 'is_discovery' pill logic. 
-  // Discovery rows will use the dedicated 'data_availability' column instead.
-
-  // CRM Contact
-  const phones = [
-    ...(c.mobile ? [{ phone_number: c.mobile, type: 'mobile', source_name: 'Manual', status: 'valid_number' }] : []),
-    ...(c.all_phones || []).filter((p:any) => p.phone_number !== c.mobile).map((p:any) => ({ ...p, source_name: p.source_name || 'CRM' }))
-  ];
-  const primaryPhone = phones[0]?.phone_number;
-  const count = phones.length;
-
-  const handleAdd = (val: string, meta: any) => { table.options.meta?.handleAssetAction(row.index, 'mobile', 'add', val, meta); };
-  const execAction = (action: string, val: string, payload?: any) => { table.options.meta?.handleAssetAction(row.index, 'mobile', action, val, payload); };
-
-  // No phones
-  if (count === 0) {
-    return (
-      <div className="flex items-center gap-2 w-full group">
-        {c.phone_enrichment_status === 'pending_phones' ? (
-          <Badge className="bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 border-amber-200/60 animate-pulse font-semibold text-[9px] w-full justify-center py-1.5">
-            <Loader2 size={10} className="mr-1.5 animate-spin" /> Verifying...
-          </Badge>
-        ) : (
-          <Button 
-            onClick={() => table.options.meta?.enrichContact(c.id, c.apollo_person_id, 'phone')} 
-            variant="outline" 
-            size="sm" 
-            className="h-7 px-2.5 text-[10px] font-medium bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200/60 text-emerald-700 hover:from-emerald-100 hover:to-teal-100 w-full justify-start shadow-sm"
-          >
-            <Zap size={10} className="mr-1.5 text-emerald-500" /> 
-            Access Phone
-          </Button>
-        )}
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-emerald-600 rounded-full hover:bg-emerald-50" onClick={() => setIsDialogOpen(true)}>
-                <Plus size={12} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="text-xs">Add manually</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <AddAssetDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} type="mobile" onSave={handleAdd} />
-      </div>
-    );
-  }
-
-  return (
-    <HoverCard openDelay={150} closeDelay={200}>
-      <HoverCardTrigger asChild>
-        <div className="flex items-center justify-between w-full group cursor-pointer py-1 relative">
-          <div className="flex items-center gap-2 overflow-hidden pr-8">
-            <div className="flex items-center justify-center h-5 w-6 rounded bg-slate-100">
-              <PhoneFlag number={primaryPhone} />
-            </div>
-            <span className="text-xs text-slate-700 truncate font-medium">{primaryPhone}</span>
-          </div>
-          {count > 1 && (
-            <Badge className="absolute right-0 h-5 min-w-[20px] px-1.5 text-[9px] font-semibold bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 border-emerald-200/50 rounded-full">
-              +{count-1}
-            </Badge>
-          )}
-        </div>
-      </HoverCardTrigger>
-      <HoverCardContent align="start" className="w-[360px] p-0 shadow-xl border-slate-200 rounded-xl overflow-hidden" sideOffset={5}>
-        <div className="px-3 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 flex justify-between items-center">
-          <span className="text-[10px] font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-            <Phone size={12} /> Phones
-          </span>
-          <div className="flex items-center gap-2">
-            <Badge className="bg-white/20 text-white text-[9px] font-semibold border-0">{count}</Badge>
-            <Button variant="ghost" size="icon" className="h-5 w-5 text-white/80 hover:text-white hover:bg-white/20" onClick={() => setIsDialogOpen(true)}>
-              <Plus size={12} />
-            </Button>
-          </div>
-        </div>
-        <div className="p-2 max-h-[280px] overflow-y-auto bg-white space-y-1">
-          {phones.map((p: any, idx: number) => (
-            <ContactAssetRow 
-              key={idx} 
-              value={p.phone_number} 
-              type="phone" 
-              label={p.type} 
-              isPrimary={idx === 0} 
-              status={p.status} 
-              source={p.source_name}
-              onSetPrimary={() => execAction('set_primary', p.phone_number)} 
-              onDelete={() => execAction('delete', p.phone_number)} 
-              onFlag={(status: string) => execAction('flag', p.phone_number, status)} 
-              onUpdateFull={(payload: any) => execAction('edit', p.phone_number, payload)} 
-            />
-          ))}
-        </div>
-        <AddAssetDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} type="mobile" onSave={handleAdd} />
-      </HoverCardContent>
-    </HoverCard>
+  if (state === 'maybe') return (
+    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-100">
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0 animate-pulse" />
+      <span className="text-[11px] font-semibold text-amber-700">May have {label.toLowerCase()} (request to confirm)</span>
+    </div>
   );
-};
-
-// --- OTHER CELLS ---
-
-export const EditableCell: React.FC<any> = ({ getValue, row, column, table }) => {
-  const value = getValue() as string || '';
-  
-  // Discovery or grouped rows → read-only truncated display
-  if (row.getIsGrouped() || isDiscoveryRow(row)) {
-    return (
-      <div 
-        className="truncate text-xs text-slate-600 min-w-0"
-        title={value}
-      >
-        {value || '-'}
-      </div>
-    );
-  }
-
-  // Normal editable mode
-  const initialValue = value;
-  const [localValue, setLocalValue] = useState(initialValue);
-
-  const onBlur = () => {
-    if (localValue !== initialValue) {
-      table.options.meta?.updateData(row.index, column.id, localValue);
-    }
-  };
-
-  useEffect(() => {
-    setLocalValue(initialValue);
-  }, [initialValue]);
-
   return (
-    <Input
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      onBlur={onBlur}
-      className="h-full text-xs border-none bg-transparent rounded-none p-0 truncate focus-visible:ring-1 focus-visible:ring-indigo-500/50 min-w-0"
-      title={localValue} // tooltip on hover shows full value
-    />
-  );
-};
-
-const ActionCell = ({ row, table }: any) => {
-  const c = row.original;
-  const deleteContactMutation = useDeleteContact();
-  const { toast } = useToast();
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  // Discovery mode – prominent ADD button with gradient
- if (c.is_discovery) {
-    return (
-     <div className="flex justify-center">
-                      {/* <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200"> */}
-<TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-          onClick={() => table.options.meta?.openListModal(c, true)}
-        >
-          <ListPlus size={12} className="mr-1.5" />
-        
-        </Button>
-        </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">Add to List</TooltipContent>
-
-        </Tooltip>
-</TooltipProvider>
-
-
-      {/* </div> */}
-      </div>
-    );
-  }
-
-  // CRM contact actions
-  return (
-    <div className="flex items-center justify-end gap-0.5">
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-              onClick={() => table.options.meta?.openListModal(c, false)}
-            >
-              <ListPlus size={14} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">Add to List</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-              asChild
-            >
-              <Link to={`/contacts/${c.id}`}>
-                <Eye size={14} />
-              </Link>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">View Profile</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-              onClick={() => table.options.meta?.enrichContact(c.id, c.apollo_person_id, 'email')}
-            >
-              <ShieldCheck size={14} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">Verify / Enrich</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              onClick={() => setIsDeleting(true)}
-            >
-              <Trash2 size={14} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">Delete</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      <Dialog open={isDeleting} onOpenChange={setIsDeleting}>
-        <DialogContent className="sm:max-w-[380px]">
-          <DialogHeader>
-            <DialogTitle>Delete Contact</DialogTitle>
-            <DialogDescription>
-              Permanently delete <span className="font-semibold">{c.name}</span>? This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsDeleting(false)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                deleteContactMutation.mutate(c.id, {
-                  onSuccess: () => {
-                    toast({ title: "Contact deleted" });
-                    setIsDeleting(false);
-                  },
-                  onError: () => {
-                    toast({ variant: "destructive", title: "Failed to delete" });
-                  },
-                });
-              }}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100">
+      <span className="w-1.5 h-1.5 rounded-full bg-slate-300 flex-shrink-0" />
+      <span className="text-[11px] text-slate-500">{label} not found</span>
     </div>
   );
 };
 
+// ── Combined Contact Cell ─────────────────────────────────────────────────────
 
-// --- COMPANY CELL - Final version with company_id fallback ---
+const ContactCell = ({ row, table }: any) => {
+  const c = row.original;
+  const [emailAddOpen, setEmailAddOpen] = useState(false);
+  const [phoneAddOpen, setPhoneAddOpen] = useState(false);
+
+  const emails: any[] = [
+    ...(c.email ? [{ email: c.email, type: 'work', is_primary: true, source: 'CRM', email_status: c.email_status || 'unverified' }] : []),
+    ...(c.all_emails || []).filter((e: any) => e.email !== c.email),
+  ];
+  const phones: any[] = [
+    ...(c.mobile ? [{ phone_number: c.mobile, type: 'mobile', source_name: 'CRM', status: 'valid_number', is_primary: true }] : []),
+    ...(c.all_phones || []).filter((p: any) => p.phone_number !== c.mobile),
+  ];
+
+  // 3-state availability computed in useSimpleContacts and passed via row data
+  const emailAvail: AvailState = c.email_avail ?? (emails.length > 0 ? 'yes' : 'no');
+  const phoneAvail: AvailState = c.phone_avail ?? (phones.length > 0 ? 'yes' : 'no');
+
+  const execEmail = (action: string, val: string, payload?: any) =>
+    table.options.meta?.handleAssetAction(row.index, 'email', action, val, payload);
+  const execPhone = (action: string, val: string, payload?: any) =>
+    table.options.meta?.handleAssetAction(row.index, 'mobile', action, val, payload);
+
+  // ── Dot indicator on icon button ──────────────────────────────────────────
+  const dotCls = (avail: AvailState, hasData: boolean) => {
+    if (hasData) return 'bg-emerald-500';
+    if (avail === 'yes')   return 'bg-emerald-500';
+    if (avail === 'maybe') return 'bg-amber-400';
+    return 'hidden';
+  };
+
+  // ── Reveal button helper ──────────────────────────────────────────────────
+  const RevealBtn = ({ kind, avail }: { kind: 'email' | 'phone'; avail: AvailState }) => {
+    const isEmail = kind === 'email';
+    const base  = isEmail ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700';
+    const maybe = isEmail ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-amber-500 hover:bg-amber-600';
+    const label = avail === 'maybe'
+      ? (isEmail ? 'Request Email' : 'Request Direct Dial')
+      : (isEmail ? 'Reveal Email' : 'Reveal Phone');
+
+    return (
+      <button
+        onClick={() => table.options.meta?.enrichContact(c.id, c.apollo_person_id, kind)}
+        className={cn(
+          'w-full flex items-center justify-center gap-1.5 h-8 px-3 text-xs font-semibold text-white rounded-xl transition-colors shadow-sm',
+          avail === 'maybe' ? maybe : base,
+        )}
+      >
+        <Zap size={11} /> {label}
+      </button>
+    );
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {/* ── Email icon button ── */}
+      <HoverCard openDelay={120} closeDelay={200}>
+        <HoverCardTrigger asChild>
+          <button
+            className={cn(
+              'relative flex items-center justify-center h-7 w-7 rounded-lg transition-all border',
+              emails.length > 0
+                ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-100'
+                : emailAvail === 'yes' || emailAvail === 'maybe'
+                  ? 'bg-indigo-50/60 text-indigo-400 hover:bg-indigo-100 border-indigo-100 border-dashed'
+                  : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border-slate-200',
+            )}
+          >
+            <Mail size={12} />
+            <span className={cn(
+              'absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-[1.5px] border-white',
+              dotCls(emailAvail, emails.length > 0),
+            )} />
+          </button>
+        </HoverCardTrigger>
+
+        <HoverCardContent
+          align="start" side="bottom" sideOffset={8}
+          className="w-[340px] p-0 shadow-2xl border-0 rounded-2xl overflow-hidden"
+        >
+          {/* Header */}
+          <div className="px-4 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-white flex items-center gap-1.5">
+              <Mail size={12} />
+              {emails.length > 0 ? `Emails (${emails.length})` : 'Email'}
+            </span>
+            {emails.length > 0 && (
+              <button onClick={() => setEmailAddOpen(true)} className="text-white/70 hover:text-white transition-colors">
+                <Plus size={13} />
+              </button>
+            )}
+          </div>
+
+          {/* Body */}
+          <div className="p-3 space-y-1.5 max-h-[300px] overflow-y-auto bg-white">
+            {emails.length > 0 ? (
+              emails.map((e: any, i: number) => (
+                <ContactAssetRow
+                  key={i} value={e.email} type="email" label={e.type}
+                  isPrimary={i === 0} status={e.email_status} source={e.source}
+                  onSetPrimary={() => execEmail('set_primary', e.email)}
+                  onDelete={()     => execEmail('delete', e.email)}
+                  onFlag={(s: string) => execEmail('flag', e.email, s)}
+                  onUpdateFull={(p: any) => execEmail('edit', e.email, p)}
+                />
+              ))
+            ) : (
+              <div className="py-2 space-y-2">
+                <AvailBadge state={emailAvail} label="Email" />
+                <RevealBtn kind="email" avail={emailAvail} />
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-3 py-2 border-t border-slate-100 bg-slate-50/80">
+            <button
+              onClick={() => setEmailAddOpen(true)}
+              className="w-full flex items-center justify-center gap-1.5 h-7 text-[11px] font-medium text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+            >
+              <Plus size={11} /> Add {emails.length > 0 ? 'another email' : 'manually'}
+            </button>
+          </div>
+
+          <AddAssetDialog
+            open={emailAddOpen} onOpenChange={setEmailAddOpen} type="email"
+            onSave={(val: string, meta: any) => table.options.meta?.handleAssetAction(row.index, 'email', 'add', val, meta)}
+          />
+        </HoverCardContent>
+      </HoverCard>
+
+      {/* ── Phone icon button ── */}
+      <HoverCard openDelay={120} closeDelay={200}>
+        <HoverCardTrigger asChild>
+          <button
+            className={cn(
+              'relative flex items-center justify-center h-7 w-7 rounded-lg transition-all border',
+              phones.length > 0
+                ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-100'
+                : phoneAvail === 'yes'
+                  ? 'bg-emerald-50/60 text-emerald-400 hover:bg-emerald-100 border-emerald-100 border-dashed'
+                  : phoneAvail === 'maybe'
+                    ? 'bg-amber-50 text-amber-500 hover:bg-amber-100 border-amber-200 border-dashed'
+                    : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border-slate-200',
+            )}
+          >
+            <Phone size={12} />
+            <span className={cn(
+              'absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-[1.5px] border-white',
+              dotCls(phoneAvail, phones.length > 0),
+            )} />
+          </button>
+        </HoverCardTrigger>
+
+        <HoverCardContent
+          align="start" side="bottom" sideOffset={8}
+          className="w-[340px] p-0 shadow-2xl border-0 rounded-2xl overflow-hidden"
+        >
+          {/* Header */}
+          <div className="px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-white flex items-center gap-1.5">
+              <Phone size={12} />
+              {phones.length > 0 ? `Phones (${phones.length})` : 'Phone'}
+            </span>
+            {phones.length > 0 && (
+              <button onClick={() => setPhoneAddOpen(true)} className="text-white/70 hover:text-white transition-colors">
+                <Plus size={13} />
+              </button>
+            )}
+          </div>
+
+          {/* Body */}
+          <div className="p-3 space-y-1.5 max-h-[300px] overflow-y-auto bg-white">
+            {phones.length > 0 ? (
+              phones.map((p: any, i: number) => (
+                <ContactAssetRow
+                  key={i} value={p.phone_number} type="phone" label={p.type}
+                  isPrimary={i === 0} status={p.status} source={p.source_name}
+                  onSetPrimary={() => execPhone('set_primary', p.phone_number)}
+                  onDelete={()     => execPhone('delete', p.phone_number)}
+                  onFlag={(s: string) => execPhone('flag', p.phone_number, s)}
+                  onUpdateFull={(pl: any) => execPhone('edit', p.phone_number, pl)}
+                />
+              ))
+            ) : (
+              <div className="py-2 space-y-2">
+                {c.phone_enrichment_status === 'pending_phones' ? (
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-100">
+                    <Loader2 size={11} className="animate-spin text-amber-500" />
+                    <span className="text-[11px] font-semibold text-amber-700">Verifying phone…</span>
+                  </div>
+                ) : (
+                  <>
+                    <AvailBadge state={phoneAvail} label="Phone" />
+                    <RevealBtn kind="phone" avail={phoneAvail} />
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-3 py-2 border-t border-slate-100 bg-slate-50/80">
+            <button
+              onClick={() => setPhoneAddOpen(true)}
+              className="w-full flex items-center justify-center gap-1.5 h-7 text-[11px] font-medium text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+            >
+              <Plus size={11} /> Add {phones.length > 0 ? 'another phone' : 'manually'}
+            </button>
+          </div>
+
+          <AddAssetDialog
+            open={phoneAddOpen} onOpenChange={setPhoneAddOpen} type="mobile"
+            onSave={(val: string, meta: any) => table.options.meta?.handleAssetAction(row.index, 'mobile', 'add', val, meta)}
+          />
+        </HoverCardContent>
+      </HoverCard>
+    </div>
+  );
+};
+
+// ── Data Availability Cell ────────────────────────────────────────────────────
+// Shows for ALL rows (CRM + Discovery) using 3-state availability
+
+const DataAvailabilityCell = ({ row }: any) => {
+  const c = row.original;
+
+  // CRM rows use computed email_avail/phone_avail from useSimpleContacts
+  const emailAvail: AvailState = c.email_avail
+    ?? (c.has_email ? 'yes' : 'no');
+  const phoneAvail: AvailState = c.phone_avail
+    ?? (c.has_phone ? 'yes' : (c.has_direct_phone ? 'maybe' : 'no'));
+
+  const hasLocation = !!(c.city || c.state || c.country);
+  const hasCompany  = !!(c.company_name || c.original_data?.organization?.name);
+
+  const Item = ({
+    avail, ok, icon: Icon, tip,
+  }: { avail?: AvailState; ok?: boolean; icon: any; tip: string }) => {
+    const state: AvailState = avail ?? (ok ? 'yes' : 'no');
+    const cfg = {
+      yes:   { bg: 'bg-emerald-50', text: 'text-emerald-600', dot: 'bg-emerald-500', label: 'Available' },
+      maybe: { bg: 'bg-amber-50',   text: 'text-amber-500',   dot: 'bg-amber-400',   label: 'Possible' },
+      no:    { bg: 'bg-slate-100',  text: 'text-slate-400',   dot: '',               label: 'Not found' },
+    }[state];
+
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className={cn(
+              'flex items-center justify-center h-6 w-6 rounded-lg transition-colors relative',
+              cfg.bg, cfg.text,
+            )}>
+              <Icon className="h-3.5 w-3.5" />
+              {state === 'maybe' && (
+                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 border border-white animate-pulse" />
+              )}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="text-xs">
+            {tip}: {cfg.label}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <Item avail={emailAvail}  icon={Mail}      tip="Email" />
+      <Item avail={phoneAvail}  icon={Phone}     tip="Phone" />
+      <Item ok={hasLocation}    icon={MapPin}    tip="Location" />
+      <Item ok={hasCompany}     icon={Building2} tip="Company" />
+    </div>
+  );
+};
+
+// ── Other cells ───────────────────────────────────────────────────────────────
+
+export const EditableCell: React.FC<any> = ({ getValue, row, column, table }) => {
+  const value = getValue() as string || '';
+  if (row.getIsGrouped() || isDiscoveryRow(row)) {
+    return <div className="truncate text-xs text-slate-600" title={value}>{value || '—'}</div>;
+  }
+  const [local, setLocal] = useState(value);
+  useEffect(() => setLocal(value), [value]);
+  return (
+    <Input
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={() => { if (local !== value) table.options.meta?.updateData(row.index, column.id, local); }}
+      className="h-full text-xs border-none bg-transparent rounded-none p-0 focus-visible:ring-1 focus-visible:ring-indigo-400/50 truncate"
+      title={local}
+    />
+  );
+};
+
 const CompanyCell: React.FC<any> = ({ getValue, row, table }) => {
+  const contact     = row.original;
   const isDiscovery = isDiscoveryRow(row);
-  const contact = row.original;
+  const companyId   = contact.company_id;
+  const displayName = getValue() || contact.company_name || '—';
+  const logoUrl     = contact.company_logo;
 
-  const companyId = contact.company_id;
-  const displayName = getValue() || contact.company_name || '-';
+  const Logo = () =>
+    logoUrl ? (
+      <img src={logoUrl} alt={displayName}
+        className="h-5 w-5 rounded object-contain flex-shrink-0 border border-slate-100"
+        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+      />
+    ) : (
+      <div className="h-5 w-5 rounded bg-slate-100 flex items-center justify-center text-[9px] font-bold text-slate-500 flex-shrink-0 border border-slate-100">
+        {displayName?.[0]?.toUpperCase() || <Building2 size={10} />}
+      </div>
+    );
 
-  // DISCOVERY ROW (unchanged)
-  if (isDiscovery) {
+  if (isDiscovery || !companyId) {
     return (
       <div className="flex items-center gap-2">
-        <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-slate-100 text-slate-600">
-          <Building2 size={12} />
-        </div>
-        <span className="text-xs text-slate-700 truncate font-medium" title={displayName}>
-          {displayName}
-        </span>
+        <Logo />
+        <span className="text-xs text-slate-700 truncate">{displayName}</span>
       </div>
     );
   }
 
-  // CRM ROWS
-  if (companyId) {
-    // Has linked company → full combobox (editable + linked to companies table)
-    const onSelect = (id: number | null) => 
-      table.options.meta?.updateData(row.index, 'company_id', id);
-
-    return <CompanyCombobox 
-      value={companyId} 
-      onSelect={onSelect} 
-      initialName={displayName} 
-    />;
-  } 
-  else {
-    // No company_id → show the fallback company_name from contacts table
-    return (
-      <div className="flex items-center gap-2 py-1">
-        <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-amber-100 text-amber-600">
-          <Building2 size={12} />
-        </div>
-        <span className="text-xs text-slate-700 truncate font-medium" title={displayName}>
-          {displayName}
-        </span>
-      </div>
-    );
-  }
+  return (
+    <div className="flex items-center gap-2">
+      <Logo />
+      <CompanyCombobox
+        value={companyId}
+        onSelect={id => table.options.meta?.updateData(row.index, 'company_id', id)}
+        initialName={displayName}
+      />
+    </div>
+  );
 };
 
 const StageSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
   if (isDiscoveryRow(row)) return null;
-  const initialValue = getValue();
+  const val = getValue();
   const { data: stages = [] } = useContactStages();
-  const onValueChange = (val: string) => table.options.meta?.updateData(row.index, column.id, val);
-  const stageInfo = stages.find(s => s.name === initialValue);
-  
+  const stageInfo = stages.find(s => s.name === val);
   return (
-    <Select value={initialValue || ""} onValueChange={onValueChange}>
-      <SelectTrigger className="h-7 text-xs border-none bg-transparent shadow-none px-0 hover:bg-slate-50 rounded-lg transition-colors">
+    <Select value={val || ''} onValueChange={v => table.options.meta?.updateData(row.index, column.id, v)}>
+      <SelectTrigger className="h-7 text-[10px] border-none bg-transparent shadow-none px-0 w-full">
         <SelectValue>
-          {initialValue ? (
-            <Badge 
-              className="text-[10px] font-semibold border"
-              style={{ 
-                backgroundColor: stageInfo?.color + '15', 
-                color: stageInfo?.color, 
-                borderColor: stageInfo?.color + '30' 
-              }}
-            >
-              {initialValue}
+          {val ? (
+            <Badge className="text-[9px] font-semibold border"
+              style={{ backgroundColor: (stageInfo?.color || '#94a3b8') + '18', color: stageInfo?.color || '#64748b', borderColor: (stageInfo?.color || '#94a3b8') + '40' }}>
+              {val}
             </Badge>
-          ) : <span className="text-slate-400 text-xs">Select...</span>}
+          ) : <span className="text-slate-400">—</span>}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {stages.map(stage => (
-          <SelectItem key={stage.id} value={stage.name} className="text-xs">
+        {stages.map(s => (
+          <SelectItem key={s.id} value={s.name} className="text-xs">
             <div className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
-              {stage.name}
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
+              {s.name}
             </div>
           </SelectItem>
         ))}
@@ -1010,42 +807,34 @@ const StageSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
 
 const MediumSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
   if (isDiscoveryRow(row)) return null;
-  const initialValue = getValue();
-  const onValueChange = (val: string) => table.options.meta?.updateData(row.index, column.id, val);
-  const mediumOptions = [
-    { name: 'LinkedIn', color: '#0A66C2', icon: Linkedin },
-    { name: 'Cold Call', color: '#374151', icon: Phone },
-    { name: 'Email Campaign', color: '#10B981', icon: Mail },
-    { name: 'Referral', color: '#8B5CF6', icon: UserPlus },
-    { name: 'Website Form', color: '#3B82F6', icon: Globe },
-    { name: 'Other', color: '#6B7280', icon: MoreHorizontal },
+  const val = getValue();
+  const options = [
+    { name: 'LinkedIn',       color: '#0A66C2' },
+    { name: 'Cold Call',      color: '#374151' },
+    { name: 'Email Campaign', color: '#10B981' },
+    { name: 'Referral',       color: '#8B5CF6' },
+    { name: 'Website Form',   color: '#3B82F6' },
+    { name: 'Other',          color: '#6B7280' },
   ];
-  const selected = mediumOptions.find(o => o.name === initialValue);
-  
+  const sel = options.find(o => o.name === val);
   return (
-    <Select value={initialValue || ""} onValueChange={onValueChange}>
-      <SelectTrigger className="h-7 text-xs border-none bg-transparent shadow-none px-0 hover:bg-slate-50 rounded-lg transition-colors">
+    <Select value={val || ''} onValueChange={v => table.options.meta?.updateData(row.index, column.id, v)}>
+      <SelectTrigger className="h-7 text-[10px] border-none bg-transparent shadow-none px-0 w-full">
         <SelectValue>
-          {initialValue ? (
-            <Badge 
-              className="text-[10px] font-semibold border flex items-center gap-1"
-              style={{ 
-                backgroundColor: selected?.color + '15', 
-                color: selected?.color, 
-                borderColor: selected?.color + '30' 
-              }}
-            >
-              {selected && <selected.icon size={10} />} {initialValue}
+          {val ? (
+            <Badge className="text-[9px] font-medium border"
+              style={{ backgroundColor: (sel?.color || '#94a3b8') + '18', color: sel?.color || '#64748b', borderColor: (sel?.color || '#94a3b8') + '40' }}>
+              {val}
             </Badge>
-          ) : <span className="text-slate-400 text-xs">Source...</span>}
+          ) : <span className="text-slate-400">—</span>}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {mediumOptions.map(m => (
-          <SelectItem key={m.name} value={m.name} className="text-xs">
+        {options.map(o => (
+          <SelectItem key={o.name} value={o.name} className="text-xs">
             <div className="flex items-center gap-2">
-              <m.icon size={12} style={{ color: m.color }} />
-              {m.name}
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: o.color }} />
+              {o.name}
             </div>
           </SelectItem>
         ))}
@@ -1054,409 +843,243 @@ const MediumSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
   );
 };
 
-const DisplayDateCell: React.FC<any> = ({ getValue }) => {
-  const date = getValue();
-  if (!date) return <span className="text-slate-300 text-xs">-</span>;
-  return <span className="text-slate-600 text-xs">{new Date(date).toLocaleDateString()}</span>;
+// ── Action Cell ───────────────────────────────────────────────────────────────
+
+const ActionCell = ({ row, table }: any) => {
+  const c    = row.original;
+  const meta = table.options.meta as any;
+  const isDiscovery = meta?.isDiscoveryMode;
+  const deleteContactMutation = useDeleteContact();
+  const { toast } = useToast();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Discovery: always-visible Save + List buttons
+  if (isDiscovery) {
+    return (
+      <div className="flex items-center gap-1.5 py-0.5">
+        <button
+          onClick={() => meta.saveToCRM?.(row.original)}
+          className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg transition-colors whitespace-nowrap"
+        >
+          <DatabaseZap size={10} /> Save
+        </button>
+        <button
+          onClick={() => meta.openListModal?.(row.original, true)}
+          className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg transition-colors whitespace-nowrap"
+        >
+          <ListPlus size={10} /> List
+        </button>
+      </div>
+    );
+  }
+
+  // CRM: icons visible ONLY on group-hover (data-table sets group on <tr>)
+  return (
+    <>
+      <div className="flex items-center justify-center gap-0.5 transition-opacity duration-150">
+        <TooltipProvider><Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+              onClick={() => meta?.openListModal(c, false)}>
+              <ListPlus size={13} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="text-xs">Add to List</TooltipContent>
+        </Tooltip></TooltipProvider>
+
+        <TooltipProvider><Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" asChild>
+              <Link to={`/contacts/${c.id}`}><Eye size={13} /></Link>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="text-xs">View</TooltipContent>
+        </Tooltip></TooltipProvider>
+
+        <TooltipProvider><Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg"
+              onClick={() => meta?.enrichContact(c.id, c.apollo_person_id, 'email')}>
+              <ShieldCheck size={13} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="text-xs">Enrich</TooltipContent>
+        </Tooltip></TooltipProvider>
+
+        <TooltipProvider><Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+              onClick={() => setConfirmDelete(true)}>
+              <Trash2 size={13} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="text-xs">Delete</TooltipContent>
+        </Tooltip></TooltipProvider>
+      </div>
+
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent className="sm:max-w-[360px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base">Delete Contact</DialogTitle>
+            <DialogDescription className="text-sm">
+              Permanently delete <span className="font-semibold">{c.name}</span>? This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+            <Button size="sm" variant="destructive"
+              onClick={() => deleteContactMutation.mutate(c.id, {
+                onSuccess: () => { toast({ title: 'Contact deleted' }); setConfirmDelete(false); },
+                onError:   () => { toast({ variant: 'destructive', title: 'Failed to delete' }); },
+              })}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 };
 
-
-// --- NAME COLUMN (Professional Discovery Mode) ---
-// In the NAME column definition, update the cell like this:
-cell: ({ row }) => {
-  const c = row.original;
-  const isDiscovery = c.is_discovery;
-  
-  return (
-    <div className="flex items-center gap-3 py-1">
-      <Avatar className={cn(
-        "h-8 w-8 border-2 rounded-xl flex-shrink-0 shadow-sm border-slate-200"
-      )}>
-        <AvatarImage src={c.photo_url} />
-        <AvatarFallback className={cn(
-          "text-[10px] font-bold bg-slate-100 text-slate-600"
-        )}>
-          {c.name?.[0]?.toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
-      <div className="flex flex-col min-w-0">
-        {isDiscovery ? (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-900 truncate" title={c.name}>{c.name}</span>
-            <Badge className="h-4 px-1 text-[8px] font-bold bg-slate-100 text-slate-600 border-slate-200">
-              DISCOVERY
-            </Badge>
-          </div>
-        ) : (
-          <Link 
-            to={`/contacts/${c.id}`} 
-            className="text-xs font-bold text-slate-800 hover:text-indigo-600 hover:underline truncate transition-colors" 
-            title={c.name}
-          >
-            {c.name}
-          </Link>
-        )}
-        {c.linkedin_url && (
-          <a 
-            href={c.linkedin_url} 
-            target="_blank" 
-            rel="noreferrer" 
-            className="flex items-center gap-1 text-[9px] text-slate-400 hover:text-[#0A66C2] transition-colors"
-          >
-            <Linkedin size={9} /> LinkedIn
-          </a>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// --- EXPORTED COLUMNS ---
+// ── COLUMN DEFINITIONS ────────────────────────────────────────────────────────
 
 export const columns: ColumnDef<any>[] = [
-  // 1. SELECT (Sticky)
+  // SELECT
   {
-    id: 'select',
-    size: 40,
-    minSize: 40,
-    maxSize: 40,
+    id: 'select', size: 40, minSize: 40, maxSize: 40,
     header: ({ table }) => (
-      <div className="px-1 flex justify-center">
-        <Checkbox 
-          checked={table.getIsAllPageRowsSelected()} 
-          onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)} 
-          className="h-3.5 w-3.5 border-white/50 data-[state=checked]:bg-white data-[state=checked]:text-indigo-600" 
-        />
+      <div className="flex justify-center">
+        <Checkbox checked={table.getIsAllPageRowsSelected()} onCheckedChange={v => table.toggleAllPageRowsSelected(!!v)} className="h-3.5 w-3.5" />
       </div>
     ),
     cell: ({ row }) => (
-      <div className="px-1 flex justify-center">
-        <Checkbox 
-          checked={row.getIsSelected()} 
-          onCheckedChange={(v) => row.toggleSelected(!!v)} 
-          className="h-3.5 w-3.5" 
-        />
+      <div className="flex justify-center">
+        <Checkbox checked={row.getIsSelected()} onCheckedChange={v => row.toggleSelected(!!v)} className="h-3.5 w-3.5" />
       </div>
     ),
-    enableHiding: false,
-    enableSorting: false,
+    enableHiding: false, enableSorting: false,
   },
 
-  // 2. DATA AVAILABILITY (For Discovery)
+  // DATA AVAILABILITY — shows for CRM + Discovery rows
   {
-    id: 'data_availability',
-    header: () => (
-      <SimpleColumnHeader column={null} title="Data Availability" />
-    ),
-    size: 160,
-    minSize: 140,
-    maxSize: 220,
-    enableSorting: false,
-    enableHiding: true, // Controlled by parent
-    cell: ({ row }) => {
-      // Only render for discovery rows (CRM rows return null or could be handled differently)
-      if (!row.original.is_discovery) return null;
-
-      const c = row.original;
-      const hasEmail = !!c.has_email;
-      const hasPhone = !!c.has_phone || c.has_direct_phone === "Yes";
-      const hasLocation = !!(c.city || c.state || c.country ||
-        c.original_data?.has_city || c.original_data?.has_state || c.original_data?.has_country);
-      const hasCompany = !!(
-        c.company_name ||
-        c.original_data?.organization?.name ||
-        c.original_data?.organization?.has_employee_count ||
-        c.original_data?.organization?.has_industry
-      );
-
-      return (
-       <div className="flex justify-center">
-  <div 
-    className="
-      flex items-center space-x-1 
-      rounded-full bg-slate-50/90 p-1 
-      shadow-sm border border-slate-200/70
-    "
-  >
-    {/* Email */}
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className={cn(
-              "flex items-center justify-center h-7 w-7 rounded-full transition-all duration-200",
-              hasEmail
-                ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white"
-                : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-            )}
-          >
-            <Mail className="h-4 w-4" />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="text-xs font-medium">
-          {hasEmail 
-            ? "Email available (revealed on add)" 
-            : "No email found"}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-
-    {/* Phone */}
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className={cn(
-              "flex items-center justify-center h-7 w-7 rounded-full transition-all duration-200",
-              hasPhone
-                ? "bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white"
-                : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-            )}
-          >
-            <Phone className="h-4 w-4" />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="text-xs font-medium">
-          {hasPhone 
-            ? "Direct phone / mobile available" 
-            : "No phone found"}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-
-    {/* Location */}
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className={cn(
-              "flex items-center justify-center h-7 w-7 rounded-full transition-all duration-200",
-              hasLocation
-                ? "bg-amber-50 text-amber-700 hover:bg-amber-600 hover:text-white"
-                : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-            )}
-          >
-            <MapPin className="h-4 w-4" />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="text-xs font-medium">
-          {hasLocation 
-            ? "Location data available" 
-            : "No location data"}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-
-    {/* Company / Organization */}
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className={cn(
-              "flex items-center justify-center h-7 w-7 rounded-full transition-all duration-200",
-              hasCompany
-                ? "bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white"
-                : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-            )}
-          >
-            <Building2 className="h-4 w-4" />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="text-xs font-medium">
-          {hasCompany 
-            ? "Company information available" 
-            : "Limited company data"}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  </div>
-</div>
-      );
-    }
+    id: 'data_availability', size: 140, minSize: 130, maxSize: 170,
+    header: () => <ColHeader title="Availability" />,
+    enableHiding: true, enableSorting: false,
+    cell: DataAvailabilityCell,
   },
-  
-  // 3. NAME (Sticky)
+
+  // NAME (sticky)
   {
     accessorKey: 'name',
-    header: ({ column }) => <SimpleColumnHeader column={column} title="Name" />,
-    size: 200,
-    minSize: 150,
-    maxSize: 300,
-    enableSorting: false,
+    header: () => <ColHeader title="Name" />,
+    size: 210, minSize: 160, maxSize: 300, enableSorting: false,
     cell: ({ row }) => {
       const c = row.original;
-      const isDiscovery = c.is_discovery;
-      
       return (
-        <div className="flex items-center gap-3 py-1">
-          <Avatar className={cn(
-            "h-8 w-8 border-2 rounded-xl flex-shrink-0 shadow-sm",
-            isDiscovery 
-              ? "border-violet-200 ring-2 ring-violet-100" 
-              : "border-slate-200"
-          )}>
+        <div className="flex items-center gap-2.5 py-1">
+          <Avatar className="h-7 w-7 rounded-lg flex-shrink-0 border border-slate-100">
             <AvatarImage src={c.photo_url} />
-            <AvatarFallback className={cn(
-              "text-[10px] font-bold",
-              isDiscovery 
-                ? "bg-gradient-to-br from-violet-100 to-purple-100 text-violet-700" 
-                : "bg-slate-100 text-slate-600"
-            )}>
+            <AvatarFallback className={cn('text-[10px] font-bold rounded-lg', c.is_discovery ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-600')}>
               {c.name?.[0]?.toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col min-w-0">
-            {isDiscovery ? (
+            {c.is_discovery ? (
               <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-slate-900 truncate" title={c.name}>{c.name}</span>
-                <Badge className="h-4 px-1 text-[8px] font-bold bg-gradient-to-r from-violet-100 to-purple-100 text-violet-700 border-violet-200/50">
-                  NEW
-                </Badge>
+                <span className="text-xs font-semibold text-slate-800 truncate">{c.name}</span>
+                <Badge className="h-3.5 px-1 text-[8px] font-bold bg-violet-100 text-violet-700 border-0 rounded">NEW</Badge>
               </div>
             ) : (
-              <Link 
-                to={`/contacts/${c.id}`} 
-                className="text-xs font-bold text-slate-800 hover:text-indigo-600 hover:underline truncate transition-colors" 
-                title={c.name}
-              >
+              <Link to={`/contacts/${c.id}`} className="text-xs font-semibold text-slate-800 hover:text-indigo-600 truncate transition-colors">
                 {c.name}
               </Link>
             )}
             {c.linkedin_url && (
-              <a 
-                href={c.linkedin_url} 
-                target="_blank" 
-                rel="noreferrer" 
-                className="flex items-center gap-1 text-[9px] text-slate-400 hover:text-[#0A66C2] transition-colors"
-              >
-                <Linkedin size={9} /> LinkedIn
+              <a href={c.linkedin_url} target="_blank" rel="noreferrer"
+                className="text-[9px] text-slate-400 hover:text-[#0A66C2] flex items-center gap-0.5 transition-colors w-fit">
+                <Linkedin size={8} /> LinkedIn
               </a>
             )}
           </div>
         </div>
       );
-    }
+    },
   },
 
-  // 4. EMAIL
+  // CONTACT — combined Email + Phone icon buttons
   {
-    accessorKey: 'email',
-    header: ({ column }) => <SimpleColumnHeader column={column} title="Email" />,
-    size: 200,
-    enableSorting: false,
-    cell: SmartEmailCell
-  },
-  
-  // 5. PHONE
-  {
-    accessorKey: 'mobile',
-    header: ({ column }) => <SimpleColumnHeader column={column} title="Phone" />,
-    size: 180,
-    enableSorting: false,
-    cell: SmartPhoneCell
+    id: 'contact',
+    header: () => <ColHeader title="Contact" />,
+    size: 88, minSize: 80, maxSize: 100,
+    enableSorting: false, enableHiding: false,
+    cell: ContactCell,
   },
 
-  // 6. JOB TITLE
-  {
-    accessorKey: 'job_title',
-    header: ({ column }) => <SimpleColumnHeader column={column} title="Job Title" />,
-    size: 180,
-    enableSorting: false,
-    cell: EditableCell
-  },
-  
-  // 7. COMPANY
-  {
-    accessorKey: 'company_name',
-    header: ({ column }) => <SimpleColumnHeader column={column} title="Company" />,
-    size: 160,
-    enableSorting: false,
-    cell: CompanyCell
-  },
+  // JOB TITLE
+  { accessorKey: 'job_title',    header: () => <ColHeader title="Title" />,   size: 170, enableSorting: false, cell: EditableCell },
 
-  // 8. ACTIONS
+  // COMPANY
+  { accessorKey: 'company_name', header: () => <ColHeader title="Company" />, size: 170, enableSorting: false, cell: CompanyCell },
+
+  // ACTIONS
   {
     id: 'actions',
-    header: () => <div className="text-center text-[10px] font-semibold uppercase tracking-wider text-white/90">Actions</div>,
-    size: 120,
-    cell: ActionCell,
-    enableHiding: false,
-    enableSorting: false,
+    header: () => <ColHeader title="Actions" />,
+    size: 130, cell: ActionCell, enableHiding: false, enableSorting: false,
   },
 
-  // 9. CRM SPECIFIC
+  // STAGE
+  { accessorKey: 'contact_stage', header: () => <ColHeader title="Stage" />,  size: 130, enableSorting: false, cell: StageSelectCell,  enableHiding: true },
+
+  // SOURCE
+  { accessorKey: 'medium',        header: () => <ColHeader title="Source" />, size: 130, enableSorting: false, cell: MediumSelectCell, enableHiding: true },
+
+  // OWNER
   {
-    accessorKey: 'contact_stage',
-    header: ({ column }) => <SimpleColumnHeader column={column} title="Stage" />,
-    size: 130,
-    enableSorting: false,
-    cell: StageSelectCell,
-    enableHiding: true,
-  },
-  { 
-    accessorKey: 'medium', 
-    header: ({ column }) => <SimpleColumnHeader column={column} title="Source" />,
-    size: 130, 
-    enableSorting: false,
-    cell: MediumSelectCell,
-    enableHiding: true,
-  },
-  {
-    accessorFn: (row) => row.created_by ?? null,
-    id: 'created_by_employee',
-    header: ({ column }) => <SimpleColumnHeader column={column} title="Owner" />,
-    size: 80,
-    enableSorting: false,
+    accessorFn: row => row.created_by ?? null, id: 'created_by_employee',
+    header: () => <ColHeader title="Owner" />, size: 70, enableSorting: false, enableHiding: true,
     cell: ({ row }) => {
-      if (isDiscoveryRow(row)) return <span className="text-slate-300">-</span>;
-      const employee = row.original.created_by_employee;
-      if (!employee) return <span className="text-slate-400 text-[10px]">-</span>;
+      if (isDiscoveryRow(row)) return <span className="text-slate-300">—</span>;
+      const emp = row.original.created_by_employee;
+      if (!emp) return <span className="text-slate-400 text-[10px]">—</span>;
       return (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger>
-              <Avatar className="h-6 w-6 border border-slate-200">
-                <AvatarImage src={employee.profile_picture_url} />
-                <AvatarFallback className="text-[8px] bg-indigo-600 text-white font-bold">
-                  {employee.first_name?.[0]}
-                </AvatarFallback>
-              </Avatar>
-            </TooltipTrigger>
-            <TooltipContent className="text-xs">{employee.first_name} {employee.last_name}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <TooltipProvider><Tooltip>
+          <TooltipTrigger>
+            <Avatar className="h-6 w-6 border border-slate-200">
+              <AvatarImage src={emp.profile_picture_url} />
+              <AvatarFallback className="text-[8px] bg-indigo-600 text-white font-bold">{emp.first_name?.[0]}</AvatarFallback>
+            </Avatar>
+          </TooltipTrigger>
+          <TooltipContent className="text-xs">{emp.first_name} {emp.last_name}</TooltipContent>
+        </Tooltip></TooltipProvider>
       );
     },
-    enableHiding: true,
-  },
-  {
-    accessorKey: 'created_at',
-    header: ({ column }) => <SimpleColumnHeader column={column} title="Created" />,
-    size: 90,
-    enableSorting: false,
-    cell: ({ row, getValue }) => isDiscoveryRow(row) ? <span className="text-slate-300">-</span> : <DisplayDateCell getValue={getValue} />,
-    enableHiding: true,
-  },
-  
-  // 10. LOCATION
-  {
-    id: 'location',
-    header: ({ column }) => <SimpleColumnHeader column={column} title="Location" />,
-    accessorFn: row => [row.city, row.state, row.country].filter(Boolean).join(', '),
-    cell: LocationCell,
-    size: 200,
-    minSize: 150,
-    maxSize: 300,
-    enableSorting: false,
-    enableHiding: true,
   },
 
-  // 11. HIDDEN METADATA
-  { id: 'seniority', accessorKey: 'seniority', enableHiding: true, size: 0 },
-  { id: 'departments', accessorKey: 'departments', enableHiding: true, size: 0 },
-  { id: 'functions', accessorKey: 'functions', enableHiding: true, size: 0 },
-  { id: 'industry', accessorKey: 'industry', enableHiding: true, size: 0 },
-  { id: 'revenue', accessorKey: 'revenue', enableHiding: true, size: 0 },
-  { id: 'employee_count', accessorKey: 'employee_count', enableHiding: true, size: 0 },
-  { id: 'updated_at', accessorKey: 'updated_at', enableHiding: true, size: 0 },
+  // CREATED AT
+  {
+    accessorKey: 'created_at', header: () => <ColHeader title="Created" />, size: 90, enableSorting: false, enableHiding: true,
+    cell: ({ row, getValue }) => isDiscoveryRow(row) ? <span className="text-slate-300">—</span> : (
+      <span className="text-xs text-slate-500">
+        {getValue() ? new Date(getValue() as string).toLocaleDateString() : '—'}
+      </span>
+    ),
+  },
+
+  // LOCATION
+  {
+    id: 'location',
+    accessorFn: row => [row.city, row.state, row.country].filter(Boolean).join(', '),
+    header: () => <ColHeader title="Location" />, cell: LocationCell,
+    size: 170, minSize: 120, maxSize: 240, enableSorting: false, enableHiding: true,
+  },
+
+  // HIDDEN METADATA
+  { id: 'seniority',      accessorKey: 'seniority',      enableHiding: true, size: 0, header: () => <ColHeader title="Seniority" />,   cell: () => null },
+  { id: 'departments',    accessorKey: 'departments',    enableHiding: true, size: 0, header: () => <ColHeader title="Departments" />, cell: () => null },
+  { id: 'functions',      accessorKey: 'functions',      enableHiding: true, size: 0, header: () => <ColHeader title="Functions" />,   cell: () => null },
+  { id: 'industry',       accessorKey: 'industry',       enableHiding: true, size: 0, header: () => <ColHeader title="Industry" />,    cell: () => null },
+  { id: 'revenue',        accessorKey: 'revenue',        enableHiding: true, size: 0, header: () => <ColHeader title="Revenue" />,     cell: () => null },
+  { id: 'employee_count', accessorKey: 'employee_count', enableHiding: true, size: 0, header: () => <ColHeader title="Employees" />,   cell: () => null },
+  { id: 'updated_at',     accessorKey: 'updated_at',     enableHiding: true, size: 0, header: () => <ColHeader title="Updated" />,     cell: () => null },
 ];

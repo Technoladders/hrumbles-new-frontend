@@ -596,83 +596,97 @@ export const UpcomingTasks: React.FC<UpcomingTasksProps> = ({
 
   return (
     <>
-      <div className="bg-white rounded-xl border border-gray-100 p-5 h-full flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-violet-100 rounded-lg">
-              <CheckSquare size={18} className="text-violet-600" />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold text-gray-900">Tasks</h3>
-              <p className="text-xs text-gray-500">{overdue.length + today.length + upcoming.length} pending</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-8 gap-1"
-              onClick={() => { setEditingTask(null); setTaskDialogOpen(true); }}
-            >
-              <Plus size={14} />
-              New Task
-            </Button>
-            <Button variant="ghost" size="sm" className="text-xs text-blue-600">
-              View All <ChevronRight size={14} className="ml-1" />
-            </Button>
-          </div>
+      <div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden h-[460px] flex flex-col">
+  {/* Header – stronger accent */}
+  <div className="px-5 pt-5 pb-3 border-b border-gray-100 bg-gradient-to-r from-violet-50/80 to-white">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="p-2.5 bg-violet-100 rounded-xl shadow-sm">
+          <CheckSquare className="h-5 w-5 text-violet-700" />
         </div>
-
-        {/* Tabs */}
-        <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg mb-4">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition-all",
-                activeTab === tab.key
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              )}
-            >
-              {tab.label}
-              {tab.count > 0 && (
-                <span className={cn(
-                  "w-5 h-5 rounded-full text-[10px] flex items-center justify-center",
-                  tab.key === 'overdue' && tab.count > 0 ? "bg-red-100 text-red-600" : "bg-gray-200 text-gray-600"
-                )}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 tracking-tight">Upcoming Tasks</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {overdue.length + today.length + upcoming.length} pending • {overdue.length} overdue
+          </p>
         </div>
+      </div>
 
-        {/* Task List */}
-        <ScrollArea className="flex-1">
-          <div className="space-y-2 pr-2">
-            {getActiveData().map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                isOverdue={activeTab === 'overdue'}
-                onComplete={() => completeTask.mutate(task.id)}
-                onEdit={() => { setEditingTask(task); setTaskDialogOpen(true); }}
-                onDelete={() => deleteTask.mutate(task.id)}
-                teamMembers={teamMembers}
-              />
-            ))}
-            {getActiveData().length === 0 && (
-              <div className="flex flex-col items-center justify-center py-8 text-center text-gray-400">
-                <CheckSquare size={32} className="mb-2 opacity-20" />
-                <p className="text-sm font-medium">No tasks found</p>
-              </div>
-            )}
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          className="h-8 bg-violet-600 hover:bg-violet-700 text-white gap-1.5 shadow-sm"
+          onClick={() => { setEditingTask(null); setTaskDialogOpen(true); }}
+        >
+          <Plus className="h-4 w-4" />
+          New Task
+        </Button>
+      </div>
+    </div>
+  </div>
+
+      {/* Tabs – more modern segmented control */}
+  <div className="px-5 pt-3 pb-1">
+    <div className="inline-flex bg-gray-100/80 p-1 rounded-xl border border-gray-200">
+      {tabs.map(tab => (
+        <button
+          key={tab.key}
+          onClick={() => setActiveTab(tab.key)}
+          className={cn(
+            "px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200",
+            activeTab === tab.key
+              ? "bg-white shadow-sm text-gray-900"
+              : "text-gray-600 hover:text-gray-800 hover:bg-gray-50/50"
+          )}
+        >
+          {tab.label}
+          {tab.count > 0 && (
+            <span className={cn(
+              "ml-1.5 px-2 py-0.5 text-[10px] font-bold rounded-full",
+              tab.key === 'overdue' ? "bg-red-100 text-red-700" : "bg-gray-200 text-gray-700"
+            )}>
+              {tab.count}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  </div>
+
+  {/* List – better spacing, hover effects */}
+  <ScrollArea className="flex-1 px-5 pb-4">
+    <div className="space-y-2.5 mt-2">
+      {getActiveData().length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-64 text-center text-gray-400">
+          <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4 border border-gray-200">
+            <CheckSquare className="h-8 w-8 opacity-40" />
           </div>
-        </ScrollArea>
+          <p className="text-base font-medium text-gray-600">All clear!</p>
+          <p className="text-sm mt-1.5">No {activeTab} tasks right now</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4 text-violet-600 border-violet-200 hover:bg-violet-50"
+            onClick={() => { setEditingTask(null); setTaskDialogOpen(true); }}
+          >
+            Create your first task
+          </Button>
+        </div>
+      ) : (
+        getActiveData().map(task => (
+          <TaskCard
+            key={task.id}
+            task={task}
+            isOverdue={activeTab === 'overdue'}
+            onComplete={() => completeTask.mutate(task.id)}
+            onEdit={() => { setEditingTask(task); setTaskDialogOpen(true); }}
+            onDelete={() => deleteTask.mutate(task.id)}
+            teamMembers={teamMembers}
+          />
+        ))
+      )}
+    </div>
+  </ScrollArea>
       </div>
 
       {/* NEW Responsive Task Dialog */}
@@ -713,14 +727,14 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const assignee = task.assignee || teamMembers.find(m => m.id === task.assigned_to);
 
   return (
-    <div 
-      className={cn(
-        "p-3 rounded-lg border transition-all group",
-        isOverdue 
-          ? "bg-red-50/50 border-red-100 hover:border-red-200" 
-          : "bg-gray-50/50 border-gray-100 hover:border-gray-200"
-      )}
-    >
+<div 
+  className={cn(
+    "p-4 rounded-xl border transition-all duration-200 group hover:shadow-md hover:-translate-y-px",
+    isOverdue 
+      ? "bg-red-50/40 border-red-200/80 border-l-4 border-l-red-500"
+      : "bg-white border-gray-200 hover:border-indigo-200"
+  )}
+>
       <div className="flex items-start gap-3">
         <Checkbox
           className={cn(
@@ -732,9 +746,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
         
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-medium text-gray-900 line-clamp-1">
-              {task.title}
-            </p>
+           <p className="text-base font-medium text-gray-900 line-clamp-2">{task.title}</p>
             <div className="flex items-center gap-1">
               {task.priority && task.priority !== 'none' && (
                 <Badge 

@@ -61,6 +61,7 @@
     "@tailwindcss/postcss": "^4.0.0",
     "@tanstack/react-query": "^5.66.0",
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.21",
     "@types/md5": "^2.3.6",
     "@types/react-csv": "^1.1.10",
     "@types/react-phone-number-input": "^3.0.17",

@@ -205,11 +205,11 @@ export const ProspectOverviewPanel: React.FC<Props> = ({ contact }) => {
         </div>
       </div>
 
-      {/* ── Contact Info Card ────────────────────────────────────────── */}
-      {(contact.email ||
-        contact.mobile ||
-        data.allEmails?.length ||
-        data.phoneNumbers?.length) && (
+{/* ── Contact Info Card ────────────────────────────────────────── */}
+      {(!!contact.email ||
+        !!contact.mobile ||
+        data.allEmails?.length > 0 ||
+        data.phoneNumbers?.length > 0) && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
             Contact Info

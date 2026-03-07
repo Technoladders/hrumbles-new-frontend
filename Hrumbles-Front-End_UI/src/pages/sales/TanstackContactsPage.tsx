@@ -1,1036 +1,1255 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { 
-  useReactTable, 
-  getCoreRowModel, 
-  getFilteredRowModel, 
+import {
+  useReactTable,
+  getCoreRowModel,
+  getFilteredRowModel,
   getPaginationRowModel,
   ColumnFiltersState,
   VisibilityState,
   ColumnOrderState,
-  ColumnSizingState
+  ColumnSizingState,
 } from '@tanstack/react-table';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 
-// Components
-import { DataTable } from '@/components/ui/data-table';
+import { DataTable }           from '@/components/ui/data-table';
 import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import { ContactFiltersSidebar } from '@/components/sales/contacts-table/ContactFiltersSidebar';
-import { DiscoverySidebar } from '@/components/sales/discovery/DiscoverySidebar'; 
-import { AddToListModal } from '@/components/sales/contacts-table/AddToListModal';
+import { DiscoverySidebar }    from '@/components/sales/discovery/DiscoverySidebar';
+import { AddToListModal }      from '@/components/sales/contacts-table/AddToListModal';
 import { ContactImportDialog } from '@/components/sales/contacts-table/ContactImportDialog';
-import { columns } from '@/components/sales/contacts-table/columns';
+import { SearchEmptyState }    from '@/components/sales/contacts-table/SearchEmptyState';
+import { columns }             from '@/components/sales/contacts-table/columns';
 
-// Redux & Services
 import { setDiscoveryMode, setPage, setFilters, resetSearch, setPerPage } from '@/Redux/intelligenceSearchSlice';
 import { saveDiscoveryToCRM } from '@/services/sales/discoveryService';
-import { useSimpleContacts } from '@/hooks/sales/useSimpleContacts';
+import { useSimpleContacts }  from '@/hooks/sales/useSimpleContacts';
+import {
+  useFilterParams,
+  buildFilterSummary,
+  countActiveFilters,
+  hasActiveFilters,
+  ContactFilters,
+} from '@/hooks/sales/useContactFilterParams';
 import { useToast } from '@/hooks/use-toast';
 
-// Icons & UI
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Search, Filter, Settings2, Zap, RotateCcw, Check, ArrowLeft, FolderOpen, UploadCloud } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Spinner } from "@chakra-ui/react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
+import { Button }   from '@/components/ui/button';
+import { Input }    from '@/components/ui/input';
+import { Badge }    from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Spinner } from '@chakra-ui/react';
+import {
+  Search, SlidersHorizontal, RotateCcw, Check, ArrowLeft,
+  FolderOpen, UploadCloud, List, X, PanelLeftClose, PanelLeftOpen,
+  Users, DatabaseZap, ListPlus, Loader2,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-// Types for table preferences
-interface TablePreferences {
-  columnVisibility: VisibilityState;
-  columnOrder: ColumnOrderState;
-  columnSizing: ColumnSizingState;
+// ── Types ─────────────────────────────────────────────────────────────────────
+export interface RecentSearch {
+  id:          string;
+  summary:     string;
+  filters:     ContactFilters;
+  resultCount: number;
+  timestamp:   number;
 }
 
-const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
-  seniority: false, 
-  departments: false, 
-  functions: false, 
-  industry: false, 
-  revenue: false, 
-  employee_count: false,
-  country: false, 
-  city: false,
-  created_at: false, 
-  updated_at: false,
-  data_availability: false
+// ── Constants ─────────────────────────────────────────────────────────────────
+// Separate recent-search history for each mode
+const LS_KEY_CRM       = 'contacts_recent_crm_searches_v2';
+const LS_KEY_DISCOVERY = 'contacts_recent_discovery_searches_v1';
+
+const DEFAULT_VISIBILITY: VisibilityState = {
+  // Hidden by default
+  seniority: false, departments: false, functions: false,
+  industry: false, revenue: false, employee_count: false,
+  updated_at: false, data_availability: false,
+  // Visible by default
+  contact: true, job_title: true, company_name: true, location: true,
+  contact_stage: true, medium: true, created_by_employee: true, created_at: true,
 };
 
-const DEFAULT_COLUMN_ORDER: ColumnOrderState = [
-  'select', 'name', 'email', 'mobile', 'data_availability', 'job_title', 'company_name', 
-  'actions', 'contact_stage', 'medium', 'created_by_employee', 
-  'created_at', 'location', 'seniority', 'departments', 'functions',
-  'industry', 'revenue', 'employee_count', 'updated_at'
+const DEFAULT_ORDER: ColumnOrderState = [
+  'select', 'name', 'contact', 'data_availability',
+  'job_title', 'company_name', 'actions',
+  'contact_stage', 'medium', 'created_by_employee',
+  'created_at', 'location',
+  'seniority', 'departments', 'functions',
+  'industry', 'revenue', 'employee_count', 'updated_at',
 ];
 
-const DEFAULT_COLUMN_SIZING: ColumnSizingState = {};
+// Human-readable labels for every column id (no internal/vendor names)
+const COL_LABELS: Record<string, { label: string; desc: string; group: string }> = {
+  select:              { label: 'Select',          desc: 'Row selection checkbox',           group: 'Core' },
+  name:                { label: 'Name',             desc: 'Contact name and LinkedIn link',   group: 'Core' },
+  contact:             { label: 'Contact',          desc: 'Email and phone quick access',     group: 'Core' },
+  data_availability:   { label: 'Data Signals',     desc: 'Shows which contact data exists',  group: 'Core' },
+  job_title:           { label: 'Job Title',        desc: 'Current role / position',          group: 'People' },
+  company_name:        { label: 'Company',          desc: 'Employer or organisation',         group: 'People' },
+  location:            { label: 'Location',         desc: 'City, state, country',             group: 'People' },
+  seniority:           { label: 'Seniority',        desc: 'Enriched seniority level',         group: 'People' },
+  departments:         { label: 'Departments',      desc: 'Enriched department tags',         group: 'People' },
+  functions:           { label: 'Functions',        desc: 'Enriched function tags',           group: 'People' },
+  industry:            { label: 'Industry',         desc: 'Company industry',                 group: 'People' },
+  employee_count:      { label: 'Employees',        desc: 'Company headcount',                group: 'People' },
+  revenue:             { label: 'Revenue',          desc: 'Company revenue range',            group: 'People' },
+  contact_stage:       { label: 'Stage',            desc: 'Pipeline / CRM stage',             group: 'CRM' },
+  medium:              { label: 'Source',           desc: 'How the contact was acquired',     group: 'CRM' },
+  created_by_employee: { label: 'Owner',            desc: 'Who added this contact',           group: 'CRM' },
+  created_at:          { label: 'Date Added',       desc: 'When the contact was created',     group: 'CRM' },
+  updated_at:          { label: 'Last Updated',     desc: 'Most recent edit date',            group: 'CRM' },
+  actions:             { label: 'Actions',          desc: 'Inline row actions',               group: 'Core' },
+};
 
+// ── Recent-search localStorage helpers ────────────────────────────────────────
+function loadRecentSearches(isDiscovery: boolean): RecentSearch[] {
+  try { return JSON.parse(localStorage.getItem(isDiscovery ? LS_KEY_DISCOVERY : LS_KEY_CRM) || '[]'); }
+  catch { return []; }
+}
+
+function saveRecentSearch(filters: ContactFilters, resultCount: number, isDiscovery: boolean): RecentSearch[] {
+  const key     = isDiscovery ? LS_KEY_DISCOVERY : LS_KEY_CRM;
+  const summary = buildFilterSummary(filters);
+  const existing = loadRecentSearches(isDiscovery);
+  const entry: RecentSearch = {
+    id: Date.now().toString(), summary, filters, resultCount, timestamp: Date.now(),
+  };
+  // Deduplicate by summary, keep 10 max
+  const updated = [entry, ...existing.filter(s => s.summary !== summary)].slice(0, 10);
+  localStorage.setItem(key, JSON.stringify(updated));
+  return updated;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function TanstackContactsPage() {
-  const dispatch = useDispatch();
-  const { toast } = useToast();
+  const dispatch    = useDispatch();
+  const { toast }   = useToast();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate    = useNavigate();
+  const [,          setSearchParams]   = useSearchParams();
 
-    // 1. Redux State
-  const { isDiscoveryMode, totalEntries, currentPage, perPage } = useSelector(
-    (state: any) => state.intelligenceSearch
-  );
+  const { isDiscoveryMode, totalEntries, currentPage, perPage, filters: reduxFilters } =
+    useSelector((state: any) => state.intelligenceSearch);
+  const organization_id = useSelector((state: any) => state.auth.organization_id);
+  const user            = useSelector((state: any) => state.auth.user);
+  const { fileId }      = useParams<{ fileId?: string }>();
 
+  // URL-based filter params
+  const { currentFilters: urlFilters, writeFilters, clearFilters } = useFilterParams();
+
+  // ── Local state ──────────────────────────────────────────────────────────────
+  const [isSidebarOpen,    setIsSidebarOpen]    = useState(true);
+  // In CRM mode: hasSearched tracks whether CRM filters were applied
+  // In Discovery mode: always show empty state until user runs search (managed by Redux)
+  const [hasSearched,      setHasSearched]      = useState(() => hasActiveFilters(urlFilters));
+  const [isBulkSaving,           setIsBulkSaving]           = useState(false);
+  const [pendingDiscoveryChips,  setPendingDiscoveryChips]  = useState<string[]>([]);
+  const [pendingDiscoveryCount,  setPendingDiscoveryCount]  = useState(0);
+  const [recentSearches,         setRecentSearches]         = useState<RecentSearch[]>(() => loadRecentSearches(false));
+  const [selectedListId,   setSelectedListId]   = useState<string | null>(null);
+  const [listModalOpen,    setListModalOpen]     = useState(false);
+  const [selectedContact,  setSelectedContact]  = useState<any>(null);
+  const [isFromDiscovery,  setIsFromDiscovery]  = useState(false);
+  const [viewSettingsOpen, setViewSettingsOpen] = useState(false);
+  const [isImportOpen,     setIsImportOpen]     = useState(false);
+  const [headerSearch,     setHeaderSearch]     = useState('');
+
+  // ── Column preferences ───────────────────────────────────────────────────────
+  const [columnVisibility,    setColumnVisibility]    = useState<VisibilityState>(DEFAULT_VISIBILITY);
+  const [columnOrder,         setColumnOrder]         = useState<ColumnOrderState>(DEFAULT_ORDER);
+  const [columnSizing,        setColumnSizing]        = useState<ColumnSizingState>({});
+  const [preferencesLoaded,   setPreferencesLoaded]   = useState(false);
+
+  const activeFileId = selectedListId || fileId || null;
+
+  // ── On mount: re-hydrate Redux from URL params ────────────────────────────────
   useEffect(() => {
-    const pageParam = searchParams.get('page');
-    const pageNumber = pageParam ? parseInt(pageParam, 10) : 1;
-    
-    // Only dispatch if different to prevent loops
-    if (pageNumber !== currentPage) {
-        dispatch(setPage(pageNumber));
+    if (hasActiveFilters(urlFilters) && !isDiscoveryMode) {
+      const redux: any = {};
+      if (urlFilters.search)                redux.search         = urlFilters.search;
+      if (urlFilters.jobTitles.length)      redux.jobTitles       = urlFilters.jobTitles;
+      if (urlFilters.seniorities.length)    redux.seniorities     = urlFilters.seniorities;
+      if (urlFilters.stages.length)         redux.stages          = urlFilters.stages;
+      if (urlFilters.sources.length)        redux.sources         = urlFilters.sources;
+      if (urlFilters.countries.length)      redux.countries       = urlFilters.countries;
+      if (urlFilters.states?.length)        redux.states          = urlFilters.states;
+      if (urlFilters.cities.length)         redux.cities          = urlFilters.cities;
+      if (urlFilters.industries.length)     redux.industries      = urlFilters.industries;
+      if (urlFilters.employeeCounts.length) redux.employeeCounts  = urlFilters.employeeCounts;
+      if (urlFilters.companyIds.length)     redux.companyIds      = urlFilters.companyIds;
+      if (urlFilters.hasEmail)              redux.hasEmail        = true;
+      if (urlFilters.hasPhone)              redux.hasPhone        = true;
+      if (urlFilters.isEnriched)            redux.isEnriched      = true;
+      dispatch(setFilters(redux));
+      // Also restore page from URL params
+      const urlPage = parseInt(new URLSearchParams(window.location.search).get('page') || '1', 10);
+      if (urlPage > 1) dispatch(setPage(urlPage));
+      setHasSearched(true);
     }
-  }, [searchParams, currentPage, dispatch]);
-  
-  // Get fileId from route params
-  const { fileId } = useParams<{ fileId?: string }>();
+    // Determine initial tab: URL param > sessionStorage > default (discovery on fresh visit)
+    const urlMode      = new URLSearchParams(window.location.search).get('mode');
+    const sessionMode  = sessionStorage.getItem('contacts_mode');
+    const effectiveMode = urlMode || sessionMode;
 
+    if (effectiveMode === 'crm') {
+      dispatch(setDiscoveryMode(false));
+      sessionStorage.setItem('contacts_mode', 'crm');
+      if (!hasActiveFilters(urlFilters)) setHasSearched(true);
+    } else if (effectiveMode === 'discovery' || (!effectiveMode && !fileId && !hasActiveFilters(urlFilters))) {
+      dispatch(setDiscoveryMode(true));
+      sessionStorage.setItem('contacts_mode', 'discovery');
+      setRecentSearches(loadRecentSearches(true));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Reset when entering file route ───────────────────────────────────────────
   useEffect(() => {
     if (fileId) {
       dispatch(setDiscoveryMode(false));
-      // Optional but recommended: also clear search/filter state
       dispatch(resetSearch());
-      // Optional: reset page to 1 when switching context
       dispatch(setPage(1));
+      setHasSearched(true);
     }
-  }, [fileId, dispatch]);
-  
+  }, [fileId]);
 
-  const organization_id = useSelector((state: any) => state.auth.organization_id);
-  const user = useSelector((state: any) => state.auth.user);
+  // ── Reload correct recent-search history when mode changes ───────────────────
+  useEffect(() => {
+    setRecentSearches(loadRecentSearches(isDiscoveryMode));
+  }, [isDiscoveryMode]);
 
-  // 2. Fetch file details if fileId is present
-  const { data: currentFile } = useQuery({
-    queryKey: ['workspace-file', fileId],
-    queryFn: async () => {
-      if (!fileId) return null;
-      const { data, error } = await supabase
-        .from('workspace_files')
-        .select(`
-          id,
-          name,
-          type,
-          workspace_id,
-          workspaces (
-            id,
-            name
-          )
-        `)
-        .eq('id', fileId)
-        .single();
-      
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!fileId
-  });
-
-  // 3. Local State
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [listModalOpen, setListModalOpen] = useState(false);
-  const [selectedContact, setSelectedContact] = useState<any>(null);
-  const [isFromDiscovery, setIsFromDiscovery] = useState(false);
-  const [viewSettingsOpen, setViewSettingsOpen] = useState(false);
-  const [isImportOpen, setIsImportOpen] = useState(false);
-
-  // 4. Table Preferences State
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(DEFAULT_COLUMN_VISIBILITY);
-  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(DEFAULT_COLUMN_ORDER);
-  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(DEFAULT_COLUMN_SIZING);
-  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
-
-  // 5. Fetch user table preferences from database
+  // ── User preferences ─────────────────────────────────────────────────────────
   const { data: userPreferences } = useQuery({
     queryKey: ['table-preferences', user?.id, 'contacts-table'],
     queryFn: async () => {
       if (!user?.id) return null;
       const { data, error } = await supabase
-        .from('user_table_preferences')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('table_name', 'contacts-table')
-        .single();
-      
+        .from('user_table_preferences').select('*')
+        .eq('user_id', user.id).eq('table_name', 'contacts-table').single();
       if (error && error.code !== 'PGRST116') throw error;
       return data;
     },
-    enabled: !!user?.id
+    enabled: !!user?.id,
   });
 
-  // 6. Save preferences mutation
   const savePreferencesMutation = useMutation({
-    mutationFn: async (preferences: TablePreferences) => {
+    mutationFn: async (prefs: any) => {
       if (!user?.id) return;
-      
-      const { error } = await supabase
-        .from('user_table_preferences')
-        .upsert({
-          user_id: user.id,
-          table_name: 'contacts-table',
-          column_visibility: preferences.columnVisibility,
-          column_order: preferences.columnOrder,
-          column_sizing: preferences.columnSizing,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id,table_name'
-        });
-      
+      const { error } = await supabase.from('user_table_preferences').upsert({
+        user_id: user.id, table_name: 'contacts-table',
+        column_visibility: prefs.columnVisibility,
+        column_order:      prefs.columnOrder,
+        column_sizing:     prefs.columnSizing,
+        updated_at:        new Date().toISOString(),
+      }, { onConflict: 'user_id,table_name' });
       if (error) throw error;
     },
     onSuccess: () => {
-      toast({ title: "Preferences Saved", description: "Your table view has been saved." });
+      toast({ title: 'View saved' });
       queryClient.invalidateQueries({ queryKey: ['table-preferences', user?.id] });
     },
-    onError: (err: any) => {
-      toast({ variant: "destructive", title: "Save Failed", description: err.message });
-    }
   });
 
-  // 7. Load preferences from database on mount
+  // ── Migrate legacy column prefs: email + mobile → contact ───────────────────
+  const migrateLegacyPrefs = (prefs: { column_visibility?: any; column_order?: any; column_sizing?: any }) => {
+    let vis   = prefs.column_visibility ? { ...prefs.column_visibility } : null;
+    let order = prefs.column_order ? [...prefs.column_order] : null;
+    let sizing = prefs.column_sizing ? { ...prefs.column_sizing } : null;
+
+    if (order) {
+      // Replace email/mobile with a single 'contact' entry (after 'name' if possible)
+      const hasContact = order.includes('contact');
+      if (!hasContact) {
+        const nameIdx = order.indexOf('name');
+        const insertAt = nameIdx >= 0 ? nameIdx + 1 : 2;
+        const filtered = order.filter((id: string) => id !== 'email' && id !== 'mobile');
+        filtered.splice(insertAt, 0, 'contact');
+        order = filtered;
+      } else {
+        order = order.filter((id: string) => id !== 'email' && id !== 'mobile');
+      }
+    }
+    if (vis) {
+      delete vis.email; delete vis.mobile;
+      if (vis.contact === undefined) vis.contact = true;
+    }
+    if (sizing) { delete sizing.email; delete sizing.mobile; }
+    return { vis, order, sizing };
+  };
+
   useEffect(() => {
     if (userPreferences && !preferencesLoaded) {
-      if (userPreferences.column_visibility) {
-        setColumnVisibility(userPreferences.column_visibility);
-      }
-      if (userPreferences.column_order) {
-        setColumnOrder(userPreferences.column_order);
-      }
-      if (userPreferences.column_sizing) {
-        setColumnSizing(userPreferences.column_sizing);
-      }
+      const { vis, order, sizing } = migrateLegacyPrefs({
+        column_visibility: userPreferences.column_visibility,
+        column_order:      userPreferences.column_order,
+        column_sizing:     userPreferences.column_sizing,
+      });
+      if (vis)    setColumnVisibility({ ...DEFAULT_VISIBILITY, ...vis });
+      if (order)  setColumnOrder(order);
+      if (sizing) setColumnSizing(sizing);
       setPreferencesLoaded(true);
     } else if (!userPreferences && !preferencesLoaded && user?.id) {
       setPreferencesLoaded(true);
     }
   }, [userPreferences, preferencesLoaded, user?.id]);
 
-  // 8. Save preferences handler
-  const savePreferences = useCallback(() => {
-    if (preferencesLoaded && user?.id) {
-      savePreferencesMutation.mutate({
-        columnVisibility,
-        columnOrder,
-        columnSizing
-      });
+  // ── Column visibility by mode ────────────────────────────────────────────────
+  useEffect(() => {
+    if (isDiscoveryMode) {
+      setColumnVisibility(prev => ({
+        ...prev,
+        contact: true, data_availability: true,
+        contact_stage: false, medium: false,
+        created_by_employee: false, created_at: false, location: false,
+      }));
+    } else {
+      setColumnVisibility(prev => ({
+        ...prev,
+        contact: true, data_availability: false,
+        contact_stage: true, medium: true,
+        created_by_employee: true, created_at: true, location: true,
+      }));
     }
-  }, [columnVisibility, columnOrder, columnSizing, preferencesLoaded, user?.id]);
+  }, [isDiscoveryMode]);
 
-  // 9. Unified Data Fetching - Now supports fileId
- const { data: queryResult, isLoading, isFetching } = useSimpleContacts({ 
-    fileId: fileId || null, 
-    fetchUnfiled: false 
+  // ── Workspace lists for header filter ────────────────────────────────────────
+  const { data: workspaceLists } = useQuery({
+    queryKey: ['all-workspace-lists', organization_id],
+    queryFn: async () => {
+      const { data: wsData } = await supabase
+        .from('workspaces').select('id,name').eq('organization_id', organization_id).order('name');
+      if (!wsData?.length) return [];
+      const wsIds = wsData.map((w: any) => w.id);
+      const { data: fileData } = await supabase
+        .from('workspace_files').select('id,name,workspace_id').in('workspace_id', wsIds).order('name');
+      return (wsData || []).map((ws: any) => ({
+        workspace: ws,
+        files: (fileData || []).filter((f: any) => f.workspace_id === ws.id),
+      })).filter((g: any) => g.files.length > 0);
+    },
+    enabled: !!organization_id,
+    staleTime: 5 * 60_000,
   });
 
-  const tableData = queryResult?.data || [];
-  const totalRowCount = queryResult?.count || 0; // Get count from query
+  const { data: currentFile } = useQuery({
+    queryKey: ['workspace-file', fileId],
+    queryFn: async () => {
+      if (!fileId) return null;
+      const { data, error } = await supabase
+        .from('workspace_files')
+        .select('id,name,type,workspace_id,workspaces(id,name)')
+        .eq('id', fileId).single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!fileId,
+  });
 
-  const isPendingFilterChange = isFetching && !isLoading;
+  // ── Data fetch ───────────────────────────────────────────────────────────────
+  // Discovery mode only fetches when user has actually run a search (Redux filters non-empty)
+  const discoveryHasActiveFilters = useMemo(() =>
+    isDiscoveryMode && Object.keys(reduxFilters || {}).some(k => {
+      const v = (reduxFilters as any)[k];
+      return v !== undefined && v !== '' && v !== false && (Array.isArray(v) ? v.length > 0 : true);
+    }),
+  [isDiscoveryMode, reduxFilters]);
 
-   // --- NEW HELPER: Save Availability Stats ---
-  const saveContactAvailability = async (contactId: string, person: any) => {
-    try {
-      // Calculate flags based on raw Apollo data structure
-      const hasEmail = !!person.email || (Array.isArray(person.emails) && person.emails.length > 0);
-      const hasPhone = (Array.isArray(person.phone_numbers) && person.phone_numbers.length > 0) || !!person.mobile_phone || !!person.sanitized_phone;
-      const hasLocation = !!person.city || !!person.state || !!person.country;
-      const hasOrg = !!person.organization || !!person.organization_name || !!person.organization_id;
+  const queryEnabled = (hasSearched && !isDiscoveryMode) || !!activeFileId || discoveryHasActiveFilters;
 
-      const { error } = await supabase.from('enrichment_availability').upsert({
-        contact_id: contactId,
-        has_email: hasEmail,
-        has_phone: hasPhone,
-        has_location: hasLocation,
-        has_org_details: hasOrg,
-        last_checked_at: new Date().toISOString()
-      }, {
-        onConflict: 'contact_id'
-      });
+  const contactsQueryKey = useMemo(() => ['contacts-unified', {
+    isDiscoveryMode, filters: reduxFilters, currentPage, perPage,
+    fileId: activeFileId, organization_id,
+  }], [isDiscoveryMode, reduxFilters, currentPage, perPage, activeFileId, organization_id]);
 
-      if (error) {
-        console.error("Error saving availability stats:", error);
-      }
-    } catch (err) {
-      console.error("Unexpected error saving availability:", err);
+  const { data: queryResult, isLoading, isFetching } = useSimpleContacts({
+    fileId: activeFileId,
+    enabled: queryEnabled,
+  });
+
+  const tableData = queryResult?.data  || [];
+  const totalRows = queryResult?.count || 0;
+
+  // Update result count in the most recent saved search
+  useEffect(() => {
+    if (hasSearched && totalRows > 0 && recentSearches.length > 0) {
+      const updated = recentSearches.map((s, i) => i === 0 ? { ...s, resultCount: totalRows } : s);
+      setRecentSearches(updated);
+      localStorage.setItem(isDiscoveryMode ? LS_KEY_DISCOVERY : LS_KEY_CRM, JSON.stringify(updated));
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalRows]);
 
-  // 10. Actions
+  // ── Action: sidebar search  (called when user hits "Search" button) ───────────
+  const handleSidebarSearch = useCallback((reduxFilterPayload: any, summary: string) => {
+    setHasSearched(true);
+    // Save to CRM recent searches (not discovery)
+    const updated = saveRecentSearch(urlFilters, totalRows, false);
+    setRecentSearches(updated);
+  }, [urlFilters, totalRows]);
+
+  // ── Action: apply a saved recent search ──────────────────────────────────────
+  const handleApplyRecentSearch = useCallback((saved: RecentSearch) => {
+    if (isDiscoveryMode) {
+      // Discovery: restore discovery filters stored in sidebar local state shape
+      const f = saved.filters;
+      const kw = [f.q_keywords, ...(f.company_name_tags || [])].filter(Boolean).join(' ').trim();
+      dispatch(setFilters({
+        q_keywords:                               kw,
+        person_titles:                             f.person_titles            || [],
+        person_locations:                          f.person_locations         || [],
+        person_seniorities:                        f.person_seniorities       || [],
+        organization_locations:                    f.organization_locations   || [],
+        organization_num_employees_ranges:         f.organization_num_employees_ranges || [],
+        contact_email_status:                      f.contact_email_status     || [],
+        include_similar_titles:                    f.include_similar_titles   ?? true,
+        currently_using_any_of_technology_uids:   f.technologies             || [],
+        q_organization_job_titles:                f.q_organization_job_titles || [],
+        organization_job_locations:               f.job_posting_locations    || [],
+        revenue_range: f.revenue_min || f.revenue_max ? {
+          min: f.revenue_min ? parseInt(f.revenue_min, 10) : undefined,
+          max: f.revenue_max ? parseInt(f.revenue_max, 10) : undefined,
+        } : undefined,
+      }));
+      dispatch(setPage(1));
+    } else {
+      // CRM: restore ContactFilters → URL params + Redux
+      const savedFilters = saved.filters as ContactFilters;
+      writeFilters(savedFilters, 1);
+      const redux: any = {};
+      if (savedFilters.search)                redux.search         = savedFilters.search;
+      if (savedFilters.jobTitles?.length)     redux.jobTitles       = savedFilters.jobTitles;
+      if (savedFilters.seniorities?.length)   redux.seniorities     = savedFilters.seniorities;
+      if (savedFilters.stages?.length)        redux.stages          = savedFilters.stages;
+      if (savedFilters.sources?.length)       redux.sources         = savedFilters.sources;
+      if (savedFilters.countries?.length)     redux.countries       = savedFilters.countries;
+      if (savedFilters.states?.length)        redux.states          = savedFilters.states;
+      if (savedFilters.cities?.length)        redux.cities          = savedFilters.cities;
+      if (savedFilters.industries?.length)    redux.industries      = savedFilters.industries;
+      if (savedFilters.employeeCounts?.length) redux.employeeCounts = savedFilters.employeeCounts;
+      if (savedFilters.companyIds?.length)    redux.companyIds      = savedFilters.companyIds;
+      if (savedFilters.hasEmail)              redux.hasEmail        = true;
+      if (savedFilters.hasPhone)              redux.hasPhone        = true;
+      if (savedFilters.isEnriched)            redux.isEnriched      = true;
+      dispatch(setFilters(redux));
+      dispatch(setPage(1));
+    }
+    setHasSearched(true);
+  }, [isDiscoveryMode, writeFilters, dispatch]);
+
+  const handleRemoveRecentSearch = useCallback((id: string) => {
+    const updated = recentSearches.filter(s => s.id !== id);
+    setRecentSearches(updated);
+    localStorage.setItem(isDiscoveryMode ? LS_KEY_DISCOVERY : LS_KEY_CRM, JSON.stringify(updated));
+  }, [recentSearches, isDiscoveryMode]);
+
+  // (Availability signals are derived from the search cache at query time — no separate upsert needed)
+
+  // ── Handlers (logic preserved from original) ─────────────────────────────────
+
   const handleSaveDiscovery = async (person: any, targetFileId?: string) => {
+    // Unwrap mapped discovery row → get original person data object
+    // (mapped rows carry original_data; raw discovery persons don't)
+    const apolloPerson = person?.original_data || person;
     try {
-      const savedContact = await saveDiscoveryToCRM(person, organization_id, user.id);
-
-            // 2. Save Availability Data (New Requirement)
-      if (savedContact?.id) {
-         await saveContactAvailability(savedContact.id, person);
-      }
-      
-      // If fileId provided (from modal or current page), also add to list
-      const finalFileId = targetFileId || fileId;
-      if (finalFileId && savedContact?.id) {
+      const savedContact = await saveDiscoveryToCRM(apolloPerson, organization_id, user.id);
+      const fid = targetFileId || activeFileId;
+      if (fid && savedContact?.id) {
         await supabase.from('contact_workspace_files').upsert({
-          contact_id: savedContact.id,
-          file_id: finalFileId,
-          added_by: user.id
+          contact_id: savedContact.id, file_id: fid, added_by: user.id,
         });
       }
-      
-      toast({ title: "Lead Captured", description: `${person.name || person.first_name} added to CRM.` });
+      toast({ title: 'Lead Captured', description: `${person.name || person.first_name} added to CRM.` });
       queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-      queryClient.invalidateQueries({ queryKey: ['file-contacts', fileId] });
       queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
       return savedContact;
     } catch (err: any) {
-      toast({ variant: "destructive", title: "Save Failed", description: err.message });
+      toast({ variant: 'destructive', title: 'Save Failed', description: err.message });
       throw err;
     }
   };
 
-// TanstackContactsPage.tsx
-
-// 1. Update the function signature to accept the full 'person' object
-const handleEnrich = async (contactId: string, apolloId: string | null, type: 'email' | 'phone', personDetails?: any) => {
-  try {
-    toast({ title: "Request Sent", description: `Verifying ${type}...` });
-    
-    const { data, error } = await supabase.functions.invoke('enrich-contact', { 
-      body: { 
-        contactId, 
-        apolloPersonId: apolloId, 
-        revealType: type, 
-        organizationId: organization_id, 
-        userId: user.id,
-        // Matching criteria for contacts without apolloId (was built but never sent before)
-        email: personDetails?.email,
-        name: personDetails?.name,
-        linkedin_url: personDetails?.linkedin_url,
-        organization_name: personDetails?.company_name,
-        domain: personDetails?.company_domain
+  const handleEnrich = async (contactId: string, apolloId: string | null, type: 'email' | 'phone', personDetails?: any) => {
+    try {
+      toast({ title: 'Verifying…', description: `Checking ${type}` });
+      const { data, error } = await supabase.functions.invoke('enrich-contact', {
+        body: {
+          contactId, apolloPersonId: apolloId, revealType: type,
+          organizationId: organization_id, userId: user.id,
+          email: personDetails?.email, name: personDetails?.name,
+          linkedin_url: personDetails?.linkedin_url,
+          organization_name: personDetails?.company_name,
+          domain: personDetails?.company_domain,
+        },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error === 'insufficient_credits') {
+        toast({ variant: 'destructive', title: 'Insufficient Credits', description: data.message }); return;
       }
+      if (data?.error === 'no_match') {
+        toast({ variant: 'destructive', title: 'No Match Found', description: data.message }); return;
+      }
+      const credit = data?.credits?.deducted ? ` (${data.credits.deducted} credit${data.credits.deducted > 1 ? 's' : ''})` : '';
+      toast({ title: 'Success', description: (data?.message || 'Enrichment complete') + credit });
+      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    }
+  };
+
+  // ── Bulk: Save selected discovery rows to CRM ────────────────────────────────
+  const handleBulkSaveToCRM = async () => {
+    const selectedRows = table.getSelectedRowModel().rows;
+    if (!selectedRows.length) return;
+    setIsBulkSaving(true);
+    let saved = 0, failed = 0;
+    for (const row of selectedRows) {
+      try {
+        const person = row.original?.original_data || row.original;
+        if (!person) { failed++; continue; }
+        const savedContact = await saveDiscoveryToCRM(person, organization_id, user.id);
+        if (savedContact?.id) {
+          saved++;
+        }
+      } catch { failed++; }
+    }
+    setIsBulkSaving(false);
+    table.resetRowSelection();
+    toast({
+      title: `${saved} contact${saved !== 1 ? 's' : ''} saved to CRM`,
+      description: failed > 0 ? `${failed} failed` : undefined,
     });
-
-    if (error) throw new Error(error.message || "Function invocation failed");
-
-    // Handle 402 insufficient credits
-    if (data?.error === 'insufficient_credits') {
-      toast({ 
-        variant: "destructive", 
-        title: "Insufficient Credits", 
-        description: data.message || `Need ${data.required} credits, balance: ${data.balance}. Please recharge.`
-      });
-      return;
-    }
-
-    // Handle no match
-    if (data?.error === 'no_match') {
-      toast({ 
-        variant: "destructive", 
-        title: "No Match Found", 
-        description: data.message || "Apollo could not identify this person." 
-      });
-      return;
-    }
-
-    const creditInfo = data?.credits?.deducted ? ` (${data.credits.deducted} credit${data.credits.deducted > 1 ? 's' : ''})` : '';
-    toast({ title: "Success", description: (data?.message || "Enrichment complete") + creditInfo });
-    
     queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-    queryClient.invalidateQueries({ queryKey: ['contact-full-detail', contactId] });
-  } catch (err: any) {
-    console.error("Enrichment error:", err);
-    toast({ variant: "destructive", title: "Error", description: err.message });
-  }
-};
+  };
 
-// Replace the current handleListAdd completely
-const handleListAdd = async (targetFileId: string) => {
+  // ── Bulk: Add selected discovery rows to a list ──────────────────────────────
+  const handleBulkAddToList = async (targetFileId: string) => {
+    const selectedRows = table.getSelectedRowModel().rows;
+    if (!selectedRows.length) return;
+    let saved = 0, failed = 0;
+    for (const row of selectedRows) {
+      try {
+        const person = row.original?.original_data || row.original;
+        const contact = person ? await saveDiscoveryToCRM(person, organization_id, user.id) : row.original;
+        if (!contact?.id) { failed++; continue; }
+        await supabase.from('contact_workspace_files').upsert({ contact_id: contact.id, file_id: targetFileId, added_by: user.id });
+        saved++;
+      } catch { failed++; }
+    }
+    toast({ title: `${saved} contact${saved !== 1 ? 's' : ''} added to list`, description: failed > 0 ? `${failed} failed` : undefined });
+    table.resetRowSelection();
+    queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+    queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
+    setListModalOpen(false);
+  };
+      const handleListAdd = async (targetFileId: string) => {
   if (!targetFileId) {
-    toast({ variant: "destructive", title: "No list selected" });
+    toast({ variant: 'destructive', title: 'No list selected' });
     return;
   }
 
   try {
     if (isFromDiscovery && selectedContact?.original_data) {
-      // ── Discovery → CRM + add to list in one flow ──
-      const person = selectedContact.original_data;
+      const savedContact = await saveDiscoveryToCRM(
+        selectedContact.original_data,
+        organization_id,
+        user.id
+      );
 
-      // 1. Save to contacts + get the new contact
-      const savedContact = await saveDiscoveryToCRM(person, organization_id, user.id);
+      if (!savedContact?.id) throw new Error('No ID returned');
 
-      if (!savedContact?.id) {
-        throw new Error("Contact was created but no ID returned");
-      }
+      await saveContactAvailability(savedContact.id, selectedContact.original_data);
 
-      // 2. Save Availability Data (New Requirement)
-      await saveContactAvailability(savedContact.id, person);
-
-      // 3. Add to the chosen list
-      const { error } = await supabase
-        .from('contact_workspace_files')
-        .upsert({
-          contact_id: savedContact.id,
-          file_id: targetFileId,
-          added_by: user.id,
-          // optional: added_at: new Date().toISOString(),
-        });
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: `${person.name || person.first_name} saved to CRM and added to list.`,
+      const { error } = await supabase.from('contact_workspace_files').upsert({
+        contact_id: savedContact.id,
+        file_id: targetFileId,
+        added_by: user.id,
       });
 
-      // Refresh relevant queries
-      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-      queryClient.invalidateQueries({ queryKey: ['file-contacts', targetFileId] });
-      queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
+      if (error) throw error;
+
+      toast({ title: 'Saved', description: 'Added to list.' });
     } 
     else if (selectedContact?.id) {
-      // ── Normal CRM contact – just add to list ──
-      const { error } = await supabase
-        .from('contact_workspace_files')
-        .upsert({
-          contact_id: selectedContact.id,
-          file_id: targetFileId,
-          added_by: user.id,
-        });
+      const { error } = await supabase.from('contact_workspace_files').upsert({
+        contact_id: selectedContact.id,
+        file_id: targetFileId,
+        added_by: user.id,
+      });
 
       if (error) throw error;
 
-      toast({ title: "Added to List" });
-
-      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-      queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
-      if (fileId) {
-        queryClient.invalidateQueries({ queryKey: ['file-contacts', fileId] });
-      }
+      toast({ title: 'Added to List' });
     } 
     else {
-      throw new Error("No valid contact selected");
+      throw new Error('No valid contact');
     }
-  } catch (err: any) {
-    console.error("Add to list failed:", err);
-    toast({
-      variant: "destructive",
-      title: "Failed to add to list",
-      description: err.message || "An unexpected error occurred",
-    });
-  } finally {
+
+    queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+    queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
+  } 
+  catch (err: any) {
+    toast({ variant: 'destructive', title: 'Failed', description: err.message });
+  } 
+  finally {
     setListModalOpen(false);
     setIsFromDiscovery(false);
-    setSelectedContact(null); // clean up
+    setSelectedContact(null);
   }
 };
+  // OPTIMISTIC inline edit — no refetch, no spinner
+  const handleUpdateData = async (rowIndex: number, columnId: string, value: any) => {
+    if (isDiscoveryMode) return;
+    const rowItem = tableData[rowIndex];
+    if (!rowItem) return;
 
-  // --- 11. COMPREHENSIVE ASSET HANDLER (ADD/EDIT/DELETE/FLAG) ---
+    queryClient.setQueryData(contactsQueryKey, (old: any) => {
+      if (!old?.data) return old;
+      return {
+        ...old,
+        data: old.data.map((item: any, i: number) => {
+          if (i !== rowIndex) return item;
+          if (columnId === 'location' && typeof value === 'object') return { ...item, ...value };
+          return { ...item, [columnId]: value };
+        }),
+      };
+    });
+
+    try {
+      if (columnId === 'location' && typeof value === 'object') {
+        await supabase.from('contacts').update(value).eq('id', rowItem.id);
+      } else {
+        await supabase.from('contacts').update({ [columnId]: value }).eq('id', rowItem.id);
+      }
+    } catch (err: any) {
+      queryClient.invalidateQueries({ queryKey: contactsQueryKey });
+      toast({ variant: 'destructive', title: 'Update Failed', description: err.message });
+    }
+  };
+
   const handleAssetAction = async (rowIndex: number, type: 'email' | 'mobile', action: string, value: string, payload?: any) => {
     if (isDiscoveryMode) return;
     const rowItem = tableData[rowIndex];
     if (!rowItem) return;
 
     const tableName = type === 'email' ? 'enrichment_contact_emails' : 'enrichment_contact_phones';
-    const valCol = type === 'email' ? 'email' : 'phone_number';
+    const valCol    = type === 'email' ? 'email'        : 'phone_number';
     const statusCol = type === 'email' ? 'email_status' : 'status';
-    const sourceCol = type === 'email' ? 'source' : 'source_name';
-    const mainCol = type === 'email' ? 'email' : 'mobile';
+    const sourceCol = type === 'email' ? 'source'       : 'source_name';
+    const mainCol   = type === 'email' ? 'email'        : 'mobile';
 
     try {
       if (action === 'add') {
-         const insertPayload: any = {
-            contact_id: rowItem.id,
-            [valCol]: value,
-            [statusCol]: payload?.status || (type === 'email' ? 'unverified' : 'no_status'),
-            [sourceCol]: 'Manual',
-         };
-
-         if (type === 'mobile') {
-            insertPayload.type = payload?.type || 'mobile';
-         }
-         if (type === 'email') {
-            insertPayload.is_primary = false; 
-         }
-
-         const { error } = await supabase.from(tableName).insert(insertPayload);
-         if (error) throw error;
-
-         if (!rowItem[mainCol]) {
-            await supabase.from('contacts').update({ [mainCol]: value }).eq('id', rowItem.id);
-            if (type === 'email') {
-                await supabase.from(tableName).update({ is_primary: true }).eq('contact_id', rowItem.id).eq(valCol, value);
-            }
-         }
-         toast({ title: "Added", description: "Record added successfully." });
+        const ins: any = { contact_id: rowItem.id, [valCol]: value, [statusCol]: payload?.status || (type === 'email' ? 'unverified' : 'no_status'), [sourceCol]: 'Manual' };
+        if (type === 'mobile') ins.type = payload?.type || 'mobile';
+        if (type === 'email')  ins.is_primary = false;
+        const { error } = await supabase.from(tableName).insert(ins);
+        if (error) throw error;
+        if (!rowItem[mainCol]) {
+          await supabase.from('contacts').update({ [mainCol]: value }).eq('id', rowItem.id);
+          if (type === 'email') await supabase.from(tableName).update({ is_primary: true }).eq('contact_id', rowItem.id).eq(valCol, value);
+        }
+      } else if (action === 'edit') {
+        const upd: any = { [valCol]: payload.value, [statusCol]: payload.status };
+        if (type === 'mobile') upd.type = payload.type;
+        const { error } = await supabase.from(tableName).update(upd).eq('contact_id', rowItem.id).eq(valCol, value);
+        if (error) throw error;
+        if (rowItem[mainCol] === value) await supabase.from('contacts').update({ [mainCol]: payload.value }).eq('id', rowItem.id);
+      } else if (action === 'set_primary') {
+        await supabase.from('contacts').update({ [mainCol]: value }).eq('id', rowItem.id);
+        if (type === 'email') {
+          await supabase.from(tableName).update({ is_primary: false }).eq('contact_id', rowItem.id);
+          await supabase.from(tableName).update({ is_primary: true }).eq('contact_id', rowItem.id).eq(valCol, value);
+        }
+      } else if (action === 'flag') {
+        await supabase.from(tableName).update({ [statusCol]: payload }).eq('contact_id', rowItem.id).eq(valCol, value);
+      } else if (action === 'delete') {
+        await supabase.from(tableName).delete().eq('contact_id', rowItem.id).eq(valCol, value);
+        if (rowItem[mainCol] === value) await supabase.from('contacts').update({ [mainCol]: null }).eq('id', rowItem.id);
       }
-      else if (action === 'edit') {
-         const { value: newValue, type: newType, status: newStatus } = payload;
-         
-         const updatePayload: any = {
-            [valCol]: newValue,
-            [statusCol]: newStatus
-         };
-         if (type === 'mobile') updatePayload.type = newType;
-
-         const { error } = await supabase.from(tableName)
-            .update(updatePayload)
-            .eq('contact_id', rowItem.id)
-            .eq(valCol, value);
-         
-         if (error) throw error;
-
-         if (rowItem[mainCol] === value) {
-            await supabase.from('contacts').update({ [mainCol]: newValue }).eq('id', rowItem.id);
-         }
-         toast({ title: "Updated", description: "Record updated." });
-      }
-      else if (action === 'set_primary') {
-         await supabase.from('contacts').update({ [mainCol]: value }).eq('id', rowItem.id);
-         
-         if (type === 'email') {
-            await supabase.from(tableName).update({ is_primary: false }).eq('contact_id', rowItem.id);
-            await supabase.from(tableName).update({ is_primary: true }).eq('contact_id', rowItem.id).eq(valCol, value);
-         }
-         toast({ title: "Primary Updated", description: "Main contact method updated." });
-      }
-      else if (action === 'flag') {
-         await supabase.from(tableName).update({ [statusCol]: payload }).eq('contact_id', rowItem.id).eq(valCol, value);
-         toast({ title: "Status Updated", description: `Marked as ${payload}` });
-      }
-      else if (action === 'delete') {
-         await supabase.from(tableName).delete().eq('contact_id', rowItem.id).eq(valCol, value);
-         if (rowItem[mainCol] === value) {
-            await supabase.from('contacts').update({ [mainCol]: null }).eq('id', rowItem.id);
-         }
-         toast({ title: "Deleted", description: "Record removed." });
-      }
-
+      toast({ title: action === 'delete' ? 'Deleted' : 'Updated' });
       queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
     } catch (e: any) {
-        console.error(e);
-        toast({ variant: "destructive", title: "Error", description: e.message });
+      toast({ variant: 'destructive', title: 'Error', description: e.message });
     }
   };
 
-  // --- 12. HANDLE INLINE EDITS (Simple Columns) ---
-  const handleUpdateData = async (rowIndex: number, columnId: string, value: any) => {
-    if (isDiscoveryMode) return;
-    const rowItem = tableData[rowIndex];
-    if (!rowItem) return;
-
-    try {
-        if (columnId === 'location' && typeof value === 'object') {
-          await supabase.from('contacts').update(value).eq('id', rowItem.id);
-        } else {
-          await supabase.from('contacts').update({ [columnId]: value }).eq('id', rowItem.id);
-        }
-        queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-    } catch (err: any) {
-        toast({ variant: "destructive", title: "Update Failed", description: err.message });
-    }
-  };
-
-  // 13. Column Filters
+  // ── Column filters ────────────────────────────────────────────────────────────
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
-  // 14. Adjust visibility based on mode
-  useEffect(() => {
-    if (isDiscoveryMode) {
-      setColumnVisibility(prev => ({
-        ...prev, 
-        email: false,
-        mobile: false,
-        contact_stage: false, 
-        medium: false, 
-        created_by_employee: false, 
-        created_at: false, 
-        updated_at: false, 
-        location: false, 
-        data_availability: true,
-      }));
-    } else {
-      setColumnVisibility(prev => ({
-        ...prev, 
-         email: true,
-        mobile: true,
-        contact_stage: true, 
-        medium: true, 
-        created_by_employee: true, 
-        created_at: true, 
-        updated_at: false, 
-        location: true,
-        data_availability: false,
-      }));
-    }
-  }, [isDiscoveryMode]);
-
-  // 15. Table Configuration
+  // ── Table instance ────────────────────────────────────────────────────────────
   const table = useReactTable({
     data: tableData,
     columns,
-    state: { 
-      columnFilters, 
-      columnVisibility, 
+    state: {
+      columnFilters,
+      columnVisibility,
       columnOrder,
       columnSizing,
-      pagination: { pageIndex: currentPage - 1, pageSize: perPage } 
+      pagination: { pageIndex: currentPage - 1, pageSize: perPage },
     },
-    manualPagination: true, // <--- ALWAYS TRUE NOW (Server-side paging)
-    rowCount: totalRowCount, // <--- PASS TOTAL COUNT FROM SERVER
+    manualPagination: true,
+    rowCount: totalRows,
     pageCount: isDiscoveryMode ? Math.ceil(totalEntries / perPage) : undefined,
-    onColumnFiltersChange: setColumnFilters,
+    onColumnFiltersChange:    setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
-    onColumnOrderChange: setColumnOrder,
-    onColumnSizingChange: setColumnSizing,
+    onColumnOrderChange:      setColumnOrder,
+    onColumnSizingChange:     setColumnSizing,
     columnResizeMode: 'onChange',
-  onPaginationChange: (updater) => {
-      // 1. Calculate the new state
-      // 'updater' is usually a function: (oldState) => newState
-      const currentPagination = { pageIndex: currentPage - 1, pageSize: perPage };
-      const newPagination = typeof updater === 'function'
-        ? updater(currentPagination)
-        : updater;
-
-      // 2. Handle Page Size Change (Rows per page)
-      if (newPagination.pageSize !== perPage) {
-        dispatch(setPerPage(newPagination.pageSize)); // Update Redux
-        dispatch(setPage(1)); // Always reset to page 1 when changing limit
-        
-        // Update URL to page 1
-        setSearchParams(prev => {
-          prev.set('page', '1');
-          return prev;
-        });
-      }
-
-      // 3. Handle Page Index Change (Next/Prev)
-      else if (newPagination.pageIndex !== currentPagination.pageIndex) {
-        const newPageNumber = newPagination.pageIndex + 1;
-        // Update URL (useEffect will catch this and update Redux)
-        setSearchParams(prev => {
-          prev.set('page', newPageNumber.toString());
-          return prev;
-        });
+    onPaginationChange: updater => {
+      const cur = { pageIndex: currentPage - 1, pageSize: perPage };
+      const next = typeof updater === 'function' ? updater(cur) : updater;
+      if (next.pageSize !== perPage) {
+        dispatch(setPerPage(next.pageSize));
+        dispatch(setPage(1));
+        writeFilters(urlFilters, 1);
+      } else if (next.pageIndex !== cur.pageIndex) {
+        const newPage = next.pageIndex + 1;
+        writeFilters(urlFilters, newPage);
+        dispatch(setPage(newPage));
       }
     },
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
+    getCoreRowModel:       getCoreRowModel(),
+    getFilteredRowModel:   getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     meta: {
-      saveDiscoveryLead: handleSaveDiscovery,
-      enrichContact: handleEnrich,
-      openListModal: (c: any, fromDiscovery: boolean = false) => { 
-        setSelectedContact(c); 
-        setIsFromDiscovery(fromDiscovery);
-        setListModalOpen(true); 
+      saveDiscoveryLead: handleSaveDiscovery,  // single row save to CRM (discovery)
+      saveToCRM:         handleSaveDiscovery,  // alias for action column button
+      enrichContact:     handleEnrich,
+      openListModal: (c: any, fromDiscovery = false) => {
+        setSelectedContact(c); setIsFromDiscovery(fromDiscovery); setListModalOpen(true);
       },
-      updateData: handleUpdateData,
+      updateData:        handleUpdateData,
       handleAssetAction: handleAssetAction,
-    }
+      isDiscoveryMode,
+    },
   });
 
-  console.log("tableData from TanstackContactsPage:", tableData);
+  // ── Derived ───────────────────────────────────────────────────────────────────
+  const isPendingFilter = isFetching && !isLoading;
+  const pageTitle = fileId && currentFile ? currentFile.name : isDiscoveryMode ? 'Search People' : 'Contacts';
+  const activeFilterCount = countActiveFilters(urlFilters);
 
-  // 16. Reset preferences to default
-  const handleResetPreferences = () => {
-    setColumnVisibility(DEFAULT_COLUMN_VISIBILITY);
-    setColumnOrder(DEFAULT_COLUMN_ORDER);
-    setColumnSizing(DEFAULT_COLUMN_SIZING);
-    toast({ title: "Reset", description: "Table view reset to defaults." });
-  };
+  const selectedListName = useMemo(() => {
+    if (!selectedListId || !workspaceLists) return null;
+    for (const group of workspaceLists as any[]) {
+      const f = group.files.find((f: any) => f.id === selectedListId);
+      if (f) return `${group.workspace.name} / ${f.name}`;
+    }
+    return null;
+  }, [selectedListId, workspaceLists]);
 
-  // 17. Get column display name
-  const getColumnDisplayName = (columnId: string) => {
-    return columnId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  };
+  const getColLabel = (id: string) => COL_LABELS[id]?.label ?? id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
-  // 18. Determine page title
-  const pageTitle = fileId && currentFile 
-    ? currentFile.name 
-    : isDiscoveryMode 
-      ? 'Global Intelligence' 
-      : 'My Contacts';
-
-  const recordCount = isDiscoveryMode 
-    ? totalEntries 
-    : table.getFilteredRowModel().rows.length;
-
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <DndProvider backend={HTML5Backend}>
-      <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-slate-50">
-        
-        {/* HEADER - Full Width at Top */}
-        <header className="bg-white border-b px-6 py-3 flex items-center justify-between shadow-sm z-30 flex-shrink-0">
-          <div className="flex items-center gap-4">
-             {/* Back button when viewing a specific file */}
-             {fileId && (
-               <Button 
-                 variant="ghost" 
-                 size="sm" 
-                 onClick={() => navigate('/lists')}
-                 className="text-slate-600 hover:text-slate-900"
-               >
-                 <ArrowLeft size={16} className="mr-1" />
-                 Back to Lists
-               </Button>
-             )}
-             
-             <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  {fileId && currentFile?.workspaces && (
-                    <Badge variant="outline" className="text-[9px] bg-slate-100">
-                      <FolderOpen size={10} className="mr-1" />
-                      {currentFile.workspaces.name}
-                    </Badge>
-                  )}
-                  <h1 className="text-lg font-black text-slate-900 tracking-tight">
-                     {pageTitle}
-                  </h1>
-                </div>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                   {isDiscoveryMode ? `${recordCount.toLocaleString()} Matches` : `${recordCount} Records`}
-                </p>
-             </div>
-             
-             {/* Mode toggle - only show when not viewing a specific file */}
-             {!fileId && (
-               <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner ml-4">
-                  <button 
-                    onClick={() => dispatch(resetSearch())} 
-                    className={cn(
-                      "px-6 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all", 
-                      !isDiscoveryMode ? "bg-white text-purple-600 shadow-md" : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    CRM Records
-                  </button>
-                  <button 
-                    onClick={() => dispatch(setDiscoveryMode(true))} 
-                    className={cn(
-                      "px-6 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all", 
-                      isDiscoveryMode ? "bg-white text-purple-600 shadow-md" : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    Search People
-                  </button>
-               </div>
-             )}
-          </div>
-          
-          <div className="flex items-center gap-3">
+      <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-slate-50/80">
 
-             {fileId && !isDiscoveryMode && (
-               <Button 
-                 variant="secondary" 
-                 size="sm" 
-                 onClick={() => setIsImportOpen(true)}
-                 className="h-9 text-xs font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200"
-               >
-                 <UploadCloud size={14} className="mr-2" />
-                 Import CSV
-               </Button>
-             )}
-             <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
-                <Input 
-                   placeholder={isDiscoveryMode ? "Search Global Database..." : "Search Contacts..."}
-                   className="pl-9 h-9 text-xs bg-slate-50 border-slate-200 w-64"
-                   value={searchTerm}
-                   onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      if (!isDiscoveryMode) table.getColumn('name')?.setFilterValue(e.target.value);
-                   }}
-                   onKeyDown={(e) => {
-                      if (e.key === 'Enter' && isDiscoveryMode) dispatch(setFilters({ q_keywords: searchTerm }));
-                   }}
-                />
-             </div>
-             
-             <Button 
-               variant="outline" 
-               size="sm" 
-               className="h-9 hidden lg:flex"
-               onClick={() => setViewSettingsOpen(true)}
-             >
-               <Settings2 className="mr-2 h-3.5 w-3.5" /> View
-             </Button>
-             
-             {!isSidebarOpen && (
-               <Button 
-                 variant="outline" 
-                 size="icon" 
-                 onClick={() => setIsSidebarOpen(true)} 
-                 className="h-9 w-9"
-               >
-                 <Filter size={14}/>
-               </Button>
-             )}
-          </div>
-        </header>
+        {/* ════ HEADER ════════════════════════════════════════════════════════ */}
+        <header className="bg-white border-b border-slate-200 px-5 flex items-center gap-3 shadow-sm z-30 flex-shrink-0 h-[52px]">
 
-        {/* MAIN CONTENT - Sidebar and Table Share Space */}
-        <div className="flex flex-1 overflow-hidden">
-          
-          {/* SIDEBAR */}
-          {isSidebarOpen && (
-            <div className="w-[220px] flex-shrink-0 border-r bg-white z-20 overflow-hidden">
-               {isDiscoveryMode ? (
-                 <DiscoverySidebar /> 
-               ) : (
-                 <ContactFiltersSidebar 
-                   table={table} 
-                   isOpen={isSidebarOpen} 
-                   onClose={() => setIsSidebarOpen(false)} 
-                   fileId={fileId || null}
-                 />
-               )}
+          {/* Sidebar toggle */}
+          <button
+            onClick={() => setIsSidebarOpen(v => !v)}
+            className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors flex-shrink-0"
+          >
+            {isSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+          </button>
+
+          {/* Back */}
+          {fileId && (
+            <button onClick={() => navigate('/lists')} className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-xs font-medium transition-colors">
+              <ArrowLeft size={14} /> Back
+            </button>
+          )}
+
+          {/* Title */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <h1 className="text-sm font-semibold text-slate-800">{pageTitle}</h1>
+            {fileId && currentFile?.workspaces && (
+              <Badge variant="outline" className="text-[9px] bg-slate-50 text-slate-500 border-slate-200">
+                <FolderOpen size={9} className="mr-1" />{(currentFile.workspaces as any).name}
+              </Badge>
+            )}
+          </div>
+
+          {/* CRM / Search People mode toggle */}
+          {!fileId && (
+            <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+              <button
+                onClick={() => {
+                  dispatch(setDiscoveryMode(true));
+                  setHasSearched(false);
+                  sessionStorage.setItem('contacts_mode', 'discovery');
+                  setSearchParams(prev => { prev.set('mode', 'discovery'); return prev; });
+                }}
+                className={cn(
+                  'px-3 py-1 rounded-md text-[11px] font-medium transition-all',
+                  isDiscoveryMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                )}
+              >
+                Search People
+              </button>
+              <button
+                onClick={() => {
+                  dispatch(setDiscoveryMode(false));
+                  dispatch(resetSearch());
+                  setHasSearched(true);
+                  sessionStorage.setItem('contacts_mode', 'crm');
+                  setSearchParams(prev => { prev.set('mode', 'crm'); return prev; });
+                }}
+                className={cn(
+                  'px-3 py-1 rounded-md text-[11px] font-medium transition-all',
+                  !isDiscoveryMode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                )}
+              >
+                CRM
+              </button>
             </div>
           )}
 
-          {/* TABLE AREA */}
-<div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-  <div className="flex-1 overflow-hidden p-0 pb-0 flex flex-col relative">
-      
-      {/* 
-         CHANGE 1: Only show full Spinner on INITIAL load (isLoading).
-         On updates (isFetching), keep the table mounted but dimmed.
-      */}
-     {isLoading ? (
-  <div className="flex-1 flex flex-col items-center justify-center ...">
-    <Spinner size="xl" color="purple.500" />
-    <p>Loading Contacts...</p>
-  </div>
-) : isPendingFilterChange ? (
-  <div className="flex-1 flex flex-col items-center justify-center ... opacity-70">
-    <Spinner size="lg" color="purple.500" />
-    <p className="mt-4 text-xs font-black text-slate-500 uppercase tracking-widest">
-      Applying filters...
-    </p>
-    <p className="mt-2 text-xs text-slate-400">
-      This usually takes a few seconds
-    </p>
-  </div>
-) : (
-  <div className={cn(
-    "flex-1 bg-white rounded-t-2xl border shadow-sm overflow-hidden ...",
-    isFetching ? "opacity-60 pointer-events-none" : "opacity-100"
-  )}>
-    {tableData.length === 0 ? (
-      isDiscoveryMode ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-          <div className="bg-purple-50 p-4 rounded-full mb-4">
-            <Zap className="h-8 w-8 text-purple-600" />
-          </div>
-          <h3 className="text-lg font-bold text-slate-800">Global Intelligence Search</h3>
-          <p className="text-sm text-slate-500 max-w-md mt-2">
-            Search over 275M+ verified contacts.
-          </p>
-        </div>
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-          <div className="bg-slate-100 p-4 rounded-full mb-4">
-            <FolderOpen className="h-8 w-8 text-slate-400" />
-          </div>
-          <h3 className="text-lg font-bold text-slate-800">No Contacts Yet</h3>
-          <p className="text-sm text-slate-500 max-w-md mt-2">
-            {fileId
-              ? "This list is empty. Add contacts from Discovery mode or your CRM."
-              : "Start by adding contacts or searching in Discovery mode."}
-          </p>
-        </div>
-      )
-    ) : (
-      <DataTable table={table} />
-    )}
-  </div>
-)}
+          {/* List filter dropdown */}
+          {!fileId && !isDiscoveryMode && (
+            <div className="flex items-center gap-1.5">
+              <Select
+                value={selectedListId || '__all__'}
+                onValueChange={v => {
+                  const next = v === '__all__' ? null : v;
+                  setSelectedListId(next);
+                  if (next) setHasSearched(true);
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs border-slate-200 bg-slate-50 hover:bg-white w-auto min-w-[130px] max-w-[210px]">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <List size={12} className="text-slate-400 flex-shrink-0" />
+                    <span className="truncate text-slate-600">
+                      {selectedListName || 'All Contacts'}
+                    </span>
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="max-w-[260px]">
+                  <SelectItem value="__all__" className="text-xs">
+                    <div className="flex items-center gap-2"><Users size={12} className="text-slate-400" /> All Contacts</div>
+                  </SelectItem>
+                  {(workspaceLists as any[] || []).map((group: any) => (
+                    <SelectGroup key={group.workspace.id}>
+                      <SelectLabel className="text-[10px] text-slate-400 uppercase tracking-wider">{group.workspace.name}</SelectLabel>
+                      {group.files.map((f: any) => (
+                        <SelectItem key={f.id} value={f.id} className="text-xs pl-4">{f.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedListId && (
+                <button onClick={() => setSelectedListId(null)} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+              )}
+            </div>
+          )}
 
-      {/* Pagination Bar */}
-      <div className="bg-white border-x border-b rounded-b-2xl px-6 py-3 flex justify-between items-center shadow-sm mb-6">
-         <DataTablePagination table={table} />
-      </div>
-  </div>
-</div>
+          <div className="flex-1" />
+
+          {/* Active filter badge */}
+          {activeFilterCount > 0 && !isDiscoveryMode && (
+            <div className="flex items-center gap-1 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1">
+              <span className="text-[10px] font-semibold text-indigo-600">{activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active</span>
+              <button
+                onClick={() => { clearFilters(); dispatch(setFilters({})); setHasSearched(false); }}
+                className="text-indigo-400 hover:text-indigo-600 ml-1"
+              >
+                <X size={11} />
+              </button>
+            </div>
+          )}
+
+          {/* Record count */}
+          {queryEnabled && (
+            <span className="text-[11px] text-slate-500 hidden md:block">
+              {isPendingFilter ? (
+                <span className="flex items-center gap-1.5 text-indigo-500"><Spinner size="xs" /> Filtering…</span>
+              ) : (
+                <><span className="font-semibold text-slate-700">{totalRows.toLocaleString()}</span> records</>
+              )}
+            </span>
+          )}
+
+          {/* Search box */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2 text-slate-400 pointer-events-none" size={13} />
+            <Input
+              placeholder={isDiscoveryMode ? 'Search global database…' : 'Quick search…'}
+              className="pl-8 h-8 text-xs bg-slate-50 border-slate-200 w-48 focus:bg-white"
+              value={headerSearch}
+              onChange={e => {
+                setHeaderSearch(e.target.value);
+                if (!isDiscoveryMode) table.getColumn('name')?.setFilterValue(e.target.value);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && isDiscoveryMode) dispatch(setFilters({ q_keywords: headerSearch }));
+              }}
+            />
+          </div>
+
+          {/* Import button */}
+          {fileId && !isDiscoveryMode && (
+            <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}
+              className="h-8 text-xs border-slate-200 text-slate-600">
+              <UploadCloud size={13} className="mr-1.5" /> Import
+            </Button>
+          )}
+
+          {/* View settings */}
+          <Button variant="outline" size="sm" onClick={() => setViewSettingsOpen(true)}
+            className="h-8 text-xs border-slate-200 text-slate-600 hidden lg:flex">
+            <SlidersHorizontal size={13} className="mr-1.5" /> View
+          </Button>
+        </header>
+
+        {/* ════ BODY ══════════════════════════════════════════════════════════ */}
+        <div className="flex flex-1 overflow-hidden">
+
+          {/* Sidebar */}
+          {isSidebarOpen && (
+            <div className="w-[240px] flex-shrink-0 border-r border-slate-200 bg-white z-20 flex flex-col overflow-y-hidden">
+              {isDiscoveryMode ? (
+                <DiscoverySidebar
+                  onFiltersChange={(chips, count) => {
+                    setPendingDiscoveryChips(chips);
+                    setPendingDiscoveryCount(count);
+                  }}
+                />
+              ) : (
+                <ContactFiltersSidebar
+                  table={table}
+                  isOpen
+                  onClose={() => setIsSidebarOpen(false)}
+                  fileId={activeFileId}
+                  onSearch={handleSidebarSearch}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Table area */}
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+            {/* Loading */}
+            {isLoading && queryEnabled ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3">
+                <Spinner size="xl" color="purple.500" />
+                <p className="text-xs text-slate-500 font-medium">Loading contacts…</p>
+              </div>
+
+            /* Pre-search empty state */
+            ) : !queryEnabled ? (
+              <SearchEmptyState
+                recentSearches={recentSearches}
+                onApplySearch={handleApplyRecentSearch}
+                onRemoveSearch={handleRemoveRecentSearch}
+                isDiscoveryMode={isDiscoveryMode}
+                pendingFilterChips={pendingDiscoveryChips}
+                pendingFilterCount={pendingDiscoveryCount}
+                onRunSearch={isDiscoveryMode ? () => {
+                  // Programmatically trigger Run Search in sidebar via Redux
+                  // The sidebar's "Run Search" fn reads local state — we dispatch
+                  // a signal by temporarily focusing; actual trigger via footer btn
+                  document.querySelector<HTMLButtonElement>('[data-run-search]')?.click();
+                } : undefined}
+              />
+
+            /* Results */
+            ) : (
+              <>
+                {/* ── Discovery bulk action bar ──────────────────────────────── */}
+                {isDiscoveryMode && table.getSelectedRowModel().rows.length > 0 && (
+                  <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-indigo-50 border-b border-indigo-100 z-10">
+                    <span className="text-xs font-semibold text-indigo-700 mr-1">
+                      {table.getSelectedRowModel().rows.length} selected
+                    </span>
+                    <button
+                      onClick={handleBulkSaveToCRM}
+                      disabled={isBulkSaving}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-60"
+                    >
+                      {isBulkSaving
+                        ? <Loader2 size={12} className="animate-spin" />
+                        : <DatabaseZap size={12} />
+                      }
+                      Save to CRM
+                    </button>
+                    <button
+                      onClick={() => { setIsFromDiscovery(true); setListModalOpen(true); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 transition-colors"
+                    >
+                      <ListPlus size={12} /> Add to List
+                    </button>
+                    <button
+                      onClick={() => table.resetRowSelection()}
+                      className="ml-auto text-indigo-400 hover:text-indigo-600 p-1 rounded"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+
+                <div className={cn(
+                  'flex-1 overflow-hidden transition-opacity duration-200',
+                  isPendingFilter && 'opacity-60 pointer-events-none'
+                )}>
+                  {tableData.length === 0 && !isPendingFilter ? (
+                    isDiscoveryMode ? (
+                      <SearchEmptyState
+                        recentSearches={recentSearches}
+                        onApplySearch={handleApplyRecentSearch}
+                        onRemoveSearch={handleRemoveRecentSearch}
+                        isDiscoveryMode={true}
+                        pendingFilterChips={pendingDiscoveryChips}
+                        pendingFilterCount={pendingDiscoveryCount}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full py-20 text-center">
+                        <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-4">
+                          <Users className="h-5 w-5 text-slate-400" />
+                        </div>
+                        <p className="text-sm font-medium text-slate-600 mb-1">No contacts found</p>
+                        <p className="text-xs text-slate-400 mb-4">Try adjusting your filters</p>
+                        {activeFilterCount > 0 && (
+                          <button
+                            onClick={() => { clearFilters(); dispatch(setFilters({})); setHasSearched(false); }}
+                            className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                          >
+                            Clear all filters
+                          </button>
+                        )}
+                      </div>
+                    )
+                  ) : (
+                    <div
+                      className="flex-1 overflow-hidden bg-white rounded-tl-xl border border-slate-200 border-b-0 shadow-sm"
+                      style={{ height: 'calc(100% - 0px)' }}
+                    >
+                      <DataTable table={table} />
+                    </div>
+                  )}
+                </div>
+
+                {tableData.length > 0 && (
+                  <div className="flex-shrink-0 bg-white border border-slate-200 rounded-bl-xl px-5 py-2.5 shadow-sm">
+                    <DataTablePagination table={table} />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
-        {/* ADD TO LIST MODAL */}
+        {/* ════ MODALS ════════════════════════════════════════════════════════ */}
+
         {selectedContact && (
-          <AddToListModal 
-            open={listModalOpen} 
-            onOpenChange={(open: boolean) => {
-              setListModalOpen(open);
-              if (!open) setIsFromDiscovery(false);
-            }} 
-            personName={selectedContact.name || `${selectedContact.first_name || ''} ${selectedContact.last_name || ''}`} 
-            onConfirm={handleListAdd}
+          <AddToListModal
+            open={listModalOpen}
+            onOpenChange={open => { setListModalOpen(open); if (!open) { setIsFromDiscovery(false); setSelectedContact(null); } }}
+            personName={
+              table.getSelectedRowModel().rows.length > 1
+                ? `${table.getSelectedRowModel().rows.length} people`
+                : (selectedContact?.name || '')
+            }
+            onConfirm={isDiscoveryMode && table.getSelectedRowModel().rows.length > 1
+              ? handleBulkAddToList
+              : handleListAdd
+            }
             isFromDiscovery={isFromDiscovery}
           />
         )}
+        {/* Open list modal for bulk without a specific contact */}
+        {!selectedContact && listModalOpen && isDiscoveryMode && (
+          <AddToListModal
+            open={listModalOpen}
+            onOpenChange={open => { setListModalOpen(open); if (!open) setIsFromDiscovery(false); }}
+            personName={`${table.getSelectedRowModel().rows.length} people`}
+            onConfirm={handleBulkAddToList}
+            isFromDiscovery={true}
+          />
+        )}
 
-         {/* IMPORT DIALOG - RENDERED HERE */}
-        <ContactImportDialog 
-          open={isImportOpen} 
-          onOpenChange={setIsImportOpen} 
-          fileId={fileId || null} 
-        />
+        <ContactImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} fileId={activeFileId} />
 
-        {/* VIEW SETTINGS DIALOG */}
+        {/* ════ VIEW SETTINGS DIALOG ════════════════════════════════════════ */}
         <Dialog open={viewSettingsOpen} onOpenChange={setViewSettingsOpen}>
-          <DialogContent className="sm:max-w-[500px] max-h-[80vh]">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Settings2 className="h-5 w-5" />
-                Table View Settings
-              </DialogTitle>
-              <DialogDescription>
-                Customize which columns are visible, their order, and sizes.
-              </DialogDescription>
-            </DialogHeader>
-            
-            <Tabs defaultValue="visibility" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="visibility">Column Visibility</TabsTrigger>
-                <TabsTrigger value="order">Column Order</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="visibility" className="mt-4">
-                <ScrollArea className="h-[300px] pr-4">
-                  <div className="space-y-3">
-                    {table.getAllColumns()
-                      .filter(column => typeof column.accessorFn !== "undefined" && column.getCanHide())
-                      .map(column => (
-                        <div 
-                          key={column.id} 
-                          className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors"
-                        >
-                          <Label 
-                            htmlFor={`col-${column.id}`} 
-                            className="text-sm font-medium cursor-pointer capitalize"
-                          >
-                            {getColumnDisplayName(column.id)}
-                          </Label>
-                          <Switch
-                            id={`col-${column.id}`}
-                            checked={column.getIsVisible()}
-                            onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                          />
-                        </div>
-                      ))}
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-              
-              <TabsContent value="order" className="mt-4">
-                <ScrollArea className="h-[300px] pr-4">
-                  <div className="space-y-1">
-                    {columnOrder
-                      .filter(colId => {
-                        const col = table.getColumn(colId);
-                        return col && col.getIsVisible();
-                      })
-                      .map((colId, index) => (
-                        <div 
-                          key={colId} 
-                          className="flex items-center gap-3 py-2 px-3 rounded-lg bg-slate-50 border"
-                        >
-                          <span className="text-xs text-slate-500 w-6">{index + 1}</span>
-                          <span className="text-sm font-medium capitalize flex-1">
-                            {getColumnDisplayName(colId)}
-                          </span>
-                          <div className="flex gap-1">
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-6 w-6"
-                              disabled={index === 0}
-                              onClick={() => {
-                                const newOrder = [...columnOrder];
-                                const currentIndex = newOrder.indexOf(colId);
-                                if (currentIndex > 0) {
-                                  [newOrder[currentIndex - 1], newOrder[currentIndex]] = 
-                                  [newOrder[currentIndex], newOrder[currentIndex - 1]];
-                                  setColumnOrder(newOrder);
-                                }
-                              }}
-                            >
-                              ↑
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-6 w-6"
-                              disabled={index === columnOrder.length - 1}
-                              onClick={() => {
-                                const newOrder = [...columnOrder];
-                                const currentIndex = newOrder.indexOf(colId);
-                                if (currentIndex < newOrder.length - 1) {
-                                  [newOrder[currentIndex], newOrder[currentIndex + 1]] = 
-                                  [newOrder[currentIndex + 1], newOrder[currentIndex]];
-                                  setColumnOrder(newOrder);
-                                }
-                              }}
-                            >
-                              ↓
-                            </Button>
+          <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-2xl border-0 shadow-2xl max-h-[90vh] flex flex-col">
+
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4 bg-gradient-to-br from-slate-800 to-slate-700 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
+                  <SlidersHorizontal className="h-4.5 w-4.5 text-white" size={18} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white">Table View Settings</h2>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Choose which columns to show and in what order</p>
+                </div>
+                <button onClick={() => setViewSettingsOpen(false)} className="ml-auto text-slate-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="flex flex-1 overflow-hidden min-h-0">
+
+              {/* Left: Column Toggles grouped */}
+              <div className="flex-1 border-r border-slate-100 flex flex-col min-w-0">
+                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Columns</span>
+                  <button
+                    onClick={() => {
+                      // Toggle all hideable columns on
+                      const vis: VisibilityState = { ...columnVisibility };
+                      table.getAllColumns().filter(c => c.getCanHide()).forEach(c => { vis[c.id] = true; });
+                      setColumnVisibility(vis);
+                    }}
+                    className="text-[10px] text-indigo-500 hover:text-indigo-700 font-semibold"
+                  >
+                    Show all
+                  </button>
+                </div>
+
+                <ScrollArea className="flex-1">
+                  <div className="p-3 space-y-4">
+                    {(['Core', 'People', 'CRM'] as const).map(group => {
+                      const groupCols = DEFAULT_ORDER
+                        .map(id => table.getColumn(id))
+                        .filter((col): col is NonNullable<typeof col> =>
+                          !!col && col.getCanHide() && COL_LABELS[col.id]?.group === group
+                        );
+                      if (!groupCols.length) return null;
+                      return (
+                        <div key={group}>
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 px-1">{group}</p>
+                          <div className="space-y-0.5">
+                            {groupCols.map(col => {
+                              const meta = COL_LABELS[col.id];
+                              const isOn = col.getIsVisible();
+                              return (
+                                <button
+                                  key={col.id}
+                                  onClick={() => col.toggleVisibility(!isOn)}
+                                  className={cn(
+                                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all',
+                                    isOn
+                                      ? 'bg-indigo-50 border border-indigo-100'
+                                      : 'hover:bg-slate-50 border border-transparent',
+                                  )}
+                                >
+                                  {/* Check indicator */}
+                                  <span className={cn(
+                                    'flex-shrink-0 h-4 w-4 rounded flex items-center justify-center transition-colors',
+                                    isOn ? 'bg-indigo-600' : 'bg-slate-200',
+                                  )}>
+                                    {isOn && <Check size={10} className="text-white" strokeWidth={3} />}
+                                  </span>
+                                  <span className="flex-1 min-w-0">
+                                    <span className={cn('block text-xs font-semibold leading-tight', isOn ? 'text-indigo-900' : 'text-slate-700')}>
+                                      {meta?.label ?? col.id}
+                                    </span>
+                                    {meta?.desc && (
+                                      <span className="block text-[10px] text-slate-400 mt-0.5 truncate">{meta.desc}</span>
+                                    )}
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
-                      ))}
+                      );
+                    })}
                   </div>
                 </ScrollArea>
-              </TabsContent>
-            </Tabs>
-            
-            <DialogFooter className="flex justify-between mt-4">
-              <Button 
-                variant="outline" 
-                onClick={handleResetPreferences}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              </div>
+
+              {/* Right: Column Order (visible only) */}
+              <div className="w-[180px] flex-shrink-0 flex flex-col">
+                <div className="px-4 py-3 border-b border-slate-100 flex-shrink-0">
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Order</span>
+                </div>
+                <ScrollArea className="flex-1">
+                  <div className="p-2 space-y-1">
+                    {columnOrder
+                      .filter(id => { const c = table.getColumn(id); return c?.getIsVisible() && c.getCanHide(); })
+                      .map((colId, idx, arr) => {
+                        const label = COL_LABELS[colId]?.label ?? colId;
+                        const isFirst = idx === 0;
+                        const isLast  = idx === arr.length - 1;
+                        return (
+                          <div key={colId} className="flex items-center gap-1.5 group px-2 py-2 rounded-lg bg-slate-50 border border-slate-100">
+                            <span className="text-[10px] text-slate-400 w-4 text-right flex-shrink-0">{idx + 1}</span>
+                            <span className="text-[11px] font-medium text-slate-700 flex-1 min-w-0 truncate">{label}</span>
+                            <div className="flex flex-col gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                              <button
+                                disabled={isFirst}
+                                onClick={() => {
+                                  const o = [...columnOrder];
+                                  const ci = o.indexOf(colId);
+                                  if (ci > 0) { [o[ci - 1], o[ci]] = [o[ci], o[ci - 1]]; setColumnOrder(o); }
+                                }}
+                                className="h-4 w-4 rounded flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[10px] font-bold"
+                              >↑</button>
+                              <button
+                                disabled={isLast}
+                                onClick={() => {
+                                  const o = [...columnOrder];
+                                  const ci = o.indexOf(colId);
+                                  if (ci < o.length - 1) { [o[ci], o[ci + 1]] = [o[ci + 1], o[ci]]; setColumnOrder(o); }
+                                }}
+                                className="h-4 w-4 rounded flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[10px] font-bold"
+                              >↓</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </ScrollArea>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3.5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
+              <Button
+                variant="ghost" size="sm"
+                onClick={() => { setColumnVisibility(DEFAULT_VISIBILITY); setColumnOrder(DEFAULT_ORDER); setColumnSizing({}); }}
+                className="text-slate-500 hover:text-red-600 hover:bg-red-50 text-xs h-8 gap-1.5"
               >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Reset to Defaults
+                <RotateCcw className="h-3 w-3" /> Reset to default
               </Button>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setViewSettingsOpen(false)}>
+                <Button variant="outline" size="sm" className="text-xs h-8 border-slate-200 rounded-lg" onClick={() => setViewSettingsOpen(false)}>
                   Cancel
                 </Button>
-                <Button 
+                <Button
+                  size="sm"
+                  className="text-xs h-8 bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm gap-1.5"
                   onClick={() => {
-                    savePreferences();
+                    savePreferencesMutation.mutate({ columnVisibility, columnOrder, columnSizing });
                     setViewSettingsOpen(false);
                   }}
-                  className="bg-purple-600 hover:bg-purple-700"
                 >
-                  <Check className="h-4 w-4 mr-2" />
-                  Save Preferences
+                  <Check className="h-3 w-3" /> Save View
                 </Button>
               </div>
-            </DialogFooter>
+            </div>
+
           </DialogContent>
         </Dialog>
+
       </div>
     </DndProvider>
   );
 }
-// fix the people search not working from the previous git commit

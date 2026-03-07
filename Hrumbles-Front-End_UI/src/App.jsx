@@ -149,6 +149,8 @@ import SalesDashboard from "./pages/sales/SalesDashboard";
 import DiscoveryPage from "./pages/sales/DiscoveryPage";
 import SyncReportsPage from "./pages/sales/SyncReportsPage";
 
+import ContactsV2Page from '@/pages/sales/ContactsV2Page';
+
 import CreditUsageReport from '@/components/reports/CreditUsageReport.tsx';
 
 
@@ -608,8 +610,9 @@ useEffect(() => {
               <Route path="/discovery" element={<DiscoveryPage />} />
               <Route path="/sales/reports" element={<SyncReportsPage />} />
 
-
-
+              <Route path="/contacts-v2" element={<ContactsV2Page />} />
+              <Route path="/contacts-v2/list/:fileId" element={<ContactsV2Page />} />
+              <Route path="/contacts-v2/discovery" element={<ContactsV2Page />} />
 
               {/* TimeTracker, Timesheet, Attendance and Leave */}
               {/* Employee routes */}
