@@ -1007,13 +1007,19 @@ export const columns: ColumnDef<any>[] = [
   },
 
   // CONTACT — combined Email + Phone icon buttons
-  {
-    id: 'contact',
-    header: () => <ColHeader title="Contact" />,
-    size: 88, minSize: 80, maxSize: 100,
-    enableSorting: false, enableHiding: false,
-    cell: ContactCell,
+{
+  id: 'contact',
+  header: () => <ColHeader title="Contact" />,
+  size: 88,
+  minSize: 80,
+  maxSize: 100,
+  enableSorting: false,
+  enableHiding: false,
+  cell: ({ row, table }) => {
+    if (isDiscoveryRow(row)) return null;
+    return <ContactCell row={row} table={table} />;
   },
+},
 
   // JOB TITLE
   { accessorKey: 'job_title',    header: () => <ColHeader title="Title" />,   size: 170, enableSorting: false, cell: EditableCell },

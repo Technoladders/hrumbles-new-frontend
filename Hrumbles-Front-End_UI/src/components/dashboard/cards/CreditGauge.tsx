@@ -15,6 +15,7 @@ interface CreditGaugeProps {
   };
   byVerificationType?: Record<string, number>;
   delay?: number;
+  isSalesSuiteEnabled?: boolean; // ── NEW PROP ──
 }
 
 const CreditGauge: React.FC<CreditGaugeProps> = ({
@@ -25,6 +26,7 @@ const CreditGauge: React.FC<CreditGaugeProps> = ({
   byEnrichmentType,
   byVerificationType = {},
   delay = 0,
+  isSalesSuiteEnabled = true, // default to true if not passed
 }) => {
   const total = balance + totalConsumed;
   const usagePct = total > 0 ? (totalConsumed / total) * 100 : 0;
@@ -34,39 +36,46 @@ const CreditGauge: React.FC<CreditGaugeProps> = ({
   const circ = Math.PI * radius;
   const offset = circ - (usagePct / 100) * circ;
 
-  const services = [
-    {
-      label: "Email Reveals",
-      value: byEnrichmentType?.contact_email_reveal || 0,
-      icon: <Mail className="w-3 h-3" />,
-      color: "#6366f1",
-    },
-    {
-      label: "Phone Reveals",
-      value: byEnrichmentType?.contact_phone_reveal || 0,
-      icon: <Phone className="w-3 h-3" />,
-      color: "#10b981",
-    },
-    {
-      label: "Company Enrich",
-      value: byEnrichmentType?.company_enrich || 0,
-      icon: <Building2 className="w-3 h-3" />,
-      color: "#f59e0b",
-    },
-    {
-      label: "Company Search",
-      value: byEnrichmentType?.company_search || 0,
-      icon: <Search className="w-3 h-3" />,
-      color: "#ec4899",
-    },
-    ...Object.entries(byVerificationType).map(([key, value]) => ({
-      label: key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
-      value: value as number,
-      icon: <ShieldCheck className="w-3 h-3" />,
-      color: "#06b6d4",
-    })),
-  ].filter((s) => s.value > 0);
+  // ── Verification Services (Always Included) ──
+  const verificationServices = Object.entries(byVerificationType).map(([key, value]) => ({
+    label: key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
+    value: value as number,
+    icon: <ShieldCheck className="w-3 h-3" />,
+    color: "#06b6d4",
+  }));
 
+  // ── Enrichment Services (Only if Sales Suite is enabled) ──
+  const enrichmentServices = isSalesSuiteEnabled
+    ?[
+        {
+          label: "Email Reveals",
+          value: byEnrichmentType?.contact_email_reveal || 0,
+          icon: <Mail className="w-3 h-3" />,
+          color: "#6366f1",
+        },
+        {
+          label: "Phone Reveals",
+          value: byEnrichmentType?.contact_phone_reveal || 0,
+          icon: <Phone className="w-3 h-3" />,
+          color: "#10b981",
+        },
+        {
+          label: "Company Enrich",
+          value: byEnrichmentType?.company_enrich || 0,
+          icon: <Building2 className="w-3 h-3" />,
+          color: "#f59e0b",
+        },
+        {
+          label: "Company Search",
+          value: byEnrichmentType?.company_search || 0,
+          icon: <Search className="w-3 h-3" />,
+          color: "#ec4899",
+        },
+      ]
+    :[];
+
+  // Combine and filter services with >0 usage
+  const services = [...enrichmentServices, ...verificationServices].filter((s) => s.value > 0);
   const maxVal = Math.max(...services.map((s) => s.value), 1);
 
   return (
@@ -77,8 +86,6 @@ const CreditGauge: React.FC<CreditGaugeProps> = ({
       className="bg-white rounded-2xl border border-gray-100 p-4"
       style={{
         boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-        // ── KEY FIX: explicit height so this card never drives row height ──
-        // Must match HiringFunnel & CreditTrendChart natural height (~380px)
         height: 380,
         overflow: "hidden",
         display: "flex",
@@ -142,36 +149,59 @@ const CreditGauge: React.FC<CreditGaugeProps> = ({
         </div>
       </div>
 
-      {/* ── Enrich vs Verify bar ── */}
+      {/* ── Enrich vs Verify bar OR Verify Only ── */}
       <div className="mb-2 flex-shrink-0">
-        <div className="flex justify-between text-[9px] text-gray-400 mb-1">
-          <span>
-            Enrich{" "}
-            <span className="font-semibold text-indigo-500">{enrichPct.toFixed(0)}%</span>
-          </span>
-          <span>
-            Verify{" "}
-            <span className="font-semibold text-cyan-500">{(100 - enrichPct).toFixed(0)}%</span>
-          </span>
-        </div>
-        <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden flex">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${enrichPct || 0}%` }}
-            transition={{ duration: 0.8, delay: delay + 0.5 }}
-            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
-          />
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${100 - enrichPct}%` }}
-            transition={{ duration: 0.8, delay: delay + 0.6 }}
-            className="h-full bg-gradient-to-r from-cyan-400 to-teal-400"
-          />
-        </div>
-        <div className="flex justify-between text-[9px] mt-0.5">
-          <span className="text-indigo-500 font-medium">{enrichmentUsed.toLocaleString()}</span>
-          <span className="text-cyan-500 font-medium">{verificationUsed.toLocaleString()}</span>
-        </div>
+        {isSalesSuiteEnabled ? (
+          <>
+            <div className="flex justify-between text-[9px] text-gray-400 mb-1">
+              <span>
+                Enrich{" "}
+                <span className="font-semibold text-indigo-500">{enrichPct.toFixed(0)}%</span>
+              </span>
+              <span>
+                Verify{" "}
+                <span className="font-semibold text-cyan-500">{(100 - enrichPct).toFixed(0)}%</span>
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden flex">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${enrichPct || 0}%` }}
+                transition={{ duration: 0.8, delay: delay + 0.5 }}
+                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
+              />
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${100 - enrichPct}%` }}
+                transition={{ duration: 0.8, delay: delay + 0.6 }}
+                className="h-full bg-gradient-to-r from-cyan-400 to-teal-400"
+              />
+            </div>
+            <div className="flex justify-between text-[9px] mt-0.5">
+              <span className="text-indigo-500 font-medium">{enrichmentUsed.toLocaleString()}</span>
+              <span className="text-cyan-500 font-medium">{verificationUsed.toLocaleString()}</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex justify-between text-[9px] text-gray-400 mb-1">
+              <span>
+                Verify <span className="font-semibold text-cyan-500">100%</span>
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden flex">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `100%` }}
+                transition={{ duration: 0.8, delay: delay + 0.6 }}
+                className="h-full w-full bg-gradient-to-r from-cyan-400 to-teal-400"
+              />
+            </div>
+            <div className="flex justify-end text-[9px] mt-0.5">
+              <span className="text-cyan-500 font-medium">{verificationUsed.toLocaleString()} Used</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── By Service label ── */}
@@ -184,7 +214,7 @@ const CreditGauge: React.FC<CreditGaugeProps> = ({
         )}
       </div>
 
-      {/* ── Services list: flex-1 + overflow-y-auto keeps it inside fixed height ── */}
+      {/* ── Services list ── */}
       <div
         className="flex-1 overflow-y-auto space-y-1.5"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}

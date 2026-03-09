@@ -9,7 +9,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
-  Cell,
 } from "recharts";
 import { TrendingUp, Sparkles } from "lucide-react";
 import { DailyTrend } from "../hooks/useCreditUsage";
@@ -18,6 +17,7 @@ interface CreditTrendChartProps {
   data: DailyTrend[];
   isLoading?: boolean;
   delay?: number;
+  isSalesSuiteEnabled?: boolean; // ── NEW PROP ──
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -62,17 +62,32 @@ const RoundedBar = (props: any) => {
   );
 };
 
-const CreditTrendChart: React.FC<CreditTrendChartProps> = ({ data, isLoading, delay = 0 }) => {
-  const chartData = (data || []).map((d) => ({
-    ...d,
-    date: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-  }));
+const CreditTrendChart: React.FC<CreditTrendChartProps> = ({ 
+  data, 
+  isLoading, 
+  delay = 0,
+  isSalesSuiteEnabled = true, // default to true
+}) => {
+  
+  // Recalculate display totals based on active modules
+  const chartData = (data ||[]).map((d) => {
+    const displayTotal = isSalesSuiteEnabled 
+      ? (d.total_credits || 0) 
+      : (d.verification_credits || 0);
 
-  const totalCredits = chartData.reduce((s, d) => s + (d.total_credits || 0), 0);
+    return {
+      ...d,
+      date: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      displayTotal,
+    };
+  });
+
+  const totalCredits = chartData.reduce((s, d) => s + (d.displayTotal || 0), 0);
   const avgDaily = chartData.length > 0 ? Math.round(totalCredits / chartData.length) : 0;
+  
   const maxDay = chartData.reduce(
-    (max, d) => ((d.total_credits || 0) > (max.total_credits || 0) ? d : max),
-    chartData[0] || {}
+    (max, d) => ((d.displayTotal || 0) > (max.displayTotal || 0) ? d : max),
+    chartData[0] || { displayTotal: 0 }
   );
 
   return (
@@ -187,19 +202,23 @@ const CreditTrendChart: React.FC<CreditTrendChartProps> = ({ data, isLoading, de
                   <span style={{ color: "#64748b", fontWeight: 600 }}>{value}</span>
                 )}
               />
-              <Bar
-                dataKey="enrichment_credits"
-                name="Enrichment"
-                stackId="a"
-                fill="url(#enrichGrad)"
-                radius={[0, 0, 0, 0]}
-              />
+              {/* Only render enrichment bar if Sales Suite is enabled */}
+              {isSalesSuiteEnabled && (
+                <Bar
+                  dataKey="enrichment_credits"
+                  name="Enrichment"
+                  stackId="a"
+                  fill="url(#enrichGrad)"
+                  radius={[0, 0, 0, 0]}
+                />
+              )}
+              {/* Verification is always rendered, radius on top corners */}
               <Bar
                 dataKey="verification_credits"
                 name="Verification"
                 stackId="a"
                 fill="url(#verifyGrad)"
-                radius={[4, 4, 0, 0]}
+                radius={[4, 4, 0, 0]} 
               />
             </BarChart>
           </ResponsiveContainer>
@@ -226,7 +245,7 @@ const CreditTrendChart: React.FC<CreditTrendChartProps> = ({ data, isLoading, de
                 color: "#6366f1",
               }}
             >
-              {(maxDay.total_credits || 0).toLocaleString()}
+              {(maxDay.displayTotal || 0).toLocaleString()}
             </span>
           </div>
         </motion.div>

@@ -68,7 +68,8 @@ const HiringSuiteDashboard: React.FC = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("hr_organizations")
-        .select("credit_balance, name")
+        // Added subscription_features to the selection query
+        .select("credit_balance, name, subscription_features")
         .eq("id", organizationId)
         .single();
       if (error) throw error;
@@ -76,6 +77,9 @@ const HiringSuiteDashboard: React.FC = () => {
     },
     enabled: !!organizationId,
   });
+
+  // Extract the sales_suite flag from the JSONB feature column
+  const isSalesSuiteEnabled = orgData?.subscription_features?.sales_suite === true;
 
   // ── Data hooks ──
   const { data: creditSummary } = useCreditSummary(organizationId, dateRange);
@@ -88,7 +92,7 @@ const HiringSuiteDashboard: React.FC = () => {
   const { data: topJobs } = useTopJobs(organizationId);
 
   // ── Derived ──
-  const funnelTotal = (funnelData || []).reduce((s, f) => s + f.count, 0);
+  const funnelTotal = (funnelData ||[]).reduce((s, f) => s + f.count, 0);
   const displayPipeline = pipelineCount ?? funnelTotal;
   const displayActiveJobs = activeJobsCount ?? topJobs?.length ?? 0;
 
@@ -151,7 +155,7 @@ const HiringSuiteDashboard: React.FC = () => {
                   accent: "#06b6d4",
                   bg: "bg-cyan-50",
                 },
-                                {
+                {
                   label: "Credits Used",
                   value: (creditSummary?.total_consumed || 0).toLocaleString(),
                   sub: "Total consumption",
@@ -221,7 +225,7 @@ const HiringSuiteDashboard: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5 items-start">
           <div className="lg:col-span-5">
             <HiringFunnel
-              stages={funnelData || []}
+              stages={funnelData ||[]}
               isLoading={funnelLoading}
               delay={0.15}
             />
@@ -235,43 +239,50 @@ const HiringSuiteDashboard: React.FC = () => {
               byEnrichmentType={creditSummary?.by_enrichment_type}
               byVerificationType={creditSummary?.by_verification_type}
               delay={0.2}
+              isSalesSuiteEnabled={isSalesSuiteEnabled}
             />
           </div>
           <div className="lg:col-span-4">
             <CreditTrendChart
-              data={creditTrend || []}
+              data={creditTrend ||[]}
               isLoading={trendLoading}
               delay={0.25}
+              isSalesSuiteEnabled={isSalesSuiteEnabled}
             />
           </div>
         </div>
 
-        {/* ═══ ROW 2 — WEEKLY ACTIVITY + SALES ACTIVITY ═══ */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5">
-          <div className="lg:col-span-8">
+        {/* ═══ ROW 2 — WEEKLY ACTIVITY (+ SALES ACTIVITY Conditionally) ═══ */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5 items-stretch">
+          {/* Automatically adjust column span based on Sales Suite availability */}
+          <div className={isSalesSuiteEnabled ? "lg:col-span-8" : "lg:col-span-12"}>
             <WeeklyActivityChart
-              data={weeklyActivity || []}
+              data={weeklyActivity ||[]}
               isLoading={activityLoading}
               delay={0.2}
             />
           </div>
-          <div className="lg:col-span-4">
-            <SalesActivityWidget delay={0.25} />
-          </div>
+          {isSalesSuiteEnabled && (
+            <div className="lg:col-span-4">
+              <SalesActivityWidget delay={0.25} />
+            </div>
+          )}
         </div>
 
-        {/* ═══ ROW 3 — CONTACTS PIPELINE + COMPANIES PIPELINE + STAGE CONVERSION ═══ */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5">
-          <div className="lg:col-span-4">
-            <ContactsPipelineWidget delay={0.2} />
+        {/* ═══ ROW 3 — CONTACTS PIPELINE + COMPANIES PIPELINE + STAGE CONVERSION (Only if Sales Suite Enabled) ═══ */}
+        {isSalesSuiteEnabled && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5">
+            <div className="lg:col-span-4">
+              <ContactsPipelineWidget delay={0.2} />
+            </div>
+            <div className="lg:col-span-4">
+              <CompaniesPipelineWidget delay={0.25} />
+            </div>
+            <div className="lg:col-span-4">
+              <StageConversionChart delay={0.3} />
+            </div>
           </div>
-          <div className="lg:col-span-4">
-            <CompaniesPipelineWidget delay={0.25} />
-          </div>
-          <div className="lg:col-span-4">
-            <StageConversionChart delay={0.3} />
-          </div>
-        </div>
+        )}
 
         {/* ═══ ANALYTICS DIVIDER ═══ */}
         <motion.div

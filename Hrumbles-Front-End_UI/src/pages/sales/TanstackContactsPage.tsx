@@ -195,20 +195,14 @@ export default function TanstackContactsPage() {
       setHasSearched(true);
     }
     // Determine initial tab: URL param > sessionStorage > default (discovery on fresh visit)
-    const urlMode      = new URLSearchParams(window.location.search).get('mode');
-    const sessionMode  = sessionStorage.getItem('contacts_mode');
-    const effectiveMode = urlMode || sessionMode;
+const sp = new URLSearchParams(window.location.search);
+  const urlMode = sp.get('mode');
 
-    if (effectiveMode === 'crm') {
-      dispatch(setDiscoveryMode(false));
-      sessionStorage.setItem('contacts_mode', 'crm');
-      if (!hasActiveFilters(urlFilters)) setHasSearched(true);
-    } else if (effectiveMode === 'discovery' || (!effectiveMode && !fileId && !hasActiveFilters(urlFilters))) {
-      dispatch(setDiscoveryMode(true));
-      sessionStorage.setItem('contacts_mode', 'discovery');
-      setRecentSearches(loadRecentSearches(true));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  if (urlMode === 'crm') {
+    dispatch(setDiscoveryMode(false));
+  } else if (urlMode === 'discovery') {
+    dispatch(setDiscoveryMode(true));
+  }
   }, []);
 
   // ── Reset when entering file route ───────────────────────────────────────────
@@ -222,9 +216,27 @@ export default function TanstackContactsPage() {
   }, [fileId]);
 
   // ── Reload correct recent-search history when mode changes ───────────────────
-  useEffect(() => {
-    setRecentSearches(loadRecentSearches(isDiscoveryMode));
-  }, [isDiscoveryMode]);
+// Keep URL and sessionStorage in sync whenever Redux mode changes
+useEffect(() => {
+  const mode = isDiscoveryMode ? 'discovery' : 'crm';
+
+  // Update URL without adding to history stack (replace)
+  setSearchParams(
+    prev => {
+      if (prev.get('mode') !== mode) {
+        prev.set('mode', mode);
+      }
+      return prev;
+    },
+    { replace: true }
+  );
+
+  // Update sessionStorage
+  sessionStorage.setItem('contacts_mode', mode);
+
+  // Reload correct recent searches for current mode
+  setRecentSearches(loadRecentSearches(isDiscoveryMode));
+}, [isDiscoveryMode, setSearchParams]);
 
   // ── User preferences ─────────────────────────────────────────────────────────
   const { data: userPreferences } = useQuery({
@@ -785,34 +797,30 @@ export default function TanstackContactsPage() {
           {!fileId && (
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
               <button
-                onClick={() => {
-                  dispatch(setDiscoveryMode(true));
-                  setHasSearched(false);
-                  sessionStorage.setItem('contacts_mode', 'discovery');
-                  setSearchParams(prev => { prev.set('mode', 'discovery'); return prev; });
-                }}
-                className={cn(
-                  'px-3 py-1 rounded-md text-[11px] font-medium transition-all',
-                  isDiscoveryMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                )}
-              >
-                Search People
-              </button>
-              <button
-                onClick={() => {
-                  dispatch(setDiscoveryMode(false));
-                  dispatch(resetSearch());
-                  setHasSearched(true);
-                  sessionStorage.setItem('contacts_mode', 'crm');
-                  setSearchParams(prev => { prev.set('mode', 'crm'); return prev; });
-                }}
-                className={cn(
-                  'px-3 py-1 rounded-md text-[11px] font-medium transition-all',
-                  !isDiscoveryMode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                )}
-              >
-                CRM
-              </button>
+  onClick={() => {
+    dispatch(setDiscoveryMode(true));
+    setHasSearched(false);
+  }}
+  className={cn(
+    'px-3 py-1 rounded-md text-[11px] font-medium transition-all',
+    isDiscoveryMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+  )}
+>
+  Search People
+</button>
+             <button
+  onClick={() => {
+    dispatch(setDiscoveryMode(false));
+    dispatch(resetSearch());
+    setHasSearched(true);
+  }}
+  className={cn(
+    'px-3 py-1 rounded-md text-[11px] font-medium transition-all',
+    !isDiscoveryMode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+  )}
+>
+  CRM
+</button>
             </div>
           )}
 
