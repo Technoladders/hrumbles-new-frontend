@@ -2,88 +2,64 @@
 import * as React from 'react';
 import { flexRender } from '@tanstack/react-table';
 import { motion, AnimatePresence } from 'framer-motion';
-import { EmptyState } from '@/components/sales/contacts-table/EmptyState';
 import { cn } from '@/lib/utils';
 
 const rowVariants = {
-  hidden: { opacity: 0, y: 8 },
+  hidden:  { opacity: 0, y: 4 },
   visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: i * 0.02, duration: 0.25, ease: [0.25, 0.1, 0.25, 1] },
+    opacity: 1, y: 0,
+    transition: { delay: i * 0.015, duration: 0.2, ease: [0.25, 0.1, 0.25, 1] },
   }),
-  exit: { opacity: 0, x: -10, transition: { duration: 0.15 } },
+  exit: { opacity: 0, transition: { duration: 0.1 } },
 };
 
-export function DataTable<TData, TValue>({
-  table,
-  onAddContact,
-}: any) {
+// Sticky columns: select (left: 0) and name (left: 40)
+const STICKY_COLS = new Set(['select', 'name']);
+
+export function DataTable<TData, TValue>({ table }: any) {
+  const totalWidth = table.getTotalSize();
   const isFiltering = table.getState().columnFilters.length > 0;
-  const totalTableWidth = table.getTotalSize();
-  const isDiscoveryMode = table.getRowModel().rows.some((row: any) => row.original?.is_discovery);
 
   return (
-    <div className="relative w-full h-full overflow-auto border rounded-xl border-slate-200 bg-white shadow-sm">
-      <table 
-        className="table-fixed border-collapse" 
-        style={{ width: totalTableWidth, minWidth: '100%' }}
-      >
-        {/* THEAD - Modern gradient header */}
-        <thead className="sticky top-0 z-40">
-          {table.getHeaderGroups().map((headerGroup: any) => (
-            <tr 
-              key={headerGroup.id} 
-              className={cn(
-                "transition-all",
-                isDiscoveryMode 
-                  ? "bg-gradient-to-r from-purple-600 to-violet-600"
-                  : "bg-gradient-to-r from-purple-600 to-violet-600"
-              )}
-            >
-              {headerGroup.headers.map((header: any) => {
-                const isStickyColumn = header.column.id === 'select' || header.column.id === 'name';
-                
-                let leftPosition = 0;
-                if (header.column.id === 'name') {
-                  leftPosition = 39;
-                }
-                
+    <div className="relative w-full h-full overflow-auto">
+      <table className="border-collapse" style={{ width: totalWidth, minWidth: '100%' }}>
+
+        {/* ── THEAD ── */}
+        <thead className="sticky top-0 z-30">
+          {table.getHeaderGroups().map((hg: any) => (
+            <tr key={hg.id} className="border-b border-slate-200">
+              {hg.headers.map((header: any) => {
+                const isSticky = STICKY_COLS.has(header.column.id);
+                const leftPos  = header.column.id === 'name' ? 40 : 0;
                 return (
                   <th
                     key={header.id}
                     colSpan={header.colSpan}
-                    style={{ 
-                      width: header.getSize(),
-                      position: isStickyColumn ? 'sticky' : 'relative',
-                      left: isStickyColumn ? leftPosition : undefined,
+                    style={{
+                      width:    header.getSize(),
+                      position: isSticky ? 'sticky' : 'relative',
+                      left:     isSticky ? leftPos  : undefined,
                     }}
                     className={cn(
-                      "px-3 py-3.5 text-left text-[10px] font-semibold text-white/90 uppercase tracking-wider",
-                      "border-r border-white/10 last:border-r-0",
-                      isStickyColumn && "z-50",
-                      header.column.id === 'select' && (isDiscoveryMode 
-                        ? "bg-gradient-to-r from-purple-600 to-violet-600"
-                        : "bg-gradient-to-r from-purple-600 to-violet-600"
-                      ),
-                      header.column.id === 'name' && (isDiscoveryMode 
-                        ? "bg-gradient-to-r from-purple-600 to-violet-600 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.2)]"
-                        : "bg-gradient-to-r from-purple-600 to-violet-600 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.2)]"
-                      )
+                      'px-3 py-2.5 text-left border-r border-slate-100 last:border-r-0',
+                      'text-[10px] font-semibold text-slate-500 uppercase tracking-wider',
+                      // Solid bg — no opacity, so scrolled content never bleeds through
+                      'bg-slate-50',
+                      isSticky && 'z-20',
+                      header.column.id === 'name' && 'shadow-[1px_0_0_0_#e2e8f0]',
                     )}
                   >
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                     </div>
-                    
-                    {/* Resize Handle */}
+                    {/* Resize handle */}
                     <div
                       onMouseDown={header.getResizeHandler()}
                       onTouchStart={header.getResizeHandler()}
                       className={cn(
-                        "absolute top-0 right-0 h-full w-1.5 cursor-col-resize select-none touch-none opacity-0 hover:opacity-100 transition-opacity",
-                        "before:absolute before:inset-y-0 before:right-0 before:w-0.5 before:bg-white/20",
-                        header.column.getIsResizing() && "opacity-100 before:bg-white/50 before:w-1"
+                        'absolute top-0 right-0 h-full w-1 cursor-col-resize select-none touch-none',
+                        'hover:bg-indigo-300 transition-colors',
+                        header.column.getIsResizing() && 'bg-indigo-400',
                       )}
                     />
                   </th>
@@ -93,57 +69,53 @@ export function DataTable<TData, TValue>({
           ))}
         </thead>
 
-        <tbody className="bg-white divide-y divide-slate-100">
+        {/* ── TBODY ── */}
+        <tbody className="divide-y divide-slate-100">
           {table.getRowModel().rows?.length ? (
             <AnimatePresence mode="popLayout">
-              {table.getRowModel().rows.map((row: any, index: number) => {
-                const isDiscoveryRow = row.original?.is_discovery;
-                
+              {table.getRowModel().rows.map((row: any, i: number) => {
+                const isSelected = row.getIsSelected();
                 return (
                   <motion.tr
                     key={row.id}
-                    custom={index}
+                    custom={i}
                     variants={rowVariants}
                     initial="hidden"
                     animate="visible"
                     exit="exit"
                     layout
                     className={cn(
-                      "group transition-all duration-150",
-                      row.getIsSelected() 
-                        ? "bg-indigo-50/70 hover:bg-indigo-50" 
-                        : isDiscoveryRow
-                          ? "hover:bg-slate-100"
-                          : "hover:bg-slate-100",
+                      'group transition-colors duration-100',
+                      isSelected ? 'bg-indigo-50' : 'bg-white hover:bg-slate-50',
                     )}
                   >
                     {row.getVisibleCells().map((cell: any) => {
-                      const isStickyColumn = cell.column.id === 'select' || cell.column.id === 'name';
-                      
-                      let leftPosition = 0;
-                      if (cell.column.id === 'name') {
-                        leftPosition = 39;
-                      }
-                      
+                      const isSticky = STICKY_COLS.has(cell.column.id);
+                      const leftPos  = cell.column.id === 'name' ? 40 : 0;
+
+                      // Sticky cells need explicit solid bg matching the row state
+                      // to prevent scrolled content from bleeding through
+                      const stickyBg = isSticky
+                        ? isSelected
+                          ? 'bg-indigo-50'
+                          : 'bg-white group-hover:bg-slate-50'
+                        : undefined;
+
                       return (
                         <td
                           key={cell.id}
-                          style={{ 
-                            width: cell.column.getSize(),
-                            position: isStickyColumn ? 'sticky' : 'relative',
-                            left: isStickyColumn ? leftPosition : undefined,
+                          style={{
+                            width:    cell.column.getSize(),
+                            position: isSticky ? 'sticky' : 'relative',
+                            left:     isSticky ? leftPos  : undefined,
                           }}
                           className={cn(
-                            "px-3 py-2 text-xs text-slate-700 align-middle border-r border-slate-100/50 last:border-r-0",
-                            isStickyColumn && "z-20",
-                            // Select column backgrounds
-                            cell.column.id === 'select' && !row.getIsSelected() && !isDiscoveryRow && "bg-white group-hover:bg-slate-100",
-                            cell.column.id === 'select' && !row.getIsSelected() && isDiscoveryRow && "bg-white group-hover:bg-slate-100",
-                            cell.column.id === 'select' && row.getIsSelected() && "bg-indigo-50/70",
-                            // Name column backgrounds
-                            cell.column.id === 'name' && !row.getIsSelected() && !isDiscoveryRow && "bg-white group-hover:bg-slate-100 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.03)]",
-                            cell.column.id === 'name' && !row.getIsSelected() && isDiscoveryRow && "bg-white group-hover:bg-slate-100 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.03)]",
-                            cell.column.id === 'name' && row.getIsSelected() && "bg-indigo-50/70 shadow-[2px_0_8px_-2px_rgba(99,102,241,0.1)]",
+                            'px-3 py-0 text-xs text-slate-700 align-middle',
+                            'border-r border-slate-100/80 last:border-r-0',
+                            'h-[42px] max-h-[42px]',
+                            isSticky && 'z-10',
+                            stickyBg,
+                            cell.column.id === 'name' && 'shadow-[1px_0_0_0_#f1f5f9]',
                           )}
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -156,12 +128,17 @@ export function DataTable<TData, TValue>({
             </AnimatePresence>
           ) : (
             <tr>
-              <td colSpan={table.getAllColumns().length} className="h-64 p-0">
-                <EmptyState
-                  type={isFiltering ? 'no-results' : 'no-contacts'}
-                  onReset={() => table.resetColumnFilters()}
-                  onAddContact={onAddContact}
-                />
+              <td colSpan={table.getAllColumns().length} className="h-32">
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 text-sm">
+                  {isFiltering ? (
+                    <>
+                      <span className="font-medium text-slate-600 mb-1">No results found</span>
+                      <span className="text-xs text-slate-400">Try adjusting your filters</span>
+                    </>
+                  ) : (
+                    <span>No contacts</span>
+                  )}
+                </div>
               </td>
             </tr>
           )}

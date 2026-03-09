@@ -98,7 +98,7 @@ const companyCsvSchema = z.object({
   revenue: data.revenue,
   cashflow: data.cashflow,
   domain: data.domain?.trim() || null,
-  status: data.status?.trim() || 'Customer',
+  status: data.status?.trim() || 'Identified',
   about: data.about?.trim() || null,
   start_date: data.start_date?.trim() || null,
   founded_as: data.founded_as?.trim() || null,

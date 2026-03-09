@@ -48,6 +48,10 @@ import { ActivityHeatmap } from './ActivityHeatmap';
 import { ConversionFunnel } from './ConversionFunnel';
 import { MiniSparkline } from './MiniSparkline';
 import { EmployeeSelector } from './EmployeeSelector';
+// ── Sales pipeline widgets (reused from hiring/org dashboard) ──
+import ContactsPipelineWidget from "@/components/dashboard/cards/ContactsPipelineWidget";
+import CompaniesPipelineWidget from "@/components/dashboard/cards/CompaniesPipelineWidget";
+import StageConversionChart from "@/components/dashboard/charts/StageConversionChart";
 
 // Styles
 import './dashboard.css';
@@ -370,7 +374,7 @@ export const SalesDashboardLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
@@ -501,25 +505,43 @@ export const SalesDashboardLayout: React.FC = () => {
           />
         </div>
 
+        {/* ── Sales Pipeline Overview ── */}
+<div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+
+  <div className="grid grid-cols-12 gap-6 col-span-12">
+  {/* Stage Conversion Chart – takes more space */}
+  <div className="col-span-12 lg:col-span-8">
+    <StageConversionChart 
+      delay={0.25}
+    />
+  </div>
+
+  {/* Team Leaderboard – compact */}
+  <div className="col-span-12 lg:col-span-4">
+    <TeamLeaderboard 
+      data={metrics?.byEmployee || []}
+      title={isAdmin ? "Team Leaderboard" : "Your Performance"}
+      delay={0.3}
+    />
+  </div>
+</div>
+  {/* Contacts Pipeline */}
+  <div className="lg:col-span-6">
+    <ContactsPipelineWidget delay={0.1} />
+  </div>
+
+  {/* Companies / Accounts Pipeline */}
+  <div className="lg:col-span-6">
+    <CompaniesPipelineWidget delay={0.15} />
+  </div>
+
+         
+</div>
+
         {/* Main Content Grid */}
         <div className="grid grid-cols-12 gap-6">
-          {/* Activity Trend Chart */}
-          <div className="col-span-12 lg:col-span-8">
-            <ActivityChart 
-              data={metrics?.dailyTrend || []}
-              title="Activity Trend"
-            />
-          </div>
 
-          {/* Activity Breakdown */}
-          <div className="col-span-12 lg:col-span-4">
-            <PerformanceChart 
-              data={metrics?.activityByType || []}
-              title="Activity Breakdown"
-            />
-          </div>
-
-          {/* Tasks Section - NOW 2/3 WIDTH (8 cols) */}
+           {/* Tasks Section - NOW 2/3 WIDTH (8 cols) */}
           <div className="col-span-12 lg:col-span-8">
             <UpcomingTasks 
               overdue={pendingTasks.overdue}
@@ -537,40 +559,36 @@ export const SalesDashboardLayout: React.FC = () => {
               activities={activities?.slice(0, 10) || []}
             />
           </div>
-
-          {/* Conversion Funnel or Team Leaderboard - Full width below */}
-          <div className="col-span-12 lg:col-span-6">
-            {isAdmin ? (
-              <TeamLeaderboard 
-                data={metrics?.byEmployee || []}
-              />
-            ) : (
-              <ConversionFunnel 
-                stageCounts={contactsStats?.stageCounts || {}}
-              />
-            )}
+          {/* Activity Trend Chart */}
+          <div className="col-span-12 lg:col-span-8">
+           <ActivityChart 
+  data={metrics?.dailyTrend || []} 
+  title="Team Activity Trend"
+  delay={0.15}   // matches other widgets
+/>
           </div>
 
-          {/* Additional widget for non-admins or extra space */}
-          <div className="col-span-12 lg:col-span-6">
-            {!isAdmin ? (
-              <TeamLeaderboard 
-                data={metrics?.byEmployee || []}
-              />
-            ) : (
-              <ConversionFunnel 
-                stageCounts={contactsStats?.stageCounts || {}}
-              />
-            )}
+          {/* Activity Breakdown */}
+          <div className="col-span-12 lg:col-span-4">
+<PerformanceChart
+    data={metrics?.activityByType || []}
+    title="Activity Distribution"
+    delay={0.25}
+  />
           </div>
+
+         
+
+
 
           {/* Activity Heatmap (Full Width - Admin Only) */}
           {isAdmin && (
             <div className="col-span-12">
-              <ActivityHeatmap 
-                activities={activities || []}
-                teamMembers={teamMembers || []}
-              />
+<ActivityHeatmap
+  activities={activities || []}
+  teamMembers={teamMembers || []}
+  delay={0.35}
+/>
             </div>
           )}
         </div>

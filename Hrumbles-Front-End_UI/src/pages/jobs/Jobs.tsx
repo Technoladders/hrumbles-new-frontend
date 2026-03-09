@@ -102,6 +102,9 @@ import { DateRangePickerField } from "@/components/ui/DateRangePickerField";
 import { CompactDateRangeSelector } from "@/components/ui/CompactDateRangeSelector";
 import { EnhancedDateRangeSelector } from "@/components/ui/EnhancedDateRangeSelector";
 
+// integartion job board imports
+import { CareerjetShareModal } from "@/components/jobs/CareerjetShareModal";
+
 interface DateRange {
   startDate: Date | null;
   endDate: Date | null;
@@ -201,6 +204,10 @@ const Jobs = () => {
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   
   const isEmployee = userRole === "employee" && user?.id !== "0fa0aa1b-9cb3-482f-b679-5bd8fa355a6e";
+
+  // job Board states
+  const [careerjetShareJob, setCareerjetShareJob] = useState<JobData | null>(null);
+  const orgSlug = window.location.hostname.split(".")[0];
   
   // Check if current org is TUP
   // const isTupOrg = organization_id === TUP_ORG_CHECK || organization_id === TUP_ORG_ID;
@@ -752,6 +759,26 @@ if (isLoading) {
                                 </Tooltip>
                               </TooltipProvider>
                             )}
+                                     <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full text-slate-500 hover:bg-orange-500 hover:text-white transition-colors"
+                  onClick={() => setCareerjetShareJob(job)}
+                >
+                  {/* RSS-style CareerJet icon */}
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className="h-4 w-4">
+                    <circle cx="5" cy="19" r="2" fill="currentColor" />
+                    <path d="M4 4a16 16 0 0 1 16 16" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" fill="none"/>
+                    <path d="M4 11a9 9 0 0 1 9 9"    stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" fill="none"/>
+                  </svg>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent><p>Share to CareerJet</p></TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-red-600 hover:text-white transition-colors" onClick={() => handleDeleteJob(job)}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger>
@@ -1087,6 +1114,16 @@ if (isLoading) {
           <AlertDialogFooter><AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteJob} disabled={actionLoading} className="bg-red-600 hover:bg-red-700">{actionLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Deleting...</> : "Delete"}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {careerjetShareJob && (
+  <CareerjetShareModal
+    job={careerjetShareJob}
+    orgSlug={orgSlug}
+    supabaseUrl={import.meta.env.VITE_SUPABASE_URL}
+    isOpen={!!careerjetShareJob}
+    onClose={() => setCareerjetShareJob(null)}
+  />
+)}
     </div>
   );
 };

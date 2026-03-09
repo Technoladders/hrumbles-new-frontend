@@ -3,7 +3,7 @@ import { createSlice } from '@reduxjs/toolkit';
 const intelligenceSearchSlice = createSlice({
   name: 'intelligenceSearch',
   initialState: {
-    isDiscoveryMode: false, // true = searching API, false = viewing CRM
+    isDiscoveryMode: true, // true = searching API, false = viewing CRM
   filters: {
     q_keywords: '', // Used for Name/Keyword search
     person_titles: [],

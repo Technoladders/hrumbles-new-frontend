@@ -107,139 +107,104 @@ export const RecentActivities: React.FC<RecentActivitiesProps> = ({ activities }
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-5 h-full flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Clock size={18} className="text-blue-600" />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-gray-900">Recent Activity</h3>
-            <p className="text-xs text-gray-500">Latest updates</p>
-          </div>
+<div className="bg-white rounded-2xl border border-gray-200/70 shadow-sm overflow-hidden h-[460px] flex flex-col">
+  {/* Header */}
+  <div className="px-5 pt-5 pb-3 border-b border-gray-100 bg-gradient-to-r from-blue-50/60 to-white">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="p-2.5 bg-blue-100 rounded-xl shadow-sm">
+          <Clock className="h-5 w-5 text-blue-700" />
         </div>
-        
-        <Button variant="ghost" size="sm" className="text-xs text-blue-600">
-          View All <ChevronRight size={14} className="ml-1" />
-        </Button>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 tracking-tight">Recent Activity</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Last actions across team</p>
+        </div>
       </div>
+      <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700">
+        View timeline <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
+      </Button>
+    </div>
+  </div>
 
-      {/* Activity List */}
-      <ScrollArea className="flex-1">
-        <div className="space-y-1 pr-2">
-          {activities.map((activity, index) => {
-            const config = activityConfig[activity.type] || activityConfig.note;
-            const Icon = config.icon;
-            const linkedInSubtype = activity.type === 'linkedin' ? getLinkedInSubtype(activity.metadata) : null;
-            
-            return (
-              <div 
-                key={activity.id}
-                className="group flex items-start gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-                onClick={() => activity.contact?.id && navigate(`/contacts/${activity.contact.id}`)}
-              >
-                {/* Timeline Connector */}
-                <div className="flex flex-col items-center">
-                  <div className={cn("p-1.5 rounded-lg", config.bg)}>
-                    <Icon size={14} className={config.color} />
-                  </div>
-                  {index < activities.length - 1 && (
-                    <div className="w-px h-full bg-gray-200 my-1 flex-1 min-h-[20px]" />
-                  )}
-                </div>
-                
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 line-clamp-1">
-                        {activity.title}
-                      </p>
-                      
-                      {/* LinkedIn subtype badge */}
-                      {linkedInSubtype && (
-                        <Badge 
-                          variant="secondary" 
-                          className="text-[10px] mt-1 bg-[#0A66C2]/10 text-[#0A66C2]"
-                        >
-                          {linkedInSubtype}
-                        </Badge>
-                      )}
-                      
-                      {/* Contact Info */}
-                      {activity.contact && (
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <Avatar className="h-4 w-4">
-                            <AvatarImage src={activity.contact.photo_url} />
-                            <AvatarFallback className="text-[7px] bg-gray-200">
-                              {getInitials(activity.contact.name)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs text-gray-500 truncate">
-                            {activity.contact.name}
-                          </span>
-                          {activity.contact.companies?.name && (
-                            <>
-                              <span className="text-xs text-gray-300">•</span>
-                              <span className="text-xs text-gray-400 truncate">
-                                {activity.contact.companies.name}
-                              </span>
-                            </>
-                          )}
-                        </div>
+  <ScrollArea className="flex-1 px-5 py-3">
+    <div className="space-y-1">
+      {activities.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-64 text-center">
+          <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4 border border-gray-200">
+            <Clock className="h-8 w-8 text-gray-400 opacity-60" />
+          </div>
+          <p className="text-base font-medium text-gray-600">Quiet for now</p>
+          <p className="text-sm text-gray-500 mt-1.5">Recent activities will appear here</p>
+        </div>
+      ) : (
+        activities.map((activity, idx) => {
+          const config = activityConfig[activity.type] || activityConfig.note;
+          const Icon = config.icon;
+
+          return (
+            <div
+              key={activity.id}
+              className="group relative pl-10 py-2.5 hover:bg-indigo-50/30 rounded-lg transition-colors cursor-pointer"
+              onClick={() => activity.contact?.id && navigate(`/contacts/${activity.contact.id}`)}
+            >
+              {/* Vertical timeline line */}
+              <div className="absolute left-4 top-0 bottom-0 w-px bg-gray-200 group-hover:bg-indigo-200 transition-colors" />
+              
+              {/* Dot + icon */}
+              <div className="absolute left-0 top-3 w-8 h-8 rounded-full bg-white border-2 border-indigo-100 flex items-center justify-center shadow-sm group-hover:border-indigo-300">
+                <Icon className={cn("h-4 w-4", config.color)} />
+              </div>
+
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900 group-hover:text-indigo-700 transition-colors line-clamp-1">
+                    {activity.title}
+                  </p>
+
+                  {activity.contact && (
+                    <div className="flex items-center gap-2 mt-1.5 text-xs text-gray-600">
+                      <Avatar className="h-5 w-5 ring-1 ring-gray-100">
+                        <AvatarImage src={activity.contact.photo_url} />
+                        <AvatarFallback className="text-[9px] bg-gray-100">
+                          {getInitials(activity.contact.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="font-medium truncate max-w-[140px]">
+                        {activity.contact.name}
+                      </span>
+                      {activity.contact.companies?.name && (
+                        <span className="text-gray-400">• {activity.contact.companies.name}</span>
                       )}
                     </div>
-                    
-                    {/* Timestamp */}
-                    <span className="text-[10px] text-gray-400 whitespace-nowrap">
-                      {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true })}
-                    </span>
-                  </div>
+                  )}
 
-                  {/* Metadata */}
-                  <div className="flex items-center gap-2 mt-1.5">
-                    {/* Direction */}
-                    {activity.direction && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-500">
-                        {activity.direction === 'inbound' ? (
-                          <ArrowDownLeft size={10} className="text-green-500" />
-                        ) : (
-                          <ArrowUpRight size={10} className="text-blue-500" />
-                        )}
-                        <span className="capitalize">{activity.direction}</span>
-                      </span>
-                    )}
-                    
-                    {/* Outcome */}
-                    {activity.outcome && (
+                  {/* Outcome / subtype */}
+                  {(activity.outcome || activity.metadata?.linkedinActivityType) && (
+                    <div className="mt-1.5">
                       <Badge 
                         variant="secondary" 
                         className={cn(
-                          "text-[10px] px-1.5 py-0",
+                          "text-[10px] px-2.5 py-0.5",
                           outcomeStyles[activity.outcome] || 'bg-gray-100 text-gray-600'
                         )}
                       >
-                        {formatOutcome(activity.outcome)}
+                        {activity.outcome ? formatOutcome(activity.outcome) : getLinkedInSubtype(activity.metadata)}
                       </Badge>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            );
-          })}
 
-          {activities.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                <Clock size={20} className="text-gray-400" />
+                <span className="text-xs text-gray-400 whitespace-nowrap pt-1">
+                  {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true })}
+                </span>
               </div>
-              <p className="text-sm font-medium text-gray-500">No recent activity</p>
-              <p className="text-xs text-gray-400 mt-1">Activities will appear here</p>
             </div>
-          )}
-        </div>
-      </ScrollArea>
+          );
+        })
+      )}
     </div>
+  </ScrollArea>
+</div>
   );
 };
 
