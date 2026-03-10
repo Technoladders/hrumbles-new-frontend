@@ -101,7 +101,7 @@ export const useStatusReport = () => {
           sub_status_id,
           created_at,
           updated_at,
-          hr_jobs!inner(client_owner),
+          hr_jobs!inner(client_details),
           main_status:job_statuses!hr_status_change_counts_main_status_id_fkey!inner(name),
           sub_status:job_statuses!hr_status_change_counts_sub_status_id_fkey!inner(name)
         `)
@@ -119,7 +119,7 @@ export const useStatusReport = () => {
       // Transform data to aggregate by main status
       const transformedData = data.reduce((acc, curr) => {
         if (
-          !curr.hr_jobs?.client_owner ||
+          !curr.hr_jobs?.client_details?.clientName ||
           !curr.main_status?.name ||
           !curr.sub_status?.name ||
           !curr.candidate_id ||
@@ -129,7 +129,7 @@ export const useStatusReport = () => {
           return acc;
         }
 
-        const clientName = curr.hr_jobs.client_owner;
+        const clientName = curr.hr_jobs?.client_details?.clientName;
         const subStatusName = curr.sub_status.name;
         const mainStatusName = curr.main_status.name;
         const candidateId = curr.candidate_id;
