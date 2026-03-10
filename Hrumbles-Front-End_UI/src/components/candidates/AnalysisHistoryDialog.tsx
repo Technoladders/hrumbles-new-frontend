@@ -43,8 +43,30 @@ const AnalysisHistoryDialog = ({ isOpen, onClose, candidateId, candidateName }: 
 
   console.log("history", history)
 
+  const customModalStyles = {
+  overlay: {
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    zIndex: 9999,
+  },
+  content: {
+    top: '50%',
+    left: '50%',
+    right: 'auto',
+    bottom: 'auto',
+    transform: 'translate(-50%, -50%)',
+    maxWidth: '600px',
+    width: '90%',
+    border: 'none',
+    borderRadius: '0.75rem',
+    padding: '1.5rem',
+    boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.25)',
+    zIndex: 10000,
+    background: 'white',
+  },
+};
+
   return (
-    <Modal isOpen={isOpen} onRequestClose={onClose} style={{ content: { maxWidth: '600px', margin: 'auto' } }}>
+    <Modal isOpen={isOpen} onRequestClose={onClose} style={customModalStyles} ariaHideApp={false} >
       <div className="p-4 space-y-4">
         <h2 className="text-xl font-semibold">Analysis History for {candidateName}</h2>
         {isLoading ? (
