@@ -21,6 +21,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
+import { createPortal } from "react-dom";
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1425,7 +1426,7 @@ const JobMatchModal: FC<JobMatchModalProps> = ({ isOpen, onClose, job, organizat
 
   if (!isOpen || !job) return null;
 
-  return (
+  return createPortal(
     <TooltipProvider delayDuration={100}>
       <div className="fixed inset-0 z-50 flex items-stretch"
         style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}>
@@ -1471,8 +1472,9 @@ const JobMatchModal: FC<JobMatchModalProps> = ({ isOpen, onClose, job, organizat
           to   { opacity:1; transform:scale(1)    translateY(0);    }
         }
       `}</style>
-    </TooltipProvider>
-  );
+</TooltipProvider>,
+document.body
+);
 };
 
 export default JobMatchModal;
