@@ -504,26 +504,33 @@ const revalidateSkills = async () => {
   };
  
   return (
-    <Modal
-      isOpen={true}
-      onRequestClose={onClose}
-      style={{
-        content: {
-          maxWidth: '1000px',
-          width: '95%',
-          margin: '20px auto',
-          maxHeight: '85vh',
-          overflowY: 'auto',
-          padding: '15px',
-          borderRadius: '10px',
-          border: '1px solid #d1c4e9',
-          background: '#fff',
-        },
-        overlay: {
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        },
-      }}
-    >
+   <Modal
+  isOpen={true}
+  onRequestClose={onClose}
+  ariaHideApp={false}
+  style={{
+    overlay: {
+      backgroundColor: "rgba(0,0,0,0.6)",
+      zIndex: 99,
+    },
+    content: {
+      top: "50%",
+      left: "50%",
+      right: "auto",
+      bottom: "auto",
+      transform: "translate(-50%, -50%)",
+      maxWidth: "1000px",
+      width: "60%",
+      maxHeight: "85vh",
+      overflowY: "auto",
+      padding: "15px",
+      borderRadius: "10px",
+      border: "1px solid #d1c4e9",
+      background: "#fff",
+      zIndex: 99,
+    },
+  }}
+>
       <h2 className="text-2xl font-bold text-purple-800 mb-4">Resume Analysis</h2>
       <textarea
         placeholder="Paste your resume here..."
