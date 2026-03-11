@@ -9,6 +9,7 @@ export interface WorkspaceFile {
   created_at: string;
   type: 'people' | 'companies';
   workspace_id: string;
+  created_by: string | null;
   created_by_employee: {
     first_name: string;
     last_name: string;
@@ -31,6 +32,7 @@ export const useWorkspaceFiles = (workspaceId?: string | null) => {
           created_at,
           type,
           workspace_id,
+          created_by,
           created_by_employee:created_by (first_name, last_name, profile_picture_url)
         `)
         .eq('organization_id', organization_id);
