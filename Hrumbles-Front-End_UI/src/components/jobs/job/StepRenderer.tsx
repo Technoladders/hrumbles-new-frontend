@@ -14,6 +14,7 @@ interface StepRendererProps {
   updateFormData: (step: string, data: any) => void;
   jobType: "Internal" | "External";
   internalType: "Inhouse" | "Client Side" | null;
+  orgSettings?: any;
 }
 
 const StepRenderer = ({ 
@@ -21,7 +22,8 @@ const StepRenderer = ({
   formData, 
   updateFormData,
   jobType,
-  internalType
+  internalType,
+  orgSettings
 }: StepRendererProps): ReactNode => {
   
   const isClientSideOrExternalFlow = jobType === "External" || (jobType === "Internal" && internalType === "Client Side");
@@ -40,6 +42,7 @@ const StepRenderer = ({
               updateFormData("clientDetails", data);
               updateFormData("jobInformation", data);
             }}
+            orgSettings={orgSettings}
           />
         );
       case 2:
@@ -52,7 +55,7 @@ const StepRenderer = ({
     // This is the "Inhouse" flow, which remains completely unchanged.
     switch(currentStep) {
       case 1:
-        return ( <JobInformationStep data={formData.jobInformation} onChange={(data) => updateFormData("jobInformation", data)} jobType={jobType} /> );
+        return ( <JobInformationStep data={formData.jobInformation} onChange={(data) => updateFormData("jobInformation", data)} jobType={jobType} orgSettings={orgSettings} /> );
       case 2:
         return ( <JobDescriptionStep data={formData.jobDescription} onChange={(data) => updateFormData("jobDescription", data)} /> );
       default:

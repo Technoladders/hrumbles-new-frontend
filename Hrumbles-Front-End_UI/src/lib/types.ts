@@ -172,6 +172,7 @@ export interface JobData {
   hr_job_candidates: { name: string }[];  
   currency_type?: string;  
   budget_type?: string;   
+  isSkillMatrixMandatory?: boolean;
 }
 
 // src/lib/types.ts

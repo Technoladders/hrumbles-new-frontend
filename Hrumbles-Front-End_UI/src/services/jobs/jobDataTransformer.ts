@@ -5,7 +5,8 @@ import { DbJob } from "./types";
 // Transform DB job record to application JobData model
 // jobDataTransformer.ts
 export const transformToJobData = (jobRecord: any): JobData => {
- 
+
+ console.log("TRANSFORM INPUT:", jobRecord);
   const transformedJob: JobData = {
     id: jobRecord.id,
     jobId: jobRecord.job_id,
@@ -40,9 +41,10 @@ export const transformToJobData = (jobRecord: any): JobData => {
     hr_job_candidates: jobRecord.hr_job_candidates,
     currency_type: jobRecord.currency_type,
     budget_type: jobRecord.budget_type,
+    isSkillMatrixMandatory: jobRecord.is_skill_matrix_mandatory ?? false,
   };
 
- 
+  console.log("TRANSFORM OUTPUT:", transformedJob.isSkillMatrixMandatory);
   return transformedJob;
 };
 
@@ -75,6 +77,7 @@ export const transformToDbJob = (job: JobData): Record<string, any> => {
     closed_by: job.closedBy,
     currency_type: job.currency_type,
     budget_type: job.budget_type,
+    is_skill_matrix_mandatory: job.isSkillMatrixMandatory ?? false,
     // hr_job_candidates: job.hr_job_candidates
   };
 };

@@ -57,13 +57,15 @@ interface SkillInformationTabProps {
   jobSkills: string[];
   onSave: (data: CandidateFormData) => void;
   onCancel: () => void;
+  isSkillMatrixMandatory?: boolean;
 }
 
 const SkillInformationTab = ({ 
   form, 
   jobSkills,
   onSave, 
-  onCancel 
+  onCancel,
+  isSkillMatrixMandatory
 }: SkillInformationTabProps) => {
   const [newSkill, setNewSkill] = useState("");
 
@@ -133,35 +135,40 @@ const SkillInformationTab = ({
     form.setValue("skills", updatedSkills);
   };
 
-  const validateSkills = (skills: CandidateFormData["skills"]) => {
-    if (skills.length === 0) {
+   const validateSkills = (skills: CandidateFormData["skills"]) => {
+    if (!skills || skills.length === 0) {
       toast.error("At least one skill is required.");
       return false;
     }
 
-    for (const skill of skills) {
-      if (skill.rating < 1 || skill.rating > 5) {
-        toast.error(`Rating for ${skill.name} must be between 1 and 5.`);
-        return false;
-      }
-      if (skill.experienceYears === undefined || skill.experienceYears === null) {
-        toast.error(`Experience years for ${skill.name} is required.`);
-        return false;
-      }
-      if (skill.experienceYears < 0) {
-        toast.error(`Experience years for ${skill.name} cannot be negative.`);
-        return false;
-      }
-      if (skill.experienceMonths === undefined || skill.experienceMonths === null) {
-        toast.error(`Experience months for ${skill.name} is required.`);
-        return false;
-      }
-      if (skill.experienceMonths < 0 || skill.experienceMonths > 11) {
-        toast.error(`Experience months for ${skill.name} must be between 0 and 11.`);
-        return false;
+    // 2. Conditionally enforce validation only if the Job flag requires it
+    if (isSkillMatrixMandatory) {
+      for (const skill of skills) {
+        if (skill.rating < 1 || skill.rating > 5) {
+          toast.error(`Rating for ${skill.name} is mandatory (must be 1-5).`);
+          return false;
+        }
+        if (skill.experienceYears === undefined || skill.experienceYears === null) {
+          toast.error(`Experience years for ${skill.name} is mandatory.`);
+          return false;
+        }
+        if (skill.experienceYears < 0) {
+          toast.error(`Experience years for ${skill.name} cannot be negative.`);
+          return false;
+        }
+        if (skill.experienceMonths === undefined || skill.experienceMonths === null) {
+          toast.error(`Experience months for ${skill.name} is mandatory.`);
+          return false;
+        }
+        if (skill.experienceMonths < 0 || skill.experienceMonths > 11) {
+          toast.error(`Experience months for ${skill.name} must be between 0 and 11.`);
+          return false;
+        }
       }
     }
-    return true;
+    
+    // If it's NOT mandatory, we just allow the save to proceed regardless of 0 stars or blank years.
+    return true; 
   };
 
   const handleSubmit = (data: CandidateFormData) => {

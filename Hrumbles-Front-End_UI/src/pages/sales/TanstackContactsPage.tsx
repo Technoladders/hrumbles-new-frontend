@@ -49,7 +49,7 @@ import { Spinner } from '@chakra-ui/react';
 import {
   Search, SlidersHorizontal, RotateCcw, Check, ArrowLeft,
   FolderOpen, UploadCloud, List, X, PanelLeftClose, PanelLeftOpen,
-  Users, DatabaseZap, ListPlus, Loader2,
+  Users, DatabaseZap, ListPlus, Loader2, Folder
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -561,61 +561,63 @@ useEffect(() => {
     queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
     setListModalOpen(false);
   };
-      const handleListAdd = async (targetFileId: string) => {
-  if (!targetFileId) {
-    toast({ variant: 'destructive', title: 'No list selected' });
-    return;
-  }
-
-  try {
-    if (isFromDiscovery && selectedContact?.original_data) {
-      const savedContact = await saveDiscoveryToCRM(
-        selectedContact.original_data,
-        organization_id,
-        user.id
-      );
-
-      if (!savedContact?.id) throw new Error('No ID returned');
-
-      await saveContactAvailability(savedContact.id, selectedContact.original_data);
-
-      const { error } = await supabase.from('contact_workspace_files').upsert({
-        contact_id: savedContact.id,
-        file_id: targetFileId,
-        added_by: user.id,
-      });
-
-      if (error) throw error;
-
-      toast({ title: 'Saved', description: 'Added to list.' });
-    } 
-    else if (selectedContact?.id) {
-      const { error } = await supabase.from('contact_workspace_files').upsert({
-        contact_id: selectedContact.id,
-        file_id: targetFileId,
-        added_by: user.id,
-      });
-
-      if (error) throw error;
-
-      toast({ title: 'Added to List' });
-    } 
-    else {
-      throw new Error('No valid contact');
+      
+  
+const handleListAdd = async (targetFileId: string) => {
+    if (!targetFileId) {
+      toast({ variant: 'destructive', title: 'No list selected' });
+      return;
     }
 
-    queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-    queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
-  } 
-  catch (err: any) {
-    toast({ variant: 'destructive', title: 'Failed', description: err.message });
-  } 
-  finally {
-    setListModalOpen(false);
-    setIsFromDiscovery(false);
-    setSelectedContact(null);
-  }
-};
+    try {
+      if (isFromDiscovery && selectedContact?.original_data) {
+        const savedContact = await saveDiscoveryToCRM(
+          selectedContact.original_data,
+          organization_id,
+          user.id
+        );
+
+        if (!savedContact?.id) throw new Error('No ID returned');
+
+        // REMOVED: await saveContactAvailability(...) - no longer needed!
+
+        const { error } = await supabase.from('contact_workspace_files').upsert({
+          contact_id: savedContact.id,
+          file_id: targetFileId,
+          added_by: user.id,
+        });
+
+        if (error) throw error;
+
+        toast({ title: 'Saved', description: 'Added to list.' });
+      } 
+      else if (selectedContact?.id) {
+        const { error } = await supabase.from('contact_workspace_files').upsert({
+          contact_id: selectedContact.id,
+          file_id: targetFileId,
+          added_by: user.id,
+        });
+
+        if (error) throw error;
+
+        toast({ title: 'Added to List' });
+      } 
+      else {
+        throw new Error('No valid contact');
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+      queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
+    } 
+    catch (err: any) {
+      toast({ variant: 'destructive', title: 'Failed', description: err.message });
+    } 
+    finally {
+      setListModalOpen(false);
+      setIsFromDiscovery(false);
+      setSelectedContact(null);
+    }
+  };
   // OPTIMISTIC inline edit — no refetch, no spinner
   const handleUpdateData = async (rowIndex: number, columnId: string, value: any) => {
     if (isDiscoveryMode) return;
@@ -819,7 +821,7 @@ useEffect(() => {
     !isDiscoveryMode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
   )}
 >
-  CRM
+  Saved Contacts
 </button>
             </div>
           )}
@@ -843,19 +845,40 @@ useEffect(() => {
                     </span>
                   </div>
                 </SelectTrigger>
-                <SelectContent className="max-w-[260px]">
-                  <SelectItem value="__all__" className="text-xs">
-                    <div className="flex items-center gap-2"><Users size={12} className="text-slate-400" /> All Contacts</div>
-                  </SelectItem>
-                  {(workspaceLists as any[] || []).map((group: any) => (
-                    <SelectGroup key={group.workspace.id}>
-                      <SelectLabel className="text-[10px] text-slate-400 uppercase tracking-wider">{group.workspace.name}</SelectLabel>
-                      {group.files.map((f: any) => (
-                        <SelectItem key={f.id} value={f.id} className="text-xs pl-4">{f.name}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ))}
-                </SelectContent>
+<SelectContent className="max-w-[260px]">
+  <SelectItem value="__all__" className="text-xs">
+    <div className="flex items-center gap-2">
+      <Users size={13} className="text-slate-400" />
+      <span>All Contacts</span>
+    </div>
+  </SelectItem>
+
+  {(workspaceLists as any[] || []).map((group: any) => (
+    <SelectGroup key={group.workspace.id}>
+
+      {/* Workspace Folder */}
+      <SelectLabel className="flex items-center gap-2 text-[11px] text-black-600 font-semibold">
+        <Folder size={13} className="text-slate-400" />
+        {group.workspace.name}
+      </SelectLabel>
+
+      {/* Lists inside workspace */}
+      {group.files.map((f: any) => (
+        <SelectItem
+          key={f.id}
+          value={f.id}
+          className="text-xs pl-14"
+        >
+          <div className="flex items-center gap-2">
+            <List size={12}  />
+            <span className="truncate">{f.name}</span>
+          </div>
+        </SelectItem>
+      ))}
+
+    </SelectGroup>
+  ))}
+</SelectContent>
               </Select>
               {selectedListId && (
                 <button onClick={() => setSelectedListId(null)} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>

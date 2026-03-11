@@ -201,12 +201,12 @@ export const fetchEmployeesByIds = async (employeeIds: string[]) => {
   return { data, error };
 };
 
-export const getLastJobIdForOrg = async (organizationId: string) => {
+export const getLastJobIdForOrg = async (organizationId: string, prefix: string = "TUP") => {
   const { data, error } = await supabase
     .from("hr_jobs")
     .select("job_id")
     .eq("organization_id", organizationId)
-    .ilike("job_id", "TUP%") 
+    .ilike("job_id", `${prefix}%`) 
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

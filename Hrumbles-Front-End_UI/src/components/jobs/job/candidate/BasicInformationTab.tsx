@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
 import { UseFormReturn } from "react-hook-form";
 import { motion } from "framer-motion"; // Import framer-motion
@@ -135,7 +135,7 @@ const formatINR = (value: number): string => {
 const YEARS = Array.from({ length: 31 }, (_, i) => i.toString());
 const MONTHS = Array.from({ length: 12 }, (_, i) => i.toString());
 
-const NOTICE_PERIOD_OPTIONS = [
+const DEFAULT_NOTICE_PERIODS =[
   "Immediate", "15 days", "30 days", "45 days", "60 days", "90 days",
 ];
 
@@ -182,6 +182,59 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete, c
   const isJoined = isEditMode && candidate?.sub_status?.name === 'Joined';
   const ctcLabel = isJoined ? 'Joined CTC' : 'Offered CTC';
   const dateLabel = isJoined ? 'Joined Date' : 'Offer/Joining Date';
+
+    // 2. Add new states for Custom Notice Period
+  const[noticePeriods, setNoticePeriods] = useState<string[]>(DEFAULT_NOTICE_PERIODS);
+  const[showCustomNoticeInput, setShowCustomNoticeInput] = useState(false);
+  const [customNotice, setCustomNotice] = useState("");
+  const [isSavingNotice, setIsSavingNotice] = useState(false);
+
+    // 3. Fetch custom notice periods for this organization on mount
+  useEffect(() => {
+    const fetchOrgData = async () => {
+      if (!organizationId) return;
+      const { data } = await supabase
+        .from('hr_organizations')
+        .select('custom_notice_periods')
+        .eq('id', organizationId)
+        .single();
+        
+      if (data?.custom_notice_periods && Array.isArray(data.custom_notice_periods)) {
+        setNoticePeriods(prev => Array.from(new Set([...prev, ...data.custom_notice_periods])));
+      }
+    };
+    fetchOrgData();
+  }, [organizationId]);
+
+  // 4. Save function for Custom Notice Period
+  const handleSaveCustomNotice = async () => {
+    if (!customNotice.trim()) return;
+    setIsSavingNotice(true);
+    try {
+      const newCustomOption = customNotice.trim();
+      const updatedList = Array.from(new Set([...noticePeriods, newCustomOption]));
+      
+      // We only store the custom ones in DB
+      const purelyCustom = updatedList.filter(o => !DEFAULT_NOTICE_PERIODS.includes(o));
+      
+      const { error } = await supabase
+        .from('hr_organizations')
+        .update({ custom_notice_periods: purelyCustom })
+        .eq('id', organizationId);
+      
+      if (error) throw error;
+      
+      setNoticePeriods(updatedList);
+      form.setValue('noticePeriod', newCustomOption);
+      setShowCustomNoticeInput(false);
+      setCustomNotice("");
+      toast.success("Custom notice period saved!");
+    } catch (e) {
+      toast.error("Failed to save custom notice period");
+    } finally {
+      setIsSavingNotice(false);
+    }
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -231,9 +284,13 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete, c
         if (parsedData.lastName) form.setValue("lastName", parsedData.lastName, { shouldValidate: true });
         if (parsedData.email) form.setValue("email", parsedData.email, { shouldValidate: true });
         if (parsedData.linkedin_url) form.setValue("linkedInId", parsedData.linkedin_url, { shouldValidate: true });
-        if (parsedData.phone) {
-          let phoneNumber = parsedData.phone.replace(/\s+/g, '');
-          if (!phoneNumber.startsWith('+')) phoneNumber = `+91${phoneNumber}`;
+if (parsedData.phone) {
+          // Strip everything except numbers and plus signs
+          let phoneNumber = parsedData.phone.replace(/[^0-9+]/g, '');
+          // Default to Indian country code if missing
+          if (!phoneNumber.startsWith('+') && phoneNumber.length >= 10) {
+            phoneNumber = `+91${phoneNumber}`;
+          }
           form.setValue("phone", phoneNumber, { shouldValidate: true });
         }
         // if (parsedData.currentLocation) form.setValue("currentLocation", parsedData.currentLocation, { shouldValidate: true });
@@ -791,29 +848,69 @@ const getFileNameFromUrl = (url: string) => {
                     />
                 </motion.div>
                 {/* Notice Period */}
-                <motion.div variants={itemVariants}>
-                    <FormField
-                        control={form.control}
-                        name="noticePeriod"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Notice Period</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                                <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
-                                <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
-                                <SelectTrigger className="pl-10">
-                                    <SelectValue placeholder="Select notice period" />
-                                </SelectTrigger>
-                                </motion.div>
-                            </FormControl>
-                            <SelectContent>{NOTICE_PERIOD_OPTIONS.map((option) => (<SelectItem key={option} value={option}>{option}</SelectItem>))}</SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                        )}
-                    />
-                </motion.div>
+ {/* Notice Period UI Modification */}
+  <motion.div variants={itemVariants}>
+      <FormField
+          control={form.control}
+          name="noticePeriod"
+          render={({ field }) => (
+          <FormItem>
+              <FormLabel>Notice Period</FormLabel>
+              <Select 
+                onValueChange={(val) => {
+                  if (val === "custom_add_new") {
+                    setShowCustomNoticeInput(true);
+                    field.onChange(""); // Clear selection
+                  } else {
+                    setShowCustomNoticeInput(false);
+                    field.onChange(val);
+                  }
+                }} 
+                value={showCustomNoticeInput ? "custom_add_new" : field.value || ""}
+              >
+              <FormControl>
+                  <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
+                  <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
+                  <SelectTrigger className="pl-10">
+                      <SelectValue placeholder="Select notice period" />
+                  </SelectTrigger>
+                  </motion.div>
+              </FormControl>
+              <SelectContent>
+                  {noticePeriods.map((option) => (
+                    <SelectItem key={option} value={option}>{option}</SelectItem>
+                  ))}
+                  {/* Dynamic Custom Option Trigger */}
+                  <SelectItem value="custom_add_new" className="text-purple-600 font-semibold bg-purple-50 hover:bg-purple-100">
+                    + Add Custom & Save
+                  </SelectItem>
+              </SelectContent>
+              </Select>
+
+              {/* Input for Custom Notice Period */}
+              {showCustomNoticeInput && (
+                <div className="flex items-center gap-2 mt-3 animate-in slide-in-from-top-2">
+                  <Input 
+                    placeholder="E.g. 7 days, 2 Months..." 
+                    value={customNotice} 
+                    onChange={e => setCustomNotice(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button 
+                    type="button" 
+                    onClick={handleSaveCustomNotice}
+                    disabled={isSavingNotice || !customNotice.trim()}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    {isSavingNotice ? <Loader2 className="h-4 w-4 animate-spin"/> : "Save"}
+                  </Button>
+                </div>
+              )}
+              <FormMessage />
+          </FormItem>
+          )}
+      />
+  </motion.div>
                 <motion.div variants={itemVariants}>
                     <FormField
                         control={form.control}
@@ -1003,9 +1100,16 @@ const getFileNameFromUrl = (url: string) => {
                             <FormItem className="flex items-center space-x-2">
                             <FormControl>
                                 <Switch
-                                checked={switchField.value}
-                                onCheckedChange={switchField.onChange}
-                                />
+  checked={switchField.value}
+  onCheckedChange={(checked) => {
+    switchField.onChange(checked);
+
+    // Clear LinkedIn URL when disabled
+    if (!checked) {
+      form.setValue("linkedInId", "");
+    }
+  }}
+/>
                             </FormControl>
                             <Label htmlFor="isLinkedInRequired" className="text-sm font-medium">Required</Label>
                             </FormItem>

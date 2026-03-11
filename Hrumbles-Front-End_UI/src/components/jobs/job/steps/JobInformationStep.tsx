@@ -1,5 +1,6 @@
 // src/components/jobs/job/steps/JobInformationStep.tsx
 import { useSelector } from "react-redux";
+import { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -37,22 +38,34 @@ interface JobInformationStepProps {
   data: Partial<JobInformationData>;
   onChange: (data: Partial<JobInformationData>) => void;
   jobType: "Internal" | "External";
+  orgSettings?: any;
 }
 
 const TUP_ORG_ID = "0e4318d8-b1a5-4606-b311-c56d7eec47ce";
+const AMPLE_ORG_ID = "e032d8c5-2168-4083-9919-c2e09719550a";
 
 const JobInformationStep = ({ 
   data, 
   onChange, 
-  jobType 
+  jobType,
+  orgSettings
 }: JobInformationStepProps) => {
 
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const isTupOrg = organizationId === TUP_ORG_ID;
+  const isAmpleOrg = organizationId === AMPLE_ORG_ID;
+
+  const isAutoId = isTupOrg || orgSettings?.is_job_id_auto;
 
   const handleFieldChange = (field: keyof JobInformationData, value: any) => {
     onChange({ ...data, [field]: value });
   };
+
+  useEffect(() => {
+  if (isAmpleOrg && data.isSkillMatrixMandatory === true) {
+    handleFieldChange("isSkillMatrixMandatory", false);
+  }
+}, [isAmpleOrg]);
 
     // Logic to get 'Tomorrow' in Asia/Kolkata timezone
   const getMinDate = () => {
@@ -109,11 +122,10 @@ const JobInformationStep = ({
               placeholder="Enter job ID" 
               value={data.jobId || ""} 
               onChange={(e) => handleFieldChange('jobId', e.target.value)} 
-              // DISABLE IF TUP ORG
-              disabled={isTupOrg}
-              className={isTupOrg ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}
+              disabled={isAutoId} // <-- Use new variable
+              className={isAutoId ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}
             />
-            </div>
+          </div>
             {isTupOrg && (
             <div className="space-y-2">
               <Label>Job Due Date <span className="text-red-500">*</span></Label>
@@ -173,6 +185,24 @@ const JobInformationStep = ({
              <p className="text-xs text-gray-500">Multiple locations selectable.</p>
           </div>
         </div>
+                {/* Render Skill Matrix Mandatory check if Org has it enabled */}
+        {orgSettings?.is_skill_matrix_mandatory && (
+          <div className="mt-6 flex items-center">
+            <Label className="flex items-center gap-2 cursor-pointer w-fit text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={
+  isAmpleOrg
+    ? data.isSkillMatrixMandatory === true ? true : false
+    : data.isSkillMatrixMandatory ?? true
+}
+                onChange={(e) => handleFieldChange('isSkillMatrixMandatory', e.target.checked)}
+                className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+              />
+              Make Skill Matrix Mandatory for Candidates
+            </Label>
+          </div>
+        )}
       </div>
 
       {/* --- FIX 2: THIS IS THE MISSING EXPERIENCE SECTION --- */}
