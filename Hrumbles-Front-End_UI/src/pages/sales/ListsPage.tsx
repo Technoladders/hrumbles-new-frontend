@@ -134,6 +134,7 @@ const WorkspaceCard: React.FC<{
   files: WorkspaceFile[];
   recordCounts: Record<string, number>;
   isAdmin: boolean;
+  currentUserId: string;
   perms: EffectivePermissions | null;
   fileAccessMap: Map<string, EffectivePermissions>;
   onEditWorkspace: () => void;
@@ -145,7 +146,7 @@ const WorkspaceCard: React.FC<{
   onShareFile: (f: WorkspaceFile) => void;
 }> = ({
   workspace, files, recordCounts,
-  isAdmin, perms, fileAccessMap,
+  isAdmin, currentUserId, perms, fileAccessMap,
   onEditWorkspace, onDeleteWorkspace, onAddFile,
   onEditFile, onDeleteFile, onShareWorkspace, onShareFile,
 }) => {
@@ -207,7 +208,11 @@ const WorkspaceCard: React.FC<{
           ) : (
             files.map(file => {
               const directPerms = fileAccessMap.get(file.id);
-              const effectivePerms = isAdmin ? null : mergePermissions(perms ?? undefined, directPerms);
+              // Own files always get full write+delete — regardless of share status
+              const isOwnFile = file.created_by === currentUserId;
+              const effectivePerms = isAdmin || isOwnFile
+                ? null  // null = full access in FileRow
+                : mergePermissions(perms ?? undefined, directPerms);
               return (
                 <FileRow
                   key={file.id}
@@ -238,6 +243,7 @@ const SectionColumn: React.FC<{
   recordCounts: Record<string, number>;
   search: string;
   isAdmin: boolean;
+  currentUserId: string;
   workspaceAccess: Map<string, EffectivePermissions>;
   fileAccess: Map<string, EffectivePermissions>;
   onOpenDialog: (cfg: DialogConfig) => void;
@@ -245,7 +251,7 @@ const SectionColumn: React.FC<{
   onShareTarget: (t: ShareTarget) => void;
 }> = ({
   type, allFiles, recordCounts, search,
-  isAdmin, workspaceAccess, fileAccess,
+  isAdmin, currentUserId, workspaceAccess, fileAccess,
   onOpenDialog, onDeleteTarget, onShareTarget,
 }) => {
   const { data: allWorkspaces = [], isLoading } = useWorkspaces(type);
@@ -255,16 +261,20 @@ const SectionColumn: React.FC<{
 
   // For employees: show workspace if:
   //   (a) it is directly shared with them, OR
-  //   (b) at least one file inside it is directly shared with them
+  //   (b) at least one file inside it is directly shared with them, OR
+  //   (c) they created at least one file inside it
   //       → folder is visible but read-only (no edit/delete on the folder itself)
   const workspaces = useMemo(() => {
     if (isAdmin) return allWorkspaces;
     return allWorkspaces.filter(ws => {
       if (workspaceAccess.has(ws.id)) return true;
-      // Check if any file of this type inside this workspace is directly shared
-      return allFiles.some(f => f.type === type && f.workspace_id === ws.id && fileAccess.has(f.id));
+      return allFiles.some(f =>
+        f.type === type &&
+        f.workspace_id === ws.id &&
+        (fileAccess.has(f.id) || f.created_by === currentUserId)
+      );
     });
-  }, [allWorkspaces, isAdmin, workspaceAccess, fileAccess, allFiles, type]);
+  }, [allWorkspaces, isAdmin, workspaceAccess, fileAccess, allFiles, type, currentUserId]);
 
   // Build file map for this type + search
   const filesByWsId = useMemo(() => {
@@ -275,8 +285,8 @@ const SectionColumn: React.FC<{
       .filter(f => {
         if (f.type !== type) return false;
         if (q && !f.name.toLowerCase().includes(q)) return false;
-        // Employees only see files in their accessible workspaces
-        if (!isAdmin && !workspaceAccess.has(f.workspace_id) && !fileAccess.has(f.id)) return false;
+        // Show file if: shared with user OR created by user OR workspace is shared
+        if (!isAdmin && !workspaceAccess.has(f.workspace_id) && !fileAccess.has(f.id) && f.created_by !== currentUserId) return false;
         return true;
       })
       .forEach(f => {
@@ -286,7 +296,7 @@ const SectionColumn: React.FC<{
       });
 
     return map;
-  }, [allFiles, workspaces, type, q, isAdmin, workspaceAccess, fileAccess]);
+  }, [allFiles, workspaces, type, q, isAdmin, workspaceAccess, fileAccess, currentUserId]);
 
   const totalLists = workspaces.reduce((acc, ws) => acc + (filesByWsId.get(ws.id) ?? []).length, 0);
 
@@ -373,6 +383,7 @@ const SectionColumn: React.FC<{
             files={wsFiles}
             recordCounts={recordCounts}
             isAdmin={isAdmin}
+            currentUserId={currentUserId}
             perms={wsPerms}
             fileAccessMap={fileAccess}
             onEditWorkspace={() => onOpenDialog({ mode: "rename-folder", fileType: type, currentItem: ws })}
@@ -394,8 +405,10 @@ const SectionColumn: React.FC<{
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ListsPage: React.FC = () => {
-  const userRole = useSelector((state: any) => state.auth.role);
-  const isAdmin  = userRole === "admin" || userRole === "organization_superadmin";
+  const userRole    = useSelector((state: any) => state.auth.role);
+  const currentUser = useSelector((state: any) => state.auth.user);
+  const isAdmin     = userRole === "admin" || userRole === "organization_superadmin";
+  const currentUserId: string = currentUser?.id ?? "";
 
   const { data: files = [], isLoading: isLoadingFiles } = useWorkspaceFiles();
   const { data: recordCounts = {} }                     = useListRecordCounts(files);
@@ -518,6 +531,7 @@ const ListsPage: React.FC = () => {
               recordCounts={recordCounts}
               search={search}
               isAdmin={isAdmin}
+              currentUserId={currentUserId}
               workspaceAccess={workspaceAccess}
               fileAccess={fileAccess}
               onOpenDialog={setDialogConfig}
@@ -530,6 +544,7 @@ const ListsPage: React.FC = () => {
               recordCounts={recordCounts}
               search={search}
               isAdmin={isAdmin}
+              currentUserId={currentUserId}
               workspaceAccess={workspaceAccess}
               fileAccess={fileAccess}
               onOpenDialog={setDialogConfig}
