@@ -549,7 +549,8 @@ export async function saveAllSearchResultsToDatabase(
 
 export async function promoteToActiveCRM(companyId: number): Promise<any> {
   const { data, error } = await supabase.from("companies")
-    .update({ status: "Active", stage: "Targeting", updated_at: new Date().toISOString() })
+    // ADD is_saved: true HERE
+    .update({ status: "Active", stage: "Targeting", is_saved: true, updated_at: new Date().toISOString() })
     .eq("id", companyId).select().single();
   if (error) throw new Error(error.message);
   return data;
@@ -620,6 +621,9 @@ export async function getApolloApiLogById(logId: string): Promise<any> {
 // ============================================================================
 
 export async function addCompanyToWorkspaceFile(companyId: number, fileId: string, userId: string | null): Promise<void> {
+  // ADD THIS LINE: Explicitly mark as saved when added to a list
+  await supabase.from("companies").update({ is_saved: true }).eq("id", companyId);
+
   const { error } = await supabase.from("company_workspace_files").upsert(
     { company_id: companyId, file_id: fileId, added_by: userId }, { onConflict: "company_id,file_id" }
   );

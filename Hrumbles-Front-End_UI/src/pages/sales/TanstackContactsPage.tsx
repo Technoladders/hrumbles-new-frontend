@@ -49,7 +49,7 @@ import { Spinner } from '@chakra-ui/react';
 import {
   Search, SlidersHorizontal, RotateCcw, Check, ArrowLeft,
   FolderOpen, UploadCloud, List, X, PanelLeftClose, PanelLeftOpen,
-  Users, DatabaseZap, ListPlus, Loader2, Folder
+  Users, DatabaseZap, ListPlus, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -195,14 +195,20 @@ export default function TanstackContactsPage() {
       setHasSearched(true);
     }
     // Determine initial tab: URL param > sessionStorage > default (discovery on fresh visit)
-const sp = new URLSearchParams(window.location.search);
-  const urlMode = sp.get('mode');
+    const urlMode      = new URLSearchParams(window.location.search).get('mode');
+    const sessionMode  = sessionStorage.getItem('contacts_mode');
+    const effectiveMode = urlMode || sessionMode;
 
-  if (urlMode === 'crm') {
-    dispatch(setDiscoveryMode(false));
-  } else if (urlMode === 'discovery') {
-    dispatch(setDiscoveryMode(true));
-  }
+    if (effectiveMode === 'crm') {
+      dispatch(setDiscoveryMode(false));
+      sessionStorage.setItem('contacts_mode', 'crm');
+      if (!hasActiveFilters(urlFilters)) setHasSearched(true);
+    } else if (effectiveMode === 'discovery' || (!effectiveMode && !fileId && !hasActiveFilters(urlFilters))) {
+      dispatch(setDiscoveryMode(true));
+      sessionStorage.setItem('contacts_mode', 'discovery');
+      setRecentSearches(loadRecentSearches(true));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Reset when entering file route ───────────────────────────────────────────
@@ -216,27 +222,9 @@ const sp = new URLSearchParams(window.location.search);
   }, [fileId]);
 
   // ── Reload correct recent-search history when mode changes ───────────────────
-// Keep URL and sessionStorage in sync whenever Redux mode changes
-useEffect(() => {
-  const mode = isDiscoveryMode ? 'discovery' : 'crm';
-
-  // Update URL without adding to history stack (replace)
-  setSearchParams(
-    prev => {
-      if (prev.get('mode') !== mode) {
-        prev.set('mode', mode);
-      }
-      return prev;
-    },
-    { replace: true }
-  );
-
-  // Update sessionStorage
-  sessionStorage.setItem('contacts_mode', mode);
-
-  // Reload correct recent searches for current mode
-  setRecentSearches(loadRecentSearches(isDiscoveryMode));
-}, [isDiscoveryMode, setSearchParams]);
+  useEffect(() => {
+    setRecentSearches(loadRecentSearches(isDiscoveryMode));
+  }, [isDiscoveryMode]);
 
   // ── User preferences ─────────────────────────────────────────────────────────
   const { data: userPreferences } = useQuery({
@@ -542,82 +530,80 @@ useEffect(() => {
   };
 
   // ── Bulk: Add selected discovery rows to a list ──────────────────────────────
-  const handleBulkAddToList = async (targetFileId: string) => {
+  const handleBulkAddToList = async (targetFileIds: string[]) => {
     const selectedRows = table.getSelectedRowModel().rows;
-    if (!selectedRows.length) return;
+    if (!selectedRows.length || !targetFileIds.length) return;
     let saved = 0, failed = 0;
     for (const row of selectedRows) {
       try {
         const person = row.original?.original_data || row.original;
         const contact = person ? await saveDiscoveryToCRM(person, organization_id, user.id) : row.original;
         if (!contact?.id) { failed++; continue; }
-        await supabase.from('contact_workspace_files').upsert({ contact_id: contact.id, file_id: targetFileId, added_by: user.id });
+        for (const fileId of targetFileIds) {
+          await supabase.from('contact_workspace_files').upsert({ contact_id: contact.id, file_id: fileId, added_by: user.id });
+        }
         saved++;
       } catch { failed++; }
     }
-    toast({ title: `${saved} contact${saved !== 1 ? 's' : ''} added to list`, description: failed > 0 ? `${failed} failed` : undefined });
+    toast({ title: `${saved} contact${saved !== 1 ? 's' : ''} added to ${targetFileIds.length} list${targetFileIds.length !== 1 ? 's' : ''}`, description: failed > 0 ? `${failed} failed` : undefined });
     table.resetRowSelection();
     queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
     queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
     setListModalOpen(false);
   };
-      
-  
-const handleListAdd = async (targetFileId: string) => {
-    if (!targetFileId) {
-      toast({ variant: 'destructive', title: 'No list selected' });
-      return;
+      const handleListAdd = async (targetFileIds: string[]) => {
+  if (!targetFileIds.length) {
+    toast({ variant: 'destructive', title: 'No list selected' });
+    return;
+  }
+
+  try {
+    let contactId: string | null = null;
+
+    if (isFromDiscovery && selectedContact?.original_data) {
+      const savedContact = await saveDiscoveryToCRM(
+        selectedContact.original_data,
+        organization_id,
+        user.id
+      );
+
+      if (!savedContact?.id) throw new Error('No ID returned');
+
+      await saveContactAvailability(savedContact.id, selectedContact.original_data);
+      contactId = savedContact.id;
+
+      toast({ title: 'Saved', description: `Added to ${targetFileIds.length} list${targetFileIds.length !== 1 ? 's' : ''}.` });
+    } 
+    else if (selectedContact?.id) {
+      contactId = selectedContact.id;
+      toast({ title: `Added to ${targetFileIds.length} list${targetFileIds.length !== 1 ? 's' : ''}` });
+    } 
+    else {
+      throw new Error('No valid contact');
     }
 
-    try {
-      if (isFromDiscovery && selectedContact?.original_data) {
-        const savedContact = await saveDiscoveryToCRM(
-          selectedContact.original_data,
-          organization_id,
-          user.id
-        );
-
-        if (!savedContact?.id) throw new Error('No ID returned');
-
-        // REMOVED: await saveContactAvailability(...) - no longer needed!
-
-        const { error } = await supabase.from('contact_workspace_files').upsert({
-          contact_id: savedContact.id,
-          file_id: targetFileId,
-          added_by: user.id,
-        });
-
-        if (error) throw error;
-
-        toast({ title: 'Saved', description: 'Added to list.' });
-      } 
-      else if (selectedContact?.id) {
-        const { error } = await supabase.from('contact_workspace_files').upsert({
-          contact_id: selectedContact.id,
-          file_id: targetFileId,
-          added_by: user.id,
-        });
-
-        if (error) throw error;
-
-        toast({ title: 'Added to List' });
-      } 
-      else {
-        throw new Error('No valid contact');
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-      queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
-    } 
-    catch (err: any) {
-      toast({ variant: 'destructive', title: 'Failed', description: err.message });
-    } 
-    finally {
-      setListModalOpen(false);
-      setIsFromDiscovery(false);
-      setSelectedContact(null);
+    for (const fileId of targetFileIds) {
+      const { error } = await supabase.from('contact_workspace_files').upsert({
+        contact_id: contactId,
+        file_id: fileId,
+        added_by: user.id,
+      });
+      if (error) throw error;
     }
-  };
+
+    queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+    queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
+    queryClient.invalidateQueries({ queryKey: ['contact-list-memberships'] });
+  } 
+  catch (err: any) {
+    toast({ variant: 'destructive', title: 'Failed', description: err.message });
+  } 
+  finally {
+    setListModalOpen(false);
+    setIsFromDiscovery(false);
+    setSelectedContact(null);
+  }
+};
   // OPTIMISTIC inline edit — no refetch, no spinner
   const handleUpdateData = async (rowIndex: number, columnId: string, value: any) => {
     if (isDiscoveryMode) return;
@@ -799,30 +785,34 @@ const handleListAdd = async (targetFileId: string) => {
           {!fileId && (
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
               <button
-  onClick={() => {
-    dispatch(setDiscoveryMode(true));
-    setHasSearched(false);
-  }}
-  className={cn(
-    'px-3 py-1 rounded-md text-[11px] font-medium transition-all',
-    isDiscoveryMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-  )}
->
-  Search People
-</button>
-             <button
-  onClick={() => {
-    dispatch(setDiscoveryMode(false));
-    dispatch(resetSearch());
-    setHasSearched(true);
-  }}
-  className={cn(
-    'px-3 py-1 rounded-md text-[11px] font-medium transition-all',
-    !isDiscoveryMode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-  )}
->
-  Saved Contacts
-</button>
+                onClick={() => {
+                  dispatch(setDiscoveryMode(true));
+                  setHasSearched(false);
+                  sessionStorage.setItem('contacts_mode', 'discovery');
+                  setSearchParams(prev => { prev.set('mode', 'discovery'); return prev; });
+                }}
+                className={cn(
+                  'px-3 py-1 rounded-md text-[11px] font-medium transition-all',
+                  isDiscoveryMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                )}
+              >
+                Search People
+              </button>
+              <button
+                onClick={() => {
+                  dispatch(setDiscoveryMode(false));
+                  dispatch(resetSearch());
+                  setHasSearched(true);
+                  sessionStorage.setItem('contacts_mode', 'crm');
+                  setSearchParams(prev => { prev.set('mode', 'crm'); return prev; });
+                }}
+                className={cn(
+                  'px-3 py-1 rounded-md text-[11px] font-medium transition-all',
+                  !isDiscoveryMode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                )}
+              >
+                CRM
+              </button>
             </div>
           )}
 
@@ -845,40 +835,19 @@ const handleListAdd = async (targetFileId: string) => {
                     </span>
                   </div>
                 </SelectTrigger>
-<SelectContent className="max-w-[260px]">
-  <SelectItem value="__all__" className="text-xs">
-    <div className="flex items-center gap-2">
-      <Users size={13} className="text-slate-400" />
-      <span>All Contacts</span>
-    </div>
-  </SelectItem>
-
-  {(workspaceLists as any[] || []).map((group: any) => (
-    <SelectGroup key={group.workspace.id}>
-
-      {/* Workspace Folder */}
-      <SelectLabel className="flex items-center gap-2 text-[11px] text-black-600 font-semibold">
-        <Folder size={13} className="text-slate-400" />
-        {group.workspace.name}
-      </SelectLabel>
-
-      {/* Lists inside workspace */}
-      {group.files.map((f: any) => (
-        <SelectItem
-          key={f.id}
-          value={f.id}
-          className="text-xs pl-14"
-        >
-          <div className="flex items-center gap-2">
-            <List size={12}  />
-            <span className="truncate">{f.name}</span>
-          </div>
-        </SelectItem>
-      ))}
-
-    </SelectGroup>
-  ))}
-</SelectContent>
+                <SelectContent className="max-w-[260px]">
+                  <SelectItem value="__all__" className="text-xs">
+                    <div className="flex items-center gap-2"><Users size={12} className="text-slate-400" /> All Contacts</div>
+                  </SelectItem>
+                  {(workspaceLists as any[] || []).map((group: any) => (
+                    <SelectGroup key={group.workspace.id}>
+                      <SelectLabel className="text-[10px] text-slate-400 uppercase tracking-wider">{group.workspace.name}</SelectLabel>
+                      {group.files.map((f: any) => (
+                        <SelectItem key={f.id} value={f.id} className="text-xs pl-4">{f.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
               </Select>
               {selectedListId && (
                 <button onClick={() => setSelectedListId(null)} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
@@ -1093,6 +1062,14 @@ const handleListAdd = async (targetFileId: string) => {
                 ? `${table.getSelectedRowModel().rows.length} people`
                 : (selectedContact?.name || '')
             }
+            contactIds={
+              // Only pass IDs for CRM contacts (not discovery — they don't have IDs yet)
+              !isFromDiscovery && selectedContact?.id
+                ? table.getSelectedRowModel().rows.length > 1
+                  ? table.getSelectedRowModel().rows.map(r => r.original?.id).filter(Boolean)
+                  : [selectedContact.id]
+                : []
+            }
             onConfirm={isDiscoveryMode && table.getSelectedRowModel().rows.length > 1
               ? handleBulkAddToList
               : handleListAdd
@@ -1106,6 +1083,7 @@ const handleListAdd = async (targetFileId: string) => {
             open={listModalOpen}
             onOpenChange={open => { setListModalOpen(open); if (!open) setIsFromDiscovery(false); }}
             personName={`${table.getSelectedRowModel().rows.length} people`}
+            contactIds={[]}
             onConfirm={handleBulkAddToList}
             isFromDiscovery={true}
           />

@@ -18,7 +18,7 @@ import {
   ChevronDown, Star, Phone, Copy, Check,
   Facebook, Twitter, Clock, ArrowLeft,
   PanelLeftClose, PanelLeftOpen, Cloud,
-  FolderOpen, List, DatabaseZap, Folder
+  FolderOpen, List, DatabaseZap, Folder, BookmarkPlus, BookmarkCheck
 } from "lucide-react";
 import { Input }    from "@/components/ui/input";
 import { Badge }    from "@/components/ui/badge";
@@ -322,6 +322,16 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
   const[isBulkAddingList,       setIsBulkAddingList]       = useState(false);
   const[isBulkPromoting,        setIsBulkPromoting]        = useState(false);
 
+    // ADD THESE:
+  const [isSavingIds,            setIsSavingIds]            = useState<Set<string>>(new Set());
+  const [isBulkSaving,           setIsBulkSaving]           = useState(false);
+
+    // ADD THIS: Memoize the callback so it doesn't trigger infinite re-renders in the child
+  const handleCloudFiltersChange = useCallback((chips: string[], count: number) => {
+    setPendingChips(chips);
+    setPendingCount(count);
+  },[]);
+
   const mountRef = useRef(false);
   const activeFileId = selectedListId || fileId || null;
   
@@ -351,11 +361,16 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
         ? "*, created_by_employee:hr_employees!companies_created_by_fkey(first_name,last_name), company_workspace_files!inner(file_id)"
         : "*, created_by_employee:hr_employees!companies_created_by_fkey(first_name,last_name)";
 
-      let q = supabase.from("companies").select(selectStr, { count: "exact" })
+ let q = supabase.from("companies").select(selectStr, { count: "exact" })
         .eq("organization_id", organizationId)
         .order("created_at", { ascending: false });
 
-      if (activeFileId) q = q.eq("company_workspace_files.file_id", activeFileId);
+      if (activeFileId) {
+        q = q.eq("company_workspace_files.file_id", activeFileId);
+      } else {
+        // ADD THIS: ONLY show companies explicitly saved (or added to lists which sets is_saved = true)
+        q = q.eq("is_saved", true); 
+      }
       if (dbFilters.search?.trim()) {
         const t = dbFilters.search.trim();
         q = q.or(`name.ilike.%${t}%,domain.ilike.%${t}%,website.ilike.%${t}%`);
@@ -623,7 +638,7 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
           domain: company.domain || company.primary_domain, apollo_org_id: company.apollo_org_id, logo_url: company.logo_url,
           industry: company.industry, location:[company.city, company.state, company.country].filter(Boolean).join(", "),
           employee_count: company.estimated_num_employees || company.employee_count, revenue: company.annual_revenue || company.revenue,
-          organization_id: organizationId, created_by: currentUserId, stage: newStage, status: "Active",
+          organization_id: organizationId, created_by: currentUserId, stage: newStage, status: "Active", is_saved: true,
         }).select("id").single();
         if (error) throw error;
         id = data?.id;
@@ -631,6 +646,9 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
       } catch (e: any) {
         toast({ title: "Failed", description: e.message, variant: "destructive" }); return;
       }
+    } else if (id) {
+      // ADDED: Mark as explicitly saved since user is engaging with it
+      await supabase.from("companies").update({ is_saved: true }).eq("id", id);
     }
     if (id) updateStageMutation.mutate({ companyId: id, stage: newStage });
   };
@@ -671,28 +689,52 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
     setIsBulkPromoting(false);
   };
 
-  const handleListAdd = async (targetFileId: string) => {
-    if (!selectedCompanyForList || !targetFileId) return;
+ const handleListAdd = async (targetFileIds: string[]) => {
+    if (!selectedCompanyForList || !targetFileIds.length) return;
     try {
       let companyId = selectedCompanyForList.id;
-      if (isCloudMode && !companyId) {
+
+      if (!companyId && selectedCompanyForList.apollo_org_id) {
         const { data, error } = await supabase.from("companies").insert({
           name: selectedCompanyForList.name, website: selectedCompanyForList.website || selectedCompanyForList.website_url,
           domain: selectedCompanyForList.domain || selectedCompanyForList.primary_domain, apollo_org_id: selectedCompanyForList.apollo_org_id,
           logo_url: selectedCompanyForList.logo_url, industry: selectedCompanyForList.industry,
-          location:[selectedCompanyForList.city, selectedCompanyForList.state, selectedCompanyForList.country].filter(Boolean).join(", "),
+          location: [selectedCompanyForList.city, selectedCompanyForList.state, selectedCompanyForList.country].filter(Boolean).join(", "),
           employee_count: selectedCompanyForList.estimated_num_employees || selectedCompanyForList.employee_count,
           revenue: selectedCompanyForList.annual_revenue || selectedCompanyForList.revenue,
-          organization_id: organizationId, created_by: currentUserId, stage: "Identified", status: "Active",
+          organization_id: organizationId, created_by: currentUserId, status: "Active",
+          is_saved: true,
         }).select("id").single();
         if (error) throw error;
         companyId = data.id;
+      } else if (companyId) {
+        await supabase.from("companies").update({ is_saved: true }).eq("id", companyId);
       }
+
       if (!companyId) throw new Error("No company ID");
-      const { error } = await supabase.from("company_workspace_files").upsert({ company_id: companyId, file_id: targetFileId, added_by: currentUserId }, { onConflict: "company_id,file_id" });
-      if (error) throw error;
-      toast({ title: "Added to List", description: `${selectedCompanyForList.name} added.` });
+
+      for (const fileId of targetFileIds) {
+        const { error } = await supabase.from("company_workspace_files").upsert(
+          { company_id: companyId, file_id: fileId, added_by: currentUserId },
+          { onConflict: "company_id,file_id" }
+        );
+        if (error) throw error;
+      }
+
+      toast({ title: `Added to ${targetFileIds.length} list${targetFileIds.length !== 1 ? "s" : ""}`, description: `${selectedCompanyForList.name} added.` });
+
+      if (isCloudMode && apiResults) {
+        setApiResults(prev => {
+          if (!prev) return prev;
+          const newOrgs = prev.organizations.map(o =>
+            (o.id === companyId || o.apollo_org_id === selectedCompanyForList.apollo_org_id)
+              ? { ...o, is_saved: true, id: companyId } : o
+          );
+          return { ...prev, organizations: newOrgs };
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["companies-crm"] });
+      queryClient.invalidateQueries({ queryKey: ["company-list-memberships"] });
     } catch (e: any) {
       toast({ title: "Failed", description: e.message, variant: "destructive" });
     } finally {
@@ -700,10 +742,12 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
     }
   };
 
-  const handleBulkAddToList = async (targetFileId: string) => {
+const handleBulkAddToList = async (targetFileIds: string[]) => {
+    if (!targetFileIds.length) return;
     setIsBulkAddingList(true);
     const companies = displayCompanies.filter((c: any) => selectedOrgs.has(c._derived.companyId));
     let ok = 0, fail = 0;
+
     for (const company of companies) {
       try {
         let companyId = company.id;
@@ -711,21 +755,134 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
           const { data, error } = await supabase.from("companies").insert({
             name: company.name, apollo_org_id: company.apollo_org_id, website: company.website || company.website_url,
             domain: company.domain || company.primary_domain, industry: company.industry,
-            organization_id: organizationId, created_by: currentUserId, stage: "Identified", status: "Active",
+            organization_id: organizationId, created_by: currentUserId, status: "Active",
+            is_saved: true,
           }).select("id").single();
           if (error) throw error;
           companyId = data.id;
+        } else if (companyId) {
+          await supabase.from("companies").update({ is_saved: true }).eq("id", companyId);
         }
         if (!companyId) { fail++; continue; }
-        await supabase.from("company_workspace_files").upsert({ company_id: companyId, file_id: targetFileId, added_by: currentUserId }, { onConflict: "company_id,file_id" });
+
+        for (const fileId of targetFileIds) {
+          await supabase.from("company_workspace_files").upsert(
+            { company_id: companyId, file_id: fileId, added_by: currentUserId },
+            { onConflict: "company_id,file_id" }
+          );
+        }
         ok++;
       } catch { fail++; }
     }
-    toast({ title: `${ok} added to list`, description: fail > 0 ? `${fail} failed` : undefined });
+
+    toast({
+      title: `${ok} compan${ok !== 1 ? "ies" : "y"} added to ${targetFileIds.length} list${targetFileIds.length !== 1 ? "s" : ""}`,
+      description: fail > 0 ? `${fail} failed` : undefined,
+    });
+
+    if (isCloudMode && apiResults) {
+      setApiResults(prev => {
+        if (!prev) return prev;
+        const selectedSet = new Set(companies.map((c: any) => c.apollo_org_id || c.id?.toString()));
+        const newOrgs = prev.organizations.map(o => {
+          const matchKey = o.apollo_org_id || o.id?.toString();
+          return selectedSet.has(matchKey) ? { ...o, is_saved: true } : o;
+        });
+        return { ...prev, organizations: newOrgs };
+      });
+    }
+
     setSelectedOrgs(new Set());
-    queryClient.invalidateQueries({ queryKey:["companies-crm"] });
+    queryClient.invalidateQueries({ queryKey: ["companies-crm"] });
+    queryClient.invalidateQueries({ queryKey: ["company-list-memberships"] });
     setListModalOpen(false);
     setIsBulkAddingList(false);
+  };
+
+  // 2. ADD THIS: Single Company Save Handler
+  const handleSaveCompany = async (company: any) => {
+    let companyId = company.id;
+    const cidStr = companyId?.toString() || company.apollo_org_id;
+    setIsSavingIds(prev => new Set(prev).add(cidStr));
+    try {
+      if (!companyId && company.apollo_org_id) {
+        const { data, error } = await supabase.from("companies").insert({
+          name: company.name, website: company.website || company.website_url,
+          domain: company.domain || company.primary_domain, apollo_org_id: company.apollo_org_id, logo_url: company.logo_url,
+          industry: company.industry, location:[company.city, company.state, company.country].filter(Boolean).join(", "),
+          employee_count: company.estimated_num_employees || company.employee_count, revenue: company.annual_revenue || company.revenue,
+          organization_id: organizationId, created_by: currentUserId, status: "Intelligence",
+          is_saved: true
+        }).select("id").single();
+        if (error) throw error;
+        companyId = data.id;
+      } else if (companyId) {
+        const { error } = await supabase.from("companies").update({ is_saved: true }).eq("id", companyId);
+        if (error) throw error;
+      }
+      toast({ title: "Company Saved" });
+      
+      if (isCloudMode && apiResults) {
+         setApiResults(prev => {
+            if (!prev) return prev;
+            const newOrgs = prev.organizations.map(o => 
+               (o.id === companyId || o.apollo_org_id === company.apollo_org_id) ? { ...o, is_saved: true, id: companyId } : o
+            );
+            return { ...prev, organizations: newOrgs };
+         });
+      }
+      queryClient.invalidateQueries({ queryKey: ["companies-crm"] });
+    } catch (e: any) {
+      toast({ title: "Save Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setIsSavingIds(prev => { const n = new Set(prev); n.delete(cidStr); return n; });
+    }
+  };
+
+  // 3. ADD THIS: Bulk Save Handler
+  const handleBulkSave = async () => {
+    setIsBulkSaving(true);
+    const companiesToSave = displayCompanies.filter((c: any) => selectedOrgs.has(c._derived.companyId));
+    let ok = 0, fail = 0;
+    
+    for (const company of companiesToSave) {
+      try {
+        let companyId = company.id;
+        if (!companyId && company.apollo_org_id) {
+          const { data, error } = await supabase.from("companies").insert({
+            name: company.name, website: company.website || company.website_url,
+            domain: company.domain || company.primary_domain, apollo_org_id: company.apollo_org_id, logo_url: company.logo_url,
+            industry: company.industry, location:[company.city, company.state, company.country].filter(Boolean).join(", "),
+            employee_count: company.estimated_num_employees || company.employee_count, revenue: company.annual_revenue || company.revenue,
+            organization_id: organizationId, created_by: currentUserId, status: "Intelligence",
+            is_saved: true
+          }).select("id").single();
+          if (error) throw error;
+          companyId = data.id;
+        } else if (companyId) {
+          const { error } = await supabase.from("companies").update({ is_saved: true }).eq("id", companyId);
+          if (error) throw error;
+        }
+        ok++;
+      } catch (e) { fail++; }
+    }
+    
+    if (isCloudMode && apiResults) {
+         setApiResults(prev => {
+            if (!prev) return prev;
+            const selectedSet = new Set(companiesToSave.map((c: any) => c.apollo_org_id || c.id?.toString()));
+            const newOrgs = prev.organizations.map(o => {
+               const matchKey = o.apollo_org_id || o.id?.toString();
+               return selectedSet.has(matchKey) ? { ...o, is_saved: true } : o;
+            });
+            return { ...prev, organizations: newOrgs };
+         });
+    }
+
+    toast({ title: `${ok} companies saved`, description: fail > 0 ? `${fail} failed` : undefined });
+    setSelectedOrgs(new Set());
+    queryClient.invalidateQueries({ queryKey: ["companies-crm"] });
+    setIsBulkSaving(false);
   };
 
   const displayCompanies = useMemo(() => {
@@ -801,6 +958,8 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
     : 0;
 
   return (
+<TooltipProvider delayDuration={300}>
+
     <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-slate-50/80">
       {/* ════ HEADER ════════════════════════════════════════════════════════ */}
       <header className="bg-white border-b border-slate-200 px-5 flex items-center gap-3 shadow-sm z-30 flex-shrink-0 h-[52px]">
@@ -928,7 +1087,6 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
         )}
 
         {/* Outer TooltipProvider wraps headers & table completely */}
-<TooltipProvider delayDuration={300}>
   {!isCloudMode && (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -943,7 +1101,6 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
       <TooltipContent>Refresh</TooltipContent>
     </Tooltip>
   )}
-</TooltipProvider>
 </header>
 
       {/* ════ BODY ══════════════════════════════════════════════════════════ */}
@@ -952,7 +1109,6 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
           <div className="w-[240px] flex-shrink-0 border-r border-slate-200 bg-white z-20 flex flex-col overflow-y-hidden">
             {isCloudMode ? (
               <CompanySearchFilterSidebar
-                // Safely providing clear handler downstream so Sidebar's own "Clear" button handles session reset
                 onClear={handleClearCloudFilters}
                 onSearch={(apolloFilters, summary) => {
                   lastSearchSummaryRef.current = summary;
@@ -963,10 +1119,9 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
                 totalResults={totalResults}
                 onClose={() => setIsSidebarOpen(false)}
                 initialFilters={apiFilters}
-                onFiltersChange={(chips, count) => {
-                  setPendingChips(chips);
-                  setPendingCount(count);
-                }}
+                
+                
+                onFiltersChange={handleCloudFiltersChange}
               />
             ) : (
               <DatabaseFilterSidebar
@@ -1007,12 +1162,20 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
               {selectedOrgs.size > 0 && (
                 <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-indigo-50 border-b border-indigo-100 z-10">
                   <span className="text-xs font-semibold text-indigo-700 mr-1">{selectedOrgs.size} selected</span>
-                  <button
+                        {isCloudMode && (
+        <button
+          onClick={handleBulkSave} disabled={isBulkSaving}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 transition-colors disabled:opacity-60"
+        >
+          {isBulkSaving ? <Loader2 size={12} className="animate-spin" /> : <BookmarkPlus size={12} />} Save Companies
+        </button>
+      )}
+                  {/* <button
                     onClick={handleBulkPromote} disabled={isBulkPromoting}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-60"
                   >
                     {isBulkPromoting ? <Loader2 size={12} className="animate-spin" /> : <DatabaseZap size={12} />} Promote to CRM
-                  </button>
+                  </button> */}
                   <button
                     onClick={() => { setSelectedCompanyForList(null); setListModalOpen(true); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 transition-colors"
@@ -1042,23 +1205,26 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
                       <table className="w-full min-w-max divide-y divide-slate-200 table-fixed">
                         <thead className="sticky top-0 z-10 bg-gradient-to-r from-indigo-600 to-violet-600 shadow-sm">
                           <tr className="h-10">
-                            <th className="sticky left-0 z-30 bg-gradient-to-r from-indigo-600 to-violet-600 px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider border-r border-white/20 shadow-[2px_0_6px_-3px_rgba(0,0,0,0.25)] w-[260px]">
-                              <div className="flex items-center gap-2">
-                                <Checkbox
-                                  checked={displayCompanies.length > 0 && displayCompanies.every((c: any) => selectedOrgs.has(c._derived.companyId))}
-                                  onCheckedChange={handleSelectAll} className="border-white/70 data-[state=checked]:bg-white/20 data-[state=checked]:border-white/70 h-3.5 w-3.5"
-                                /> Company
-                              </div>
-                            </th>
-                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[160px]"><div className="flex items-center gap-1"><Phone className="h-3 w-3" /> Phone</div></th>
-                            <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-white uppercase tracking-wider w-[100px]">Links</th>
-                            <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-white uppercase tracking-wider w-[110px]">Revenue</th>
-                            <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-white uppercase tracking-wider w-[90px]">Founded</th>
-                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[150px]">CRM Stage</th>
-                            <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-white uppercase tracking-wider w-[110px]">Actions</th>
-                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[200px]"><div className="flex items-center gap-1"><MapPin className="h-3 w-3" /> Location</div></th>
-                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[150px]">Industry</th>
-                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[110px]"><div className="flex items-center gap-1"><Users className="h-3 w-3" /> Employees</div></th>
+                            <th className="sticky left-0 z-20 px-3 py-2.5 text-left w-[40px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 border-r border-slate-200">
+  <Checkbox
+    checked={displayCompanies.length > 0 && displayCompanies.every((c: any) => selectedOrgs.has(c._derived.companyId))}
+    onCheckedChange={handleSelectAll}
+    className="border-slate-300 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600 h-3.5 w-3.5"
+  />
+</th>
+
+<th className="sticky left-[40px] z-20 px-3 py-2.5 text-left w-[240px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 border-r border-slate-200">
+  Company
+</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 w-[160px]"><div className="flex items-center gap-1"><Phone className="h-3 w-3" /> Phone</div></th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 w-[100px]">Links</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 w-[110px]">Revenue</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 w-[90px]">Founded</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 w-[150px]">CRM Stage</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 w-[110px]">Actions</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 w-[200px]"><div className="flex items-center gap-1"><MapPin className="h-3 w-3" /> Location</div></th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 w-[150px]">Industry</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 w-[110px]"><div className="flex items-center gap-1"><Users className="h-3 w-3" /> Employees</div></th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 bg-white text-[11px]">
@@ -1085,9 +1251,16 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
                                 // Enforcing explicit exact height instead of ref recalculations
                                 className={cn("h-[52px] group transition-colors duration-100", isSelected ? "bg-indigo-50/60" : "hover:bg-slate-50/80")}
                               >
-                                <td className="sticky left-0 z-5 bg-white group-hover:bg-slate-50/80 px-3 py-2 shadow-[2px_0_6px_-3px_rgba(0,0,0,0.08)] border-r border-slate-100 w-[260px]">
+                                <td className="sticky left-0 z-5 bg-white group-hover:bg-slate-50 px-3 py-2 border-r border-slate-100 w-[40px]">
+  <Checkbox
+    checked={isSelected}
+    onCheckedChange={() => handleSelectOrg(companyId)}
+    className="border-slate-300 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600 h-3.5 w-3.5"
+  />
+</td>
+                                <td className="sticky left-[40px] left-0 z-5 bg-white group-hover:bg-slate-50 px-3 py-2 shadow-[2px_0_6px_-3px_rgba(0,0,0,0.08)] border-r border-slate-100 w-[260px]">
                                   <div className="flex items-center gap-2">
-                                    <Checkbox checked={isSelected} onCheckedChange={() => handleSelectOrg(companyId)} className="border-slate-300 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600 h-3.5 w-3.5" />
+                                   
                                     <Avatar className="h-8 w-8 border shadow-sm flex-shrink-0">
                                       <AvatarImage src={company.logo_url} />
                                       <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white text-[9px] font-bold">{getInitials(company.name)}</AvatarFallback>
@@ -1099,8 +1272,8 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
                                         ) : (
                                           <span className="font-semibold text-slate-900 truncate text-[11px] block leading-tight">{company.name}</span>
                                         )}
-                                        {hasApollo   && <Sparkles className="h-3 w-3 text-amber-500 flex-shrink-0" />}
-                                        {isPromoted  && <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />}
+                                        {/* {hasApollo   && <Sparkles className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+                                        {isPromoted  && <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />} */}
                                       </div>
                                       <p className="text-[9px] text-slate-500 truncate">{domain || "No domain"}</p>
                                     </div>
@@ -1150,27 +1323,110 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
                                     </DropdownMenuContent>
                                   </DropdownMenu>
                                 </td>
-                                <td className="px-3 py-2 whitespace-nowrap text-center w-[110px]">
-                                  <div className="flex items-center justify-center gap-0.5">
-                                    {!isCloudMode && company.id && (
-                                      <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:bg-indigo-50"><RouterLink to={`/companies/${company.id}`}><Eye className="h-3.5 w-3.5" /></RouterLink></Button></TooltipTrigger><TooltipContent>View</TooltipContent></Tooltip>
-                                    )}
-                                    {!isCloudMode && !isPromoted && company.id && (
-                                      <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md" onClick={() => promoteMutation.mutate(company.id)} disabled={promoteMutation.isPending}>{promoteMutation.isPending && promoteMutation.variables === company.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Star className="h-3.5 w-3.5" />}</Button></TooltipTrigger><TooltipContent>Promote</TooltipContent></Tooltip>
-                                    )}
-                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 rounded-md"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end" className="w-52">
-                                        {company.apollo_org_id && <DropdownMenuItem onClick={() => getInfoMutation.mutate(company.apollo_org_id)} disabled={getInfoMutation.isPending}><Zap className="h-4 w-4 mr-2" />Get Full Info</DropdownMenuItem>}
-                                        {domain && <DropdownMenuItem onClick={() => enrichMutation.mutate(company)} disabled={enrichingIds.has(companyId)}><Sparkles className="h-4 w-4 mr-2" />{enrichingIds.has(companyId) ? "Enriching…" : "Enrich Data"}</DropdownMenuItem>}
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={() => { setSelectedCompanyForList(company); setListModalOpen(true); }}><ListPlus className="h-4 w-4 mr-2" />Add to List…</DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        {(company.website || company.website_url) && <DropdownMenuItem asChild><a href={company.website || company.website_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 mr-2" />Visit Website</a></DropdownMenuItem>}
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
-                                  </div>
-                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-center w-[140px]">
+  <div className="flex items-center justify-center gap-0.5  group-hover:opacity-100 transition-opacity duration-150">
+
+    {/* View */}
+    {!isCloudMode && company.id && (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+            asChild
+          >
+            <RouterLink to={`/companies/${company.id}`}>
+              <Eye size={13} />
+            </RouterLink>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="text-xs">View</TooltipContent>
+      </Tooltip>
+    )}
+
+    {/* Save (Cloud mode) */}
+    {isCloudMode && (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+            onClick={() => handleSaveCompany(company)}
+            disabled={company.is_saved || isSavingIds.has(companyId)}
+          >
+            {company.is_saved ? (
+              <BookmarkCheck size={13} className="text-green-600" />
+            ) : (
+              <BookmarkPlus size={13} />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="text-xs">
+          {company.is_saved ? "Saved" : "Save"}
+        </TooltipContent>
+      </Tooltip>
+    )}
+
+    {/* Add to List */}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+          onClick={() => {
+            setSelectedCompanyForList(company);
+            setListModalOpen(true);
+          }}
+        >
+          <ListPlus size={13} />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent className="text-xs">Add to List</TooltipContent>
+    </Tooltip>
+
+    {/* Enrich */}
+    {/* {domain && (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg"
+            onClick={() => enrichMutation.mutate(company)}
+            disabled={enrichingIds.has(companyId)}
+          >
+            {enrichingIds.has(companyId)
+              ? <Loader2 size={13} className="animate-spin" />
+              : <Zap size={13} />
+            }
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="text-xs">Enrich</TooltipContent>
+      </Tooltip>
+    )} */}
+
+    {/* Get Full Info */}
+    {!isCloudMode && company.apollo_org_id && (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg"
+            onClick={() => getInfoMutation.mutate(company.apollo_org_id)}
+          >
+            <Sparkles size={13} />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="text-xs">Get Full Info</TooltipContent>
+      </Tooltip>
+    )}
+
+  </div>
+</td>
                                 <td className="px-3 py-2 w-[200px] leading-tight">
                                   <div className="flex flex-col gap-0.5">
                                     <div className="flex items-center gap-1.5 text-[10.5px] text-slate-700 font-medium"><MapPin className="h-3.5 w-3.5 text-slate-400 flex-shrink-0 mt-0.5" /><span className="truncate max-w-[160px]">{primaryLoc}</span></div>
@@ -1242,11 +1498,35 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
       </div>
 
       {selectedCompanyForList && listModalOpen && (
-        <AddToCompanyListModal open={listModalOpen} onOpenChange={open => { setListModalOpen(open); if (!open) setSelectedCompanyForList(null); }} onConfirm={handleListAdd} companyName={selectedCompanyForList.name} isFromSearch={isCloudMode} />
+        <AddToCompanyListModal
+          open={listModalOpen}
+          onOpenChange={open => { setListModalOpen(open); if (!open) setSelectedCompanyForList(null); }}
+          companyName={selectedCompanyForList.name}
+          companyIds={
+            // Only pass ID for saved CRM companies — cloud companies don't have one yet
+            !isCloudMode && selectedCompanyForList.id ? [selectedCompanyForList.id.toString()] : []
+          }
+          onConfirm={handleListAdd}
+          isFromSearch={isCloudMode}
+        />
       )}
 
       {!selectedCompanyForList && listModalOpen && selectedOrgs.size > 0 && (
-        <AddToCompanyListModal open={listModalOpen} onOpenChange={open => { setListModalOpen(open); }} onConfirm={handleBulkAddToList} companyName={`${selectedOrgs.size} companies`} isFromSearch={isCloudMode} />
+        <AddToCompanyListModal
+          open={listModalOpen}
+          onOpenChange={open => { setListModalOpen(open); }}
+          companyName={`${selectedOrgs.size} companies`}
+          companyIds={
+            // For CRM bulk: pass all selected company IDs
+            !isCloudMode
+              ? displayCompanies
+                  .filter((c: any) => selectedOrgs.has(c._derived.companyId) && c.id)
+                  .map((c: any) => c.id.toString())
+              : []
+          }
+          onConfirm={handleBulkAddToList}
+          isFromSearch={isCloudMode}
+        />
       )}
 
       <Dialog open={!!viewingOrgDetails} onOpenChange={() => setViewingOrgDetails(null)}>
@@ -1295,6 +1575,8 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
         </DialogContent>
       </Dialog>
     </div>
+</TooltipProvider>
+
   );
 };
 

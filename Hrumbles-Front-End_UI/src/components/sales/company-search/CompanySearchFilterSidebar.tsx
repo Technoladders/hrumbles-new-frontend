@@ -527,9 +527,14 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
   }, []);
 
   // ── Emit pending chips to parent on every filter change ────────────────────
+  // ADD THIS: Use a ref to store the latest callback without forcing re-renders
+  const onFiltersChangeRef = useRef(onFiltersChange);
   useEffect(() => {
-    if (!onFiltersChange) return;
-    const chips: string[] = [];
+    onFiltersChangeRef.current = onFiltersChange;
+  }, [onFiltersChange]);
+
+  useEffect(() => {
+    const chips: string[] =[];
     if (filters.companyName)              chips.push(filters.companyName);
     filters.keywords.forEach(k           => chips.push(k));
     filters.industries.forEach(v         => chips.push(v));
@@ -541,8 +546,12 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
     filters.fundingStages.forEach(v      => chips.push(v));
     if (filters.foundedYearMin || filters.foundedYearMax)
       chips.push(`Founded: ${filters.foundedYearMin || '?'}–${filters.foundedYearMax || '?'}`);
-    onFiltersChange(chips, chips.length);
-  }, [filters, onFiltersChange]);
+    
+    // Call via Ref safely without it being a dependency 
+    if (onFiltersChangeRef.current) {
+      onFiltersChangeRef.current(chips, chips.length);
+    }
+  }, [filters]); // <-- REMOVED onFiltersChange from dependency array
 
   // ── Build human-readable summary for recent-search storage ─────────────────
   const buildSearchSummary = useCallback((): string => {
