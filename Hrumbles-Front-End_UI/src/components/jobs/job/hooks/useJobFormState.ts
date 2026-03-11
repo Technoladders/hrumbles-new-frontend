@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { JobData } from "@/lib/types";
+import { supabase } from "@/integrations/supabase/client";
 import { getLastJobIdForOrg } from "@/services/jobs/supabaseQueries";
 import { getAuthDataFromLocalStorage } from '@/utils/localstorage';
 
@@ -30,6 +31,7 @@ export interface JobInformationData {
   maximumYear: number;
   maximumMonth: number;
   dueDate: string | null;
+  isSkillMatrixMandatory: boolean;
 }
 
 export interface ExperienceSkillsData {
@@ -77,6 +79,8 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
 
     const organizationId = organization_id;
 
+    const [orgSettings, setOrgSettings] = useState<any>(null);
+
 
   const [formData, setFormData] = useState<JobFormData>({
     jobInformation: {
@@ -91,6 +95,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
       maximumYear: 0,
       maximumMonth: 0,
       dueDate: null,
+      isSkillMatrixMandatory: true,
     },
     experienceSkills: {
       skills: [],
@@ -130,6 +135,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
           maximumYear: editJob.experience?.max?.years || 0,
           maximumMonth: editJob.experience?.max?.months || 0,
           dueDate: editJob.dueDate || null,
+          isSkillMatrixMandatory: editJob.isSkillMatrixMandatory || false,
         },
         experienceSkills: {
           skills: editJob.skills || [],
@@ -156,50 +162,78 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
 
     // 2. Handle Auto-ID Generation (Only for TUP Org & New Jobs)
   useEffect(() => {
-    const generateTupId = async () => {
-      if (!editJob && organizationId === TUP_ORG_ID) {
-        
-        const lastId = await getLastJobIdForOrg(TUP_ORG_ID);
-        let nextId = "TUP001"; // Default start
+    const fetchSettingsAndGenerateId = async () => {
+      // 1. Fetch organizational settings
+      const { data: orgData } = await supabase
+        .from("hr_organizations")
+        .select("is_job_id_auto, job_id_prefix, is_skill_matrix_mandatory")
+        .eq("id", organizationId)
+        .single();
+
+      if (orgData) setOrgSettings(orgData);
+
+      // Do not generate ID if we are editing an existing job
+      if (editJob) return;
+
+      // 2. Logic for TUP Org (Leaves original behavior unchanged)
+      if (organizationId === TUP_ORG_ID) {
+        const lastId = await getLastJobIdForOrg(TUP_ORG_ID, "TUP");
+        let nextId = "TUP001";
 
         if (lastId) {
-          // Extract numeric part
           const match = lastId.match(/^TUP(\d+)$/);
           if (match) {
             const numStr = match[1];
             const currentLength = numStr.length;
             const currentVal = parseInt(numStr, 10);
-            
-            // Calculate max value for current digit length (e.g., 999 for length 3)
             const maxVal = Math.pow(10, currentLength) - 1;
             
             let nextValString = "";
             let nextPrefixLength = currentLength;
 
             if (currentVal >= maxVal) {
-               // Expand digits: 999 -> 0001
                nextPrefixLength = currentLength + 1;
                nextValString = "1".padStart(nextPrefixLength, "0");
             } else {
-               // Standard increment
                nextValString = (currentVal + 1).toString().padStart(currentLength, "0");
             }
-            
             nextId = `TUP${nextValString}`;
           }
         }
+        setFormData(prev => ({...prev, jobInformation: { ...prev.jobInformation, jobId: nextId }}));
+      } 
+      // 3. Logic for New Org Settings Prefix
+      else if (orgData?.is_job_id_auto && orgData?.job_id_prefix) {
+        const prefix = orgData.job_id_prefix;
+        const lastId = await getLastJobIdForOrg(organizationId, prefix);
+        let nextId = `${prefix}001`;
 
-        setFormData(prev => ({
-          ...prev,
-          jobInformation: {
-            ...prev.jobInformation,
-            jobId: nextId
+        if (lastId) {
+          const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const match = lastId.match(new RegExp(`^${escapedPrefix}(\\d+)$`));
+          if (match) {
+            const numStr = match[1];
+            const currentLength = numStr.length;
+            const currentVal = parseInt(numStr, 10);
+            const maxVal = Math.pow(10, currentLength) - 1;
+            
+            let nextValString = "";
+            let nextPrefixLength = currentLength;
+
+            if (currentVal >= maxVal) {
+               nextPrefixLength = currentLength + 1;
+               nextValString = "1".padStart(nextPrefixLength, "0");
+            } else {
+               nextValString = (currentVal + 1).toString().padStart(currentLength, "0");
+            }
+            nextId = `${prefix}${nextValString}`;
           }
-        }));
+        }
+        setFormData(prev => ({...prev, jobInformation: { ...prev.jobInformation, jobId: nextId }}));
       }
     };
 
-    generateTupId();
+    fetchSettingsAndGenerateId();
   }, [organizationId, editJob]);
 
 
@@ -212,6 +246,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
 
   return {
     formData,
-    updateFormData
+    updateFormData,
+    orgSettings
   };
 };

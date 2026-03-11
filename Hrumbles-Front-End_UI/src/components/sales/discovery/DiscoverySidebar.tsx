@@ -375,11 +375,11 @@ function JobTitleSelect({ selected, onChange }: { selected: string[]; onChange: 
         </div>
       )}
       <div ref={anchorRef} className="relative">
-        <Briefcase className="absolute left-2.5 top-2 text-slate-400 pointer-events-none" size={11} />
+        <Briefcase className="absolute left-2.5 top-3 text-slate-400 pointer-events-none text-[10px]" size={11} />
         <Input
           ref={inputRef}
           placeholder="e.g. CEO, Marketing Director…"
-          className="pl-7 h-8 text-xs border-slate-200"
+          className="pl-7 h-8 text-xs border-slate-200 placeholder:italic placeholder:text-[10px] placeholder:text-slate-400"
           value={q}
           onChange={e => { setQ(e.target.value); if (e.target.value.trim()) setOpen(true); else setOpen(false); }}
           onFocus={() => { if (q.trim()) setOpen(true); }}
@@ -906,7 +906,7 @@ export function DiscoverySidebar({ onFiltersChange }: DiscoverySidebarProps) {
             count={local.person_titles.length + local.person_seniorities.length}>
             <div className="pt-1 space-y-3">
               <div>
-                <p className="text-[9px] uppercase text-slate-400 font-semibold mb-1.5">Job Titles</p>
+                <p className="text-[9px] uppercase text-slate-700 font-semibold tracking-wide mb-1.5">Job Titles</p>
                 <JobTitleSelect
                   selected={local.person_titles}
                   onChange={v => setLocal(p => ({ ...p, person_titles: v }))}
@@ -916,12 +916,12 @@ export function DiscoverySidebar({ onFiltersChange }: DiscoverySidebarProps) {
                     onChange={e => setLocal(p => ({ ...p, include_similar_titles: e.target.checked }))}
                     className="h-3 w-3 rounded accent-indigo-600"
                   />
-                  <label htmlFor="simtitles" className="text-[10px] text-slate-500 cursor-pointer">Include similar titles</label>
+                  <label htmlFor="simtitles" className="text-[10px] text-slate-600 cursor-pointer">Include similar titles</label>
                 </div>
               </div>
 
               <div>
-                <p className="text-[9px] uppercase text-slate-400 font-semibold mb-1">Seniority</p>
+                <p className="text-[9px] uppercase text-slate-700 tracking-wide font-semibold mb-1">Seniority</p>
                 <div className="grid grid-cols-2 gap-x-1 gap-y-0.5">
                   {SENIORITIES.map(s => (
                     <FilterChip key={s.id} id={`sen-${s.id}`} label={s.label}

@@ -1,126 +1,134 @@
 // src/hooks/sales/useCompanyFilterParams.ts
-// Serialises ALL company CRM filters + pagination to URL search params.
-// Arrays → comma-separated  |  booleans → "1"  |  page as numbers
-// Mirrors the exact same pattern as useContactFilterParams.ts
-
 import { useSearchParams } from 'react-router-dom';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
-// ── Filter shape ─────────────────────────────────────────────────────────────
+// ============================================================================
+// Type
+// ============================================================================
 
-export interface CompanyFilters {
+export interface CompanyDBFilters {
   search:         string;
+  companyIds:     number[];       // selected specific companies (include filter)
   industries:     string[];
+  locations:      string[];
   stages:         string[];
-  countries:      string[];
-  states:         string[];
-  cities:         string[];
-  employeeRanges: string[];    // "min,max" e.g. "51,200" or "10000,"
-  hasApollo:      boolean;     // has enrichment / cloud data
-  isActive:       boolean;     // status = 'Active'
-  foundedMin:     string;
-  foundedMax:     string;
+  employeeRanges: string[];
+  revenueRanges:  string[];
+  isEnriched:     boolean | null; // true → only companies with enrichment_org_raw_responses records
+  hasPhone:       boolean | null; // true → only companies with phone data
+  foundedYearMin: number | null;
+  foundedYearMax: number | null;
 }
 
-export const EMPTY_COMPANY_FILTERS: CompanyFilters = {
+export const EMPTY_DB_FILTERS: CompanyDBFilters = {
   search:         '',
+  companyIds:     [],
   industries:     [],
+  locations:      [],
   stages:         [],
-  countries:      [],
-  states:         [],
-  cities:         [],
   employeeRanges: [],
-  hasApollo:      false,
-  isActive:       false,
-  foundedMin:     '',
-  foundedMax:     '',
+  revenueRanges:  [],
+  isEnriched:     null,
+  hasPhone:       null,
+  foundedYearMin: null,
+  foundedYearMax: null,
 };
 
-// ── Serialisation helpers ─────────────────────────────────────────────────────
+// ============================================================================
+// Helpers
+// ============================================================================
 
-const ARRAY_KEYS:  (keyof CompanyFilters)[] = [
-  'industries','stages','countries','states','cities','employeeRanges',
-];
-const BOOL_KEYS:   (keyof CompanyFilters)[] = ['hasApollo','isActive'];
-const STRING_KEYS: (keyof CompanyFilters)[] = ['search','foundedMin','foundedMax'];
-
-export function parseCompanyFiltersFromParams(params: URLSearchParams): CompanyFilters {
-  const f = { ...EMPTY_COMPANY_FILTERS };
-  STRING_KEYS.forEach(k => { (f as any)[k] = params.get(k as string) || ''; });
-  ARRAY_KEYS.forEach(k => {
-    const raw = params.get(k as string);
-    (f as any)[k] = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
-  });
-  BOOL_KEYS.forEach(k => { (f as any)[k] = params.get(k as string) === '1'; });
-  return f;
-}
-
-export function companyFiltersToParams(f: CompanyFilters): Record<string, string> {
-  const out: Record<string, string> = {};
-  STRING_KEYS.forEach(k => { if ((f as any)[k]) out[k as string] = (f as any)[k]; });
-  ARRAY_KEYS.forEach(k => {
-    const arr = (f as any)[k] as string[];
-    if (arr.length) out[k as string] = arr.join(',');
-  });
-  BOOL_KEYS.forEach(k => { if ((f as any)[k]) out[k as string] = '1'; });
-  return out;
-}
-
-export function hasActiveCompanyFilters(f: CompanyFilters): boolean {
-  return !!(
-    f.search ||
-    f.industries.length || f.stages.length || f.countries.length ||
-    f.states.length || f.cities.length || f.employeeRanges.length ||
-    f.hasApollo || f.isActive || f.foundedMin || f.foundedMax
-  );
-}
-
-export function countActiveCompanyFilters(f: CompanyFilters): number {
+export function countActiveDBFilters(f: CompanyDBFilters): number {
   let n = 0;
-  if (f.search) n++;
-  n += f.industries.length + f.stages.length + f.countries.length +
-       f.states.length + f.cities.length + f.employeeRanges.length;
-  if (f.hasApollo)  n++;
-  if (f.isActive)   n++;
-  if (f.foundedMin || f.foundedMax) n++;
+  if (f.search)                  n++;
+  n += (f.companyIds     || []).length;
+  n += (f.industries     || []).length;
+  n += (f.locations      || []).length;
+  n += (f.stages         || []).length;
+  n += (f.employeeRanges || []).length;
+  n += (f.revenueRanges  || []).length;
+  if (f.isEnriched     !== null) n++;
+  if (f.hasPhone       !== null) n++;
+  if (f.foundedYearMin !== null) n++;
+  if (f.foundedYearMax !== null) n++;
   return n;
 }
 
-export function buildCompanyFilterSummary(f: CompanyFilters): string {
+export function buildDBFilterSummary(f: CompanyDBFilters): string {
   const parts: string[] = [];
-  if (f.search)               parts.push(`"${f.search}"`);
-  if (f.industries.length)    parts.push(f.industries.slice(0,2).join(', '));
-  if (f.stages.length)        parts.push(`Stage: ${f.stages.slice(0,2).join(', ')}`);
-  if (f.countries.length)     parts.push(f.countries.slice(0,2).join(', '));
-  if (f.employeeRanges.length) parts.push('Employees filtered');
-  if (f.hasApollo)             parts.push('Has cloud data');
-  if (f.isActive)              parts.push('Active CRM');
-  if (f.foundedMin || f.foundedMax) parts.push(`Founded ${f.foundedMin||''}–${f.foundedMax||''}`);
+  if (f.search)                    parts.push(`"${f.search}"`);
+  if ((f.companyIds || []).length)  parts.push(`${f.companyIds.length} compan${f.companyIds.length === 1 ? 'y' : 'ies'}`);
+  if ((f.industries || []).length)  parts.push(f.industries.slice(0, 2).join(', ') + (f.industries.length > 2 ? '…' : ''));
+  if ((f.locations  || []).length)  parts.push(f.locations.slice(0, 2).join(', ')  + (f.locations.length  > 2 ? '…' : ''));
+  if ((f.stages     || []).length)  parts.push(f.stages.slice(0, 2).join(', ')     + (f.stages.length     > 2 ? '…' : ''));
+  if (f.isEnriched === true)        parts.push('Enriched');
+  if (f.hasPhone   === true)        parts.push('Has Phone');
+  if (f.foundedYearMin)             parts.push(`From ${f.foundedYearMin}`);
+  if (f.foundedYearMax)             parts.push(`To ${f.foundedYearMax}`);
   return parts.length ? parts.join(' · ') : 'All companies';
 }
 
-// ── Hook ─────────────────────────────────────────────────────────────────────
-// Exactly mirrors useFilterParams from useContactFilterParams.ts
+export function buildDBFilterChips(f: CompanyDBFilters): string[] {
+  const chips: string[] = [];
+  if (f.search)                       chips.push(`Search: ${f.search}`);
+  if ((f.companyIds || []).length)    chips.push(`${f.companyIds.length} compan${f.companyIds.length === 1 ? 'y' : 'ies'} selected`);
+  (f.industries     || []).forEach(i  => chips.push(`Industry: ${i}`));
+  (f.locations      || []).forEach(l  => chips.push(`Location: ${l}`));
+  (f.stages         || []).forEach(s  => chips.push(`Stage: ${s}`));
+  (f.employeeRanges || []).forEach(r  => chips.push(`Employees: ${r}`));
+  (f.revenueRanges  || []).forEach(r  => chips.push(`Revenue: ${r}`));
+  if (f.isEnriched === true)          chips.push('Is Enriched');
+  if (f.hasPhone   === true)          chips.push('Has Phone');
+  if (f.foundedYearMin)               chips.push(`Founded ≥ ${f.foundedYearMin}`);
+  if (f.foundedYearMax)               chips.push(`Founded ≤ ${f.foundedYearMax}`);
+  return chips;
+}
+
+// ============================================================================
+// Hook — syncs CRM filters to URL params for shareability
+// ============================================================================
 
 export function useCompanyFilterParams() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const currentFilters = parseCompanyFiltersFromParams(searchParams);
-  const currentPage    = parseInt(searchParams.get('page') || '1', 10);
+  const currentFilters = useMemo<CompanyDBFilters>(() => {
+    try {
+      const raw = searchParams.get('crm_filters');
+      if (!raw) return EMPTY_DB_FILTERS;
+      const parsed = JSON.parse(decodeURIComponent(raw)) as Partial<CompanyDBFilters>;
+      return { ...EMPTY_DB_FILTERS, ...parsed };
+    } catch {
+      return EMPTY_DB_FILTERS;
+    }
+  }, [searchParams]);
 
-  const writeFilters = useCallback((filters: CompanyFilters, page = 1) => {
-    const params = companyFiltersToParams(filters);
-    if (page > 1) params['page'] = String(page);
-    // preserve mode param
-    const mode = searchParams.get('mode');
-    if (mode) params['mode'] = mode;
-    setSearchParams(params, { replace: true });
-  }, [setSearchParams, searchParams]);
+  const currentPage = useMemo(
+    () => parseInt(searchParams.get('crm_page') || '1', 10),
+    [searchParams],
+  );
+
+  const writeFilters = useCallback((filters: CompanyDBFilters, page = 1) => {
+    setSearchParams(prev => {
+      const n = new URLSearchParams(prev);
+      if (countActiveDBFilters(filters) > 0) {
+        n.set('crm_filters', encodeURIComponent(JSON.stringify(filters)));
+      } else {
+        n.delete('crm_filters');
+      }
+      if (page > 1) n.set('crm_page', page.toString());
+      else          n.delete('crm_page');
+      return n;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   const clearFilters = useCallback(() => {
-    const mode = searchParams.get('mode');
-    setSearchParams(mode ? { mode } : {}, { replace: true });
-  }, [setSearchParams, searchParams]);
+    setSearchParams(prev => {
+      const n = new URLSearchParams(prev);
+      n.delete('crm_filters');
+      n.delete('crm_page');
+      return n;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   return { currentFilters, currentPage, writeFilters, clearFilters };
 }

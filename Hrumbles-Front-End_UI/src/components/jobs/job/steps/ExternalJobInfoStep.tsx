@@ -1,5 +1,6 @@
 // src/components/jobs/job/steps/ExternalJobInfoStep.tsx
 import { useSelector } from "react-redux";
+import { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -32,19 +33,29 @@ interface ExternalJobInfoData {
   minimumMonth: number;
   maximumYear: number;
   maximumMonth: number;
+  isSkillMatrixMandatory: boolean;
 }
 
 interface ExternalJobInfoStepProps {
   data: Partial<ExternalJobInfoData>;
   onChange: (data: Partial<ExternalJobInfoData>) => void;
+  orgSettings?: any;
 }
 
 const TUP_ORG_ID = "0e4318d8-b1a5-4606-b311-c56d7eec47ce";
+const AMPLE_ORG_ID = "e032d8c5-2168-4083-9919-c2e09719550a";
 
-const ExternalJobInfoStep = ({ data, onChange }: ExternalJobInfoStepProps) => {
+const ExternalJobInfoStep = ({ data, onChange, orgSettings }: ExternalJobInfoStepProps) => {
 
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const isTupOrg = organizationId === TUP_ORG_ID;
+  const isAmpleOrg = organizationId === AMPLE_ORG_ID;
+
+    useEffect(() => {
+    if (isAmpleOrg && data.isSkillMatrixMandatory === true) {
+      handleFieldChange("isSkillMatrixMandatory", false);
+    }
+  }, [isAmpleOrg]);
 
   const handleFieldChange = (field: keyof ExternalJobInfoData, value: any) => {
     onChange({ ...data, [field]: value });
@@ -188,6 +199,26 @@ const ExternalJobInfoStep = ({ data, onChange }: ExternalJobInfoStepProps) => {
                 />
               </div>
          </div>
+         {/* Skill Matrix Mandatory */}
+{orgSettings?.is_skill_matrix_mandatory && (
+  <div className="mt-6 flex items-center">
+    <Label className="flex items-center gap-2 cursor-pointer w-fit text-sm font-medium">
+      <input
+        type="checkbox"
+        checked={
+          isAmpleOrg
+            ? data.isSkillMatrixMandatory ?? false
+            : data.isSkillMatrixMandatory ?? true
+        }
+        onChange={(e) =>
+          handleFieldChange("isSkillMatrixMandatory", e.target.checked)
+        }
+        className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+      />
+      Make Skill Matrix Mandatory for Candidates
+    </Label>
+  </div>
+)}
       </div>
       
       {/* --- Experience Section (No changes) --- */}

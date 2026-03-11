@@ -74,10 +74,9 @@ const basicInfoSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Invalid email format"),
-  phone: z
+phone: z
     .string()
-    .regex(/^\+\d{10,15}$/, "Phone number must include country code and be 10-15 digits")
-    .min(1, "Phone number is required"),
+    .min(7, "Phone number must be at least 7 digits"),
   currentLocation: z.string().min(1, "Current location is required"),
   preferredLocations: z.array(z.string()).min(1, "At least one preferred location is required"),
 totalExperience: z
@@ -117,9 +116,7 @@ expectedSalary: z
   })
   .min(0, "Cannot be negative"),
   resume: z.string().url("Resume URL is required"),
-  noticePeriod: z
-    .enum(["Immediate", "15 days", "30 days", "45 days", "60 days", "90 days"])
-    .optional(),
+  noticePeriod: z.string().optional(),
   lastWorkingDay: z.string().optional(),
   // **FIX STARTS HERE**
   // 1. Define as a simple optional string. All logic will be in superRefine.
@@ -181,6 +178,8 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
   const [extractedResumeText, setExtractedResumeText] = useState<string | null>(null);
 
     const [parsedResumeData, setParsedResumeData] = useState<any | null>(null);
+
+    console.log("job.skills", job); 
 
   // Use controlled open state if provided, otherwise use internal state
   const controlledOpen = open !== undefined ? open : isOpen;
@@ -544,6 +543,7 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
               jobSkills={job.skills || []}
               onSave={(data) => handleSaveSkills(data)}
               onCancel={handleClose}
+              isSkillMatrixMandatory={job.isSkillMatrixMandatory} 
             />
           </TabsContent>
           <TabsContent value="proof-id">

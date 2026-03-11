@@ -38,6 +38,7 @@ export const mapFormDataToJobData = (
   const jobDataForDatabase: Partial<JobData> = {
     // --- Data from Job Information (Step 1) ---
     job_id: formData.jobInformation.jobId,
+    is_skill_matrix_mandatory: formData.jobInformation.isSkillMatrixMandatory,
     title: formData.jobInformation.jobTitle,
     location: formData.jobInformation.jobLocation,
     hiring_mode: formData.jobInformation.hiringMode,

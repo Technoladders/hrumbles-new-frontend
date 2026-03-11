@@ -20,11 +20,13 @@ import { type ApolloCompanySearchFilters } from '@/services/sales/apolloCompanyS
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface CompanySearchFilterSidebarProps {
-  onSearch: (filters: ApolloCompanySearchFilters) => void;
+  onSearch: (filters: ApolloCompanySearchFilters, summary: string) => void;
   isSearching?: boolean;
   totalResults?: number;
   onClose?: () => void;
   initialFilters?: ApolloCompanySearchFilters;
+  /** Called on every filter change so the parent can show pending chips in the empty state */
+  onFiltersChange?: (chips: string[], count: number) => void;
 }
 
 // ─── Static filter options ────────────────────────────────────────────────────
@@ -480,6 +482,7 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
   totalResults = 0,
   onClose,
   initialFilters = {},
+  onFiltersChange,
 }) => {
   const [filters, setFilters] = useState({
     companyName:      initialFilters.q_organization_name                           || '',
@@ -523,6 +526,51 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
     });
   }, []);
 
+  // ── Emit pending chips to parent on every filter change ────────────────────
+  useEffect(() => {
+    if (!onFiltersChange) return;
+    const chips: string[] = [];
+    if (filters.companyName)              chips.push(filters.companyName);
+    filters.keywords.forEach(k           => chips.push(k));
+    filters.industries.forEach(v         => chips.push(v));
+    filters.locations.forEach(v          => chips.push(v));
+    filters.excludedLocations.forEach(v  => chips.push(`⊘ ${v}`));
+    filters.employeeRanges.forEach(v     => chips.push(v.replace(',', '–')));
+    filters.revenueRanges.forEach(v      => chips.push(v));
+    filters.technologies.forEach(v       => chips.push(v));
+    filters.fundingStages.forEach(v      => chips.push(v));
+    if (filters.foundedYearMin || filters.foundedYearMax)
+      chips.push(`Founded: ${filters.foundedYearMin || '?'}–${filters.foundedYearMax || '?'}`);
+    onFiltersChange(chips, chips.length);
+  }, [filters, onFiltersChange]);
+
+  // ── Build human-readable summary for recent-search storage ─────────────────
+  const buildSearchSummary = useCallback((): string => {
+    const parts: string[] = [];
+    if (filters.companyName)             parts.push(`"${filters.companyName}"`);
+    if (filters.industries.length)       parts.push(filters.industries.join(', '));
+    if (filters.locations.length)        parts.push(filters.locations.join(', '));
+    if (filters.employeeRanges.length)   parts.push(`${filters.employeeRanges.length} size range(s)`);
+    if (filters.technologies.length)     parts.push(filters.technologies.join(', '));
+    if (filters.keywords.length)         parts.push(filters.keywords.join(', '));
+    return parts.join(' · ') || 'Company search';
+  }, [filters]);
+
+  // ── Build chips snapshot for saving in recent search ───────────────────────
+  const buildCurrentChips = useCallback((): string[] => {
+    const chips: string[] = [];
+    if (filters.companyName)              chips.push(filters.companyName);
+    filters.keywords.forEach(k           => chips.push(k));
+    filters.industries.forEach(v         => chips.push(v));
+    filters.locations.forEach(v          => chips.push(v));
+    filters.employeeRanges.forEach(v     => chips.push(v.replace(',', '–')));
+    filters.technologies.forEach(v       => chips.push(v));
+    filters.fundingStages.forEach(v      => chips.push(v));
+    if (filters.foundedYearMin || filters.foundedYearMax)
+      chips.push(`Founded: ${filters.foundedYearMin || '?'}–${filters.foundedYearMax || '?'}`);
+    return chips;
+  }, [filters]);
+
   // ── Build Apollo payload ────────────────────────────────────────────────────
   const handleSearch = useCallback(() => {
     const apolloFilters: ApolloCompanySearchFilters = {};
@@ -565,8 +613,8 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
         max: filters.foundedYearMax ? parseInt(filters.foundedYearMax) : null,
       };
 
-    onSearch(apolloFilters);
-  }, [filters, onSearch]);
+    onSearch(apolloFilters, buildSearchSummary());
+  }, [filters, onSearch, buildSearchSummary]);
 
   const handleReset = useCallback(() => {
     setFilters({
@@ -872,6 +920,7 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
         <Button
           onClick={handleSearch}
           disabled={isSearching}
+          data-run-search="true"
           className="w-full h-9 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold text-xs shadow-md"
         >
           {isSearching ? (

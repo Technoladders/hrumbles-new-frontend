@@ -1,1401 +1,1297 @@
 // src/pages/sales/CompanyIntelligenceSearchPage.tsx
+"use client";
+
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Link as RouterLink, useSearchParams, useParams, useNavigate } from "react-router-dom";
+import {
+  Link as RouterLink, useSearchParams, useParams, useNavigate,
+} from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { supabase } from "@/integrations/supabase/client";
 import { useSelector } from "react-redux";
 import {
-  Building2, Search, Plus, Globe, Linkedin, Users, MapPin,
+  Building2, Search, Globe, Linkedin, Users, MapPin,
   TrendingUp, DollarSign, Eye, ChevronLeft, ChevronRight,
-  Filter, X, Loader2, RefreshCw, Download, MoreHorizontal,
-  Sparkles, CheckCircle2, AlertCircle, ExternalLink, Save,
-  ListPlus, Info, Zap, Database, Settings2, Table2, Cloud,
-  SlidersHorizontal, ChevronDown, ArrowUpDown, Star, Bookmark,
-  Calendar, Hash, Tag, Building, Briefcase, Phone, Copy, Check,
-  Facebook, Twitter, Clock
+  X, Loader2, RefreshCw, MoreHorizontal,
+  Sparkles, CheckCircle2, ExternalLink,
+  ListPlus, Zap, Database,
+  ChevronDown, Star, Phone, Copy, Check,
+  Facebook, Twitter, Clock, ArrowLeft,
+  PanelLeftClose, PanelLeftOpen, Cloud,
+  FolderOpen, List, DatabaseZap, Folder
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Input }    from "@/components/ui/input";
+import { Badge }    from "@/components/ui/badge";
+import { Button }   from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogDescription,
+  DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem,
+  SelectLabel, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
+import { useToast }  from "@/hooks/use-toast";
+import { cn }        from "@/lib/utils";
+
 import { CompanySearchFilterSidebar } from "@/components/sales/company-search/CompanySearchFilterSidebar";
-import { DatabaseFilterSidebar } from "@/components/sales/company-search/DatabaseFilterSidebar";
+import { DatabaseFilterSidebar }      from "@/components/sales/company-search/DatabaseFilterSidebar";
+import { AddToCompanyListModal }       from "@/components/sales/company-search/AddToCompanyListModal";
+import { CompanySearchEmptyState, type CompanyRecentSearch }
+  from "@/components/sales/company-search/CompanySearchEmptyState";
+
 import {
   searchCompaniesInApolloV2,
-  saveAllSearchResultsToDatabase,
   enrichOrganization,
   getCompleteOrganizationInfo,
   promoteToActiveCRM,
   type ApolloOrganization,
   type ApolloCompanySearchFilters,
-  type ApolloSearchResponseV2,
 } from "@/services/sales/apolloCompanySearch";
-import { AddToCompanyListModal } from '@/components/sales/company-search/AddToCompanyListModal';
+
+import {
+  useCompanyFilterParams,
+  countActiveDBFilters,
+  buildDBFilterSummary,
+  buildDBFilterChips,
+  EMPTY_DB_FILTERS,
+  type CompanyDBFilters,
+} from "@/hooks/sales/useCompanyFilterParams";
+
 import { Skeleton } from "@/components/ui/skeleton";
-import PhoneInput, { parsePhoneNumber, isValidPhoneNumber } from 'react-phone-number-input';
-import flags from 'react-phone-number-input/flags';
-import 'react-phone-number-input/style.css';
-import { lookupViaCity, findFromCityStateProvince, findFromIsoCode } from 'city-timezones';
-import "react-country-state-city/dist/react-country-state-city.css"; // (optional, if you're using dropdowns elsewhere)
+import PhoneInput, { parsePhoneNumber, isValidPhoneNumber } from "react-phone-number-input";
+import flags from "react-phone-number-input/flags";
+import "react-phone-number-input/style.css";
+import { lookupViaCity, findFromCityStateProvince } from "city-timezones";
 
 // ============================================================================
-// Constants & Helpers
+// Constants
 // ============================================================================
 
-const STAGES = [
-  'Identified', 'Targeting', 'In Outreach', 'Warm', 'Qualified Company',
-  'Proposal Sent / In Discussion', 'Negotiation', 'Closed - Won',
-  'Closed - Lost', 'Re-engage Later',
+const STAGES =[
+  "Identified", "Targeting", "In Outreach", "Warm", "Qualified Company",
+  "Proposal Sent / In Discussion", "Negotiation", "Closed - Won",
+  "Closed - Lost", "Re-engage Later",
 ];
 
 const stageColors: Record<string, string> = {
-  'Identified': 'bg-blue-100 text-blue-800',
-  'Targeting': 'bg-indigo-100 text-indigo-800',
-  'In Outreach': 'bg-teal-100 text-teal-800',
-  'Warm': 'bg-yellow-100 text-yellow-800',
-  'Qualified Company': 'bg-green-100 text-green-800',
-  'Proposal Sent / In Discussion': 'bg-purple-100 text-purple-800',
-  'Negotiation': 'bg-orange-100 text-orange-800',
-  'Closed - Won': 'bg-emerald-100 text-emerald-800',
-  'Closed - Lost': 'bg-red-100 text-red-800',
-  'Re-engage Later': 'bg-gray-100 text-gray-800',
-  'Intelligence': 'bg-slate-100 text-slate-600',
-  'Active': 'bg-green-100 text-green-700',
-  'default': 'bg-gray-100 text-gray-800',
+  "Identified":                         "bg-blue-100 text-blue-800",
+  "Targeting":                          "bg-indigo-100 text-indigo-800",
+  "In Outreach":                        "bg-teal-100 text-teal-800",
+  "Warm":                               "bg-yellow-100 text-yellow-800",
+  "Qualified Company":                  "bg-green-100 text-green-800",
+  "Proposal Sent / In Discussion":      "bg-purple-100 text-purple-800",
+  "Negotiation":                        "bg-orange-100 text-orange-800",
+  "Closed - Won":                       "bg-emerald-100 text-emerald-800",
+  "Closed - Lost":                      "bg-red-100 text-red-800",
+  "Re-engage Later":                    "bg-gray-100 text-gray-800",
+  "Intelligence":                       "bg-slate-100 text-slate-600",
+  "Active":                             "bg-green-100 text-green-700",
+  "default":                            "bg-gray-100 text-gray-800",
 };
 
-// Country code to flag emoji
-const countryFlags: Record<string, string> = {
-  'US': '🇺🇸', 'GB': '🇬🇧', 'UK': '🇬🇧', 'IN': '🇮🇳', 'BR': '🇧🇷', 'DE': '🇩🇪',
-  'FR': '🇫🇷', 'ES': '🇪🇸', 'IT': '🇮🇹', 'JP': '🇯🇵', 'CN': '🇨🇳',
-  'AU': '🇦🇺', 'SG': '🇸🇬', 'AE': '🇦🇪', 'ZA': '🇿🇦', 'MY': '🇲🇾',
-  'MX': '🇲🇽', 'CH': '🇨🇭', 'EG': '🇪🇬', 'TR': '🇹🇷', 'CZ': '🇨🇿',
-  'CA': '🇨🇦', 'NL': '🇳🇱', 'BE': '🇧🇪', 'AT': '🇦🇹', 'SE': '🇸🇪',
-  'NO': '🇳🇴', 'DK': '🇩🇰', 'FI': '🇫🇮', 'PL': '🇵🇱', 'RU': '🇷🇺',
-  'KR': '🇰🇷', 'TH': '🇹🇭', 'ID': '🇮🇩', 'PH': '🇵🇭', 'VN': '🇻🇳',
-  'AR': '🇦🇷', 'CL': '🇨🇱', 'CO': '🇨🇴', 'PE': '🇵🇪', 'NG': '🇳🇬',
-  'KE': '🇰🇪', 'IL': '🇮🇱', 'SA': '🇸🇦', 'PK': '🇵🇰', 'BD': '🇧🇩',
-  'HK': '🇭🇰', 'TW': '🇹🇼', 'NZ': '🇳🇿', 'IE': '🇮🇪', 'PT': '🇵🇹',
-  'United States': '🇺🇸', 'United Kingdom': '🇬🇧', 'India': '🇮🇳',
-  'Brazil': '🇧🇷', 'Germany': '🇩🇪', 'France': '🇫🇷', 'Spain': '🇪🇸',
-  'Italy': '🇮🇹', 'Japan': '🇯🇵', 'China': '🇨🇳', 'Australia': '🇦🇺',
-  'Singapore': '🇸🇬', 'Canada': '🇨🇦', 'Mexico': '🇲🇽', 'Switzerland': '🇨🇭',
-};
+const LS_KEY_CLOUD = "companies_recent_cloud_searches_v1";
+const LS_KEY_CRM   = "companies_recent_crm_searches_v1";
 
-// Get flag from phone or country
-function getCountryFlag(sanitizedPhone?: string | null, country?: string | null): string {
-  // Try to get from phone prefix
-  if (sanitizedPhone) {
-    const prefixMap: Record<string, string> = {
-      '+1': '🇺🇸', '+44': '🇬🇧', '+91': '🇮🇳', '+55': '🇧🇷', '+49': '🇩🇪',
-      '+33': '🇫🇷', '+34': '🇪🇸', '+39': '🇮🇹', '+81': '🇯🇵', '+86': '🇨🇳',
-      '+61': '🇦🇺', '+65': '🇸🇬', '+971': '🇦🇪', '+27': '🇿🇦', '+60': '🇲🇾',
-      '+52': '🇲🇽', '+41': '🇨🇭', '+20': '🇪🇬', '+90': '🇹🇷', '+420': '🇨🇿',
-    };
-    for (const [prefix, flag] of Object.entries(prefixMap)) {
-      if (sanitizedPhone.startsWith(prefix)) return flag;
-    }
-  }
-  // Try from country name
-  if (country && countryFlags[country]) return countryFlags[country];
-  return '🌍';
+// ============================================================================
+// Session-storage: full search state persisted across navigation
+// ============================================================================
+
+interface SearchSession {
+  isCloudMode:        boolean;
+  hasSearched:        boolean;
+  apiFilters:         ApolloCompanySearchFilters;
+  apiPage:            number;
+  apiPerPage:         number;
+  apiResults:         { organizations: any[]; pagination: any } | null;
+  lastSearchChips:    string[];
+  lastSearchSummary:  string;
+  dbFilters:          CompanyDBFilters;
+  dbPage:             number;
+  dbPerPage:          number;
+  selectedListId:     string | null;
+  scrollOffset:       number;
 }
 
-const PhoneFlag = ({ number }: { number?: string | null }) => {
-  if (!number || !isValidPhoneNumber(number)) {
-    return <Globe className="h-3.5 w-3.5 text-slate-400" />;
-  }
+const SS_KEY = (orgId: string) => `companies_session_${orgId}`;
 
+function loadSession(orgId: string | null): Partial<SearchSession> {
+  if (!orgId) return {};
   try {
+    const raw = sessionStorage.getItem(SS_KEY(orgId));
+    return raw ? (JSON.parse(raw) as Partial<SearchSession>) : {};
+  } catch { return {}; }
+}
+
+
+function persistSession(orgId: string | null, patch: Partial<SearchSession>) {
+  if (!orgId) return;
+  try {
+    const current = loadSession(orgId);
+    sessionStorage.setItem(SS_KEY(orgId), JSON.stringify({ ...current, ...patch }));
+  } catch {} 
+}
+
+// ============================================================================
+// Recent-search helpers
+// ============================================================================
+
+function loadRecentSearches(isCloud: boolean): CompanyRecentSearch[] {
+  try { return JSON.parse(localStorage.getItem(isCloud ? LS_KEY_CLOUD : LS_KEY_CRM) || "[]"); }
+  catch { return[]; }
+}
+
+function saveCloudSearch(
+  apolloFilters: ApolloCompanySearchFilters,
+  chips: string[],
+  summary: string,
+  resultCount: number,
+): CompanyRecentSearch[] {
+  const existing = loadRecentSearches(true);
+  const entry: CompanyRecentSearch = {
+    id: Date.now().toString(), summary, filters: apolloFilters,
+    chips, resultCount, timestamp: Date.now(),
+  };
+  const updated =[entry, ...existing.filter(s => s.summary !== summary)].slice(0, 10);
+  localStorage.setItem(LS_KEY_CLOUD, JSON.stringify(updated));
+  return updated;
+}
+
+function saveCRMSearch(filters: CompanyDBFilters, resultCount: number): CompanyRecentSearch[] {
+  const existing = loadRecentSearches(false);
+  const summary  = buildDBFilterSummary(filters);
+  const chips    = buildDBFilterChips(filters);
+  const entry: CompanyRecentSearch = {
+    id: Date.now().toString(), summary, filters, chips, resultCount, timestamp: Date.now(),
+  };
+  const updated =[entry, ...existing.filter(s => s.summary !== summary)].slice(0, 10);
+  localStorage.setItem(LS_KEY_CRM, JSON.stringify(updated));
+  return updated;
+}
+
+// ============================================================================
+// Misc helpers
+// ============================================================================
+
+const _tzCache = new Map<string, string | null>();
+
+function resolveTimezone(loc: string): string | null {
+  if (_tzCache.has(loc)) return _tzCache.get(loc)!;
+  let tz: string | undefined;
+  const city = lookupViaCity(loc);
+  if (city?.length) {
+    tz = city[0].timezone;
+  } else if (loc.includes(",")) {
+    const parts = loc.split(",").map(p => p.trim());
+    const m = findFromCityStateProvince(parts[0], parts[1]);
+    if (m?.length) tz = m[0].timezone;
+  }
+  const result = tz ?? null;
+  _tzCache.set(loc, result);
+  return result;
+}
+
+const getLocalTime = (loc: string | null | undefined): string | null => {
+  if (!loc) return null;
+  const tz = resolveTimezone(loc);
+  if (!tz) return null;
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true })
+      .format(new Date());
+  } catch { return null; }
+};
+
+const _phoneValidCache = new Map<string, boolean>();
+const _phoneParsedCache = new Map<string, string | null>();
+
+function getCachedCountry(number: string): string | null {
+  if (_phoneParsedCache.has(number)) return _phoneParsedCache.get(number)!;
+  try {
+    const valid = isValidPhoneNumber(number);
+    _phoneValidCache.set(number, valid);
+    if (!valid) { _phoneParsedCache.set(number, null); return null; }
     const parsed = parsePhoneNumber(number);
-    if (parsed?.country) {
-      const FlagComponent = flags[parsed.country as keyof typeof flags];
-      if (FlagComponent) {
-        return <FlagComponent title={parsed.country} className="h-3.5 w-5 shadow-sm rounded-sm object-cover" />;
-      }
-    }
-  } catch {}
-
-  return <Globe className="h-3.5 w-3.5 text-slate-400" />;
-};
-
-const getLocalTimeForLocation = (locationStr: string | null | undefined): string | null => {
-  if (!locationStr || locationStr === "—" || locationStr.trim() === "") {
+    const country = parsed?.country ?? null;
+    _phoneParsedCache.set(number, country);
+    return country;
+  } catch {
+    _phoneParsedCache.set(number, null);
     return null;
   }
-
-  // Try different strategies to find timezone
-  let timezone: string | undefined;
-
-  // 1. Try city name directly
-  const cityMatches = lookupViaCity(locationStr);
-  if (cityMatches?.length > 0) {
-    timezone = cityMatches[0].timezone;
-  }
-  // 2. If we have city + country/state format, try split
-  else if (locationStr.includes(",")) {
-    const parts = locationStr.split(",").map(p => p.trim());
-    if (parts.length >= 2) {
-      const city = parts[0];
-      const regionOrCountry = parts[1];
-      const matches = findFromCityStateProvince(city, regionOrCountry);
-      if (matches?.length > 0) {
-        timezone = matches[0].timezone;
-      }
-    }
-  }
-
-  if (!timezone) {
-    return null;
-  }
-
-  try {
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-    return formatter.format(now);
-  } catch (err) {
-    console.warn("Timezone formatting failed:", err);
-    return null;
-  }
-};
-
-// ============================================================================
-// Types
-// ============================================================================
-
-interface DatabaseFilters {
-  search: string;
-  industries: string[];
-  locations: string[];
-  stages: string[];
-  employeeRanges: string[];
-  revenueRanges: string[];
-  hasApolloId: boolean | null;
-  isPromoted: boolean | null;
-  technologies: string[];
-  fundingStages: string[];
-  foundedYearMin: number | null;
-  foundedYearMax: number | null;
 }
 
-type ViewMode = "database" | "search";
+const extractDomain = (url?: string | null) => {
+  if (!url) return null;
+  try { return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace("www.", ""); } catch { return null; }
+};
+
+const getInitials = (n: string) => (n ? n.slice(0, 2).toUpperCase() : "??");
+
+const fmtEmployees = (n?: number | null) => {
+  if (!n) return "—";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}K`;
+  return n.toLocaleString();
+};
+
+const fmtRevenue = (v?: number | string | null) => {
+  if (!v) return "—";
+  if (typeof v === "string") return v;
+  if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}B`;
+  if (v >= 1_000_000)     return `${(v / 1_000_000).toFixed(0)}M`;
+  return v.toLocaleString();
+};
 
 // ============================================================================
 // Main Component
 // ============================================================================
 
 const CompanyIntelligenceSearchPage: React.FC = () => {
-  const { fileId } = useParams<{ fileId?: string }>();
-  const navigate = useNavigate();
+  const { fileId }        = useParams<{ fileId?: string }>();
+  const navigate          = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const user = useSelector((state: any) => state.auth.user);
-  const organizationId = useSelector((state: any) => state.auth.organization_id);
-  const currentUserId = user?.id || null;
+  const { toast }         = useToast();
+  const queryClient       = useQueryClient();
+  const user              = useSelector((state: any) => state.auth.user);
+  const organizationId    = useSelector((state: any) => state.auth.organization_id);
+  const currentUserId     = user?.id || null;
 
-  // ============================================================================
-  // 1. PARSE URL PARAMS ON INITIAL LOAD
-  // ============================================================================
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const { currentFilters: urlCRMFilters, currentPage: urlCRMPage, writeFilters, clearFilters } = useCompanyFilterParams();
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const session = useMemo(() => loadSession(organizationId),[]);
   
-  // Helper to parse Apollo filters from URL
-  const getInitialApiFilters = (): ApolloCompanySearchFilters => {
-    try {
-      const filterParam = searchParams.get("filters");
-      if (filterParam) {
-        return JSON.parse(decodeURIComponent(filterParam));
-      }
-    } catch (e) {
-      console.error("Failed to parse filters from URL", e);
-    }
-    return {};
+  const saveToSession = useCallback(
+    (patch: Partial<SearchSession>) => persistSession(organizationId, patch),
+    [organizationId],
+  );
+
+  const getInitialMode = (): boolean => {
+    if (fileId) return false;
+    const urlMode = searchParams.get("mode");
+    if (urlMode === "crm")   return false;
+    if (urlMode === "cloud") return true;
+    if (session.isCloudMode !== undefined) return session.isCloudMode;
+    return true; 
   };
 
-  // Initialize State from URL
-  const initialViewMode = (searchParams.get("tab") as ViewMode) || (fileId ? "database" : "database");
-  const initialApiPage = parseInt(searchParams.get("page") || "1", 10);
-  const initialApiFilters = getInitialApiFilters();
-  const initialHasSearched = searchParams.get("tab") === "search" && !!searchParams.get("filters");
-
-  // View Mode State
-  const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
-
-
-//   Add List State
-    const [listModalOpen, setListModalOpen] = useState(false);
-  const [selectedCompanyForList, setSelectedCompanyForList] = useState<any>(null);
-
-  // UI State
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [selectedOrgs, setSelectedOrgs] = useState<Set<string>>(new Set());
-  const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
-  const [viewingOrgDetails, setViewingOrgDetails] = useState<ApolloOrganization | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
-  const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
-
-  // API Search State
-  const [apiFilters, setApiFilters] = useState<ApolloCompanySearchFilters>(initialApiFilters);
-  const [apiPage, setApiPage] = useState(initialApiPage);
-  const [apiPerPage, setApiPerPage] = useState(100);
-  const [hasSearched, setHasSearched] = useState(initialHasSearched);
-  const [apiSearchResults, setApiSearchResults] = useState<{
-    organizations: ApolloOrganization[];
-    pagination: { page: number; per_page: number; total_entries: number; total_pages: number };
-  } | null>(null);
-
-  // Database Filter State
-  const [dbFilters, setDbFilters] = useState<DatabaseFilters>({
-    search: "", industries: [], locations: [], stages: [],
-    employeeRanges: [], revenueRanges: [], hasApolloId: null,
-    isPromoted: null, technologies: [], fundingStages: [],
-    foundedYearMin: null, foundedYearMax: null,
+  const[isCloudMode,    setIsCloudMode]    = useState(getInitialMode);
+  const[isSidebarOpen,  setIsSidebarOpen]  = useState(true);
+  const [hasSearched,    setHasSearched]    = useState(() => {
+    if (fileId) return true;
+    return session.hasSearched ?? false;
   });
-  const [dbPage, setDbPage] = useState(1);
-  const [dbPerPage, setDbPerPage] = useState(100);
-  const initialLoadDone = useRef(false);
+  const[recentSearches, setRecentSearches] = useState<CompanyRecentSearch[]>(() => loadRecentSearches(getInitialMode()));
 
-  // ============================================================================
-  // Copy Phone Handler
-  // ============================================================================
-  const handleCopyPhone = useCallback((phone: string) => {
-    navigator.clipboard.writeText(phone);
-    setCopiedPhone(phone);
-    setTimeout(() => setCopiedPhone(null), 2000);
-    toast({ title: "Copied!", description: "Phone number copied to clipboard" });
-  }, [toast]);
+  const [pendingChips,   setPendingChips]   = useState<string[]>([]);
+  const [pendingCount,   setPendingCount]   = useState(0);
 
-  // ============================================================================
-  // Workspace Files Query
-  // ============================================================================
-  const { data: currentFile } = useQuery({
-    queryKey: ['workspace-file-companies', fileId],
-    queryFn: async () => {
-      if (!fileId) return null;
-      const { data, error } = await supabase
-        .from('workspace_files')
-        .select(`id, name, type, workspace_id, workspaces(id, name)`)
-        .eq('id', fileId)
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!fileId
-  });
+  const lastSearchChipsRef   = useRef<string[]>(session.lastSearchChips   ??[]);
+  const lastSearchSummaryRef = useRef<string>(session.lastSearchSummary   ?? "");
 
-  const pageTitle = fileId && currentFile ? currentFile.name : "My Companies";
+  const[isSearching,    setIsSearching]    = useState(false);
+  const[apiFilters,     setApiFilters]     = useState<ApolloCompanySearchFilters>(() => session.apiFilters ?? {});
+  const[apiPage,        setApiPage]        = useState(() => session.apiPage    ?? 1);
+  const[apiPerPage,     setApiPerPage]     = useState(() => session.apiPerPage ?? 100);
+  const[apiResults,     setApiResults]     = useState<{ organizations: ApolloOrganization[]; pagination: any } | null>(() => session.apiResults ?? null);
 
-    // Force database view when in file mode
+  const [dbFilters,      setDbFilters]      = useState<CompanyDBFilters>(() => session.dbFilters ?? urlCRMFilters);
+  const[dbPage,         setDbPage]         = useState(() => session.dbPage    ?? urlCRMPage);
+  const[dbPerPage,      setDbPerPage]      = useState(() => session.dbPerPage ?? 100);
+
+  const[selectedOrgs,   setSelectedOrgs]   = useState<Set<string>>(new Set());
+  const[enrichingIds,   setEnrichingIds]   = useState<Set<string>>(new Set());
+  const[viewingOrgDetails, setViewingOrgDetails] = useState<ApolloOrganization | null>(null);
+  const[copiedPhone,    setCopiedPhone]    = useState<string | null>(null);
+
+  const[selectedListId, setSelectedListId] = useState<string | null>(() => session.selectedListId ?? null);
+
+  const [listModalOpen,          setListModalOpen]          = useState(false);
+  const[selectedCompanyForList, setSelectedCompanyForList] = useState<any>(null);
+  const[isBulkAddingList,       setIsBulkAddingList]       = useState(false);
+  const[isBulkPromoting,        setIsBulkPromoting]        = useState(false);
+
+  const mountRef = useRef(false);
+  const activeFileId = selectedListId || fileId || null;
+  
+
   useEffect(() => {
-    if (fileId) {
-        setViewMode("database");
-    }
-  }, [fileId]);
+    if (mountRef.current) return;
+    mountRef.current = true;
+    if (!getInitialMode() && !fileId) setHasSearched(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
 
-  // ============================================================================
-  // Database Companies Query
-  // ============================================================================
- const {
-    data: databaseCompanies,
-    isLoading: isLoadingDatabase,
-    isFetching: isFetchingDatabase,
-    refetch: refetchDatabase,
+  const {
+    data: databaseResult,
+    isLoading: isLoadingDB,
+    isFetching: isFetchingDB,
+    refetch: refetchDB,
   } = useQuery({
-    queryKey: ["database-companies", organizationId, dbFilters, dbPage, dbPerPage, fileId],
+    queryKey:["companies-crm", organizationId, dbFilters, dbPage, dbPerPage, activeFileId],
     queryFn: async () => {
-      let query;
-      
-      // Select string construction based on fileId presence (M:M relationship)
-      const selectString = fileId 
-        ? `*, created_by_employee:hr_employees!companies_created_by_fkey(first_name, last_name), company_workspace_files!inner(file_id)`
-        : `*, created_by_employee:hr_employees!companies_created_by_fkey(first_name, last_name)`;
+      let enrichedCompanyIds: number[] | null = null;
+      if (dbFilters.isEnriched === true) {
+        const { data: rawRows } = await supabase.from("enrichment_org_raw_responses").select("company_id").not("company_id", "is", null);
+        enrichedCompanyIds =[...new Set((rawRows || []).map((r: any) => r.company_id).filter(Boolean))];
+      }
 
-      query = supabase
-        .from("companies")
-        .select(selectString, { count: "exact" })
+      const selectStr = activeFileId
+        ? "*, created_by_employee:hr_employees!companies_created_by_fkey(first_name,last_name), company_workspace_files!inner(file_id)"
+        : "*, created_by_employee:hr_employees!companies_created_by_fkey(first_name,last_name)";
+
+      let q = supabase.from("companies").select(selectStr, { count: "exact" })
         .eq("organization_id", organizationId)
         .order("created_at", { ascending: false });
 
-      if (fileId) {
-          query = query.eq('company_workspace_files.file_id', fileId);
-      }
-
+      if (activeFileId) q = q.eq("company_workspace_files.file_id", activeFileId);
       if (dbFilters.search?.trim()) {
-        const searchTerm = dbFilters.search.trim();
-        query = query.or(`name.ilike.%${searchTerm}%,domain.ilike.%${searchTerm}%,website.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
+        const t = dbFilters.search.trim();
+        q = q.or(`name.ilike.%${t}%,domain.ilike.%${t}%,website.ilike.%${t}%`);
       }
-      if (dbFilters.industries.length > 0) query = query.in("industry", dbFilters.industries);
-      if (dbFilters.locations.length > 0) {
-        const locFilters = dbFilters.locations.map((loc) => `location.ilike.%${loc}%`).join(",");
-        query = query.or(locFilters);
+      if ((dbFilters.companyIds ||[]).length > 0) q = q.in("id", dbFilters.companyIds);
+      if (dbFilters.isEnriched === true && enrichedCompanyIds !== null) {
+        q = enrichedCompanyIds.length > 0 ? q.in("id", enrichedCompanyIds) : q.eq("id", -1);
       }
-      if (dbFilters.stages.length > 0) query = query.in("stage", dbFilters.stages);
-      if (dbFilters.hasApolloId === true) query = query.not("apollo_org_id", "is", null);
-      else if (dbFilters.hasApolloId === false) query = query.is("apollo_org_id", null);
-      if (dbFilters.isPromoted === true) query = query.eq("status", "Active");
-      else if (dbFilters.isPromoted === false) query = query.neq("status", "Active");
-      if (dbFilters.foundedYearMin !== null) query = query.gte("founded_year", dbFilters.foundedYearMin);
-      if (dbFilters.foundedYearMax !== null) query = query.lte("founded_year", dbFilters.foundedYearMax);
+      if (dbFilters.hasPhone === true) q = q.not("phone", "is", null).neq("phone", "");
+      if ((dbFilters.industries ||[]).length)     q = q.in("industry", dbFilters.industries);
+      if ((dbFilters.stages     ||[]).length)     q = q.in("stage",    dbFilters.stages);
+      if ((dbFilters.locations  ||[]).length) {
+        const f = dbFilters.locations.map(l => `location.ilike.%${l}%`).join(",");
+        q = q.or(f);
+      }
+      if (dbFilters.foundedYearMin !== null) q = q.gte("founded_year", dbFilters.foundedYearMin);
+      if (dbFilters.foundedYearMax !== null) q = q.lte("founded_year", dbFilters.foundedYearMax);
 
       const from = (dbPage - 1) * dbPerPage;
-      query = query.range(from, from + dbPerPage - 1);
+      q = q.range(from, from + dbPerPage - 1);
 
-      const { data, error, count } = await query;
+      const { data, error, count } = await q;
       if (error) throw error;
-      return { companies: data || [], totalCount: count || 0, totalPages: Math.ceil((count || 0) / dbPerPage) };
+      return {
+        companies:   data ||[],
+        totalCount:  count || 0,
+        totalPages:  Math.ceil((count || 0) / dbPerPage),
+      };
     },
-    enabled: !!organizationId && viewMode === "database",
-    staleTime: 30000,
+    enabled: !!organizationId && !isCloudMode,
+    staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
 
-  // ============================================================================
-  // 2. SYNC STATE TO URL
-  // ============================================================================
-  
-  const updateUrlParams = useCallback((mode: ViewMode, page: number, filters: any) => {
-    const params: Record<string, string> = {};
+  const scrollRestoredRef = useRef(false);
+  useEffect(() => {
+    if (scrollRestoredRef.current) return;
+    const offset = session.scrollOffset;
+    if (!offset || !parentRef.current) return;
+    const t = requestAnimationFrame(() => {
+      if (parentRef.current) {
+        parentRef.current.scrollTop = offset;
+        scrollRestoredRef.current = true;
+      }
+    });
+    return () => cancelAnimationFrame(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[apiResults, databaseResult]);
+
+  // Debounced scroll listener to drastically prevent lag/forced reflows
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
     
-    // Always set tab
-    params.tab = mode;
-    
-    // Set page
-    if (page > 1) params.page = page.toString();
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const onScroll = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        saveToSession({ scrollOffset: el.scrollTop });
+      }, 150); // Save to session storage only after scrolling stops for 150ms
+    };
 
-    // Set filters (Only for search mode)
-    if (mode === "search" && Object.keys(filters).length > 0) {
-      params.filters = encodeURIComponent(JSON.stringify(filters));
-    }
-
-    setSearchParams(params, { replace: true });
-  }, [setSearchParams]);
-
-  // ============================================================================
-  // 3. AUTO-TRIGGER SEARCH ON MOUNT (If params exist)
-  // ============================================================================
-  
-  const mountRef = useRef(false);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      clearTimeout(timeoutId);
+    };
+  }, [saveToSession]);
 
   useEffect(() => {
-    if (!mountRef.current) {
-      mountRef.current = true;
-      // If we loaded into search mode with filters, execute the search immediately
-      if (initialViewMode === "search" && Object.keys(initialApiFilters).length > 0) {
-        handleApiSearch(initialApiFilters, initialApiPage);
-      }
+    if (fileId) { setIsCloudMode(false); setHasSearched(true); }
+  },[fileId]);
+
+  useEffect(() => {
+    setRecentSearches(loadRecentSearches(isCloudMode));
+  }, [isCloudMode]);
+
+  const switchToCloud = () => {
+    setIsCloudMode(true);
+    setHasSearched(!!apiResults);
+    setSelectedOrgs(new Set());
+    saveToSession({ isCloudMode: true, hasSearched: !!apiResults });
+    setSearchParams(prev => { const n = new URLSearchParams(prev); n.set("mode", "cloud"); return n; }, { replace: true });
+  };
+
+  const switchToCRM = () => {
+    setIsCloudMode(false);
+    setHasSearched(true);
+    setSelectedOrgs(new Set());
+    saveToSession({ isCloudMode: false, hasSearched: true });
+    setSearchParams(prev => { const n = new URLSearchParams(prev); n.set("mode", "crm"); return n; }, { replace: true });
+  };
+
+  const { data: currentFile } = useQuery({
+    queryKey:["workspace-file-companies", fileId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("workspace_files").select("id,name,type,workspace_id,workspaces(id,name)")
+        .eq("id", fileId!).single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!fileId,
+  });
+
+  useEffect(() => {
+    if (!isCloudMode && databaseResult && countActiveDBFilters(dbFilters) > 0) {
+      const updated = saveCRMSearch(dbFilters, databaseResult.totalCount);
+      setRecentSearches(updated);
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [databaseResult?.totalCount]);
 
+  const { data: workspaceLists =[] } = useQuery({
+    queryKey:["workspace-lists-companies", organizationId],
+    queryFn: async () => {
+      const { data: ws } = await supabase.from("workspaces").select("id,name").eq("organization_id", organizationId).order("name");
+      if (!ws?.length) return[];
+      const ids = ws.map((w: any) => w.id);
+      const { data: files } = await supabase.from("workspace_files").select("id,name,workspace_id").eq("type", "companies").in("workspace_id", ids).order("name");
+      return ws.map((w: any) => ({
+        workspace: w,
+        files: (files ||[]).filter((f: any) => f.workspace_id === w.id),
+      })).filter((g: any) => g.files.length > 0);
+    },
+    enabled: !!organizationId,
+    staleTime: 5 * 60_000,
+  });
 
-  // ============================================================================
-  // API Search Handler (V2 - Server-side storage)
-  // ============================================================================
-  const handleApiSearch = useCallback(async (filters: ApolloCompanySearchFilters, pageOverride?: number) => {
+  const handleApiSearch = useCallback(async (
+    filters: ApolloCompanySearchFilters,
+    pageOverride = 1,
+    summary = "",
+    chips: string[] =[],
+  ) => {
     setIsSearching(true);
     setHasSearched(true);
     setApiFilters(filters);
-    
-    const targetPage = pageOverride || 1;
-    setApiPage(targetPage);
+    setApiPage(pageOverride);
 
-    // Update URL
-    updateUrlParams("search", targetPage, filters);
+    setSearchParams(prev => {
+      const n = new URLSearchParams(prev);
+      n.set("mode", "cloud");
+      n.delete("filters");
+      n.delete("page");
+      return n;
+    }, { replace: true });
+
+    saveToSession({
+      isCloudMode: true,
+      hasSearched: true,
+      apiFilters: filters,
+      apiPage: pageOverride,
+      lastSearchChips:   chips.length ? chips : lastSearchChipsRef.current,
+      lastSearchSummary: summary || lastSearchSummaryRef.current,
+      scrollOffset: 0,
+    });
 
     try {
-      // V2 handles storage server-side and returns saved companies
-      const result = await searchCompaniesInApolloV2(filters, targetPage, apiPerPage, fileId);
-      
- // ==========================================================
-      // NEW: TRIGGER BACKGROUND SYNC FOR COMPANIES
-      // ==========================================================
-      if (targetPage === 1 && result.pagination?.total_entries > 0) {
-        supabase.from('background_sync_jobs').insert({
-          organization_id: organizationId,
-          created_by: currentUserId,
-          filters: filters,
-          total_entries: result.pagination.total_entries,
-          status: 'pending',
-          job_type: 'companies' // Tells the scraper to use the Company endpoint
-        }).then(({error}) => {
-          if (error) console.error("Failed to queue background sync:", error);
-        });
-      }
-      // ==========================================================
+      const result = await searchCompaniesInApolloV2(filters, pageOverride, apiPerPage, fileId);
 
-      const savedCount = result.saved?.companies || 0;
-      const totalEntries = result.pagination?.total_entries || 0;
-      
-      if (result.companies?.length > 0 || result.organizations?.length > 0) {
-        toast({ 
-          title: "Search Complete! ✓", 
-          description: `Found ${totalEntries.toLocaleString()} companies. ${savedCount} saved to database.` 
-        });
-        // Refresh database view since new companies were added
-        queryClient.invalidateQueries({ queryKey: ["database-companies"] });
-      } else {
-        toast({ title: "Search Complete", description: "No companies found matching your criteria." });
+      if (pageOverride === 1 && result.pagination?.total_entries > 0) {
+        supabase.from("background_sync_jobs").insert({
+          organization_id: organizationId, created_by: currentUserId,
+          filters, total_entries: result.pagination.total_entries,
+          status: "pending", job_type: "companies",
+        }).then(({ error }) => { if (error) console.error("BG sync failed:", error); });
       }
-      
-      // Store the results - prefer saved companies from DB, fallback to raw organizations
-      setApiSearchResults({
-        organizations: result.companies?.length > 0 ? result.companies : result.organizations,
-        pagination: result.pagination,
-      });
-    } catch (error: any) {
-      toast({ title: "Search Failed", description: error.message, variant: "destructive" });
-      setApiSearchResults(null);
+
+      const total      = result.pagination?.total_entries || 0;
+      const savedCount = result.saved?.companies || 0;
+
+      const useSummary = summary || lastSearchSummaryRef.current || "Company search";
+      const useChips   = chips.length ? chips : lastSearchChipsRef.current;
+      const updated    = saveCloudSearch(filters, useChips, useSummary, total);
+      setRecentSearches(updated);
+
+      const organizations = result.companies?.length > 0 ? result.companies : result.organizations;
+      const pagination    = result.pagination;
+
+      if (organizations?.length > 0) {
+        toast({ title: "Search Complete ✓", description: `Found ${total.toLocaleString()} companies. ${savedCount} saved.` });
+        queryClient.invalidateQueries({ queryKey: ["companies-crm"] });
+      } else {
+        toast({ title: "No results", description: "Try adjusting your filters." });
+      }
+
+      const newResults = { organizations: organizations ||[], pagination };
+      setApiResults(newResults);
+      saveToSession({ apiResults: newResults, apiPage: pageOverride, apiFilters: filters });
+    } catch (err: any) {
+      toast({ title: "Search Failed", description: err.message, variant: "destructive" });
+      setApiResults(null);
+      saveToSession({ apiResults: null });
     } finally {
       setIsSearching(false);
     }
-  }, [apiPerPage, fileId, toast, queryClient, updateUrlParams, organizationId, currentUserId]);
+  },[apiPerPage, fileId, organizationId, currentUserId, toast, queryClient, setSearchParams, saveToSession]);
 
-    const { data: workspaceFiles = [] } = useQuery({
-    queryKey: ["workspace-files-for-lists", organizationId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("workspace_files")
-        .select("id, name, workspaces(name)")
-        .eq("organization_id", organizationId)
-        .eq("type", "companies") // Ensure we only get company lists
-        .order("name");
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!organizationId,
-  });
+  const handleApiPageChange = useCallback(async (newPage: number) => {
+    if (!hasSearched || !apiFilters) return;
+    saveToSession({ scrollOffset: 0 });
+    await handleApiSearch(apiFilters, newPage, lastSearchSummaryRef.current, lastSearchChipsRef.current);
+  },[hasSearched, apiFilters, handleApiSearch, saveToSession]);
 
-  // ============================================================================
-  // Stage Change Mutation
-  // ============================================================================
+  const handleApplyRecentSearch = useCallback((saved: CompanyRecentSearch) => {
+    if (isCloudMode) {
+      lastSearchSummaryRef.current = saved.summary;
+      lastSearchChipsRef.current   = saved.chips ||[];
+      handleApiSearch(saved.filters as ApolloCompanySearchFilters, 1, saved.summary, saved.chips ||[]);
+    } else {
+      const f = saved.filters as CompanyDBFilters;
+      setDbFilters(f);
+      setDbPage(1);
+      writeFilters(f, 1);
+      saveToSession({ dbFilters: f, dbPage: 1, scrollOffset: 0 });
+    }
+    setHasSearched(true);
+  },[isCloudMode, handleApiSearch, writeFilters, saveToSession]);
+
+  const handleRemoveRecentSearch = useCallback((id: string) => {
+    const updated = recentSearches.filter(s => s.id !== id);
+    setRecentSearches(updated);
+    localStorage.setItem(isCloudMode ? LS_KEY_CLOUD : LS_KEY_CRM, JSON.stringify(updated));
+  },[recentSearches, isCloudMode]);
+
+  // -- Clear Complete Cloud Filters (For both Sidebar and Header)
+  const handleClearCloudFilters = useCallback(() => {
+    setApiFilters({});
+    setApiResults(null);
+    setHasSearched(false);
+    setApiPage(1);
+    setPendingChips([]);
+    setPendingCount(0);
+    saveToSession({
+      apiFilters: {}, apiResults: null, hasSearched: false, apiPage: 1, 
+      scrollOffset: 0, lastSearchChips:[], lastSearchSummary: ""
+    });
+    setSearchParams(prev => { const n = new URLSearchParams(prev); n.delete("filters"); return n; }, { replace: true });
+  }, [saveToSession, setSearchParams]);
+
+  // -- Clear Complete CRM Filters
+  const clearCRMSessionFilters = useCallback(() => {
+    setDbFilters(EMPTY_DB_FILTERS);
+    clearFilters();
+    setDbPage(1);
+    saveToSession({ dbFilters: EMPTY_DB_FILTERS, dbPage: 1, scrollOffset: 0 });
+  },[clearFilters, saveToSession]);
+
   const updateStageMutation = useMutation({
     mutationFn: async ({ companyId, stage }: { companyId: number; stage: string }) => {
-      const { error } = await supabase
-        .from('companies')
-        .update({ stage, updated_by: currentUserId, updated_at: new Date().toISOString() })
-        .eq('id', companyId);
+      const { error } = await supabase.from("companies").update({ stage, updated_by: currentUserId, updated_at: new Date().toISOString() }).eq("id", companyId);
       if (error) throw error;
     },
-    onSuccess: () => {
-      toast({ title: "Stage Updated" });
-      queryClient.invalidateQueries({ queryKey: ["database-companies"] });
-    },
-    onError: (err: any) => toast({ title: "Update Failed", description: err.message, variant: "destructive" }),
+    onSuccess: () => { toast({ title: "Stage Updated" }); queryClient.invalidateQueries({ queryKey: ["companies-crm"] }); },
+    onError: (e: any) => toast({ title: "Update Failed", description: e.message, variant: "destructive" }),
   });
 
   const handleStageChange = async (company: any, newStage: string) => {
-    let targetCompanyId = company.id;
-    if (!targetCompanyId && company.apollo_org_id) {
+    let id = company.id;
+    if (!id && company.apollo_org_id) {
       try {
-        const { data: newCompany, error } = await supabase
-          .from('companies')
-          .insert({
-            name: company.name,
-            website: company.website || company.website_url,
-            domain: company.domain || company.primary_domain,
-            apollo_org_id: company.apollo_org_id,
-            logo_url: company.logo_url,
-            industry: company.industry,
-            location: company.location || [company.city, company.state, company.country].filter(Boolean).join(', '),
-            employee_count: company.estimated_num_employees || company.employee_count,
-            revenue: company.annual_revenue || company.revenue,
-            organization_id: organizationId,
-            created_by: currentUserId,
-            stage: newStage,
-            status: 'Active',
-          })
-          .select('id')
-          .single();
+        const { data, error } = await supabase.from("companies").insert({
+          name: company.name, website: company.website || company.website_url,
+          domain: company.domain || company.primary_domain, apollo_org_id: company.apollo_org_id, logo_url: company.logo_url,
+          industry: company.industry, location:[company.city, company.state, company.country].filter(Boolean).join(", "),
+          employee_count: company.estimated_num_employees || company.employee_count, revenue: company.annual_revenue || company.revenue,
+          organization_id: organizationId, created_by: currentUserId, stage: newStage, status: "Active",
+        }).select("id").single();
         if (error) throw error;
-        targetCompanyId = newCompany?.id;
+        id = data?.id;
         toast({ title: "Company Added to CRM" });
-      } catch (err: any) {
-        toast({ title: "Failed", description: err.message, variant: "destructive" });
-        return;
+      } catch (e: any) {
+        toast({ title: "Failed", description: e.message, variant: "destructive" }); return;
       }
     }
-    if (targetCompanyId) updateStageMutation.mutate({ companyId: targetCompanyId, stage: newStage });
+    if (id) updateStageMutation.mutate({ companyId: id, stage: newStage });
   };
 
-  // ============================================================================
-  // API Page Change (V2 - Server-side storage)
-  // ============================================================================
-  const handleApiPageChange = useCallback(async (newPage: number) => {
-    if (!hasSearched || !apiFilters) return;
-    
-    // Update URL immediately
-    updateUrlParams("search", newPage, apiFilters);
-    
-    setIsSearching(true);
-    setApiPage(newPage);
-    try {
-      const result = await searchCompaniesInApolloV2(apiFilters, newPage, apiPerPage, fileId);
-      // Refresh database view since new companies were added
-      if (result.saved?.companies > 0) {
-        queryClient.invalidateQueries({ queryKey: ["database-companies"] });
-      }
-      setApiSearchResults({
-        organizations: result.companies?.length > 0 ? result.companies : result.organizations,
-        pagination: result.pagination,
-      });
-    } catch (error: any) {
-      toast({ title: "Failed to load page", description: error.message, variant: "destructive" });
-    } finally {
-      setIsSearching(false);
-    }
-  }, [hasSearched, apiFilters, apiPerPage, fileId, toast, queryClient, updateUrlParams]);
-
-  // ============================================================================
-  // Mutations
-  // ============================================================================
   const enrichMutation = useMutation({
     mutationFn: async (company: any) => {
       const domain = company.domain || company.primary_domain || extractDomain(company.website || company.website_url);
       if (!domain) throw new Error("No domain available");
-      return await enrichOrganization(domain, company.apollo_org_id || company.id);
+      return enrichOrganization(domain, company.apollo_org_id || company.id);
     },
-    onMutate: (company) => setEnrichingIds((prev) => new Set(prev).add(company.id?.toString() || company.apollo_org_id)),
-    onSuccess: (data, company) => {
-      toast({ title: "Enrichment Complete", description: `${company.name} enriched.` });
-      queryClient.invalidateQueries({ queryKey: ["database-companies"] });
-    },
-    onError: (error: any) => toast({ title: "Enrichment Failed", description: error.message, variant: "destructive" }),
-    onSettled: (_, __, company) => setEnrichingIds((prev) => { const next = new Set(prev); next.delete(company.id?.toString() || company.apollo_org_id); return next; }),
+    onMutate: (c) => setEnrichingIds(prev => new Set(prev).add(c.id?.toString() || c.apollo_org_id)),
+    onSuccess: (_, c) => { toast({ title: "Enriched", description: `${c.name} enriched.` }); queryClient.invalidateQueries({ queryKey: ["companies-crm"] }); },
+    onError: (e: any) => toast({ title: "Enrichment Failed", description: e.message, variant: "destructive" }),
+    onSettled: (_, __, c) => setEnrichingIds(prev => { const n = new Set(prev); n.delete(c.id?.toString() || c.apollo_org_id); return n; }),
   });
 
   const getInfoMutation = useMutation({
-    mutationFn: async (apolloOrgId: string) => await getCompleteOrganizationInfo(apolloOrgId),
-    onSuccess: (data) => { setViewingOrgDetails(data); queryClient.invalidateQueries({ queryKey: ["database-companies"] }); },
-    onError: (error: any) => toast({ title: "Failed to Get Info", description: error.message, variant: "destructive" }),
+    mutationFn: (apolloOrgId: string) => getCompleteOrganizationInfo(apolloOrgId),
+    onSuccess: (data) => { setViewingOrgDetails(data); queryClient.invalidateQueries({ queryKey: ["companies-crm"] }); },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
   const promoteMutation = useMutation({
-    mutationFn: async (companyId: number) => await promoteToActiveCRM(companyId),
-    onSuccess: (data) => {
-      toast({ title: "Promoted to Active CRM! 🎉", description: `${data.name} is now active.` });
-      queryClient.invalidateQueries({ queryKey: ["database-companies"] });
-    },
-    onError: (error: any) => toast({ title: "Promotion Failed", description: error.message, variant: "destructive" }),
+    mutationFn: (companyId: number) => promoteToActiveCRM(companyId),
+    onSuccess: (data) => { toast({ title: "Promoted to Active CRM 🎉", description: `${data.name} is now active.` }); queryClient.invalidateQueries({ queryKey: ["companies-crm"] }); },
+    onError: (e: any) => toast({ title: "Promotion Failed", description: e.message, variant: "destructive" }),
   });
 
-  const bulkPromoteMutation = useMutation({
-    mutationFn: async (companyIds: number[]) => {
-      const results = await Promise.allSettled(companyIds.map((id) => promoteToActiveCRM(id)));
-      const successful = results.filter((r) => r.status === "fulfilled").length;
-      return { successful, failed: results.length - successful, total: companyIds.length };
-    },
-    onSuccess: ({ successful, failed, total }) => {
-      toast({ title: "Bulk Promotion Complete", description: `${successful} of ${total} promoted.${failed > 0 ? ` ${failed} failed.` : ""}` });
-      setSelectedOrgs(new Set());
-      queryClient.invalidateQueries({ queryKey: ["database-companies"] });
-    },
-    onError: (error: any) => toast({ title: "Bulk Promotion Failed", description: error.message, variant: "destructive" }),
-  });
-
-  // ============================================================================
-  // Helpers
-  // ============================================================================
-  const extractDomain = (url?: string | null): string | null => {
-    if (!url) return null;
-    try {
-      const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
-      return parsed.hostname.replace("www.", "");
-    } catch { return null; }
-  };
-
-  const getInitials = (name: string) => (name ? name.slice(0, 2).toUpperCase() : "??");
-
-  const formatEmployeeCount = (count?: number | null) => {
-    if (!count) return "—";
-    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-    if (count >= 1000) return `${(count / 1000).toFixed(0)}K`;
-    return count.toLocaleString();
-  };
-
-  const formatRevenue = (revenue?: number | string | null) => {
-    if (!revenue) return "—";
-    if (typeof revenue === "string") return revenue;
-    if (revenue >= 1000000000) return `${(revenue / 1000000000).toFixed(1)}B`;
-    if (revenue >= 1000000) return `${(revenue / 1000000).toFixed(0)}M`;
-    return revenue.toLocaleString();
-  };
-
-  // ============================================================================
-  // Selection Handlers
-  // ============================================================================
-  const handleSelectAll = useCallback(() => {
-    const companies = viewMode === "database" ? databaseCompanies?.companies || [] : apiSearchResults?.organizations || [];
-    const allIds = companies.map((c: any) => c.id?.toString() || c.apollo_org_id || "").filter(Boolean);
-    const allSelected = allIds.length > 0 && allIds.every((id: string) => selectedOrgs.has(id));
-    setSelectedOrgs(allSelected ? new Set() : new Set(allIds));
-  }, [viewMode, databaseCompanies, apiSearchResults, selectedOrgs]);
-
-  const handleSelectOrg = useCallback((id: string) => {
-    setSelectedOrgs((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }, []);
-
-  useEffect(() => { setSelectedOrgs(new Set()); }, [viewMode]);
-
-  // ============================================================================
-  // Computed Values
-  // ============================================================================
-  const displayCompanies = useMemo(() => {
-    return viewMode === "database" ? databaseCompanies?.companies || [] : apiSearchResults?.organizations || [];
-  }, [viewMode, databaseCompanies, apiSearchResults]);
-
-  console.log("displayCompanies", displayCompanies);
-
-  const totalResults = viewMode === "database" ? databaseCompanies?.totalCount || 0 : apiSearchResults?.pagination?.total_entries || 0;
-  const totalPages = viewMode === "database" ? databaseCompanies?.totalPages || 0 : apiSearchResults?.pagination?.total_pages || 0;
-  const currentPage = viewMode === "database" ? dbPage : apiPage;
-  const perPage = viewMode === "database" ? dbPerPage : apiPerPage;
-  const isLoading = viewMode === "database" ? isLoadingDatabase && !initialLoadDone.current : isSearching;
-  const isFetching = viewMode === "database" ? isFetchingDatabase : isSearching;
-
-  useEffect(() => {
-    if (viewMode === "database" && !isLoadingDatabase) initialLoadDone.current = true;
-  }, [viewMode, isLoadingDatabase]);
-
-  const handleTabChange = (v: string) => {
-    const newMode = v as ViewMode;
-    setViewMode(newMode);
+  const handleBulkPromote = async () => {
+    const ids = Array.from(selectedOrgs).map(id => parseInt(id)).filter(id => !isNaN(id));
+    if (!ids.length) return;
+    setIsBulkPromoting(true);
+    const results = await Promise.allSettled(ids.map(id => promoteToActiveCRM(id)));
+    const ok = results.filter(r => r.status === "fulfilled").length;
+    toast({ title: `${ok} of ${ids.length} promoted` });
     setSelectedOrgs(new Set());
-    
-    // Reset URL to clean state when switching tabs
-    updateUrlParams(newMode, 1, newMode === "search" ? apiFilters : {}); 
+    queryClient.invalidateQueries({ queryKey: ["companies-crm"] });
+    setIsBulkPromoting(false);
   };
 
-  const handleListAdd = async (fileId: string) => {
-    if (!selectedCompanyForList || !fileId) return;
-
+  const handleListAdd = async (targetFileId: string) => {
+    if (!selectedCompanyForList || !targetFileId) return;
     try {
       let companyId = selectedCompanyForList.id;
-
-      // Scenario A: Company is from Search (doesn't have a numeric ID in our DB yet)
-      if (viewMode === 'search' && !companyId) {
-        // We need to save the company first
-        const { data: newCompany, error: createError } = await supabase
-          .from('companies')
-          .insert({
-            name: selectedCompanyForList.name,
-            website: selectedCompanyForList.website || selectedCompanyForList.website_url,
-            domain: selectedCompanyForList.domain || selectedCompanyForList.primary_domain,
-            apollo_org_id: selectedCompanyForList.apollo_org_id || selectedCompanyForList.id, // Handle Apollo ID mapping
-            logo_url: selectedCompanyForList.logo_url,
-            industry: selectedCompanyForList.industry,
-            location: selectedCompanyForList.location || [selectedCompanyForList.city, selectedCompanyForList.state, selectedCompanyForList.country].filter(Boolean).join(', '),
-            employee_count: selectedCompanyForList.estimated_num_employees || selectedCompanyForList.employee_count,
-            revenue: selectedCompanyForList.annual_revenue || selectedCompanyForList.revenue,
-            organization_id: organizationId,
-            created_by: currentUserId,
-            stage: 'Identified', // Default stage
-            status: 'Active',
-          })
-          .select('id')
-          .single();
-
-        if (createError) throw createError;
-        companyId = newCompany.id;
+      if (isCloudMode && !companyId) {
+        const { data, error } = await supabase.from("companies").insert({
+          name: selectedCompanyForList.name, website: selectedCompanyForList.website || selectedCompanyForList.website_url,
+          domain: selectedCompanyForList.domain || selectedCompanyForList.primary_domain, apollo_org_id: selectedCompanyForList.apollo_org_id,
+          logo_url: selectedCompanyForList.logo_url, industry: selectedCompanyForList.industry,
+          location:[selectedCompanyForList.city, selectedCompanyForList.state, selectedCompanyForList.country].filter(Boolean).join(", "),
+          employee_count: selectedCompanyForList.estimated_num_employees || selectedCompanyForList.employee_count,
+          revenue: selectedCompanyForList.annual_revenue || selectedCompanyForList.revenue,
+          organization_id: organizationId, created_by: currentUserId, stage: "Identified", status: "Active",
+        }).select("id").single();
+        if (error) throw error;
+        companyId = data.id;
       }
-
-      // Scenario B: Company exists (or was just created) - Link to File
-      if (companyId) {
-        const { error: linkError } = await supabase
-          .from('company_workspace_files')
-          .upsert({ 
-            company_id: companyId, 
-            file_id: fileId, 
-            added_by: currentUserId 
-          }, { 
-            onConflict: 'company_id,file_id' 
-          });
-
-        if (linkError) throw linkError;
-
-        toast({ 
-          title: "Added to List", 
-          description: `${selectedCompanyForList.name} has been added successfully.` 
-        });
-        
-        // Refresh to show status changes if needed
-        queryClient.invalidateQueries({ queryKey: ["database-companies"] });
-      }
-
-    } catch (error: any) {
-      toast({ 
-        title: "Failed to add to list", 
-        description: error.message, 
-        variant: "destructive" 
-      });
+      if (!companyId) throw new Error("No company ID");
+      const { error } = await supabase.from("company_workspace_files").upsert({ company_id: companyId, file_id: targetFileId, added_by: currentUserId }, { onConflict: "company_id,file_id" });
+      if (error) throw error;
+      toast({ title: "Added to List", description: `${selectedCompanyForList.name} added.` });
+      queryClient.invalidateQueries({ queryKey: ["companies-crm"] });
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
     } finally {
-        // Reset selection
-        setListModalOpen(false);
-        setSelectedCompanyForList(null);
+      setListModalOpen(false); setSelectedCompanyForList(null);
     }
   };
 
-  // ============================================================================
-  // Render
-  // ============================================================================
-  return (
-    <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-slate-50/70">
-      {/* Header */}
-      <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4 shadow-md z-30">
-        <div className="flex items-center justify-between gap-6 flex-wrap max-w-screen-2xl mx-auto">
-          <div className="flex items-center gap-5 min-w-0">
-            <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="h-10 w-10 shrink-0">
-              {isSidebarOpen ? <X className="h-5 w-5" /> : <SlidersHorizontal className="h-5 w-5" />}
-            </Button>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">My Companies</h1>
-           <Tabs value={viewMode} onValueChange={handleTabChange} className="w-auto">
-              <TabsList className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200">
-                <TabsTrigger value="database" className={cn("flex items-center whitespace-nowrap px-6 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md text-slate-500 hover:text-slate-700")}>
-                  <Database className="mr-2 h-3.5 w-3.5" />CRM Records
-                </TabsTrigger>
-                <TabsTrigger value="search" className={cn("flex items-center whitespace-nowrap px-6 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md text-slate-500 hover:text-slate-700")}>
-                  <Cloud className="mr-2 h-3.5 w-3.5" />Search from Cloud
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-            {isFetching && (
-              <div className="flex items-center gap-2.5 text-purple-700 text-base hidden md:flex">
-                <Loader2 className="h-5 w-5 animate-spin" />Loading...
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-4 flex-wrap">
-            {selectedOrgs.size > 0 && (
-              <div className="flex items-center gap-4 bg-purple-50 px-5 py-2 rounded-xl border border-purple-100">
-                <span className="font-semibold text-purple-900 text-base">{selectedOrgs.size} selected</span>
-                {viewMode === "database" && (
-                  <Button size="default" onClick={() => { const ids = Array.from(selectedOrgs).map(id => parseInt(id)).filter(id => !isNaN(id)); bulkPromoteMutation.mutate(ids); }} disabled={bulkPromoteMutation.isPending} className="bg-green-600 hover:bg-green-700 px-5 h-10 text-sm font-medium">
-                    {bulkPromoteMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Star className="h-4 w-4 mr-2" />}Promote to CRM
-                  </Button>
-                )}
-                <Button variant="outline" size="default" onClick={() => setSelectedOrgs(new Set())} className="h-10 text-sm"><X className="h-4 w-4 mr-2" />Clear</Button>
-              </div>
-            )}
-            {viewMode === "database" && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="icon" onClick={() => refetchDatabase()} disabled={isFetchingDatabase} className="h-10 w-10">
-                      <RefreshCw className={cn("h-5 w-5", isFetchingDatabase && "animate-spin")} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Refresh database</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-          </div>
-        </div>
-      </div>
+  const handleBulkAddToList = async (targetFileId: string) => {
+    setIsBulkAddingList(true);
+    const companies = displayCompanies.filter((c: any) => selectedOrgs.has(c._derived.companyId));
+    let ok = 0, fail = 0;
+    for (const company of companies) {
+      try {
+        let companyId = company.id;
+        if (!companyId && company.apollo_org_id) {
+          const { data, error } = await supabase.from("companies").insert({
+            name: company.name, apollo_org_id: company.apollo_org_id, website: company.website || company.website_url,
+            domain: company.domain || company.primary_domain, industry: company.industry,
+            organization_id: organizationId, created_by: currentUserId, stage: "Identified", status: "Active",
+          }).select("id").single();
+          if (error) throw error;
+          companyId = data.id;
+        }
+        if (!companyId) { fail++; continue; }
+        await supabase.from("company_workspace_files").upsert({ company_id: companyId, file_id: targetFileId, added_by: currentUserId }, { onConflict: "company_id,file_id" });
+        ok++;
+      } catch { fail++; }
+    }
+    toast({ title: `${ok} added to list`, description: fail > 0 ? `${fail} failed` : undefined });
+    setSelectedOrgs(new Set());
+    queryClient.invalidateQueries({ queryKey:["companies-crm"] });
+    setListModalOpen(false);
+    setIsBulkAddingList(false);
+  };
 
-      {/* Content Area */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <div className={cn("flex-shrink-0 border-r border-slate-200 bg-white transition-all duration-300 ease-in-out shadow-md z-20", isSidebarOpen ? "w-80" : "w-0")}>
-          {isSidebarOpen && (
-            viewMode === "database" ? (
-              <DatabaseFilterSidebar filters={dbFilters} onFiltersChange={(newFilters) => { setDbFilters(newFilters); setDbPage(1); }} isLoading={isFetchingDatabase} totalResults={totalResults} onClose={() => setIsSidebarOpen(false)} />
-            ) : (
-              <CompanySearchFilterSidebar onSearch={(f) => handleApiSearch(f, 1)} isSearching={isSearching} totalResults={totalResults} onClose={() => setIsSidebarOpen(false)} initialFilters={apiFilters} />
-            )
-          )}
-        </div>
+  const displayCompanies = useMemo(() => {
+    const raw = isCloudMode ? (apiResults?.organizations || []) : (databaseResult?.companies ||[]);
+    return raw.map((company: any) => {
+      const companyId  = company.id?.toString() || company.apollo_org_id || "";
+      const domain     = company.domain || company.primary_domain || extractDomain(company.website || company.website_url);
+      const rawPhone   = company.phone || company.primary_phone?.number || company.sanitized_phone || null;
+      const phoneNorm  = rawPhone?.trim() ? (rawPhone.trim().startsWith("+") ? rawPhone.trim() : `+${rawPhone.trim()}`) : null;
+      const phoneCountry = phoneNorm ? getCachedCountry(phoneNorm) : null;
 
-        {/* Main Table Area */}
-        <div className="flex-1 flex flex-col overflow-hidden relative bg-slate-50/40">
-          {/* Loading skeleton */}
-          {viewMode === "database" && isLoading && (
-            <div className="p-6 space-y-5">
-              <div className="bg-white rounded-2xl border shadow-sm p-5">
-                <div className="h-12 bg-slate-100 animate-pulse rounded-xl mb-5" />
-                {[...Array(10)].map((_, i) => (
-                  <div key={i} className="flex items-center gap-8 py-5 border-b last:border-0">
-                    <Skeleton className="h-10 w-10 rounded-full" />
-                    <Skeleton className="h-5 w-48" />
-                    <Skeleton className="h-5 w-32" />
-                    <Skeleton className="h-5 w-24" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+      const cityState   = [company.city, company.state].filter(Boolean).join(", ");
+      const country     = company.country || null;
+      const primaryLoc  = cityState || company.location?.split(",").slice(0, -1).join(", ") || "—";
+      const secondaryLoc = country || company.location?.split(",").pop()?.trim() || "—";
+      const timeLookup  =[primaryLoc, secondaryLoc].filter(s => s && s !== "—").join(", ");
+      const localTime   = timeLookup ? getLocalTime(timeLookup) : null;
 
-          {/* Empty search state */}
-          {viewMode === "search" && !hasSearched && !isSearching && (
-            <div className="flex flex-col items-center justify-center h-full text-center px-8">
-              <div className="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center mb-8 shadow-lg">
-                <Search className="h-12 w-12 text-purple-600" />
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900 mb-4">Search</h2>
-              <p className="text-lg text-slate-600 max-w-lg mb-10">Use the filters on the left to discover companies. All matching results are automatically saved to your database.</p>
-              <div className="flex gap-10 text-base text-slate-500">
-                <div className="flex items-center gap-3"><Zap className="h-6 w-6 text-amber-500" />Find Companies</div>
-                <div className="flex items-center gap-3"><Database className="h-6 w-6 text-blue-500" />Auto-saved</div>
-              </div>
-            </div>
-          )}
+      return {
+        ...company,
+        _derived: {
+          companyId, domain, displayPhone: rawPhone?.trim() || null, phoneNorm, phoneCountry,
+          primaryLoc, secondaryLoc, localTime,
+          isPromoted: company.status === "Active", hasApollo: !!company.apollo_org_id,
+          revenue: company.revenue || company.annual_revenue || company.annual_revenue_printed || null,
+          founded: company.founded_year || company.start_date || "—", industry: company.industry || "—",
+        },
+      };
+    });
+  },[isCloudMode, apiResults, databaseResult]);
 
-          {/* Loading overlay */}
-          {isSearching && (
-            <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10 backdrop-blur-sm">
-              <div className="text-center">
-                <Loader2 className="h-16 w-16 animate-spin text-purple-600 mx-auto mb-6" />
-                <p className="text-2xl font-semibold text-slate-800 mb-2">Searching & Saving...</p>
-                <p className="text-base text-slate-600">This may take a few seconds</p>
-              </div>
-            </div>
-          )}
+  // Virtualizer config (strict size calculation, no dynamic measureElement)
+  const rowVirtualizer = useVirtualizer({
+    count: displayCompanies.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 52, // Set strict height mapped to row
+    overscan: 10,
+  });
 
-          {/* Main Table */}
-          {!isLoading && displayCompanies.length > 0 && !isSearching && (
-            <div className="flex flex-col h-full overflow-hidden">
-              <div className="flex-1 overflow-hidden bg-white border border-slate-200 shadow-sm">
-                <div className="h-full overflow-y-auto">
-                  <table className="w-full min-w-max divide-y divide-slate-200 table-fixed">
-                <thead className="sticky top-0 z-10 bg-gradient-to-r from-purple-600 to-violet-600 shadow-sm">
-  <tr>
-    {/* 1. Company + checkbox */}
-    <th className="sticky left-0 z-30 bg-gradient-to-r from-purple-600 to-violet-600 px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider border-r border-slate-600/40 shadow-[2px_0_6px_-3px_rgba(0,0,0,0.25)] w-[260px]">
-      <div className="flex items-center gap-2">
-        <Checkbox
-          checked={displayCompanies.length > 0 && displayCompanies.every((c: any) => selectedOrgs.has(c.id?.toString() || c.apollo_org_id || ""))}
-          onCheckedChange={handleSelectAll}
-          className="border-white/70 data-[state=checked]:bg-purple-500 data-[state=checked]:border-purple-500 h-3.5 w-3.5"
-        />
-        Company
-      </div>
-    </th>
+  const handleSelectAll = useCallback(() => {
+    const all = displayCompanies.map((c: any) => c._derived.companyId).filter(Boolean);
+    const allSelected = all.length > 0 && all.every((id: string) => selectedOrgs.has(id));
+    setSelectedOrgs(allSelected ? new Set() : new Set(all));
+  },[displayCompanies, selectedOrgs]);
 
+  const handleSelectOrg = useCallback((id: string) => {
+    setSelectedOrgs(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  },[]);
 
+  const handleCopyPhone = useCallback((phone: string) => {
+    navigator.clipboard.writeText(phone);
+    setCopiedPhone(phone);
+    setTimeout(() => setCopiedPhone(null), 2000);
+    toast({ title: "Copied!" });
+  }, [toast]);
 
-    {/* 3. Phone with better flag */}
-    <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[160px]">
-      <div className="flex items-center gap-1">
-        <Phone className="h-3 w-3" /> Phone
-      </div>
-    </th>
+  const totalResults = isCloudMode ? (apiResults?.pagination?.total_entries || 0) : (databaseResult?.totalCount || 0);
+  const totalPages   = isCloudMode ? (apiResults?.pagination?.total_pages || 0) : (databaseResult?.totalPages || 0);
+  const currentPage  = isCloudMode ? apiPage : dbPage;
+  const perPage      = isCloudMode ? apiPerPage : dbPerPage;
+  const isLoading    = isCloudMode ? isSearching : isLoadingDB;
+  const isFetching   = isCloudMode ? isSearching : isFetchingDB;
 
-    
-    {/* 9. Links */}
-    <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-white uppercase tracking-wider w-[100px]">
-      Links
-    </th>
+  const queryEnabled = isCloudMode ? hasSearched : true;
+  const activeDBFilterCount = countActiveDBFilters(dbFilters);
+  const pageTitle = fileId && currentFile ? (currentFile as any).name : "My Companies";
 
-    {/* 10. Actions */}
-
-     <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-white uppercase tracking-wider w-[110px]">
-      Revenue
-    </th>
-    
-
-        {/* 2. Founded Year */}
-    <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-white uppercase tracking-wider w-[90px]">
-      Founded
-    </th>
-
-     <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[150px]">
-      CRM Stage
-    </th>
-
-    <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-white uppercase tracking-wider w-[110px]">
-      Actions
-    </th>
-
-
-    {/* 4. Location */}
-    <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[200px]">
-      <div className="flex items-center gap-1"><MapPin className="h-3 w-3" /> Location</div>
-    </th>
-
-    {/* 5. Industry – made wider */}
-    <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[150px]">
-      Industry
-    </th>
-
-    {/* 6. Employees */}
-    <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[110px]">
-      <div className="flex items-center gap-1"><Users className="h-3 w-3" /> Employees</div>
-    </th>
-
-    {/* 7. Revenue */}
-   
-
-    {/* 8. CRM Stage */}
-   
-  </tr>
-</thead>
-                    <tbody className="divide-y divide-slate-100 bg-white text-[11px]">
-     {displayCompanies.map((company: any) => {
-  const companyId = company.id?.toString() || company.apollo_org_id || "";
-  const isSelected = selectedOrgs.has(companyId);
-  const domain = company.domain || company.primary_domain || extractDomain(company.website || company.website_url);
-  
-  // ────────────────────────────────────────────────
-  // Phone logic
-  const rawPhone = company.phone || company.primary_phone?.number || company.sanitized_phone || null;
-  const displayPhone = rawPhone ? rawPhone.trim() : null;
-  const isPromoted = company.status === "Active";
-                        const hasApolloData = !!company.apollo_org_id;
-  
-  // Location fallback chain
-  const locationParts = [
-    company.city,
-    company.state,
-    company.country,
-    company.location
-  ].filter(Boolean);
-  const displayLocation = locationParts.length > 0 ? locationParts.join(", ") : "—";
-
-  // Location logic - split into primary (city/state) and secondary (country)
-const cityStateParts = [
-  company.city,
-  company.state || company.region || company.province, // some datasets use region/province
-].filter(Boolean);
-
-const countryPart = company.country || null;
-
-const primaryLocation = cityStateParts.length > 0 
-  ? cityStateParts.join(", ") 
-  : (company.location?.split(",").slice(0, -1).join(", ") || "—"); // try to exclude country if it's in location
-
-const secondaryLocation = countryPart || 
-  (company.location?.split(",").pop()?.trim() || null); // last part if no explicit country
-
-const displayPrimary = primaryLocation !== "—" ? primaryLocation : "—";
-const displaySecondary = secondaryLocation || "—";
-
-// Use this for timezone lookup (prefer more complete string)
-const timezoneLookupStr = [displayPrimary, displaySecondary]
-  .filter(Boolean)
-  .join(", ");
-
-  // Industry fallback
-  const displayIndustry = company.industry || "—";
-
-  // Founded
-  const founded = company.founded_year || company.start_date || "—";
-
-  // Revenue
-  const revenue = company.revenue || company.annual_revenue || company.annual_revenue_printed || company.organization_revenue_printed || null;
+  // Virtualizer calculations
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0]?.start || 0 : 0;
+  const paddingBottom = virtualItems.length > 0
+    ? rowVirtualizer.getTotalSize() - (virtualItems[virtualItems.length - 1]?.end || 0)
+    : 0;
 
   return (
-    <tr key={companyId} className={cn("group transition-colors duration-100", isSelected ? "bg-purple-50/60" : "hover:bg-slate-50/80")}>
-      {/* Company */}
-      <td className="sticky left-0 z-5 bg-white group-hover:bg-slate-50 px-3 py-2 shadow-[2px_0_6px_-3px_rgba(0,0,0,0.08)] border-r border-slate-100 w-[260px]">
-       <div className="flex items-center gap-2">
-                                <Checkbox checked={isSelected} onCheckedChange={() => handleSelectOrg(companyId)} className="border-slate-300 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 h-3.5 w-3.5" />
-                                <Avatar className="h-8 w-8 border shadow-sm flex-shrink-0">
-                                  <AvatarImage src={company.logo_url} />
-                                  <AvatarFallback className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white text-[9px] font-bold">{getInitials(company.name)}</AvatarFallback>
-                                </Avatar>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-1">
-                                    {viewMode === "database" && company.id ? (
-                                      <RouterLink to={`/companies/${company.id}`} className="font-semibold text-slate-900 hover:text-purple-700 truncate text-[11px] block leading-tight">{company.name}</RouterLink>
-                                    ) : (
-                                      <span className="font-semibold text-slate-900 truncate text-[11px] block leading-tight">{company.name}</span>
-                                    )}
-                                    {hasApolloData && <Sparkles className="h-3 w-3 text-amber-500 flex-shrink-0" />}
-                                    {isPromoted && <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />}
-                                  </div>
-                                  <p className="text-[9px] text-slate-500 truncate">{domain || "No domain"}</p>
-                                </div>
-                              </div>
+    <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-slate-50/80">
+      {/* ════ HEADER ════════════════════════════════════════════════════════ */}
+      <header className="bg-white border-b border-slate-200 px-5 flex items-center gap-3 shadow-sm z-30 flex-shrink-0 h-[52px]">
+        <button
+          onClick={() => setIsSidebarOpen(v => !v)}
+          className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors flex-shrink-0"
+        >
+          {isSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+        </button>
 
-      </td>
-
-            {/* Phone with real flag */}
-      <td className="px-3 py-2 whitespace-nowrap w-[160px]">
-        {displayPhone ? (
-          <div className="flex items-center gap-2.5">
-            <PhoneFlag number={displayPhone.startsWith('+') ? displayPhone : `+${displayPhone}`} />
-            <span className="text-[10.5px] text-slate-700 truncate max-w-[100px]">{displayPhone}</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => handleCopyPhone(displayPhone)}
-                    className="p-1 hover:bg-slate-100 rounded transition-colors"
-                  >
-                    {copiedPhone === displayPhone ? (
-                      <Check className="h-3.5 w-3.5 text-green-600" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5 text-slate-400" />
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Copy phone</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        ) : (
-          <span className="text-slate-400 text-[10px]">—</span>
+        {fileId && (
+          <button onClick={() => navigate("/lists")} className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-xs font-medium transition-colors">
+            <ArrowLeft size={14} /> Back
+          </button>
         )}
-      </td>
 
-            {/* Links – keep as is */}
-      <td className="px-3 py-2 whitespace-nowrap text-center w-[100px]">
-       <div className="flex items-center justify-center gap-1.5">
-                                {(company.website || company.website_url) && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <a href={company.website || company.website_url} target="_blank" rel="noopener noreferrer" className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
-                                          <Globe className="h-3.5 w-3.5" />
-                                        </a>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Website</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
-                                {(company.linkedin || company.linkedin_url) && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <a href={company.linkedin || company.linkedin_url} target="_blank" rel="noopener noreferrer" className="p-1 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors">
-                                          <Linkedin className="h-3.5 w-3.5" />
-                                        </a>
-                                      </TooltipTrigger>
-                                      <TooltipContent>LinkedIn</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
-                                {(company.twitter || company.twitter_url) && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <a href={company.twitter || company.twitter_url} target="_blank" rel="noopener noreferrer" className="p-1 text-slate-400 hover:text-sky-500 hover:bg-sky-50 rounded transition-colors">
-                                          <Twitter className="h-3.5 w-3.5" />
-                                        </a>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Twitter</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
-                                {(company.facebook || company.facebook_url) && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <a href={company.facebook || company.facebook_url} target="_blank" rel="noopener noreferrer" className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
-                                          <Facebook className="h-3.5 w-3.5" />
-                                        </a>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Facebook</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
-                              </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <h1 className="text-sm font-semibold text-slate-800">{pageTitle}</h1>
+          {fileId && currentFile && (currentFile as any).workspaces && (
+            <Badge variant="outline" className="text-[9px] bg-slate-50 text-slate-500 border-slate-200">
+              <FolderOpen size={9} className="mr-1" />{(currentFile as any).workspaces.name}
+            </Badge>
+          )}
+        </div>
 
-      </td>
-
-            {/* Revenue */}
-      <td className="px-3 py-2 text-center whitespace-nowrap w-[110px]">
-        <span className="text-[10.5px] font-medium text-slate-800">
-          {formatRevenue(revenue)}
-        </span>
-      </td>
-
-      {/* Founded Year */}
-      <td className="px-3 py-2 whitespace-nowrap text-center text-[10.5px] text-slate-700 font-medium w-[90px]">
-        {founded}
-      </td>
-
-  {/* CRM Stage – keep as is */}
-      <td className="px-3 py-2 whitespace-nowrap w-[150px]">
-        <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="outline" size="sm" className={cn("h-6 min-w-[110px] text-[9px] font-semibold uppercase tracking-tight rounded-md border shadow-sm px-2 py-0.5", stageColors[company.stage || company.status || "default"])}>
-                                    {company.stage || company.status || "Stage"}
-                                    <ChevronDown className="ml-1 h-2.5 w-2.5 opacity-70" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="min-w-[140px] max-h-60 overflow-y-auto text-[10px]">
-                                  {STAGES.map((stageOption) => (
-                                    <DropdownMenuItem key={stageOption} onClick={() => handleStageChange(company, stageOption)} className={cn("py-1 cursor-pointer", (company.stage || company.status) === stageOption && "bg-purple-50 font-medium")}>
-                                      {stageOption}
-                                    </DropdownMenuItem>
-                                  ))}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-
-      </td>
-
-
-
-      {/* Actions – keep as is */}
-      <td className="px-3 py-2 whitespace-nowrap text-center w-[110px]">
-        <div className="flex items-center justify-center gap-0.5">
-                                {viewMode === "database" && company.id && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:bg-purple-50">
-                                          <RouterLink to={`/companies/${company.id}`}><Eye className="h-3.5 w-3.5" /></RouterLink>
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>View</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
-                                {viewMode === "database" && !isPromoted && company.id && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md" onClick={() => promoteMutation.mutate(company.id)} disabled={promoteMutation.isPending}>
-                                          {promoteMutation.isPending && promoteMutation.variables === company.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Star className="h-3.5 w-3.5" />}
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Promote</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md"><MoreHorizontal className="h-4 w-4" /></Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-52">
-                                    {company.apollo_org_id && (
-                                      <DropdownMenuItem onClick={() => getInfoMutation.mutate(company.apollo_org_id)} disabled={getInfoMutation.isPending}>
-                                        <Info className="h-4 w-4 mr-2" />Get Full Info
-                                      </DropdownMenuItem>
-                                    )}
-                                    {domain && (
-                                      <DropdownMenuItem onClick={() => enrichMutation.mutate(company)} disabled={enrichingIds.has(companyId)}>
-                                        <Sparkles className="h-4 w-4 mr-2" />{enrichingIds.has(companyId) ? "Enriching..." : "Enrich Data"}
-                                      </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuSeparator />
-                                    {workspaceFiles.length > 0 && (
-                                      <>
-                                        <DropdownMenuLabel className="text-xs text-slate-500 px-3 py-2">Add to List</DropdownMenuLabel>
-                                       
-                                          <DropdownMenuItem 
-                onClick={() => {
-                setSelectedCompanyForList(company);
-                setListModalOpen(true);
-                }}
+        {!fileId && (
+          <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+            <button
+              onClick={switchToCloud}
+              className={cn("px-3 py-1 rounded-md text-[11px] font-medium transition-all", isCloudMode ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700")}
             >
-                <ListPlus className="h-4 w-4 mr-2" /> 
-                Add to List...
-            </DropdownMenuItem>
-                                    
-                                        <DropdownMenuSeparator />
-                                      </>
-                                    )}
-                                    {(company.website || company.website_url) && (
-                                      <DropdownMenuItem asChild>
-                                        <a href={company.website || company.website_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 mr-2" />Visit Website</a>
-                                      </DropdownMenuItem>
-                                    )}
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-
-      </td>
-
-
-{/* Location + Local Time */}
-<td className="px-3 py-2 w-[200px] leading-tight">
-  <div className="flex flex-col gap-0.5">
-    {/* Line 1: Primary location (City, State) */}
-    <div className="flex items-center gap-1.5 text-[10.5px] text-slate-700 font-medium">
-      <MapPin className="h-3.5 w-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
-      <span className="truncate max-w-[160px]">{displayPrimary}</span>
-    </div>
-
-    {/* Line 2: Country + Local time (same line) */}
-    <div className="pl-[15px] flex items-center gap-1.5 text-[9.5px] text-slate-500">
-      <span className="truncate max-w-[110px] opacity-90">
-        {displaySecondary !== "—" ? displaySecondary : "—"}
-      </span>
-
-      {displayPrimary !== "—" && displaySecondary !== "—" && getLocalTimeForLocation(timezoneLookupStr) && (
-        <>
-          <span className="text-slate-400">•</span>
-          <div className="flex items-center gap-1">
-            <Clock size={10} className="text-blue-500 flex-shrink-0" />
-            <span className="text-[10px] text-blue-600 font-medium">
-              {getLocalTimeForLocation(timezoneLookupStr)}
-            </span>
+              <Cloud size={11} className="inline mr-1" />Search Cloud
+            </button>
+            <button
+              onClick={switchToCRM}
+              className={cn("px-3 py-1 rounded-md text-[11px] font-medium transition-all", !isCloudMode ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+            >
+              <Database size={11} className="inline mr-1" />Saved Companies
+            </button>
           </div>
-        </>
-      )}
-    </div>
-  </div>
-</td>
+        )}
 
-      {/* Industry */}
-      <td className="px-3 py-2 whitespace-nowrap text-[10.5px] text-slate-700 w-[150px]">
-        <span className="truncate block max-w-[130px]">{displayIndustry}</span>
-      </td>
-
-      {/* Employees */}
-      <td className="px-3 py-2 whitespace-nowrap w-[110px]">
-        <span className="text-[10.5px] font-medium text-slate-800">
-          {formatEmployeeCount(company.employee_count || company.estimated_num_employees)}
-        </span>
-      </td>
-
-
-
-    
-    </tr>
-  );
-})}
-                    </tbody>
-                  </table>
+        {!fileId && !isCloudMode && workspaceLists.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <Select
+              value={selectedListId || "__all__"}
+              onValueChange={v => {
+                const id = v === "__all__" ? null : v;
+                setSelectedListId(id);
+                setDbPage(1);
+                saveToSession({ selectedListId: id, dbPage: 1, scrollOffset: 0 });
+              }}
+            >
+              <SelectTrigger className="h-8 text-xs border-slate-200 bg-slate-50 hover:bg-white w-auto min-w-[130px] max-w-[200px]">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <List size={12} className="text-slate-400 flex-shrink-0" />
+                  <span className="truncate text-slate-600">
+                    {selectedListId ? (workspaceLists as any[]).flatMap((g: any) => g.files).find((f: any) => f.id === selectedListId)?.name ?? "List" : "All Companies"}
+                  </span>
                 </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__" className="text-xs">
+                  <div className="flex items-center gap-2"><Building2 size={13} className="text-slate-400" /><span>All Companies</span></div>
+                </SelectItem>
+                {(workspaceLists as any[]).map((group: any) => (
+                  <SelectGroup key={group.workspace.id}>
+                    <SelectLabel className="flex items-center gap-2 text-[11px] text-black-500 font-semibold"><Folder size={13} className="text-slate-400" />{group.workspace.name}</SelectLabel>
+                    {group.files.map((f: any) => (
+                      <SelectItem key={f.id} value={f.id} className="text-xs pl-14">
+                        <div className="flex items-center gap-2"><List size={12} className="text-slate-400" /><span>{f.name}</span></div>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedListId && (
+              <button onClick={() => { setSelectedListId(null); setDbPage(1); saveToSession({ selectedListId: null, dbPage: 1 }); }} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+            )}
+          </div>
+        )}
+
+        <div className="flex-1" />
+
+        {!isCloudMode && selectedListId && (
+          <div className="flex items-center gap-1 bg-violet-50 border border-violet-100 rounded-lg px-2.5 py-1">
+            <List size={10} className="text-violet-500" />
+            <span className="text-[10px] font-semibold text-violet-700">{(workspaceLists as any[]).flatMap((g: any) => g.files).find((f: any) => f.id === selectedListId)?.name ?? "List"}</span>
+          </div>
+        )}
+
+        {/* Active Cloud Search badge / Reset */}
+        {isCloudMode && hasSearched && (
+          <div className="flex items-center gap-1 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1">
+            <span className="text-[10px] font-semibold text-indigo-600">
+              Cloud Search Active
+            </span>
+            <button onClick={handleClearCloudFilters} className="text-indigo-400 hover:text-indigo-600 ml-1">
+              <X size={11} />
+            </button>
+          </div>
+        )}
+
+        {/* Active CRM filter badge / Reset */}
+        {!isCloudMode && activeDBFilterCount > 0 && (
+          <div className="flex items-center gap-1 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1">
+            <span className="text-[10px] font-semibold text-indigo-600">
+              {activeDBFilterCount} filter{activeDBFilterCount !== 1 ? "s" : ""} active
+            </span>
+            <button onClick={clearCRMSessionFilters} className="text-indigo-400 hover:text-indigo-600 ml-1">
+              <X size={11} />
+            </button>
+          </div>
+        )}
+
+        {(hasSearched || !isCloudMode) && (
+          <span className="text-[11px] text-slate-500 hidden md:flex items-center gap-1">
+            {isFetching && !isLoading ? (
+              <span className="flex items-center gap-1.5 text-indigo-500"><Loader2 size={12} className="animate-spin" /> Filtering…</span>
+            ) : (
+              <><span className="font-semibold text-slate-700">{totalResults.toLocaleString()}</span> companies</>
+            )}
+          </span>
+        )}
+
+        {/* Outer TooltipProvider wraps headers & table completely */}
+<TooltipProvider delayDuration={300}>
+  {!isCloudMode && (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          onClick={() => refetchDB()}
+          disabled={isFetchingDB}
+          className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-40"
+        >
+          <RefreshCw size={14} className={cn(isFetchingDB && "animate-spin")} />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>Refresh</TooltipContent>
+    </Tooltip>
+  )}
+</TooltipProvider>
+</header>
+
+      {/* ════ BODY ══════════════════════════════════════════════════════════ */}
+      <div className="flex flex-1 overflow-hidden">
+        {isSidebarOpen && (
+          <div className="w-[240px] flex-shrink-0 border-r border-slate-200 bg-white z-20 flex flex-col overflow-y-hidden">
+            {isCloudMode ? (
+              <CompanySearchFilterSidebar
+                // Safely providing clear handler downstream so Sidebar's own "Clear" button handles session reset
+                onClear={handleClearCloudFilters}
+                onSearch={(apolloFilters, summary) => {
+                  lastSearchSummaryRef.current = summary;
+                  lastSearchChipsRef.current   = pendingChips;
+                  handleApiSearch(apolloFilters, 1, summary, pendingChips);
+                }}
+                isSearching={isSearching}
+                totalResults={totalResults}
+                onClose={() => setIsSidebarOpen(false)}
+                initialFilters={apiFilters}
+                onFiltersChange={(chips, count) => {
+                  setPendingChips(chips);
+                  setPendingCount(count);
+                }}
+              />
+            ) : (
+              <DatabaseFilterSidebar
+                filters={dbFilters}
+                onClear={clearCRMSessionFilters}
+                onFiltersChange={(f) => {
+                  setDbFilters(f);
+                  setDbPage(1);
+                  writeFilters(f, 1);
+                  saveToSession({ dbFilters: f, dbPage: 1, scrollOffset: 0 });
+                }}
+                isLoading={isFetchingDB}
+                totalResults={totalResults}
+                onClose={() => setIsSidebarOpen(false)}
+              />
+            )}
+          </div>
+        )}
+
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {isLoading && queryEnabled ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+              <p className="text-xs text-slate-500 font-medium">{isCloudMode ? "Searching companies…" : "Loading companies…"}</p>
+            </div>
+          ) : !queryEnabled || (!hasSearched && isCloudMode) ? (
+            <CompanySearchEmptyState
+              recentSearches={recentSearches}
+              onApplySearch={handleApplyRecentSearch}
+              onRemoveSearch={handleRemoveRecentSearch}
+              isCloudMode={isCloudMode}
+              pendingFilterChips={pendingChips}
+              pendingFilterCount={pendingCount}
+              onRunSearch={isCloudMode ? () => { document.querySelector<HTMLButtonElement>("[data-run-search]")?.click(); } : undefined}
+            />
+          ) : (
+            <>
+              {selectedOrgs.size > 0 && (
+                <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-indigo-50 border-b border-indigo-100 z-10">
+                  <span className="text-xs font-semibold text-indigo-700 mr-1">{selectedOrgs.size} selected</span>
+                  <button
+                    onClick={handleBulkPromote} disabled={isBulkPromoting}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-60"
+                  >
+                    {isBulkPromoting ? <Loader2 size={12} className="animate-spin" /> : <DatabaseZap size={12} />} Promote to CRM
+                  </button>
+                  <button
+                    onClick={() => { setSelectedCompanyForList(null); setListModalOpen(true); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 transition-colors"
+                  >
+                    <ListPlus size={12} /> Add to List
+                  </button>
+                  <button onClick={() => setSelectedOrgs(new Set())} className="ml-auto text-indigo-400 hover:text-indigo-600 p-1 rounded"><X size={14} /></button>
+                </div>
+              )}
+
+              <div className={cn("flex-1 flex flex-col overflow-hidden transition-opacity duration-200", isFetching && !isLoading && "opacity-60 pointer-events-none")}>
+                {displayCompanies.length === 0 && !isFetching ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center px-8">
+                    <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-4"><Building2 className="h-5 w-5 text-slate-400" /></div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">No companies found</p>
+                    <p className="text-xs text-slate-400 mb-4">{isCloudMode ? "Try adjusting your search filters." : "Try adjusting your filters or switch to Search Cloud."}</p>
+                    {!isCloudMode && activeDBFilterCount > 0 && (
+                      <button onClick={clearCRMSessionFilters} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">Clear all filters</button>
+                    )}
+                    {!isCloudMode && (
+                      <button onClick={switchToCloud} className="mt-2 text-xs text-slate-500 hover:text-indigo-600 flex items-center gap-1"><Cloud size={12} /> Search from Cloud</button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-hidden bg-white rounded-tl-xl border border-slate-200 border-b-0 shadow-sm">
+                    <div ref={parentRef} className="h-full overflow-y-auto overflow-x-auto">
+                      <table className="w-full min-w-max divide-y divide-slate-200 table-fixed">
+                        <thead className="sticky top-0 z-10 bg-gradient-to-r from-indigo-600 to-violet-600 shadow-sm">
+                          <tr className="h-10">
+                            <th className="sticky left-0 z-30 bg-gradient-to-r from-indigo-600 to-violet-600 px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider border-r border-white/20 shadow-[2px_0_6px_-3px_rgba(0,0,0,0.25)] w-[260px]">
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={displayCompanies.length > 0 && displayCompanies.every((c: any) => selectedOrgs.has(c._derived.companyId))}
+                                  onCheckedChange={handleSelectAll} className="border-white/70 data-[state=checked]:bg-white/20 data-[state=checked]:border-white/70 h-3.5 w-3.5"
+                                /> Company
+                              </div>
+                            </th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[160px]"><div className="flex items-center gap-1"><Phone className="h-3 w-3" /> Phone</div></th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-white uppercase tracking-wider w-[100px]">Links</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-white uppercase tracking-wider w-[110px]">Revenue</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-white uppercase tracking-wider w-[90px]">Founded</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[150px]">CRM Stage</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-white uppercase tracking-wider w-[110px]">Actions</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[200px]"><div className="flex items-center gap-1"><MapPin className="h-3 w-3" /> Location</div></th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[150px]">Industry</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wider w-[110px]"><div className="flex items-center gap-1"><Users className="h-3 w-3" /> Employees</div></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white text-[11px]">
+                          {paddingTop > 0 && (
+                            <tr><td colSpan={10} style={{ height: `${paddingTop}px`, padding: 0, border: 0 }} /></tr>
+                          )}
+                          {virtualItems.map((virtualRow) => {
+                            const company = displayCompanies[virtualRow.index];
+                            const {
+                              companyId, domain, displayPhone, phoneCountry,
+                              primaryLoc, secondaryLoc, localTime,
+                              isPromoted, hasApollo, revenue, founded, industry,
+                            } = company._derived;
+                            const isSelected = selectedOrgs.has(companyId);
+
+                            const PhoneFlagEl = phoneCountry
+                              ? (() => { const F = flags[phoneCountry as keyof typeof flags]; return F ? <F title={phoneCountry} className="h-3.5 w-5 shadow-sm rounded-sm object-cover" /> : <Globe className="h-3.5 w-3.5 text-slate-400" />; })()
+                              : <Globe className="h-3.5 w-3.5 text-slate-400" />;
+
+                            return (
+                              <tr
+                                key={company._derived.companyId}
+                                data-index={virtualRow.index}
+                                // Enforcing explicit exact height instead of ref recalculations
+                                className={cn("h-[52px] group transition-colors duration-100", isSelected ? "bg-indigo-50/60" : "hover:bg-slate-50/80")}
+                              >
+                                <td className="sticky left-0 z-5 bg-white group-hover:bg-slate-50/80 px-3 py-2 shadow-[2px_0_6px_-3px_rgba(0,0,0,0.08)] border-r border-slate-100 w-[260px]">
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox checked={isSelected} onCheckedChange={() => handleSelectOrg(companyId)} className="border-slate-300 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600 h-3.5 w-3.5" />
+                                    <Avatar className="h-8 w-8 border shadow-sm flex-shrink-0">
+                                      <AvatarImage src={company.logo_url} />
+                                      <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white text-[9px] font-bold">{getInitials(company.name)}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1">
+                                        {!isCloudMode && company.id ? (
+                                          <RouterLink to={`/companies/${company.id}`} className="font-semibold text-slate-900 hover:text-indigo-700 truncate text-[11px] block leading-tight">{company.name}</RouterLink>
+                                        ) : (
+                                          <span className="font-semibold text-slate-900 truncate text-[11px] block leading-tight">{company.name}</span>
+                                        )}
+                                        {hasApollo   && <Sparkles className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+                                        {isPromoted  && <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />}
+                                      </div>
+                                      <p className="text-[9px] text-slate-500 truncate">{domain || "No domain"}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap w-[160px]">
+                                  {displayPhone ? (
+                                    <div className="flex items-center gap-2">
+                                      {PhoneFlagEl}
+                                      <span className="text-[10.5px] text-slate-700 truncate max-w-[90px]">{displayPhone}</span>
+                                      <Tooltip><TooltipTrigger asChild>
+                                          <button onClick={() => handleCopyPhone(displayPhone)} className="p-1 hover:bg-slate-100 rounded transition-colors">
+                                            {copiedPhone === displayPhone ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5 text-slate-400" />}
+                                          </button>
+                                        </TooltipTrigger><TooltipContent>Copy</TooltipContent>
+                                      </Tooltip>
+                                    </div>
+                                  ) : (<span className="text-slate-400 text-[10px]">—</span>)}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-center w-[100px]">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    {(company.website || company.website_url) && (
+                                      <Tooltip><TooltipTrigger asChild><a href={company.website || company.website_url} target="_blank" rel="noopener noreferrer" className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Globe className="h-3.5 w-3.5" /></a></TooltipTrigger><TooltipContent>Website</TooltipContent></Tooltip>
+                                    )}
+                                    {(company.linkedin || company.linkedin_url) && (
+                                      <Tooltip><TooltipTrigger asChild><a href={company.linkedin || company.linkedin_url} target="_blank" rel="noopener noreferrer" className="p-1 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"><Linkedin className="h-3.5 w-3.5" /></a></TooltipTrigger><TooltipContent>LinkedIn</TooltipContent></Tooltip>
+                                    )}
+                                    {(company.twitter || company.twitter_url) && (
+                                      <Tooltip><TooltipTrigger asChild><a href={company.twitter || company.twitter_url} target="_blank" rel="noopener noreferrer" className="p-1 text-slate-400 hover:text-sky-500 hover:bg-sky-50 rounded transition-colors"><Twitter className="h-3.5 w-3.5" /></a></TooltipTrigger><TooltipContent>Twitter</TooltipContent></Tooltip>
+                                    )}
+                                    {(company.facebook || company.facebook_url) && (
+                                      <Tooltip><TooltipTrigger asChild><a href={company.facebook || company.facebook_url} target="_blank" rel="noopener noreferrer" className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Facebook className="h-3.5 w-3.5" /></a></TooltipTrigger><TooltipContent>Facebook</TooltipContent></Tooltip>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 text-center whitespace-nowrap w-[110px]"><span className="text-[10.5px] font-medium text-slate-800">{fmtRevenue(revenue)}</span></td>
+                                <td className="px-3 py-2 whitespace-nowrap text-center text-[10.5px] text-slate-700 font-medium w-[90px]">{founded}</td>
+                                <td className="px-3 py-2 whitespace-nowrap w-[150px]">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="outline" size="sm" className={cn("h-6 min-w-[110px] text-[9px] font-semibold uppercase tracking-tight rounded-md border shadow-sm px-2 py-0.5", stageColors[company.stage || company.status || "default"])}>
+                                        {company.stage || company.status || "Stage"} <ChevronDown className="ml-1 h-2.5 w-2.5 opacity-70" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="min-w-[140px] max-h-60 overflow-y-auto text-[10px]">
+                                      {STAGES.map(s => <DropdownMenuItem key={s} onClick={() => handleStageChange(company, s)} className={cn("py-1 cursor-pointer", (company.stage || company.status) === s && "bg-indigo-50 font-medium")}>{s}</DropdownMenuItem>)}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-center w-[110px]">
+                                  <div className="flex items-center justify-center gap-0.5">
+                                    {!isCloudMode && company.id && (
+                                      <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:bg-indigo-50"><RouterLink to={`/companies/${company.id}`}><Eye className="h-3.5 w-3.5" /></RouterLink></Button></TooltipTrigger><TooltipContent>View</TooltipContent></Tooltip>
+                                    )}
+                                    {!isCloudMode && !isPromoted && company.id && (
+                                      <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md" onClick={() => promoteMutation.mutate(company.id)} disabled={promoteMutation.isPending}>{promoteMutation.isPending && promoteMutation.variables === company.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Star className="h-3.5 w-3.5" />}</Button></TooltipTrigger><TooltipContent>Promote</TooltipContent></Tooltip>
+                                    )}
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 rounded-md"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="w-52">
+                                        {company.apollo_org_id && <DropdownMenuItem onClick={() => getInfoMutation.mutate(company.apollo_org_id)} disabled={getInfoMutation.isPending}><Zap className="h-4 w-4 mr-2" />Get Full Info</DropdownMenuItem>}
+                                        {domain && <DropdownMenuItem onClick={() => enrichMutation.mutate(company)} disabled={enrichingIds.has(companyId)}><Sparkles className="h-4 w-4 mr-2" />{enrichingIds.has(companyId) ? "Enriching…" : "Enrich Data"}</DropdownMenuItem>}
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={() => { setSelectedCompanyForList(company); setListModalOpen(true); }}><ListPlus className="h-4 w-4 mr-2" />Add to List…</DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        {(company.website || company.website_url) && <DropdownMenuItem asChild><a href={company.website || company.website_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 mr-2" />Visit Website</a></DropdownMenuItem>}
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 w-[200px] leading-tight">
+                                  <div className="flex flex-col gap-0.5">
+                                    <div className="flex items-center gap-1.5 text-[10.5px] text-slate-700 font-medium"><MapPin className="h-3.5 w-3.5 text-slate-400 flex-shrink-0 mt-0.5" /><span className="truncate max-w-[160px]">{primaryLoc}</span></div>
+                                    <div className="pl-[19px] flex items-center gap-1.5 text-[9.5px] text-slate-500">
+                                      <span className="truncate max-w-[100px]">{secondaryLoc !== "—" ? secondaryLoc : "—"}</span>
+                                      {primaryLoc !== "—" && secondaryLoc !== "—" && localTime && (<><span className="text-slate-300">•</span><div className="flex items-center gap-1"><Clock size={10} className="text-blue-500 flex-shrink-0" /><span className="text-[10px] text-blue-600 font-medium">{localTime}</span></div></>)}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-[10.5px] text-slate-700 w-[150px]"><span className="truncate block max-w-[130px]">{industry}</span></td>
+                                <td className="px-3 py-2 whitespace-nowrap w-[110px]"><span className="text-[10.5px] font-medium text-slate-800">{fmtEmployees(company.employee_count || company.estimated_num_employees)}</span></td>
+                              </tr>
+                            );
+                          })}
+                          {paddingBottom > 0 && (
+                            <tr><td colSpan={10} style={{ height: `${paddingBottom}px`, padding: 0, border: 0 }} /></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="sticky bottom-2 z-20 bg-white border-t border-slate-200 shadow-[0_-2px_6px_-3px_rgba(0,0,0,0.15)]">
-                  <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-2 gap-4 text-[10px]">
-                    <p className="text-slate-600">{((currentPage - 1) * perPage + 1).toLocaleString()} – {Math.min(currentPage * perPage, totalResults).toLocaleString()} of {totalResults.toLocaleString()}</p>
+              {displayCompanies.length > 0 && totalPages > 0 && (
+                <div className="flex-shrink-0 bg-white border border-slate-200 border-t-0 px-5 py-2.5 shadow-sm">
+                  <div className="flex items-center justify-between gap-4 text-[10px]">
+                    <p className="text-slate-500">{((currentPage - 1) * perPage + 1).toLocaleString()}–{Math.min(currentPage * perPage, totalResults).toLocaleString()} of {totalResults.toLocaleString()}</p>
                     <div className="flex items-center gap-2.5">
-                      <span className="text-slate-600 font-medium">Rows:</span>
-                      <Select value={perPage.toString()} onValueChange={(v) => { const n = parseInt(v); if (viewMode === "database") { setDbPerPage(n); setDbPage(1); } else { setApiPerPage(n); setApiPage(1); } }}>
+                      <span className="text-slate-500 font-medium">Rows:</span>
+                      <Select
+                        value={perPage.toString()}
+                        onValueChange={v => {
+                          const n = parseInt(v);
+                          if (isCloudMode) { setApiPerPage(n); setApiPage(1); saveToSession({ apiPerPage: n, apiPage: 1, scrollOffset: 0 }); } 
+                          else { setDbPerPage(n); setDbPage(1); saveToSession({ dbPerPage: n, dbPage: 1, scrollOffset: 0 }); }
+                        }}
+                      >
                         <SelectTrigger className="w-16 h-7 text-[10px] px-2"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="10">10</SelectItem>
-                          <SelectItem value="25">25</SelectItem>
-                          <SelectItem value="50">50</SelectItem>
-                          <SelectItem value="100">100</SelectItem>
-                        </SelectContent>
+                        <SelectContent>{[10, 25, 50, 100].map(n => <SelectItem key={n} value={n.toString()}>{n}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => viewMode === "database" ? setDbPage((p) => Math.max(1, p - 1)) : handleApiPageChange(apiPage - 1)} disabled={currentPage === 1 || isFetching} className="h-7 px-2.5 text-[10px]">
+                      <Button variant="outline" size="sm"
+                        onClick={() => {
+                          if (isCloudMode) { handleApiPageChange(apiPage - 1); } 
+                          else { const p = Math.max(1, dbPage - 1); setDbPage(p); saveToSession({ dbPage: p, scrollOffset: 0 }); }
+                        }}
+                        disabled={currentPage === 1 || isFetching} className="h-7 px-2.5 text-[10px]">
                         <ChevronLeft className="h-3.5 w-3.5 mr-1" />Prev
                       </Button>
-                      <span className="font-medium px-3">{currentPage} / {totalPages}</span>
-                      <Button variant="outline" size="sm" onClick={() => viewMode === "database" ? setDbPage((p) => Math.min(totalPages, p + 1)) : handleApiPageChange(apiPage + 1)} disabled={currentPage === totalPages || isFetching} className="h-7 px-2.5 text-[10px]">
+                      <span className="font-medium px-3 text-slate-700">{currentPage} / {totalPages}</span>
+                      <Button variant="outline" size="sm"
+                        onClick={() => {
+                          if (isCloudMode) { handleApiPageChange(apiPage + 1); } 
+                          else { const p = Math.min(totalPages, dbPage + 1); setDbPage(p); saveToSession({ dbPage: p, scrollOffset: 0 }); }
+                        }}
+                        disabled={currentPage >= totalPages || isFetching} className="h-7 px-2.5 text-[10px]">
                         Next<ChevronRight className="h-3.5 w-3.5 ml-1" />
                       </Button>
                     </div>
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* No results */}
-          {!isLoading && displayCompanies.length === 0 && (viewMode === "database" || hasSearched) && !isSearching && (
-            <div className="flex flex-col items-center justify-center h-full text-center px-8">
-              <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-8 shadow-md">
-                <AlertCircle className="h-12 w-12 text-slate-400" />
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900 mb-4">No companies found</h2>
-              <p className="text-lg text-slate-600 max-w-lg mb-10">{viewMode === "database" ? "Try adjusting your filters or switch to Search from Cloud." : "Try adjusting your search criteria."}</p>
-              {viewMode === "database" && <Button onClick={() => setViewMode("search")} size="lg" className="gap-3 text-base"><Cloud className="h-5 w-5" />Search from Cloud</Button>}
-            </div>
+            </>
           )}
         </div>
+       
       </div>
 
-     {/* ADD MODAL AT THE BOTTOM OF THE COMPONENT (Outside the loop) */}
-       {selectedCompanyForList && (
-        <AddToCompanyListModal
-            open={listModalOpen}
-            onOpenChange={(val) => {
-                setListModalOpen(val);
-                if (!val) setSelectedCompanyForList(null);
-            }}
-            onConfirm={handleListAdd}
-            companyName={selectedCompanyForList.name}
-            isFromSearch={viewMode === 'search'}
-        />
+      {selectedCompanyForList && listModalOpen && (
+        <AddToCompanyListModal open={listModalOpen} onOpenChange={open => { setListModalOpen(open); if (!open) setSelectedCompanyForList(null); }} onConfirm={handleListAdd} companyName={selectedCompanyForList.name} isFromSearch={isCloudMode} />
       )}
 
-      {/* Organization Details Dialog */}
+      {!selectedCompanyForList && listModalOpen && selectedOrgs.size > 0 && (
+        <AddToCompanyListModal open={listModalOpen} onOpenChange={open => { setListModalOpen(open); }} onConfirm={handleBulkAddToList} companyName={`${selectedOrgs.size} companies`} isFromSearch={isCloudMode} />
+      )}
+
       <Dialog open={!!viewingOrgDetails} onOpenChange={() => setViewingOrgDetails(null)}>
         <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-4 text-2xl">
-              <Avatar className="h-12 w-12">
-                <AvatarImage src={viewingOrgDetails?.logo_url} />
-                <AvatarFallback className="text-xl">{getInitials(viewingOrgDetails?.name || "")}</AvatarFallback>
-              </Avatar>
+            <DialogTitle className="flex items-center gap-4 text-xl">
+              <Avatar className="h-10 w-10"><AvatarImage src={viewingOrgDetails?.logo_url} /><AvatarFallback className="text-lg">{getInitials(viewingOrgDetails?.name || "")}</AvatarFallback></Avatar>
               {viewingOrgDetails?.name}
             </DialogTitle>
-            <DialogDescription className="text-base">Complete organization information</DialogDescription>
+            <DialogDescription>Complete organization information</DialogDescription>
           </DialogHeader>
           {viewingOrgDetails && (
-            <div className="space-y-6 py-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div><p className="text-sm text-slate-500 uppercase font-semibold">Industry</p><p className="text-base font-medium mt-1">{viewingOrgDetails.industry || "N/A"}</p></div>
-                <div><p className="text-sm text-slate-500 uppercase font-semibold">Employees</p><p className="text-base font-medium mt-1">{formatEmployeeCount(viewingOrgDetails.estimated_num_employees)}</p></div>
-                <div><p className="text-sm text-slate-500 uppercase font-semibold">Revenue</p><p className="text-base font-medium mt-1">{formatRevenue(viewingOrgDetails.annual_revenue_printed || viewingOrgDetails.organization_revenue_printed)}</p></div>
-                <div><p className="text-sm text-slate-500 uppercase font-semibold">Founded</p><p className="text-base font-medium mt-1">{viewingOrgDetails.founded_year || "N/A"}</p></div>
+            <div className="space-y-5 py-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+                <div><p className="text-xs text-slate-500 uppercase font-semibold mb-1">Industry</p><p className="text-sm font-medium">{viewingOrgDetails.industry || "N/A"}</p></div>
+                <div><p className="text-xs text-slate-500 uppercase font-semibold mb-1">Employees</p><p className="text-sm font-medium">{fmtEmployees(viewingOrgDetails.estimated_num_employees)}</p></div>
+                <div><p className="text-xs text-slate-500 uppercase font-semibold mb-1">Revenue</p><p className="text-sm font-medium">{fmtRevenue((viewingOrgDetails as any).annual_revenue_printed || (viewingOrgDetails as any).organization_revenue_printed)}</p></div>
+                <div><p className="text-xs text-slate-500 uppercase font-semibold mb-1">Founded</p><p className="text-sm font-medium">{viewingOrgDetails.founded_year || "N/A"}</p></div>
               </div>
               {viewingOrgDetails.short_description && (
-                <div><p className="text-sm text-slate-500 uppercase font-semibold mb-2">Description</p><p className="text-base text-slate-700 leading-relaxed">{viewingOrgDetails.short_description}</p></div>
+                <div><p className="text-xs text-slate-500 uppercase font-semibold mb-1">Description</p><p className="text-sm text-slate-700 leading-relaxed">{viewingOrgDetails.short_description}</p></div>
               )}
-              <div><p className="text-sm text-slate-500 uppercase font-semibold mb-2">Location</p><p className="text-base text-slate-700">{[viewingOrgDetails.city, viewingOrgDetails.state, viewingOrgDetails.country].filter(Boolean).join(", ") || "N/A"}</p></div>
-              {viewingOrgDetails.technology_names && viewingOrgDetails.technology_names.length > 0 && (
+              <div><p className="text-xs text-slate-500 uppercase font-semibold mb-1">Location</p>
+                <p className="text-sm text-slate-700">{[viewingOrgDetails.city, viewingOrgDetails.state, viewingOrgDetails.country].filter(Boolean).join(", ") || "N/A"}</p>
+              </div>
+              {(viewingOrgDetails as any).technology_names?.length > 0 && (
                 <div>
-                  <p className="text-sm text-slate-500 uppercase font-semibold mb-3">Technologies</p>
-                  <div className="flex flex-wrap gap-2">
-                    {viewingOrgDetails.technology_names.slice(0, 20).map((tech: string) => (<Badge key={tech} variant="secondary" className="text-sm px-3 py-1">{tech}</Badge>))}
-                    {viewingOrgDetails.technology_names.length > 20 && <Badge variant="outline" className="text-sm px-3 py-1">+{viewingOrgDetails.technology_names.length - 20} more</Badge>}
+                  <p className="text-xs text-slate-500 uppercase font-semibold mb-2">Technologies</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(viewingOrgDetails as any).technology_names.slice(0, 20).map((t: string) => <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>)}
+                    {(viewingOrgDetails as any).technology_names.length > 20 && <Badge variant="outline" className="text-xs">+{(viewingOrgDetails as any).technology_names.length - 20} more</Badge>}
                   </div>
                 </div>
               )}
-              {viewingOrgDetails.keywords && viewingOrgDetails.keywords.length > 0 && (
+              {(viewingOrgDetails as any).keywords?.length > 0 && (
                 <div>
-                  <p className="text-sm text-slate-500 uppercase font-semibold mb-3">Keywords</p>
-                  <div className="flex flex-wrap gap-2">
-                    {viewingOrgDetails.keywords.slice(0, 15).map((keyword: string) => (<Badge key={keyword} variant="outline" className="text-sm px-3 py-1">{keyword}</Badge>))}
+                  <p className="text-xs text-slate-500 uppercase font-semibold mb-2">Keywords</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(viewingOrgDetails as any).keywords.slice(0, 15).map((k: string) => <Badge key={k} variant="outline" className="text-xs">{k}</Badge>)}
                   </div>
                 </div>
               )}
             </div>
           )}
-          <DialogFooter><Button variant="outline" size="lg" onClick={() => setViewingOrgDetails(null)}>Close</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setViewingOrgDetails(null)}>Close</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -1403,5 +1299,3 @@ const timezoneLookupStr = [displayPrimary, displaySecondary]
 };
 
 export default CompanyIntelligenceSearchPage;
-
-// List view table

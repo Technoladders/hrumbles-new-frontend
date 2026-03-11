@@ -20,35 +20,44 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 // --- Type Definitions ---
-interface Candidate { id: string; name: string; created_at: string; main_status_id: string | null; sub_status_id: string | null; job_title: string | null; recruiter_name: string | null; client_name: string | null; current_salary: number | null; expected_salary: number | null; location: string | null; notice_period: string | null; overall_score: number | null; job_id: string; metadata: any; interview_date?: string | null; interview_time?: string | null; interview_feedback?: string | null; }interface StatusMap { [key: string]: string; }
+interface Candidate { id: string; name: string; created_at: string; main_status_id: string | null; sub_status_id: string | null; job_title: string | null; recruiter_name: string | null; client_name: string | null; current_salary: number | null; expected_salary: number | null; location: string | null; notice_period: string | null; overall_score: number | null; job_id: string; metadata: any; interview_date?: string | null; interview_time?: string | null; interview_feedback?: string | null; }interface StatusMap {[key: string]: string; }
 interface GroupedData { [statusName: string]: Candidate[]; }
 interface TableRowData { type: 'header' | 'data'; statusName?: string; count?: number; candidate?: Candidate; }
 interface RecruiterPerformance { name: string; hires: number; }
 interface PipelineStage { stage: string; count: number; }
 
 // --- CONSTANTS FOR CALCULATION ---
-// --- NEW DYNAMIC STATUS ID CONFIGURATION ---
 const STATUS_CONFIG = {
   default: {
     INTERVIEW_MAIN_STATUS_ID: "f72e13f8-7825-4793-85e0-e31d669f8097",
-    INTERVIEW_SCHEDULED_SUB_STATUS_IDS: ["4ab0c42a-4748-4808-8f29-e57cb401bde5", "a8eed1eb-f903-4bbf-a91b-e347a0f7c43f", "1de35d8a-c07f-4c1d-b185-12379f559286", "0cc92be8-c8f1-47c6-a38d-3ca04eca6bb8", "48e060dc-5884-47e5-85dd-d717d4debe40"],
-    INTERVIEW_RESCHEDULED_SUB_STATUS_IDS: ["00601f51-90ec-4d75-8ced-3225fed31643", "9ef38a36-cffa-4286-9826-bc7d736a04ce", "2c38a0fb-8b56-47bf-8c7e-e4bd19b68fdf", "d2aef2b3-89b4-4845-84f0-777b6adf9018", "e569facd-7fd0-48b9-86cd-30062c80260b"],
-    INTERVIEW_OUTCOME_SUB_STATUS_IDS: ["1930ab52-4bb4-46a2-a9d1-887629954868", "e5615fa5-f60c-4312-9f6b-4ed543541520", "258741d9-cdb1-44fe-8ae9-ed5e9eed9e27", "0111b1b9-23c9-4be1-8ad4-322ccad6ccf0", "11281dd5-5f33-4d5c-831d-2488a5d3c96e", "31346b5c-1ff4-4842-aab4-645b36b6197a", "1ce3a781-09c7-4b3f-9a58-e4c6cd02721a", "4694aeff-567b-4007-928e-b3fefe558daf", "5b59c8cb-9a6a-43b8-a3cd-8f867c0b30a2", "368aa85f-dd4a-45b5-9266-48898704839b"],
+    INTERVIEW_SCHEDULED_SUB_STATUS_IDS:["4ab0c42a-4748-4808-8f29-e57cb401bde5", "a8eed1eb-f903-4bbf-a91b-e347a0f7c43f", "1de35d8a-c07f-4c1d-b185-12379f559286", "0cc92be8-c8f1-47c6-a38d-3ca04eca6bb8", "48e060dc-5884-47e5-85dd-d717d4debe40"],
+    INTERVIEW_RESCHEDULED_SUB_STATUS_IDS:["00601f51-90ec-4d75-8ced-3225fed31643", "9ef38a36-cffa-4286-9826-bc7d736a04ce", "2c38a0fb-8b56-47bf-8c7e-e4bd19b68fdf", "d2aef2b3-89b4-4845-84f0-777b6adf9018", "e569facd-7fd0-48b9-86cd-30062c80260b"],
+    INTERVIEW_OUTCOME_SUB_STATUS_IDS:["1930ab52-4bb4-46a2-a9d1-887629954868", "e5615fa5-f60c-4312-9f6b-4ed543541520", "258741d9-cdb1-44fe-8ae9-ed5e9eed9e27", "0111b1b9-23c9-4be1-8ad4-322ccad6ccf0", "11281dd5-5f33-4d5c-831d-2488a5d3c96e", "31346b5c-1ff4-4842-aab4-645b36b6197a", "1ce3a781-09c7-4b3f-9a58-e4c6cd02721a", "4694aeff-567b-4007-928e-b3fefe558daf", "5b59c8cb-9a6a-43b8-a3cd-8f867c0b30a2", "368aa85f-dd4a-45b5-9266-48898704839b"],
     JOINED_STATUS_ID: "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e",
     OFFERED_STATUS_ID: "9d48d0f9-8312-4f60-aaa4-bafdce067417",
     JOINED_SUB_STATUS_ID: "c9716374-3477-4606-877a-dfa5704e7680",
   },
   demo: { // organization_id: 53989f03-bdc9-439a-901c-45b274eff506
     INTERVIEW_MAIN_STATUS_ID: "6f5a6a77-ab6a-46ca-b659-fd207b22ae0d",
-    INTERVIEW_SCHEDULED_SUB_STATUS_IDS: ["84e97908-3a51-4ccd-82c3-ec2ebcc17757", "97e76257-b0c8-4935-8bae-2ef4097d776f", "531a2ca1-551f-43f4-9eb4-cb293f4f7517", "74cba87d-b193-44d0-9ac6-9c378ef971b2", "4a13bb3c-cf3b-45d4-9d80-f9d9c3d4d7d1"],
-    INTERVIEW_RESCHEDULED_SUB_STATUS_IDS: ["72711a0d-5060-4eb9-8a68-6558e73d013d", "708424a6-5d24-4905-a275-f3d3e0519914", "59e371e3-455c-4cf1-912e-aab38872ebad", "7f468dd7-30af-4632-97b9-7668cbd847e0", "c5f48189-07ed-49a8-985b-0a98b46ca831"],
-    INTERVIEW_OUTCOME_SUB_STATUS_IDS: ["fc3acdf6-48f7-4a9f-98fa-bd29d72ed118", "ebb88495-1a66-48d4-afe9-d45cabeecac3", "a8f533cf-5e68-4a86-96eb-c519a48aef1f", "385af9cb-4ae6-49b7-b5a8-45b653ca0c78", "3cca7b15-6b26-470b-b086-406d401c8c28", "743fd5ed-2ebf-45b3-8703-d0114b3607ae", "d9798bab-c375-4748-937a-abb739c5c82a", "fdd2c99c-29a6-4fad-8a58-ad9c3d30d7c5", "5aabfefe-e426-4bf1-b037-0eca402a1a4b", "3f797fc6-caef-48fd-9aa0-3d1fba010168"],
+    INTERVIEW_SCHEDULED_SUB_STATUS_IDS:["84e97908-3a51-4ccd-82c3-ec2ebcc17757", "97e76257-b0c8-4935-8bae-2ef4097d776f", "531a2ca1-551f-43f4-9eb4-cb293f4f7517", "74cba87d-b193-44d0-9ac6-9c378ef971b2", "4a13bb3c-cf3b-45d4-9d80-f9d9c3d4d7d1"],
+    INTERVIEW_RESCHEDULED_SUB_STATUS_IDS:["72711a0d-5060-4eb9-8a68-6558e73d013d", "708424a6-5d24-4905-a275-f3d3e0519914", "59e371e3-455c-4cf1-912e-aab38872ebad", "7f468dd7-30af-4632-97b9-7668cbd847e0", "c5f48189-07ed-49a8-985b-0a98b46ca831"],
+    INTERVIEW_OUTCOME_SUB_STATUS_IDS:["fc3acdf6-48f7-4a9f-98fa-bd29d72ed118", "ebb88495-1a66-48d4-afe9-d45cabeecac3", "a8f533cf-5e68-4a86-96eb-c519a48aef1f", "385af9cb-4ae6-49b7-b5a8-45b653ca0c78", "3cca7b15-6b26-470b-b086-406d401c8c28", "743fd5ed-2ebf-45b3-8703-d0114b3607ae", "d9798bab-c375-4748-937a-abb739c5c82a", "fdd2c99c-29a6-4fad-8a58-ad9c3d30d7c5", "5aabfefe-e426-4bf1-b037-0eca402a1a4b", "3f797fc6-caef-48fd-9aa0-3d1fba010168"],
     JOINED_STATUS_ID: "5ab8833c-c409-46b8-a6b0-dbf23591827b",
     OFFERED_STATUS_ID: "0557a2c9-6c27-46d5-908c-a826b82a6c47",
     JOINED_SUB_STATUS_ID: "247ef818-9fbe-41ee-a755-a446d620ebb6",
+  },
+  ample: { // organization_id: e032d8c5-2168-4083-9919-c2e09719550a
+    INTERVIEW_MAIN_STATUS_ID: "da3fbfcb-f06b-4ed5-bea7-fd3cc83574ec",
+    INTERVIEW_SCHEDULED_SUB_STATUS_IDS:["3f6d2b70-1bef-458f-9159-1fccbff6a7da", "af109127-7551-4a8b-9f8d-540677031e6c", "265e8b74-f119-48a9-8287-12681e2ca85a", "c99881c4-5187-4671-ace5-bc7f843a8e3d", "e4c869bf-6d02-44e7-9104-d5e71a7dbe02"],
+    INTERVIEW_RESCHEDULED_SUB_STATUS_IDS:["55f56dd7-4a92-4b51-be2b-6d2f9bc6827d", "d8a786cb-45d7-45f5-9792-36a791ffab4a", "a20be41a-8f16-4a3d-bc74-4022187aaf01", "73ac9fb4-7589-48d6-834f-499a49cda2df", "ea8b2079-55a3-4104-910b-b73734533791"],
+    INTERVIEW_OUTCOME_SUB_STATUS_IDS:["7206549a-2614-4e43-a607-c1fe62f19a98", "e2fe5bb5-e5dd-43a7-910d-60d898544a8d", "60e64b4b-59bf-42c8-a2fe-6c9845002dc7", "6eccd385-d4a6-48b9-a2cd-81ad6c681469", "07b22796-dd81-4bc5-930d-3e3442a5294f", "803dbde0-1757-423d-b68f-56aaaf7149ab", "40a98037-ce72-402c-b0da-ca578902fd10", "40e3139a-d220-4c7d-8743-1edc21dd7c2d", "e352c699-13de-4765-8e83-1df563b6f488", "e1104e37-7dcd-44fd-af27-b7f574a8bd90"],
+    JOINED_STATUS_ID: "c86f65ab-b122-476c-8d5b-f6ff1ca8147b",
+    OFFERED_STATUS_ID: "bf2f3bf1-c1a0-417c-9c26-53083b5888ce",
+    JOINED_SUB_STATUS_ID: "d1537afc-0b75-454d-ba37-dd2bd4acaf2d",
   }
 };
 const DEMO_ORGANIZATION_ID = '53989f03-bdc9-439a-901c-45b274eff506';
+const AMPLE_ORGANIZATION_ID = 'e032d8c5-2168-4083-9919-c2e09719550a';
 
 // --- Helper Functions ---
 const formatCurrency = (value: number | null | undefined) => (value == null) ? 'N/A' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
@@ -61,13 +70,13 @@ const formatTime = (time?: string | null) => {
     const [hours, minutes] = time.split(':');
     const date = new Date();
     date.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0);
-    return format(date, 'h:mm a'); // 'h:mm a' explicitly produces '10:00 AM' or '2:30 PM'
+    return format(date, 'h:mm a'); 
   } catch {
-    return time; // Fallback to original string if parsing fails
+    return time; 
   }
 };
 
-// --- Reusable Analytics Card Component (Updated) ---
+// --- Reusable Analytics Card Component ---
 const AnalyticsCard: React.FC<{ icon: React.ElementType; title: string; value: string | number; subMetrics?: { label: string; value: string | number }[]; }> = ({ icon: Icon, title, value, subMetrics }) => (
   <Card className="shadow-sm hover:shadow-md transition-shadow h-full">
     <CardContent className="p-4 flex flex-col justify-between h-full">
@@ -76,7 +85,6 @@ const AnalyticsCard: React.FC<{ icon: React.ElementType; title: string; value: s
           <p className="text-sm font-medium text-gray-500">{title}</p>
           <Icon className="h-5 w-5 text-gray-400" />
         </div>
-        {/* Render main value only if it's not empty */}
         {value && <div className="mt-2"><h3 className="text-3xl font-bold text-gray-800 truncate" title={String(value)}>{value}</h3></div>}
       </div>
       {subMetrics && subMetrics.length > 0 && (
@@ -102,10 +110,6 @@ const AnalyticsCard: React.FC<{ icon: React.ElementType; title: string; value: s
   </Card>
 );
 
-
-
-
-
 // --- Main Component ---
 interface AllCandidatesTabProps {
   clientName: string;
@@ -114,29 +118,28 @@ interface AllCandidatesTabProps {
 
 const AllCandidatesTab: React.FC<AllCandidatesTabProps> = ({ clientName, dateRange }) => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
-    // --- DYNAMICALLY SELECT STATUS IDs ---
-  const statusIds = useMemo(() => {
-    return organizationId === DEMO_ORGANIZATION_ID ? STATUS_CONFIG.demo : STATUS_CONFIG.default;
-  }, [organizationId]);
+  
+  // Dynamic State initialization for statuses
+  const[dynamicStatusIds, setDynamicStatusIds] = useState(STATUS_CONFIG.default);
+  
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isGrouped, setIsGrouped] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const[searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [recruiterFilter, setRecruiterFilter] = useState('all');
-  const [recruiterOptions, setRecruiterOptions] = useState<string[]>([]);
+  const[recruiterOptions, setRecruiterOptions] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
-  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+  const[expandedGroups, setExpandedGroups] = useState<string[]>([]);
 
-
-  // --- STATUS CELL COMPONENT (MOVED INSIDE to access statusIds) ---
+  // --- STATUS CELL COMPONENT ---
   const StatusCell: React.FC<{ candidate: Candidate; statusName: string }> = ({ candidate, statusName }) => {
-    const isScheduled = candidate.main_status_id === statusIds.INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && (statusIds.INTERVIEW_SCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id));
-    const isRescheduled = candidate.main_status_id === statusIds.INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && statusIds.INTERVIEW_RESCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id);
-    const isOutcome = candidate.main_status_id === statusIds.INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && statusIds.INTERVIEW_OUTCOME_SUB_STATUS_IDS.includes(candidate.sub_status_id);
+    const isScheduled = candidate.main_status_id === dynamicStatusIds.INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && (dynamicStatusIds.INTERVIEW_SCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id));
+    const isRescheduled = candidate.main_status_id === dynamicStatusIds.INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && dynamicStatusIds.INTERVIEW_RESCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id);
+    const isOutcome = candidate.main_status_id === dynamicStatusIds.INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && dynamicStatusIds.INTERVIEW_OUTCOME_SUB_STATUS_IDS.includes(candidate.sub_status_id);
 
     let displayStatusName = statusName;
     if (isScheduled) {
@@ -185,12 +188,11 @@ useEffect(() => {
       if (!organizationId || !clientName) return;
       setIsLoading(true); setError(null);
       try {
-        const { data: jobs, error: jobsError } = await supabase.from('hr_jobs').select('id').eq('organization_id', organizationId).eq('client_owner', clientName);
+        const { data: jobs, error: jobsError } = await supabase.from('hr_jobs').select('id').eq('organization_id', organizationId).eq('client_details->>clientName', clientName);
         if (jobsError) throw jobsError;
         if (!jobs || jobs.length === 0) { setCandidates([]); return; }
         const jobIds = jobs.map(job => job.id);
         
-        // --- UPDATED QUERY to fetch interview details ---
         let candidatesQuery = supabase.from('hr_job_candidates').select(`
           id, name, created_at, main_status_id, sub_status_id, metadata, job_id,
           interview_date, interview_time, interview_feedback,
@@ -203,15 +205,41 @@ useEffect(() => {
             candidatesQuery = candidatesQuery.gte('created_at', format(dateRange.startDate, 'yyyy-MM-dd')).lte('created_at', format(dateRange.endDate, 'yyyy-MM-dd'));
         }
 
+        // Changed select to fetch type column to help map dynamic ID names uniquely
         const [candidatesResponse, statusesResponse] = await Promise.all([
           candidatesQuery.order('created_at', { ascending: false }),
-          supabase.from('job_statuses').select('id, name').eq('organization_id', organizationId),
+          supabase.from('job_statuses').select('id, name, type').eq('organization_id', organizationId),
         ]);
 
         if (candidatesResponse.error) throw candidatesResponse.error;
         if (statusesResponse.error) throw statusesResponse.error;
         
-        // --- UPDATED FORMATTING to include new fields ---
+        const statusesData = statusesResponse.data ||[];
+        const statusMap = statusesData.reduce((acc: any, status: any) => { acc[status.id] = status.name; return acc; }, {});
+        setStatuses(statusMap);
+
+        // --- DYNAMIC STATUS ID RESOLUTION --- 
+        // This makes sure it works seamlessly for *any* newly added organization moving forward!
+        const findId = (name: string, type?: string) => statusesData.find((s: any) => s.name === name && (type ? s.type === type : true))?.id;
+        const interviewMain = findId('Interview', 'main');
+        
+        if (interviewMain) {
+            setDynamicStatusIds({
+                INTERVIEW_MAIN_STATUS_ID: interviewMain,
+                INTERVIEW_SCHEDULED_SUB_STATUS_IDS:["Technical Assessment", "L1", "L2", "L3", "End Client Round"].map(n => findId(n, 'sub')).filter(Boolean) as string[],
+                INTERVIEW_RESCHEDULED_SUB_STATUS_IDS:["Reschedule Technical Assessment", "Reschedule L1", "Reschedule L2", "Reschedule L3", "Reschedule End Client Round"].map(n => findId(n, 'sub')).filter(Boolean) as string[],
+                INTERVIEW_OUTCOME_SUB_STATUS_IDS:["Technical Assessment Selected", "Technical Assessment Rejected", "L1 Selected", "L1 Rejected", "L2 Selected", "L2 Rejected", "L3 Selected", "L3 Rejected", "End Client Selected", "End Client Rejected"].map(n => findId(n, 'sub')).filter(Boolean) as string[],
+                JOINED_STATUS_ID: findId('Joined', 'main') || STATUS_CONFIG.default.JOINED_STATUS_ID,
+                OFFERED_STATUS_ID: findId('Offered', 'main') || STATUS_CONFIG.default.OFFERED_STATUS_ID,
+                JOINED_SUB_STATUS_ID: findId('Joined', 'sub') || STATUS_CONFIG.default.JOINED_SUB_STATUS_ID,
+            });
+        } else {
+             // Fallback for statically declared IDs
+             if (organizationId === DEMO_ORGANIZATION_ID) setDynamicStatusIds(STATUS_CONFIG.demo);
+             else if (organizationId === AMPLE_ORGANIZATION_ID) setDynamicStatusIds(STATUS_CONFIG.ample);
+             else setDynamicStatusIds(STATUS_CONFIG.default);
+        }
+
         const formattedCandidates: Candidate[] = (candidatesResponse.data as any[]).map(c => ({
           id: c.id, job_id: c.job_id, name: c.name, created_at: c.created_at, main_status_id: c.main_status_id, sub_status_id: c.sub_status_id, metadata: c.metadata,
           job_title: c.job?.title || 'N/A', 
@@ -228,9 +256,8 @@ useEffect(() => {
         }));
 
         setCandidates(formattedCandidates);
-        const statusMap = statusesResponse.data.reduce((acc, status) => { acc[status.id] = status.name; return acc; }, {});
-        setStatuses(statusMap);
-        const uniqueRecruiters = [...new Set(formattedCandidates.map(c => c.recruiter_name).filter(r => r && r !== 'N/A'))].sort();
+        
+        const uniqueRecruiters =[...new Set(formattedCandidates.map(c => c.recruiter_name).filter(r => r && r !== 'N/A'))].sort();
         setRecruiterOptions(uniqueRecruiters);
       } catch (err: any) {
         setError(err.message || 'An unknown error occurred.');
@@ -239,24 +266,21 @@ useEffect(() => {
       }
     };
     fetchData();
-  }, [organizationId, clientName, dateRange]);
+  },[organizationId, clientName, dateRange]);
 
   const filteredCandidates = useMemo(() => candidates.filter(c => {
     const statusName = statuses[c.sub_status_id || ''] || 'Uncategorized';
     return (statusFilter === 'all' || statusName === statusFilter) &&
            (recruiterFilter === 'all' || c.recruiter_name === recruiterFilter) &&
            (!searchTerm || (c.name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.job_title?.toLowerCase().includes(searchTerm.toLowerCase()) || c.recruiter_name?.toLowerCase().includes(searchTerm.toLowerCase())));
-  }), [candidates, searchTerm, statuses, statusFilter, recruiterFilter]);
+  }),[candidates, searchTerm, statuses, statusFilter, recruiterFilter]);
 
-  console.log("filteredCandidates", filteredCandidates)
-
-
-    // --- UPDATED ANALYTICS LOGIC ---
-    const { analytics, pipelineStages, recruiterPerformance } = useMemo(() => {
+  // --- UPDATED ANALYTICS LOGIC ---
+  const { analytics, pipelineStages, recruiterPerformance } = useMemo(() => {
     const stageCounts: { [key: string]: number } = {}; let scoreSum = 0; let scoreCount = 0;
     const recruiterProfiles: { [key: string]: number } = {}; const recruiterConversions: { [key: string]: number } = {}; const recruiterJoins: { [key: string]: number } = {};
     let convertedCount = 0; let joinedCount = 0;
-    const conversionStatuses = [statusIds.INTERVIEW_MAIN_STATUS_ID, statusIds.OFFERED_STATUS_ID, statusIds.JOINED_STATUS_ID];
+    const conversionStatuses =[dynamicStatusIds.INTERVIEW_MAIN_STATUS_ID, dynamicStatusIds.OFFERED_STATUS_ID, dynamicStatusIds.JOINED_STATUS_ID];
 
     filteredCandidates.forEach(c => {
       const mainStatusName = statuses[c.main_status_id || ''] || 'Sourced';
@@ -265,10 +289,10 @@ useEffect(() => {
       if (c.recruiter_name && c.recruiter_name !== 'N/A') { 
           recruiterProfiles[c.recruiter_name] = (recruiterProfiles[c.recruiter_name] || 0) + 1;
           if (c.main_status_id && conversionStatuses.includes(c.main_status_id)) { recruiterConversions[c.recruiter_name] = (recruiterConversions[c.recruiter_name] || 0) + 1; }
-          if (c.main_status_id === statusIds.JOINED_STATUS_ID && c.sub_status_id === statusIds.JOINED_SUB_STATUS_ID) { recruiterJoins[c.recruiter_name] = (recruiterJoins[c.recruiter_name] || 0) + 1; }
+          if (c.main_status_id === dynamicStatusIds.JOINED_STATUS_ID && c.sub_status_id === dynamicStatusIds.JOINED_SUB_STATUS_ID) { recruiterJoins[c.recruiter_name] = (recruiterJoins[c.recruiter_name] || 0) + 1; }
       }
       if (c.main_status_id && conversionStatuses.includes(c.main_status_id)) { convertedCount++; }
-      if (c.main_status_id === statusIds.JOINED_STATUS_ID && c.sub_status_id === statusIds.JOINED_SUB_STATUS_ID) { joinedCount++; }
+      if (c.main_status_id === dynamicStatusIds.JOINED_STATUS_ID && c.sub_status_id === dynamicStatusIds.JOINED_SUB_STATUS_ID) { joinedCount++; }
     });
     
     const getTopPerformer = (counts: { [key: string]: number }) => Object.keys(counts).sort((a,b) => counts[b] - counts[a])[0] || 'N/A';
@@ -286,12 +310,13 @@ useEffect(() => {
         pipelineStages: Object.entries(stageCounts).map(([stage, count]) => ({ stage, count })),
         recruiterPerformance: Object.entries(recruiterProfiles).map(([name, hires]) => ({ name, hires })).sort((a,b) => b.hires - a.hires)
     };
-  }, [filteredCandidates, statuses]);
+  }, [filteredCandidates, statuses, dynamicStatusIds]);
 
   const groupedBySubStatus = useMemo<GroupedData>(() => filteredCandidates.reduce((acc: GroupedData, c) => { const s = statuses[c.sub_status_id || ''] || 'Uncategorized'; if (!acc[s]) acc[s] = []; acc[s].push(c); return acc; }, {}), [filteredCandidates, statuses]);
-  const tableRows = useMemo<TableRowData[]>(() => !isGrouped ? filteredCandidates.map(c => ({ type: 'data', candidate: c, statusName: statuses[c.sub_status_id || ''] || 'Uncategorized' })) : Object.entries(groupedBySubStatus).sort((a, b) => a[0].localeCompare(b[0])).flatMap(([s, g]) => [{ type: 'header', statusName: s, count: g.length }, ...expandedGroups.includes(s) ? g.map(c => ({ type: 'data', candidate: c, statusName: s })) : []]), [isGrouped, filteredCandidates, groupedBySubStatus, expandedGroups, statuses]);
+  const tableRows = useMemo<TableRowData[]>(() => !isGrouped ? filteredCandidates.map(c => ({ type: 'data', candidate: c, statusName: statuses[c.sub_status_id || ''] || 'Uncategorized' })) : Object.entries(groupedBySubStatus).sort((a, b) => a[0].localeCompare(b[0])).flatMap(([s, g]) =>[{ type: 'header', statusName: s, count: g.length }, ...expandedGroups.includes(s) ? g.map(c => ({ type: 'data', candidate: c, statusName: s })) : []]),[isGrouped, filteredCandidates, groupedBySubStatus, expandedGroups, statuses]);
   const totalPages = Math.ceil(tableRows.length / itemsPerPage); const startIndex = (currentPage - 1) * itemsPerPage; const paginatedData = tableRows.slice(startIndex, startIndex + itemsPerPage);
- const exportToCSV = () => {
+ 
+  const exportToCSV = () => {
     if (filteredCandidates.length === 0) {
         alert("No data to export.");
         return;
@@ -310,7 +335,7 @@ useEffect(() => {
       'Location': formatValue(c.location),
     }));
     const csv = Papa.unparse(dataForExport, { header: true });
-    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' }); // \uFEFF for BOM
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' }); 
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `${clientName}_candidate_report_${new Date().toISOString().split('T')[0]}.csv`;
@@ -346,12 +371,13 @@ useEffect(() => {
       startY: 20,
       theme: 'grid',
       styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
-      headStyles: { fillColor: [123, 67, 241] }, // Purple color
-      columnStyles: { 0: { cellWidth: 30 }, 3: { cellWidth: 40 } } // Give more width to Name and Job Title
+      headStyles: { fillColor:[123, 67, 241] }, 
+      columnStyles: { 0: { cellWidth: 30 }, 3: { cellWidth: 40 } } 
     });
     doc.save(`${clientName}_candidate_report_${new Date().toISOString().split('T')[0]}.pdf`);
   };
-  const toggleGroup = (statusName: string) => setExpandedGroups(prev => prev.includes(statusName) ? prev.filter(g => g !== statusName) : [...prev, statusName]);
+  
+  const toggleGroup = (statusName: string) => setExpandedGroups(prev => prev.includes(statusName) ? prev.filter(g => g !== statusName) :[...prev, statusName]);
   const onFilterChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (value: string) => { setter(value); setCurrentPage(1); };
 
   if (isLoading) return <div className="flex h-[50vh] items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-purple-600"/></div>;
@@ -364,15 +390,15 @@ useEffect(() => {
         <AnalyticsCard icon={GitMerge} title="Conversion Rate" value={analytics.conversionRate} subMetrics={[{ label: 'Joined Rate', value: analytics.joinedRate }]} />
         <AnalyticsCard icon={Star} title="Average AI Score" value={analytics.averageScore} />
         <AnalyticsCard 
-    icon={Crown} 
-    title="Top Performers" 
-    value="" // This is important to trigger the special layout
-    subMetrics={[
-        { label: 'Profiles', value: analytics.topProfilesRecruiter },
-        { label: 'Converted', value: analytics.topConvertedRecruiter },
-        { label: 'Joined', value: analytics.topJoinedRecruiter }
-    ]} 
-/>
+            icon={Crown} 
+            title="Top Performers" 
+            value="" 
+            subMetrics={[
+                { label: 'Profiles', value: analytics.topProfilesRecruiter },
+                { label: 'Converted', value: analytics.topConvertedRecruiter },
+                { label: 'Joined', value: analytics.topJoinedRecruiter }
+            ]} 
+        />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2">

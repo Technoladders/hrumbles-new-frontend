@@ -28,7 +28,7 @@ export const JobStepperForm = ({
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = getTotalSteps(jobType, internalType);
   
-  const { formData, updateFormData } = useJobFormState({ jobType, editJob });
+  const { formData, updateFormData, orgSettings } = useJobFormState({ jobType, editJob });
   const user = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   
@@ -78,6 +78,7 @@ export const JobStepperForm = ({
             formData={formData}
             internalType={internalType}
             updateFormData={handleStepChange}
+            orgSettings={orgSettings}
           />
         </div>
         <div className="flex justify-between pt-8 mt-4 border-t">

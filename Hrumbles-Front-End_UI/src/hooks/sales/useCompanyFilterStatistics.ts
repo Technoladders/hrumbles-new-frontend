@@ -3,18 +3,18 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from "@/integrations/supabase/client";
 import { useSelector } from 'react-redux';
 
-interface CompanyFilterStatistics {
-  total: number;
-  hasApolloData: number;
-  activeCount: number;
-  industries: Record<string, number>;
-  locations: Record<string, number>;
-  countries: Record<string, number>;
-  cities: Record<string, number>;
-  stages: Record<string, number>;
+export interface CompanyFilterStatistics {
+  total:          number;
+  enrichedCount:  number; // distinct company_ids in enrichment_org_raw_responses
+  hasPhoneCount:  number; // companies with a non-null phone column
+  industries:     Record<string, number>;
+  locations:      Record<string, number>;
+  countries:      Record<string, number>;
+  cities:         Record<string, number>;
+  stages:         Record<string, number>;
   employeeRanges: Record<string, number>;
-  revenueRanges: Record<string, number>;
-  foundedYears: Record<string, number>;
+  revenueRanges:  Record<string, number>; // bucketed from enrichment_organizations.annual_revenue
+  foundedYears:   Record<string, number>;
 }
 
 interface UseCompanyFilterStatisticsOptions {
@@ -29,130 +29,136 @@ export const useCompanyFilterStatistics = (options: UseCompanyFilterStatisticsOp
     queryKey: ['company-filter-statistics', organization_id, fileId],
     queryFn: async (): Promise<CompanyFilterStatistics> => {
       const stats: CompanyFilterStatistics = {
-        total: 0,
-        hasApolloData: 0,
-        activeCount: 0,
-        industries: {},
-        locations: {},
-        countries: {},
-        cities: {},
-        stages: {},
+        total:          0,
+        enrichedCount:  0,
+        hasPhoneCount:  0,
+        industries:     {},
+        locations:      {},
+        countries:      {},
+        cities:         {},
+        stages:         {},
         employeeRanges: {},
-        revenueRanges: {},
-        foundedYears: {},
+        revenueRanges:  {},
+        foundedYears:   {},
       };
 
-      let baseQuery = supabase
+      // ── Step 1: Fetch all company base data for this org in one query ─────
+      // Selecting only the columns we need for stats keeps payload small.
+      const { data: orgCompanies, error: orgError } = await supabase
         .from('companies')
+        .select('id, apollo_org_id, phone, industry, location, country, city, state, stage, employee_count, founded_year')
         .eq('organization_id', organization_id);
 
-      if (fileId) {
-        baseQuery = baseQuery.eq('file_id', fileId);
+      if (orgError) throw orgError;
+
+      const allCompanies = orgCompanies || [];
+      stats.total        = allCompanies.length;
+
+      const companyIds   = allCompanies.map(c => c.id);
+      const apolloOrgIds = allCompanies
+        .filter(c => c.apollo_org_id)
+        .map(c => c.apollo_org_id as string);
+
+      // ── Step 2: Has phone count ───────────────────────────────────────────
+      stats.hasPhoneCount = allCompanies.filter(c => c.phone).length;
+
+      // ── Step 3: Enriched count from enrichment_org_raw_responses ─────────
+      // Count distinct company_ids — a company enriched multiple times counts once.
+      if (companyIds.length > 0) {
+        const CHUNK      = 500; // keep well within URL length limits
+        const enrichedSet = new Set<number>();
+
+        for (let i = 0; i < companyIds.length; i += CHUNK) {
+          const chunk = companyIds.slice(i, i + CHUNK);
+          const { data: rawRows } = await supabase
+            .from('enrichment_org_raw_responses')
+            .select('company_id')
+            .in('company_id', chunk)
+            .not('company_id', 'is', null);
+          (rawRows || []).forEach(r => r.company_id && enrichedSet.add(r.company_id));
+        }
+
+        stats.enrichedCount = enrichedSet.size;
       }
 
-      // 1. Fast total counts (no rows fetched – works for 1 lakh+ instantly)
-      const [totalRes, apolloRes, activeRes] = await Promise.all([
-        baseQuery.select('*', { count: 'exact', head: true }),
-        baseQuery.select('*', { count: 'exact', head: true }).not('apollo_org_id', 'is', null),
-        baseQuery.select('*', { count: 'exact', head: true }).eq('status', 'Active')
-      ]);
+      // ── Step 4: Revenue ranges from enrichment_organizations ─────────────
+      // Only companies in this org (joined via apollo_org_id) so counts are org-scoped.
+      if (apolloOrgIds.length > 0) {
+        const CHUNK = 500;
 
-      stats.total = totalRes.count || 0;
-      stats.hasApolloData = apolloRes.count || 0;
-      stats.activeCount = activeRes.count || 0;
+        for (let i = 0; i < apolloOrgIds.length; i += CHUNK) {
+          const chunk = apolloOrgIds.slice(i, i + CHUNK);
+          const { data: revRows } = await supabase
+            .from('enrichment_organizations')
+            .select('annual_revenue')
+            .in('apollo_org_id', chunk)
+            .not('annual_revenue', 'is', null)
+            .gt('annual_revenue', 0);
 
-      // 2. Group-by aggregates (only summary data returned – scales perfectly)
-      const [
-        industriesData,
-        locationsData,
-        countriesData,
-        stagesData,
-        citiesData,
-        empData,
-        revData,
-        yearData
-      ] = await Promise.all([
-        baseQuery.select('industry,count').group('industry'),
-        baseQuery.select('location,count').group('location'),
-        baseQuery.select('country,count').group('country'),
-        baseQuery.select('stage,count').group('stage'),
-        baseQuery.select('city,state,count').group('city,state'),
-        baseQuery.select('employee_count,count').group('employee_count'),
-        baseQuery.select('revenue,count').group('revenue'),
-        baseQuery.select('founded_year,count').group('founded_year')
-      ]);
-
-      // Industries (lowercase to match your original logic)
-      (industriesData.data || []).forEach((item: any) => {
-        if (item.industry) {
-          const key = item.industry.toLowerCase().trim();
-          stats.industries[key] = Number(item.count) || 0;
+          (revRows || []).forEach(r => {
+            const rev = Number(r.annual_revenue);
+            if (isNaN(rev) || rev <= 0) return;
+            let range = '';
+            if (rev < 1_000_000)          range = '0,1000000';
+            else if (rev < 10_000_000)    range = '1000000,10000000';
+            else if (rev < 50_000_000)    range = '10000000,50000000';
+            else if (rev < 100_000_000)   range = '50000000,100000000';
+            else if (rev < 500_000_000)   range = '100000000,500000000';
+            else if (rev < 1_000_000_000) range = '500000000,1000000000';
+            else                          range = '1000000000,';
+            stats.revenueRanges[range] = (stats.revenueRanges[range] || 0) + 1;
+          });
         }
-      });
+      }
 
-      // Locations, Countries, Stages
-      (locationsData.data || []).forEach((item: any) => {
-        if (item.location) stats.locations[item.location] = Number(item.count) || 0;
-      });
-      (countriesData.data || []).forEach((item: any) => {
-        if (item.country) stats.countries[item.country] = Number(item.count) || 0;
-      });
-      (stagesData.data || []).forEach((item: any) => {
-        if (item.stage) stats.stages[item.stage] = Number(item.count) || 0;
-      });
-
-      // Cities (city, state)
-      (citiesData.data || []).forEach((item: any) => {
-        if (item.city) {
-          const key = item.state ? `${item.city}, ${item.state}` : item.city;
-          stats.cities[key] = Number(item.count) || 0;
+      // ── Step 5: All other aggregates computed in-memory from companies ────
+      allCompanies.forEach(c => {
+        // Industry
+        if (c.industry) {
+          const key = c.industry.toLowerCase().trim();
+          stats.industries[key] = (stats.industries[key] || 0) + 1;
         }
-      });
-
-      // Employee Ranges (exact same logic as before)
-      (empData.data || []).forEach((item: any) => {
-        const count = Number(item.employee_count);
-        if (isNaN(count)) return;
-        let range = '';
-        if (count <= 10) range = '1,10';
-        else if (count <= 50) range = '11,50';
-        else if (count <= 200) range = '51,200';
-        else if (count <= 500) range = '201,500';
-        else if (count <= 1000) range = '501,1000';
-        else if (count <= 5000) range = '1001,5000';
-        else if (count <= 10000) range = '5001,10000';
-        else range = '10000,';
-        stats.employeeRanges[range] = (stats.employeeRanges[range] || 0) + Number(item.count) || 0;
-      });
-
-      // Revenue Ranges (exact same logic as before)
-      (revData.data || []).forEach((item: any) => {
-        const rev = Number(item.revenue);
-        if (isNaN(rev)) return;
-        let range = '';
-        if (rev < 1000000) range = '0,1000000';
-        else if (rev < 10000000) range = '1000000,10000000';
-        else if (rev < 50000000) range = '10000000,50000000';
-        else if (rev < 100000000) range = '50000000,100000000';
-        else if (rev < 500000000) range = '100000000,500000000';
-        else if (rev < 1000000000) range = '500000000,1000000000';
-        else range = '1000000000,';
-        stats.revenueRanges[range] = (stats.revenueRanges[range] || 0) + Number(item.count) || 0;
-      });
-
-      // Founded Years (decades)
-      (yearData.data || []).forEach((item: any) => {
-        const year = Number(item.founded_year);
-        if (isNaN(year)) return;
-        const decade = Math.floor(year / 10) * 10;
-        const key = `${decade}s`;
-        stats.foundedYears[key] = (stats.foundedYears[key] || 0) + Number(item.count) || 0;
+        // Location (full string)
+        if (c.location) stats.locations[c.location] = (stats.locations[c.location] || 0) + 1;
+        // Country
+        if (c.country)  stats.countries[c.country]  = (stats.countries[c.country]  || 0) + 1;
+        // City (city + state composite key)
+        if (c.city) {
+          const key = c.state ? `${c.city}, ${c.state}` : c.city;
+          stats.cities[key] = (stats.cities[key] || 0) + 1;
+        }
+        // Stage
+        if (c.stage) stats.stages[c.stage] = (stats.stages[c.stage] || 0) + 1;
+        // Employee range bucket
+        if (c.employee_count != null) {
+          const n = Number(c.employee_count);
+          if (!isNaN(n)) {
+            let range = '';
+            if (n <= 10)        range = '1,10';
+            else if (n <= 50)   range = '11,50';
+            else if (n <= 200)  range = '51,200';
+            else if (n <= 500)  range = '201,500';
+            else if (n <= 1000) range = '501,1000';
+            else if (n <= 5000) range = '1001,5000';
+            else if (n <= 10000) range = '5001,10000';
+            else                 range = '10000,';
+            stats.employeeRanges[range] = (stats.employeeRanges[range] || 0) + 1;
+          }
+        }
+        // Founded year → decade bucket
+        if (c.founded_year != null) {
+          const year = Number(c.founded_year);
+          if (!isNaN(year)) {
+            const decade = `${Math.floor(year / 10) * 10}s`;
+            stats.foundedYears[decade] = (stats.foundedYears[decade] || 0) + 1;
+          }
+        }
       });
 
       return stats;
     },
-    enabled: !!organization_id,
-    staleTime: 30000,
+    enabled:              !!organization_id,
+    staleTime:            30_000,
     refetchOnWindowFocus: false,
   });
 };

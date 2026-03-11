@@ -132,7 +132,7 @@ const CompareWithJobDialog = ({ isOpen, onClose, candidateId }: CompareWithJobDi
     borderRadius: '0.75rem', // 12px
     padding: '1.5rem', // 24px
     boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.25)',
-    zIndex: 51, // Must be higher than the overlay
+    zIndex: 99, // Must be higher than the overlay
     background: 'white',
   },
 };
