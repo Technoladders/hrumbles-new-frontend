@@ -644,13 +644,16 @@ export const LogCallDialog: React.FC<BaseDialogProps> = ({
     
     if (!text.trim()) return;
 
+    // Convert local datetime string to strict ISO UTC string
+    const isoActivityDate = activityDate ? new Date(activityDate).toISOString() : new Date().toISOString();
+
     const data: ActivityLogData = {
       id: activity?.id,
       type: 'call',
       title: `Call: ${CALL_OUTCOMES.find(o => o.value === outcome)?.label || 'Logged'}`,
       description: text,
       descriptionHtml: html,
-      metadata: { outcome, direction, duration, activityDate }
+      metadata: { outcome, direction, duration, activityDate: isoActivityDate } // Use ISO date
     };
 
     if (createFollowUp) {
@@ -664,7 +667,7 @@ export const LogCallDialog: React.FC<BaseDialogProps> = ({
 
     await onSubmit(data);
     onOpenChange(false);
-  }, [outcome, direction, duration, activityDate, createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
+  },[outcome, direction, duration, activityDate, createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -772,13 +775,16 @@ export const LogEmailDialog: React.FC<BaseDialogProps> = ({
     
     if (!subject.trim()) return;
 
+    // Convert local datetime string to strict ISO UTC string
+    const isoActivityDate = activityDate ? new Date(activityDate).toISOString() : new Date().toISOString();
+
     const data: ActivityLogData = {
       id: activity?.id,
       type: 'email',
       title: subject,
       description: text,
       descriptionHtml: html,
-      metadata: { subject, activityDate }
+      metadata: { subject, activityDate: isoActivityDate } // Use ISO date
     };
 
     if (createFollowUp) {
@@ -792,7 +798,7 @@ export const LogEmailDialog: React.FC<BaseDialogProps> = ({
 
     await onSubmit(data);
     onOpenChange(false);
-  }, [subject, activityDate, createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
+  },[subject, activityDate, createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1139,11 +1145,14 @@ export const LogMeetingDialog: React.FC<BaseDialogProps> = ({
     }
   }, [open, activity]);
 
-  const handleSubmit = useCallback(async () => {
+ const handleSubmit = useCallback(async () => {
     const html = editorRef.current?.getHTML() || '';
     const text = editorRef.current?.getText() || '';
     
     if (!text.trim()) return;
+
+    // Convert local datetime string to strict ISO UTC string
+    const isoStartTime = startTime ? new Date(startTime).toISOString() : new Date().toISOString();
 
     const data: ActivityLogData = {
       id: activity?.id,
@@ -1151,7 +1160,7 @@ export const LogMeetingDialog: React.FC<BaseDialogProps> = ({
       title: title || `Meeting: ${MEETING_OUTCOMES.find(o => o.value === outcome)?.label || 'Logged'}`,
       description: text,
       descriptionHtml: html,
-      metadata: { outcome, duration, startTime }
+      metadata: { outcome, duration, startTime: isoStartTime } // Use ISO date
     };
 
     if (createFollowUp) {
@@ -1165,7 +1174,7 @@ export const LogMeetingDialog: React.FC<BaseDialogProps> = ({
 
     await onSubmit(data);
     onOpenChange(false);
-  }, [title, outcome, duration, startTime, createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
+  },[title, outcome, duration, startTime, createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1255,19 +1264,22 @@ export const LogLinkedInDialog: React.FC<BaseDialogProps> = ({
     }
   }, [open, activity, contact]);
 
-  const handleSubmit = useCallback(async () => {
+ const handleSubmit = useCallback(async () => {
     const html = editorRef.current?.getHTML() || '';
     const text = editorRef.current?.getText() || '';
     
     const activityLabel = LINKEDIN_ACTIVITY_TYPES.find(t => t.value === linkedinActivityType)?.label || 'LinkedIn Activity';
     
+    // Convert local datetime string to strict ISO UTC string
+    const isoActivityDate = activityDate ? new Date(activityDate).toISOString() : new Date().toISOString();
+
     const data: ActivityLogData = {
       id: activity?.id,
       type: 'linkedin',
       title: `LinkedIn: ${activityLabel}`,
       description: text,
       descriptionHtml: html,
-      metadata: { linkedinActivityType, outcome, activityDate, linkedinUrl }
+      metadata: { linkedinActivityType, outcome, activityDate: isoActivityDate, linkedinUrl } // Use ISO date
     };
 
     if (createFollowUp) {
@@ -1281,7 +1293,7 @@ export const LogLinkedInDialog: React.FC<BaseDialogProps> = ({
 
     await onSubmit(data);
     onOpenChange(false);
-  }, [linkedinActivityType, outcome, activityDate, linkedinUrl, createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
+  },[linkedinActivityType, outcome, activityDate, linkedinUrl, createFollowUp, followUpTaskType, followUpDays, onSubmit, onOpenChange, activity]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

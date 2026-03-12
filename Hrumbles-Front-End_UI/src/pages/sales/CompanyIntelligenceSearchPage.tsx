@@ -333,15 +333,27 @@ const CompanyIntelligenceSearchPage: React.FC = () => {
   },[]);
 
   const mountRef = useRef(false);
-  const activeFileId = selectedListId || fileId || null;
+  
+  // FIX 1: Prioritize the 'fileId' from the route URL over the 'selectedListId' from session cache
+  const activeFileId = fileId || selectedListId || null;
   
 
-  useEffect(() => {
+useEffect(() => {
     if (mountRef.current) return;
     mountRef.current = true;
     if (!getInitialMode() && !fileId) setHasSearched(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
+
+  // FIX 2: When the URL fileId changes, ensure we reset to DB page 1 and clear conflicting session IDs
+  useEffect(() => {
+    if (fileId) { 
+      setIsCloudMode(false); 
+      setHasSearched(true); 
+      setDbPage(1);
+      setSelectedListId(null); // Clear session conflict so the URL fileId strictly applies
+    }
+  }, [fileId]);
 
   const {
     data: databaseResult,
