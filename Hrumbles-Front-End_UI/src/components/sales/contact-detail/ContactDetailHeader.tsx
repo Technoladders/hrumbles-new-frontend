@@ -12,7 +12,6 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
 import { cn } from '@/lib/utils';
 import { extractFromRaw } from '@/utils/dataExtractor';
 
@@ -25,10 +24,11 @@ interface Props {
   isEnriching: boolean;
   onOpenModal: (type: ActivityModalType) => void;
   refetch: () => void;
+  onAddToList: () => void; // <--- Added prop
 }
 
 export const ContactDetailHeader: React.FC<Props> = ({
-  contact, onBack, onEnrich, isEnriching, onOpenModal
+  contact, onBack, onEnrich, isEnriching, onOpenModal, onAddToList
 }) => {
   const data = extractFromRaw(contact);
   const companyWebsite = contact?.companies?.website || null;
@@ -43,7 +43,7 @@ export const ContactDetailHeader: React.FC<Props> = ({
     Cold:       'bg-slate-100 text-slate-600 border-slate-200',
   }[contact.contact_stage || ''] || 'bg-gray-100 text-gray-600 border-gray-200';
 
-  const quickActions = [
+  const quickActions =[
     { type: 'call' as const,     icon: PhoneCall,   tooltip: 'Log Call' },
     { type: 'email' as const,    icon: Mail,        tooltip: 'Log Email' },
     { type: 'linkedin' as const, icon: Linkedin,    tooltip: 'Log LinkedIn' },
@@ -147,6 +147,7 @@ export const ContactDetailHeader: React.FC<Props> = ({
           <Button
             variant="outline"
             size="sm"
+            onClick={onAddToList} // <--- Added onClick handler
             className="h-8 px-3 text-xs font-medium text-gray-700 border-gray-200 hidden sm:flex items-center gap-1.5"
           >
             <ListPlus size={13} />

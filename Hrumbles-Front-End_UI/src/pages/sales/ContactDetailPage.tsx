@@ -14,6 +14,7 @@ import { ProspectOverviewPanel } from '@/components/sales/contact-detail/Prospec
 import { ProspectCompanyTab } from '@/components/sales/contact-detail/ProspectCompanyTab';
 import { ContactCompanyPanel } from '@/components/sales/contact-detail/ContactCompanyPanel';
 import { MasterRecordTab } from '@/components/sales/contact-detail/MasterRecordTab';
+import { AddToListModal } from '@/components/sales/contacts-table/AddToListModal';
 
 
 // Dialogs
@@ -46,6 +47,7 @@ const ContactDetailPage = () => {
   const [isEnriching, setIsEnriching] = useState(false);
   const [isRequestingPhone, setIsRequestingPhone] = useState(false);
   const [activeTab, setActiveTab] = useState('prospect');
+   const[listModalOpen, setListModalOpen] = useState(false); 
 
   // ─── Queries ──────────────────────────────────────────────────────────────
 
@@ -197,6 +199,35 @@ const ContactDetailPage = () => {
     await logActivityMutation.mutateAsync(data);
   }, [logActivityMutation]);
 
+  const handleListAdd = async (targetFileId: string) => {
+    if (!targetFileId || !contact?.id) {
+      toast({ variant: 'destructive', title: 'No list selected' });
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('contact_workspace_files').upsert({
+        contact_id: contact.id,
+        file_id: targetFileId,
+        added_by: user?.id,
+      });
+
+      if (error) throw error;
+
+      toast({ title: 'Added to List', description: `${contact.name} was successfully added.` });
+      
+      // Invalidate both unified grid & detail queries to reflect new list state globally
+      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+      queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
+    } 
+    catch (err: any) {
+      toast({ variant: 'destructive', title: 'Failed to add', description: err.message });
+    } 
+    finally {
+      setListModalOpen(false);
+    }
+  };
+
   // ─── CHANGED: Unified enrich-contact (was old-contact-enrich + enrich-contact) ───
   const handleEnrich = useCallback(async () => {
     setIsEnriching(true);
@@ -329,6 +360,7 @@ const ContactDetailPage = () => {
         isEnriching={isEnriching}
         onOpenModal={(m: ActivityModalType) => { setEditingActivity(null); setActiveModal(m); }}
         refetch={refetch}
+        onAddToList={() => setListModalOpen(true)}
       />
 
       {/* Body: Left Activities + Right Profile */}
@@ -403,6 +435,15 @@ const ContactDetailPage = () => {
         contact={contact} activity={editingActivity} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
       <LogLinkedInDialog open={activeModal === 'linkedin'} onOpenChange={(o) => !o && handleCloseModal()}
         contact={contact} activity={editingActivity} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
+              {/* Add this Modal: */}
+      <AddToListModal
+        open={listModalOpen}
+        onOpenChange={setListModalOpen}
+        personName={contact?.name || ''}
+        onConfirm={handleListAdd}
+        isFromDiscovery={false}
+        contactIds={contact?.id ? [contact.id] : []}
+      />
     </div>
   );
 };

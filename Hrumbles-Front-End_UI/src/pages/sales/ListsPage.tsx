@@ -7,7 +7,7 @@ import {
   Plus, ChevronDown, FolderOpen, Folder,
   Users, Building2, Edit2, Trash2,
   FilePlus, Search, ListChecks, Hash, X, Loader2,
-  UserPlus, Lock,
+  UserPlus, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWorkspaces, type Workspace } from "@/hooks/sales/useWorkspaces";
@@ -72,53 +72,59 @@ const FileRow: React.FC<{
     ? `/lists/contacts/file/${file.id}`
     : `/lists/companies/file/${file.id}`;
 
-  const canWrite  = isAdmin || (perms?.can_write ?? false);
-  const canDelete = isAdmin || (perms?.can_delete ?? false);
+  // null = full access (admin, own folder, own file)
+  const canWrite  = perms === null || (perms?.can_write  ?? false);
+  const canDelete = perms === null || (perms?.can_delete ?? false);
+  const canShare  = isAdmin || perms === null;
 
   return (
     <div
-      className="group flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-100 last:border-0"
+      className="group flex items-center gap-2 pl-12 pr-3 py-2 hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-100 last:border-0"
       onClick={() => navigate(path)}
     >
-      <div className={cn(
-        "w-1.5 h-1.5 rounded-full flex-shrink-0 mt-px",
-        file.type === "people" ? "bg-blue-400" : "bg-emerald-400",
-      )} />
+      <FileText
+        size={12}
+        className={cn("flex-shrink-0", file.type === "people" ? "text-blue-500" : "text-emerald-500")}
+      />
       <span className="flex-1 text-[11px] font-medium text-slate-700 group-hover:text-indigo-700 truncate transition-colors min-w-0">
         {file.name}
       </span>
 
       {/* Record count */}
-      <div className="flex items-center gap-0.5 text-[10px] text-slate-400 flex-shrink-0">
+      <div className="flex items-center justify-end gap-0.5 text-[10px] text-slate-400 w-[60px] flex-shrink-0">
         {count === undefined
           ? <Loader2 size={9} className="animate-spin text-slate-300" />
           : <><Hash size={9} /><span className="font-semibold text-slate-600">{count.toLocaleString()}</span></>}
       </div>
 
-      {/* Employee inherited badge */}
-      {!isAdmin && perms && !perms.isDirect && (
+      {/* Inherited badge — only for shared-only access */}
+      {perms !== null && perms && !perms.isDirect && (
         <span className="text-[9px] text-slate-400 italic flex-shrink-0" title="Access via folder">inherited</span>
       )}
 
-      <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
+      <div className="w-[28px] flex justify-center flex-shrink-0" onClick={e => e.stopPropagation()}>
         <CreatorAvatar employee={file.created_by_employee} createdAt={file.created_at} />
       </div>
 
       {/* Action icons */}
       <div
-        className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+        className="flex items-center gap-0.5 w-[72px] justify-end opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
         onClick={e => e.stopPropagation()}
       >
-        {isAdmin && (
+        {canShare && (
           <button onClick={onShare} title="Share" className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
             <UserPlus size={11} />
           </button>
         )}
         {canWrite && (
-          <button onClick={onEdit}   title="Rename" className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"><Edit2 size={11} /></button>
+          <button onClick={onEdit} title="Rename" className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+            <Edit2 size={11} />
+          </button>
         )}
         {canDelete && (
-          <button onClick={onDelete} title="Delete" className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"><Trash2 size={11} /></button>
+          <button onClick={onDelete} title="Delete" className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+            <Trash2 size={11} />
+          </button>
         )}
       </div>
     </div>
@@ -152,11 +158,16 @@ const WorkspaceCard: React.FC<{
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  const wsCanWrite  = isAdmin || (perms?.can_write ?? false);
-  const wsCanDelete = isAdmin || (perms?.can_delete ?? false);
+  // Own folder or admin = full control on the folder
+  const isOwnWorkspace = workspace.created_by === currentUserId;
+  const canManageWs    = isAdmin || isOwnWorkspace;
+
+  // For shared-only folders (not own, not admin): respect granted perms
+  const wsCanWrite  = canManageWs || (perms?.can_write  ?? false);
+  const wsCanDelete = canManageWs || (perms?.can_delete ?? false);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-2 hover:border-slate-300 transition-colors">
+    <div className="bg-white border border-slate-200 rounded-xl overflow-visible mb-2 hover:border-slate-300 transition-colors">
       {/* Header row */}
       <div className="group/ws flex items-center gap-2 px-3 py-2.5">
         <button
@@ -165,8 +176,8 @@ const WorkspaceCard: React.FC<{
         >
           <ChevronDown size={12} className={cn("text-slate-400 transition-transform duration-200 flex-shrink-0", !isOpen && "-rotate-90")} />
           {isOpen
-            ? <FolderOpen size={13} className="text-amber-400 flex-shrink-0" />
-            : <Folder     size={13} className="text-amber-400 flex-shrink-0" />}
+            ? <FolderOpen size={13} className="text-amber-400 fill-amber-400 flex-shrink-0" />
+            : <Folder     size={13} className="text-amber-400 fill-amber-400 flex-shrink-0" />}
           <span className="text-xs font-semibold text-slate-800 truncate">{workspace.name}</span>
           <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full flex-shrink-0 ml-0.5">
             {files.length}
@@ -175,9 +186,9 @@ const WorkspaceCard: React.FC<{
 
         <CreatorAvatar employee={workspace.created_by_employee} createdAt={workspace.created_at} />
 
-        {/* Action icons — permission-gated */}
+        {/* Action icons */}
         <div className="flex items-center gap-0.5 opacity-0 group-hover/ws:opacity-100 transition-opacity flex-shrink-0">
-          {isAdmin && (
+          {canManageWs && (
             <>
               <button onClick={onShareWorkspace} title="Share folder" className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"><UserPlus size={12} /></button>
               <button onClick={onAddFile}        title="Add list"     className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"><FilePlus size={12} /></button>
@@ -199,7 +210,7 @@ const WorkspaceCard: React.FC<{
             <div className="flex flex-col items-center py-5 gap-1.5">
               <ListChecks size={13} className="text-slate-300" />
               <p className="text-[10px] text-slate-400">No lists yet</p>
-              {isAdmin && (
+              {canManageWs && (
                 <button onClick={onAddFile} className="text-[10px] font-semibold text-indigo-500 hover:text-indigo-700 transition-colors">
                   + Add first list
                 </button>
@@ -208,11 +219,13 @@ const WorkspaceCard: React.FC<{
           ) : (
             files.map(file => {
               const directPerms = fileAccessMap.get(file.id);
-              // Own files always get full write+delete — regardless of share status
-              const isOwnFile = file.created_by === currentUserId;
+              const isOwnFile   = file.created_by === currentUserId;
+              // null = full access: admin, own file, or own folder
               const effectivePerms = isAdmin || isOwnFile
-                ? null  // null = full access in FileRow
-                : mergePermissions(perms ?? undefined, directPerms);
+                ? null
+                : canManageWs
+                  ? null   // own folder → full access on all files inside
+                  : mergePermissions(perms ?? undefined, directPerms);
               return (
                 <FileRow
                   key={file.id}
@@ -259,14 +272,15 @@ const SectionColumn: React.FC<{
   const isPeople = type === "people";
   const q = search.toLowerCase().trim();
 
-  // For employees: show workspace if:
-  //   (a) it is directly shared with them, OR
-  //   (b) at least one file inside it is directly shared with them, OR
-  //   (c) they created at least one file inside it
-  //       → folder is visible but read-only (no edit/delete on the folder itself)
+  // Show workspace if:
+  //   (a) admin
+  //   (b) employee owns it
+  //   (c) directly shared with them
+  //   (d) any of its files are shared or owned by them
   const workspaces = useMemo(() => {
     if (isAdmin) return allWorkspaces;
     return allWorkspaces.filter(ws => {
+      if (ws.created_by === currentUserId) return true;
       if (workspaceAccess.has(ws.id)) return true;
       return allFiles.some(f =>
         f.type === type &&
@@ -274,9 +288,9 @@ const SectionColumn: React.FC<{
         (fileAccess.has(f.id) || f.created_by === currentUserId)
       );
     });
-  }, [allWorkspaces, isAdmin, workspaceAccess, fileAccess, allFiles, type, currentUserId]);
+  }, [allWorkspaces, isAdmin, currentUserId, workspaceAccess, fileAccess, allFiles, type]);
 
-  // Build file map for this type + search
+  // Build file map
   const filesByWsId = useMemo(() => {
     const map = new Map<string, WorkspaceFile[]>();
     workspaces.forEach(ws => map.set(ws.id, []));
@@ -285,8 +299,11 @@ const SectionColumn: React.FC<{
       .filter(f => {
         if (f.type !== type) return false;
         if (q && !f.name.toLowerCase().includes(q)) return false;
-        // Show file if: shared with user OR created by user OR workspace is shared
-        if (!isAdmin && !workspaceAccess.has(f.workspace_id) && !fileAccess.has(f.id) && f.created_by !== currentUserId) return false;
+        if (!isAdmin &&
+          f.created_by !== currentUserId &&
+          !workspaceAccess.has(f.workspace_id) &&
+          !fileAccess.has(f.id)
+        ) return false;
         return true;
       })
       .forEach(f => {
@@ -296,7 +313,7 @@ const SectionColumn: React.FC<{
       });
 
     return map;
-  }, [allFiles, workspaces, type, q, isAdmin, workspaceAccess, fileAccess, currentUserId]);
+  }, [allFiles, workspaces, type, q, isAdmin, currentUserId, workspaceAccess, fileAccess]);
 
   const totalLists = workspaces.reduce((acc, ws) => acc + (filesByWsId.get(ws.id) ?? []).length, 0);
 
@@ -319,25 +336,16 @@ const SectionColumn: React.FC<{
           </div>
         </div>
 
-        {/* New list button — admin only */}
-        {isAdmin && (
-          <button
-            onClick={() => onOpenDialog({ mode: "create-list", fileType: type })}
-            className={cn(
-              "flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold transition-colors",
-              isPeople ? "bg-blue-100 text-blue-700 hover:bg-blue-200" : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200",
-            )}
-          >
-            <Plus size={10} /> New list
-          </button>
-        )}
-
-        {/* Employee: read-only badge */}
-        {!isAdmin && (
-          <span className="flex items-center gap-1 text-[9px] font-semibold text-slate-400">
-            <Lock size={9} /> Shared with you
-          </span>
-        )}
+        {/* New list — available to everyone */}
+        <button
+          onClick={() => onOpenDialog({ mode: "create-list", fileType: type })}
+          className={cn(
+            "flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold transition-colors",
+            isPeople ? "bg-blue-100 text-blue-700 hover:bg-blue-200" : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200",
+          )}
+        >
+          <Plus size={10} /> New list
+        </button>
       </div>
 
       {/* Loading */}
@@ -353,26 +361,23 @@ const SectionColumn: React.FC<{
           <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center", isPeople ? "bg-blue-50" : "bg-emerald-50")}>
             {isPeople ? <Users size={14} className="text-blue-400" /> : <Building2 size={14} className="text-emerald-400" />}
           </div>
-          <p className="text-xs font-semibold text-slate-500">
-            {isAdmin ? "No folders yet" : "Nothing shared with you yet"}
-          </p>
-          {isAdmin && (
-            <button
-              onClick={() => onOpenDialog({ mode: "create-folder", fileType: type })}
-              className="text-[10px] font-semibold text-indigo-500 hover:text-indigo-700"
-            >
-              + Create a folder
-            </button>
-          )}
+          <p className="text-xs font-semibold text-slate-500">No folders yet</p>
+          <button
+            onClick={() => onOpenDialog({ mode: "create-folder", fileType: type })}
+            className="text-[10px] font-semibold text-indigo-500 hover:text-indigo-700"
+          >
+            + Create a folder
+          </button>
         </div>
       )}
 
       {/* Workspace cards */}
       {!isLoading && workspaces.map(ws => {
         const wsFiles = filesByWsId.get(ws.id) ?? [];
-        // null = admin (full). Direct share = granted perms.
-        // Visible-via-file-only = folder is read-only (can't rename/delete the folder itself)
-        const wsPerms = isAdmin
+        // null = full access (admin or own workspace)
+        // shared perms = what was granted
+        // via-file-only = read-only on the folder itself
+        const wsPerms = isAdmin || ws.created_by === currentUserId
           ? null
           : workspaceAccess.get(ws.id) ?? { can_read: true, can_write: false, can_delete: false, isDirect: false };
 
@@ -414,7 +419,6 @@ const ListsPage: React.FC = () => {
   const { data: recordCounts = {} }                     = useListRecordCounts(files);
   const { deleteWorkspace, deleteFile }                 = useManageWorkspaces();
 
-  // Employee access map (no-op for admins — they always have full access)
   const { data: myAccess } = useMyListAccess();
   const workspaceAccess = myAccess?.workspaceAccess ?? new Map();
   const fileAccess      = myAccess?.fileAccess      ?? new Map();
@@ -454,11 +458,6 @@ const ListsPage: React.FC = () => {
             <ListChecks size={13} className="text-white" />
           </div>
           <h1 className="text-sm font-bold text-slate-800">My Lists</h1>
-          {!isAdmin && (
-            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
-              View only
-            </span>
-          )}
         </div>
 
         <div className="relative max-w-xs w-full">
@@ -474,46 +473,44 @@ const ListsPage: React.FC = () => {
 
         <div className="flex-1" />
 
-        {/* Create dropdown — admin only */}
-        {isAdmin && (
-          <div ref={createMenuRef} className="relative">
-            <button
-              onClick={() => setCreateMenuOpen(v => !v)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all"
-            >
-              <Plus size={12} /> Create
-              <ChevronDown size={11} className={cn("transition-transform", createMenuOpen && "rotate-180")} />
-            </button>
+        {/* Create — available to all users */}
+        <div ref={createMenuRef} className="relative">
+          <button
+            onClick={() => setCreateMenuOpen(v => !v)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all"
+          >
+            <Plus size={12} /> Create
+            <ChevronDown size={11} className={cn("transition-transform", createMenuOpen && "rotate-180")} />
+          </button>
 
-            {createMenuOpen && (
-              <div className="absolute right-0 top-9 z-50 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 w-56">
-                <p className="px-3 py-1 text-[9px] font-bold text-blue-400 uppercase tracking-widest">People</p>
-                <button onClick={() => { setDialogConfig({ mode: "create-folder", fileType: "people" }); setCreateMenuOpen(false); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-slate-50 transition-colors">
-                  <Folder size={12} className="text-amber-500 flex-shrink-0" />
-                  <div className="text-left"><p className="text-xs font-semibold">New folder</p><p className="text-[10px] text-slate-400">For people lists</p></div>
-                </button>
-                <button onClick={() => { setDialogConfig({ mode: "create-list", fileType: "people" }); setCreateMenuOpen(false); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-slate-50 transition-colors">
-                  <Users size={12} className="text-blue-500 flex-shrink-0" />
-                  <div className="text-left"><p className="text-xs font-semibold">New list</p><p className="text-[10px] text-slate-400">Contacts & leads</p></div>
-                </button>
-                <div className="border-t border-slate-100 my-1" />
-                <p className="px-3 py-1 text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Companies</p>
-                <button onClick={() => { setDialogConfig({ mode: "create-folder", fileType: "companies" }); setCreateMenuOpen(false); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-slate-50 transition-colors">
-                  <Folder size={12} className="text-amber-500 flex-shrink-0" />
-                  <div className="text-left"><p className="text-xs font-semibold">New folder</p><p className="text-[10px] text-slate-400">For company lists</p></div>
-                </button>
-                <button onClick={() => { setDialogConfig({ mode: "create-list", fileType: "companies" }); setCreateMenuOpen(false); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-slate-50 transition-colors">
-                  <Building2 size={12} className="text-emerald-500 flex-shrink-0" />
-                  <div className="text-left"><p className="text-xs font-semibold">New list</p><p className="text-[10px] text-slate-400">Accounts & orgs</p></div>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+          {createMenuOpen && (
+            <div className="absolute right-0 top-9 z-50 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 w-56">
+              <p className="px-3 py-1 text-[9px] font-bold text-blue-400 uppercase tracking-widest">People</p>
+              <button onClick={() => { setDialogConfig({ mode: "create-folder", fileType: "people" }); setCreateMenuOpen(false); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-slate-50 transition-colors">
+                <Folder size={12} className="text-amber-500 flex-shrink-0" />
+                <div className="text-left"><p className="text-xs font-semibold">New folder</p><p className="text-[10px] text-slate-400">For people lists</p></div>
+              </button>
+              <button onClick={() => { setDialogConfig({ mode: "create-list", fileType: "people" }); setCreateMenuOpen(false); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-slate-50 transition-colors">
+                <Users size={12} className="text-blue-500 flex-shrink-0" />
+                <div className="text-left"><p className="text-xs font-semibold">New list</p><p className="text-[10px] text-slate-400">Contacts & leads</p></div>
+              </button>
+              <div className="border-t border-slate-100 my-1" />
+              <p className="px-3 py-1 text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Companies</p>
+              <button onClick={() => { setDialogConfig({ mode: "create-folder", fileType: "companies" }); setCreateMenuOpen(false); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-slate-50 transition-colors">
+                <Folder size={12} className="text-amber-500 flex-shrink-0" />
+                <div className="text-left"><p className="text-xs font-semibold">New folder</p><p className="text-[10px] text-slate-400">For company lists</p></div>
+              </button>
+              <button onClick={() => { setDialogConfig({ mode: "create-list", fileType: "companies" }); setCreateMenuOpen(false); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-slate-50 transition-colors">
+                <Building2 size={12} className="text-emerald-500 flex-shrink-0" />
+                <div className="text-left"><p className="text-xs font-semibold">New list</p><p className="text-[10px] text-slate-400">Accounts & orgs</p></div>
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* ── Two-column grid ─────────────────────────────────────────────────── */}
