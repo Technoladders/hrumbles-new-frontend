@@ -45,8 +45,11 @@ const Highlight: FC<{ text: string; query: string[] }> = ({ text, query }) => {
 interface CandidateSearchResultsProps {
   results: CandidateSearchResult[];
   highlightTerms?: string[];
-  jobId?: string;    // ADD THIS
-  jobTitle?: string; // ADD THIS
+  jobId?:          string;         
+  jobTitle?:       string;          
+  selectedIds?:    Set<string>;     
+  onToggleSelect?: (id: string) => void;
+  onInvite?:       (candidate: CandidateSearchResult) => void;
 }
 
 type ContactInfo = { email: string | null } | null;
@@ -58,7 +61,13 @@ const formatSalary = (ctc: number | null) => {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-const CandidateSearchResults: FC<CandidateSearchResultsProps> = ({ results, highlightTerms }) => {
+const CandidateSearchResults: FC<CandidateSearchResultsProps> = ({ results,
+  highlightTerms = [],
+  jobId,
+  jobTitle,
+  selectedIds = new Set(),
+  onToggleSelect,
+  onInvite, }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [searchParams] = useSearchParams();
@@ -476,8 +485,33 @@ const CandidateSearchResults: FC<CandidateSearchResultsProps> = ({ results, high
           const profileUrl = `/talent-pool/${candidate.id}${profileSearchParams ? `?${profileSearchParams}` : ''}`;
 
           return (
-            <div key={candidate.id} className="zx-card">
+           <div
+  key={candidate.id}
+  className="zx-card"
+  style={{
+    background: selectedIds.has(candidate.id) ? '#F5F3FF' : undefined,
+    outline: selectedIds.has(candidate.id) ? '2px solid #DDD6FE' : 'none',
+  }}
+>
               <div className="zx-card-inner">
+
+                 {onToggleSelect && (
+    <div style={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      paddingTop: '3px',
+      flexShrink: 0,
+    }}>
+      <input
+        type="checkbox"
+        checked={selectedIds.has(candidate.id)}
+        onChange={() => onToggleSelect(candidate.id)}
+        onClick={e => e.stopPropagation()}
+        style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: '#7B43F1', flexShrink: 0 }}
+        aria-label={`Select ${candidate.full_name}`}
+      />
+    </div>
+  )}
                 {/* Avatar */}
                 <div className="zx-avatar">
                   {candidate.full_name?.charAt(0).toUpperCase()}
@@ -580,20 +614,46 @@ const CandidateSearchResults: FC<CandidateSearchResultsProps> = ({ results, high
                   <Link to={profileUrl}>
                     <button className="zx-view-btn">View</button>
                   </Link>
-                  <button
-  className="zx-invite-btn"
-  onClick={(e) => {
-    e.preventDefault();
-    setInviteTarget({
-      name:  candidate.full_name || '',
-      email: candidate.email     || '',
-    });
-  }}
-  title="Invite to apply"
->
-  <Send className="w-4 h-4" />
-  Invite
-</button>
+                  {onInvite && (
+  <button
+    onClick={e => { e.stopPropagation(); onInvite(candidate); }}
+    className="zx-invite-btn"
+    title={jobId ? `Invite to ${jobTitle}` : 'Select a job first'}
+    style={{
+      display:      'inline-flex',
+      alignItems:   'center',
+      gap:          '5px',
+      padding:      '6px 14px',
+      borderRadius: '8px',
+      border:       '1.5px solid #DDD6FE',
+      background:   '#F5F3FF',
+      color:        '#7C3AED',
+      fontSize:     '12px',
+      fontWeight:   700,
+      cursor:       'pointer',
+      transition:   'all 0.15s',
+      whiteSpace:   'nowrap',
+    }}
+    onMouseEnter={e => {
+      (e.currentTarget as HTMLButtonElement).style.background = '#7B43F1';
+      (e.currentTarget as HTMLButtonElement).style.color      = '#fff';
+      (e.currentTarget as HTMLButtonElement).style.borderColor = '#7B43F1';
+    }}
+    onMouseLeave={e => {
+      (e.currentTarget as HTMLButtonElement).style.background  = '#F5F3FF';
+      (e.currentTarget as HTMLButtonElement).style.color       = '#7C3AED';
+      (e.currentTarget as HTMLButtonElement).style.borderColor = '#DDD6FE';
+    }}
+  >
+    {/* Send icon — inline SVG so no import needed */}
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13"/>
+      <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </svg>
+    Invite
+  </button>
+)}
                 </div>
               </div>
             </div>

@@ -74,6 +74,7 @@ import { Avatar, AvatarFallback } from "@/components/jobs/ui/avatar";
 import { motion } from "framer-motion";
 import { TaskupActionModal, TaskupModalConfig } from './TaskupActionModal';
 import InviteCandidateModal from "@/components/jobs/job/invite/InviteCandidateModal";
+import BulkInviteReviewModal, { BulkInviteCandidate } from '@/components/jobs/job/invite/BulkInviteReviewModal';
 
 const VALIDATION_QUEUE_KEY = "validationQueue";
 
@@ -144,6 +145,9 @@ const [inviteModalMeta, setInviteModalMeta] = useState<{
   candidateOwnerId: string;
   inviteSource:     'pipeline' | 'zivex';
 } | null>(null);
+
+const [isBulkModalOpen,    setIsBulkModalOpen]    = useState(false);
+const [bulkInviteCandidates, setBulkInviteCandidates] = useState<BulkInviteCandidate[]>([]);
 
   const ITECH_ORGANIZATION_ID = [
   "1961d419-1272-4371-8dc7-63a4ec71be83",
@@ -1200,6 +1204,27 @@ const candidates = useMemo(() => {
     toast.info("Batch validation process complete.");
   };
 
+const openBulkInviteReview = (candidatesToInvite: Candidate[]) => {
+  if (!job) { toast.error('Job data not loaded yet'); return; }
+ 
+  const withEmail = candidatesToInvite.filter(c => c.email);
+  if (withEmail.length === 0) {
+    toast.info('No candidates with email addresses selected');
+    return;
+  }
+ 
+  // Map Candidate → BulkInviteCandidate shape
+  const rows: BulkInviteCandidate[] = withEmail.map(c => ({
+    id:              c.id,
+    name:            c.name            || '',
+    email:           c.email!,
+    phone:           c.phone           || undefined,
+    candidateOwnerId: c.metadata?.createdBy || user?.id || '',
+  }));
+ 
+  setBulkInviteCandidates(rows);
+  setIsBulkModalOpen(true);
+};
 
     // Helper to fetch rejection reasons from the analysis table
   const fetchRejectionReasons = async (candidateIds: string[]): Promise<Record<string, string>> => {
@@ -1326,24 +1351,28 @@ const candidates = useMemo(() => {
   };
 
   // --- MODIFIED: Expose both batch functions to the parent component via ref ---
-  useImperativeHandle(ref, () => ({
-    // This is the existing function for batch validation
-    triggerBatchValidate() {
-      handleBatchValidate();
-    },
-    // --- THIS IS THE NEW FUNCTION YOU NEED TO ADD ---
-    triggerBulkShare(emailType: 'shortlist' | 'rejection') {
-      const candidatesToShare = selectedCandidates.size > 0
-        ? candidates.filter(c => selectedCandidates.has(c.id))
-        : filteredCandidates; // Default to all visible if none are selected
-      
-      if (candidatesToShare.length === 0) {
-        toast.info("No candidates to send mail to.");
-        return;
-      }
-      openShareModal(candidatesToShare, emailType);
+useImperativeHandle(ref, () => ({
+  triggerBatchValidate() {
+    handleBatchValidate();
+  },
+  triggerBulkShare(emailType: 'shortlist' | 'rejection') {
+    const candidatesToShare = selectedCandidates.size > 0
+      ? candidates.filter(c => selectedCandidates.has(c.id))
+      : filteredCandidates;
+    if (candidatesToShare.length === 0) {
+      toast.info("No candidates to send mail to.");
+      return;
     }
-  }));
+    openShareModal(candidatesToShare, emailType);
+  },
+  // NEW
+  triggerBulkInvite() {
+    const toInvite = selectedCandidates.size > 0
+      ? paginatedCandidates.filter(c => selectedCandidates.has(c.id) && c.email)
+      : paginatedCandidates.filter(c => c.email);
+    openBulkInviteReview(toInvite);
+  },
+}));
 
 
   const filteredCandidates = useMemo(() => {
@@ -2143,7 +2172,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
         </div>
 
         {/* --- This is the Hover Box, positioned on the LEFT and with a high z-index --- */}
-        <div className="absolute right-full mr-2 z-30 flex items-center gap-1 rounded-md border bg-white p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        {/* <div className="absolute right-full mr-2 z-30 flex items-center gap-1 rounded-md border bg-white p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <div className="flex flex-col gap-1 items-center">
             <p className="font-semibold text-xs whitespace-nowrap px-1">Validation Score: {score}/100</p>
             <div className="w-full h-[1px] bg-gray-200" />
@@ -2172,7 +2201,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
               )}
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
     );
   }
@@ -2269,9 +2298,100 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
         }} />
       ) : (
        <div className="w-full overflow-x-auto rounded-md border">
+         {selectedCandidates.size > 0 && (
+    <div style={{
+      display:        'flex',
+      alignItems:     'center',
+      gap:            '10px',
+      padding:        '10px 16px',
+      background:     '#EDE9FE',
+      borderBottom:   '1px solid #DDD6FE',
+      flexWrap:       'wrap',
+    }}>
+      <span style={{ fontSize: '13px', fontWeight: 700, color: '#7C3AED' }}>
+        {selectedCandidates.size} candidate{selectedCandidates.size > 1 ? 's' : ''} selected
+      </span>
+ 
+      {/* Invite selected */}
+      <button
+  onClick={() => {
+    const toInvite = paginatedCandidates.filter(
+      c => selectedCandidates.has(c.id) && c.email
+    );
+    openBulkInviteReview(toInvite);
+  }}
+  style={{
+    padding:      '5px 14px',
+    borderRadius: '99px',
+    border:       'none',
+    background:   '#7B43F1',
+    color:        '#fff',
+    fontSize:     '12px',
+    fontWeight:   700,
+    cursor:       'pointer',
+    display:      'flex',
+    alignItems:   'center',
+    gap:          '5px',
+  }}
+>
+  <Send size={13} /> Invite Selected ({selectedCandidates.size})
+</button>
+ 
+      {/* Share selected */}
+      {/* <button
+        onClick={() => openShareModal(
+          candidates.filter(c => selectedCandidates.has(c.id)),
+          'shortlist'
+        )}
+        style={{
+          padding:      '5px 14px',
+          borderRadius: '99px',
+          border:       '1px solid #7C3AED',
+          background:   '#fff',
+          color:        '#7C3AED',
+          fontSize:     '12px',
+          fontWeight:   700,
+          cursor:       'pointer',
+          display:      'flex',
+          alignItems:   'center',
+          gap:          '5px',
+        }}
+      >
+        <Mail size={13} /> Email Selected
+      </button> */}
+ 
+      {/* Clear selection */}
+      <button
+        onClick={() => setSelectedCandidates(new Set())}
+        style={{
+          marginLeft:   'auto',
+          padding:      '5px 12px',
+          borderRadius: '99px',
+          border:       '1px solid #DDD6FE',
+          background:   '#fff',
+          color:        '#9CA3AF',
+          fontSize:     '12px',
+          cursor:       'pointer',
+        }}
+      >
+        Clear
+      </button>
+    </div>
+  )}
       <Table className="min-w-[800px]">
   <TableHeader>
     <TableRow className="bg-purple-600 hover:bg-purple-700 whitespace-nowrap border border-purple-500">
+      <TableHead className="sticky left-0 z-20 w-[40px] px-3 text-white">
+          <Checkbox
+            checked={
+              paginatedCandidates.length > 0 &&
+              paginatedCandidates.every(c => selectedCandidates.has(c.id))
+            }
+            onCheckedChange={(checked) => handleSelectAll(!!checked)}
+            className="border-white data-[state=checked]:bg-white data-[state=checked]:text-purple-600"
+            aria-label="Select all"
+          />
+        </TableHead>
       <TableHead className="sticky text-center left-0 z-20 w-[120px] px-2 text-white">Score</TableHead>
       <TableHead className="sticky left-[60px] z-10 w-[200px] px-2 text-white">Candidate Name</TableHead>
       <TableHead className="w-[60px] text-center px-2 text-white">Owner</TableHead>
@@ -2286,6 +2406,15 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
   <TableBody>
     {paginatedCandidates.map((candidate) => (
       <TableRow key={candidate.id} className="align-top group bg-white hover:bg-slate-50 relative">
+
+        <TableCell className="sticky left-0 z-20 px-3 bg-white group-hover:bg-slate-50 py-1"
+            style={{ background: selectedCandidates.has(candidate.id) ? '#F5F3FF' : undefined }}>
+            <Checkbox
+              checked={selectedCandidates.has(candidate.id)}
+              onCheckedChange={(checked) => handleSelectCandidate(candidate.id, !!checked)}
+              aria-label={`Select ${candidate.name}`}
+            />
+          </TableCell>
         {/* --- Sticky Cell 1 (BACKGROUND FIXED) --- */}
         <TableCell className="sticky left-0 z-20 px-2 bg-purple-50 group-hover:bg-slate-50 py-1">
           <ScoreDisplay
@@ -2495,6 +2624,21 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
     candidateId={inviteModalMeta?.candidateId}
     candidateOwnerId={inviteModalMeta?.candidateOwnerId}
     inviteSource={inviteModalMeta?.inviteSource || 'pipeline'}
+  />
+)}
+
+{isBulkModalOpen && job && bulkInviteCandidates.length > 0 && (
+  <BulkInviteReviewModal
+    isOpen={isBulkModalOpen}
+    onClose={() => {
+      setIsBulkModalOpen(false);
+      setBulkInviteCandidates([]);
+      setSelectedCandidates(new Set()); // clear selection after done
+    }}
+    candidates={bulkInviteCandidates}
+    jobId={jobId}
+    jobTitle={job.title}
+    inviteSource="pipeline"
   />
 )}
 

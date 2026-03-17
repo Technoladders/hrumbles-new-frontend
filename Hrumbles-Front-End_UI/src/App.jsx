@@ -97,7 +97,7 @@ import SharedProfileV2 from "./components/MagicLinkView/candidate-profile-v2/Sha
 
 import CandidateApplicationPage from "./pages/candidates/CandidateApplicationPage.jsx";
 import InviteResponsesPage from "./pages/jobs/InviteResponsesPage";
-
+import MyInvitesPage      from './pages/invites/MyInvitesPage.jsx';
 
 // candidate search beta
 import CandidateSearch from "@/components/CandidateSearch";
@@ -202,6 +202,9 @@ import UserActivityDetailsPage from "./components/reports/UserActivityDetailsPag
 
 // Job Board Integrations
 import JobBoardIntegrations from "./pages/integrations/JobBoardIntegrations.tsx";
+
+// settings
+import WhatsAppSettings from "./components/settings/WhatsAppSettings.tsx";
 
 // --- Simple Loader for Organization Check ---
 const FullScreenLoader = () => (
@@ -566,6 +569,7 @@ useEffect(() => {
 
               {/* candidate invite */}
               <Route path="/jobs/:id/invites" element={<InviteResponsesPage />} />
+              <Route path="/my-invites" element={<MyInvitesPage />} />
               {/* Background Verification */}
               <Route path="/jobs/:jobId/candidate/:candidateId/bgv" element={<CandidateBgvProfilePage />} />
               <Route path="/all-candidates" element={<AllCandidatesPage />} /> 
@@ -658,6 +662,9 @@ useEffect(() => {
 
               {/* Bench Profiles */}
               <Route path="/bench-pool" element={<BenchProfilesPage />} />
+
+              {/* settings */}
+              <Route path="/whatsapp-settings" element={<WhatsAppSettings />} />
             </Route>
           </Route>
         </Route>

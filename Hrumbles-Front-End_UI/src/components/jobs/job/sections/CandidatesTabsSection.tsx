@@ -60,6 +60,7 @@ const [candidateFilter, setCandidateFilter] = useState<string>("All");
       .filter((name): name is string => Boolean(name));
     return Array.from(new Set(owners)).sort();
   }, [localCandidates]);
+  const [bulkEmailType, setBulkEmailType] = useState<'shortlist' | 'rejection'>('shortlist');
 
   
   // --- ADDED: State for the new score filter ---
@@ -128,12 +129,11 @@ const fetchCandidates = async () => {
     }
   };
 
-    const handleBulkShareClick = () => {
-    if (candidatesListRef.current) {
-      const emailType = scoreFilter === 'shortlisted' ? 'shortlist' : 'rejection';
-      candidatesListRef.current.triggerBulkShare(emailType);
-    }
-  };
+const handleBulkShareClick = (type?: 'shortlist' | 'rejection') => {
+  if (candidatesListRef.current) {
+    candidatesListRef.current.triggerBulkShare(type || bulkEmailType);
+  }
+};
 
   const handleBulkInviteClick = () => {
   if (candidatesListRef.current) {
@@ -214,22 +214,53 @@ const fetchCandidates = async () => {
 
             {/* Bulk Share Button (Conditional) */}
             {(scoreFilter === 'shortlisted' || scoreFilter === 'not_shortlisted') && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-          <Button 
-  variant="outline" 
-  onClick={handleBulkShareClick} 
-  size="sm" 
-  className="flex-shrink-0 order-5 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-[#7731E8] hover:text-white border-transparent transition-all duration-200"
->
-                    <Mail className="w-4 h-4 mr-2" /> 
-                    Send Mail to All
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="start" className="z-[70]">
-                  <p className="max-w-48">Bulk email {scoreFilter === 'shortlisted' ? 'shortlist' : 'rejection'} to selected candidates</p>
-                </TooltipContent>
-              </Tooltip>
+              <div className="flex items-center gap-2 flex-shrink-0 order-5">
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button
+        variant="outline"
+        onClick={() => handleBulkShareClick('shortlist')}
+        size="sm"
+        className="
+          rounded-full h-10 text-gray-600
+          bg-gray-100 dark:bg-gray-800 shadow-inner text-sm
+          hover:bg-emerald-600 hover:text-white hover:border-emerald-600
+          border-transparent transition-all duration-200
+          flex items-center gap-2
+        "
+      >
+        <Mail className="w-4 h-4" />
+        <span className="hidden sm:inline">Shortlist Mail</span>
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent side="bottom">
+      <p>Send shortlist email to selected / visible candidates</p>
+    </TooltipContent>
+  </Tooltip>
+ 
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button
+        variant="outline"
+        onClick={() => handleBulkShareClick('rejection')}
+        size="sm"
+        className="
+          rounded-full h-10 text-gray-600
+          bg-gray-100 dark:bg-gray-800 shadow-inner text-sm
+          hover:bg-rose-600 hover:text-white hover:border-rose-600
+          border-transparent transition-all duration-200
+          flex items-center gap-2
+        "
+      >
+        <Mail className="w-4 h-4" />
+        <span className="hidden sm:inline">Rejection Mail</span>
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent side="bottom">
+      <p>Send rejection email to selected / visible candidates</p>
+    </TooltipContent>
+  </Tooltip>
+</div>
             )}
 
             {/* Bulk Invite Button */}
