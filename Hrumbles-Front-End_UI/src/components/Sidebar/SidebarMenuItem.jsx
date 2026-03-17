@@ -303,6 +303,8 @@ export const menuItemsByRole = {
             dropdown: [
                 { icon: TrendingUp, label: "Org. Talent Trends", path: "/reports/organization-talent-trends" },
                 { icon: TrendingUp, label: "Credit Usage", path: "/reports/credit-usage" },
+                { icon: TrendingUp, label: "OpenAI Usage", path: "/reports/openai-usage" },
+                { icon: TrendingUp, label: "Apollo Usage", path: "/reports/apollo-usage" },
             ],
         },
         { icon: FiSettings, label: "Settings", path: "/settings" },

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Bookmark, Sparkles, Plus, Edit, Share2, Copy, Check, Link as LinkIcon, Globe } from "lucide-react";
+import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Bookmark, Sparkles, Plus, Edit, Share2, Copy, Check, Link as LinkIcon, Globe, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { shareJob } from "@/services/jobs/supabaseQueries";
 import { Helmet } from "react-helmet-async";
+import InviteCandidateModal from "@/components/jobs/job/invite/InviteCandidateModal";
 
 
 const JobView = () => {
@@ -42,6 +43,9 @@ const JobView = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
    const [hasCopied, setHasCopied] = useState(false);
+
+  //  --- Invite Candidate Modal ---
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
    // Define the missing state here
    const [isShared, setIsShared] = useState(false);
@@ -240,17 +244,29 @@ useEffect(() => {
     enabled: !!id,
   });
 
-  // --- DATA TRANSFORMATION ---
-  const candidates: Candidate[] = candidatesData.map(candidate => ({
-    id: candidate.id,
-    name: candidate.name,
-    status: candidate.status,
-    experience: candidate.experience,
-    matchScore: candidate.matchScore,
-    appliedDate: candidate.appliedDate,
-    skills: candidate.skills || []
-  }));
+  
 
+// --- DATA TRANSFORMATION ---
+  const candidates: Candidate[] = candidatesData.map(candidate => {
+    // Safely extract the owner name from the joined hr_employees data
+    const ownerName = candidate.hr_employees 
+      ? `${candidate.hr_employees.first_name || ''} ${candidate.hr_employees.last_name || ''}`.trim()
+      : candidate.appliedFrom || candidate.applied_from;
+
+    return {
+      id: candidate.id,
+      name: candidate.name,
+      status: candidate.status,
+      experience: candidate.experience,
+      matchScore: candidate.matchScore,
+      appliedDate: candidate.appliedDate,
+      skills: candidate.skills ||[],
+      appliedFrom: candidate.appliedFrom || candidate.applied_from,
+      owner: ownerName // <-- Added owner here
+    };
+  });
+
+  console.log("candidatesData", candidatesData);
   // --- useEffect TO CHECK sessionStorage ---
   useEffect(() => {
     const dataFromAnalysisPage = sessionStorage.getItem('aiCandidateForFinalize');
@@ -567,6 +583,19 @@ useEffect(() => {
               <span>My Shortlists</span>
             </button>
 
+            <Link to={`/jobs/${id}/invites`}>
+  <button
+    className={`
+      group flex items-center gap-2 px-6 py-1.5 rounded-full text-sm font-semibold
+      transition-all duration-200
+      text-gray-500 hover:bg-gray hover:text-[#7731E8] hover:shadow-sm
+    `}
+  >
+    <Send size={16} className="text-gray-500 group-hover:text-[#7731E8]" />
+    <span className="hidden sm:inline">Invites</span>
+  </button>
+</Link>
+
             {/* Job Description Button */}
             <Link to={`/jobs/${id}/description`}>
               <button 
@@ -583,6 +612,16 @@ useEffect(() => {
               </button>
             </Link>
           </div>
+
+          <button
+  onClick={() => setIsInviteModalOpen(true)}
+  className="flex items-center gap-2 px-5 py-2 rounded-full font-semibold text-sm
+             border border-[#7731E8] text-[#7731E8] bg-white
+             hover:bg-[#EDE9FE] transition-all duration-200 h-10"
+>
+  <Send size={15} />
+  <span>Invite</span>
+</button>
 
           {/* 3. Add Candidate Button (3D Style) */}
           <button
@@ -666,6 +705,15 @@ useEffect(() => {
           onCandidateAdded={handleFinalizeCandidateAdded}
         />
       )}
+
+      {job && (
+  <InviteCandidateModal
+    isOpen={isInviteModalOpen}
+    onClose={() => setIsInviteModalOpen(false)}
+    jobId={job.id}
+    jobTitle={job.title}
+  />
+)}
       
 
       {isHistoryModalOpen && (

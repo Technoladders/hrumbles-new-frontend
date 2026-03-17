@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle  } from "react";
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useMemo  } from "react";
 import { useSelector } from "react-redux";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Filter, X, Zap, Mail, User, Search, Settings2 } from "lucide-react";
+import { Filter, X, Zap, Mail, User, Search, Settings2, Send } from "lucide-react";
 import CandidatesList from "../CandidatesList";
 import { Candidate } from "@/lib/types";
 import StatusSettings from "@/pages/jobs/StatusSettings";
@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 interface CandidatesListHandle {
   triggerBatchValidate: () => void;
   triggerBulkShare: (emailType: 'shortlist' | 'rejection') => void; // Add this new method
+  triggerBulkInvite: () => void;
 }
 
 interface CandidatesTabsSectionProps {
@@ -50,8 +51,16 @@ const CandidatesTabsSection = ({
   
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [localCandidates, setLocalCandidates] = useState<Candidate[]>([]);
-  const [candidateFilter, setCandidateFilter] = useState<"All" | "Yours">("All");
+const [candidateFilter, setCandidateFilter] = useState<string>("All");
     const [searchTerm, setSearchTerm] = useState("");
+
+      const uniqueOwners = useMemo(() => {
+    const owners = localCandidates
+      .map(c => c.owner || c.appliedFrom)
+      .filter((name): name is string => Boolean(name));
+    return Array.from(new Set(owners)).sort();
+  }, [localCandidates]);
+
   
   // --- ADDED: State for the new score filter ---
   const [scoreFilter, setScoreFilter] = useState("all");
@@ -87,11 +96,24 @@ const CandidatesTabsSection = ({
     fetchConfig();
   }, [jobId]);
   
-  const fetchCandidates = async () => {
+const fetchCandidates = async () => {
     try {
       const data = await getCandidatesForJob(jobId);
       if (data) {
-        setLocalCandidates(data);
+        // Map the data to resolve the owner from hr_employees
+        const mappedData = data.map((candidate: any) => {
+          const ownerName = candidate.hr_employees 
+            ? `${candidate.hr_employees.first_name || ''} ${candidate.hr_employees.last_name || ''}`.trim()
+            : candidate.appliedFrom || candidate.applied_from;
+            
+          return {
+            ...candidate,
+            owner: ownerName,
+            appliedFrom: candidate.appliedFrom || candidate.applied_from
+          };
+        });
+        
+        setLocalCandidates(mappedData);
       }
     } catch (error: any) {
       console.error('Error fetching candidates:', error);
@@ -112,6 +134,12 @@ const CandidatesTabsSection = ({
       candidatesListRef.current.triggerBulkShare(emailType);
     }
   };
+
+  const handleBulkInviteClick = () => {
+  if (candidatesListRef.current) {
+    candidatesListRef.current.triggerBulkInvite();
+  }
+};
 
   return (
     <TooltipProvider>
@@ -146,24 +174,32 @@ const CandidatesTabsSection = ({
                 </SelectContent>
               </Select>
             </div>
-            {isEmployee && (
+           
   <div className="flex-shrink-0 order-2 w-full sm:w-[150px] min-w-0 overflow-hidden">
-    <Select value={candidateFilter} onValueChange={setCandidateFilter}>
-      <SelectTrigger className="group w-full rounded-full justify-start h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 hover:text-white shadow-inner text-sm relative z-0">
-        <User size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
-        <div className="truncate min-w-0">
-          <SelectValue placeholder="Filter Candidates" />
-        </div>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="All">All</SelectItem>
-        <SelectItem value="Yours">Yours</SelectItem>
-      </SelectContent>
-    </Select>
-  </div>
-)}
+              <Select value={candidateFilter} onValueChange={setCandidateFilter}>
+                <SelectTrigger className="group w-full rounded-full justify-start h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 hover:text-white shadow-inner text-sm relative z-0">
+                  <User size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
+                  <div className="truncate min-w-0">
+                    <SelectValue placeholder="Filter Candidates" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All</SelectItem>
+                  {isEmployee ? (
+                    <SelectItem value="Yours">Yours</SelectItem>
+                  ) : (
+                    uniqueOwners.map((owner, index) => (
+                      <SelectItem key={index} value={owner}>
+                        {owner}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
 
-<div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] w-full sm:w-auto">
+
+<div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] max-w-[400px] w-full sm:w-auto">
               <Search
                 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
                 size={18}
@@ -196,61 +232,113 @@ const CandidatesTabsSection = ({
               </Tooltip>
             )}
 
+            {/* Bulk Invite Button */}
+<Tooltip>
+  <TooltipTrigger asChild>
+    <button
+      onClick={handleBulkInviteClick}
+      className="
+        flex items-center order-8 justify-center
+        w-9 h-9 group
+        rounded-xl
+        bg-gradient-to-br from-purple-50 to-purple-100
+        text-purple-700
+        border border-purple-200
+        shadow-sm
+        hover:from-purple-100 hover:to-purple-200
+        hover:shadow-md
+        hover:scale-[1.05]
+        active:scale-[0.96]
+        transition-all duration-200 ease-out
+        focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-1
+      "
+    >
+      <Send size={16} className="transition-transform duration-200 group-hover:translate-x-0.5" />
+    </button>
+  </TooltipTrigger>
+  <TooltipContent side="bottom">
+    <p>Bulk Invite Selected Candidates</p>
+  </TooltipContent>
+</Tooltip>
+
             {/* Batch Validate Button */}
             <Tooltip>
-              <TooltipTrigger asChild>
-       <Button 
-  onClick={handleBatchValidateClick} 
-  size="sm" 
-  variant="outline"
-  className="flex-shrink-0 order-4 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-[#7731E8] hover:text-white border-transparent transition-all duration-200"
->
-                  <Zap size={16} className="mr-2" />
-                  Batch Validate All
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="start" className="z-[70]">
-                <p className="max-w-48">Run AI validation on all candidates in this view</p>
-              </TooltipContent>
-            </Tooltip>
+  <TooltipTrigger asChild>
+    <button
+      onClick={handleBatchValidateClick}
+      className="
+      flex items-center order-6 justify-center
+      w-9 h-9 group
+      rounded-xl
+      bg-gradient-to-br from-purple-50 to-purple-100
+      text-purple-700
+      border border-purple-200
+      shadow-sm
+      hover:from-purple-100 hover:to-purple-200
+      hover:shadow-md
+      hover:scale-[1.05]
+      active:scale-[0.96]
+      transition-all duration-200 ease-out
+      focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-1
+      "
+    >
+      <Zap size={16} className="transition-transform duration-200 group-hover:rotate-12" />
+    </button>
+  </TooltipTrigger>
+  <TooltipContent side="bottom">
+    <p>Batch Validate All Candidates</p>
+  </TooltipContent>
+</Tooltip>
 
             {/* Status Settings Button (Conditional) */}
-            {!ITECH_ORGANIZATION_ID.includes(organization_id) && organization_id !== ASCENDION_ORGANIZATION_ID && (
+            {/* {!ITECH_ORGANIZATION_ID.includes(organization_id) && organization_id !== ASCENDION_ORGANIZATION_ID && (
               <Tooltip>
-                <TooltipTrigger asChild>
-                <Button 
-  onClick={() => setShowStatusDialog(true)} 
-  size="sm" 
-  variant="outline"
-  className="flex-shrink-0 order-6 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-[#7731E8] hover:text-white border-transparent transition-all duration-200"
->
-                    <Filter size={16} className="mr-2" />
-                    Status Settings
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="start" className="z-[70]">
-                  <p className="max-w-48">Configure job status workflow</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+  <TooltipTrigger asChild>
+    <button
+      onClick={() => setShowStatusDialog(true)}
+      className="flex items-center order-8 justify-center w-9 h-9 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 transition-colors"
+    >
+      <Filter size={16} />
+    </button>
+  </TooltipTrigger>
+  <TooltipContent side="bottom">
+    <p>Status Settings</p>
+  </TooltipContent>
+</Tooltip>
+            )} */}
 
              {/* NEW: Configuration Button - Add before Batch Validate or Status Settings */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  onClick={() => setShowConfigDialog(true)} 
-                  size="sm" 
-                  variant="outline"
-                  className="flex-shrink-0 order-4 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-[#7731E8] hover:text-white border-transparent transition-all duration-200"
-                >
-                  <Settings2 size={16} className="mr-2" />
-                  AI Config
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="start">
-                <p>Configure scoring weights</p>
-              </TooltipContent>
-            </Tooltip>
+<Tooltip>
+  <TooltipTrigger asChild>
+    <button
+      onClick={() => setShowConfigDialog(true)}
+      className="
+      group
+      flex items-center order-7 justify-center
+      w-9 h-9
+      rounded-xl
+      bg-gradient-to-br from-indigo-50 to-indigo-100
+      text-indigo-700
+      border border-indigo-200
+      shadow-sm
+      hover:from-indigo-100 hover:to-indigo-200
+      hover:shadow-md
+      hover:scale-[1.05]
+      active:scale-[0.96]
+      transition-all duration-200 ease-out
+      focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1
+      "
+    >
+      <Settings2
+        size={16}
+        className="transition-transform duration-200 group-hover:rotate-90"
+      />
+    </button>
+  </TooltipTrigger>
+  <TooltipContent side="bottom">
+    <p>Configure AI Scoring Weights</p>
+  </TooltipContent>
+</Tooltip>
           </div>
         </div>
 

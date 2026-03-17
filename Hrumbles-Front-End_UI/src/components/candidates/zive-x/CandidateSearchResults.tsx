@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import {
   IndianRupee, MapPin, Briefcase, Bookmark, Mail, Clipboard,
   ClipboardCheck, ChevronLeft, ChevronRight, Clock, GraduationCap,
-  Zap, Users, Search, SlidersHorizontal
+  Zap, Users, Search, SlidersHorizontal, Send
 } from 'lucide-react';
 import { CandidateSearchResult } from '@/types/candidateSearch';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSelector } from 'react-redux';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import InviteCandidateModal from '@/components/jobs/job/invite/InviteCandidateModal';
 
 // ─── Highlight ───────────────────────────────────────────────────────────────
 
@@ -44,6 +45,8 @@ const Highlight: FC<{ text: string; query: string[] }> = ({ text, query }) => {
 interface CandidateSearchResultsProps {
   results: CandidateSearchResult[];
   highlightTerms?: string[];
+  jobId?: string;    // ADD THIS
+  jobTitle?: string; // ADD THIS
 }
 
 type ContactInfo = { email: string | null } | null;
@@ -61,6 +64,12 @@ const CandidateSearchResults: FC<CandidateSearchResultsProps> = ({ results, high
   const [searchParams] = useSearchParams();
   const [contactInfo, setContactInfo] = useState<ContactInfo>(null);
   const [isCopied, setIsCopied] = useState(false);
+
+  // --- Invite Candidate Modal ---
+  const [inviteTarget, setInviteTarget] = useState<{
+  name: string;
+  email: string;
+} | null>(null);
 
   const highlightQuery = useMemo(() => {
     if (highlightTerms && highlightTerms.length > 0) return highlightTerms;
@@ -571,6 +580,20 @@ const CandidateSearchResults: FC<CandidateSearchResultsProps> = ({ results, high
                   <Link to={profileUrl}>
                     <button className="zx-view-btn">View</button>
                   </Link>
+                  <button
+  className="zx-invite-btn"
+  onClick={(e) => {
+    e.preventDefault();
+    setInviteTarget({
+      name:  candidate.full_name || '',
+      email: candidate.email     || '',
+    });
+  }}
+  title="Invite to apply"
+>
+  <Send className="w-4 h-4" />
+  Invite
+</button>
                 </div>
               </div>
             </div>
@@ -625,6 +648,17 @@ const CandidateSearchResults: FC<CandidateSearchResultsProps> = ({ results, high
           </div>
         </DialogContent>
       </Dialog>
+
+      {inviteTarget && (
+  <InviteCandidateModal
+    isOpen={!!inviteTarget}
+    onClose={() => setInviteTarget(null)}
+    jobId={jobId || ''}       // pass from parent ZiveXResultsPage if available
+    jobTitle={jobTitle || 'Open Position'}
+    prefillName={inviteTarget.name}
+    prefillEmail={inviteTarget.email}
+  />
+)}
     </>
   );
 };

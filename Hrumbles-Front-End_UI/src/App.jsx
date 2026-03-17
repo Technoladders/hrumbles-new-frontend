@@ -72,6 +72,7 @@ import GoalDetailView from "./components/goals/dashboard/GoalDetailView";
 import EmployeeGoalDetail from "./pages/goals/EmployeeGoalDetail";
 import ProfileEditEmployee from "./pages/ProfileEditEmployee";
 import MySubmissionsReport from "./pages/reports/MySubmissionsReport";
+import OpenAIUsageReport from '@/components/reports/OpenAIUsageReport';
 
 // New CLients
 import ClientNew from "./pages/ClientNew/page";
@@ -93,6 +94,13 @@ import EmployeeProfilePage from "./components/MagicLinkView/EmployeeProfileDrawe
 import CandidateConsentPage from './components/MagicLinkView/CandidateConsentPage';
 import CandidateProfileV2 from "./components/MagicLinkView/candidate-profile-v2/CandidateProfileV2";
 import SharedProfileV2 from "./components/MagicLinkView/candidate-profile-v2/SharedProfileV2";
+
+import CandidateApplicationPage from "./pages/candidates/CandidateApplicationPage.jsx";
+import InviteResponsesPage from "./pages/jobs/InviteResponsesPage";
+
+
+// candidate search beta
+import CandidateSearch from "@/components/CandidateSearch";
 
 
 // Job Route Handler
@@ -152,6 +160,7 @@ import SyncReportsPage from "./pages/sales/SyncReportsPage";
 import ContactsV2Page from '@/pages/sales/ContactsV2Page';
 
 import CreditUsageReport from '@/components/reports/CreditUsageReport.tsx';
+import ApolloUsageReport from '@/components/reports/ApolloUsageReport'
 
 
 // Clients
@@ -224,10 +233,11 @@ function AppContent() {
  const [isOrgValidated, setIsOrgValidated] = useState(null); 
   
   // --- Define Public Routes ---
-  const publicPaths = [
-    '/login', '/signup', '/set-password', '/forgot-password',
-    '/careers', '/job/', '/share/', '/share-v2/', '/consent/', '/talentcareers', '/'
-  ];
+const publicPaths = [
+  '/login', '/signup', '/set-password', '/forgot-password',
+  '/careers', '/job/', '/share/', '/share-v2/', '/consent/', '/talentcareers', '/',
+  '/apply/', 
+];
 
 
 
@@ -461,6 +471,8 @@ useEffect(() => {
         <Route path="/share/:shareId" element={<SharedProfile />} />
         <Route path="/share-v2/:shareId" element={<SharedProfileV2 />} />
 
+        <Route path="/apply/:inviteToken" element={<CandidateApplicationPage />} />
+
         <Route path="/consent/:consentId" element={<CandidateConsentPage />} />
 
         {/* Protected Routes */}
@@ -505,6 +517,8 @@ useEffect(() => {
               <Route path="/reports/organization-talent-trends" element={<OrganizationTalentTrendsReport />} />
               <Route path="/organization/invoices" element={<GlobalInvoicesPage />} />
               <Route path="/reports/credit-usage" element={<CreditUsageReport />} />
+              <Route path="/reports/openai-usage" element={<OpenAIUsageReport />} />
+              <Route path="/reports/apollo-usage" element={<ApolloUsageReport />} />
 
               
               <Route path="/projects" element={<ProjectManagement />} />
@@ -549,10 +563,17 @@ useEffect(() => {
               <Route path="/jobstatuses" element={<StatusSettings />} />
               <Route path="/jobs/candidateprofile/:candidateId/:jobId" element={<CandidateProfileV2 />} />
               <Route path="/candidate-v2/:candidateId/:jobId" element={<EmployeeProfilePage />} />
+
+              {/* candidate invite */}
+              <Route path="/jobs/:id/invites" element={<InviteResponsesPage />} />
               {/* Background Verification */}
               <Route path="/jobs/:jobId/candidate/:candidateId/bgv" element={<CandidateBgvProfilePage />} />
               <Route path="/all-candidates" element={<AllCandidatesPage />} /> 
               <Route path="/bg-verification/analytics" element={<BgvAnalyticsDashboard />} />
+              
+
+              {/* Candidate Search Beta */}
+              <Route path="/search/candidates/beta" element={<CandidateSearch />} />
 
               {/* Job Board Integrations */}
               <Route path="/integrations/job-boards" element={<JobBoardIntegrations />} />

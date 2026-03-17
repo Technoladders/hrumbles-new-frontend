@@ -27,7 +27,7 @@ import { ItechStatusSelector } from "./ItechStatusSelector";
 import ValidateResumeButton from "./candidate/ValidateResumeButton";
 import StageProgress from "./candidate/StageProgress";
 import EmptyState from "./candidate/EmptyState";
-import { Pencil,Bot,Sparkles, UserSearch, Eye, Download, FileText, Phone, Calendar, User, ChevronLeft, ChevronRight, Copy, Check, Mail, MessageSquare, Notebook, Linkedin } from "lucide-react";
+import { Pencil,Bot,Sparkles, UserSearch, Eye, Download, FileText, Phone, Calendar, User, ChevronLeft, ChevronRight, Copy, Check, Mail, MessageSquare, Notebook, Linkedin, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import EditCandidateDrawer from "@/components/jobs/job/candidate/EditCandidateDrawer";
@@ -73,6 +73,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback } from "@/components/jobs/ui/avatar";
 import { motion } from "framer-motion";
 import { TaskupActionModal, TaskupModalConfig } from './TaskupActionModal';
+import InviteCandidateModal from "@/components/jobs/job/invite/InviteCandidateModal";
 
 const VALIDATION_QUEUE_KEY = "validationQueue";
 
@@ -96,7 +97,7 @@ interface CandidatesListProps {
   onRefresh: () => Promise<void>;
   isCareerPage?: boolean;
   scoreFilter?: string;
-  candidateFilter?: "All" | "Yours";
+  candidateFilter?: string;
    rejection_reason?: string; 
     searchTerm?: string;
 }
@@ -130,6 +131,19 @@ const CandidatesList = forwardRef((props: CandidatesListProps, ref) => {
     // ADD NEW STATE FOR THE TASKUP MODAL
   const [isTaskupActionModalOpen, setIsTaskupActionModalOpen] = useState(false);
   const [taskupModalConfig, setTaskupModalConfig] = useState<TaskupModalConfig | null>(null);
+
+  // Invite modal state
+const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+const [inviteCandidate, setInviteCandidate]     = useState<{
+  name:  string;
+  email: string;
+  phone?: string;
+} | null>(null);
+const [inviteModalMeta, setInviteModalMeta] = useState<{
+  candidateId:      string;
+  candidateOwnerId: string;
+  inviteSource:     'pipeline' | 'zivex';
+} | null>(null);
 
   const ITECH_ORGANIZATION_ID = [
   "1961d419-1272-4371-8dc7-63a4ec71be83",
@@ -1391,12 +1405,16 @@ const candidates = useMemo(() => {
       filtered = filtered.filter(c => c.appliedFrom === "Candidate");
     }
 
-if (candidateFilter === "Yours") { // Use prop directly
-    const userFullName = `${user.user_metadata.first_name} ${user.user_metadata.last_name}`;
-    filtered = filtered.filter(
-      c => c.owner === userFullName || c.appliedFrom === userFullName
-    );
-  }
+if (candidateFilter === "Yours") {
+      const userFullName = `${user.user_metadata.first_name} ${user.user_metadata.last_name}`;
+      filtered = filtered.filter(
+        c => c.owner === userFullName || c.appliedFrom === userFullName
+      );
+    } else if (candidateFilter && candidateFilter !== "All") {
+      filtered = filtered.filter(
+        c => c.owner === candidateFilter || c.appliedFrom === candidateFilter
+      );
+    }
     
     return filtered;
   }, [candidates, appliedCandidates, activeTab, statusFilters, statusFilter, isCareerPage, candidateFilter, searchTerm, scoreFilter, candidateAnalysisData, user]); // Added user to dependencies
@@ -1410,6 +1428,26 @@ if (candidateFilter === "Yours") { // Use prop directly
       toast.error("Resume not available");
     }
   };
+
+const handleInviteCandidate = (candidate: Candidate) => {
+  if (!candidate.email) {
+    toast.error('Cannot invite: candidate has no email address');
+    return;
+  }
+  setInviteCandidate({
+    name:  candidate.name  || '',
+    email: candidate.email || '',
+    phone: candidate.phone || '',
+  });
+  // Pass the existing candidate row ID + owner so the edge function
+  // knows to UPDATE hr_job_candidates instead of creating a new pipeline entry
+  setInviteModalMeta({
+    candidateId:      candidate.id,
+    candidateOwnerId: candidate.metadata?.createdBy || user?.id || '',
+    inviteSource:     'pipeline',
+  });
+  setIsInviteModalOpen(true);
+};
 
   const handleEditCandidate = (candidate: Candidate) => {
     console.log("Editing candidate:", candidate);
@@ -2350,6 +2388,21 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
                 <TooltipContent><p>View Timeline & Notes</p></TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            <TooltipProvider>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors"
+        onClick={() => handleInviteCandidate(candidate)}
+      >
+        <Send className="h-4 w-4" />
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent><p>Invite to Apply</p></TooltipContent>
+  </Tooltip>
+</TooltipProvider>
             {candidate.hasValidatedResume && (
               <TooltipProvider>
                 <Tooltip>
@@ -2421,6 +2474,27 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
     isOpen={isShareModalOpen}
     onClose={() => setIsShareModalOpen(false)}
     data={shareModalData}
+  />
+)}
+
+{/* Invite Candidate Modal — auto-filled from table row */}
+{isInviteModalOpen && job && inviteCandidate && (
+  <InviteCandidateModal
+    isOpen={isInviteModalOpen}
+    onClose={() => {
+      setIsInviteModalOpen(false);
+      setInviteCandidate(null);
+      setInviteModalMeta(null);
+    }}
+    jobId={jobId}
+    job={job}
+    prefillName={inviteCandidate.name}
+    prefillEmail={inviteCandidate.email}
+    prefillPhone={inviteCandidate.phone}
+    // Pipeline extras — these make the invite_source = 'pipeline' in DB
+    candidateId={inviteModalMeta?.candidateId}
+    candidateOwnerId={inviteModalMeta?.candidateOwnerId}
+    inviteSource={inviteModalMeta?.inviteSource || 'pipeline'}
   />
 )}
 

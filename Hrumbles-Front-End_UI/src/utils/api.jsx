@@ -338,7 +338,7 @@ export const createOrganizationWithSuperadmin = async (
 
   // Clone Job Statuses for Recruitment Firms
   if (isRecruitmentFirm) {
-    const TEMPLATE_ORG_ID = '53989f03-bdc9-439a-901c-45b274eff506';
+    const TEMPLATE_ORG_ID = '96593f3f-59fa-4805-bc84-bbec17ed964e';
     const { error: cloneError } = await supabase.rpc('clone_job_statuses', {
       source_org_id: TEMPLATE_ORG_ID,
       target_org_id: orgId

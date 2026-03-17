@@ -352,3 +352,23 @@
 [data-state="open"] {
   opacity: 1 !important;
 }
+
+.zx-invite-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: white;
+  color: var(--zx-brand);
+  border: 1.5px solid var(--zx-brand-border);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.zx-invite-btn:hover {
+  background: var(--zx-brand-bg);
+  border-color: var(--zx-brand);
+  box-shadow: 0 2px 8px rgba(108,43,217,0.15);
+}
