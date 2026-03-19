@@ -257,7 +257,7 @@ export const getCandidatesByJobId = async (jobId: string, statusFilter?: string)
       .from('hr_job_candidates')
       .select(`
         *,
-        hr_employees!hr_job_candidates_created_by_fkey (first_name, last_name)
+        hr_employees!hr_job_candidates_created_by_fkey (first_name, last_name),
   main_status:job_statuses!hr_job_candidates_main_status_id_fkey (id,name,type),
   sub_status:job_statuses!hr_job_candidates_sub_status_id_fkey (id,name,type)
       `)

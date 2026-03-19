@@ -264,8 +264,10 @@ useEffect(() => {
       skills: candidate.skills ||[],
       appliedFrom: candidate.appliedFrom || candidate.applied_from,
       owner: ownerName,
-      main_status: candidate.main_status,
-      main_status_id: candidate.main_status_id
+      main_status: candidate.main_status, 
+    sub_status: candidate.sub_status,
+    main_status_id: candidate.main_status_id,
+    sub_status_id: candidate.sub_status_id
     };
   });
 

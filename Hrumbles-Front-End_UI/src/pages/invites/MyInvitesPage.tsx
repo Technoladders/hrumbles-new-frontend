@@ -218,39 +218,55 @@ const MyInvitesPage: React.FC = () => {
         </button>
       </div>
 
-      {/* ── Stat cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {[
-          { label: 'Total Invites', value: stats.total,   icon: <Users size={22} className="text-purple-600" />, bg: 'bg-purple-50', iconBg: 'bg-purple-100', val: 'text-purple-700', clickVal: 'all'     },
-          { label: 'Sent',          value: stats.sent,    icon: <Send size={22} className="text-gray-500" />,    bg: 'bg-gray-50',   iconBg: 'bg-gray-100',   val: '',               clickVal: 'sent'    },
-          { label: 'Opened',        value: stats.opened,  icon: <Eye size={22} className="text-amber-600" />,   bg: 'bg-amber-50',  iconBg: 'bg-amber-100',  val: 'text-amber-700', clickVal: 'opened'  },
-          { label: 'Applied',       value: stats.applied, icon: <CheckCircle size={22} className="text-green-600" />, bg: 'bg-green-50', iconBg: 'bg-green-100', val: 'text-green-700', clickVal: 'applied' },
-          { label: 'Expired',       value: stats.expired, icon: <AlertCircle size={22} className="text-red-500" />,  bg: 'bg-red-50',   iconBg: 'bg-red-100',   val: 'text-red-600',   clickVal: 'expired' },
-        ].map(({ label, value, icon, bg, iconBg, val, clickVal }) => (
-          <Card key={label}
-            onClick={() => { setFilter(clickVal as FilterStatus); setCurrentPage(1); }}
-            className={`p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow ${bg}`}>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-500">{label}</p>
-              <h3 className={`text-3xl font-bold ${val || 'text-gray-800'}`}>{value}</h3>
-            </div>
-            <div className={`p-2 ${iconBg} rounded-lg`}>{icon}</div>
-          </Card>
-        ))}
+<div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+  {[
+    { label: 'Total Invites', value: stats.total,   icon: <Users size={22} className="text-purple-600" />, bg: 'bg-purple-50', iconBg: 'bg-purple-100', val: 'text-purple-700', clickVal: 'all' },
+    { label: 'Sent',          value: stats.sent,    icon: <Send size={22} className="text-gray-500" />,    bg: 'bg-gray-50',   iconBg: 'bg-gray-100',   val: '',               clickVal: 'sent' },
+    { label: 'Opened',        value: stats.opened,  icon: <Eye size={22} className="text-amber-600" />,   bg: 'bg-amber-50',  iconBg: 'bg-amber-100',  val: 'text-amber-700', clickVal: 'opened' },
+    { label: 'Applied',       value: stats.applied, icon: <CheckCircle size={22} className="text-green-600" />, bg: 'bg-green-50', iconBg: 'bg-green-100', val: 'text-green-700', clickVal: 'applied' },
+    { label: 'Expired',       value: stats.expired, icon: <AlertCircle size={22} className="text-red-500" />,  bg: 'bg-red-50',   iconBg: 'bg-red-100',   val: 'text-red-600',   clickVal: 'expired' },
+  ].map(({ label, value, icon, bg, iconBg, val, clickVal }) => (
+    <Card
+      key={label}
+      onClick={() => { setFilter(clickVal as FilterStatus); setCurrentPage(1); }}
+      className={`p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow ${bg}`}
+    >
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-gray-500">{label}</p>
+        <h3 className={`text-3xl font-bold ${val || 'text-gray-800'}`}>{value}</h3>
+      </div>
+      <div className={`p-2 ${iconBg} rounded-lg`}>{icon}</div>
+    </Card>
+  ))}
+
+  {/* ✅ Conversion Card */}
+  {stats.total > 0 && (
+    <Card className="p-4 flex flex-col justify-between bg-purple-50 border-purple-100 hover:shadow-lg transition-shadow">
+      <div className="flex items-center gap-2 mb-2">
+        <Users size={18} className="text-purple-600" />
+        <span className="text-sm font-semibold text-purple-800">
+          Conversion
+        </span>
       </div>
 
-      {/* Conversion bar */}
-      {stats.total > 0 && (
-        <div className="flex items-center gap-3 bg-purple-50 rounded-xl px-5 py-3 border border-purple-100">
-          <Users size={16} className="text-purple-600 flex-shrink-0" />
-          <span className="text-sm text-purple-800 font-semibold">Conversion Rate: {conversion}%</span>
-          <div className="flex-1 h-2 bg-purple-100 rounded-full overflow-hidden ml-2">
-            <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-violet-600 transition-all duration-700"
-              style={{ width: `${conversion}%` }} />
-          </div>
-          <span className="text-xs text-purple-500 flex-shrink-0">{stats.applied}/{stats.total} applied</span>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-2 bg-purple-100 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-purple-500 to-violet-600 transition-all duration-700"
+            style={{ width: `${conversion}%` }}
+          />
         </div>
-      )}
+        <span className="text-xs font-medium text-purple-700">
+          {conversion}%
+        </span>
+      </div>
+
+      <p className="text-xs text-purple-500 mt-2">
+        {stats.applied}/{stats.total} applied
+      </p>
+    </Card>
+  )}
+</div>
 
       {/* ── Toolbar ── */}
       <div className="flex flex-wrap items-center gap-3">
