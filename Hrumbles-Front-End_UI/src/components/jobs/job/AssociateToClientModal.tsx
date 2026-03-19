@@ -104,6 +104,8 @@ const AssociateToClientModal = ({
     client.service_type.includes("permanent") || 
     client.service_type.includes("contractual")
   );
+
+  console.log('filteredClients', filteredClients);
   
   const { data: projects = [], refetch: refetchProjects } = useQuery({
     queryKey: ['client-projects', selectedClient],
@@ -279,10 +281,13 @@ const AssociateToClientModal = ({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                <PopoverContent
+  className="w-[--radix-popover-trigger-width] p-0"
+  onWheel={(e) => e.stopPropagation()}
+>
                   <Command>
                     <CommandInput placeholder="Search client..." />
-                    <CommandList>
+                    <CommandList className="max-h-72 overflow-y-auto">
                       <CommandEmpty>
                         <div className="py-4 text-center text-sm text-muted-foreground">
                           No client found.

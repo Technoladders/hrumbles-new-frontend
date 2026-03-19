@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Bookmark, Sparkles, Plus, Edit, Share2, Copy, Check, Link as LinkIcon, Globe } from "lucide-react";
+import { ArrowLeft, FileText, Eye, UserPlus, ChevronDown, Clock, Bookmark, Sparkles, Plus, Edit, Share2, Copy, Check, Link as LinkIcon, Globe, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { shareJob } from "@/services/jobs/supabaseQueries";
 import { Helmet } from "react-helmet-async";
+import InviteCandidateModal from "@/components/jobs/job/invite/InviteCandidateModal";
 
 
 const JobView = () => {
@@ -42,6 +43,9 @@ const JobView = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
    const [hasCopied, setHasCopied] = useState(false);
+
+  //  --- Invite Candidate Modal ---
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
    // Define the missing state here
    const [isShared, setIsShared] = useState(false);
@@ -240,17 +244,34 @@ useEffect(() => {
     enabled: !!id,
   });
 
-  // --- DATA TRANSFORMATION ---
-  const candidates: Candidate[] = candidatesData.map(candidate => ({
-    id: candidate.id,
-    name: candidate.name,
-    status: candidate.status,
-    experience: candidate.experience,
-    matchScore: candidate.matchScore,
-    appliedDate: candidate.appliedDate,
-    skills: candidate.skills || []
-  }));
+  console.log("candidatesData", candidatesData);
+  
 
+// --- DATA TRANSFORMATION ---
+  const candidates: Candidate[] = candidatesData.map(candidate => {
+    // Safely extract the owner name from the joined hr_employees data
+    const ownerName = candidate.hr_employees 
+      ? `${candidate.hr_employees.first_name || ''} ${candidate.hr_employees.last_name || ''}`.trim()
+      : candidate.appliedFrom || candidate.applied_from;
+
+    return {
+      id: candidate.id,
+      name: candidate.name,
+      status: candidate.status,
+      experience: candidate.experience,
+      matchScore: candidate.matchScore,
+      appliedDate: candidate.appliedDate,
+      skills: candidate.skills ||[],
+      appliedFrom: candidate.appliedFrom || candidate.applied_from,
+      owner: ownerName,
+      main_status: candidate.main_status, 
+    sub_status: candidate.sub_status,
+    main_status_id: candidate.main_status_id,
+    sub_status_id: candidate.sub_status_id
+    };
+  });
+
+  console.log("candidatesData", candidatesData);
   // --- useEffect TO CHECK sessionStorage ---
   useEffect(() => {
     const dataFromAnalysisPage = sessionStorage.getItem('aiCandidateForFinalize');
@@ -361,7 +382,7 @@ useEffect(() => {
   const isShortlistActive = isWishlistModalOpen;
 
   // Tab Styles
-  const baseTabStyle = "flex items-center gap-2 px-6 py-1.5 rounded-full text-sm font-medium transition-all duration-200";
+  const baseTabStyle = "flex items-center gap-2 px-4 py-1 text-xsrounded-full font-medium transition-all duration-200";
   // Hover = White with Shadow (Depth)
   const inactiveTabStyle = "text-gray-600 hover:bg-white hover:shadow-sm hover:text-gray-900";
   // Active = Purple Background
@@ -390,12 +411,12 @@ useEffect(() => {
           <meta name="twitter:description" content={jobDescriptionPreview} />
         </Helmet>
       )}
-      <div className="flex items-center justify-between mb-4">
+     <div className="flex items-center justify-between mb-4 gap-2 flex-nowrap">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-gray-500 hover:text-gray-700">
             <ArrowLeft size={20} />
           </Button>
-          <h1 className="text-xl font-semibold">{job.title}</h1>
+          <h1 className="text-xl font-semibold whitespace-nowrap flex-nowrap">{job.title}</h1>
 {/* --- UPDATED ICONS SECTION --- */}
        {/* --- MODERN ACTION BUTTONS --- */}
            <div className="inline-flex items-center gap-2 ml-4 bg-gray-100 dark:bg-gray-800 p-1.5 rounded-full shadow-inner">
@@ -403,7 +424,7 @@ useEffect(() => {
              {/* 1. View Button - Pill Style */}
              <Link to={`/jobs/${id}/description`}>
                <button 
-                 className="group flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 text-gray-600 hover:bg-white hover:text-[#7731E8] hover:shadow-sm"
+                 className="group flex items-center gap-2 px-4 py-1 text-xs rounded-full font-medium transition-all duration-200 text-gray-600 hover:bg-white hover:text-[#7731E8] hover:shadow-sm"
                >
                  <Eye size={16} className="text-gray-500 group-hover:text-[#7731E8]" />
                  <span className="hidden sm:inline">View</span>
@@ -414,7 +435,7 @@ useEffect(() => {
              {!isEmployee && (
                <button 
                  onClick={() => setIsEditModalOpen(true)}
-                 className="group flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 text-gray-600 hover:bg-white hover:text-[#7731E8] hover:shadow-sm"
+                 className="group flex items-center gap-2 px-4 py-1 text-xs rounded-full font-medium transition-all duration-200 text-gray-600 hover:bg-white hover:text-[#7731E8] hover:shadow-sm"
                >
                  <Edit size={16} className="text-gray-500 group-hover:text-[#7731E8]" />
                  <span className="hidden sm:inline">Edit</span>
@@ -426,7 +447,7 @@ useEffect(() => {
                <DropdownMenuTrigger asChild>
                  <button 
                    className={`
-                     group flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200
+                     group flex items-center gap-2 px-4 py-1 text-xs rounded-full font-medium transition-all duration-200
                      ${isShared 
                        ? 'bg-emerald-50 text-emerald-600 shadow-sm hover:bg-emerald-100' 
                        : 'text-gray-600 hover:bg-white hover:text-[#7731E8] hover:shadow-sm'
@@ -511,12 +532,12 @@ useEffect(() => {
         {/* Action Buttons */}
 
        {/* --- ACTION BUTTONS & TABS --- */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-nowrap shrink-0">
           
           {/* 1. Analyse with AI Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button className="h-10 px-6 font-semibold text-white whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200 flex items-center gap-2">
+              <Button className="h-9 px-4 py-1 text-xs font-semibold text-white whitespace-nowrap bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200 flex items-center gap-2">
                 <Sparkles size={18} />
                 <span>Analyse with AI</span>
                 <ChevronDown className="h-5 w-5" />
@@ -551,12 +572,12 @@ useEffect(() => {
           </DropdownMenu>
 
 {/* 2. Middle Tab Group (Shortlist + Job Desc) */}
-          <div className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1.5 shadow-inner">
+         <div className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner whitespace-nowrap">
             {/* My Shortlist Button */}
             <button
               onClick={() => setIsWishlistModalOpen(true)}
               className={`
-                group flex items-center gap-2 px-6 py-1 rounded-full text-sm font-semibold transition-all duration-200
+                group flex items-center gap-2 px-4 py-1 text-xs rounded-full font-semibold transition-all duration-200
                 ${isShortlistActive 
                   ? "bg-[#7731E8] text-white shadow-md" // Active: Purple & White
                   : "text-gray-500 hover:bg-gray hover:text-[#7731E8] hover:shadow-sm" // Inactive: Gray -> Hover: White BG + Purple Text
@@ -567,11 +588,24 @@ useEffect(() => {
               <span>My Shortlists</span>
             </button>
 
+            <Link to={`/jobs/${id}/invites`}>
+  <button
+    className={`
+      group flex items-center gap-2 px-4 py-1 text-xs rounded-full font-semibold
+      transition-all duration-200
+      text-gray-500 hover:bg-gray hover:text-[#7731E8] hover:shadow-sm
+    `}
+  >
+    <Send size={16} className="text-gray-500 group-hover:text-[#7731E8]" />
+    <span className="hidden sm:inline">Invites</span>
+  </button>
+</Link>
+
             {/* Job Description Button */}
             <Link to={`/jobs/${id}/description`}>
               <button 
                 className={`
-                  group flex items-center gap-2 px-6 py-1.5 rounded-full text-sm font-semibold transition-all duration-200
+                  group flex items-center gap-2 px-4 py-1 text-xs rounded-full font-semibold transition-all duration-200
                   ${isJobDescriptionActive 
                     ? "bg-[#7731E8] text-white shadow-md" // Active: Purple & White
                     : "text-gray-500 hover:bg-gray hover:text-[#7731E8] hover:shadow-sm" // Inactive: Gray -> Hover: White BG + Purple Text
@@ -584,14 +618,16 @@ useEffect(() => {
             </Link>
           </div>
 
+          
+
           {/* 3. Add Candidate Button (3D Style) */}
           <button
             onClick={() => setIsAddCandidateDrawerOpen(true)}
-            className="flex items-center gap-3 pl-1.5 pr-6 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 group h-10"
+            className="flex items-center text-xs gap-3 pl-1.5 pr-6 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 group h-10"
           >
             <div className="relative flex items-center justify-center w-7 h-7 mr-1">
               <div className="absolute inset-0 bg-white blur-md scale-110 opacity-50 animate-pulse"></div>
-              <div className="relative w-full h-full rounded-full flex items-center justify-center z-10 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.2)]" style={{ background: 'radial-gradient(circle at 30% 30%, #ffffff, #f1f5f9)' }}>
+              <div className="relative w-full h-full text-xs rounded-full flex items-center justify-center z-10 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.2)]" style={{ background: 'radial-gradient(circle at 30% 30%, #ffffff, #f1f5f9)' }}>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className="w-5 h-5" style={{ filter: 'drop-shadow(0 2px 2px rgba(119,49,232,0.3))' }}>
                   <defs>
                     <linearGradient id="purpleIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -604,7 +640,7 @@ useEffect(() => {
                 </svg>
               </div>
             </div>
-            <span className="tracking-wide text-sm relative z-10">Add Candidate</span>
+            <span className="tracking-wide text-xs relative z-10">Add Candidate</span>
           </button>
         </div>
       </div>
@@ -666,6 +702,15 @@ useEffect(() => {
           onCandidateAdded={handleFinalizeCandidateAdded}
         />
       )}
+
+      {job && (
+  <InviteCandidateModal
+    isOpen={isInviteModalOpen}
+    onClose={() => setIsInviteModalOpen(false)}
+    jobId={job.id}
+    jobTitle={job.title}
+  />
+)}
       
 
       {isHistoryModalOpen && (

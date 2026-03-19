@@ -1,124 +1,216 @@
-import { useState, useEffect } from "react";
-import { format, startOfMonth, endOfMonth, addMonths, addYears, subYears } from "date-fns";
+import { useState, useEffect, useCallback } from "react";
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  addMonths,
+  addYears,
+  subYears,
+  startOfYear,
+  endOfYear,
+  parseISO,
+} from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Holiday, OfficialHolidayInsert } from "@/types/time-tracker-types";
+import { Holiday, OfficialHolidayInsert, HolidayType } from "@/types/time-tracker-types";
 import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
 
+export interface HolidayStats {
+  totalThisYear: number;
+  upcomingThisMonth: number;
+  byType: Record<string, number>;
+}
+
 export const useHolidays = () => {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [holidays, setHolidays] = useState<Holiday[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [currentDate, setCurrentDate]   = useState(new Date());
+  const [holidays, setHolidays]         = useState<Holiday[]>([]);
+  const [isLoading, setIsLoading]       = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
-  const authData = getAuthDataFromLocalStorage();
-  const organization_id = authData?.organization_id;
+  const [stats, setStats]               = useState<HolidayStats>({
+    totalThisYear: 0,
+    upcomingThisMonth: 0,
+    byType: {},
+  });
 
-  const fetchHolidays = async () => {
+  const authData        = getAuthDataFromLocalStorage();
+  const organization_id = authData?.organization_id as string;
+
+  // ── Map DB row → Holiday ──────────────────────────────────
+  const mapRow = (item: any): Holiday => ({
+    id:                 item.id,
+    name:               item.holiday_name,
+    date:               item.holiday_date,
+    day_of_week:        item.day_of_week ?? format(parseISO(item.holiday_date), "EEEE"),
+    type:               item.holiday_type as HolidayType,
+    is_recurring:       item.is_recurring,
+    applicable_regions: item.applicable_regions,
+    created_at:         item.created_at,
+    updated_at:         item.updated_at,
+  });
+
+  // ── Fetch holidays for current month ─────────────────────
+  const fetchHolidays = useCallback(async () => {
     if (!organization_id) return;
-
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      const startDate = format(startOfMonth(currentDate), "yyyy-MM-dd");
-      const endDate = format(endOfMonth(currentDate), "yyyy-MM-dd");
-      
-      // Direct DB Query (RLS filtered)
-      const { data, error } = await supabase
-        .from('official_holidays')
-        .select('*')
-        .eq('organization_id', organization_id)
-        .gte('holiday_date', startDate)
-        .lte('holiday_date', endDate)
-        .order('holiday_date', { ascending: true });
-      
-      if (error) throw error;
-      
-      const mappedHolidays: Holiday[] = data.map((item: any) => ({
-        id: item.id,
-        name: item.holiday_name,
-        date: item.holiday_date,
-        day_of_week: item.day_of_week || format(new Date(item.holiday_date), 'EEEE'),
-        type: item.holiday_type,
-        is_recurring: item.is_recurring,
-        created_at: item.created_at,
-        updated_at: item.updated_at
-      }));
+      const start = format(startOfMonth(currentDate), "yyyy-MM-dd");
+      const end   = format(endOfMonth(currentDate), "yyyy-MM-dd");
 
-      setHolidays(mappedHolidays);
-    } catch (error) {
-      console.error('Error fetching holidays:', error);
-      toast.error('Failed to load holidays');
+      const { data, error } = await supabase
+        .from("official_holidays")
+        .select("*")
+        .eq("organization_id", organization_id)
+        .gte("holiday_date", start)
+        .lte("holiday_date", end)
+        .order("holiday_date", { ascending: true });
+
+      if (error) throw error;
+      setHolidays((data ?? []).map(mapRow));
+    } catch (err) {
+      console.error("Error fetching holidays:", err);
+      toast.error("Failed to load holidays");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentDate, organization_id]);
 
-  const handleDeleteHoliday = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('official_holidays')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
-      toast.success('Holiday deleted successfully');
-      fetchHolidays();
-    } catch (error) {
-      console.error('Error deleting holiday:', error);
-      toast.error('Failed to delete holiday');
-    }
-  };
-
-  const handleAddHolidays = async (newHolidays: Omit<Holiday, "id" | "created_at" | "updated_at">[]) => {
+  // ── Fetch year-level stats ────────────────────────────────
+  const fetchStats = useCallback(async () => {
     if (!organization_id) return;
-
     try {
-      const holidaysToInsert = newHolidays.map(holiday => ({
-        organization_id, // Important: Scope to Org
-        holiday_name: holiday.name,
-        holiday_date: holiday.date,
-        day_of_week: holiday.day_of_week,
-        holiday_type: holiday.type,
-        is_recurring: holiday.is_recurring || false,
+      const yearStart = format(startOfYear(currentDate), "yyyy-MM-dd");
+      const yearEnd   = format(endOfYear(currentDate), "yyyy-MM-dd");
+      const today     = format(new Date(), "yyyy-MM-dd");
+      const monthEnd  = format(endOfMonth(currentDate), "yyyy-MM-dd");
+
+      const { data } = await supabase
+        .from("official_holidays")
+        .select("holiday_date, holiday_type")
+        .eq("organization_id", organization_id)
+        .gte("holiday_date", yearStart)
+        .lte("holiday_date", yearEnd);
+
+      const all = data ?? [];
+      const byType: Record<string, number> = {};
+      all.forEach(h => {
+        byType[h.holiday_type] = (byType[h.holiday_type] ?? 0) + 1;
+      });
+
+      const upcoming = all.filter(
+        h => h.holiday_date >= today && h.holiday_date <= monthEnd
+      ).length;
+
+      setStats({ totalThisYear: all.length, upcomingThisMonth: upcoming, byType });
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+    }
+  }, [currentDate, organization_id]);
+
+  // ── Add holidays ──────────────────────────────────────────
+  const handleAddHolidays = async (
+    newHolidays: Omit<Holiday, "id" | "created_at" | "updated_at">[]
+  ) => {
+    if (!organization_id) return;
+    try {
+      const rows = newHolidays.map(h => ({
+        organization_id,
+        holiday_name:  h.name,
+        holiday_date:  h.date,
+        day_of_week:   h.day_of_week,
+        holiday_type:  h.type,
+        is_recurring:  h.is_recurring ?? false,
+        applicable_regions: h.applicable_regions ?? "All",
       }));
 
       const { error } = await supabase
-        .from('official_holidays')
-        .insert(holidaysToInsert);
-        
-      if (error) throw error;
+        .from("official_holidays")
+        .upsert(rows, { onConflict: "organization_id,holiday_date", ignoreDuplicates: false });
 
-      toast.success(`Added ${newHolidays.length} holiday(s)`);
+      if (error) throw error;
+      toast.success(`Added ${newHolidays.length} holiday${newHolidays.length !== 1 ? "s" : ""}`);
       setIsDialogOpen(false);
-      fetchHolidays();
-    } catch (error) {
-      console.error('Error adding holidays:', error);
-      toast.error('Failed to add holidays');
+      await Promise.all([fetchHolidays(), fetchStats()]);
+    } catch (err: any) {
+      if (err?.code === "23505") {
+        toast.error("One or more dates already have holidays. They were skipped.");
+        await Promise.all([fetchHolidays(), fetchStats()]);
+      } else {
+        console.error("Error adding holidays:", err);
+        toast.error("Failed to add holidays");
+      }
     }
   };
 
-  const changeMonth = (offset: number) => {
-    setCurrentDate(prev => addMonths(prev, offset));
+  // ── Edit holiday ──────────────────────────────────────────
+  const handleEditHoliday = async (
+    id: string,
+    patch: Partial<Pick<Holiday, "name" | "type" | "is_recurring" | "applicable_regions">>
+  ) => {
+    try {
+      const updatePayload: any = {};
+      if (patch.name)               updatePayload.holiday_name  = patch.name;
+      if (patch.type)               updatePayload.holiday_type  = patch.type;
+      if (patch.is_recurring !== undefined) updatePayload.is_recurring = patch.is_recurring;
+      if (patch.applicable_regions) updatePayload.applicable_regions = patch.applicable_regions;
+
+      const { error } = await supabase
+        .from("official_holidays")
+        .update(updatePayload)
+        .eq("id", id)
+        .eq("organization_id", organization_id);
+
+      if (error) throw error;
+      toast.success("Holiday updated");
+      await Promise.all([fetchHolidays(), fetchStats()]);
+    } catch (err) {
+      console.error("Error editing holiday:", err);
+      toast.error("Failed to update holiday");
+    }
   };
 
-  const changeYear = (offset: number) => {
-    setCurrentDate(prev => offset > 0 ? addYears(prev, 1) : subYears(prev, 1));
+  // ── Delete holiday ────────────────────────────────────────
+  const handleDeleteHoliday = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("official_holidays")
+        .delete()
+        .eq("id", id)
+        .eq("organization_id", organization_id);
+
+      if (error) throw error;
+      toast.success("Holiday deleted");
+      await Promise.all([fetchHolidays(), fetchStats()]);
+    } catch (err) {
+      console.error("Error deleting holiday:", err);
+      toast.error("Failed to delete holiday");
+    }
   };
+
+  // ── Navigation ────────────────────────────────────────────
+  const changeMonth = (offset: number) =>
+    setCurrentDate(prev => addMonths(prev, offset));
+
+  const changeYear = (offset: number) =>
+    setCurrentDate(prev => offset > 0 ? addYears(prev, 1) : subYears(prev, 1));
 
   useEffect(() => {
     fetchHolidays();
-  }, [currentDate, organization_id]);
+    fetchStats();
+  }, [fetchHolidays, fetchStats]);
 
   return {
     currentDate,
     holidays,
     isLoading,
     isDialogOpen,
+    stats,
+    organization_id,
     setIsDialogOpen,
-    handleDeleteHoliday,
     handleAddHolidays,
+    handleEditHoliday,
+    handleDeleteHoliday,
     changeMonth,
     changeYear,
+    refetch: () => { fetchHolidays(); fetchStats(); },
   };
 };

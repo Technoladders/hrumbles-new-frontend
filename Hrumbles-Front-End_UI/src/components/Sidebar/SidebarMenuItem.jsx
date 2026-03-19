@@ -10,7 +10,7 @@ import { TbCheckbox } from "react-icons/tb";
 import { GoOrganization } from "react-icons/go";
 import { VscOrganization } from "react-icons/vsc";
 import { GrDocumentTime } from "react-icons/gr";
-import { LuCalendarPlus, LuUserSearch, LuCalendarCog } from "react-icons/lu";
+import { LuCalendarPlus, LuUserSearch, LuCalendarCog, LuSend } from "react-icons/lu";
 import { BsShieldLock, BsShieldCheck, BsPin, BsGraphUpArrow } from "react-icons/bs";
 import { FaUserShield, FaProjectDiagram, FaUserTie } from 'react-icons/fa';
 import { RiCustomerService2Fill } from 'react-icons/ri';
@@ -258,6 +258,7 @@ const masterMenuItems = [
   { icon: BsPin, label: "Bench Pool", path: "/bench-pool", suite: "RECRUITMENT", permission: "view_bench_pool" },
   { icon: AiOutlineProfile, label: "My Submission", path: "/my-submission", suite: "RECRUITMENT", permission: "view_my_submission" },
   { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", suite: "RECRUITMENT", permission: "access_zive_x", beta: true },
+  { icon: LuSend, label: "My Invites", path: "/my-invites", suite: "RECRUITMENT", permission: "access_invite" },
   { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients", suite: "RECRUITMENT", permission: "access_client_management" },
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects", suite: "RECRUITMENT", permission: "access_project_management" },
 
@@ -303,6 +304,8 @@ export const menuItemsByRole = {
             dropdown: [
                 { icon: TrendingUp, label: "Org. Talent Trends", path: "/reports/organization-talent-trends" },
                 { icon: TrendingUp, label: "Credit Usage", path: "/reports/credit-usage" },
+                { icon: TrendingUp, label: "OpenAI Usage", path: "/reports/openai-usage" },
+                { icon: TrendingUp, label: "Apollo Usage", path: "/reports/apollo-usage" },
             ],
         },
         { icon: FiSettings, label: "Settings", path: "/settings" },

@@ -257,8 +257,9 @@ export const getCandidatesByJobId = async (jobId: string, statusFilter?: string)
       .from('hr_job_candidates')
       .select(`
         *,
-        main_status:job_statuses!left!main_status_id(*),
-        sub_status:job_statuses!left!sub_status_id(*)
+        hr_employees!hr_job_candidates_created_by_fkey (first_name, last_name),
+  main_status:job_statuses!hr_job_candidates_main_status_id_fkey (id,name,type),
+  sub_status:job_statuses!hr_job_candidates_sub_status_id_fkey (id,name,type)
       `)
       .eq('job_id', jobId)
       .order('created_at', { ascending: false });
@@ -279,6 +280,8 @@ export const getCandidatesByJobId = async (jobId: string, statusFilter?: string)
       console.warn(`No candidates found for job_id: ${jobId}`);
       return [];
     }
+
+    console.log('Fetched candidates from getCandidatesByJobId:', data); // Debug log
 
     // Update statuses for candidates missing main_status_id or sub_status_id
     const candidatesToUpdate = data.filter(candidate => !candidate.main_status_id || !candidate.sub_status_id);

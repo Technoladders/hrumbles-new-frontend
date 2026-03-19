@@ -89,16 +89,17 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
         // headers: { 'Content-Type': 'application/json' } // invoke handles this for JSON body
     });
 
-    if (edgeFunctionError) {
-        console.error('Edge Function invocation error:', edgeFunctionError);
-        // The Edge Function returns structured error, try to parse it
-        try {
-            const errorBody = JSON.parse(edgeFunctionError.message);
-            throw new Error(errorBody.error || edgeFunctionError.message);
-        } catch {
-            throw new Error(`Failed to process resume: ${edgeFunctionError.message}`);
-        }
-    }
+ if (edgeFunctionError) {
+     console.error('Edge Function invocation error:', edgeFunctionError);
+     // edgeFunctionError.context is the raw Response for non-2xx replies.
+     // Read the JSON body from it to surface the real "error" field.
+     let errorMessage = edgeFunctionError.message;
+     try {
+         const errorBody = await (edgeFunctionError as any).context?.json();
+         if (errorBody?.error) errorMessage = errorBody.error;
+     } catch { /* ignore – fall back to the generic message */ }
+     throw new Error(errorMessage);
+ }
     
     // The Edge Function now returns the status and profile directly
     const { status, profile } = data;

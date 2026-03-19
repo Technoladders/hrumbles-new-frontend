@@ -27,7 +27,7 @@ import { ItechStatusSelector } from "./ItechStatusSelector";
 import ValidateResumeButton from "./candidate/ValidateResumeButton";
 import StageProgress from "./candidate/StageProgress";
 import EmptyState from "./candidate/EmptyState";
-import { Pencil,Bot,Sparkles, UserSearch, Eye, Download, FileText, Phone, Calendar, User, ChevronLeft, ChevronRight, Copy, Check, Mail, MessageSquare, Notebook, Linkedin } from "lucide-react";
+import { Pencil,Bot,Sparkles, UserSearch, Eye, Download, FileText, Phone, Calendar, User, ChevronLeft, ChevronRight, Copy, Check, Mail, MessageSquare, Notebook, Linkedin, Send, Clock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import EditCandidateDrawer from "@/components/jobs/job/candidate/EditCandidateDrawer";
@@ -73,6 +73,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback } from "@/components/jobs/ui/avatar";
 import { motion } from "framer-motion";
 import { TaskupActionModal, TaskupModalConfig } from './TaskupActionModal';
+import InviteCandidateModal from "@/components/jobs/job/invite/InviteCandidateModal";
+import BulkInviteReviewModal, { BulkInviteCandidate } from '@/components/jobs/job/invite/BulkInviteReviewModal';
 
 const VALIDATION_QUEUE_KEY = "validationQueue";
 
@@ -96,9 +98,10 @@ interface CandidatesListProps {
   onRefresh: () => Promise<void>;
   isCareerPage?: boolean;
   scoreFilter?: string;
-  candidateFilter?: "All" | "Yours";
+  candidateFilter?: string;
    rejection_reason?: string; 
     searchTerm?: string;
+    activeTab?: string;
 }
 
 interface HiddenContactCellProps {
@@ -121,6 +124,7 @@ const CandidatesList = forwardRef((props: CandidatesListProps, ref) => {
     candidateFilter = "All",
     isCareerPage = false,
      searchTerm = "",
+     activeTab = "All Candidates",
   } = props;
   const navigate = useNavigate();
   const user = useSelector((state: any) => state.auth.user);
@@ -130,6 +134,22 @@ const CandidatesList = forwardRef((props: CandidatesListProps, ref) => {
     // ADD NEW STATE FOR THE TASKUP MODAL
   const [isTaskupActionModalOpen, setIsTaskupActionModalOpen] = useState(false);
   const [taskupModalConfig, setTaskupModalConfig] = useState<TaskupModalConfig | null>(null);
+
+  // Invite modal state
+const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+const [inviteCandidate, setInviteCandidate]     = useState<{
+  name:  string;
+  email: string;
+  phone?: string;
+} | null>(null);
+const [inviteModalMeta, setInviteModalMeta] = useState<{
+  candidateId:      string;
+  candidateOwnerId: string;
+  inviteSource:     'pipeline' | 'zivex';
+} | null>(null);
+
+const [isBulkModalOpen,    setIsBulkModalOpen]    = useState(false);
+const [bulkInviteCandidates, setBulkInviteCandidates] = useState<BulkInviteCandidate[]>([]);
 
   const ITECH_ORGANIZATION_ID = [
   "1961d419-1272-4371-8dc7-63a4ec71be83",
@@ -241,7 +261,7 @@ console.log('mainStatuses', mainStatuses)
 
 
 
-  const [activeTab, setActiveTab] = useState("All Candidates");
+
   const [analysisData, setAnalysisData] = useState<{
     overall_score: number;
     summary: string;
@@ -923,6 +943,61 @@ const candidates = useMemo(() => {
     }
   }, [validatingIds, jobId]);
 
+ const [inviteStatusMap, setInviteStatusMap] = useState<
+  Record<string, { status: string; expiresAt: string }>
+>({});
+ 
+useEffect(() => {
+  if (!jobId || !candidates?.length) return;
+  const ids = candidates.map(c => c.id).filter(Boolean);
+  if (!ids.length) return;
+ 
+  supabase
+    .from('candidate_invites')
+    .select('candidate_id, status, expires_at')
+    .eq('job_id', jobId)
+    .eq('invite_source', 'pipeline')
+    .in('candidate_id', ids)
+    .order('created_at', { ascending: false }) // latest invite per candidate
+    .then(({ data }) => {
+      if (!data) return;
+      // Keep only the most recent invite per candidate
+      const map: Record<string, { status: string; expiresAt: string }> = {};
+      data.forEach(row => {
+        if (row.candidate_id && !map[row.candidate_id]) {
+          map[row.candidate_id] = {
+            status:    row.status,
+            expiresAt: row.expires_at,
+          };
+        }
+      });
+      setInviteStatusMap(map);
+    });
+}, [jobId, candidates]);
+ 
+// Call after a new invite is sent from the modal (optimistic update)
+const handleInviteSuccess = (candidateId: string) => {
+  setInviteStatusMap(prev => ({
+    ...prev,
+    [candidateId]: {
+      status:    'sent',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  }));
+};
+ 
+// Helper — returns the effective display state for a candidate's invite
+const getInviteState = (candidateId: string): 'none' | 'pending' | 'consented' => {
+  const inv = inviteStatusMap[candidateId];
+  if (!inv) return 'none';
+ 
+  const isExpired = new Date(inv.expiresAt) < new Date();
+ 
+  if (inv.status === 'applied')                              return 'consented';
+  if ((inv.status === 'sent' || inv.status === 'opened') && !isExpired) return 'pending';
+  // expired / declined / or expired sent/opened → allow re-invite
+  return 'none';
+};
 
 // --- UPDATED handleStatusChange Function ---
 
@@ -1186,6 +1261,27 @@ const candidates = useMemo(() => {
     toast.info("Batch validation process complete.");
   };
 
+const openBulkInviteReview = (candidatesToInvite: Candidate[]) => {
+  if (!job) { toast.error('Job data not loaded yet'); return; }
+ 
+  const withEmail = candidatesToInvite.filter(c => c.email);
+  if (withEmail.length === 0) {
+    toast.info('No candidates with email addresses selected');
+    return;
+  }
+ 
+  // Map Candidate → BulkInviteCandidate shape
+  const rows: BulkInviteCandidate[] = withEmail.map(c => ({
+    id:              c.id,
+    name:            c.name            || '',
+    email:           c.email!,
+    phone:           c.phone           || undefined,
+    candidateOwnerId: c.metadata?.createdBy || user?.id || '',
+  }));
+ 
+  setBulkInviteCandidates(rows);
+  setIsBulkModalOpen(true);
+};
 
     // Helper to fetch rejection reasons from the analysis table
   const fetchRejectionReasons = async (candidateIds: string[]): Promise<Record<string, string>> => {
@@ -1312,24 +1408,28 @@ const candidates = useMemo(() => {
   };
 
   // --- MODIFIED: Expose both batch functions to the parent component via ref ---
-  useImperativeHandle(ref, () => ({
-    // This is the existing function for batch validation
-    triggerBatchValidate() {
-      handleBatchValidate();
-    },
-    // --- THIS IS THE NEW FUNCTION YOU NEED TO ADD ---
-    triggerBulkShare(emailType: 'shortlist' | 'rejection') {
-      const candidatesToShare = selectedCandidates.size > 0
-        ? candidates.filter(c => selectedCandidates.has(c.id))
-        : filteredCandidates; // Default to all visible if none are selected
-      
-      if (candidatesToShare.length === 0) {
-        toast.info("No candidates to send mail to.");
-        return;
-      }
-      openShareModal(candidatesToShare, emailType);
+useImperativeHandle(ref, () => ({
+  triggerBatchValidate() {
+    handleBatchValidate();
+  },
+  triggerBulkShare(emailType: 'shortlist' | 'rejection') {
+    const candidatesToShare = selectedCandidates.size > 0
+      ? candidates.filter(c => selectedCandidates.has(c.id))
+      : filteredCandidates;
+    if (candidatesToShare.length === 0) {
+      toast.info("No candidates to send mail to.");
+      return;
     }
-  }));
+    openShareModal(candidatesToShare, emailType);
+  },
+  // NEW
+  triggerBulkInvite() {
+    const toInvite = selectedCandidates.size > 0
+      ? paginatedCandidates.filter(c => selectedCandidates.has(c.id) && c.email)
+      : paginatedCandidates.filter(c => c.email);
+    openBulkInviteReview(toInvite);
+  },
+}));
 
 
   const filteredCandidates = useMemo(() => {
@@ -1391,12 +1491,16 @@ const candidates = useMemo(() => {
       filtered = filtered.filter(c => c.appliedFrom === "Candidate");
     }
 
-if (candidateFilter === "Yours") { // Use prop directly
-    const userFullName = `${user.user_metadata.first_name} ${user.user_metadata.last_name}`;
-    filtered = filtered.filter(
-      c => c.owner === userFullName || c.appliedFrom === userFullName
-    );
-  }
+if (candidateFilter === "Yours") {
+      const userFullName = `${user.user_metadata.first_name} ${user.user_metadata.last_name}`;
+      filtered = filtered.filter(
+        c => c.owner === userFullName || c.appliedFrom === userFullName
+      );
+    } else if (candidateFilter && candidateFilter !== "All") {
+      filtered = filtered.filter(
+        c => c.owner === candidateFilter || c.appliedFrom === candidateFilter
+      );
+    }
     
     return filtered;
   }, [candidates, appliedCandidates, activeTab, statusFilters, statusFilter, isCareerPage, candidateFilter, searchTerm, scoreFilter, candidateAnalysisData, user]); // Added user to dependencies
@@ -1410,6 +1514,26 @@ if (candidateFilter === "Yours") { // Use prop directly
       toast.error("Resume not available");
     }
   };
+
+const handleInviteCandidate = (candidate: Candidate) => {
+  if (!candidate.email) {
+    toast.error('Cannot invite: candidate has no email address');
+    return;
+  }
+  setInviteCandidate({
+    name:  candidate.name  || '',
+    email: candidate.email || '',
+    phone: candidate.phone || '',
+  });
+  // Pass the existing candidate row ID + owner so the edge function
+  // knows to UPDATE hr_job_candidates instead of creating a new pipeline entry
+  setInviteModalMeta({
+    candidateId:      candidate.id,
+    candidateOwnerId: candidate.metadata?.createdBy || user?.id || '',
+    inviteSource:     'pipeline',
+  });
+  setIsInviteModalOpen(true);
+};
 
   const handleEditCandidate = (candidate: Candidate) => {
     console.log("Editing candidate:", candidate);
@@ -2105,7 +2229,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
         </div>
 
         {/* --- This is the Hover Box, positioned on the LEFT and with a high z-index --- */}
-        <div className="absolute right-full mr-2 z-30 flex items-center gap-1 rounded-md border bg-white p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        {/* <div className="absolute right-full mr-2 z-30 flex items-center gap-1 rounded-md border bg-white p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <div className="flex flex-col gap-1 items-center">
             <p className="font-semibold text-xs whitespace-nowrap px-1">Validation Score: {score}/100</p>
             <div className="w-full h-[1px] bg-gray-200" />
@@ -2134,7 +2258,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
               )}
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
     );
   }
@@ -2166,42 +2290,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
   return (
     <>
 
-      <div className="w-full mb-4 flex justify-center">
-<div className="flex-shrink-0 order-1">
-  <Tabs value={activeTab} onValueChange={setActiveTab}>
-    <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
-      {/* Combine "All Candidates" with the dynamic statuses into one array */}
-      {[{ id: "all-candidates", name: "All Candidates" }, ...mainStatuses].map((status) => {
-        const isActive = activeTab === status.name || (status.id === 'all-candidates' && activeTab === 'All Candidates');
 
-        return (
-          <TabsTrigger
-            key={status.id}
-            value={status.name}
-            className={`relative px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
-              data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-primary"
-              }`}
-          >
-            {/* Tab Content (Text and Count) */}
-            <span className="relative flex items-center">
-              {status.name}
-              <span
-                className={`ml-2 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
-                  isActive ? "bg-white/20 text-white" : "bg-primary/10 text-primary"
-                }`}
-              >
-                {getTabCount(status.name)}
-              </span>
-            </span>
-          </TabsTrigger>
-        );
-      })}
-    </TabsList>
-  </Tabs>
-</div>
-</div>
       {filteredCandidates.length === 0 ? (
         <EmptyState onAddCandidate={async () => {
           try {
@@ -2231,9 +2320,100 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
         }} />
       ) : (
        <div className="w-full overflow-x-auto rounded-md border">
+         {selectedCandidates.size > 0 && (
+    <div style={{
+      display:        'flex',
+      alignItems:     'center',
+      gap:            '10px',
+      padding:        '10px 16px',
+      background:     '#EDE9FE',
+      borderBottom:   '1px solid #DDD6FE',
+      flexWrap:       'wrap',
+    }}>
+      <span style={{ fontSize: '13px', fontWeight: 700, color: '#7C3AED' }}>
+        {selectedCandidates.size} candidate{selectedCandidates.size > 1 ? 's' : ''} selected
+      </span>
+ 
+      {/* Invite selected */}
+      <button
+  onClick={() => {
+    const toInvite = paginatedCandidates.filter(
+      c => selectedCandidates.has(c.id) && c.email
+    );
+    openBulkInviteReview(toInvite);
+  }}
+  style={{
+    padding:      '5px 14px',
+    borderRadius: '99px',
+    border:       'none',
+    background:   '#7B43F1',
+    color:        '#fff',
+    fontSize:     '12px',
+    fontWeight:   700,
+    cursor:       'pointer',
+    display:      'flex',
+    alignItems:   'center',
+    gap:          '5px',
+  }}
+>
+  <Send size={13} /> Invite Selected ({selectedCandidates.size})
+</button>
+ 
+      {/* Share selected */}
+      {/* <button
+        onClick={() => openShareModal(
+          candidates.filter(c => selectedCandidates.has(c.id)),
+          'shortlist'
+        )}
+        style={{
+          padding:      '5px 14px',
+          borderRadius: '99px',
+          border:       '1px solid #7C3AED',
+          background:   '#fff',
+          color:        '#7C3AED',
+          fontSize:     '12px',
+          fontWeight:   700,
+          cursor:       'pointer',
+          display:      'flex',
+          alignItems:   'center',
+          gap:          '5px',
+        }}
+      >
+        <Mail size={13} /> Email Selected
+      </button> */}
+ 
+      {/* Clear selection */}
+      <button
+        onClick={() => setSelectedCandidates(new Set())}
+        style={{
+          marginLeft:   'auto',
+          padding:      '5px 12px',
+          borderRadius: '99px',
+          border:       '1px solid #DDD6FE',
+          background:   '#fff',
+          color:        '#9CA3AF',
+          fontSize:     '12px',
+          cursor:       'pointer',
+        }}
+      >
+        Clear
+      </button>
+    </div>
+  )}
       <Table className="min-w-[800px]">
   <TableHeader>
     <TableRow className="bg-purple-600 hover:bg-purple-700 whitespace-nowrap border border-purple-500">
+      <TableHead className="sticky left-0 z-20 w-[40px] px-3 text-white">
+          <Checkbox
+            checked={
+              paginatedCandidates.length > 0 &&
+              paginatedCandidates.every(c => selectedCandidates.has(c.id))
+            }
+            onCheckedChange={(checked) => handleSelectAll(!!checked)}
+            className="border-white data-[state=checked]:bg-white data-[state=checked]:text-purple-600"
+            aria-label="Select all"
+          />
+        </TableHead>
       <TableHead className="sticky text-center left-0 z-20 w-[120px] px-2 text-white">Score</TableHead>
       <TableHead className="sticky left-[60px] z-10 w-[200px] px-2 text-white">Candidate Name</TableHead>
       <TableHead className="w-[60px] text-center px-2 text-white">Owner</TableHead>
@@ -2248,6 +2428,15 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
   <TableBody>
     {paginatedCandidates.map((candidate) => (
       <TableRow key={candidate.id} className="align-top group bg-white hover:bg-slate-50 relative">
+
+        <TableCell className="sticky left-0 z-20 px-3 bg-white group-hover:bg-slate-50 py-1"
+            style={{ background: selectedCandidates.has(candidate.id) ? '#F5F3FF' : undefined }}>
+            <Checkbox
+              checked={selectedCandidates.has(candidate.id)}
+              onCheckedChange={(checked) => handleSelectCandidate(candidate.id, !!checked)}
+              aria-label={`Select ${candidate.name}`}
+            />
+          </TableCell>
         {/* --- Sticky Cell 1 (BACKGROUND FIXED) --- */}
         <TableCell className="sticky left-0 z-20 px-2 bg-purple-50 group-hover:bg-slate-50 py-1">
           <ScoreDisplay
@@ -2350,7 +2539,66 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
                 <TooltipContent><p>View Timeline & Notes</p></TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            {candidate.hasValidatedResume && (
+<TooltipProvider>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <span> {/* span wrapper keeps tooltip alive when pointer-events:none */}
+        {(() => {
+          const state = getInviteState(candidate.id);
+ 
+          if (state === 'consented') {
+            return (
+              <Button
+                variant="ghost"
+                size="icon"
+                style={{ pointerEvents: 'none' }}
+                className="h-7 w-7 rounded-full bg-green-50 text-green-600 border border-green-200 cursor-default transition-colors"
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+            );
+          }
+ 
+          if (state === 'pending') {
+            return (
+              <Button
+                variant="ghost"
+                size="icon"
+                style={{ pointerEvents: 'none' }}
+                className="h-7 w-7 rounded-full bg-amber-50 text-amber-600 border border-amber-200 cursor-default transition-colors"
+              >
+                <Clock className="h-4 w-4" />
+              </Button>
+            );
+          }
+ 
+          // state === 'none' — normal invite button
+          return (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleInviteCandidate(candidate)}
+              className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          );
+        })()}
+      </span>
+    </TooltipTrigger>
+    <TooltipContent>
+      <p>
+        {(() => {
+          const state = getInviteState(candidate.id);
+          if (state === 'consented') return 'Already Consented';
+          if (state === 'pending')   return 'Invite Pending (not yet applied)';
+          return 'Invite to Apply';
+        })()}
+      </p>
+    </TooltipContent>
+  </Tooltip>
+</TooltipProvider>
+            {/* {candidate.hasValidatedResume && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2361,7 +2609,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
                   <TooltipContent><p>Share update with {candidate.name}</p></TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            )}
+            )} */}
           </div>
         </TableCell>
       </TableRow>
@@ -2421,6 +2669,42 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
     isOpen={isShareModalOpen}
     onClose={() => setIsShareModalOpen(false)}
     data={shareModalData}
+  />
+)}
+
+{/* Invite Candidate Modal — auto-filled from table row */}
+{isInviteModalOpen && job && inviteCandidate && (
+  <InviteCandidateModal
+    isOpen={isInviteModalOpen}
+    onClose={() => {
+      setIsInviteModalOpen(false);
+      setInviteCandidate(null);
+      setInviteModalMeta(null);
+    }}
+    jobId={jobId}
+    job={job}
+    prefillName={inviteCandidate.name}
+    prefillEmail={inviteCandidate.email}
+    prefillPhone={inviteCandidate.phone}
+    // Pipeline extras — these make the invite_source = 'pipeline' in DB
+    candidateId={inviteModalMeta?.candidateId}
+    candidateOwnerId={inviteModalMeta?.candidateOwnerId}
+    inviteSource={inviteModalMeta?.inviteSource || 'pipeline'}
+  />
+)}
+
+{isBulkModalOpen && job && bulkInviteCandidates.length > 0 && (
+  <BulkInviteReviewModal
+    isOpen={isBulkModalOpen}
+    onClose={() => {
+      setIsBulkModalOpen(false);
+      setBulkInviteCandidates([]);
+      setSelectedCandidates(new Set()); // clear selection after done
+    }}
+    candidates={bulkInviteCandidates}
+    jobId={jobId}
+    jobTitle={job.title}
+    inviteSource="pipeline"
   />
 )}
 

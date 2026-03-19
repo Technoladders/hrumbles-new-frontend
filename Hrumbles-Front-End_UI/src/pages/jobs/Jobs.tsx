@@ -759,7 +759,7 @@ if (isLoading) {
                                 </Tooltip>
                               </TooltipProvider>
                             )}
-                                     <TooltipProvider>
+                                     {/* <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -768,7 +768,7 @@ if (isLoading) {
                   className="h-7 w-7 rounded-full text-slate-500 hover:bg-orange-500 hover:text-white transition-colors"
                   onClick={() => setCareerjetShareJob(job)}
                 >
-                  {/* RSS-style CareerJet icon */}
+                  
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className="h-4 w-4">
                     <circle cx="5" cy="19" r="2" fill="currentColor" />
                     <path d="M4 4a16 16 0 0 1 16 16" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" fill="none"/>
@@ -778,7 +778,7 @@ if (isLoading) {
               </TooltipTrigger>
               <TooltipContent><p>Share to CareerJet</p></TooltipContent>
             </Tooltip>
-          </TooltipProvider>
+          </TooltipProvider> */}
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-red-600 hover:text-white transition-colors" onClick={() => handleDeleteJob(job)}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger>
