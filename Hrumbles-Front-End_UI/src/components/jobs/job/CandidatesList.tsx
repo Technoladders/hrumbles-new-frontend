@@ -27,7 +27,7 @@ import { ItechStatusSelector } from "./ItechStatusSelector";
 import ValidateResumeButton from "./candidate/ValidateResumeButton";
 import StageProgress from "./candidate/StageProgress";
 import EmptyState from "./candidate/EmptyState";
-import { Pencil,Bot,Sparkles, UserSearch, Eye, Download, FileText, Phone, Calendar, User, ChevronLeft, ChevronRight, Copy, Check, Mail, MessageSquare, Notebook, Linkedin, Send } from "lucide-react";
+import { Pencil,Bot,Sparkles, UserSearch, Eye, Download, FileText, Phone, Calendar, User, ChevronLeft, ChevronRight, Copy, Check, Mail, MessageSquare, Notebook, Linkedin, Send, Clock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import EditCandidateDrawer from "@/components/jobs/job/candidate/EditCandidateDrawer";
@@ -101,6 +101,7 @@ interface CandidatesListProps {
   candidateFilter?: string;
    rejection_reason?: string; 
     searchTerm?: string;
+    activeTab?: string;
 }
 
 interface HiddenContactCellProps {
@@ -123,6 +124,7 @@ const CandidatesList = forwardRef((props: CandidatesListProps, ref) => {
     candidateFilter = "All",
     isCareerPage = false,
      searchTerm = "",
+     activeTab = "All Candidates",
   } = props;
   const navigate = useNavigate();
   const user = useSelector((state: any) => state.auth.user);
@@ -259,7 +261,7 @@ console.log('mainStatuses', mainStatuses)
 
 
 
-  const [activeTab, setActiveTab] = useState("All Candidates");
+
   const [analysisData, setAnalysisData] = useState<{
     overall_score: number;
     summary: string;
@@ -941,6 +943,61 @@ const candidates = useMemo(() => {
     }
   }, [validatingIds, jobId]);
 
+ const [inviteStatusMap, setInviteStatusMap] = useState<
+  Record<string, { status: string; expiresAt: string }>
+>({});
+ 
+useEffect(() => {
+  if (!jobId || !candidates?.length) return;
+  const ids = candidates.map(c => c.id).filter(Boolean);
+  if (!ids.length) return;
+ 
+  supabase
+    .from('candidate_invites')
+    .select('candidate_id, status, expires_at')
+    .eq('job_id', jobId)
+    .eq('invite_source', 'pipeline')
+    .in('candidate_id', ids)
+    .order('created_at', { ascending: false }) // latest invite per candidate
+    .then(({ data }) => {
+      if (!data) return;
+      // Keep only the most recent invite per candidate
+      const map: Record<string, { status: string; expiresAt: string }> = {};
+      data.forEach(row => {
+        if (row.candidate_id && !map[row.candidate_id]) {
+          map[row.candidate_id] = {
+            status:    row.status,
+            expiresAt: row.expires_at,
+          };
+        }
+      });
+      setInviteStatusMap(map);
+    });
+}, [jobId, candidates]);
+ 
+// Call after a new invite is sent from the modal (optimistic update)
+const handleInviteSuccess = (candidateId: string) => {
+  setInviteStatusMap(prev => ({
+    ...prev,
+    [candidateId]: {
+      status:    'sent',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  }));
+};
+ 
+// Helper — returns the effective display state for a candidate's invite
+const getInviteState = (candidateId: string): 'none' | 'pending' | 'consented' => {
+  const inv = inviteStatusMap[candidateId];
+  if (!inv) return 'none';
+ 
+  const isExpired = new Date(inv.expiresAt) < new Date();
+ 
+  if (inv.status === 'applied')                              return 'consented';
+  if ((inv.status === 'sent' || inv.status === 'opened') && !isExpired) return 'pending';
+  // expired / declined / or expired sent/opened → allow re-invite
+  return 'none';
+};
 
 // --- UPDATED handleStatusChange Function ---
 
@@ -2233,42 +2290,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
   return (
     <>
 
-      <div className="w-full mb-4 flex justify-center">
-<div className="flex-shrink-0 order-1">
-  <Tabs value={activeTab} onValueChange={setActiveTab}>
-    <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
-      {/* Combine "All Candidates" with the dynamic statuses into one array */}
-      {[{ id: "all-candidates", name: "All Candidates" }, ...mainStatuses].map((status) => {
-        const isActive = activeTab === status.name || (status.id === 'all-candidates' && activeTab === 'All Candidates');
 
-        return (
-          <TabsTrigger
-            key={status.id}
-            value={status.name}
-            className={`relative px-4 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 
-              data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-primary"
-              }`}
-          >
-            {/* Tab Content (Text and Count) */}
-            <span className="relative flex items-center">
-              {status.name}
-              <span
-                className={`ml-2 text-xs rounded-full h-5 w-5 flex items-center justify-center ${
-                  isActive ? "bg-white/20 text-white" : "bg-primary/10 text-primary"
-                }`}
-              >
-                {getTabCount(status.name)}
-              </span>
-            </span>
-          </TabsTrigger>
-        );
-      })}
-    </TabsList>
-  </Tabs>
-</div>
-</div>
       {filteredCandidates.length === 0 ? (
         <EmptyState onAddCandidate={async () => {
           try {
@@ -2517,22 +2539,66 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
                 <TooltipContent><p>View Timeline & Notes</p></TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <TooltipProvider>
+<TooltipProvider>
   <Tooltip>
     <TooltipTrigger asChild>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors"
-        onClick={() => handleInviteCandidate(candidate)}
-      >
-        <Send className="h-4 w-4" />
-      </Button>
+      <span> {/* span wrapper keeps tooltip alive when pointer-events:none */}
+        {(() => {
+          const state = getInviteState(candidate.id);
+ 
+          if (state === 'consented') {
+            return (
+              <Button
+                variant="ghost"
+                size="icon"
+                style={{ pointerEvents: 'none' }}
+                className="h-7 w-7 rounded-full bg-green-50 text-green-600 border border-green-200 cursor-default transition-colors"
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+            );
+          }
+ 
+          if (state === 'pending') {
+            return (
+              <Button
+                variant="ghost"
+                size="icon"
+                style={{ pointerEvents: 'none' }}
+                className="h-7 w-7 rounded-full bg-amber-50 text-amber-600 border border-amber-200 cursor-default transition-colors"
+              >
+                <Clock className="h-4 w-4" />
+              </Button>
+            );
+          }
+ 
+          // state === 'none' — normal invite button
+          return (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleInviteCandidate(candidate)}
+              className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          );
+        })()}
+      </span>
     </TooltipTrigger>
-    <TooltipContent><p>Invite to Apply</p></TooltipContent>
+    <TooltipContent>
+      <p>
+        {(() => {
+          const state = getInviteState(candidate.id);
+          if (state === 'consented') return 'Already Consented';
+          if (state === 'pending')   return 'Invite Pending (not yet applied)';
+          return 'Invite to Apply';
+        })()}
+      </p>
+    </TooltipContent>
   </Tooltip>
 </TooltipProvider>
-            {candidate.hasValidatedResume && (
+            {/* {candidate.hasValidatedResume && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2543,7 +2609,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
                   <TooltipContent><p>Share update with {candidate.name}</p></TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            )}
+            )} */}
           </div>
         </TableCell>
       </TableRow>

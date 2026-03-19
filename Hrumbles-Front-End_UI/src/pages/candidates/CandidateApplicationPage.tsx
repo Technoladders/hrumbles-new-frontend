@@ -1,31 +1,103 @@
 // @ts-nocheck
 // src/pages/candidates/CandidateApplicationPage.jsx
-// Public page — no auth. Accessed via /apply/:inviteToken
-// Redesigned: clean two-column layout, modern form, progress steps, professional styling.
+// Public page — no auth. /apply/:inviteToken
+// - react-phone-number-input for phone field
+// - Lucide icons throughout (no emojis in UI chrome)
+// - Consistent purple palette — no blue anywhere
+// - Pipeline: consent submit locks the button permanently
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { City, State } from 'country-state-city';
+import PhoneInput from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
+
+// Lucide icons
+import {
+  FileText, User, Briefcase, DollarSign, ShieldCheck,
+  Upload, X, MapPin, Link, Clock, CalendarDays,
+  CheckCircle2, ChevronRight, Loader2, AlertTriangle, IndianRupee
+} from 'lucide-react';
 
 console.log('[CandidateApplicationPage] MODULE LOADED ✅');
 
-const LOCATIONS = [
-  'Bangalore','Mumbai','Delhi','Hyderabad','Pune','Chennai',
-  'Kolkata','Ahmedabad','Gurugram','Noida','Kochi','Jaipur',
-  'Chandigarh','Indore','Coimbatore','Remote','Others',
-];
-const NOTICE_PERIODS = ['Immediate','15 days','30 days','45 days','60 days','90 days'];
-const EXP_YEARS  = Array.from({ length: 31 }, (_, i) => String(i));
-const EXP_MONTHS = Array.from({ length: 12 }, (_, i) => String(i));
+// ── Constants ─────────────────────────────────────────────────────────────────
+const NOTICE_PERIODS = ['Immediate', '15 days', '30 days', '45 days', '60 days', '90 days'];
+const EXP_YEARS      = Array.from({ length: 31 }, (_, i) => String(i));
+const EXP_MONTHS     = Array.from({ length: 12 }, (_, i) => String(i));
 
-// ── Spinner ──────────────────────────────────────────────────────────────────
-function Spinner({ size = 20, color = '#7B43F1' }) {
+// ── Design tokens — one place, zero drift ────────────────────────────────────
+const P = {
+  // Purples
+  p900:  '#3B0764',
+  p800:  '#4C1D95',
+  p700:  '#5B21B6',
+  p600:  '#6D28D9',
+  p500:  '#7C3AED',
+  p400:  '#8B5CF6',
+  p100:  '#EDE9FE',
+  p50:   '#F5F3FF',
+  border:'#DDD6FE',
+  // Neutrals
+  gray50: '#F9FAFB',
+  gray100:'#F3F4F6',
+  gray200:'#E5E7EB',
+  gray400:'#9CA3AF',
+  gray500:'#6B7280',
+  gray700:'#374151',
+  gray900:'#111827',
+  // Semantic
+  green50: '#F0FDF4',
+  green200:'#86EFAC',
+  green800:'#065F46',
+  red50:  '#FFF5F5',
+  red300: '#FCA5A5',
+  red500: '#EF4444',
+  amber50:'#FFFBEB',
+  amber200:'#FDE68A',
+  amber800:'#92400E',
+};
+
+const GRAD = `linear-gradient(135deg, ${P.p600}, ${P.p500})`;
+
+// ── Input style ───────────────────────────────────────────────────────────────
+const ipt = (err = false) => ({
+  width: '100%', padding: '9px 12px', borderRadius: '8px',
+  border: `1.5px solid ${err ? P.red300 : P.gray200}`,
+  fontSize: '13px', color: P.gray900,
+  background: err ? P.red50 : '#fff',
+  outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
+  transition: 'border-color 0.15s',
+});
+
+// ── Spinner ───────────────────────────────────────────────────────────────────
+function Spinner({ size = 18, color = P.p500 }) {
+  return <Loader2 size={size} color={color} style={{ animation: 'cap-spin 0.7s linear infinite', flexShrink: 0 }} />;
+}
+
+// ── Section wrapper with Lucide icon ─────────────────────────────────────────
+function Sec({ icon: Icon, title, subtitle, children }) {
   return (
-    <span style={{
-      display: 'inline-block', width: size, height: size, flexShrink: 0,
-      border: `2.5px solid ${color}30`, borderTopColor: color,
-      borderRadius: '50%', animation: 'cap-spin 0.7s linear infinite',
-    }} />
+    <div style={{ marginBottom: '28px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+        <div style={{
+          width: '34px', height: '34px', borderRadius: '9px',
+          background: GRAD,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          boxShadow: `0 3px 10px rgba(124,58,237,0.35)`,
+        }}>
+          <Icon size={16} color="#fff" strokeWidth={2.2} />
+        </div>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: P.gray900, lineHeight: 1.2 }}>{title}</h3>
+          {subtitle && <p style={{ margin: 0, fontSize: '11px', color: P.gray400 }}>{subtitle}</p>}
+        </div>
+      </div>
+      <div style={{ background: P.gray50, borderRadius: '10px', border: `1px solid ${P.gray100}`, padding: '16px' }}>
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -34,57 +106,140 @@ function Fld({ label, required, error, children, span2 = false }) {
   return (
     <div style={{ gridColumn: span2 ? '1 / -1' : undefined }}>
       <label style={{
-        display: 'block', fontSize: '11.5px', fontWeight: 700,
-        color: error ? '#DC2626' : '#374151',
-        textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '5px',
+        display: 'block', fontSize: '11px', fontWeight: 700,
+        color: error ? P.red500 : P.gray700,
+        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px',
       }}>
-        {label}
-        {required && <span style={{ color: '#EF4444', marginLeft: '3px' }}>*</span>}
+        {label}{required && <span style={{ color: P.red500, marginLeft: '3px' }}>*</span>}
       </label>
       {children}
       {error && (
-        <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#EF4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          ⚠ {error}
+        <p style={{ margin: '4px 0 0', fontSize: '11px', color: P.red500, display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <AlertTriangle size={11} /> {error}
         </p>
       )}
     </div>
   );
 }
 
-// ── Input style factory ───────────────────────────────────────────────────────
-const ipt = (err = false) => ({
-  width: '100%', padding: '9px 12px', borderRadius: '8px',
-  border: `1.5px solid ${err ? '#FCA5A5' : '#E5E7EB'}`,
-  fontSize: '13px', color: '#111827',
-  background: err ? '#FFF5F5' : '#fff',
-  outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
-  transition: 'border-color 0.15s',
-});
+// ── City search (country-state-city, India) ───────────────────────────────────
+function CitySearchInput({ value, onChange, error }) {
+  const [query,   setQuery]   = useState(value || '');
+  const [results, setResults] = useState([]);
+  const [open,    setOpen]    = useState(false);
+  const wrapRef = useRef(null);
+  const indianStates = useMemo(() => State.getStatesOfCountry('IN'), []);
 
-// ── Section wrapper ───────────────────────────────────────────────────────────
-function Sec({ icon, title, subtitle, children }) {
+  const search = (q) => {
+    if (!q || q.length < 2) { setResults([]); return; }
+    const lq = q.toLowerCase();
+    const stateHits = indianStates.filter(s => s.name.toLowerCase().includes(lq)).slice(0, 5).map(s => ({ label: s.name, sub: 'State' }));
+    const cityHits  = q.length >= 3
+      ? City.getAllCities().filter(c => c.countryCode === 'IN' && c.name.toLowerCase().includes(lq)).slice(0, 14).map(c => ({ label: c.name, sub: 'City' }))
+      : [];
+    const seen = new Set();
+    setResults([...stateHits, ...cityHits].filter(r => { const k = r.label.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 20));
+  };
+
+  useEffect(() => {
+    const h = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
   return (
-    <div style={{ marginBottom: '28px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-        <div style={{
-          width: '32px', height: '32px', borderRadius: '8px',
-          background: 'linear-gradient(135deg,#6D28D9,#7C3AED)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0, fontSize: '15px',
-        }}>
-          {icon}
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <input
+        className="cap-inp"
+        value={query}
+        onChange={e => { setQuery(e.target.value); search(e.target.value); setOpen(true); onChange(e.target.value); }}
+        onFocus={() => { if (results.length) setOpen(true); }}
+        placeholder="Type to search city or state…"
+        style={ipt(!!error)}
+        autoComplete="off"
+      />
+      {open && results.length > 0 && <LocationDropdown results={results} onSelect={r => { setQuery(r.label); onChange(r.label); setOpen(false); }} />}
+      {query.length === 1 && <p style={{ margin: '4px 0 0', fontSize: '11px', color: P.gray400 }}>Type 2+ characters to search</p>}
+    </div>
+  );
+}
+
+// ── Multi-city (preferred locations) ─────────────────────────────────────────
+function MultiCityInput({ values, onChange }) {
+  const [query,   setQuery]   = useState('');
+  const [results, setResults] = useState([]);
+  const [open,    setOpen]    = useState(false);
+  const wrapRef = useRef(null);
+  const indianStates = useMemo(() => State.getStatesOfCountry('IN'), []);
+
+  const search = (q) => {
+    if (!q || q.length < 2) { setResults([]); return; }
+    const lq = q.toLowerCase();
+    const stateHits = indianStates.filter(s => s.name.toLowerCase().includes(lq) && !values.includes(s.name)).slice(0, 5).map(s => ({ label: s.name, sub: 'State' }));
+    const cityHits  = q.length >= 3
+      ? City.getAllCities().filter(c => c.countryCode === 'IN' && c.name.toLowerCase().includes(lq) && !values.includes(c.name)).slice(0, 12).map(c => ({ label: c.name, sub: 'City' }))
+      : [];
+    const seen = new Set();
+    setResults([...stateHits, ...cityHits].filter(r => { const k = r.label.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 18));
+  };
+
+  useEffect(() => {
+    const h = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) { setOpen(false); setQuery(''); } };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  return (
+    <div ref={wrapRef}>
+      {values.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '8px' }}>
+          {values.map(v => (
+            <span key={v} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 8px 3px 10px', borderRadius: '99px', background: P.p100, color: P.p600, fontSize: '11px', fontWeight: 600, border: `1px solid ${P.border}` }}>
+              {v}
+              <button type="button" onClick={() => onChange(values.filter(x => x !== v))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: P.gray400, padding: '0 1px', lineHeight: 1, display: 'flex' }}>
+                <X size={11} />
+              </button>
+            </span>
+          ))}
         </div>
-        <div>
-          <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#111827', lineHeight: 1.2 }}>{title}</h3>
-          <p style={{ margin: 0, fontSize: '11px', color: '#9CA3AF' }}>{subtitle}</p>
-        </div>
+      )}
+      <div style={{ position: 'relative' }}>
+        <input
+          className="cap-inp"
+          value={query}
+          onChange={e => { setQuery(e.target.value); search(e.target.value); setOpen(true); }}
+          onFocus={() => { if (results.length) setOpen(true); }}
+          placeholder="Search and add cities or states…"
+          style={ipt(false)}
+          autoComplete="off"
+        />
+        {open && results.length > 0 && (
+          <LocationDropdown results={results} onSelect={r => { onChange([...values, r.label]); setQuery(''); setResults([]); setOpen(false); }} />
+        )}
       </div>
-      <div style={{
-        background: '#FAFAFA', borderRadius: '10px', border: '1px solid #F3F4F6',
-        padding: '16px',
-      }}>
-        {children}
-      </div>
+    </div>
+  );
+}
+
+// ── Shared location dropdown ──────────────────────────────────────────────────
+function LocationDropdown({ results, onSelect }) {
+  return (
+    <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 999, background: '#fff', border: `1px solid ${P.gray200}`, borderRadius: '10px', boxShadow: '0 10px 28px rgba(0,0,0,0.13)', maxHeight: '230px', overflowY: 'auto' }}>
+      {results.map((r, i) => (
+        <button key={i} type="button"
+          onMouseDown={e => { e.preventDefault(); onSelect(r); }}
+          style={{ width: '100%', padding: '9px 14px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '9px', fontSize: '13px', borderBottom: i < results.length - 1 ? `1px solid ${P.gray100}` : 'none' }}
+          onMouseEnter={e => e.currentTarget.style.background = P.p50}
+          onMouseLeave={e => e.currentTarget.style.background = 'none'}
+        >
+          {/* Type badge — all purple shades, no blue */}
+          <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '99px', flexShrink: 0, background: r.sub === 'State' ? P.p100 : '#F3E8FF', color: r.sub === 'State' ? P.p600 : P.p800 }}>
+            {r.sub}
+          </span>
+          <span style={{ color: P.gray900, fontWeight: 500 }}>{r.label}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -94,30 +249,33 @@ function Sec({ icon, title, subtitle, children }) {
 export default function CandidateApplicationPage() {
   const { inviteToken } = useParams();
 
-  const [pageState,    setPageState]   = useState('loading');
-  const [errorMsg,     setErrorMsg]    = useState('');
-  const [inviteData,   setInviteData]  = useState(null);
-  const [isSubmitting, setSubmitting]  = useState(false);
-  const [resumeUrl,    setResumeUrl]   = useState('');
-  const [resumeFile,   setResumeFile]  = useState('');
-  const [uploading,    setUploading]   = useState(false);
-  const [descOpen,     setDescOpen]    = useState(false);
-  const [errs,         setErrs]        = useState({});
+  const [pageState,   setPageState]  = useState('loading');
+  const [errorMsg,    setErrorMsg]   = useState('');
+  const [inviteData,  setInviteData] = useState(null);
+  const [submitting,  setSubmitting] = useState(false);
+  const [resumeUrl,   setResumeUrl]  = useState('');
+  const [resumeFile,  setResumeFile] = useState('');
+  const [uploading,   setUploading]  = useState(false);
+  const [descOpen,    setDescOpen]   = useState(false);
+  const [errs,        setErrs]       = useState({});
+  const [consented,   setConsented]  = useState(false);
 
   // Form fields
-  const [firstName,           setFirstName]           = useState('');
-  const [lastName,            setLastName]             = useState('');
-  const [email,               setEmail]               = useState('');
-  const [phone,               setPhone]               = useState('');
-  const [currentLocation,     setCurrentLocation]     = useState('');
-  const [totalExpYears,       setTotalExpYears]        = useState('');
-  const [totalExpMonths,      setTotalExpMonths]       = useState('');
-  const [currentCompany,      setCurrentCompany]       = useState('');
-  const [currentDesignation,  setCurrentDesignation]   = useState('');
-  const [currentSalary,       setCurrentSalary]        = useState('');
-  const [expectedSalary,      setExpectedSalary]       = useState('');
-  const [noticePeriod,        setNoticePeriod]         = useState('');
-  const [linkedInUrl,         setLinkedInUrl]          = useState('');
+  const [firstName,          setFirstName]          = useState('');
+  const [lastName,           setLastName]            = useState('');
+  const [email,              setEmail]              = useState('');
+  const [phone,              setPhone]              = useState('');       // E.164 from PhoneInput
+  const [currentLocation,    setCurrentLocation]    = useState('');
+  const [preferredLocations, setPreferredLocations] = useState([]);
+  const [totalExpYears,      setTotalExpYears]      = useState('');
+  const [totalExpMonths,     setTotalExpMonths]     = useState('');
+  const [relevantExpYears,   setRelevantExpYears]   = useState('');
+  const [relevantExpMonths,  setRelevantExpMonths]  = useState('');
+  const [currentSalary,      setCurrentSalary]      = useState('');
+  const [expectedSalary,     setExpectedSalary]     = useState('');
+  const [noticePeriod,       setNoticePeriod]       = useState('');
+  const [lastWorkingDay,     setLastWorkingDay]      = useState('');
+  const [linkedInUrl,        setLinkedInUrl]        = useState('');
 
   // ── Load invite ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -132,14 +290,15 @@ export default function CandidateApplicationPage() {
             hr_jobs!candidate_invites_job_id_fkey(
               id, title, location, experience, skills, description,
               hiring_mode, job_type_category
-            )
+            ),
+            hr_organizations!candidate_invites_organization_id_fkey(name)
           `)
           .eq('invite_token', inviteToken)
           .single();
 
         if (error || !data) { setErrorMsg('This invite link is invalid or no longer exists.'); setPageState('error'); return; }
         if (new Date(data.expires_at) < new Date()) { setErrorMsg('This invite link has expired.'); setPageState('error'); return; }
-        if (data.status === 'applied') { setErrorMsg('You have already submitted your application.'); setPageState('error'); return; }
+        if (data.status === 'applied') { setErrorMsg('You have already submitted your consent for this position.'); setPageState('error'); return; }
 
         setInviteData(data);
         if (data.candidate_email) setEmail(data.candidate_email);
@@ -150,19 +309,15 @@ export default function CandidateApplicationPage() {
         }
         supabase.functions.invoke('mark-invite-opened', { body: { token: inviteToken } }).catch(() => {});
         setPageState('form');
-      } catch {
-        setErrorMsg('Something went wrong. Please contact the recruiter.');
-        setPageState('error');
-      }
+      } catch { setErrorMsg('Something went wrong. Please contact the recruiter.'); setPageState('error'); }
     })();
   }, [inviteToken]);
 
-  // ── Resume upload ────────────────────────────────────────────────────────────
+  // ── Resume upload ─────────────────────────────────────────────────────────
   const handleResumeChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const allowed = ['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    if (!allowed.includes(file.type)) { alert('PDF or DOCX only.'); return; }
+    if (!['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) { alert('PDF or DOCX only.'); return; }
     if (file.size > 5 * 1024 * 1024) { alert('Max file size is 5 MB.'); return; }
     setUploading(true);
     try {
@@ -173,30 +328,29 @@ export default function CandidateApplicationPage() {
       const { data: urlData } = supabase.storage.from('candidate_resumes').getPublicUrl(path);
       setResumeUrl(urlData.publicUrl);
       setResumeFile(file.name);
-    } catch (e) {
-      alert('Upload failed: ' + (e.message || 'Unknown error'));
-    } finally {
-      setUploading(false);
-    }
+    } catch (e) { alert('Upload failed: ' + (e.message || 'Unknown')); }
+    finally { setUploading(false); }
   };
 
-  // ── Validate ─────────────────────────────────────────────────────────────────
+  // ── Validate ──────────────────────────────────────────────────────────────
   const validate = () => {
     const e = {};
-    if (!firstName.trim())            e.firstName        = 'First name is required';
-    if (!lastName.trim())             e.lastName         = 'Last name is required';
-    if (!email.trim())                e.email            = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(email)) e.email       = 'Enter a valid email';
-    if (!phone.trim())                e.phone            = 'Phone number is required';
-    if (!currentLocation)             e.currentLocation  = 'Please select your location';
-    if (totalExpYears === '')          e.totalExpYears    = 'Please select years of experience';
-    if (!currentSalary)               e.currentSalary    = 'Current salary is required';
-    if (!expectedSalary)              e.expectedSalary   = 'Expected salary is required';
+    if (!firstName.trim())               e.firstName          = 'First name is required';
+    if (!lastName.trim())                e.lastName           = 'Last name is required';
+    if (!email.trim())                   e.email              = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(email)) e.email            = 'Enter a valid email';
+    if (!phone)                          e.phone              = 'Phone number is required';
+    if (!currentLocation.trim())         e.currentLocation    = 'Current location is required';
+    if (preferredLocations.length === 0) e.preferredLocations = 'Select at least one preferred location';
+    if (totalExpYears === '')             e.totalExpYears      = 'Select years of experience';
+    if (!currentSalary)                  e.currentSalary      = 'Current salary is required';
+    if (!expectedSalary)                 e.expectedSalary     = 'Expected salary is required';
+    if (isPipeline && !consented)        e.consent            = 'You must check the authorization box to continue';
     setErrs(e);
     return Object.keys(e).length === 0;
   };
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
+  // ── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = async (ev) => {
     ev.preventDefault();
     if (!validate() || !inviteToken) return;
@@ -204,107 +358,112 @@ export default function CandidateApplicationPage() {
     try {
       const formData = {
         firstName: firstName.trim(), lastName: lastName.trim(),
-        email: email.trim(), phone: phone.trim() || undefined,
+        email: email.trim(), phone: phone || undefined,
         currentLocation: currentLocation || undefined,
+        preferredLocations: preferredLocations.length ? preferredLocations : undefined,
         totalExperience: totalExpYears !== '' ? parseInt(totalExpYears, 10) : undefined,
         totalExperienceMonths: totalExpMonths !== '' ? parseInt(totalExpMonths, 10) : undefined,
-        currentCompany: currentCompany.trim() || undefined,
-        currentDesignation: currentDesignation.trim() || undefined,
+        relevantExperience: relevantExpYears !== '' ? parseInt(relevantExpYears, 10) : undefined,
+        relevantExperienceMonths: relevantExpMonths !== '' ? parseInt(relevantExpMonths, 10) : undefined,
         currentSalary: currentSalary ? parseFloat(currentSalary) : undefined,
         expectedSalary: expectedSalary ? parseFloat(expectedSalary) : undefined,
         noticePeriod: noticePeriod || undefined,
+        lastWorkingDay: lastWorkingDay || undefined,
         linkedInId: linkedInUrl.trim() || undefined,
         resume: resumeUrl || undefined,
+        ...(isPipeline ? { consentGiven: true, consentAt: new Date().toISOString() } : {}),
       };
-      const { data, error } = await supabase.functions.invoke('process-candidate-invite', {
-        body: { inviteToken, formData },
-      });
+      const { data, error } = await supabase.functions.invoke('process-candidate-invite', { body: { inviteToken, formData } });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
       setPageState('success');
-    } catch (e) {
-      alert(e.message || 'Submission failed. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
+    } catch (e) { alert(e.message || 'Submission failed. Please try again.'); }
+    finally { setSubmitting(false); }
   };
 
-  // ── Derived ──────────────────────────────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────
   const job        = inviteData?.hr_jobs;
+  const orgName    = inviteData?.hr_organizations?.name || 'the hiring team';
   const isPipeline = inviteData?.invite_source === 'pipeline';
   const locs       = job?.location ? (Array.isArray(job.location) ? job.location : [job.location]) : [];
   const expMin     = job?.experience?.min?.value;
   const expMax     = job?.experience?.max?.value;
-  const expText    = expMin != null && expMax != null ? `${expMin}–${expMax} yrs`
-                   : expMin != null ? `${expMin}+ yrs`
-                   : expMax != null ? `Up to ${expMax} yrs` : null;
+  const expText    = expMin != null && expMax != null ? `${expMin}–${expMax} yrs` : expMin != null ? `${expMin}+ yrs` : expMax != null ? `Up to ${expMax} yrs` : null;
   const descFull   = job?.description || '';
   const descShort  = descFull.length > 380 ? descFull.slice(0, 380) + '…' : descFull;
+  const inrFmt     = (v) => v ? `₹ ${new Intl.NumberFormat('en-IN').format(Number(v))}` : '';
 
-  // ── Loading ──────────────────────────────────────────────────────────────────
+  // ── States ────────────────────────────────────────────────────────────────
   if (pageState === 'loading') return (
     <Shell>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '16px' }}>
-        <Spinner size={36} />
-        <p style={{ color: '#6B7280', fontSize: '14px', margin: 0 }}>Validating your invite link…</p>
-      </div>
+      <CenterBox>
+        <Spinner size={32} />
+        <p style={{ color: P.gray500, fontSize: '14px', margin: 0 }}>Validating your invite link…</p>
+      </CenterBox>
     </Shell>
   );
 
-  // ── Error ────────────────────────────────────────────────────────────────────
   if (pageState === 'error') return (
     <Shell>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', textAlign: 'center', padding: '24px' }}>
-        <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', marginBottom: '20px' }}>
-          ⚠️
+      <CenterBox>
+        <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px' }}>
+          <AlertTriangle size={28} color="#EF4444" />
         </div>
-        <h2 style={{ margin: '0 0 8px', fontSize: '20px', fontWeight: 800, color: '#111827' }}>Link Unavailable</h2>
-        <p style={{ color: '#6B7280', maxWidth: '380px', lineHeight: 1.7, margin: 0, fontSize: '14px' }}>{errorMsg}</p>
-      </div>
+        <h2 style={{ margin: '0 0 8px', fontSize: '20px', fontWeight: 800, color: P.gray900 }}>Link Unavailable</h2>
+        <p style={{ color: P.gray500, maxWidth: '380px', lineHeight: 1.7, margin: 0, fontSize: '14px', textAlign: 'center' }}>{errorMsg}</p>
+      </CenterBox>
     </Shell>
   );
 
-  // ── Success ──────────────────────────────────────────────────────────────────
   if (pageState === 'success') return (
     <Shell>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', textAlign: 'center', padding: '24px' }}>
-        <div style={{
-          width: '72px', height: '72px', borderRadius: '18px',
-          background: 'linear-gradient(135deg,#6D28D9,#7C3AED)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '32px', marginBottom: '24px',
-          boxShadow: '0 8px 24px rgba(124,58,237,0.35)',
-        }}>
-          ✅
+      <CenterBox>
+        <div style={{ width: '72px', height: '72px', borderRadius: '18px', background: GRAD, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px', boxShadow: '0 8px 24px rgba(124,58,237,0.35)' }}>
+          <CheckCircle2 size={36} color="#fff" />
         </div>
-        <h2 style={{ margin: '0 0 10px', fontSize: '24px', fontWeight: 800, color: '#111827' }}>
-          {isPipeline ? 'Profile Updated!' : 'Application Submitted!'}
+        <h2 style={{ margin: '0 0 10px', fontSize: '24px', fontWeight: 800, color: P.gray900 }}>
+          {isPipeline ? 'Consent Submitted!' : 'Application Submitted!'}
         </h2>
-        <p style={{ color: '#6B7280', maxWidth: '440px', lineHeight: 1.75, margin: '0 0 28px', fontSize: '14px' }}>
+        <p style={{ color: P.gray500, maxWidth: '440px', lineHeight: 1.75, margin: '0 0 28px', fontSize: '14px', textAlign: 'center' }}>
           {isPipeline
-            ? 'Thank you! Your profile has been updated. Our recruiter will review and be in touch soon.'
-            : <>Thank you for applying for <strong style={{ color: '#7C3AED' }}>{job?.title}</strong>. The hiring team will review your application and reach out to you.</>
+            ? <><strong style={{ color: P.p500 }}>{orgName}</strong> will now present your profile for <strong style={{ color: P.p500 }}>{job?.title}</strong>. The recruiter will be in touch shortly.</>
+            : <>Thank you for applying for <strong style={{ color: P.p500 }}>{job?.title}</strong>. The hiring team will review and reach out soon.</>
           }
         </p>
-        <div style={{ padding: '14px 24px', borderRadius: '10px', background: '#F5F3FF', border: '1px solid #DDD6FE' }}>
-          <p style={{ margin: 0, fontSize: '12px', color: '#7C3AED', fontWeight: 600 }}>
-            Powered by Xrilic.ai · Candidate Platform
-          </p>
+        <div style={{ padding: '12px 22px', borderRadius: '10px', background: P.p50, border: `1px solid ${P.border}` }}>
+          <p style={{ margin: 0, fontSize: '12px', color: P.p500, fontWeight: 600 }}>Powered by Xrilic.ai · Candidate Platform</p>
         </div>
-      </div>
+      </CenterBox>
     </Shell>
   );
 
-  // ── Form ─────────────────────────────────────────────────────────────────────
+  // ── Main form ─────────────────────────────────────────────────────────────
   return (
     <Shell>
       <style>{`
         @keyframes cap-spin { to { transform: rotate(360deg); } }
-        .cap-inp:focus { border-color: #7C3AED !important; box-shadow: 0 0 0 3px rgba(124,58,237,0.1); }
-        .cap-upload:hover { border-color: #7C3AED !important; background: #FAF5FF !important; }
+        .cap-inp:focus { border-color: ${P.p500} !important; box-shadow: 0 0 0 3px rgba(124,58,237,0.1); }
+        .cap-upload:hover { border-color: ${P.p500} !important; background: ${P.p50} !important; }
+        /* PhoneInput styling — match our inputs */
+        .cap-phone .PhoneInput { display: flex; align-items: center; gap: 0; }
+        .cap-phone .PhoneInputCountry {
+          padding: 0 10px; border: 1.5px solid ${P.gray200}; border-right: none;
+          border-radius: 8px 0 0 8px; background: ${P.gray50};
+          height: 40px; display: flex; align-items: center;
+        }
+        .cap-phone .PhoneInputCountry:focus-within { border-color: ${P.p500}; }
+        .cap-phone input[type=tel] {
+          flex: 1; padding: 9px 12px; border: 1.5px solid ${P.gray200};
+          border-left: none; border-radius: 0 8px 8px 0;
+          font-size: 13px; color: ${P.gray900}; outline: none;
+          font-family: inherit; height: 40px; box-sizing: border-box;
+        }
+        .cap-phone input[type=tel]:focus { border-color: ${P.p500}; box-shadow: 0 0 0 3px rgba(124,58,237,0.1); }
+        .cap-phone-err .PhoneInputCountry { border-color: ${P.red300}; background: ${P.red50}; }
+        .cap-phone-err input[type=tel] { border-color: ${P.red300}; background: ${P.red50}; }
         @media (max-width: 700px) {
           .cap-cols    { flex-direction: column !important; }
-          .cap-sidebar { width: 100% !important; position: relative !important; max-height: none !important; border-right: none !important; border-bottom: 1px solid #EDE9FE !important; }
+          .cap-sidebar { width: 100% !important; position: relative !important; max-height: none !important; border-right: none !important; border-bottom: 1px solid ${P.border} !important; }
           .cap-form    { max-height: none !important; }
           .cap-grid    { grid-template-columns: 1fr !important; }
         }
@@ -312,204 +471,162 @@ export default function CandidateApplicationPage() {
 
       <div className="cap-cols" style={{ display: 'flex', minHeight: '100vh', alignItems: 'stretch' }}>
 
-        {/* ── LEFT: Job details ───────────────────────────────────────────────── */}
+        {/* ── LEFT PANEL ─────────────────────────────────────────────────── */}
         <div className="cap-sidebar" style={{
-          width: '360px', flexShrink: 0,
-          background: 'linear-gradient(160deg, #F5F0FF 0%, #EDE9FE 100%)',
-          borderRight: '1px solid #DDD6FE',
+          width: '350px', flexShrink: 0,
+          background: `linear-gradient(160deg, ${P.p50} 0%, ${P.p100} 100%)`,
+          borderRight: `1px solid ${P.border}`,
           padding: '32px 24px', position: 'sticky', top: 0,
           maxHeight: '100vh', overflowY: 'auto',
         }}>
-
-          {/* Branding */}
-          {/* <div style={{ marginBottom: '24px' }}>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: '7px',
-              padding: '6px 12px', borderRadius: '99px',
-              background: 'white', border: '1px solid #DDD6FE',
-              boxShadow: '0 2px 6px rgba(124,58,237,0.1)',
-            }}>
-              <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: 'linear-gradient(135deg,#6D28D9,#7C3AED)' }} />
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#7C3AED', letterSpacing: '0.3px' }}>Xrilic.ai</span>
+          {/* Logo */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 14px', borderRadius: '99px', background: 'white', border: `1px solid ${P.border}`, boxShadow: `0 2px 8px rgba(124,58,237,0.12)` }}>
+              <div style={{ width: '14px', height: '14px', borderRadius: '4px', background: GRAD }} />
+              <span style={{ fontSize: '11px', fontWeight: 700, color: P.p500 }}>Xrilic.ai</span>
             </div>
-          </div> */}
+          </div>
 
-          {job ? (
-            <>
-              {/* Job title */}
-              <h2 style={{ margin: '0 0 12px', fontSize: '22px', fontWeight: 800, color: '#1E1B4B', lineHeight: 1.3 }}>
-                {job.title}
-              </h2>
+          {job ? (<>
+            <h2 style={{ margin: '0 0 12px', fontSize: '21px', fontWeight: 800, color: P.p800, lineHeight: 1.3 }}>{job.title}</h2>
 
-              {/* Tags */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '18px' }}>
-                {isPipeline && <JTag text="Profile Update" bg="#D1FAE5" color="#065F46" />}
-                {job.hiring_mode && <JTag text={job.hiring_mode} bg="white" color="#374151" />}
-                {job.job_type_category && <JTag text={job.job_type_category} bg="white" color="#374151" />}
-              </div>
+            {/* Tags */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '16px' }}>
+              {isPipeline && <JTag text="Consent Required" bg="#FEF3C7" color={P.amber800} />}
+              {job.hiring_mode && <JTag text={job.hiring_mode} bg="white" color={P.gray700} />}
+              {job.job_type_category && <JTag text={job.job_type_category} bg="white" color={P.gray700} />}
+            </div>
 
-              {/* Meta */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '22px' }}>
-                {locs.length > 0 && (
-                  <MetaChip icon="📍">{locs.join(' · ')}</MetaChip>
-                )}
-                {expText && (
-                  <MetaChip icon="💼">{expText} experience required</MetaChip>
-                )}
-              </div>
-
-              {/* Divider */}
-              <div style={{ height: '1px', background: 'rgba(109,40,217,0.12)', margin: '0 0 20px' }} />
-
-              {/* Skills */}
-              {job.skills && job.skills.length > 0 && (
-                <div style={{ marginBottom: '20px' }}>
-                  <SideLabel>Required Skills</SideLabel>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                    {job.skills.map((s, i) => (
-                      <span key={i} style={{
-                        padding: '4px 10px', borderRadius: '99px',
-                        background: 'white', color: '#4C1D95',
-                        fontSize: '11px', fontWeight: 500,
-                        border: '1px solid #DDD6FE',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                      }}>{s}</span>
-                    ))}
-                  </div>
-                </div>
+            {/* Meta chips — all purple */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+              {locs.length > 0 && (
+                <MetaChip icon={MapPin}>{locs.join(' · ')}</MetaChip>
               )}
-
-              {/* Description */}
-              {descFull && (
-                <div>
-                  <SideLabel>About the Role</SideLabel>
-                  <p style={{ margin: 0, fontSize: '12.5px', color: '#4C1D95', lineHeight: 1.75, whiteSpace: 'pre-line', opacity: 0.85 }}>
-                    {descOpen ? descFull : descShort}
-                  </p>
-                  {descFull.length > 380 && (
-                    <button onClick={() => setDescOpen(!descOpen)} style={{
-                      marginTop: '8px', background: 'none', border: 'none',
-                      color: '#7C3AED', fontSize: '12px', fontWeight: 700,
-                      cursor: 'pointer', padding: 0,
-                      display: 'flex', alignItems: 'center', gap: '3px',
-                    }}>
-                      {descOpen ? '↑ Show less' : '↓ Read more'}
-                    </button>
-                  )}
-                </div>
+              {expText && (
+                <MetaChip icon={Briefcase}>{expText} experience required</MetaChip>
               )}
-            </>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '48px 0', color: '#7C3AED', opacity: 0.5 }}>
-              <div style={{ fontSize: '36px', marginBottom: '10px' }}>💼</div>
+            </div>
+
+            {/* Pipeline consent notice */}
+            {isPipeline && (
+              <div style={{ background: P.amber50, border: `1px solid ${P.amber200}`, borderRadius: '10px', padding: '14px', marginBottom: '20px' }}>
+                <p style={{ margin: '0 0 5px', fontSize: '12px', fontWeight: 700, color: P.amber800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <ShieldCheck size={13} /> Consent Required
+                </p>
+                <p style={{ margin: 0, fontSize: '11.5px', color: '#78350F', lineHeight: 1.65 }}>
+                  <strong>{orgName}</strong> would like to present your profile for this position. Review your details, then authorize below.
+                </p>
+              </div>
+            )}
+
+            <div style={{ height: '1px', background: `rgba(109,40,217,0.12)`, margin: '0 0 20px' }} />
+
+            {/* Skills */}
+            {job.skills?.length > 0 && (
+              <div style={{ marginBottom: '20px' }}>
+                <SideLabel>Required Skills</SideLabel>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                  {job.skills.map((s, i) => (
+                    <span key={i} style={{ padding: '4px 10px', borderRadius: '99px', background: 'white', color: P.p800, fontSize: '11px', fontWeight: 500, border: `1px solid ${P.border}`, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>{s}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Description */}
+            {descFull && (
+              <div>
+                <SideLabel>About the Role</SideLabel>
+                <p style={{ margin: 0, fontSize: '12px', color: P.p800, lineHeight: 1.75, whiteSpace: 'pre-line', opacity: 0.85 }}>
+                  {descOpen ? descFull : descShort}
+                </p>
+                {descFull.length > 380 && (
+                  <button onClick={() => setDescOpen(!descOpen)} style={{ marginTop: '8px', background: 'none', border: 'none', color: P.p500, fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    {descOpen ? '↑ Show less' : '↓ Read more'}
+                  </button>
+                )}
+              </div>
+            )}
+          </>) : (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: P.p400, opacity: 0.6 }}>
+              <Briefcase size={36} style={{ margin: '0 auto 12px' }} />
               <p style={{ margin: 0, fontSize: '13px' }}>Loading job details…</p>
             </div>
           )}
         </div>
 
-        {/* ── RIGHT: Form ─────────────────────────────────────────────────────── */}
-        <div className="cap-form" style={{
-          flex: 1, minWidth: 0, overflowY: 'auto', maxHeight: '100vh',
-          padding: '32px 32px 56px', background: '#fff',
-        }}>
+        {/* ── RIGHT PANEL: Form ──────────────────────────────────────────── */}
+        <div className="cap-form" style={{ flex: 1, minWidth: 0, overflowY: 'auto', maxHeight: '100vh', padding: '32px 32px 56px', background: '#fff' }}>
 
-          {/* Form header */}
+          {/* Header */}
           <div style={{ marginBottom: '28px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-              <div style={{
-                width: '40px', height: '40px', borderRadius: '10px',
-                background: 'linear-gradient(135deg,#6D28D9,#7C3AED)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '18px', boxShadow: '0 4px 12px rgba(124,58,237,0.3)',
-              }}>
-                {isPipeline ? '🔄' : '📋'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '10px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: GRAD, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(124,58,237,0.3)', flexShrink: 0 }}>
+                {isPipeline ? <ShieldCheck size={22} color="#fff" /> : <FileText size={22} color="#fff" />}
               </div>
               <div>
-                <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#111827' }}>
-                  {isPipeline ? 'Update Your Profile' : 'Submit Your Application'}
+                <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: P.gray900 }}>
+                  {isPipeline ? 'Authorize Your Profile' : 'Submit Your Application'}
                 </h3>
-                <p style={{ margin: 0, fontSize: '12px', color: '#9CA3AF' }}>
+                <p style={{ margin: 0, fontSize: '12px', color: P.gray400 }}>
                   {isPipeline
-                    ? 'Verify and update your details — takes 2 minutes'
+                    ? `Confirm your details, then authorize ${orgName} to share your profile`
                     : 'Complete the form below — takes about 3 minutes'}
                 </p>
               </div>
             </div>
 
-            {/* Progress hint */}
-            <div style={{ marginTop: '14px', display: 'flex', gap: '6px' }}>
-              {['Resume', 'Personal', 'Professional'].map((s, i) => (
-                <div key={s} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <div style={{
-                    width: '20px', height: '20px', borderRadius: '50%',
-                    background: 'linear-gradient(135deg,#6D28D9,#7C3AED)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '10px', color: 'white', fontWeight: 700,
-                  }}>{i + 1}</div>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#7C3AED' }}>{s}</span>
-                  {i < 2 && <span style={{ fontSize: '10px', color: '#D1D5DB' }}>›</span>}
-                </div>
+            {/* Step trail */}
+            <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+              {(isPipeline
+                ? ['Resume', 'Personal', 'Professional', 'Compensation', 'Authorize']
+                : ['Resume', 'Personal', 'Professional', 'Compensation']
+              ).map((s, i, arr) => (
+                <React.Fragment key={s}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: GRAD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'white', fontWeight: 700, boxShadow: `0 2px 6px rgba(124,58,237,0.3)` }}>{i + 1}</div>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: P.p600 }}>{s}</span>
+                  </div>
+                  {i < arr.length - 1 && <ChevronRight size={12} color={P.gray200} />}
+                </React.Fragment>
               ))}
             </div>
           </div>
 
           <form onSubmit={handleSubmit} noValidate>
 
-            {/* ── Section 1: Resume ──────────────────────────────────────────── */}
-            <Sec icon="📎" title="Resume" subtitle="Upload your CV — PDF or DOCX, max 5 MB">
-              <input id="res-inp" type="file" accept=".pdf,.docx,.doc"
-                onChange={handleResumeChange} disabled={uploading}
-                style={{ display: 'none' }} />
-
+            {/* ── 1. Resume ── */}
+            <Sec icon={FileText} title="Resume" subtitle="Upload your CV — PDF or DOCX, max 5 MB">
+              <input id="res-inp" type="file" accept=".pdf,.docx,.doc" onChange={handleResumeChange} disabled={uploading} style={{ display: 'none' }} />
               {resumeUrl ? (
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '14px 16px', border: '1.5px solid #86EFAC',
-                  borderRadius: '10px', background: '#F0FDF4',
-                }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', border: `1.5px solid ${P.green200}`, borderRadius: '10px', background: P.green50 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '20px' }}>📄</span>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <FileText size={18} color={P.green800} />
+                    </div>
                     <div>
-                      <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#065F46' }}>
-                        Resume uploaded
-                      </p>
-                      <p style={{ margin: '1px 0 0', fontSize: '11px', color: '#6B7280' }}>
-                        {resumeFile}
-                      </p>
+                      <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: P.green800 }}>Resume uploaded</p>
+                      <p style={{ margin: '1px 0 0', fontSize: '11px', color: P.gray500 }}>{resumeFile}</p>
                     </div>
                   </div>
-                  <label htmlFor="res-inp" style={{
-                    fontSize: '12px', color: '#7B43F1', fontWeight: 700, cursor: 'pointer',
-                    padding: '6px 12px', borderRadius: '7px', border: '1px solid #DDD6FE',
-                    background: 'white',
-                  }}>
+                  <label htmlFor="res-inp" style={{ fontSize: '12px', color: P.p500, fontWeight: 700, cursor: 'pointer', padding: '6px 12px', borderRadius: '7px', border: `1px solid ${P.border}`, background: 'white' }}>
                     Replace
                   </label>
                 </div>
               ) : (
-                <label htmlFor="res-inp" className="cap-upload" style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
-                  padding: '32px 16px', border: '2px dashed #DDD6FE', borderRadius: '12px',
-                  cursor: uploading ? 'not-allowed' : 'pointer', background: '#FAFAFA',
-                  transition: 'all 0.15s',
-                }}>
+                <label htmlFor="res-inp" className="cap-upload" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '32px 16px', border: `2px dashed ${P.border}`, borderRadius: '12px', cursor: uploading ? 'not-allowed' : 'pointer', background: P.gray50, transition: 'all 0.15s' }}>
                   {uploading ? (
-                    <><Spinner size={28} /><span style={{ fontSize: '13px', color: '#7C3AED', fontWeight: 600 }}>Uploading…</span></>
+                    <><Spinner size={28} /><span style={{ fontSize: '13px', color: P.p500, fontWeight: 600 }}>Uploading…</span></>
                   ) : (
                     <>
-                      <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>
-                        📎
+                      <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: P.p100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Upload size={24} color={P.p500} />
                       </div>
                       <div style={{ textAlign: 'center' }}>
-                        <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#374151' }}>Click to upload your resume</p>
-                        <p style={{ margin: '3px 0 0', fontSize: '11px', color: '#9CA3AF' }}>PDF or DOCX · Maximum 5 MB</p>
+                        <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: P.gray700 }}>Click to upload your resume</p>
+                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: P.gray400 }}>PDF or DOCX · Maximum 5 MB</p>
                       </div>
-                      <span style={{
-                        padding: '7px 18px', borderRadius: '8px',
-                        background: 'linear-gradient(135deg,#6D28D9,#7C3AED)',
-                        color: 'white', fontSize: '12px', fontWeight: 700,
-                        boxShadow: '0 2px 8px rgba(124,58,237,0.3)',
-                      }}>
+                      <span style={{ padding: '8px 20px', borderRadius: '8px', background: GRAD, color: 'white', fontSize: '12px', fontWeight: 700, boxShadow: '0 2px 8px rgba(124,58,237,0.3)' }}>
                         Browse Files
                       </span>
                     </>
@@ -518,9 +635,9 @@ export default function CandidateApplicationPage() {
               )}
             </Sec>
 
-            {/* ── Section 2: Personal ────────────────────────────────────────── */}
-            <Sec icon="👤" title="Personal Details" subtitle="Your name and contact information">
-              <div className="cap-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            {/* ── 2. Personal Details ── */}
+            <Sec icon={User} title="Personal Details" subtitle="Your name and contact information">
+              <div className="cap-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <Fld label="First Name" required error={errs.firstName}>
                   <input className="cap-inp" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="John" style={ipt(!!errs.firstName)} />
                 </Fld>
@@ -530,85 +647,167 @@ export default function CandidateApplicationPage() {
                 <Fld label="Email Address" required error={errs.email}>
                   <input className="cap-inp" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" style={ipt(!!errs.email)} />
                 </Fld>
+
+                {/* ── Phone — react-phone-number-input ── */}
                 <Fld label="Phone Number" required error={errs.phone}>
-                  <input className="cap-inp" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91 9876543210" style={ipt(!!errs.phone)} />
+                  <div className={`cap-phone${errs.phone ? ' cap-phone-err' : ''}`}>
+                    <PhoneInput
+                      international
+                      defaultCountry="IN"
+                      placeholder="Enter phone number"
+                      value={phone}
+                      onChange={setPhone}
+                    />
+                  </div>
                 </Fld>
-                <Fld label="Current Location" required error={errs.currentLocation} span2>
-                  <select className="cap-inp" value={currentLocation} onChange={e => setCurrentLocation(e.target.value)} style={ipt(!!errs.currentLocation)}>
-                    <option value="">Select your city…</option>
-                    {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
-                  </select>
+
+                <Fld label="Current Location" required error={errs.currentLocation}>
+                  <CitySearchInput value={currentLocation} onChange={setCurrentLocation} error={errs.currentLocation} />
+                </Fld>
+
+                <Fld label="Preferred Locations" required error={errs.preferredLocations}>
+                  <MultiCityInput values={preferredLocations} onChange={setPreferredLocations} />
+                  {errs.preferredLocations && (
+                    <p style={{ margin: '4px 0 0', fontSize: '11px', color: P.red500, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertTriangle size={11} /> {errs.preferredLocations}
+                    </p>
+                  )}
                 </Fld>
               </div>
             </Sec>
 
-            {/* ── Section 3: Professional ─────────────────────────────────────── */}
-            <Sec icon="💼" title="Professional Background" subtitle="Your experience and current role details">
-              <div className="cap-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-
-                <Fld label="Years of Experience" required error={errs.totalExpYears}>
+            {/* ── 3. Professional Background ── */}
+            <Sec icon={Briefcase} title="Professional Background" subtitle="Your experience and work history">
+              <div className="cap-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <Fld label="Total Experience (Years)" required error={errs.totalExpYears}>
                   <select className="cap-inp" value={totalExpYears} onChange={e => setTotalExpYears(e.target.value)} style={ipt(!!errs.totalExpYears)}>
                     <option value="">Select years…</option>
                     {EXP_YEARS.map(y => <option key={y} value={y}>{y} {y === '1' ? 'year' : 'years'}</option>)}
                   </select>
                 </Fld>
-                <Fld label="Months (optional)">
+                <Fld label="Total Experience (Months)">
                   <select className="cap-inp" value={totalExpMonths} onChange={e => setTotalExpMonths(e.target.value)} style={ipt(false)}>
                     <option value="">Select months…</option>
                     {EXP_MONTHS.map(m => <option key={m} value={m}>{m} {m === '1' ? 'month' : 'months'}</option>)}
                   </select>
                 </Fld>
-
-                <Fld label="Current Company">
-                  <input className="cap-inp" value={currentCompany} onChange={e => setCurrentCompany(e.target.value)} placeholder="e.g. Infosys" style={ipt(false)} />
-                </Fld>
-                <Fld label="Current Designation">
-                  <input className="cap-inp" value={currentDesignation} onChange={e => setCurrentDesignation(e.target.value)} placeholder="e.g. Senior Engineer" style={ipt(false)} />
-                </Fld>
-
-                <Fld label="Current Salary (₹ / year)" required error={errs.currentSalary}>
-                  <input className="cap-inp" type="number" min="0" value={currentSalary} onChange={e => setCurrentSalary(e.target.value)} placeholder="e.g. 800000" style={ipt(!!errs.currentSalary)} />
-                </Fld>
-                <Fld label="Expected Salary (₹ / year)" required error={errs.expectedSalary}>
-                  <input className="cap-inp" type="number" min="0" value={expectedSalary} onChange={e => setExpectedSalary(e.target.value)} placeholder="e.g. 1200000" style={ipt(!!errs.expectedSalary)} />
-                </Fld>
-
-                <Fld label="Notice Period">
-                  <select className="cap-inp" value={noticePeriod} onChange={e => setNoticePeriod(e.target.value)} style={ipt(false)}>
-                    <option value="">Select…</option>
-                    {NOTICE_PERIODS.map(n => <option key={n} value={n}>{n}</option>)}
+                <Fld label="Relevant Experience (Years)">
+                  <select className="cap-inp" value={relevantExpYears} onChange={e => setRelevantExpYears(e.target.value)} style={ipt(false)}>
+                    <option value="">Select years…</option>
+                    {EXP_YEARS.map(y => <option key={y} value={y}>{y} {y === '1' ? 'year' : 'years'}</option>)}
                   </select>
                 </Fld>
-                <Fld label="LinkedIn URL">
-                  <input className="cap-inp" type="url" value={linkedInUrl} onChange={e => setLinkedInUrl(e.target.value)} placeholder="https://linkedin.com/in/yourname" style={ipt(false)} />
+                <Fld label="Relevant Experience (Months)">
+                  <select className="cap-inp" value={relevantExpMonths} onChange={e => setRelevantExpMonths(e.target.value)} style={ipt(false)}>
+                    <option value="">Select months…</option>
+                    {EXP_MONTHS.map(m => <option key={m} value={m}>{m} {m === '1' ? 'month' : 'months'}</option>)}
+                  </select>
+                </Fld>
+                <Fld label="LinkedIn Profile URL" span2>
+                  <div style={{ position: 'relative' }}>
+                    <Link size={14} color={P.gray400} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                    <input className="cap-inp" type="url" value={linkedInUrl} onChange={e => setLinkedInUrl(e.target.value)} placeholder="https://linkedin.com/in/yourname" style={{ ...ipt(false), paddingLeft: '34px' }} />
+                  </div>
                 </Fld>
               </div>
             </Sec>
 
-            {/* ── Submit ──────────────────────────────────────────────────────── */}
+            {/* ── 4. Compensation & Logistics ── */}
+            <Sec icon={IndianRupee} title="Compensation & Logistics" subtitle="Salary expectations and availability">
+              <div className="cap-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <Fld label="Current Salary (₹ / year)" required error={errs.currentSalary}>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: 600, color: P.gray500, pointerEvents: 'none' }}>₹</span>
+                    <input className="cap-inp" type="number" min="0" value={currentSalary} onChange={e => setCurrentSalary(e.target.value)} placeholder="e.g. 800000" style={{ ...ipt(!!errs.currentSalary), paddingLeft: '24px' }} />
+                  </div>
+                  {currentSalary && <p style={{ margin: '4px 0 0', fontSize: '11px', color: P.gray500 }}>{inrFmt(currentSalary)}</p>}
+                </Fld>
+                <Fld label="Expected Salary (₹ / year)" required error={errs.expectedSalary}>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: 600, color: P.gray500, pointerEvents: 'none' }}>₹</span>
+                    <input className="cap-inp" type="number" min="0" value={expectedSalary} onChange={e => setExpectedSalary(e.target.value)} placeholder="e.g. 1200000" style={{ ...ipt(!!errs.expectedSalary), paddingLeft: '24px' }} />
+                  </div>
+                  {expectedSalary && <p style={{ margin: '4px 0 0', fontSize: '11px', color: P.gray500 }}>{inrFmt(expectedSalary)}</p>}
+                </Fld>
+                <Fld label="Notice Period">
+                  <div style={{ position: 'relative' }}>
+                    <Clock size={14} color={P.gray400} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                    <select className="cap-inp" value={noticePeriod} onChange={e => setNoticePeriod(e.target.value)} style={{ ...ipt(false), paddingLeft: '34px' }}>
+                      <option value="">Select…</option>
+                      {NOTICE_PERIODS.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                </Fld>
+                <Fld label="Last Working Day">
+                  <div style={{ position: 'relative' }}>
+                    <CalendarDays size={14} color={P.gray400} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                    <input className="cap-inp" type="date" value={lastWorkingDay} onChange={e => setLastWorkingDay(e.target.value)} style={{ ...ipt(false), paddingLeft: '34px' }} />
+                  </div>
+                </Fld>
+              </div>
+            </Sec>
+
+            {/* ── 5. Pipeline: Consent ── */}
+            {isPipeline && (
+              <Sec icon={ShieldCheck} title="Authorization & Consent" subtitle={`Authorize ${orgName} to present your profile`}>
+                {/* What will be shared */}
+                <div style={{ background: P.p50, borderRadius: '8px', border: `1px solid ${P.border}`, padding: '14px 16px', marginBottom: '16px' }}>
+                  <p style={{ margin: '0 0 10px', fontSize: '12px', fontWeight: 700, color: P.p600 }}>What will be shared with the client:</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                    {['Your resume / CV', 'Name, email, and phone number', 'Current and expected salary', 'Total experience and skills', 'Notice period and availability'].map(item => (
+                      <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '9px', fontSize: '12.5px', color: P.gray700 }}>
+                        <CheckCircle2 size={14} color={P.p500} style={{ flexShrink: 0 }} />
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Consent checkbox */}
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer', padding: '16px', borderRadius: '10px', border: `2px solid ${consented ? P.p500 : errs.consent ? P.red300 : P.gray200}`, background: consented ? P.p50 : errs.consent ? P.red50 : '#fff', transition: 'all 0.2s' }}>
+                  <input
+                    type="checkbox"
+                    checked={consented}
+                    onChange={e => { setConsented(e.target.checked); if (e.target.checked) setErrs(prev => ({ ...prev, consent: undefined })); }}
+                    style={{ width: '18px', height: '18px', marginTop: '2px', accentColor: P.p500, flexShrink: 0, cursor: 'pointer' }}
+                  />
+                  <div>
+                    <p style={{ margin: '0 0 5px', fontSize: '13px', fontWeight: 700, color: P.gray900 }}>
+                      I authorize {orgName} to share my profile
+                    </p>
+                    <p style={{ margin: 0, fontSize: '11.5px', color: P.gray500, lineHeight: 1.65 }}>
+                      I confirm the information above is accurate and authorize <strong>{orgName}</strong> to present my resume and profile to their client for the <strong>{job?.title}</strong> position. I understand this is not a job offer.
+                    </p>
+                  </div>
+                </label>
+                {errs.consent && <p style={{ margin: '7px 0 0', fontSize: '11px', color: P.red500, display: 'flex', alignItems: 'center', gap: '4px' }}><AlertTriangle size={11} /> {errs.consent}</p>}
+              </Sec>
+            )}
+
+            {/* ── Submit button ── */}
             <button
               type="submit"
-              disabled={isSubmitting || uploading}
+              disabled={submitting || uploading || (isPipeline && !consented)}
               style={{
                 width: '100%', padding: '16px', borderRadius: '12px', border: 'none',
-                background: (isSubmitting || uploading)
-                  ? '#C4B5FD'
-                  : 'linear-gradient(135deg,#5B21B6,#7C3AED)',
+                background: (submitting || uploading || (isPipeline && !consented)) ? '#C4B5FD' : GRAD,
                 color: '#fff', fontSize: '15px', fontWeight: 800,
-                cursor: (isSubmitting || uploading) ? 'not-allowed' : 'pointer',
+                cursor: (submitting || uploading || (isPipeline && !consented)) ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                boxShadow: (isSubmitting || uploading) ? 'none' : '0 6px 20px rgba(124,58,237,0.4)',
-                transition: 'all 0.2s',
-                letterSpacing: '0.2px',
+                boxShadow: (submitting || uploading || (isPipeline && !consented)) ? 'none' : '0 6px 20px rgba(124,58,237,0.38)',
+                transition: 'all 0.2s', letterSpacing: '0.2px',
               }}
             >
-              {isSubmitting
+              {submitting
                 ? <><Spinner size={18} color="#fff" /> Submitting…</>
-                : isPipeline ? '🔄  Update My Profile' : '✉️  Submit Application'}
+                : isPipeline
+                  ? <><ShieldCheck size={18} /> Authorize &amp; Submit</>
+                  : <><FileText size={18} /> Submit Application</>
+              }
             </button>
 
-            <p style={{ textAlign: 'center', color: '#9CA3AF', fontSize: '11.5px', marginTop: '14px', lineHeight: 1.6 }}>
-              🔒 Your information is shared only with the hiring team and kept private.
+            <p style={{ textAlign: 'center', color: P.gray400, fontSize: '11.5px', marginTop: '14px', lineHeight: 1.6 }}>
+              🔒 Your information is shared only with {orgName} and kept private.
             </p>
           </form>
         </div>
@@ -620,45 +819,26 @@ export default function CandidateApplicationPage() {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function Shell({ children }) {
-  return (
-    <div style={{ minHeight: '100vh', background: '#F5F3FF', fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}>
-      {children}
-    </div>
-  );
+  return <div style={{ minHeight: '100vh', background: P.p50, fontFamily: "'Inter','Segoe UI',sans-serif" }}>{children}</div>;
+}
+
+function CenterBox({ children }) {
+  return <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '16px', padding: '24px' }}>{children}</div>;
 }
 
 function JTag({ text, bg, color }) {
-  return (
-    <span style={{
-      padding: '4px 10px', borderRadius: '99px', background: bg, color,
-      fontSize: '11px', fontWeight: 600, border: '1px solid rgba(0,0,0,0.06)',
-    }}>
-      {text}
-    </span>
-  );
+  return <span style={{ padding: '4px 10px', borderRadius: '99px', background: bg, color, fontSize: '11px', fontWeight: 600, border: '1px solid rgba(0,0,0,0.06)' }}>{text}</span>;
 }
 
-function MetaChip({ icon, children }) {
+function MetaChip({ icon: Icon, children }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '8px',
-      padding: '7px 12px', borderRadius: '8px',
-      background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(109,40,217,0.12)',
-      fontSize: '12.5px', color: '#4C1D95', fontWeight: 500,
-    }}>
-      <span style={{ fontSize: '14px' }}>{icon}</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.8)', border: `1px solid ${P.border}`, fontSize: '12.5px', color: P.p800, fontWeight: 500 }}>
+      <Icon size={13} color={P.p500} style={{ flexShrink: 0 }} />
       {children}
     </div>
   );
 }
 
 function SideLabel({ children }) {
-  return (
-    <p style={{
-      margin: '0 0 8px', fontSize: '10px', fontWeight: 700,
-      color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '0.5px',
-    }}>
-      {children}
-    </p>
-  );
+  return <p style={{ margin: '0 0 8px', fontSize: '10px', fontWeight: 700, color: P.p500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{children}</p>;
 }

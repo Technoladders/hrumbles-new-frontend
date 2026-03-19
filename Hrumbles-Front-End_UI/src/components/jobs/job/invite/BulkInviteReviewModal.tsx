@@ -244,7 +244,7 @@ const BulkInviteReviewModal: React.FC<BulkInviteReviewModalProps> = ({
                         display:'flex', flexShrink:0 }}
                       title="Remove from this batch"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={14} color="red" />
                     </button>
                   )}
 

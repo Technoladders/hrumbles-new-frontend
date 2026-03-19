@@ -103,7 +103,7 @@ const MyInvitesPage: React.FC = () => {
       let q = supabase
         .from('candidate_invites')
         .select(`
-          id, job_id, candidate_name, candidate_email, candidate_phone,
+          id, job_id, candidate_name, candidate_email, candidate_phone, candidate_id,
           channel, status, invite_source, expires_at, sent_at, created_at, opened_at, invite_token,
           hr_jobs ( id, title, job_id ),
           candidate_invite_responses (
@@ -350,9 +350,11 @@ const MyInvitesPage: React.FC = () => {
 
                       {/* Candidate */}
                       <td className="px-4 py-3">
+                        <Link to={`/jobs/candidateprofile/${inv.candidate_id}/${inv.job_id}`} className="hover:underline">
                         <p className="text-sm font-semibold text-gray-900 leading-tight">
                           {inv.candidate_name || '—'}
                         </p>
+                        </Link>
                         {inv.candidate_email && (
                           <p className="text-xs text-gray-400 mt-0.5">{inv.candidate_email}</p>
                         )}

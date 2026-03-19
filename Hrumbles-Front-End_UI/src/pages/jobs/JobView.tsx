@@ -244,6 +244,7 @@ useEffect(() => {
     enabled: !!id,
   });
 
+  console.log("candidatesData", candidatesData);
   
 
 // --- DATA TRANSFORMATION ---
@@ -262,7 +263,9 @@ useEffect(() => {
       appliedDate: candidate.appliedDate,
       skills: candidate.skills ||[],
       appliedFrom: candidate.appliedFrom || candidate.applied_from,
-      owner: ownerName // <-- Added owner here
+      owner: ownerName,
+      main_status: candidate.main_status,
+      main_status_id: candidate.main_status_id
     };
   });
 

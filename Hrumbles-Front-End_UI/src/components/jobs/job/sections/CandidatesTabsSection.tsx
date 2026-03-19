@@ -54,6 +54,9 @@ const CandidatesTabsSection = ({
 const [candidateFilter, setCandidateFilter] = useState<string>("All");
     const [searchTerm, setSearchTerm] = useState("");
 
+    const [activeTab, setActiveTab] = useState("All Candidates");
+const [mainStatuses, setMainStatuses] = useState<MainStatus[]>([]);
+
       const uniqueOwners = useMemo(() => {
     const owners = localCandidates
       .map(c => c.owner || c.appliedFrom)
@@ -80,6 +83,15 @@ const [candidateFilter, setCandidateFilter] = useState<string>("All");
       setLocalCandidates(candidates);
     }
   }, [candidates]);
+
+  useEffect(() => {
+  const loadStatuses = async () => {
+    const data = await fetchAllStatuses();
+    setMainStatuses(data);
+  };
+
+  loadStatuses();
+}, []);
 
   // Add this effect to fetch config
   useEffect(() => {
@@ -141,11 +153,66 @@ const handleBulkShareClick = (type?: 'shortlist' | 'rejection') => {
   }
 };
 
+const getTabCount = (tabName: string) => {
+  if (!localCandidates || localCandidates.length === 0) return 0;
+
+  if (tabName === "All Candidates") {
+    return localCandidates.filter(
+      (c) => c.main_status?.name !== "New Applicants"
+    ).length;
+  }
+
+  if (tabName === "Applied") {
+    return localCandidates.filter(
+      (c) => c.main_status?.name === "New Applicants"
+    ).length;
+  }
+
+  return localCandidates.filter(
+    (c) => c.main_status?.name === tabName
+  ).length;
+};
+
+console.log("localCandidates", localCandidates);
   return (
     <TooltipProvider>
       <div className="md:col-span-3">
         <div className="relative z-10">
           <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
+
+            {/* Candidate Tabs */}
+<div className="flex-shrink-0">
+  <Tabs value={activeTab} onValueChange={setActiveTab}>
+    <TabsList className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
+
+      {[{ id: "all-candidates", name: "All Candidates" }, ...mainStatuses].map((status) => (
+       <TabsTrigger
+  key={status.id}
+  value={status.name}
+  className="px-4 py-1.5 rounded-full text-sm font-medium text-gray-600
+  data-[state=active]:bg-violet-600 data-[state=active]:text-white
+  transition-all"
+>
+  <span className="flex items-center gap-2">
+    {status.name}
+
+    <span
+      className={`text-xs rounded-full h-5 min-w-[20px] px-1 flex items-center justify-center
+      ${
+        activeTab === status.name
+          ? "bg-white/20 text-white"
+          : "bg-primary/10 text-primary"
+      }`}
+    >
+      {getTabCount(status.name)}
+    </span>
+  </span>
+</TabsTrigger>
+      ))}
+
+    </TabsList>
+  </Tabs>
+</div>
             {/* Score Filter */}
             <div className="flex-shrink-0 order-3 w-full sm:w-[180px] min-w-0 overflow-hidden">
               <Select value={scoreFilter} onValueChange={setScoreFilter}>
@@ -382,6 +449,7 @@ const handleBulkShareClick = (type?: 'shortlist' | 'rejection') => {
           scoreFilter={scoreFilter} // Pass the filter down
           candidateFilter={candidateFilter}
           searchTerm={searchTerm}
+          activeTab={activeTab}
         />
 
         <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>

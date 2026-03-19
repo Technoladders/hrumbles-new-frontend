@@ -5,7 +5,6 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useSelector } from 'react-redux';
 import {
   ArrowLeft, Send, RefreshCw, Users, Search, ChevronLeft,
   ChevronRight, Eye, Mail, MessageSquare, CheckCircle,
@@ -21,13 +20,9 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/jobs/ui/select';
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/jobs/ui/tooltip';
 import { Button } from '@/components/jobs/ui/button';
 import { Input } from '@/components/jobs/ui/input';
 import { Card } from '@/components/jobs/ui/card';
-import { Badge } from '@/components/jobs/ui/badge';
 import Loader from '@/components/ui/Loader';
 import moment from 'moment';
 
@@ -66,7 +61,7 @@ function ChannelBadge({ channel }: { channel: string }) {
 
 const InviteResponsesPage: React.FC = () => {
   const { id: jobId } = useParams<{ id: string }>();
-  const navigate      = useNavigate();
+  const navigate = useNavigate();
 
   const [filter,      setFilter]      = useState<FilterStatus>('all');
   const [search,      setSearch]      = useState('');
@@ -83,13 +78,15 @@ const InviteResponsesPage: React.FC = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from('hr_jobs')
-        .select('id, title, location, experience, skills, description, hiringMode, job_type_category, noticePeriod, department')
+        .select('id, title, location, experience, skills, description, job_type_category')
         .eq('id', jobId!)
         .single();
       return data;
     },
     enabled: !!jobId,
   });
+
+  console.log('jobin invite', job);
 
   const { data: invites = [], isLoading, refetch } = useQuery({
     queryKey: ['job-invites', jobId],
@@ -170,27 +167,44 @@ const InviteResponsesPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in p-4 md:p-6">
 
-      {/* ── Page header ── */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate(`/jobs/${jobId}`)}
-            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors">
-            <ArrowLeft size={16} className="text-gray-600" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold mb-0.5">Invite Responses</h1>
-            {job && (
-              <p className="text-gray-500 text-sm flex items-center gap-2">
-                <Link to={`/jobs/${jobId}`} className="hover:underline text-purple-600 font-medium">{job.title}</Link>
-              </p>
-            )}
+      {/* ── Breadcrumb + Back Button ── */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate(-1)}
+          className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+        >
+          <ArrowLeft size={18} className="text-gray-600" />
+        </button>
+
+        {job && (
+          <div className="text-sm text-gray-500">
+            <span className="hover:underline cursor-pointer" 
+                  onClick={() => navigate(-1)}>
+              Jobs
+            </span>
+            <span className="mx-2 text-gray-300">›</span>
+            <span className="font-medium text-gray-700">{job.title}</span>
           </div>
+        )}
+      </div>
+
+      {/* ── Page Title & Actions ── */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Invite Responses</h1>
+          {job && (
+            <p className="text-gray-500 text-sm mt-0.5">
+              {job.title}
+            </p>
+          )}
         </div>
+
         <div className="flex items-center gap-2">
           <button onClick={() => refetch()}
             className="flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 bg-white text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors">
             <RefreshCw size={14} /> Refresh
           </button>
+
           <button onClick={() => setModalOpen(true)}
             className="flex items-center gap-3 pl-1.5 pr-5 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 h-10">
             <div className="relative flex items-center justify-center w-7 h-7 mr-0.5">
@@ -206,44 +220,53 @@ const InviteResponsesPage: React.FC = () => {
       </div>
 
       {/* ── Stat cards ── */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {[
-            { label: 'Total Invites',  value: stats.total,            icon: <Users size={20} className="text-purple-600" />,  bg: 'bg-purple-50', iconBg: 'bg-purple-100', val: 'text-purple-700', clickVal: 'all'     },
-            { label: 'Sent',           value: stats.sent,             icon: <Send size={20} className="text-gray-500" />,      bg: 'bg-gray-50',   iconBg: 'bg-gray-100',   val: 'text-gray-700',  clickVal: 'sent'    },
-            { label: 'Opened',         value: stats.opened,           icon: <Eye size={20} className="text-amber-600" />,      bg: 'bg-amber-50',  iconBg: 'bg-amber-100',  val: 'text-amber-700', clickVal: 'opened'  },
-            { label: 'Applied',        value: stats.applied,          icon: <CheckCircle size={20} className="text-green-600" />, bg: 'bg-green-50', iconBg: 'bg-green-100', val: 'text-green-700', clickVal: 'applied' },
-            { label: 'Expired',        value: stats.expired,          icon: <AlertCircle size={20} className="text-red-500" />,  bg: 'bg-red-50',   iconBg: 'bg-red-100',   val: 'text-red-600',   clickVal: 'expired' },
-          ].map(({ label, value, icon, bg, iconBg, val, clickVal }) => (
-            <Card key={label}
-              onClick={() => { setFilter(clickVal as FilterStatus); setCurrentPage(1); }}
-              className={`p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow ${bg}`}>
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-gray-500">{label}</p>
-                <h3 className={`text-3xl font-bold ${val}`}>{value}</h3>
-              </div>
-              <div className={`p-2 ${iconBg} rounded-lg`}>{icon}</div>
-            </Card>
-          ))}
+{stats && (
+  <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+    {[
+      { label: 'Total Invites',  value: stats.total,   icon: <Users size={20} className="text-purple-600" />,  bg: 'bg-purple-50', iconBg: 'bg-purple-100', val: 'text-purple-700', clickVal: 'all' },
+      { label: 'Sent',           value: stats.sent,    icon: <Send size={20} className="text-gray-500" />,     bg: 'bg-gray-50',   iconBg: 'bg-gray-100',   val: 'text-gray-700',  clickVal: 'sent' },
+      { label: 'Opened',         value: stats.opened,  icon: <Eye size={20} className="text-amber-600" />,     bg: 'bg-amber-50',  iconBg: 'bg-amber-100',  val: 'text-amber-700', clickVal: 'opened' },
+      { label: 'Applied',        value: stats.applied, icon: <CheckCircle size={20} className="text-green-600" />, bg: 'bg-green-50', iconBg: 'bg-green-100', val: 'text-green-700', clickVal: 'applied' },
+      { label: 'Expired',        value: stats.expired, icon: <AlertCircle size={20} className="text-red-500" />, bg: 'bg-red-50', iconBg: 'bg-red-100', val: 'text-red-600', clickVal: 'expired' },
+    ].map(({ label, value, icon, bg, iconBg, val, clickVal }) => (
+      <Card
+        key={label}
+        onClick={() => { setFilter(clickVal as FilterStatus); setCurrentPage(1); }}
+        className={`p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow ${bg}`}
+      >
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-gray-500">{label}</p>
+          <h3 className={`text-3xl font-bold ${val}`}>{value}</h3>
         </div>
-      )}
+        <div className={`p-2 ${iconBg} rounded-lg`}>{icon}</div>
+      </Card>
+    ))}
 
-      {/* Conversion bar */}
-      {stats && stats.total > 0 && (
-        <div className="flex items-center gap-3 bg-purple-50 rounded-xl px-5 py-3 border border-purple-100">
-          <Users size={16} className="text-purple-600 flex-shrink-0" />
+    {/* Conversion Card */}
+    {stats.total > 0 && (
+      <Card className="p-4 bg-purple-50 border border-purple-100 flex flex-col justify-center gap-2">
+        <div className="flex items-center gap-2">
+          <Users size={16} className="text-purple-600" />
           <span className="text-sm text-purple-800 font-semibold">
-            Conversion Rate: {conversion}%
-          </span>
-          <div className="flex-1 h-2 bg-purple-100 rounded-full overflow-hidden ml-2">
-            <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-violet-600 transition-all duration-700"
-              style={{ width: `${conversion}%` }} />
-          </div>
-          <span className="text-xs text-purple-500 flex-shrink-0">
-            {stats.applied}/{stats.total} applied
+            Conversion
           </span>
         </div>
-      )}
+
+        <div className="h-2 bg-purple-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-purple-500 to-violet-600 transition-all duration-700"
+            style={{ width: `${conversion}%` }}
+          />
+        </div>
+
+        <div className="flex justify-between text-xs text-purple-600">
+          <span>{conversion}%</span>
+          <span>{stats.applied}/{stats.total}</span>
+        </div>
+      </Card>
+    )}
+  </div>
+)}
 
       {/* ── Toolbar: filters + search ── */}
       <div className="flex flex-wrap items-center gap-3">
@@ -333,9 +356,11 @@ const InviteResponsesPage: React.FC = () => {
 
                       {/* Candidate */}
                       <td className="px-4 py-3">
+                        <Link to={`/jobs/candidateprofile/${inv.candidate_id}/${inv.job_id}`} className="hover:underline">
                         <p className="text-sm font-semibold text-gray-900 leading-tight">
                           {inv.candidate_name || '—'}
                         </p>
+                        </Link>
                         {inv.candidate_email && (
                           <p className="text-xs text-gray-400 mt-0.5">{inv.candidate_email}</p>
                         )}

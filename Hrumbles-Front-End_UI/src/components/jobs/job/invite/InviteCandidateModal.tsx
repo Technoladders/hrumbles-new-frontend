@@ -66,15 +66,27 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
     if (isOpen && job?.title) setMsg(tpl(prefillName, job.title, inviteSource));
   }, [isOpen, prefillName, job?.title, inviteSource]);
 
-  useEffect(() => {
+ useEffect(() => {
     if (!isOpen || !organizationId || channel === 'email') return;
-    supabase.from('hr_organizations').select('whatsapp_config').eq('id', organizationId).single()
+    supabase
+      .from('hr_organizations')
+      .select('whatsapp_config')
+      .eq('id', organizationId)
+      .single()
       .then(({ data }) => {
-        if (data?.whatsapp_config?.is_active) {
-          setWaCfg(data.whatsapp_config);
-          setWaTpl(data.whatsapp_config.default_template_name || '');
-          setWaTplLang(data.whatsapp_config.default_template_language || 'en_US');
-        }
+        const cfg = data?.whatsapp_config;
+        if (!cfg?.is_active) return;
+ 
+        setWaCfg(cfg);
+ 
+        const approved = (cfg.templates || []).filter((t: any) => t.status === 'APPROVED');
+ 
+        // Resolve template: default → first approved → empty
+        const resolvedName = cfg.default_template_name || approved[0]?.name || '';
+        const resolvedLang = cfg.default_template_language || approved[0]?.language || 'en_US';
+ 
+        setWaTpl(resolvedName);
+        setWaTplLang(resolvedLang);
       });
   }, [isOpen, channel, organizationId]);
 
