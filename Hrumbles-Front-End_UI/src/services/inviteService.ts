@@ -15,7 +15,7 @@ export interface CandidateInvite {
   invite_token: string;
   channel: 'email' | 'whatsapp' | 'both';
   status: 'sent' | 'opened' | 'applied' | 'expired' | 'declined';
-  invite_source: 'pipeline' | 'zivex' | 'talentpool';
+  invite_source: InviteSource;
   candidate_id: string | null;
   candidate_owner_id: string | null;
   expires_at: string;
@@ -25,6 +25,15 @@ export interface CandidateInvite {
   hr_employees?: { first_name: string; last_name: string } | null;
   candidate_invite_responses?: CandidateInviteResponse | null;
 }
+
+// ── Invite source — extended with candidate_search ───────────────────────────
+// candidate_search: invite sent directly from the global candidate search page
+//   after revealing contact info. Stored in candidate_invites.invite_source.
+export type InviteSource =
+  | 'pipeline'
+  | 'zivex'
+  | 'talentpool'
+  | 'candidate_search';  // ← NEW
 
 export interface CandidateInviteResponse {
   id: string;
@@ -90,9 +99,12 @@ export interface SendInviteParams {
   expiryDays?: number;
   customMessage?: string;
   // Pipeline-invite specific
-  candidateId?: string;       // hr_job_candidates.id — present only for pipeline invites
-  candidateOwnerId?: string;  // created_by of the candidate row
-  inviteSource?: 'pipeline' | 'zivex' | 'talentpool';
+  candidateId?: string;
+  candidateOwnerId?: string;
+  inviteSource?: InviteSource;  // ← now uses the union type properly
+  // WhatsApp
+  whatsappTemplateName?: string;
+  whatsappTemplateLanguage?: string;
 }
 
 // ── Send invite ───────────────────────────────────────────────────────────────
@@ -112,7 +124,6 @@ export const sendCandidateInvite = async (
       organizationId:    organization_id,
       createdBy:         userId,
       appOrigin,
-      // Pipeline extras
       candidateId:       params.candidateId       || null,
       candidateOwnerId:  params.candidateOwnerId  || null,
       inviteSource:      params.inviteSource       || 'zivex',
@@ -219,13 +230,12 @@ export const addInviteResponseToJob = async (
     matchScore:  0,
     appliedDate: new Date().toISOString().split('T')[0],
     skills:      (response.top_skills || []).map((s) => s.name || s),
-    currentSalary:  response.current_salary ? parseFloat(response.current_salary) : undefined,
+    currentSalary:  response.current_salary  ? parseFloat(response.current_salary)  : undefined,
     expectedSalary: response.expected_salary ? parseFloat(response.expected_salary) : undefined,
     location:    response.current_location,
     appliedFrom: 'Invite',
     resumeUrl:   response.resume_url,
     status:      'Screening' as const,
-    // Preserve candidate owner
     createdBy:   candidateOwnerId || undefined,
     metadata: {
       currentLocation:  response.current_location,
@@ -265,75 +275,59 @@ export const rejectInviteResponse = async (
 
 export const applyProfileUpdate = async (
   responseId: string,
-  candidateId: string,           // hr_job_candidates.id
+  candidateId: string,
   response: CandidateInviteResponse,
-  candidateOwnerId?: string      // preserve original owner
+  candidateOwnerId?: string
 ): Promise<void> => {
-  // Build the update payload — only overwrite fields the candidate actually filled
   const updatePayload: Record<string, any> = {
     updated_at: new Date().toISOString(),
   };
- 
-  if (candidateOwnerId) {
-    updatePayload.updated_by = candidateOwnerId;
-  }
- 
-  // Name + contact
+
+  if (candidateOwnerId) updatePayload.updated_by = candidateOwnerId;
   if (response.candidate_name)  updatePayload.name         = response.candidate_name;
   if (response.email)           updatePayload.email        = response.email;
   if (response.phone)           updatePayload.phone        = response.phone;
- 
-  // Professional
-  if (response.total_experience)     updatePayload.experience      = response.total_experience;
-  if (response.notice_period)        updatePayload.notice_period   = response.notice_period;
-  if (response.current_location)     updatePayload.location        = response.current_location;
-  if (response.parsed_current_ctc)   updatePayload.current_salary  = response.parsed_current_ctc;
-  if (response.parsed_expected_ctc)  updatePayload.expected_salary = response.parsed_expected_ctc;
-  if (response.resume_url)           updatePayload.resume_url      = response.resume_url;
- 
-  // Merge metadata — patch only fields candidate provided
-  // Read existing metadata first, then spread new values on top
-  const { supabase } = await import('@/integrations/supabase/client');
- 
+  if (response.total_experience)    updatePayload.experience      = response.total_experience;
+  if (response.notice_period)       updatePayload.notice_period   = response.notice_period;
+  if (response.current_location)    updatePayload.location        = response.current_location;
+  if (response.parsed_current_ctc)  updatePayload.current_salary  = response.parsed_current_ctc;
+  if (response.parsed_expected_ctc) updatePayload.expected_salary = response.parsed_expected_ctc;
+  if (response.resume_url)          updatePayload.resume_url      = response.resume_url;
+
   const { data: existing, error: fetchErr } = await supabase
     .from('hr_job_candidates')
     .select('metadata')
     .eq('id', candidateId)
     .single();
- 
+
   if (fetchErr) throw fetchErr;
- 
+
   const submittedData = response.metadata?.submittedData || {};
- 
+
   updatePayload.metadata = {
     ...(existing?.metadata || {}),
-    // Patch individual metadata fields
-    ...(submittedData.currentLocation  ? { currentLocation:  submittedData.currentLocation  } : {}),
-    ...(submittedData.noticePeriod     ? { noticePeriod:     submittedData.noticePeriod     } : {}),
-    ...(submittedData.linkedInId       ? { linkedInId:       submittedData.linkedInId        } : {}),
-    ...(response.linkedin_url          ? { linkedInId:       response.linkedin_url           } : {}),
-    ...(response.current_company       ? { currentCompany:   response.current_company        } : {}),
-    ...(response.current_designation   ? { currentDesignation: response.current_designation  } : {}),
-    ...(response.resume_url            ? { resume_url:       response.resume_url             } : {}),
-    ...(response.parsed_current_ctc    ? { currentSalary:    response.parsed_current_ctc     } : {}),
-    ...(response.parsed_expected_ctc   ? { expectedSalary:   response.parsed_expected_ctc    } : {}),
-    profileUpdatedAt: new Date().toISOString(),
-    profileUpdatedViaInvite: true,
+    ...(submittedData.currentLocation   ? { currentLocation:     submittedData.currentLocation   } : {}),
+    ...(submittedData.noticePeriod      ? { noticePeriod:        submittedData.noticePeriod      } : {}),
+    ...(submittedData.linkedInId        ? { linkedInId:          submittedData.linkedInId         } : {}),
+    ...(response.linkedin_url           ? { linkedInId:          response.linkedin_url            } : {}),
+    ...(response.current_company        ? { currentCompany:      response.current_company         } : {}),
+    ...(response.current_designation    ? { currentDesignation:  response.current_designation     } : {}),
+    ...(response.resume_url             ? { resume_url:          response.resume_url              } : {}),
+    ...(response.parsed_current_ctc     ? { currentSalary:       response.parsed_current_ctc      } : {}),
+    ...(response.parsed_expected_ctc    ? { expectedSalary:      response.parsed_expected_ctc     } : {}),
+    profileUpdatedAt:          new Date().toISOString(),
+    profileUpdatedViaInvite:   true,
   };
- 
-  // Apply to hr_job_candidates
+
   const { error: updateErr } = await supabase
     .from('hr_job_candidates')
     .update(updatePayload)
     .eq('id', candidateId);
- 
   if (updateErr) throw updateErr;
- 
-  // Mark response as applied
+
   const { error: responseErr } = await supabase
     .from('candidate_invite_responses')
     .update({ status: 'auto_updated' })
     .eq('id', responseId);
- 
   if (responseErr) throw responseErr;
 };

@@ -101,6 +101,7 @@ import MyInvitesPage      from './pages/invites/MyInvitesPage.jsx';
 
 // candidate search beta
 import CandidateSearch from "@/components/CandidateSearch";
+import SavedCandidatesPage from "@/pages/candidates/SavedCandidatesPage";
 
 
 // Job Route Handler
@@ -161,6 +162,9 @@ import ContactsV2Page from '@/pages/sales/ContactsV2Page';
 
 import CreditUsageReport from '@/components/reports/CreditUsageReport.tsx';
 import ApolloUsageReport from '@/components/reports/ApolloUsageReport'
+
+import ActivityLogReport from '@/components/reports/ActivityLogReport.tsx';
+
 
 
 // Clients
@@ -578,6 +582,7 @@ useEffect(() => {
 
               {/* Candidate Search Beta */}
               <Route path="/search/candidates/beta" element={<CandidateSearch />} />
+              <Route path="/search/candidates/saved" element={<SavedCandidatesPage />} />
 
               {/* Job Board Integrations */}
               <Route path="/integrations/job-boards" element={<JobBoardIntegrations />} />
@@ -620,6 +625,7 @@ useEffect(() => {
               {/* Sales Companies and Contacts */}
 
           <Route path="/sales/dashboard" element={<SalesDashboard />} />
+              <Route path="/activity-log" element={<ActivityLogReport />} />
 
 
               <Route path="/companies" element={<CompanyIntelligenceSearchPage />} />

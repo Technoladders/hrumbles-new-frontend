@@ -258,6 +258,8 @@ const masterMenuItems = [
   { icon: BsPin, label: "Bench Pool", path: "/bench-pool", suite: "RECRUITMENT", permission: "view_bench_pool" },
   { icon: AiOutlineProfile, label: "My Submission", path: "/my-submission", suite: "RECRUITMENT", permission: "view_my_submission" },
   { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", suite: "RECRUITMENT", permission: "access_zive_x", beta: true },
+  { icon: TbDatabaseSearch, label: "Candidate Search", path: "/search/candidates/beta", suite: "RECRUITMENT", permission: "access_candidate_search", beta: true },
+
   { icon: LuSend, label: "My Invites", path: "/my-invites", suite: "RECRUITMENT", permission: "access_invite" },
   { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients", suite: "RECRUITMENT", permission: "access_client_management" },
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects", suite: "RECRUITMENT", permission: "access_project_management" },
@@ -272,6 +274,8 @@ const masterMenuItems = [
   { icon: VscOrganization, label: "People", path: "/contacts", suite: "SALES", permission: "access_people" },
   { icon: FiList, label: "Lists", path: "/lists", suite: "SALES", permission: "access_lists" },
   { icon: FaDropbox, label: "Kanban", path: "/sales/kanban", suite: "SALES", permission: "access_kanban" },
+  { icon: FaDropbox, label: "Activity Report", path: "/activity-log", suite: "SALES", permission: "access_activity_report" },
+
 
   // --- FINANCE SUITE ---
   { icon: MdOutlineAccountBalance, label: "Finance", path: "/finance", suite: "FINANCE", permission: "access_finance" },

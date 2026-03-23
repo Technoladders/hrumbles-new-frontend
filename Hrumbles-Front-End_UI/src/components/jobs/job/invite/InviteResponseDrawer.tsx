@@ -90,7 +90,7 @@ const InviteResponseDrawer: React.FC<InviteResponseDrawerProps> = ({
         response.id, invite.id, jobId, response,
         invite.candidate_owner_id || invite.created_by
       );
-      toast.success(`${response.candidate_name} added to job pipeline`);
+      toast.success(`${response.candidate_name} added to job`);
       onAction(); onClose();
     } catch (err: any) {
       toast.error(err.message || 'Failed to add candidate');
@@ -111,7 +111,7 @@ const InviteResponseDrawer: React.FC<InviteResponseDrawerProps> = ({
   // ── Status bar config ──────────────────────────────────────────────────────
   const statusBarConfig: Record<string, { bg: string; color: string; label: string }> = {
     auto_updated: { bg: '#EDE9FE', color: '#7C3AED', label: '🔄 Profile applied to candidate record' },
-    added_to_job: { bg: '#D1FAE5', color: '#065F46', label: '✅ Added to job pipeline' },
+    added_to_job: { bg: '#D1FAE5', color: '#065F46', label: '✅ Added to job' },
     rejected:     { bg: '#FEE2E2', color: '#991B1B', label: '❌ Rejected' },
   };
   const statusBar = statusBarConfig[response.status];
@@ -448,3 +448,4 @@ const dangBtn: React.CSSProperties = {
 };
 
 export default InviteResponseDrawer;
+// 

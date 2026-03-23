@@ -35,6 +35,8 @@ type FilterStatus = 'all' | 'sent' | 'opened' | 'applied' | 'expired';
 interface InviteRow {
   id:               string;
   job_id:           string;
+  candidate_id:     string | null; 
+  talent_id?:       string | null; 
   candidate_name:   string | null;
   candidate_email:  string | null;
   candidate_phone:  string | null;
@@ -97,13 +99,13 @@ const MyInvitesPage: React.FC = () => {
   const [drawerOpen,  setDrawerOpen]  = useState(false);
 
   // ── Fetch all invites for this user (or all if admin) ─────────────────────
-  const { data: invites = [], isLoading, refetch } = useQuery<InviteRow[]>({
+ const { data: invites = [], isLoading, refetch } = useQuery<InviteRow[]>({
     queryKey: ['my-invites', user?.id, userRole],
     queryFn: async () => {
       let q = supabase
         .from('candidate_invites')
         .select(`
-          id, job_id, candidate_name, candidate_email, candidate_phone, candidate_id,
+          id, job_id, candidate_name, candidate_email, candidate_phone, candidate_id, organization_id,
           channel, status, invite_source, expires_at, sent_at, created_at, opened_at, invite_token,
           hr_jobs ( id, title, job_id ),
           candidate_invite_responses (
@@ -120,12 +122,34 @@ const MyInvitesPage: React.FC = () => {
       // Employees only see their own invites
       if (isEmployee) q = q.eq('created_by', user.id);
 
-      const { data, error } = await q;
-      if (error) throw error;
-      return data || [];
+      const { data: invitesData, error: invitesError } = await q;
+      if (invitesError) throw invitesError;
+      if (!invitesData || invitesData.length === 0) return [];
+
+      // Extract unique emails from invites to fetch talent IDs
+      const uniqueEmails = [...new Set(invitesData.map(i => i.candidate_email).filter(Boolean))];
+
+      // Fetch corresponding talent pool IDs in a single query
+      const { data: talentPoolData, error: talentError } = await supabase
+        .from('hr_talent_pool')
+        .select('id, email')
+        .eq('organization_id', invitesData[0].organization_id)
+        .in('email', uniqueEmails);
+      
+      if (talentError) throw talentError;
+
+      // Create a Map for O(1) lookup
+      const talentMap = new Map(talentPoolData?.map(t => [t.email, t.id]));
+
+      // Map the invites to include talent_id
+      return invitesData.map(inv => ({
+        ...inv,
+        // if email exists, look it up, otherwise leave it null
+        talent_id: inv.candidate_email ? talentMap.get(inv.candidate_email) || null : null
+      })) as InviteRow[];
     },
     enabled: !!user?.id,
-  });
+});
 
   // ── Derived counts ────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
@@ -365,19 +389,35 @@ const MyInvitesPage: React.FC = () => {
                       className="transition-all duration-150 hover:shadow-sm hover:-translate-y-px hover:bg-gray-50">
 
                       {/* Candidate */}
-                      <td className="px-4 py-3">
-                        <Link to={`/jobs/candidateprofile/${inv.candidate_id}/${inv.job_id}`} className="hover:underline">
-                        <p className="text-sm font-semibold text-gray-900 leading-tight">
-                          {inv.candidate_name || '—'}
-                        </p>
-                        </Link>
-                        {inv.candidate_email && (
-                          <p className="text-xs text-gray-400 mt-0.5">{inv.candidate_email}</p>
-                        )}
-                        {inv.candidate_phone && (
-                          <p className="text-xs text-gray-400">{inv.candidate_phone}</p>
-                        )}
-                      </td>
+<td className="px-4 py-3">
+  {inv.candidate_id ? (
+    // Path 1: Already added to the job
+    <Link 
+      to={`/jobs/candidateprofile/${inv.candidate_id}/${inv.job_id}`} 
+      className="text-sm font-semibold text-gray-900 hover:text-purple-600 hover:underline leading-tight"
+    >
+      {inv.candidate_name || '—'}
+    </Link>
+  ) : inv.talent_id ? (
+    // Path 2: In Talent Pool but NOT yet added to this job
+    <Link 
+      to={`/talent-pool/${inv.talent_id}`} 
+      className="text-sm font-semibold text-gray-900 hover:text-blue-600 hover:underline leading-tight flex items-center gap-1"
+    >
+      {inv.candidate_name || '—'}
+      {/* <Badge className="text-[10px] h-4 px-1 bg-blue-50 text-blue-600 border-blue-100">Pool</Badge> */}
+    </Link>
+  ) : (
+    // Path 3: Cold invite (Zive-X / Manual) - No profile created yet
+    <p className="text-sm font-semibold text-gray-500 leading-tight">
+      {inv.candidate_name || '—'}
+    </p>
+  )}
+  
+  {inv.candidate_email && (
+    <p className="text-xs text-gray-400 mt-0.5">{inv.candidate_email}</p>
+  )}
+</td>
 
                       {/* Job */}
                       <td className="px-4 py-3">
