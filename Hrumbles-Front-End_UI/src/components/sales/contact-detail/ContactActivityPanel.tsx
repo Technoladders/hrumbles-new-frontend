@@ -98,8 +98,27 @@ export const ContactActivityPanel: React.FC<Props> = ({
   }, [filteredActivities]);
 
   // Pending tasks
-  const pendingTasks = sortedActivities.filter(a => a.type === 'task' && !a.is_completed);
-  const overdueCount = pendingTasks.filter(a => a.due_date && isPast(parseISO(a.due_date))).length;
+const tasks = sortedActivities.filter(
+  a => a.type === 'task' && !a.is_completed && a.due_date
+);
+
+const now = new Date();
+
+const overdueTasks = tasks.filter(a =>
+  isPast(parseISO(a.due_date)) && !isToday(parseISO(a.due_date))
+);
+
+const todayTasks = tasks.filter(a =>
+  isToday(parseISO(a.due_date))
+);
+
+const upcomingTasks = tasks.filter(a =>
+  !isPast(parseISO(a.due_date)) && !isToday(parseISO(a.due_date))
+);
+
+const overdueCount = overdueTasks.length;
+const pendingCount = todayTasks.length;
+const upcomingCount = upcomingTasks.length;
 
   const activityCounts = useMemo(() => {
     const counts: Record<string, number> = { all: allActivities.length };
@@ -240,23 +259,25 @@ export const ContactActivityPanel: React.FC<Props> = ({
       </div>
 
       {/* ── Pending Tasks Banner ─────────────────────────────────────── */}
-      {pendingTasks.length > 0 && (
-        <div className={cn(
-          'mx-3 mt-2.5 rounded-lg border px-3 py-2 flex items-center gap-2 flex-shrink-0',
-          overdueCount > 0 ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
-        )}>
-          {overdueCount > 0 ? (
-            <AlertCircle size={13} className="text-red-500 flex-shrink-0" />
-          ) : (
-            <CheckSquare size={13} className="text-amber-600 flex-shrink-0" />
-          )}
-          <p className={cn('text-xs font-medium', overdueCount > 0 ? 'text-red-700' : 'text-amber-700')}>
-            {overdueCount > 0
-              ? `${overdueCount} overdue task${overdueCount > 1 ? 's' : ''} · ${pendingTasks.length} total pending`
-              : `${pendingTasks.length} pending task${pendingTasks.length > 1 ? 's' : ''}`}
-          </p>
-        </div>
-      )}
+<p className="text-xs font-medium text-gray-700 flex items-center gap-6 justify-center flex-wrap">
+  {overdueCount > 0 && (
+    <span className="text-red-600 flex items-center gap-1">
+      <AlertCircle size={12} /> {overdueCount} overdue task
+    </span>
+  )}
+
+  {pendingCount > 0 && (
+    <span className="text-amber-600 flex items-center gap-1">
+      <CheckSquare size={12} /> {pendingCount} today task
+    </span>
+  )}
+
+  {upcomingCount > 0 && (
+    <span className="text-blue-600 flex items-center gap-1">
+      <Clock size={12} /> {upcomingCount} upcoming task
+    </span>
+  )}
+</p>
 
       {/* ── Filter Tabs ──────────────────────────────────────────────── */}
       <div className="px-3 pt-2.5 flex-shrink-0">

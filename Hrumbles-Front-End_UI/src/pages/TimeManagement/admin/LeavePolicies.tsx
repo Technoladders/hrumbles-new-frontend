@@ -78,10 +78,10 @@ const LeavePolicies = () => {
           </p>
         </div>
         <div className="flex gap-2">
-           <Button variant="outline" onClick={handleRecalculateAll} disabled={isRecalculating}>
+           {/* <Button variant="outline" onClick={handleRecalculateAll} disabled={isRecalculating}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isRecalculating ? 'animate-spin' : ''}`} />
             Recalculate Balances
-          </Button>
+          </Button> */}
           <Button className="gap-2" onClick={() => {
             setEditingLeaveType(null); // Clear editing state
             setIsAddPolicyDialogOpen(true);

@@ -221,7 +221,7 @@ export function AddLeaveTypeDialog({
                     </FormItem>
                   )}
                 />
-                <FormField
+                {/* <FormField
                   control={form.control}
                   name="icon"
                   render={({ field }) => (
@@ -232,7 +232,7 @@ export function AddLeaveTypeDialog({
                       </FormControl>
                     </FormItem>
                   )}
-                />
+                /> */}
               </div>
 
               <FormField
