@@ -1,17 +1,23 @@
 import React, { useMemo } from 'react';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { TimeLog, Employee } from './AttendanceReportsPage';
-import { getDaysInMonth, startOfMonth, format, isWeekend } from 'date-fns';
+import { getDaysInMonth, startOfMonth, format, isWeekend, differenceInMinutes, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Coffee, UtensilsCrossed, Clock, TrendingUp } from 'lucide-react';
+import { Coffee, Clock } from 'lucide-react';
+
+/** Prefer break timestamp pair; fall back to stored duration_minutes */
+const calcBreakDuration = (start: string | null, end: string | null, stored: number | null): number => {
+  if (start && end) {
+    try {
+      const mins = differenceInMinutes(parseISO(end), parseISO(start));
+      if (mins > 0) return mins;
+    } catch { /* fall through */ }
+  }
+  return stored ?? 0;
+};
 
 interface MonthlyBreakReportProps {
   data: TimeLog[];
@@ -19,99 +25,90 @@ interface MonthlyBreakReportProps {
   selectedMonth: Date;
 }
 
-// Thresholds (in minutes) for colour-coding total daily break time
+// Thresholds for colour-coding total daily break time
 const BREAK_WARN_THRESHOLD = 45;  // amber
 const BREAK_HIGH_THRESHOLD = 90;  // red
 
+const fmtMins = (mins: number | null, fallback = '—'): string => {
+  if (mins === null || mins === undefined) return fallback;
+  if (mins <= 0) return '0m';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+};
+
+const breakCellClass = (breakMins: number | null): string => {
+  if (breakMins === null) return 'text-gray-200 dark:text-gray-700';
+  if (breakMins >= BREAK_HIGH_THRESHOLD)
+    return 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium';
+  if (breakMins >= BREAK_WARN_THRESHOLD)
+    return 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium';
+  if (breakMins > 0)
+    return 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300';
+  return 'text-gray-300 dark:text-gray-600';
+};
+
 const MonthlyBreakReport: React.FC<MonthlyBreakReportProps> = ({
-  data,
-  employees,
-  selectedMonth,
+  data, employees, selectedMonth,
 }) => {
-  const { headers, rows, grandTotals } = useMemo(() => {
-    // Build day headers for the selected month
-    const firstDay = startOfMonth(selectedMonth);
-    const numDays = getDaysInMonth(selectedMonth);
+  const { headers, rows, grandTotalBreak } = useMemo(() => {
+    const firstDay  = startOfMonth(selectedMonth);
+    const numDays   = getDaysInMonth(selectedMonth);
     const daysArray = Array.from(
       { length: numDays },
       (_, i) => new Date(firstDay.getFullYear(), firstDay.getMonth(), i + 1)
     );
-    const headers = daysArray.map((day) => ({ date: day, label: format(day, 'd') }));
+    const headers = daysArray.map(day => ({ date: day, label: format(day, 'd') }));
 
     // Index logs by employee → date
     const logIndex = new Map<string, Map<string, TimeLog>>();
-    data.forEach((log) => {
+    data.forEach(log => {
       const dateKey = format(new Date(log.date), 'yyyy-MM-dd');
       if (!logIndex.has(log.employee_id)) logIndex.set(log.employee_id, new Map());
       logIndex.get(log.employee_id)!.set(dateKey, log);
     });
 
-    // Only show employees who have at least one log in the current data set
-    const relevantIds = new Set(data.map((l) => l.employee_id));
-    const filteredEmployees = employees.filter((e) => relevantIds.has(e.id));
+    const relevantIds       = new Set(data.map(l => l.employee_id));
+    const filteredEmployees = employees.filter(e => relevantIds.has(e.id));
 
-    let grandBreak = 0;
-    let grandNet = 0;
+    let grandTotalBreak = 0;
 
-    const rows = filteredEmployees.map((emp) => {
-      const empMap = logIndex.get(emp.id) ?? new Map<string, TimeLog>();
-      let totalBreakMins = 0;
-      let totalNetMins = 0;
-      let daysWorked = 0;
+    const rows = filteredEmployees.map(emp => {
+      const empMap        = logIndex.get(emp.id) ?? new Map<string, TimeLog>();
+      let totalBreakMins  = 0;
+      let daysWithBreaks  = 0;
 
-      const dailyData = headers.map((h) => {
+      const dailyData = headers.map(h => {
         const dateKey = format(h.date, 'yyyy-MM-dd');
-        const log = empMap.get(dateKey);
-        if (!log) return { breakMins: null, netMins: null, working: null };
+        const log     = empMap.get(dateKey);
+        if (!log) return { breakMins: null };
 
         const breakMins = log.break_logs.reduce(
-          (sum, b) => sum + (b.duration_minutes ?? 0),
+          (sum, b) => sum + calcBreakDuration(b.break_start_time, b.break_end_time, b.duration_minutes),
           0
         );
-        const working = log.duration_minutes ?? 0;
-        const net = Math.max(0, working - breakMins);
 
         totalBreakMins += breakMins;
-        totalNetMins += net;
-        if (working > 0) daysWorked++;
+        if (breakMins > 0) daysWithBreaks++;
 
-        return { breakMins, netMins: net, working };
+        return { breakMins };
       });
 
-      grandBreak += totalBreakMins;
-      grandNet += totalNetMins;
+      grandTotalBreak += totalBreakMins;
 
       return {
         employee: emp,
         dailyData,
         totalBreakMins,
-        totalNetMins,
-        daysWorked,
-        avgBreakPerDay: daysWorked > 0 ? Math.round(totalBreakMins / daysWorked) : 0,
+        daysWithBreaks,
+        avgBreakPerDay: daysWithBreaks > 0
+          ? Math.round(totalBreakMins / daysWithBreaks)
+          : 0,
       };
     });
 
-    return { headers, rows, grandTotals: { grandBreak, grandNet } };
+    return { headers, rows, grandTotalBreak };
   }, [data, employees, selectedMonth]);
-
-  const fmtMins = (mins: number | null, fallback = '—') => {
-    if (mins === null || mins === undefined) return fallback;
-    if (mins <= 0) return '0m';
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
-  };
-
-  const breakCellClass = (breakMins: number | null) => {
-    if (breakMins === null) return '';
-    if (breakMins >= BREAK_HIGH_THRESHOLD)
-      return 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300';
-    if (breakMins >= BREAK_WARN_THRESHOLD)
-      return 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300';
-    if (breakMins > 0)
-      return 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300';
-    return 'text-gray-400';
-  };
 
   return (
     <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl animate-scale-in w-full max-w-full">
@@ -123,7 +120,7 @@ const MonthlyBreakReport: React.FC<MonthlyBreakReportProps> = ({
               Monthly Break Report
             </CardTitle>
             <CardDescription className="mt-1">
-              Break time and net working time per employee per day.
+              Break time per employee per day.
             </CardDescription>
           </div>
 
@@ -135,19 +132,19 @@ const MonthlyBreakReport: React.FC<MonthlyBreakReportProps> = ({
             </span>
             <span className="flex items-center gap-1.5">
               <span className="h-3 w-3 rounded-full bg-amber-200 border border-amber-400" />
-              Extended (&ge;{BREAK_WARN_THRESHOLD}m)
+              Extended (≥{BREAK_WARN_THRESHOLD}m)
             </span>
             <span className="flex items-center gap-1.5">
               <span className="h-3 w-3 rounded-full bg-red-200 border border-red-400" />
-              Excessive (&ge;{BREAK_HIGH_THRESHOLD}m)
+              Excessive (≥{BREAK_HIGH_THRESHOLD}m)
             </span>
           </div>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Summary cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {/* Summary cards — break only */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
           <div className="rounded-xl border bg-gray-50 dark:bg-gray-900/30 p-3 flex items-center gap-3">
             <div className="rounded-lg bg-violet-100 dark:bg-violet-900/40 p-2">
               <Clock className="h-4 w-4 text-violet-600" />
@@ -155,18 +152,7 @@ const MonthlyBreakReport: React.FC<MonthlyBreakReportProps> = ({
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400">Total Break Time</p>
               <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
-                {fmtMins(grandTotals.grandBreak)}
-              </p>
-            </div>
-          </div>
-          <div className="rounded-xl border bg-gray-50 dark:bg-gray-900/30 p-3 flex items-center gap-3">
-            <div className="rounded-lg bg-emerald-100 dark:bg-emerald-900/40 p-2">
-              <TrendingUp className="h-4 w-4 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Total Net Work</p>
-              <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
-                {fmtMins(grandTotals.grandNet)}
+                {fmtMins(grandTotalBreak)}
               </p>
             </div>
           </div>
@@ -176,140 +162,89 @@ const MonthlyBreakReport: React.FC<MonthlyBreakReportProps> = ({
             </div>
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400">Employees Tracked</p>
-              <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
-                {rows.length}
-              </p>
+              <p className="text-sm font-bold text-gray-800 dark:text-gray-100">{rows.length}</p>
             </div>
           </div>
         </div>
 
-        {/* Main table */}
+        {/* Main table — one column per day (break only) */}
         <div
           className="overflow-x-auto max-w-full rounded-xl border border-gray-200 dark:border-gray-700"
           style={{ maxWidth: '85vw' }}
         >
-          <Table className="min-w-[1200px] w-full">
+          <Table className="min-w-[1000px] w-full">
             <TableHeader>
-              {/* Day-number header row */}
               <TableRow className="bg-gray-50 dark:bg-gray-900/40">
-                <TableHead
-                  rowSpan={2}
-                  className="sticky left-0 bg-gray-50 dark:bg-gray-900/40 z-20 min-w-[160px] align-middle border-r border-gray-200 dark:border-gray-700"
-                >
+                {/* sticky employee column */}
+                <TableHead className="sticky left-0 bg-gray-50 dark:bg-gray-900/40 z-20 min-w-[160px] border-r border-gray-200 dark:border-gray-700">
                   Employee
                 </TableHead>
-                {headers.map((h) => (
+
+                {/* one column per day */}
+                {headers.map(h => (
                   <TableHead
                     key={h.label}
-                    colSpan={2}
                     className={cn(
-                      'text-center border-l border-gray-100 dark:border-gray-800',
+                      'text-center text-xs border-l border-gray-100 dark:border-gray-800',
                       isWeekend(h.date) && 'text-muted-foreground bg-gray-100/60 dark:bg-gray-800/40'
                     )}
                   >
                     {h.label}
                   </TableHead>
                 ))}
-                <TableHead
-                  colSpan={3}
-                  className="text-center bg-violet-50 dark:bg-violet-900/20 border-l-2 border-violet-200 dark:border-violet-700"
-                >
-                  Summary
-                </TableHead>
-              </TableRow>
 
-              {/* Sub-header row: Break / Net per day + summary cols */}
-              <TableRow className="bg-gray-50 dark:bg-gray-900/40 text-xs">
-                {headers.map((h, i) => (
-                  <React.Fragment key={i}>
-                    <TableHead
-                      className={cn(
-                        'text-center text-[10px] font-medium text-gray-500 pb-2 border-l border-gray-100 dark:border-gray-800',
-                        isWeekend(h.date) && 'bg-gray-100/60 dark:bg-gray-800/40'
-                      )}
-                    >
-                      Brk
-                    </TableHead>
-                    <TableHead
-                      className={cn(
-                        'text-center text-[10px] font-medium text-gray-500 pb-2',
-                        isWeekend(h.date) && 'bg-gray-100/60 dark:bg-gray-800/40'
-                      )}
-                    >
-                      Net
-                    </TableHead>
-                  </React.Fragment>
-                ))}
-                <TableHead className="text-center text-[10px] font-semibold text-violet-600 bg-violet-50 dark:bg-violet-900/20 border-l-2 border-violet-200 dark:border-violet-700">
+                {/* Summary columns — break only */}
+                <TableHead className="text-center text-[10px] font-semibold text-violet-600 bg-violet-50 dark:bg-violet-900/20 border-l-2 border-violet-200 dark:border-violet-700 min-w-[90px]">
                   Total Break
                 </TableHead>
-                <TableHead className="text-center text-[10px] font-semibold text-emerald-600 bg-violet-50 dark:bg-violet-900/20">
-                  Total Net
-                </TableHead>
-                <TableHead className="text-center text-[10px] font-semibold text-amber-600 bg-violet-50 dark:bg-violet-900/20">
-                  Avg Break/Day
+                <TableHead className="text-center text-[10px] font-semibold text-amber-600 bg-violet-50 dark:bg-violet-900/20 min-w-[90px]">
+                  Avg / Day
                 </TableHead>
               </TableRow>
             </TableHeader>
 
             <TableBody>
               {rows.length > 0 ? (
-                rows.map((row) => (
+                rows.map(row => (
                   <TableRow key={row.employee.id} className="hover:bg-gray-50/70 transition-colors">
-                    <TableCell className="sticky left-0 bg-white z-10 font-medium border-r border-gray-100 dark:border-gray-800">
+                    <TableCell className="sticky left-0 bg-white dark:bg-gray-950 z-10 font-medium border-r border-gray-100 dark:border-gray-800">
                       {row.employee.name}
                     </TableCell>
 
                     {row.dailyData.map((d, i) => {
                       const isWknd = isWeekend(headers[i].date);
                       return (
-                        <React.Fragment key={i}>
-                          {/* Break cell */}
-                          <TableCell
-                            className={cn(
-                              'text-center text-xs border-l border-gray-50 dark:border-gray-800/50 px-1',
-                              isWknd && 'bg-gray-50/60 dark:bg-gray-800/20',
-                              d.breakMins !== null && breakCellClass(d.breakMins)
-                            )}
-                          >
-                            {d.breakMins !== null ? fmtMins(d.breakMins, '—') : (
-                              <span className="text-gray-200">·</span>
-                            )}
-                          </TableCell>
-                          {/* Net cell */}
-                          <TableCell
-                            className={cn(
-                              'text-center text-xs px-1',
-                              isWknd && 'bg-gray-50/60 dark:bg-gray-800/20',
-                              d.netMins !== null && d.netMins > 0
-                                ? 'text-gray-700 dark:text-gray-300'
-                                : 'text-gray-300'
-                            )}
-                          >
-                            {d.netMins !== null ? fmtMins(d.netMins, '—') : (
-                              <span className="text-gray-200">·</span>
-                            )}
-                          </TableCell>
-                        </React.Fragment>
+                        <TableCell
+                          key={i}
+                          className={cn(
+                            'text-center text-xs px-1',
+                            isWknd && 'bg-gray-50/60 dark:bg-gray-800/20',
+                            breakCellClass(d.breakMins)
+                          )}
+                        >
+                          {d.breakMins !== null
+                            ? (d.breakMins > 0 ? fmtMins(d.breakMins) : <span className="text-gray-200 dark:text-gray-700">·</span>)
+                            : <span className="text-gray-200 dark:text-gray-700">·</span>
+                          }
+                        </TableCell>
                       );
                     })}
 
-                    {/* Summary columns */}
+                    {/* Total break */}
                     <TableCell className="text-center font-semibold text-violet-700 dark:text-violet-300 bg-violet-50/60 dark:bg-violet-900/10 border-l-2 border-violet-100 dark:border-violet-800">
                       {fmtMins(row.totalBreakMins)}
                     </TableCell>
-                    <TableCell className="text-center font-semibold text-emerald-700 dark:text-emerald-300 bg-violet-50/60 dark:bg-violet-900/10">
-                      {fmtMins(row.totalNetMins)}
-                    </TableCell>
-                    <TableCell className="text-center font-medium text-amber-700 dark:text-amber-300 bg-violet-50/60 dark:bg-violet-900/10">
+
+                    {/* Avg break per day with colour pill */}
+                    <TableCell className="text-center bg-violet-50/60 dark:bg-violet-900/10">
                       <span
                         className={cn(
-                          'inline-block rounded-full px-2 py-0.5 text-xs',
+                          'inline-block rounded-full px-2 py-0.5 text-xs font-medium',
                           row.avgBreakPerDay >= BREAK_HIGH_THRESHOLD
-                            ? 'bg-red-100 text-red-700'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
                             : row.avgBreakPerDay >= BREAK_WARN_THRESHOLD
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-emerald-100 text-emerald-700'
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
                         )}
                       >
                         {fmtMins(row.avgBreakPerDay)}
@@ -320,7 +255,7 @@ const MonthlyBreakReport: React.FC<MonthlyBreakReportProps> = ({
               ) : (
                 <TableRow>
                   <TableCell
-                    colSpan={headers.length * 2 + 4}
+                    colSpan={headers.length + 3}
                     className="h-24 text-center text-gray-400"
                   >
                     No break data found for this period.
@@ -336,4 +271,3 @@ const MonthlyBreakReport: React.FC<MonthlyBreakReportProps> = ({
 };
 
 export default MonthlyBreakReport;
-// ── Monthly Break Report ───────────────────────────────────────────────────────

@@ -293,6 +293,7 @@ export const DetailPanelV2: React.FC<DetailPanelV2Props> = ({
     c.has_state   && "State",
     c.has_country && "Country",
   ].filter(Boolean).join(", ") || null;
+  
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [inviteOpen,       setInviteOpen]       = useState(false);

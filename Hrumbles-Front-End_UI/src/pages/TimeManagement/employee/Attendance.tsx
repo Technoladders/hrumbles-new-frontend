@@ -1,39 +1,40 @@
 import { useState, useEffect } from "react";
 import { useSelector } from 'react-redux';
 import { supabase } from '@/integrations/supabase/client';
-import { useAttendanceData } from "@/hooks/TimeManagement/useAttendanceData";
+import { startOfMonth, endOfMonth } from 'date-fns';
+import { useAttendanceData, type DateRange } from "@/hooks/TimeManagement/useAttendanceData";
 import { useAttendanceMarking } from "@/hooks/TimeManagement/useAttendanceMarking";
 import { AttendanceMarkingDialog } from "@/components/TimeManagement/attendance/AttendanceMarkingDialog";
 import { AttendanceHeader } from "@/components/TimeManagement/attendance/AttendanceHeader";
 import { AttendanceContent } from "@/components/TimeManagement/attendance/AttendanceContent";
-import type { TimeView } from "@/hooks/TimeManagement/useAttendanceData";
 import { toast } from 'sonner';
 
+// Default: full current month
+const defaultRange = (): DateRange => ({
+  startDate: startOfMonth(new Date()),
+  endDate:   endOfMonth(new Date()),
+});
+
 const Attendance = () => {
-  const [timeView, setTimeView] = useState<TimeView>('monthly');
+  const [dateRange, setDateRange] = useState<DateRange | null>(defaultRange());
   const [isExternal, setIsExternal] = useState(false);
-  const user = useSelector((state: any) => state.auth.user);
-  const employeeId = user?.id || "";
+
+  const user       = useSelector((state: any) => state.auth.user);
+  const employeeId = user?.id ?? "";
 
   useEffect(() => {
     const fetchDepartment = async () => {
-      if (!employeeId) {
-        setIsExternal(false);
-        return;
-      }
+      if (!employeeId) { setIsExternal(false); return; }
       try {
-        console.log('Fetching department for isExternal:', { employeeId });
         const { data, error } = await supabase
           .from('hr_employees')
           .select('hr_departments(name)')
           .eq('id', employeeId)
           .single();
-
         if (error) throw error;
         setIsExternal(data?.hr_departments?.name === 'External');
-        console.log('Department fetched:', { isExternal: data?.hr_departments?.name === 'External' });
-      } catch (error: any) {
-        console.error('Error fetching department:', error);
+      } catch (err: any) {
+        console.error('Error fetching department:', err);
         toast.error('Failed to load department data');
         setIsExternal(false);
       }
@@ -41,12 +42,7 @@ const Attendance = () => {
     fetchDepartment();
   }, [employeeId]);
 
-  const { 
-    attendanceData,
-    isLoading,
-    error,
-    refetch
-  } = useAttendanceData(timeView, employeeId);
+  const { attendanceData, isLoading, error, refetch } = useAttendanceData(dateRange, employeeId);
 
   const {
     markAttendanceOpen,
@@ -55,34 +51,38 @@ const Attendance = () => {
     setMarkAttendanceDate,
     markAttendanceTime,
     setMarkAttendanceTime,
-    handleMarkAttendance
-  } = useAttendanceMarking(refetch);
-
-  console.log('Attendance rendered', { employeeId, timeView, isExternal });
+    isSubmitting,
+    handleMarkAttendance,
+  } = useAttendanceMarking(employeeId, refetch);
 
   if (error) {
     return <div className="p-4 text-red-500">Error loading attendance data: {error}</div>;
   }
 
   if (isLoading) {
-    return <div className="p-4">Loading attendance data...</div>;
+    return (
+      <div className="p-8 flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-violet-600 border-t-transparent" />
+      </div>
+    );
   }
 
   return (
     <div className="content-area">
-      <AttendanceHeader 
-        isExternal={isExternal} 
-        onMarkAttendance={() => setMarkAttendanceOpen(true)} 
+      <AttendanceHeader
+        isExternal={isExternal}
+        onMarkAttendance={() => setMarkAttendanceOpen(true)}
       />
 
-      <AttendanceContent 
-        timeView={timeView}
-        onTimeViewChange={(v) => setTimeView(v as TimeView)}
+      <AttendanceContent
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
         attendanceData={attendanceData}
         isExternal={isExternal}
+        employeeId={employeeId}
       />
 
-      <AttendanceMarkingDialog 
+      <AttendanceMarkingDialog
         open={markAttendanceOpen}
         onOpenChange={setMarkAttendanceOpen}
         date={markAttendanceDate}
@@ -90,6 +90,7 @@ const Attendance = () => {
         onDateChange={setMarkAttendanceDate}
         onTimeChange={setMarkAttendanceTime}
         onSubmit={handleMarkAttendance}
+        isSubmitting={isSubmitting}
       />
     </div>
   );

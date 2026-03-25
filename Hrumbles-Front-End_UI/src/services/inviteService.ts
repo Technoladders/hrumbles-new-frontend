@@ -217,9 +217,44 @@ export const addInviteResponseToJob = async (
   inviteId: string,
   jobId: string,
   response: CandidateInviteResponse,
-  candidateOwnerId?: string
+  candidateOwnerId?: string,
+  pipelineStage: string = 'Screening',
+  organizationId?: string
 ): Promise<void> => {
   const { createCandidate } = await import('./candidateService');
+
+  // ── Background: upsert hr_talent_pool so the profile stays current ──────
+  // Non-fatal — never blocks the main add-to-job flow.
+  if (organizationId && response.email) {
+    supabase
+      .from('hr_talent_pool')
+      .upsert({
+        candidate_name:       response.candidate_name,
+        email:                response.email,
+        organization_id:      organizationId,
+        phone:                response.phone                || undefined,
+        current_location:     response.current_location     || undefined,
+        current_company:      response.current_company      || undefined,
+        current_designation:  response.current_designation  || undefined,
+        total_experience:     response.total_experience      || undefined,
+        parsed_experience_years: response.parsed_experience_years ?? undefined,
+        notice_period:        response.notice_period         || undefined,
+        linkedin_url:         response.linkedin_url          || undefined,
+        resume_path:          response.resume_url            || undefined,
+        current_salary:       response.current_salary        || undefined,
+        expected_salary:      response.expected_salary       || undefined,
+        parsed_current_ctc:   response.parsed_current_ctc    ?? undefined,
+        parsed_expected_ctc:  response.parsed_expected_ctc   ?? undefined,
+        top_skills:           response.top_skills?.length
+                                ? response.top_skills.map(s => typeof s === 'string' ? s : s.name)
+                                : undefined,
+        source_platform: 'invite',
+        updated_at:      new Date().toISOString(),
+      }, { onConflict: 'email,organization_id', ignoreDuplicates: false })
+      .then(({ error }) => {
+        if (error) console.warn('[inviteService] talent pool sync non-fatal:', error.message);
+      });
+  }
 
   const candidateData = {
     id:          '',
@@ -235,7 +270,7 @@ export const addInviteResponseToJob = async (
     location:    response.current_location,
     appliedFrom: 'Invite',
     resumeUrl:   response.resume_url,
-    status:      'Screening' as const,
+    status:      pipelineStage as 'Screening',
     createdBy:   candidateOwnerId || undefined,
     metadata: {
       currentLocation:  response.current_location,
@@ -277,8 +312,47 @@ export const applyProfileUpdate = async (
   responseId: string,
   candidateId: string,
   response: CandidateInviteResponse,
-  candidateOwnerId?: string
+  candidateOwnerId?: string,
+  organizationId?: string
 ): Promise<void> => {
+  // ── Background: silently update hr_talent_pool ────────────────────────────
+  // Runs fire-and-forget. Never surfaces errors to the recruiter.
+  // Does NOT affect hr_job_candidates — that's handled below.
+  if (organizationId && response.email) {
+    const talentUpdate: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+      source_platform: 'invite',
+    };
+    if (response.candidate_name)       talentUpdate.candidate_name       = response.candidate_name;
+    if (response.email)                talentUpdate.email                = response.email;
+    if (response.phone)                talentUpdate.phone                = response.phone;
+    if (response.current_location)     talentUpdate.current_location     = response.current_location;
+    if (response.current_company)      talentUpdate.current_company      = response.current_company;
+    if (response.current_designation)  talentUpdate.current_designation  = response.current_designation;
+    if (response.total_experience)     talentUpdate.total_experience     = response.total_experience;
+    if (response.parsed_experience_years != null) talentUpdate.parsed_experience_years = response.parsed_experience_years;
+    if (response.notice_period)        talentUpdate.notice_period        = response.notice_period;
+    if (response.linkedin_url)         talentUpdate.linkedin_url         = response.linkedin_url;
+    if (response.resume_url)           talentUpdate.resume_path          = response.resume_url;
+    if (response.current_salary)       talentUpdate.current_salary       = response.current_salary;
+    if (response.expected_salary)      talentUpdate.expected_salary      = response.expected_salary;
+    if (response.parsed_current_ctc  != null) talentUpdate.parsed_current_ctc  = response.parsed_current_ctc;
+    if (response.parsed_expected_ctc != null) talentUpdate.parsed_expected_ctc = response.parsed_expected_ctc;
+    if (response.top_skills?.length) {
+      talentUpdate.top_skills = response.top_skills.map(s => typeof s === 'string' ? s : s.name);
+    }
+
+    supabase
+      .from('hr_talent_pool')
+      .upsert({ ...talentUpdate, organization_id: organizationId },
+        { onConflict: 'email,organization_id', ignoreDuplicates: false })
+      .then(({ error }) => {
+        if (error) console.warn('[inviteService] pipeline talent pool sync non-fatal:', error.message);
+        else console.log('[inviteService] talent pool silently updated for', response.email);
+      });
+  }
+
+  // ── hr_job_candidates update (existing flow — unchanged) ──────────────────
   const updatePayload: Record<string, any> = {
     updated_at: new Date().toISOString(),
   };

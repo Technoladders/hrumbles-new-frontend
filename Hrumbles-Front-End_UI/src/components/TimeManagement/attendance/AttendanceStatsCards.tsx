@@ -1,75 +1,92 @@
-
-import { Award, Clock, UserCheck, UserX, Circle } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TrendingUp, UserCheck, UserX, Clock, CalendarOff } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface AttendanceStatsProps {
   present: number;
   absent: number;
   late: number;
+  onLeave: number;
+  attendanceRate: number;
+  totalWorkingDays: number;
   isExternal: boolean;
-  timeView: 'weekly' | 'monthly';
+  periodLabel: string;
 }
 
-export const AttendanceStatsCards = ({ present, absent, late, isExternal, timeView }: AttendanceStatsProps) => {
+interface StatCardProps {
+  label: string;
+  value: string | number;
+  sub?: string;
+  icon: React.ReactNode;
+  accent: string;
+  iconColor: string;
+  valueColor?: string;
+}
+
+const StatCard = ({ label, value, sub, icon, accent, iconColor, valueColor }: StatCardProps) => (
+  <div className="relative overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm hover:shadow-md transition-shadow">
+    <div className={cn("absolute -top-4 -right-4 h-20 w-20 rounded-full opacity-10", accent)} />
+    <div className="relative flex items-start justify-between gap-3">
+      <div>
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">{label}</p>
+        <p className={cn("text-3xl font-bold tracking-tight", valueColor ?? "text-gray-900 dark:text-gray-50")}>
+          {value}
+        </p>
+        {sub && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{sub}</p>}
+      </div>
+      <div className={cn("flex-shrink-0 rounded-xl p-2.5 bg-opacity-15", accent)}>
+        <span className={iconColor}>{icon}</span>
+      </div>
+    </div>
+  </div>
+);
+
+export const AttendanceStatsCards = ({
+  present, absent, late, onLeave, attendanceRate,
+  totalWorkingDays, isExternal, periodLabel,
+}: AttendanceStatsProps) => {
+  const rateColor =
+    attendanceRate >= 90 ? 'text-emerald-600 dark:text-emerald-400' :
+    attendanceRate >= 70 ? 'text-amber-600  dark:text-amber-400'    :
+                           'text-red-600    dark:text-red-400';
+
   return (
-    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-      <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-sm font-medium">Present Days</CardTitle>
-          <UserCheck className="w-4 h-4 text-green-600" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{present}</div>
-          <p className="text-xs text-muted-foreground">
-            {timeView === 'weekly' ? 'This week' : 'This month'}
-          </p>
-        </CardContent>
-      </Card>
-      
-      <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200">
-        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-sm font-medium">Absent Days</CardTitle>
-          <UserX className="w-4 h-4 text-red-600" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{absent}</div>
-          <p className="text-xs text-muted-foreground">
-            {timeView === 'weekly' ? 'This week' : 'This month'}
-          </p>
-        </CardContent>
-      </Card>
-      
+    <div className={cn(
+      "grid gap-4",
+      isExternal ? "sm:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-5"
+    )}>
+      <StatCard
+        label="Present Days"  value={present}  sub={periodLabel}
+        icon={<UserCheck className="h-5 w-5" />}
+        accent="bg-emerald-500" iconColor="text-emerald-600 dark:text-emerald-400"
+        valueColor="text-emerald-700 dark:text-emerald-400"
+      />
+      <StatCard
+        label="Absent Days"  value={absent}  sub={periodLabel}
+        icon={<UserX className="h-5 w-5" />}
+        accent="bg-red-500" iconColor="text-red-500 dark:text-red-400"
+        valueColor={absent > 0 ? "text-red-600 dark:text-red-400" : undefined}
+      />
       {!isExternal && (
-        <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Late Days</CardTitle>
-            <Clock className="w-4 h-4 text-yellow-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{late}</div>
-            <p className="text-xs text-muted-foreground">
-              {timeView === 'weekly' ? 'This week' : 'This month'}
-            </p>
-          </CardContent>
-        </Card>
+        <StatCard
+          label="Late Arrivals"  value={late}  sub={periodLabel}
+          icon={<Clock className="h-5 w-5" />}
+          accent="bg-amber-500" iconColor="text-amber-600 dark:text-amber-400"
+          valueColor={late > 0 ? "text-amber-700 dark:text-amber-400" : undefined}
+        />
       )}
-      
-      <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-sm font-medium">Overall Attendance</CardTitle>
-          <Award className="w-4 h-4 text-blue-600" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">
-            {present > 0
-              ? Math.round((present / (present + absent)) * 100)
-              : 0}%
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {timeView === 'weekly' ? 'This week' : 'This month'}
-          </p>
-        </CardContent>
-      </Card>
+      <StatCard
+        label="On Leave"  value={onLeave}
+        sub={`of ${totalWorkingDays} working days`}
+        icon={<CalendarOff className="h-5 w-5" />}
+        accent="bg-blue-500" iconColor="text-blue-600 dark:text-blue-400"
+      />
+      <StatCard
+        label="Attendance Rate"  value={`${attendanceRate}%`}
+        sub={`${present} of ${totalWorkingDays} days`}
+        icon={<TrendingUp className="h-5 w-5" />}
+        accent="bg-violet-500" iconColor="text-violet-600 dark:text-violet-400"
+        valueColor={rateColor}
+      />
     </div>
   );
 };

@@ -10,10 +10,32 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { TimeLog } from './AttendanceReportsPage';
-import { format, isValid } from 'date-fns';
+import { format, isValid, differenceInMinutes, parseISO } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChevronDown, ChevronRight, Coffee, UtensilsCrossed, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// ── Always derive duration from timestamps, never trust stored duration_minutes ──
+const calcDuration = (clockIn: string | null, clockOut: string | null): number | null => {
+  if (!clockIn || !clockOut) return null;
+  try {
+    const mins = differenceInMinutes(parseISO(clockOut), parseISO(clockIn));
+    return mins > 0 ? mins : null;
+  } catch {
+    return null;
+  }
+};
+
+// ── Also compute break duration from its own timestamps when available ─────────
+const calcBreakDuration = (start: string | null, end: string | null, stored: number | null): number | null => {
+  if (start && end) {
+    try {
+      const mins = differenceInMinutes(parseISO(end), parseISO(start));
+      if (mins > 0) return mins;
+    } catch { /* fall through */ }
+  }
+  return stored ?? null;
+};
 
 interface DailyAttendanceReportProps {
   data: TimeLog[];
@@ -121,18 +143,21 @@ const DailyAttendanceReport: React.FC<DailyAttendanceReportProps> = ({ data }) =
                     const isExpanded = expandedRows.has(log.id);
                     const hasBreaks = log.break_logs && log.break_logs.length > 0;
 
-                    // Aggregate break data
+                    // Compute duration from timestamps — ignore stored duration_minutes
+                    const computedDuration = calcDuration(log.clock_in_time, log.clock_out_time);
+
+                    // Aggregate break data — prefer timestamp-derived break durations
                     const totalBreakMins = log.break_logs.reduce(
-                      (sum, b) => sum + (b.duration_minutes ?? 0),
+                      (sum, b) => sum + (calcBreakDuration(b.break_start_time, b.break_end_time, b.duration_minutes) ?? 0),
                       0
                     );
-                    const netMins = (log.duration_minutes ?? 0) - totalBreakMins;
+                    const netMins = (computedDuration ?? 0) - totalBreakMins;
 
                     // Group breaks by type for summary badges
                     const breaksByType = log.break_logs.reduce<Record<string, number>>(
                       (acc, b) => {
                         const t = b.break_type.toLowerCase();
-                        acc[t] = (acc[t] ?? 0) + (b.duration_minutes ?? 0);
+                        acc[t] = (acc[t] ?? 0) + (calcBreakDuration(b.break_start_time, b.break_end_time, b.duration_minutes) ?? 0);
                         return acc;
                       },
                       {}
@@ -167,7 +192,7 @@ const DailyAttendanceReport: React.FC<DailyAttendanceReportProps> = ({ data }) =
                           </TableCell>
                           <TableCell>{formatTime(log.clock_in_time)}</TableCell>
                           <TableCell>{formatTime(log.clock_out_time)}</TableCell>
-                          <TableCell>{formatDuration(log.duration_minutes)}</TableCell>
+                          <TableCell>{formatDuration(computedDuration)}</TableCell>
 
                           {/* Break Time cell — shows type badges */}
                           <TableCell>
@@ -202,7 +227,7 @@ const DailyAttendanceReport: React.FC<DailyAttendanceReportProps> = ({ data }) =
                                 netMins < 0 ? 'text-red-500' : 'text-emerald-600'
                               )}
                             >
-                              {log.duration_minutes !== null
+                              {computedDuration !== null
                                 ? formatDuration(Math.max(0, netMins))
                                 : '—'}
                             </span>
@@ -264,7 +289,7 @@ const DailyAttendanceReport: React.FC<DailyAttendanceReportProps> = ({ data }) =
                                               {formatTime(b.break_end_time)}
                                             </td>
                                             <td className="px-3 py-2 font-medium text-gray-700">
-                                              {formatShortDuration(b.duration_minutes)}
+                                              {formatShortDuration(calcBreakDuration(b.break_start_time, b.break_end_time, b.duration_minutes))}
                                             </td>
                                           </tr>
                                         );

@@ -49,9 +49,10 @@ import { Spinner } from '@chakra-ui/react';
 import {
   Search, SlidersHorizontal, RotateCcw, Check, ArrowLeft,
   FolderOpen, UploadCloud, List, X, PanelLeftClose, PanelLeftOpen,
-  Users, DatabaseZap, ListPlus, Loader2,
+  Users, DatabaseZap, ListPlus, Loader2, LayoutGrid, Table2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { KanbanView } from '@/components/sales/contacts-kanban/KanbanView';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface RecentSearch {
@@ -162,6 +163,11 @@ export default function TanstackContactsPage() {
   const [isImportOpen,     setIsImportOpen]     = useState(false);
   const [headerSearch,     setHeaderSearch]     = useState('');
 
+    const [viewMode, setViewMode] = useState<'table' | 'kanban'>(() =>
+    (sessionStorage.getItem('contacts_view') as 'table' | 'kanban') || 'table'
+  );
+ 
+
   // ── Column preferences ───────────────────────────────────────────────────────
   const [columnVisibility,    setColumnVisibility]    = useState<VisibilityState>(DEFAULT_VISIBILITY);
   const [columnOrder,         setColumnOrder]         = useState<ColumnOrderState>(DEFAULT_ORDER);
@@ -224,6 +230,10 @@ export default function TanstackContactsPage() {
   // ── Reload correct recent-search history when mode changes ───────────────────
   useEffect(() => {
     setRecentSearches(loadRecentSearches(isDiscoveryMode));
+  }, [isDiscoveryMode]);
+
+    useEffect(() => {
+    if (isDiscoveryMode) setViewMode('table');
   }, [isDiscoveryMode]);
 
   // ── User preferences ─────────────────────────────────────────────────────────
@@ -551,7 +561,34 @@ export default function TanstackContactsPage() {
     queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
     setListModalOpen(false);
   };
-      const handleListAdd = async (targetFileIds: string[]) => {
+
+// ── Bulk: Add selected CRM contacts to lists (no discovery save needed) ──────
+const handleBulkCRMAddToList = async (targetFileIds: string[]) => {
+  const selectedRows = table.getSelectedRowModel().rows;
+  if (!selectedRows.length || !targetFileIds.length) return;
+  let added = 0, failed = 0;
+  for (const row of selectedRows) {
+    const contactId = row.original?.id;
+    if (!contactId) { failed++; continue; }
+    for (const fid of targetFileIds) {
+      const { error } = await supabase
+        .from('contact_workspace_files')
+        .insert({ contact_id: contactId, file_id: fid, added_by: user.id });
+      if (!error) { added++; }
+      else if (error.code !== '23505') { failed++; } // ignore duplicates
+    }
+  }
+  toast({
+    title: `${added} contact${added !== 1 ? 's' : ''} added`,
+    description: failed > 0 ? `${failed} failed` : undefined,
+  });
+  table.resetRowSelection();
+  queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+  queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
+  setListModalOpen(false);
+};
+
+const handleListAdd = async (targetFileIds: string[]) => {
   if (!targetFileIds.length) {
     toast({ variant: 'destructive', title: 'No list selected' });
     return;
@@ -560,6 +597,7 @@ export default function TanstackContactsPage() {
   try {
     let contactId: string | null = null;
 
+    // ── Step 1: Ensure contact exists ─────────────────────────
     if (isFromDiscovery && selectedContact?.original_data) {
       const savedContact = await saveDiscoveryToCRM(
         selectedContact.original_data,
@@ -569,36 +607,73 @@ export default function TanstackContactsPage() {
 
       if (!savedContact?.id) throw new Error('No ID returned');
 
-      await saveContactAvailability(savedContact.id, selectedContact.original_data);
       contactId = savedContact.id;
-
-      toast({ title: 'Saved', description: `Added to ${targetFileIds.length} list${targetFileIds.length !== 1 ? 's' : ''}.` });
     } 
     else if (selectedContact?.id) {
       contactId = selectedContact.id;
-      toast({ title: `Added to ${targetFileIds.length} list${targetFileIds.length !== 1 ? 's' : ''}` });
     } 
     else {
       throw new Error('No valid contact');
     }
 
+    // ── Step 2: Add to lists with duplicate handling ──────────
+    let added = 0;
+    let alreadyExists = 0;
+
     for (const fileId of targetFileIds) {
-      const { error } = await supabase.from('contact_workspace_files').upsert({
-        contact_id: contactId,
-        file_id: fileId,
-        added_by: user.id,
-      });
-      if (error) throw error;
+      const { error } = await supabase
+        .from('contact_workspace_files')
+        .insert({
+          contact_id: contactId,
+          file_id: fileId,
+          added_by: user.id,
+        });
+
+      if (error) {
+        if (error.code === '23505') {
+          // ✅ Already exists
+          alreadyExists++;
+          continue;
+        } else {
+          throw error;
+        }
+      }
+
+      added++;
     }
 
+    // ── Step 3: Smart Toast Messaging ─────────────────────────
+    if (added > 0 && alreadyExists > 0) {
+      toast({
+        title: 'Partially added',
+        description: `${added} added · ${alreadyExists} already in list`,
+      });
+    } 
+    else if (added > 0) {
+      toast({
+        title: 'Added to list',
+        description: `${added} list${added > 1 ? 's' : ''}`,
+      });
+    } 
+    else if (alreadyExists > 0) {
+      toast({
+        title: 'Already added',
+        description: 'Contact already exists in selected list',
+      });
+    }
+
+    // ── Step 4: Refresh ──────────────────────────────────────
     queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
     queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
     queryClient.invalidateQueries({ queryKey: ['contact-list-memberships'] });
-  } 
-  catch (err: any) {
-    toast({ variant: 'destructive', title: 'Failed', description: err.message });
-  } 
-  finally {
+
+  } catch (err: any) {
+    toast({
+      variant: 'destructive',
+      title: 'Failed',
+      description: err.message,
+    });
+  } finally {
     setListModalOpen(false);
     setIsFromDiscovery(false);
     setSelectedContact(null);
@@ -855,6 +930,42 @@ export default function TanstackContactsPage() {
             </div>
           )}
 
+                    {/* ── View mode toggle (Table / Kanban) — CRM mode only ── */}
+          {!fileId && !isDiscoveryMode && (
+            <div className="flex items-center bg-slate-100 rounded-xl p-0.5 gap-0.5">
+              <button
+                onClick={() => {
+                  setViewMode('table');
+                  sessionStorage.setItem('contacts_view', 'table');
+                }}
+                className={cn(
+                  'flex items-center justify-center h-7 w-7 rounded-lg transition-all',
+                  viewMode === 'table'
+                    ? 'bg-white text-slate-700 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-600',
+                )}
+                title="Table view"
+              >
+                <Table2 size={13} />
+              </button>
+              <button
+                onClick={() => {
+                  setViewMode('kanban');
+                  sessionStorage.setItem('contacts_view', 'kanban');
+                }}
+                className={cn(
+                  'flex items-center justify-center h-7 w-7 rounded-lg transition-all',
+                  viewMode === 'kanban'
+                    ? 'bg-white text-indigo-600 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-600',
+                )}
+                title="Kanban board"
+              >
+                <LayoutGrid size={13} />
+              </button>
+            </div>
+          )}
+
           <div className="flex-1" />
 
           {/* Active filter badge */}
@@ -939,112 +1050,128 @@ export default function TanstackContactsPage() {
           )}
 
           {/* Table area */}
+              {/* Table / Kanban area */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-            {/* Loading */}
-            {isLoading && queryEnabled ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3">
-                <Spinner size="xl" color="purple.500" />
-                <p className="text-xs text-slate-500 font-medium">Loading contacts…</p>
-              </div>
-
-            /* Pre-search empty state */
-            ) : !queryEnabled ? (
-              <SearchEmptyState
-                recentSearches={recentSearches}
-                onApplySearch={handleApplyRecentSearch}
-                onRemoveSearch={handleRemoveRecentSearch}
-                isDiscoveryMode={isDiscoveryMode}
-                pendingFilterChips={pendingDiscoveryChips}
-                pendingFilterCount={pendingDiscoveryCount}
-                onRunSearch={isDiscoveryMode ? () => {
-                  // Programmatically trigger Run Search in sidebar via Redux
-                  // The sidebar's "Run Search" fn reads local state — we dispatch
-                  // a signal by temporarily focusing; actual trigger via footer btn
-                  document.querySelector<HTMLButtonElement>('[data-run-search]')?.click();
-                } : undefined}
-              />
-
-            /* Results */
+            {/* ── KANBAN VIEW ─────────────────────────────────────────── */}
+            {viewMode === 'kanban' && !isDiscoveryMode ? (
+              <KanbanView fileId={activeFileId} />
             ) : (
+              /* ── TABLE VIEW (everything else remains exactly the same) ── */
               <>
-                {/* ── Discovery bulk action bar ──────────────────────────────── */}
-                {isDiscoveryMode && table.getSelectedRowModel().rows.length > 0 && (
-                  <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-indigo-50 border-b border-indigo-100 z-10">
-                    <span className="text-xs font-semibold text-indigo-700 mr-1">
-                      {table.getSelectedRowModel().rows.length} selected
-                    </span>
-                    <button
-                      onClick={handleBulkSaveToCRM}
-                      disabled={isBulkSaving}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-60"
-                    >
-                      {isBulkSaving
-                        ? <Loader2 size={12} className="animate-spin" />
-                        : <DatabaseZap size={12} />
-                      }
-                      Save to CRM
-                    </button>
-                    <button
-                      onClick={() => { setIsFromDiscovery(true); setListModalOpen(true); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 transition-colors"
-                    >
-                      <ListPlus size={12} /> Add to List
-                    </button>
-                    <button
-                      onClick={() => table.resetRowSelection()}
-                      className="ml-auto text-indigo-400 hover:text-indigo-600 p-1 rounded"
-                    >
-                      <X size={14} />
-                    </button>
+                {/* Loading */}
+                {isLoading && queryEnabled ? (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-3">
+                    <Spinner size="xl" color="purple.500" />
+                    <p className="text-xs text-slate-500 font-medium">Loading contacts…</p>
                   </div>
-                )}
 
-                <div className={cn(
-                  'flex-1 overflow-hidden transition-opacity duration-200',
-                  isPendingFilter && 'opacity-60 pointer-events-none'
-                )}>
-                  {tableData.length === 0 && !isPendingFilter ? (
-                    isDiscoveryMode ? (
-                      <SearchEmptyState
-                        recentSearches={recentSearches}
-                        onApplySearch={handleApplyRecentSearch}
-                        onRemoveSearch={handleRemoveRecentSearch}
-                        isDiscoveryMode={true}
-                        pendingFilterChips={pendingDiscoveryChips}
-                        pendingFilterCount={pendingDiscoveryCount}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full py-20 text-center">
-                        <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-4">
-                          <Users className="h-5 w-5 text-slate-400" />
-                        </div>
-                        <p className="text-sm font-medium text-slate-600 mb-1">No contacts found</p>
-                        <p className="text-xs text-slate-400 mb-4">Try adjusting your filters</p>
-                        {activeFilterCount > 0 && (
+                /* Pre-search empty state */
+                ) : !queryEnabled ? (
+                  <SearchEmptyState
+                    recentSearches={recentSearches}
+                    onApplySearch={handleApplyRecentSearch}
+                    onRemoveSearch={handleRemoveRecentSearch}
+                    isDiscoveryMode={isDiscoveryMode}
+                    pendingFilterChips={pendingDiscoveryChips}
+                    pendingFilterCount={pendingDiscoveryCount}
+                    onRunSearch={isDiscoveryMode ? () => {
+                      document.querySelector<HTMLButtonElement>('[data-run-search]')?.click();
+                    } : undefined}
+                  />
+
+                /* Results */
+                ) : (
+                  <>
+                    {/* ── Bulk action bar — works in both CRM and Discovery ──────────────────────────────── */}
+                    {table.getSelectedRowModel().rows.length > 0 && (
+                      <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-indigo-50 border-b border-indigo-100 z-10">
+                        <span className="text-xs font-semibold text-indigo-700 mr-1">
+                          {table.getSelectedRowModel().rows.length} selected
+                        </span>
+
+                        {/* Save to CRM — only in Discovery mode */}
+                        {isDiscoveryMode && (
                           <button
-                            onClick={() => { clearFilters(); dispatch(setFilters({})); setHasSearched(false); }}
-                            className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                            onClick={handleBulkSaveToCRM}
+                            disabled={isBulkSaving}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-60"
                           >
-                            Clear all filters
+                            {isBulkSaving
+                              ? <Loader2 size={12} className="animate-spin" />
+                              : <DatabaseZap size={12} />
+                            }
+                            Save to CRM
                           </button>
                         )}
-                      </div>
-                    )
-                  ) : (
-                    <div
-                      className="flex-1 overflow-hidden bg-white rounded-tl-xl border border-slate-200 border-b-0 shadow-sm"
-                      style={{ height: 'calc(100% - 0px)' }}
-                    >
-                      <DataTable table={table} />
-                    </div>
-                  )}
-                </div>
 
-                {tableData.length > 0 && (
-                  <div className="flex-shrink-0 bg-white border border-slate-200 rounded-bl-xl px-5 py-2.5 shadow-sm">
-                    <DataTablePagination table={table} />
-                  </div>
+                        {/* Add to List — works in both modes */}
+                        <button
+                          onClick={() => {
+                            setIsFromDiscovery(isDiscoveryMode);   // ← Important fix
+                            setListModalOpen(true);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 transition-colors"
+                        >
+                          <ListPlus size={12} /> Add to List
+                        </button>
+
+                        <button
+                          onClick={() => table.resetRowSelection()}
+                          className="ml-auto text-indigo-400 hover:text-indigo-600 p-1 rounded"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
+
+                    <div className={cn(
+                      'flex-1 overflow-hidden transition-opacity duration-200',
+                      isPendingFilter && 'opacity-60 pointer-events-none'
+                    )}>
+                      {tableData.length === 0 && !isPendingFilter ? (
+                        isDiscoveryMode ? (
+                          <SearchEmptyState
+                            recentSearches={recentSearches}
+                            onApplySearch={handleApplyRecentSearch}
+                            onRemoveSearch={handleRemoveRecentSearch}
+                            isDiscoveryMode={true}
+                            pendingFilterChips={pendingDiscoveryChips}
+                            pendingFilterCount={pendingDiscoveryCount}
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center h-full py-20 text-center">
+                            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-4">
+                              <Users className="h-5 w-5 text-slate-400" />
+                            </div>
+                            <p className="text-sm font-medium text-slate-600 mb-1">No contacts found</p>
+                            <p className="text-xs text-slate-400 mb-4">Try adjusting your filters</p>
+                            {activeFilterCount > 0 && (
+                              <button
+                                onClick={() => { clearFilters(); dispatch(setFilters({})); setHasSearched(false); }}
+                                className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                              >
+                                Clear all filters
+                              </button>
+                            )}
+                          </div>
+                        )
+                      ) : (
+                        <div
+                          className="flex-1 overflow-hidden bg-white rounded-tl-xl border border-slate-200 border-b-0 shadow-sm"
+                          style={{ height: 'calc(100% - 0px)' }}
+                        >
+                          <DataTable table={table} />
+                        </div>
+                      )}
+                    </div>
+
+                    {tableData.length > 0 && (
+                      <div className="flex-shrink-0 bg-white border border-slate-200 rounded-bl-xl px-5 py-2.5 shadow-sm">
+                        <DataTablePagination table={table} />
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -1078,16 +1205,22 @@ export default function TanstackContactsPage() {
           />
         )}
         {/* Open list modal for bulk without a specific contact */}
-        {!selectedContact && listModalOpen && isDiscoveryMode && (
-          <AddToListModal
-            open={listModalOpen}
-            onOpenChange={open => { setListModalOpen(open); if (!open) setIsFromDiscovery(false); }}
-            personName={`${table.getSelectedRowModel().rows.length} people`}
-            contactIds={[]}
-            onConfirm={handleBulkAddToList}
-            isFromDiscovery={true}
-          />
-        )}
+{/* Open list modal for bulk without a specific contact — CRM + Discovery */}
+{!selectedContact && listModalOpen && (
+  <AddToListModal
+    open={listModalOpen}
+    onOpenChange={open => { setListModalOpen(open); if (!open) setIsFromDiscovery(false); }}
+    personName={`${table.getSelectedRowModel().rows.length} people`}
+    contactIds={
+      // CRM mode: pass real contact IDs from selected rows
+      !isDiscoveryMode
+        ? table.getSelectedRowModel().rows.map(r => r.original?.id).filter(Boolean)
+        : []
+    }
+    onConfirm={isDiscoveryMode ? handleBulkAddToList : handleBulkCRMAddToList}
+    isFromDiscovery={isDiscoveryMode}
+  />
+)}
 
         <ContactImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} fileId={activeFileId} />
 

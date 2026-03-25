@@ -263,10 +263,10 @@ export default function CandidateApplicationPage() {
 
   // Track which fields were prefilled by AI so we can show the badge
   const [parsedFields, setParsedFields]   = useState<Set<string>>(new Set());
-  // Raw AI output stored to pass to edge function for audit
   const [resumeParsedData, setResumeParsedData] = useState<Record<string, any> | null>(null);
-  // Full resume text (passed to edge function for hr_talent_pool.resume_text)
   const [resumeText, setResumeText] = useState('');
+  // If invite pre-filled email but resume has a different one, show it as a suggestion
+  const [parsedEmail, setParsedEmail]     = useState<string>('');
 
   // Form fields
   const [firstName,           setFirstName]           = useState('');
@@ -342,18 +342,48 @@ export default function CandidateApplicationPage() {
       }
     };
 
-    // Always prefill these from resume (authoritative)
+    // Always prefill these from resume (authoritative source)
     if (fields.firstName)          { trySet('firstName',          setFirstName,          fields.firstName); }
     if (fields.lastName)           { trySet('lastName',           setLastName,           fields.lastName); }
     if (fields.currentCompany)     { trySet('currentCompany',     setCurrentCompany,     fields.currentCompany); }
     if (fields.currentDesignation) { trySet('currentDesignation', setCurrentDesignation, fields.currentDesignation); }
     if (fields.linkedInUrl)        { trySet('linkedInUrl',        setLinkedInUrl,        fields.linkedInUrl); }
 
-    // Only prefill these if currently empty (invite may have pre-populated them)
-    trySetIfEmpty('email',          email,          setEmail,          fields.email);
-    trySetIfEmpty('phone',          phone || '',    setPhone,          fields.phone);
-    trySetIfEmpty('currentLocation',currentLocation,setCurrentLocation,fields.currentLocation);
-    trySetIfEmpty('noticePeriod',   noticePeriod,   setNoticePeriod,   fields.noticePeriod);
+    // Email — resume email wins over invite-prefilled email.
+    // The invite email may be the recruiter's placeholder (e.g. steve@beyo.com),
+    // while the resume has the candidate's real email.
+    // Email — if the field already has a value (from invite), don't override.
+    // Instead store the resume email as a visible suggestion so the candidate can choose.
+    if (fields.email) {
+      if (!email.trim()) {
+        trySet('email', setEmail, fields.email);
+      } else if (fields.email.toLowerCase() !== email.toLowerCase()) {
+        // Invite email differs from resume email — surface it as a hint
+        setParsedEmail(fields.email);
+      }
+    }
+
+    // Phone — normalise to E.164 for react-phone-number-input.
+    // AI returns the phone as-is from the resume (e.g. "8328951154" or "+918328951154").
+    // If no + prefix: a 10-digit number is assumed Indian (+91), others passed as-is.
+    if (fields.phone && (!phone || phone === '')) {
+      const rawPhone = String(fields.phone).replace(/[\s\-\(\)]/g, '').trim();
+      let e164: string | null = null;
+      if (rawPhone.startsWith('+')) {
+        e164 = rawPhone;
+      } else if (/^\d{10}$/.test(rawPhone)) {
+        // 10-digit bare number — default to India (+91)
+        e164 = `+91${rawPhone}`;
+      } else if (/^\d{11,}$/.test(rawPhone)) {
+        // 11+ digits with no + — add + directly
+        e164 = `+${rawPhone}`;
+      }
+      if (e164) { setPhone(e164); filled.add('phone'); }
+    }
+
+    // Location — only if empty
+    trySetIfEmpty('currentLocation', currentLocation, setCurrentLocation, fields.currentLocation);
+    trySetIfEmpty('noticePeriod',    noticePeriod,    setNoticePeriod,    fields.noticePeriod);
 
     // Salary — only if empty
     if (!currentSalary  && fields.currentSalary  != null) { setCurrentSalary(String(fields.currentSalary));  filled.add('currentSalary'); }
@@ -424,7 +454,10 @@ export default function CandidateApplicationPage() {
           console.warn('[CandidateApplicationPage] resume parse non-fatal:', msg);
           setParseError('Could not parse resume — please fill in your details manually.');
         } else {
+          // Store full parsed data (including rich fields) for submission
           setResumeParsedData(parseData.fields);
+          // Store raw resume text — passed to edge function for resume_text column
+          if (parseData.resumeText) setResumeText(parseData.resumeText);
           prefillFromParsed(parseData.fields);
         }
       } catch (pe: any) {
@@ -487,10 +520,15 @@ export default function CandidateApplicationPage() {
         // New fields
         currentCompany:         currentCompany.trim()     || undefined,
         currentDesignation:     currentDesignation.trim() || undefined,
-        // AI parsed fields (skills, resumeText passed through for talent pool)
-        skills:                 resumeParsedData?.skills  || [],
-        resumeText:             resumeText || '',
-        resumeParsedFields:     resumeParsedData          || null,
+        // AI parsed fields — all passed to edge function for hr_talent_pool
+        skills:                resumeParsedData?.skills               || [],
+        resumeText:            resumeText                             || '',
+        professionalSummary:   resumeParsedData?.professionalSummary  || [],
+        workExperience:        resumeParsedData?.workExperience        || [],
+        education:             resumeParsedData?.education             || [],
+        projects:              resumeParsedData?.projects              || [],
+        certifications:        resumeParsedData?.certifications        || [],
+        resumeParsedFields:    resumeParsedData                        || null,
         ...(isPipeline ? { consentGiven: true, consentAt: new Date().toISOString() } : {}),
       };
 
@@ -787,7 +825,18 @@ export default function CandidateApplicationPage() {
                   <input className="cap-inp" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Doe" style={ipt(!!errs.lastName)} />
                 </Fld>
                 <Fld label="Email Address" required error={errs.email} parsed={p('email')}>
-                  <input className="cap-inp" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" style={ipt(!!errs.email)} />
+                  <input className="cap-inp" type="email" value={email} onChange={e => { setEmail(e.target.value); setParsedEmail(''); }} placeholder="you@example.com" style={ipt(!!errs.email)} />
+                  {parsedEmail && (
+                    <div style={{ marginTop: '5px', padding: '6px 10px', borderRadius: '7px', background: P.teal50, border: `1px solid ${P.teal200}`, display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
+                      <Sparkles size={11} color={P.teal700} style={{ flexShrink: 0 }} />
+                      <span style={{ fontSize: '11px', color: P.teal700 }}>Resume email: <strong>{parsedEmail}</strong></span>
+                      <button type="button"
+                        onClick={() => { setEmail(parsedEmail); setParsedEmail(''); }}
+                        style={{ marginLeft: 'auto', fontSize: '10px', fontWeight: 700, color: P.teal700, background: P.teal200, border: 'none', borderRadius: '5px', padding: '2px 8px', cursor: 'pointer' }}>
+                        Use this
+                      </button>
+                    </div>
+                  )}
                 </Fld>
                 <Fld label="Phone Number" required error={errs.phone} parsed={p('phone')}>
                   <div className={`cap-phone${errs.phone ? ' cap-phone-err' : ''}`}>

@@ -17,7 +17,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { GitBranch, Layers } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
@@ -35,12 +34,12 @@ interface Employee {
   department_name: string | null;
 }
 
-interface CreateTeamDialogProps {
+interface EditTeamDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  team: Team;
   allTeams: Team[];
-  parentTeam?: Team;
+  onSuccess: () => void;
 }
 
 // ── Shared field wrapper ──────────────────────────────────────────────────────
@@ -56,8 +55,8 @@ const Field: React.FC<{ label: string; hint?: string; children: React.ReactNode 
   </div>
 );
 
-const CreateTeamDialog: React.FC<CreateTeamDialogProps> = ({
-  open, onOpenChange, onSuccess, allTeams, parentTeam,
+const EditTeamDialog: React.FC<EditTeamDialogProps> = ({
+  open, onOpenChange, team, allTeams, onSuccess,
 }) => {
   const [name, setName]               = useState('');
   const [description, setDescription] = useState('');
@@ -66,10 +65,14 @@ const CreateTeamDialog: React.FC<CreateTeamDialogProps> = ({
   const [loading, setLoading]         = useState(false);
   const { toast } = useToast();
 
-  // ── Reset on open ──────────────────────────────────────────────────────────
+  // ── Populate form ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (open) { setName(''); setDescription(''); setTeamLeadId(NO_LEAD); }
-  }, [open]);
+    if (open) {
+      setName(team.name);
+      setDescription(team.description ?? '');
+      setTeamLeadId(team.team_lead_id && team.team_lead_id !== '' ? team.team_lead_id : NO_LEAD);
+    }
+  }, [open, team]);
 
   // ── Fetch employees with designation + department ─────────────────────────
   useEffect(() => {
@@ -103,7 +106,7 @@ const CreateTeamDialog: React.FC<CreateTeamDialogProps> = ({
       });
   }, [open]);
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
+  // ── Save ───────────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -112,42 +115,42 @@ const CreateTeamDialog: React.FC<CreateTeamDialogProps> = ({
       const authData = getAuthDataFromLocalStorage();
       if (!authData) throw new Error('Auth data missing');
 
-      const level    = parentTeam ? parentTeam.level + 1 : 0;
-      const teamType = parentTeam ? 'sub_team' : 'team';
-
-      const payload = {
+      const updates = {
         name: name.trim(),
         description: description.trim() || null,
-        parent_team_id: parentTeam?.id ?? null,
-        team_type: teamType,
-        level,
-        organization_id: authData.organization_id,
         team_lead_id: teamLeadId === NO_LEAD ? null : teamLeadId,
-        is_active: true,
+        updated_at: new Date().toISOString(),
       };
 
-      const { data: newTeam, error } = await supabase
-        .from('hr_teams').insert([payload]).select().single();
+      const { error } = await supabase.from('hr_teams').update(updates).eq('id', team.id);
       if (error) throw error;
 
       await supabase.from('hr_team_audit_logs').insert({
-        team_id: newTeam.id,
-        action_type: 'team_created',
-        action_details: { team_data: payload, created_by: authData.userId },
+        team_id: team.id,
+        action_type: 'team_updated',
+        action_details: { changes: updates, updated_by: authData.userId },
         performed_by: authData.userId,
         organization_id: authData.organization_id,
       });
 
-      toast({ title: 'Team created', description: `"${payload.name}" was created.` });
+      toast({ title: 'Team updated', description: `"${name.trim()}" saved.` });
       onSuccess();
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message ?? 'Failed to create team.', variant: 'destructive' });
+      toast({ title: 'Error', description: err.message ?? 'Failed to update.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
-  const isSubTeam = !!parentTeam;
+  const parentTeam = team.parent_team_id
+    ? allTeams.find(t => t.id === team.parent_team_id)
+    : null;
+
+  const typePill: Record<string, string> = {
+    department: 'bg-violet-100 text-violet-700 border-violet-200',
+    team:       'bg-sky-100 text-sky-700 border-sky-200',
+    sub_team:   'bg-emerald-100 text-emerald-700 border-emerald-200',
+  };
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -156,42 +159,38 @@ const CreateTeamDialog: React.FC<CreateTeamDialogProps> = ({
 
         {/* Gradient header */}
         <div className="bg-gradient-to-r from-violet-600 to-pink-600 px-6 py-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-white/20 p-2">
-              {isSubTeam
-                ? <GitBranch className="h-4 w-4 text-white" />
-                : <Layers className="h-4 w-4 text-white" />
-              }
-            </div>
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <DialogTitle className="text-white text-base font-bold">
-                {isSubTeam ? 'Create Sub-Team' : 'Create New Team'}
-              </DialogTitle>
+              <DialogTitle className="text-white text-base font-bold">Edit Team</DialogTitle>
               <DialogDescription className="text-violet-200 text-xs mt-0.5">
-                {isSubTeam
-                  ? `Nested under "${parentTeam!.name}" at level ${parentTeam!.level + 1}`
-                  : 'New root-level team in your organisation'}
+                {parentTeam ? `Sub-team of "${parentTeam.name}"` : 'Root-level team'}
               </DialogDescription>
             </div>
+            <span className={cn(
+              'mt-0.5 flex-shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border capitalize',
+              typePill[team.team_type] ?? 'bg-white/20 text-white border-white/30',
+            )}>
+              {team.team_type.replace('_', ' ')}
+            </span>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 bg-white">
 
           {/* Parent team — read only */}
-          {isSubTeam && (
+          {parentTeam && (
             <Field label="Parent Team">
-              <Input value={parentTeam!.name} readOnly
+              <Input value={parentTeam.name} readOnly
                 className="bg-slate-50 text-slate-500 cursor-not-allowed border-slate-200 h-8 text-sm" />
             </Field>
           )}
 
           {/* Team name */}
-          <Field label={isSubTeam ? 'Sub-Team Name' : 'Team Name'} hint="required">
+          <Field label="Team Name" hint="required">
             <Input
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder={isSubTeam ? 'e.g. Backend Squad' : 'e.g. Engineering'}
+              placeholder="e.g. Engineering"
               required autoFocus
               className="h-8 text-sm border-slate-200 focus-visible:ring-violet-400"
             />
@@ -202,6 +201,7 @@ const CreateTeamDialog: React.FC<CreateTeamDialogProps> = ({
             <Select value={teamLeadId} onValueChange={setTeamLeadId}>
               <SelectTrigger className="h-auto min-h-8 text-sm border-slate-200 focus:ring-violet-400 py-1.5">
                 <SelectValue placeholder="Select a team lead…">
+                  {/* Show rich label for the currently selected lead */}
                   {teamLeadId !== NO_LEAD && (() => {
                     const emp = employees.find(e => e.id === teamLeadId);
                     if (!emp) return null;
@@ -221,7 +221,7 @@ const CreateTeamDialog: React.FC<CreateTeamDialogProps> = ({
                 </SelectValue>
               </SelectTrigger>
               <SelectContent className="max-h-64">
-                {/* Sentinel — must NOT be "" */}
+                {/* Sentinel — Radix throws on value="" */}
                 <SelectItem value={NO_LEAD}>
                   <span className="text-slate-400 italic text-sm">No lead assigned</span>
                 </SelectItem>
@@ -266,7 +266,7 @@ const CreateTeamDialog: React.FC<CreateTeamDialogProps> = ({
               className="h-8 text-xs bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-700 hover:to-pink-700 text-white border-0 shadow-sm px-4">
               {loading
                 ? <div className="animate-spin h-3 w-3 rounded-full border-b-2 border-white" />
-                : isSubTeam ? 'Create Sub-Team' : 'Create Team'}
+                : 'Save Changes'}
             </Button>
           </div>
         </form>
@@ -275,4 +275,4 @@ const CreateTeamDialog: React.FC<CreateTeamDialogProps> = ({
   );
 };
 
-export default CreateTeamDialog;
+export default EditTeamDialog;

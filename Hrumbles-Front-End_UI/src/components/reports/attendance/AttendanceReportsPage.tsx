@@ -6,7 +6,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, User as UserIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { startOfMonth, endOfMonth, format } from 'date-fns';
+import { startOfMonth, endOfMonth, format, differenceInMinutes, parseISO } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -157,19 +157,43 @@ const AttendanceReportsPage: React.FC = () => {
     };
   });
 
+  // ── Authoritative duration helpers (used everywhere in this file) ──────────
+  // Always derive from timestamps — never trust stored duration_minutes.
+  const computeDuration = (clockIn: string | null, clockOut: string | null): number | null => {
+    if (!clockIn || !clockOut) return null;
+    try {
+      const mins = differenceInMinutes(parseISO(clockOut), parseISO(clockIn));
+      return mins > 0 ? mins : null;
+    } catch { return null; }
+  };
+
+  const computeBreakDuration = (start: string | null, end: string | null, stored: number | null): number => {
+    if (start && end) {
+      try {
+        const mins = differenceInMinutes(parseISO(end), parseISO(start));
+        if (mins > 0) return mins;
+      } catch { /* fall through */ }
+    }
+    return stored ?? 0;
+  };
+
   const exportToCSV = () => {
     const csvData = filteredLogs.map((log) => {
-      const totalBreakMins = log.break_logs.reduce((sum, b) => sum + (b.duration_minutes ?? 0), 0);
-      const netMinutes = (log.duration_minutes ?? 0) - totalBreakMins;
+      const workMins       = computeDuration(log.clock_in_time, log.clock_out_time);
+      const totalBreakMins = log.break_logs.reduce(
+        (sum, b) => sum + computeBreakDuration(b.break_start_time, b.break_end_time, b.duration_minutes),
+        0
+      );
+      const netMinutes = workMins !== null ? workMins - totalBreakMins : null;
       return {
-        Date: format(new Date(log.date), 'yyyy-MM-dd'),
-        Employee: log.employee_name,
-        'Clock In': log.clock_in_time || 'N/A',
-        'Clock Out': log.clock_out_time || 'N/A',
-        'Working Time (min)': log.duration_minutes ?? 'N/A',
-        'Break Time (min)': totalBreakMins,
-        'Net Time (min)': netMinutes >= 0 ? netMinutes : 'N/A',
-        Billable: log.is_billable ? 'Yes' : 'No',
+        Date:                format(new Date(log.date), 'yyyy-MM-dd'),
+        Employee:            log.employee_name,
+        'Clock In':          log.clock_in_time  || 'N/A',
+        'Clock Out':         log.clock_out_time || 'N/A',
+        'Working Time (min)': workMins ?? 'N/A',
+        'Break Time (min)':  totalBreakMins,
+        'Net Time (min)':    netMinutes !== null && netMinutes >= 0 ? netMinutes : 'N/A',
+        Billable:            log.is_billable ? 'Yes' : 'No',
       };
     });
     const csv = Papa.unparse(csvData, { header: true });
@@ -186,13 +210,17 @@ const AttendanceReportsPage: React.FC = () => {
     (doc as any).autoTable({
       head: [['Date', 'Employee', 'Clock In', 'Clock Out', 'Working (min)', 'Break (min)', 'Billable']],
       body: filteredLogs.map((log) => {
-        const totalBreakMins = log.break_logs.reduce((sum, b) => sum + (b.duration_minutes ?? 0), 0);
+        const workMins       = computeDuration(log.clock_in_time, log.clock_out_time);
+        const totalBreakMins = log.break_logs.reduce(
+          (sum, b) => sum + computeBreakDuration(b.break_start_time, b.break_end_time, b.duration_minutes),
+          0
+        );
         return [
           format(new Date(log.date), 'yyyy-MM-dd'),
           log.employee_name,
-          log.clock_in_time || 'N/A',
+          log.clock_in_time  || 'N/A',
           log.clock_out_time || 'N/A',
-          log.duration_minutes?.toString() ?? 'N/A',
+          workMins?.toString() ?? 'N/A',
           totalBreakMins.toString(),
           log.is_billable ? 'Yes' : 'No',
         ];
