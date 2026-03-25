@@ -210,7 +210,7 @@ export function WeekendConfigDialog({ open, onOpenChange }: WeekendConfigDialogP
             </TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="flex-1 px-6">
+          <ScrollArea className="flex-1 px-6 h-full overflow-auto">
             {/* ─── WEEKLY SCHEDULE ─────────────────────────────── */}
             <TabsContent value="weekend" className="mt-6 space-y-6">
               {/* Mon–Fri: read-only info */}

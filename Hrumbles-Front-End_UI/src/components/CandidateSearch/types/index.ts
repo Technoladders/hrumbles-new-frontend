@@ -25,10 +25,15 @@ export interface ApolloCandidate {
 }
 
 export interface FilterState {
-  skills: string[];
+  keywords: string;           // free-text keyword
   titles: string[];
   locations: string[];
   seniorities: string[];
+  companyNames: string[];     // company name filter
+  availabilityIntent: string[]; // "open_to_work" | "serving_notice" | "immediate"
+  // skills kept for backward compat with recent searches (unused in new UI)
+  skills: string[];
+  emailStatuses: string[];
 }
 
 export type SearchState = "idle" | "loading" | "results" | "empty" | "error";
@@ -41,14 +46,10 @@ export interface SearchError {
   statusCode?: number;
 }
 
-export interface SearchResult {
-  totalEntries: number;
-  people: ApolloCandidate[];
-  page: number;
-}
-
-export interface SearchParams extends FilterState {
-  page: number;
-  perPage: number;
-  apiKey: string;
+export interface RecentSearch {
+  id: string;
+  summary: string;
+  chips: string[];
+  filters: FilterState;
+  timestamp: number;
 }

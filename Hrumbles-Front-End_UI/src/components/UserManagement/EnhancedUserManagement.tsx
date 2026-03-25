@@ -69,14 +69,14 @@ const EnhancedUserManagement = () => {
                 <Users className="h-4 w-4" /> Users
               </TabsTrigger>
               
-              {!isAscendionUser && !isRecruitmentFirmUser && (
+           
               
                   <TabsTrigger value="teams" className="rounded-lg px-5 py-2 flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-violet-700">
                     <Building className="h-4 w-4" /> Teams
                   </TabsTrigger>
                  
                
-              )}
+            
                <TabsTrigger value="structure" className="rounded-lg px-5 py-2 flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-violet-700">
                     <Blocks className="h-4 w-4" /> Structure
                   </TabsTrigger>

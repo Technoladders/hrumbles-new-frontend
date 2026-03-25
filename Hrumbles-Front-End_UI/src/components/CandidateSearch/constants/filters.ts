@@ -14,12 +14,17 @@ export const POPULAR_LOCATIONS = [
 ];
 
 export const SENIORITIES = [
-  { v: "entry",    l: "Entry",    d: "0–2 yr" },
-  { v: "senior",   l: "Senior",   d: "5+ yr"  },
-  { v: "manager",  l: "Manager",  d: "Team"   },
-  { v: "director", l: "Director", d: "Dept"   },
-  { v: "vp",       l: "VP",       d: "Exec"   },
-  { v: "c_suite",  l: "C-Suite",  d: "CXO"    },
+  { v: "intern",   l: "Intern",    d: "Student / trainee" },
+  { v: "entry",    l: "Entry",     d: "0–2 yr" },
+  { v: "senior",   l: "Senior",    d: "5+ yr" },
+  { v: "manager",  l: "Manager",   d: "Team lead" },
+  { v: "director", l: "Director",  d: "Dept lead" },
+  { v: "head",     l: "Head",      d: "Function lead" },
+  { v: "vp",       l: "VP",        d: "Exec leadership" },
+  { v: "c_suite",  l: "C-Suite",   d: "CXO" },
+  { v: "partner",  l: "Partner",   d: "Firm leadership" },
+  { v: "founder",  l: "Founder",   d: "Company founder" },
+  { v: "owner",    l: "Owner",     d: "Business owner" },
 ] as const;
 
 export type SeniorityValue = typeof SENIORITIES[number]["v"];

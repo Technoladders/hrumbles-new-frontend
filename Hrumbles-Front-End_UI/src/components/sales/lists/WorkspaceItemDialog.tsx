@@ -262,72 +262,69 @@ export const WorkspaceItemDialog: React.FC<{ config: DialogConfig; onClose: () =
           )}
 
           {/* ── CREATE LIST ──────────────────────────────────────────────────── */}
-          {mode === "create-list" && (
-            <>
-              {/* List name */}
-              <div>
-                <FieldLabel>List name</FieldLabel>
-                <TextInput
-                  ref={nameRef}
-                  value={name}
-                  onChange={v => { setName(v); setError(null); }}
-                  onKeyDown={handleKey}
-                  placeholder={isPeople ? "e.g. Q2 Target Contacts" : "e.g. Enterprise Accounts"}
-                  error={!!error && !name.trim()}
-                />
-              </div>
-
-              {/* Folder */}
-              <div>
-                <FieldLabel>Folder</FieldLabel>
-                {wsLoading ? (
-                  <div className="flex items-center gap-2 h-9 px-3 border border-slate-200 rounded-lg">
-                    <Loader2 size={12} className="animate-spin text-slate-400" />
-                    <span className="text-xs text-slate-400">Loading folders…</span>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {/* Existing folder dropdown */}
-                    {!creatingNew && (
-                      <FolderDropdown
-                        workspaces={workspaces}
-                        value={folderId}
-                        onChange={v => { setFolderId(v); setError(null); }}
-                        error={!!error && !folderId && !creatingNew}
-                      />
-                    )}
-
-                    {/* Toggle create-new inline */}
-                    <button
-                      type="button"
-                      onClick={() => { setCreatingNew(v => !v); setError(null); }}
-                      className={cn(
-                        "w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold transition-all",
-                        creatingNew
-                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                          : "border-dashed border-slate-300 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/50",
-                      )}
-                    >
-                      <FolderPlus size={13} />
-                      {creatingNew ? "← Use existing folder" : "+ Create new folder"}
-                    </button>
-
-                    {/* New folder name input */}
-                    {creatingNew && (
-                      <TextInput
-                        value={newWsName}
-                        onChange={v => { setNewWsName(v); setError(null); }}
-                        onKeyDown={handleKey}
-                        placeholder={isPeople ? "e.g. Enterprise Contacts" : "e.g. Enterprise Accounts"}
-                        error={!!error && creatingNew && !newWsName.trim()}
-                        autoFocus
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-            </>
+  {mode === "create-list" && (
+  <>
+    {/* Folder FIRST */}
+    <div>
+      <FieldLabel>Folder</FieldLabel>
+      {wsLoading ? (
+        <div className="flex items-center gap-2 h-9 px-3 border border-slate-200 rounded-lg">
+          <Loader2 size={12} className="animate-spin text-slate-400" />
+          <span className="text-xs text-slate-400">Loading folders…</span>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {!creatingNew && (
+            <FolderDropdown
+              workspaces={workspaces}
+              value={folderId}
+              onChange={v => { setFolderId(v); setError(null); }}
+              error={!!error && !folderId && !creatingNew}
+            />
           )}
+
+          <button
+            type="button"
+            onClick={() => { setCreatingNew(v => !v); setError(null); }}
+            className={cn(
+              "w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold transition-all",
+              creatingNew
+                ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                : "border-dashed border-slate-300 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/50",
+            )}
+          >
+            <FolderPlus size={13} />
+            {creatingNew ? "← Use existing folder" : "+ Create new folder"}
+          </button>
+
+          {creatingNew && (
+            <TextInput
+              value={newWsName}
+              onChange={v => { setNewWsName(v); setError(null); }}
+              onKeyDown={handleKey}
+              placeholder={isPeople ? "e.g. Enterprise Contacts" : "e.g. Enterprise Accounts"}
+              error={!!error && creatingNew && !newWsName.trim()}
+              autoFocus
+            />
+          )}
+        </div>
+      )}
+    </div>
+
+    {/* List name SECOND */}
+    <div>
+      <FieldLabel>List name</FieldLabel>
+      <TextInput
+        ref={nameRef}
+        value={name}
+        onChange={v => { setName(v); setError(null); }}
+        onKeyDown={handleKey}
+        placeholder={isPeople ? "e.g. Q2 Target Contacts" : "e.g. Enterprise Accounts"}
+        error={!!error && !name.trim()}
+      />
+    </div>
+  </>
+)}
 
           {/* Error */}
           {error && <p className="text-[11px] text-red-500">{error}</p>}

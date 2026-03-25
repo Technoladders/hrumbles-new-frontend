@@ -1,124 +1,104 @@
 {
   "person": {
-    "id": "685e76e3e7e4ca00012405c7",
-    "city": null,
-    "name": "Swathi Kotla",
-    "email": "swathi@mastekit.com",
-    "state": null,
-    "title": "Software Developer",
-    "country": "United States",
-    "headline": "Actively looking for Opportunities | Pega Certified Senior System Architect | Business Process Modeling | QA Automation | Pega Testing",
+    "id": "6959d26017f9790001268482",
+    "city": "Visakhapatnam",
+    "name": "Nehaa Kashyap",
+    "email": null,
+    "state": "Andhra Pradesh",
+    "title": "Human Resources Consultant",
+    "country": "India",
+    "headline": "Human Resources Consultant at Medipharma konnect",
     "functions": [
-      "engineering"
+      "human_resources",
+      "consulting"
     ],
-    "last_name": "Kotla",
-    "photo_url": null,
+    "last_name": "Kashyap",
+    "photo_url": "https://media.licdn.com/dms/image/v2/D4E03AQH-MPsXeIbh3A/profile-displayphoto-scale_200_200/B4EZrIzsrEHoAc-/0/1764305588787?e=2147483647&v=beta&t=Jk6CkDx49b4WOAG2vvmS6f3x7TFTBfI1B6WY0OqzQOI",
     "seniority": "entry",
-    "time_zone": null,
-    "first_name": "Swathi",
+    "time_zone": "Asia/Kolkata",
+    "first_name": "Nehaa",
     "github_url": null,
     "departments": [
-      "master_engineering_technical",
-      "master_information_technology"
+      "master_human_resources",
+      "consulting"
     ],
     "postal_code": null,
     "show_intent": false,
     "twitter_url": null,
-    "email_status": "extrapolated",
+    "email_status": null,
     "facebook_url": null,
-    "linkedin_url": "http://www.linkedin.com/in/swathi-k-2a6634169",
+    "linkedin_url": "http://www.linkedin.com/in/nehaa-kashyap-998b3a379",
     "organization": {
-      "id": "64e76d41305d42009eaaf383",
-      "city": "Matthews",
-      "name": "MASTEK IT LLC",
-      "phone": "+1 704-550-3988",
-      "state": "North Carolina",
-      "country": "United States",
+      "id": "67dc028331f435001929de6c",
+      "city": "Ahmedabad",
+      "name": "MEDI PHARMA KONNECT",
+      "phone": null,
+      "state": "Gujarat",
+      "country": "India",
       "blog_url": null,
-      "industry": "information technology & services",
-      "keywords": [
-        "it services & it consulting",
-        "information technology & services"
-      ],
-      "logo_url": "https://zenprospect-production.s3.amazonaws.com/uploads/pictures/670bafaa0cceee000124c7ab/picture",
+      "industry": "staffing & recruiting",
+      "keywords": [],
+      "logo_url": "https://zenprospect-production.s3.amazonaws.com/uploads/pictures/682d4592d278400001e4b222/picture",
       "languages": [],
       "industries": [
-        "information technology & services"
+        "staffing & recruiting"
       ],
-      "postal_code": "28105-1761",
-      "raw_address": "110 Matthews Mint Hill Rd, 624 suite, Matthews, North Carolina 28105, US",
+      "postal_code": "380008",
+      "raw_address": "201, vanijya Bhavan, Maninagar, AHMEDABAD, Gujarat 380008, IN",
       "twitter_url": null,
-      "website_url": "http://www.mastekit.com",
+      "website_url": null,
       "facebook_url": null,
-      "founded_year": null,
-      "linkedin_uid": "96663977",
-      "linkedin_url": "http://www.linkedin.com/company/mastek-it-llc",
+      "founded_year": 2017,
+      "linkedin_uid": "106626979",
+      "linkedin_url": "http://www.linkedin.com/company/medipharmakonnectcom",
       "alexa_ranking": null,
       "angellist_url": null,
-      "primary_phone": {
-        "number": "+1 704-550-3988",
-        "source": "Scraped",
-        "sanitized_number": "+17045503988"
-      },
+      "primary_phone": {},
       "total_funding": null,
       "crunchbase_url": null,
       "funding_events": [],
-      "primary_domain": "mastekit.com",
-      "street_address": "624 Matthews-Mint Hill Rd",
-      "industry_tag_id": "5567cd4773696439b10b0000",
-      "sanitized_phone": "+17045503988",
+      "primary_domain": null,
+      "street_address": "201",
+      "industry_tag_id": "5567e09973696410db020800",
       "snippets_loaded": true,
-      "org_chart_sector": "OrgChart::SectorHierarchy::Rules::IT",
+      "org_chart_sector": null,
       "suborganizations": [],
       "technology_names": [
-        "Amazon SES",
-        "Apache",
-        "Databricks",
-        "Docker",
+        "Bootstrap Framework",
+        "CloudFlare Hosting",
+        "Cloudflare DNS",
         "Gmail",
-        "GoDaddy Hosting",
         "Google Apps",
         "Mobile Friendly",
         "Remote",
-        "Scala",
-        "Snowflake",
-        "WordPress.org"
+        "Render",
+        "YouTube"
       ],
       "industry_tag_hash": {
-        "information technology & services": "5567cd4773696439b10b0000"
+        "staffing & recruiting": "5567e09973696410db020800"
       },
       "org_chart_removed": null,
-      "short_description": "MASTEK IT LLC is a solutions company based in Charlotte, North Carolina, specializing in IT services and staffing solutions. The company adapts to current IT trends and focuses on delivering enterprise solutions. \n\nMASTEK IT offers a wide range of services, including big data and data analysis, talent acquisition, application development, cloud computing, HR services and outsourcing, and employee training programs. With a team that has over a decade of experience in HR operations and talent acquisition, MASTEK IT is dedicated to empowering organizations by managing their workforce and resources effectively. The company positions itself as a comprehensive solution for HR and training needs.",
+      "short_description": "MediPharma Konnect  is one of the  leading Advisory enterprise and Executive Search organizations from the last 08 years with an experienced team of Professionals in Pharma and Healthcare industries with 80+ organizations..\n\n\n\n\nOur services are-\n\n·         Pharmaceutical Strategic Consulting\n\n·         Marketing and Communication Strategy\n\n·         Human Resource Management \n\n\n·         Training & Development (For all levels)\n\nPRESENCE - Presence PAN India and Globally.",
       "current_technologies": [
         {
-          "uid": "amazon_ses",
-          "name": "Amazon SES",
-          "category": "Email Delivery"
+          "uid": "bootstrap_framework",
+          "name": "Bootstrap Framework",
+          "category": "CSS and JavaScript Libraries"
         },
         {
-          "uid": "apache",
-          "name": "Apache",
-          "category": "Load Balancers"
+          "uid": "cloudflare_hosting",
+          "name": "CloudFlare Hosting",
+          "category": "Hosting"
         },
         {
-          "uid": "databricks",
-          "name": "Databricks",
-          "category": "Analytics and Tracking"
-        },
-        {
-          "uid": "docker",
-          "name": "Docker",
-          "category": "Other"
+          "uid": "cloudflare_dns",
+          "name": "Cloudflare DNS",
+          "category": "Domain Name Services"
         },
         {
           "uid": "gmail",
           "name": "Gmail",
           "category": "Email Providers"
-        },
-        {
-          "uid": "godaddy_hosting",
-          "name": "GoDaddy Hosting",
-          "category": "Hosting"
         },
         {
           "uid": "google_apps",
@@ -136,19 +116,14 @@
           "category": "Other"
         },
         {
-          "uid": "scala",
-          "name": "Scala",
-          "category": "Frameworks and Programming Languages"
+          "uid": "render",
+          "name": "Render",
+          "category": "Other"
         },
         {
-          "uid": "snowflake",
-          "name": "Snowflake",
-          "category": "Data Management Platform"
-        },
-        {
-          "uid": "wordpress_org",
-          "name": "WordPress.org",
-          "category": "CMS"
+          "uid": "youtube",
+          "name": "YouTube",
+          "category": "Online Video Platforms"
         }
       ],
       "latest_funding_stage": null,
@@ -158,136 +133,73 @@
       "retail_location_count": 0,
       "total_funding_printed": null,
       "publicly_traded_symbol": null,
-      "estimated_num_employees": 12,
+      "estimated_num_employees": 27,
       "owned_by_organization_id": null,
       "publicly_traded_exchange": null,
       "latest_funding_round_date": null,
       "org_chart_root_people_ids": [],
       "organization_revenue_printed": null,
       "org_chart_show_department_filter": null,
-      "organization_headcount_six_month_growth": null,
-      "organization_headcount_twelve_month_growth": null,
-      "organization_headcount_twenty_four_month_growth": null
+      "organization_headcount_six_month_growth": 0.2,
+      "organization_headcount_twelve_month_growth": 0.6363636363636364,
+      "organization_headcount_twenty_four_month_growth": 1.25
     },
     "street_address": "",
     "subdepartments": [
-      "software_development",
-      "application_development"
+      "human_resources",
+      "consultant"
     ],
     "intent_strength": null,
-    "organization_id": "64e76d41305d42009eaaf383",
+    "organization_id": "67dc028331f435001929de6c",
     "personal_emails": [],
-    "formatted_address": "United States",
+    "formatted_address": "Visakhapatnam, Andhra Pradesh, India",
     "employment_history": [
       {
-        "id": "6904f64c14b50b00015584d7",
-        "_id": "6904f64c14b50b00015584d7",
-        "key": "6904f64c14b50b00015584d7",
+        "id": "699e83c0b937630001ba408b",
+        "_id": "699e83c0b937630001ba408b",
+        "key": "699e83c0b937630001ba408b",
         "kind": null,
         "major": null,
-        "title": "Software Developer",
+        "title": "Human Resources Consultant",
         "degree": null,
         "emails": null,
         "current": true,
         "end_date": null,
         "created_at": null,
-        "start_date": "2025-05-01",
+        "start_date": "2025-10-01",
         "updated_at": null,
         "description": null,
         "grade_level": null,
         "raw_address": null,
-        "organization_id": "64e76d41305d42009eaaf383",
-        "organization_name": "MASTEK IT LLC",
-        "org_matched_by_name": null
+        "organization_id": "67dc028331f435001929de6c",
+        "organization_name": "MEDIPHARMA KONNECT",
+        "org_matched_by_name": false
       },
       {
-        "id": "6904f64c14b50b00015584d8",
-        "_id": "6904f64c14b50b00015584d8",
-        "key": "6904f64c14b50b00015584d8",
+        "id": "699e83c0b937630001ba408d",
+        "_id": "699e83c0b937630001ba408d",
+        "key": "699e83c0b937630001ba408d",
         "kind": null,
         "major": null,
-        "title": "Pega System Architect",
+        "title": "Freelance Consultant",
         "degree": null,
         "emails": null,
         "current": false,
-        "end_date": "2025-05-01",
+        "end_date": "2025-10-01",
         "created_at": null,
-        "start_date": "2024-03-01",
+        "start_date": null,
         "updated_at": null,
         "description": null,
         "grade_level": null,
         "raw_address": null,
-        "organization_id": "5592266a7369641b33565c00",
-        "organization_name": "National Institute on Aging (NIA)",
-        "org_matched_by_name": null
-      },
-      {
-        "id": "6904f64c14b50b00015584d9",
-        "_id": "6904f64c14b50b00015584d9",
-        "key": "6904f64c14b50b00015584d9",
-        "kind": null,
-        "major": null,
-        "title": "Software Engineer(Trainee)",
-        "degree": null,
-        "emails": null,
-        "current": false,
-        "end_date": "2024-03-01",
-        "created_at": null,
-        "start_date": "2023-01-01",
-        "updated_at": null,
-        "description": null,
-        "grade_level": null,
-        "raw_address": null,
-        "organization_id": "61ec84a6ae92870001f52981",
-        "organization_name": "Anvil Solutions",
-        "org_matched_by_name": null
-      },
-      {
-        "id": "6904f64c14b50b00015584da",
-        "_id": "6904f64c14b50b00015584da",
-        "key": "6904f64c14b50b00015584da",
-        "kind": null,
-        "major": null,
-        "title": "Security Services Specialist",
-        "degree": null,
-        "emails": null,
-        "current": false,
-        "end_date": "2023-05-01",
-        "created_at": null,
-        "start_date": "2022-08-01",
-        "updated_at": null,
-        "description": null,
-        "grade_level": null,
-        "raw_address": null,
-        "organization_id": "5a9ee2dba6da98d9664831de",
-        "organization_name": "Imperial Events Security Services",
-        "org_matched_by_name": null
-      },
-      {
-        "id": "6904f64c14b50b00015584db",
-        "_id": "6904f64c14b50b00015584db",
-        "key": "6904f64c14b50b00015584db",
-        "kind": null,
-        "major": null,
-        "title": "Senior Analyst",
-        "degree": null,
-        "emails": null,
-        "current": false,
-        "end_date": "2021-11-01",
-        "created_at": null,
-        "start_date": "2019-06-01",
-        "updated_at": null,
-        "description": null,
-        "grade_level": null,
-        "raw_address": null,
-        "organization_id": "5d5d2c6ec8570e00d9c50aa5",
-        "organization_name": "Capgemini",
-        "org_matched_by_name": null
+        "organization_id": null,
+        "organization_name": "People Growth Mumbai",
+        "org_matched_by_name": false
       }
     ],
     "email_domain_catchall": false,
     "revealed_for_current_team": true,
-    "extrapolated_email_confidence": 0.7
+    "extrapolated_email_confidence": null
   },
-  "request_id": 5544625771062924000
+  "request_id": -2303308600055271200
 }

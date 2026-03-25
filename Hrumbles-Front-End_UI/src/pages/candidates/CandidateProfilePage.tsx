@@ -49,6 +49,7 @@ import AnalysisHistoryDialog from "@/components/candidates/AnalysisHistoryDialog
 import EnrichDataDialog from "@/components/candidates/talent-pool/EnrichDataDialog";
 import { generateDocx, generatePdf } from "@/utils/cvGenerator";
 import ResumeViewer from '@/components/candidates/talent-pool/ResumeViewer';
+import CandidateFullTimeline from "@/components/candidates/talent-pool/CandidateFullTimeline";
 
 
 // Highlight Component - Same as in search results
@@ -528,6 +529,39 @@ const highlightQuery = useMemo(() => {
         }).format(num);
   };
 
+const displaySalary = (value?: string | number | null) => {
+  if (!value || value === "0" || value === 0) return "N/A";
+
+  const str = String(value).trim();
+
+  // Try parsing
+  const cleaned = str.replace(/[^0-9.]/g, '').replace(/\s+/g, '');
+  const num = parseFloat(cleaned);
+
+  if (!isNaN(num) && num > 0) {
+    const formatted = new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(num);
+
+    // If original looks very different → show both
+    if (str !== formatted && !str.includes(formatted)) {
+      return (
+        <span>
+          <span className="font-medium">{formatted}</span>
+          <span className="text-xs text-gray-500 ml-2">({str})</span>
+        </span>
+      );
+    }
+
+    return formatted;
+  }
+
+  return str;
+};
+
+
 
 
 return (
@@ -766,7 +800,7 @@ return (
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Current Salary</p>
                   <p className="text-sm font-medium text-gray-800">
-                    {candidate.current_salary ? `${formatINR(candidate.current_salary)}` : "N/A"}
+                    {candidate.current_salary ? `${displaySalary(candidate.current_salary)}` : "N/A"}
                   </p>
                 </div>
               </div>
@@ -1220,64 +1254,12 @@ return (
           {/* Right Column - Sidebar (1/3 width) */}
           <div className="space-y-6">
             {/* Candidate Timeline - IMPROVED */}
-            {(isLoadingTimeline ||
-              (timelineEvents && timelineEvents.length > 0)) && (
-                <Card className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5">
-                    <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                      <div className="rounded-lg bg-orange-100 p-2">
-                        <History className="h-5 w-5 text-orange-600" />
-                      </div>
-                      Candidate Timeline
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-5">
-                    {isLoadingTimeline ? (
-                      <div className="space-y-4">
-                        {[...Array(2)].map((_, i) => (
-                          <div key={i} className="flex gap-3">
-                            <div className="h-10 w-10 rounded-full bg-slate-100 animate-pulse flex-shrink-0"></div>
-                            <div className="flex-grow space-y-2">
-                              <div className="h-3 w-3/4 rounded bg-slate-100 animate-pulse"></div>
-                              <div className="h-2.5 w-1/2 rounded bg-slate-100 animate-pulse"></div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="relative">
-                        <div className="absolute left-5 top-5 h-[calc(100%-40px)] w-0.5 bg-gradient-to-b from-orange-200 via-orange-100 to-transparent" />
-                        <div className="space-y-5">
-                          {timelineEvents.map((event, index) => (
-                            <div key={event.id} className="relative pl-12">
-                              <div className="absolute left-0 top-0.5 grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-orange-100 to-orange-50 text-orange-600 ring-4 ring-white shadow-sm">
-                                <Clock className="h-4 w-4" />
-                              </div>
-                              <div className="rounded-lg border border-slate-100 bg-gradient-to-br from-white to-slate-50/50 p-3 hover:border-orange-200 hover:shadow-sm transition-all duration-200">
-                                <p className="font-semibold text-sm text-slate-900">
-                                  {event.event_type}
-                                </p>
-                                <p className="text-xs text-slate-500 mt-1">
-                                  by{" "}
-                                  <span className="font-medium text-slate-700">
-                                    {event.changed_by_user
-                                      ? `${event.changed_by_user.first_name} ${event.changed_by_user.last_name}`
-                                      : "System"}
-                                  </span>
-                                </p>
-                                <p className="text-xs text-slate-400 mt-1.5 flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {new Date(event.changed_at).toLocaleString()}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+           <CandidateFullTimeline
+  candidateId={candidateId!}
+  candidateEmail={candidate.email ?? ""}
+  candidateName={candidate.candidate_name ?? ""}
+  talentPoolCreatedAt={candidate.created_at}
+/>
 
             {/* Related Candidates - IMPROVED */}
             {(isLoadingRelated ||

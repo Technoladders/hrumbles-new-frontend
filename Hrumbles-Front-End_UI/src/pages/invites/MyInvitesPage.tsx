@@ -1,7 +1,5 @@
 // src/pages/invites/MyInvitesPage.tsx
-// "My Invites" sidebar menu page.
-// Lists all invites sent by the current user across all jobs.
-// Matches Jobs.tsx style — stat cards, purple table, filter tabs, search, pagination.
+// Changed from previous: icon-only action buttons with tooltips instead of text labels
 
 import React, { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -10,7 +8,7 @@ import { useSelector } from 'react-redux';
 import {
   Send, Search, Eye, RefreshCw, ChevronLeft, ChevronRight,
   Users, CheckCircle, Clock, AlertCircle, Mail, MessageSquare,
-  Briefcase, ArrowUpDown, Filter,
+  UserCheck, XCircle, RotateCcw, MessagesSquare,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import InviteResponseDrawer from '@/components/jobs/job/invite/InviteResponseDrawer';
@@ -28,13 +26,13 @@ import { Badge } from '@/components/jobs/ui/badge';
 import Loader from '@/components/ui/Loader';
 import moment from 'moment';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 type FilterStatus = 'all' | 'sent' | 'opened' | 'applied' | 'expired';
 
 interface InviteRow {
   id:               string;
   job_id:           string;
+  candidate_id:     string | null;
+  talent_id?:       string | null;
   candidate_name:   string | null;
   candidate_email:  string | null;
   candidate_phone:  string | null;
@@ -50,42 +48,86 @@ interface InviteRow {
   candidate_invite_responses: any | null;
 }
 
-// ── Badge helpers ─────────────────────────────────────────────────────────────
-
 const SRC = {
-  pipeline:   { label: 'Pipeline',    bg: '#EDE9FE', color: '#7C3AED' },
-  zivex:      { label: 'Zive-X',      bg: '#DBEAFE', color: '#1D4ED8' },
-  talentpool: { label: 'Talent Pool', bg: '#D1FAE5', color: '#065F46' },
+  pipeline:         { label: 'Pipeline',      bg: '#EDE9FE', color: '#7C3AED' },
+  zivex:            { label: 'Zive-X',        bg: '#DBEAFE', color: '#1D4ED8' },
+  talentpool:       { label: 'Talent Pool',   bg: '#D1FAE5', color: '#065F46' },
+  candidate_search: { label: 'Global Search', bg: '#FEF3C7', color: '#92400E' },
 };
 
 function SrcBadge({ source }: { source: string }) {
   const c = SRC[source as keyof typeof SRC] || SRC.zivex;
-  return (
-    <span className="px-2 py-0.5 rounded-full text-xs font-bold whitespace-nowrap"
-      style={{ background: c.bg, color: c.color }}>{c.label}</span>
-  );
+  return <span className="px-2 py-0.5 rounded-full text-xs font-bold whitespace-nowrap" style={{ background: c.bg, color: c.color }}>{c.label}</span>;
 }
 
 function ChannelBadge({ channel }: { channel: string }) {
   const cfg = {
-    email:    { icon: <Mail size={11} />,           bg: '#F0F9FF', color: '#0369A1', label: 'Email'     },
-    whatsapp: { icon: <MessageSquare size={11} />,  bg: '#F0FDF4', color: '#15803D', label: 'WhatsApp'  },
-    both:     { icon: <Send size={11} />,            bg: '#FAF5FF', color: '#7C3AED', label: 'Both'      },
+    email:    { icon: <Mail size={11} />,          bg: '#F0F9FF', color: '#0369A1', label: 'Email'    },
+    whatsapp: { icon: <MessageSquare size={11} />, bg: '#F0FDF4', color: '#15803D', label: 'WhatsApp' },
+    both:     { icon: <Send size={11} />,          bg: '#FAF5FF', color: '#7C3AED', label: 'Both'     },
   };
   const c = cfg[channel as keyof typeof cfg] || cfg.email;
+  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: c.bg, color: c.color }}>{c.icon}{c.label}</span>;
+}
+
+// ── Icon-only action button ───────────────────────────────────────────────────
+function ActionBtn({ invite, onOpen }: { invite: InviteRow; onOpen: () => void }) {
+  const res    = invite.candidate_invite_responses;
+  const status = res?.status;
+
+  // Determine icon + tooltip + color
+  let icon: React.ReactNode;
+  let tip: string;
+  let color: string;
+  let bg: string;
+
+  if (status === 'auto_updated') {
+    icon  = <RotateCcw size={14} />;
+    tip   = 'Profile updated ✓';
+    color = '#7C3AED';
+    bg    = '#EDE9FE';
+  } else if (status === 'added_to_job') {
+    icon  = <UserCheck size={14} />;
+    tip   = 'Added to pipeline ✓';
+    color = '#065F46';
+    bg    = '#D1FAE5';
+  } else if (status === 'rejected') {
+    icon  = <XCircle size={14} />;
+    tip   = 'Rejected';
+    color = '#991B1B';
+    bg    = '#FEE2E2';
+  } else if (invite.status === 'applied') {
+    icon  = <MessagesSquare size={14} />;
+    tip   = 'Review response';
+    color = '#7C3AED';
+    bg    = '#F5F3FF';
+  } else {
+    return <span className="text-xs text-gray-300"></span>;
+  }
+
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
-      style={{ background: c.bg, color: c.color }}>{c.icon}{c.label}</span>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={onOpen}
+            className="w-7 h-7 rounded-full flex items-center justify-center transition-all hover:scale-110"
+            style={{ background: bg, color, border: `1px solid ${color}22`, cursor: 'pointer' }}
+          >
+            {icon}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent><p>{tip}</p></TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
 const MyInvitesPage: React.FC = () => {
-  const navigate    = useNavigate();
-  const user        = useSelector((s: any) => s.auth.user);
-  const userRole    = useSelector((s: any) => s.auth.role);
-  const isEmployee  = userRole === 'employee';
+  const navigate   = useNavigate();
+  const user       = useSelector((s: any) => s.auth.user);
+  const userRole   = useSelector((s: any) => s.auth.role);
+  const isEmployee = userRole === 'employee';
 
   const [filter,      setFilter]      = useState<FilterStatus>('all');
   const [srcFilter,   setSrcFilter]   = useState('all');
@@ -96,14 +138,13 @@ const MyInvitesPage: React.FC = () => {
   const [selected,    setSelected]    = useState<InviteRow | null>(null);
   const [drawerOpen,  setDrawerOpen]  = useState(false);
 
-  // ── Fetch all invites for this user (or all if admin) ─────────────────────
   const { data: invites = [], isLoading, refetch } = useQuery<InviteRow[]>({
     queryKey: ['my-invites', user?.id, userRole],
     queryFn: async () => {
       let q = supabase
         .from('candidate_invites')
         .select(`
-          id, job_id, candidate_name, candidate_email, candidate_phone, candidate_id,
+          id, job_id, candidate_name, candidate_email, candidate_phone, candidate_id, organization_id,
           channel, status, invite_source, expires_at, sent_at, created_at, opened_at, invite_token,
           hr_jobs ( id, title, job_id ),
           candidate_invite_responses (
@@ -117,17 +158,28 @@ const MyInvitesPage: React.FC = () => {
         `)
         .order('created_at', { ascending: false });
 
-      // Employees only see their own invites
       if (isEmployee) q = q.eq('created_by', user.id);
 
-      const { data, error } = await q;
+      const { data: invitesData, error } = await q;
       if (error) throw error;
-      return data || [];
+      if (!invitesData?.length) return [];
+
+      const uniqueEmails = [...new Set(invitesData.map(i => i.candidate_email).filter(Boolean))];
+      const { data: talentPoolData } = await supabase
+        .from('hr_talent_pool')
+        .select('id, email')
+        .eq('organization_id', invitesData[0].organization_id)
+        .in('email', uniqueEmails);
+
+      const talentMap = new Map(talentPoolData?.map(t => [t.email, t.id]));
+      return invitesData.map(inv => ({
+        ...inv,
+        talent_id: inv.candidate_email ? talentMap.get(inv.candidate_email) || null : null,
+      })) as InviteRow[];
     },
     enabled: !!user?.id,
   });
 
-  // ── Derived counts ────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
     total:   invites.length,
     sent:    invites.filter(i => i.status === 'sent').length,
@@ -144,7 +196,6 @@ const MyInvitesPage: React.FC = () => {
     return Array.from(map.entries()).map(([id, title]) => ({ id, title }));
   }, [invites]);
 
-  // ── Filter + search ───────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let list = [...invites];
     if (filter !== 'all')    list = list.filter(i => i.status === filter);
@@ -165,38 +216,6 @@ const MyInvitesPage: React.FC = () => {
   const startIdx   = (currentPage - 1) * perPage;
   const paginated  = filtered.slice(startIdx, startIdx + perPage);
 
-  // ── Action button ─────────────────────────────────────────────────────────
-  const ActionBtn = ({ invite }: { invite: InviteRow }) => {
-    const res    = invite.candidate_invite_responses;
-    const isPipe = invite.invite_source === 'pipeline';
-
-    if (!res && invite.status !== 'applied')
-      return <span className="text-xs text-gray-300">—</span>;
-
-    if (isPipe && res?.status === 'auto_updated')
-      return (
-        <button onClick={() => { setSelected(invite); setDrawerOpen(true); }}
-          className="px-3 py-1 rounded-lg text-xs font-bold transition-all hover:opacity-80"
-          style={{ background: '#EDE9FE', color: '#7C3AED', border: '1px solid #DDD6FE' }}>
-          Updated ✓
-        </button>
-      );
-
-    const lbl = res?.status === 'added_to_job' ? 'Added ✓'
-              : res?.status === 'rejected'     ? 'Rejected'
-              : invite.status === 'applied'    ? 'Review'
-              : '—';
-    if (lbl === '—') return <span className="text-xs text-gray-300">—</span>;
-
-    return (
-      <button onClick={() => { setSelected(invite); setDrawerOpen(true); }}
-        className="px-3 py-1 rounded-lg text-xs font-bold transition-all hover:opacity-80"
-        style={{ background: '#F5F3FF', color: '#7C3AED', border: '1px solid #DDD6FE' }}>
-        {lbl}
-      </button>
-    );
-  };
-
   if (isLoading) return (
     <div className="flex items-center justify-center h-[80vh]">
       <Loader size={60} className="border-[6px]" />
@@ -206,7 +225,7 @@ const MyInvitesPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in p-4 md:p-6">
 
-      {/* ── Page header ── */}
+      {/* Page header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold mb-1">My Invites</h1>
@@ -218,123 +237,83 @@ const MyInvitesPage: React.FC = () => {
         </button>
       </div>
 
-<div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-  {[
-    { label: 'Total Invites', value: stats.total,   icon: <Users size={22} className="text-purple-600" />, bg: 'bg-purple-50', iconBg: 'bg-purple-100', val: 'text-purple-700', clickVal: 'all' },
-    { label: 'Sent',          value: stats.sent,    icon: <Send size={22} className="text-gray-500" />,    bg: 'bg-gray-50',   iconBg: 'bg-gray-100',   val: '',               clickVal: 'sent' },
-    { label: 'Opened',        value: stats.opened,  icon: <Eye size={22} className="text-amber-600" />,   bg: 'bg-amber-50',  iconBg: 'bg-amber-100',  val: 'text-amber-700', clickVal: 'opened' },
-    { label: 'Applied',       value: stats.applied, icon: <CheckCircle size={22} className="text-green-600" />, bg: 'bg-green-50', iconBg: 'bg-green-100', val: 'text-green-700', clickVal: 'applied' },
-    { label: 'Expired',       value: stats.expired, icon: <AlertCircle size={22} className="text-red-500" />,  bg: 'bg-red-50',   iconBg: 'bg-red-100',   val: 'text-red-600',   clickVal: 'expired' },
-  ].map(({ label, value, icon, bg, iconBg, val, clickVal }) => (
-    <Card
-      key={label}
-      onClick={() => { setFilter(clickVal as FilterStatus); setCurrentPage(1); }}
-      className={`p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow ${bg}`}
-    >
-      <div className="space-y-1">
-        <p className="text-sm font-medium text-gray-500">{label}</p>
-        <h3 className={`text-3xl font-bold ${val || 'text-gray-800'}`}>{value}</h3>
-      </div>
-      <div className={`p-2 ${iconBg} rounded-lg`}>{icon}</div>
-    </Card>
-  ))}
-
-  {/* ✅ Conversion Card */}
-  {stats.total > 0 && (
-    <Card className="p-4 flex flex-col justify-between bg-purple-50 border-purple-100 hover:shadow-lg transition-shadow">
-      <div className="flex items-center gap-2 mb-2">
-        <Users size={18} className="text-purple-600" />
-        <span className="text-sm font-semibold text-purple-800">
-          Conversion
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-2 bg-purple-100 rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-purple-500 to-violet-600 transition-all duration-700"
-            style={{ width: `${conversion}%` }}
-          />
-        </div>
-        <span className="text-xs font-medium text-purple-700">
-          {conversion}%
-        </span>
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        {[
+          { label: 'Total Invites', value: stats.total,   icon: <Users size={22} className="text-purple-600" />, bg: 'bg-purple-50', iconBg: 'bg-purple-100', val: 'text-purple-700', clickVal: 'all'     },
+          { label: 'Sent',          value: stats.sent,    icon: <Send size={22} className="text-gray-500" />,    bg: 'bg-gray-50',   iconBg: 'bg-gray-100',   val: '',               clickVal: 'sent'    },
+          { label: 'Opened',        value: stats.opened,  icon: <Eye size={22} className="text-amber-600" />,   bg: 'bg-amber-50',  iconBg: 'bg-amber-100',  val: 'text-amber-700', clickVal: 'opened'  },
+          { label: 'Applied',       value: stats.applied, icon: <CheckCircle size={22} className="text-green-600" />, bg: 'bg-green-50', iconBg: 'bg-green-100', val: 'text-green-700', clickVal: 'applied' },
+          { label: 'Expired',       value: stats.expired, icon: <AlertCircle size={22} className="text-red-500" />,  bg: 'bg-red-50',   iconBg: 'bg-red-100',   val: 'text-red-600',   clickVal: 'expired' },
+        ].map(({ label, value, icon, bg, iconBg, val, clickVal }) => (
+          <Card key={label} onClick={() => { setFilter(clickVal as FilterStatus); setCurrentPage(1); }}
+            className={`p-4 flex justify-between items-start cursor-pointer hover:shadow-lg transition-shadow ${bg}`}>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-gray-500">{label}</p>
+              <h3 className={`text-3xl font-bold ${val || 'text-gray-800'}`}>{value}</h3>
+            </div>
+            <div className={`p-2 ${iconBg} rounded-lg`}>{icon}</div>
+          </Card>
+        ))}
+        {stats.total > 0 && (
+          <Card className="p-4 flex flex-col justify-between bg-purple-50 border-purple-100 hover:shadow-lg transition-shadow">
+            <div className="flex items-center gap-2 mb-2">
+              <Users size={18} className="text-purple-600" />
+              <span className="text-sm font-semibold text-purple-800">Conversion</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-2 bg-purple-100 rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-violet-600 transition-all duration-700" style={{ width: `${conversion}%` }} />
+              </div>
+              <span className="text-xs font-medium text-purple-700">{conversion}%</span>
+            </div>
+            <p className="text-xs text-purple-500 mt-2">{stats.applied}/{stats.total} applied</p>
+          </Card>
+        )}
       </div>
 
-      <p className="text-xs text-purple-500 mt-2">
-        {stats.applied}/{stats.total} applied
-      </p>
-    </Card>
-  )}
-</div>
-
-      {/* ── Toolbar ── */}
+      {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
-
-        {/* Status tabs */}
         <div className="flex-shrink-0">
           <div className="inline-flex items-center rounded-full bg-gray-100 p-1 shadow-inner gap-0.5">
             {(['all','sent','opened','applied','expired'] as FilterStatus[]).map(f => (
               <button key={f} onClick={() => { setFilter(f); setCurrentPage(1); }}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                  filter === f
-                    ? 'bg-violet-600 text-white shadow-md'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}>
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${filter === f ? 'bg-violet-600 text-white shadow-md' : 'text-gray-600 hover:text-gray-900'}`}>
                 {f.charAt(0).toUpperCase() + f.slice(1)}
-                <span className={`ml-1.5 text-xs rounded-full h-4 w-4 inline-flex items-center justify-center ${
-                  filter === f ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'
-                }`}>
+                <span className={`ml-1.5 text-xs rounded-full h-4 w-4 inline-flex items-center justify-center ${filter === f ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'}`}>
                   {f === 'all' ? stats.total : stats[f as keyof typeof stats]}
                 </span>
               </button>
             ))}
           </div>
         </div>
-
-        {/* Source filter */}
         <Select value={srcFilter} onValueChange={v => { setSrcFilter(v); setCurrentPage(1); }}>
-          <SelectTrigger className="w-36 rounded-full bg-gray-100 border-transparent text-gray-600 text-sm h-10">
-            <SelectValue placeholder="Source" />
-          </SelectTrigger>
+          <SelectTrigger className="w-36 rounded-full bg-gray-100 border-transparent text-gray-600 text-sm h-10"><SelectValue placeholder="Source" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Sources</SelectItem>
             <SelectItem value="pipeline">Pipeline</SelectItem>
             <SelectItem value="zivex">Zive-X</SelectItem>
             <SelectItem value="talentpool">Talent Pool</SelectItem>
+            <SelectItem value="candidate_search">Global Search</SelectItem>
           </SelectContent>
         </Select>
-
-        {/* Job filter */}
         <Select value={jobFilter} onValueChange={v => { setJobFilter(v); setCurrentPage(1); }}>
-          <SelectTrigger className="w-44 rounded-full bg-gray-100 border-transparent text-gray-600 text-sm h-10">
-            <SelectValue placeholder="All Jobs" />
-          </SelectTrigger>
+          <SelectTrigger className="w-44 rounded-full bg-gray-100 border-transparent text-gray-600 text-sm h-10"><SelectValue placeholder="All Jobs" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Jobs</SelectItem>
-            {uniqueJobs.map(j => (
-              <SelectItem key={j.id} value={j.id}>{j.title}</SelectItem>
-            ))}
+            {uniqueJobs.map(j => <SelectItem key={j.id} value={j.id}>{j.title}</SelectItem>)}
           </SelectContent>
         </Select>
-
-        {/* Search */}
         <div className="relative flex-grow min-w-[220px] max-w-[380px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-          <Input
-            placeholder="Search by name, email, or job…"
-            value={search}
+          <Input placeholder="Search by name, email, or job…" value={search}
             onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
-            className="pl-9 h-10 rounded-full bg-gray-100 border-transparent text-sm focus-visible:ring-purple-500"
-          />
+            className="pl-9 h-10 rounded-full bg-gray-100 border-transparent text-sm focus-visible:ring-purple-500" />
         </div>
-
-        <span className="ml-auto text-sm text-gray-400 font-medium">
-          {filtered.length} invite{filtered.length !== 1 ? 's' : ''}
-        </span>
+        <span className="ml-auto text-sm text-gray-400 font-medium">{filtered.length} invite{filtered.length !== 1 ? 's' : ''}</span>
       </div>
 
-      {/* ── Table ── */}
+      {/* Table */}
       {filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 text-center py-20 shadow-sm">
           <Send size={36} className="text-purple-200 mx-auto mb-3" />
@@ -348,104 +327,68 @@ const MyInvitesPage: React.FC = () => {
               <thead className="bg-gradient-to-r from-purple-600 to-violet-600">
                 <tr>
                   {['Candidate','Job','Source','Channel','Status','Sent','Expires','Action'].map(h => (
-                    <th key={h} scope="col"
-                      className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap">
-                      {h}
-                    </th>
+                    <th key={h} scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
-                {paginated.map((inv) => {
+                {paginated.map(inv => {
                   const isExpired = inv.status === 'expired';
                   const isApplied = inv.status === 'applied';
-
                   return (
-                    <tr key={inv.id}
-                      className="transition-all duration-150 hover:shadow-sm hover:-translate-y-px hover:bg-gray-50">
-
+                    <tr key={inv.id} className="transition-all duration-150 hover:shadow-sm hover:-translate-y-px hover:bg-gray-50">
                       {/* Candidate */}
                       <td className="px-4 py-3">
-                        <Link to={`/jobs/candidateprofile/${inv.candidate_id}/${inv.job_id}`} className="hover:underline">
-                        <p className="text-sm font-semibold text-gray-900 leading-tight">
-                          {inv.candidate_name || '—'}
-                        </p>
-                        </Link>
-                        {inv.candidate_email && (
-                          <p className="text-xs text-gray-400 mt-0.5">{inv.candidate_email}</p>
+                        {inv.candidate_id ? (
+                          <Link to={`/jobs/candidateprofile/${inv.candidate_id}/${inv.job_id}`} className="text-sm font-semibold text-gray-900 hover:text-purple-600 hover:underline leading-tight">{inv.candidate_name || '—'}</Link>
+                        ) : inv.talent_id ? (
+                          <Link to={`/talent-pool/${inv.talent_id}`} className="text-sm font-semibold text-gray-900 hover:text-blue-600 hover:underline leading-tight">{inv.candidate_name || '—'}</Link>
+                        ) : (
+                          <p className="text-sm font-semibold text-gray-500 leading-tight">{inv.candidate_name || '—'}</p>
                         )}
-                        {inv.candidate_phone && (
-                          <p className="text-xs text-gray-400">{inv.candidate_phone}</p>
-                        )}
+                        {inv.candidate_email && <p className="text-xs text-gray-400 mt-0.5">{inv.candidate_email}</p>}
                       </td>
-
                       {/* Job */}
                       <td className="px-4 py-3">
                         {inv.hr_jobs ? (
-                          <Link to={`/jobs/${inv.job_id}/invites`}
-                            className="text-sm font-medium text-purple-600 hover:underline leading-tight">
-                            {inv.hr_jobs.title}
-                          </Link>
+                          <Link to={`/jobs/${inv.job_id}/invites`} className="text-sm font-medium text-purple-600 hover:underline leading-tight">{inv.hr_jobs.title}</Link>
                         ) : <span className="text-xs text-gray-400">—</span>}
                         {inv.hr_jobs?.job_id && (
                           <span className="block mt-0.5">
-                            <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-100 px-1.5 py-0">
-                              {inv.hr_jobs.job_id}
-                            </Badge>
+                            <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-100 px-1.5 py-0">{inv.hr_jobs.job_id}</Badge>
                           </span>
                         )}
                       </td>
-
                       {/* Source */}
                       <td className="px-4 py-3"><SrcBadge source={inv.invite_source} /></td>
-
                       {/* Channel */}
                       <td className="px-4 py-3"><ChannelBadge channel={inv.channel} /></td>
-
                       {/* Status */}
                       <td className="px-4 py-3">
                         <InviteStatusBadge status={inv.status} size="sm" />
-                        {inv.opened_at && (
-                          <p className="text-xs text-amber-500 mt-0.5">
-                            Opened {moment(inv.opened_at).fromNow()}
-                          </p>
-                        )}
+                        {inv.opened_at && <p className="text-xs text-amber-500 mt-0.5">Opened {moment(inv.opened_at).fromNow()}</p>}
                       </td>
-
                       {/* Sent */}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="text-sm text-gray-600">
-                          {moment(inv.sent_at || inv.created_at).format('DD MMM YYYY')}
-                        </span>
-                        <p className="text-xs text-gray-400">
-                          {moment(inv.sent_at || inv.created_at).fromNow()}
-                        </p>
+                        <span className="text-sm text-gray-600">{moment(inv.sent_at || inv.created_at).format('DD MMM YYYY')}</span>
+                        <p className="text-xs text-gray-400">{moment(inv.sent_at || inv.created_at).fromNow()}</p>
                       </td>
-
                       {/* Expires */}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`text-sm font-medium ${
-                          isApplied ? 'text-green-600' : isExpired ? 'text-red-500' : 'text-gray-600'
-                        }`}>
+                        <span className={`text-sm font-medium ${isApplied ? 'text-green-600' : isExpired ? 'text-red-500' : 'text-gray-600'}`}>
                           {isApplied ? '—' : moment(inv.expires_at).format('DD MMM YYYY')}
                         </span>
-                        {!isApplied && (
-                          <p className={`text-xs ${isExpired ? 'text-red-400' : 'text-gray-400'}`}>
-                            {isExpired ? 'Expired' : moment(inv.expires_at).fromNow()}
-                          </p>
-                        )}
+                        {!isApplied && <p className={`text-xs ${isExpired ? 'text-red-400' : 'text-gray-400'}`}>{isExpired ? 'Expired' : moment(inv.expires_at).fromNow()}</p>}
                       </td>
-
                       {/* Action */}
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1 rounded-full bg-slate-100 p-1 shadow-sm border border-slate-200 w-fit">
-                          <ActionBtn invite={inv} />
+                        <div className="flex items-center gap-1.5">
+                          <ActionBtn invite={inv} onOpen={() => { setSelected(inv); setDrawerOpen(true); }} />
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Link to={`/jobs/${inv.job_id}/invites`}>
-                                  <Button variant="ghost" size="icon"
-                                    className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors">
                                     <Eye className="h-4 w-4" />
                                   </Button>
                                 </Link>
@@ -464,37 +407,27 @@ const MyInvitesPage: React.FC = () => {
         </div>
       )}
 
-      {/* ── Pagination ── */}
+      {/* Pagination */}
       {filtered.length > 0 && (
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-600">Show</span>
             <Select value={perPage.toString()} onValueChange={v => { setPerPage(Number(v)); setCurrentPage(1); }}>
               <SelectTrigger className="w-[70px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {[10, 20, 50].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
-              </SelectContent>
+              <SelectContent>{[10,20,50].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
             </Select>
             <span className="text-sm text-gray-600">per page</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={currentPage === 1}
-              onClick={() => setCurrentPage(p => p - 1)}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
+            <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p-1)}><ChevronLeft className="h-4 w-4" /></Button>
             <span className="text-sm text-gray-600">Page {currentPage} of {totalPages}</span>
-            <Button variant="outline" size="sm" disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(p => p + 1)}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p+1)}><ChevronRight className="h-4 w-4" /></Button>
           </div>
-          <span className="text-sm text-gray-500">
-            Showing {startIdx + 1}–{Math.min(startIdx + perPage, filtered.length)} of {filtered.length}
-          </span>
+          <span className="text-sm text-gray-500">Showing {startIdx+1}–{Math.min(startIdx+perPage, filtered.length)} of {filtered.length}</span>
         </div>
       )}
 
-      {/* ── Response drawer ── */}
+      {/* Drawer */}
       {selected && (
         <InviteResponseDrawer
           isOpen={drawerOpen}

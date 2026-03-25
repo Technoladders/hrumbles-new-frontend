@@ -82,7 +82,7 @@ export function LeavePeriodSettings({
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div className="flex items-center justify-between border-b pb-4">
+          {/* <div className="flex items-center justify-between border-b pb-4">
             <div>
               <h3 className="font-medium">Leave Year Period</h3>
               <p className="text-sm text-muted-foreground">
@@ -96,7 +96,7 @@ export function LeavePeriodSettings({
             <Button variant="outline" onClick={() => setIsOpen(true)}>
               Edit
             </Button>
-          </div>
+          </div> */}
           
           <div className="border-b pb-4">
             <h3 className="font-medium mb-2">Leave Accrual</h3>
