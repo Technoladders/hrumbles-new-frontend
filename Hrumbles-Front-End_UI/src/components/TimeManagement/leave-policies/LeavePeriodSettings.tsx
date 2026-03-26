@@ -1,134 +1,147 @@
-
-import { useState } from "react";
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
+import { useEffect } from "react";
+import {
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogFooter 
+import {
+  Dialog, DialogContent, DialogHeader,
+  DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { 
-  Form, 
-  FormControl, 
-  FormField, 
-  FormItem, 
-  FormLabel 
+import {
+  Form, FormControl, FormField, FormItem, FormLabel,
 } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { CalendarDays, ArrowRight, Pencil } from "lucide-react";
 import { LeavePolicyPeriod } from "@/types/leave-types";
 
 interface LeavePeriodSettingsProps {
-  policyPeriod: LeavePolicyPeriod | null;
-  onUpdate: (data: Partial<LeavePolicyPeriod>) => void;
-  isOpen: boolean;
-  setIsOpen: (isOpen: boolean) => void;
+  policyPeriod:  LeavePolicyPeriod | null;
+  onUpdate:      (data: Partial<LeavePolicyPeriod>) => void;
+  isOpen:        boolean;
+  setIsOpen:     (open: boolean) => void;
 }
 
-const months = [
-  { value: 1, label: "January" },
-  { value: 2, label: "February" },
-  { value: 3, label: "March" },
-  { value: 4, label: "April" },
-  { value: 5, label: "May" },
-  { value: 6, label: "June" },
-  { value: 7, label: "July" },
-  { value: 8, label: "August" },
-  { value: 9, label: "September" },
-  { value: 10, label: "October" },
-  { value: 11, label: "November" },
-  { value: 12, label: "December" },
+const MONTHS = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
 ];
 
 export function LeavePeriodSettings({
   policyPeriod,
   onUpdate,
   isOpen,
-  setIsOpen
+  setIsOpen,
 }: LeavePeriodSettingsProps) {
   const form = useForm({
     defaultValues: {
-      start_month: policyPeriod?.start_month || 1,
+      start_month:      policyPeriod?.start_month  ?? 1,
       is_calendar_year: policyPeriod?.is_calendar_year ?? true,
     },
   });
 
-  // Calculate end month based on start month
-  const getEndMonth = (startMonth: number) => {
-    if (startMonth === 1) return "December";
-    return months[(startMonth - 2) % 12].label;
-  };
+  // Sync form when policyPeriod loads async (fixes stale-default issue)
+  useEffect(() => {
+    if (policyPeriod) {
+      form.reset({
+        start_month:      policyPeriod.start_month,
+        is_calendar_year: policyPeriod.is_calendar_year,
+      });
+    }
+  }, [policyPeriod]);
+
+  const watchIsCalendar = form.watch("is_calendar_year");
+  const watchStartMonth = form.watch("start_month");
+
+  const endMonthIndex = watchStartMonth === 1 ? 11 : (watchStartMonth - 2) % 12;
+  const endMonthName  = MONTHS[endMonthIndex];
+  const startMonthName = MONTHS[(watchStartMonth - 1) % 12];
 
   const handleSubmit = (values: { start_month: number; is_calendar_year: boolean }) => {
     onUpdate(values);
+    setIsOpen(false);
   };
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Leave Year Settings</CardTitle>
-        <CardDescription>
-          Configure how leave years are calculated
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {/* <div className="flex items-center justify-between border-b pb-4">
-            <div>
-              <h3 className="font-medium">Leave Year Period</h3>
-              <p className="text-sm text-muted-foreground">
-                {policyPeriod?.is_calendar_year
-                  ? "Calendar year (January - December)"
-                  : `Custom period (${
-                      months.find(m => m.value === policyPeriod?.start_month)?.label
-                    } - ${getEndMonth(policyPeriod?.start_month || 1)})`}
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setIsOpen(true)}>
-              Edit
-            </Button>
-          </div> */}
-          
-          <div className="border-b pb-4">
-            <h3 className="font-medium mb-2">Leave Accrual</h3>
-            <p className="text-sm text-muted-foreground">
-              Leave is accrued monthly based on the configured monthly allowance
-            </p>
-          </div>
-          
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-medium mb-2">Carry Forward</h3>
-            <p className="text-sm text-muted-foreground">
-              Unused leave can be carried forward to the next period if allowed by the leave type
-            </p>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarDays className="h-5 w-5 text-indigo-600" />
+              Leave Year Settings
+            </CardTitle>
+            <CardDescription>How leave years are calculated</CardDescription>
+          </div>
+          {/* <Button variant="outline" size="sm" onClick={() => setIsOpen(true)} className="gap-1.5">
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </Button> */}
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4 text-sm">
+        {/* Current period display */}
+        {/* <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900">
+          <CalendarDays className="h-5 w-5 text-indigo-600 shrink-0" />
+          <div>
+            {policyPeriod?.is_calendar_year ? (
+              <>
+                <p className="font-medium text-indigo-700 dark:text-indigo-300">Calendar Year</p>
+                <p className="text-xs text-muted-foreground">January → December</p>
+              </>
+            ) : policyPeriod ? (
+              <>
+                <p className="font-medium text-indigo-700 dark:text-indigo-300">Custom Year</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  {MONTHS[(policyPeriod.start_month - 1) % 12]}
+                  <ArrowRight className="h-3 w-3" />
+                  {MONTHS[(policyPeriod.start_month + 10) % 12]}
+                </p>
+              </>
+            ) : (
+              <p className="text-muted-foreground text-xs">Not configured</p>
+            )}
+          </div>
+        </div> */}
+
+        <Separator />
+
+        <div className="space-y-2 text-muted-foreground">
+          <div>
+            <p className="font-medium text-foreground mb-0.5">Accrual</p>
+            <p>Leave is accrued monthly or given upfront based on each policy's setting.</p>
+          </div>
+          <div>
+            <p className="font-medium text-foreground mb-0.5">Carry Forward</p>
+            <p>Unused balance carries forward to the next year up to the policy limit.</p>
           </div>
         </div>
       </CardContent>
 
+      {/* Edit Dialog */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
             <DialogTitle>Leave Year Settings</DialogTitle>
           </DialogHeader>
-          
+
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-5">
               <FormField
-                control={form.control}
-                name="is_calendar_year"
+                control={form.control} name="is_calendar_year"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">Use Calendar Year</FormLabel>
+                  <FormItem className="flex items-center justify-between rounded-xl border p-4">
+                    <div>
+                      <FormLabel className="font-medium">Use Calendar Year</FormLabel>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        January 1 – December 31
+                      </p>
                     </div>
                     <FormControl>
                       <Switch
@@ -139,38 +152,47 @@ export function LeavePeriodSettings({
                   </FormItem>
                 )}
               />
-              
-              {!form.watch("is_calendar_year") && (
+
+              {!watchIsCalendar && (
                 <FormField
-                  control={form.control}
-                  name="start_month"
+                  control={form.control} name="start_month"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Start Month</FormLabel>
-                      <Select 
-                        onValueChange={(value) => field.onChange(parseInt(value))} 
-                        defaultValue={field.value.toString()}
+                      <FormLabel>Leave Year Start Month</FormLabel>
+                      <Select
+                        value={field.value.toString()}
+                        onValueChange={(v) => field.onChange(parseInt(v))}
                       >
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select start month" />
+                            <SelectValue />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {months.map((month) => (
-                            <SelectItem key={month.value} value={month.value.toString()}>
-                              {month.label}
+                          {MONTHS.map((m, i) => (
+                            <SelectItem key={i + 1} value={(i + 1).toString()}>
+                              {m}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        Year period: <span className="font-medium">{startMonthName}</span>
+                        <ArrowRight className="h-3 w-3" />
+                        <span className="font-medium">{endMonthName}</span>
+                      </p>
                     </FormItem>
                   )}
                 />
               )}
-              
+
               <DialogFooter>
-                <Button type="submit">Save Changes</Button>
+                <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">
+                  Save
+                </Button>
               </DialogFooter>
             </form>
           </Form>

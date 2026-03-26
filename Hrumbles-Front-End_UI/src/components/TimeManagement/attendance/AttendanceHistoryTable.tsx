@@ -1,6 +1,9 @@
 import { useState, useMemo } from "react";
 import { format, isValid } from "date-fns";
-import { Clock, Coffee, UtensilsCrossed, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import {
+  Clock, Coffee, UtensilsCrossed,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+} from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -11,20 +14,22 @@ import { cn } from "@/lib/utils";
 import type { AttendanceRecord } from "@/hooks/TimeManagement/useAttendanceData";
 
 interface AttendanceHistoryTableProps {
-  records: AttendanceRecord[];
+  records:    AttendanceRecord[];
   isExternal: boolean;
 }
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
 const STATUS_CONFIG = {
-  present:  { label: 'Present',  dot: 'bg-emerald-500', row: '',                         badge: 'bg-emerald-50  text-emerald-700  border-emerald-200'  },
-  late:     { label: 'Late',     dot: 'bg-amber-400',   row: 'bg-amber-50/40',           badge: 'bg-amber-50    text-amber-700    border-amber-200'    },
-  on_leave: { label: 'On Leave', dot: 'bg-indigo-400',  row: 'bg-indigo-50/30',          badge: 'bg-indigo-50   text-indigo-700   border-indigo-200'   },
-  absent:   { label: 'Absent',   dot: 'bg-red-400',     row: 'bg-red-50/30',             badge: 'bg-red-50      text-red-600      border-red-200'      },
-  weekend:  { label: 'Weekend',  dot: 'bg-gray-300',    row: 'bg-gray-50/60 opacity-60', badge: 'bg-gray-100    text-gray-500     border-gray-200'     },
-  holiday:  { label: 'Holiday',  dot: 'bg-purple-400',  row: 'bg-purple-50/30',          badge: 'bg-purple-50   text-purple-700   border-purple-200'   },
-  future:   { label: 'Upcoming', dot: 'bg-gray-200',    row: 'opacity-40',               badge: 'bg-gray-50     text-gray-400     border-gray-100'     },
+  present:              { label: 'Present',           dot: 'bg-emerald-500', row: '',                           badge: 'bg-emerald-50  text-emerald-700  border-emerald-200'  },
+  late:                 { label: 'Late',               dot: 'bg-amber-400',   row: 'bg-amber-50/40',            badge: 'bg-amber-50    text-amber-700    border-amber-200'    },
+  on_leave:             { label: 'On Leave',           dot: 'bg-indigo-400',  row: 'bg-indigo-50/30',           badge: 'bg-indigo-50   text-indigo-700   border-indigo-200'   },
+  absent:               { label: 'Absent',             dot: 'bg-red-400',     row: 'bg-red-50/30',              badge: 'bg-red-50      text-red-600      border-red-200'      },
+  weekend:              { label: 'Weekend',            dot: 'bg-gray-300',    row: 'bg-gray-50/60 opacity-60',  badge: 'bg-gray-100    text-gray-500     border-gray-200'     },
+  holiday:              { label: 'Holiday',            dot: 'bg-orange-400',  row: 'bg-orange-50/30',           badge: 'bg-orange-50   text-orange-700   border-orange-200'   },
+  exception_working:    { label: 'Working (override)', dot: 'bg-teal-400',    row: 'bg-teal-50/30',             badge: 'bg-teal-50     text-teal-700     border-teal-200'     },
+  exception_nonworking: { label: 'Non-working',        dot: 'bg-rose-400',    row: 'bg-rose-50/30 opacity-70',  badge: 'bg-rose-50     text-rose-600     border-rose-200'     },
+  future:               { label: 'Upcoming',           dot: 'bg-gray-200',    row: 'opacity-40',                badge: 'bg-gray-50     text-gray-400     border-gray-100'     },
 } as const;
 
 const fmtTime = (t: string | null) => {
@@ -46,29 +51,34 @@ const breakIcon = (type: string) => {
   }
 };
 
-export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistoryTableProps) => {
-  const [page, setPage]           = useState(1);
-  const [pageSize, setPageSize]   = useState(10);
+/** Human-readable label for the status cell */
+function resolveStatusLabel(rec: AttendanceRecord): string {
+  const cfg = STATUS_CONFIG[rec.dayStatus as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.absent;
+  if (rec.dayStatus === 'on_leave'             && rec.leaveTypeName)  return rec.leaveTypeName;
+  if (rec.dayStatus === 'holiday'              && rec.holidayName)    return rec.holidayName;
+  if (rec.dayStatus === 'exception_nonworking' && rec.exceptionNote)  return rec.exceptionNote;
+  if (rec.dayStatus === 'exception_working'    && rec.exceptionNote)  return `Working: ${rec.exceptionNote}`;
+  return cfg.label;
+}
 
-  // Filter out future + weekend for the table
+export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistoryTableProps) => {
+  const [page,     setPage]     = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Exclude future + pure weekends (no clock-in data)
   const tableRecords = useMemo(
-    () => records.filter(r => r.dayStatus !== 'future' && r.dayStatus !== 'weekend'),
+    () => records.filter((r) => r.dayStatus !== 'future' && r.dayStatus !== 'weekend'),
     [records]
   );
 
   const totalRecords = tableRecords.length;
   const totalPages   = Math.max(1, Math.ceil(totalRecords / pageSize));
+  const safePage     = Math.min(page, totalPages);
+  const startIndex   = (safePage - 1) * pageSize;
+  const endIndex     = Math.min(startIndex + pageSize, totalRecords);
+  const pageRecords  = tableRecords.slice(startIndex, endIndex);
 
-  // Reset to page 1 whenever pageSize changes or records change
-  const safePage   = Math.min(page, totalPages);
-  const startIndex = (safePage - 1) * pageSize;
-  const endIndex   = Math.min(startIndex + pageSize, totalRecords);
-  const pageRecords = tableRecords.slice(startIndex, endIndex);
-
-  const handlePageSize = (val: string) => {
-    setPageSize(Number(val));
-    setPage(1);
-  };
+  const handlePageSize = (val: string) => { setPageSize(Number(val)); setPage(1); };
 
   return (
     <Card className="shadow-sm border-gray-100 dark:border-gray-800">
@@ -82,8 +92,6 @@ export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistor
               {totalRecords} record{totalRecords !== 1 ? 's' : ''} in selected period
             </CardDescription>
           </div>
-
-          {/* Page size selector */}
           <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
             <span>Rows per page</span>
             <Select value={String(pageSize)} onValueChange={handlePageSize}>
@@ -91,7 +99,7 @@ export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistor
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PAGE_SIZE_OPTIONS.map(n => (
+                {PAGE_SIZE_OPTIONS.map((n) => (
                   <SelectItem key={n} value={String(n)} className="text-xs">{n}</SelectItem>
                 ))}
               </SelectContent>
@@ -115,12 +123,17 @@ export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistor
                 <TableHead className="text-xs">Status</TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
               {pageRecords.length > 0 ? (
-                pageRecords.map(rec => {
-                  const cfg        = STATUS_CONFIG[rec.dayStatus] ?? STATUS_CONFIG.absent;
-                  const breakTotal = rec.break_logs.reduce((s, b) => s + (b.duration_minutes ?? 0), 0);
-                  const netMins    = (rec.duration_minutes ?? 0) - breakTotal;
+                pageRecords.map((rec) => {
+                  const cfg = STATUS_CONFIG[rec.dayStatus as keyof typeof STATUS_CONFIG]
+                    ?? STATUS_CONFIG.absent;
+
+                  const breakTotal = rec.break_logs.reduce(
+                    (s, b) => s + (b.duration_minutes ?? 0), 0
+                  );
+                  const netMins = (rec.duration_minutes ?? 0) - breakTotal;
 
                   const breakTypes = rec.break_logs.reduce<Record<string, number>>((acc, b) => {
                     const t = b.break_type.toLowerCase();
@@ -128,10 +141,11 @@ export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistor
                     return acc;
                   }, {});
 
-                  const hasBreaks = Object.keys(breakTypes).length > 0;
-
                   return (
-                    <TableRow key={rec.id} className={cn("transition-colors text-sm", cfg.row)}>
+                    <TableRow
+                      key={rec.id}
+                      className={cn("transition-colors text-sm", cfg.row)}
+                    >
                       <TableCell className="font-medium text-gray-700 dark:text-gray-300">
                         {format(new Date(rec.date), 'dd MMM yyyy')}
                       </TableCell>
@@ -148,9 +162,9 @@ export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistor
                         {fmtDuration(rec.duration_minutes)}
                       </TableCell>
 
-                      {/* Break cell */}
+                      {/* Break types */}
                       <TableCell>
-                        {hasBreaks ? (
+                        {Object.keys(breakTypes).length > 0 ? (
                           <div className="flex flex-wrap gap-1 items-center">
                             {Object.entries(breakTypes).map(([type, mins]) => (
                               <span
@@ -158,7 +172,9 @@ export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistor
                                 className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 text-[10px] font-medium"
                               >
                                 {breakIcon(type)}
-                                {mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`}
+                                {mins >= 60
+                                  ? `${Math.floor(mins / 60)}h ${mins % 60}m`
+                                  : `${mins}m`}
                               </span>
                             ))}
                           </div>
@@ -172,7 +188,9 @@ export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistor
                         {rec.duration_minutes ? (
                           <span className={cn(
                             "text-xs font-medium",
-                            netMins >= 480 ? "text-emerald-600" : netMins >= 360 ? "text-amber-600" : "text-red-500"
+                            netMins >= 480 ? "text-emerald-600"
+                              : netMins >= 360 ? "text-amber-600"
+                              : "text-red-500"
                           )}>
                             {fmtDuration(Math.max(0, netMins))}
                           </span>
@@ -181,16 +199,14 @@ export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistor
                         )}
                       </TableCell>
 
-                      {/* Status badge */}
+                      {/* Status badge with smart label */}
                       <TableCell>
                         <span className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+                          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium max-w-[160px] truncate",
                           cfg.badge
                         )}>
                           <span className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0", cfg.dot)} />
-                          {rec.dayStatus === 'on_leave' && rec.leaveTypeName  ? rec.leaveTypeName  :
-                           rec.dayStatus === 'holiday'  && rec.holidayName   ? rec.holidayName    :
-                           cfg.label}
+                          {resolveStatusLabel(rec)}
                         </span>
                       </TableCell>
                     </TableRow>
@@ -210,10 +226,9 @@ export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistor
           </Table>
         </div>
 
-        {/* ── Pagination bar ──────────────────────────────────────────────── */}
+        {/* Pagination */}
         {totalRecords > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
-            {/* Showing X–Y of Z */}
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Showing{' '}
               <span className="font-semibold text-gray-700 dark:text-gray-200">
@@ -224,30 +239,18 @@ export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistor
               records
             </p>
 
-            {/* Page nav */}
             <div className="flex items-center gap-1">
-              {/* First page */}
-              <Button
-                variant="ghost" size="icon"
-                className="h-7 w-7 rounded-lg"
-                onClick={() => setPage(1)}
-                disabled={safePage === 1}
-              >
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg"
+                onClick={() => setPage(1)} disabled={safePage === 1}>
                 <ChevronsLeft className="h-3.5 w-3.5" />
               </Button>
-              {/* Prev */}
-              <Button
-                variant="ghost" size="icon"
-                className="h-7 w-7 rounded-lg"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={safePage === 1}
-              >
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg"
+                onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>
                 <ChevronLeft className="h-3.5 w-3.5" />
               </Button>
 
-              {/* Page number pills */}
               {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
                 .reduce<(number | '…')[]>((acc, p, idx, arr) => {
                   if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1) acc.push('…');
                   acc.push(p);
@@ -255,7 +258,7 @@ export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistor
                 }, [])
                 .map((p, i) =>
                   p === '…' ? (
-                    <span key={`ellipsis-${i}`} className="px-1 text-xs text-gray-400">…</span>
+                    <span key={`el-${i}`} className="px-1 text-xs text-gray-400">…</span>
                   ) : (
                     <Button
                       key={p}
@@ -273,22 +276,13 @@ export const AttendanceHistoryTable = ({ records, isExternal }: AttendanceHistor
                   )
                 )}
 
-              {/* Next */}
-              <Button
-                variant="ghost" size="icon"
-                className="h-7 w-7 rounded-lg"
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={safePage === totalPages}
-              >
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}>
                 <ChevronRight className="h-3.5 w-3.5" />
               </Button>
-              {/* Last page */}
-              <Button
-                variant="ghost" size="icon"
-                className="h-7 w-7 rounded-lg"
-                onClick={() => setPage(totalPages)}
-                disabled={safePage === totalPages}
-              >
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg"
+                onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>
                 <ChevronsRight className="h-3.5 w-3.5" />
               </Button>
             </div>

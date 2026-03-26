@@ -4,6 +4,7 @@ import { format, getYear } from "date-fns";
 import { HolidaySelectionDialog } from "@/components/TimeManagement/holidays/HolidaySelectionDialog";
 import { EditHolidayDialog } from "@/components/TimeManagement/holidays/EditHolidayDialog";
 import { WeekendConfigDialog } from "@/components/TimeManagement/holidays/WeekendConfigDialog";
+import { ImportHolidaysDialog } from "@/components/TimeManagement/holidays/ImportHolidaysDialog";
 import { HolidayHeader } from "@/components/TimeManagement/holidays/HolidayHeader";
 import { MonthNavigation } from "@/components/TimeManagement/holidays/MonthNavigation";
 import { HolidayTable } from "@/components/TimeManagement/holidays/HolidayTable";
@@ -17,6 +18,7 @@ const Holidays = () => {
     isLoading,
     isDialogOpen,
     stats,
+    organization_id,
     setIsDialogOpen,
     handleDeleteHoliday,
     handleEditHoliday,
@@ -25,7 +27,11 @@ const Holidays = () => {
     changeYear,
   } = useHolidays();
 
+  // All saved dates for this org (passed to picker so they show as dots)
+  const savedDates = holidays.map(h => h.date);
+
   const [weekendConfigOpen, setWeekendConfigOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen]   = useState(false);
   const [editTarget, setEditTarget]               = useState<Holiday | null>(null);
 
   const currentMonthName = format(currentDate, "MMMM yyyy");
@@ -36,6 +42,7 @@ const Holidays = () => {
       <HolidayHeader
         onAddHolidayClick={() => setIsDialogOpen(true)}
         onWeekendConfigClick={() => setWeekendConfigOpen(true)}
+        onImportClick={() => setImportDialogOpen(true)}
         stats={stats}
         year={getYear(currentDate)}
       />
@@ -80,6 +87,7 @@ const Holidays = () => {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         onSubmit={handleAddHolidays}
+        existingDates={savedDates}
       />
 
       <EditHolidayDialog
@@ -92,6 +100,14 @@ const Holidays = () => {
       <WeekendConfigDialog
         open={weekendConfigOpen}
         onOpenChange={setWeekendConfigOpen}
+        holidays={holidays}
+      />
+
+      <ImportHolidaysDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onImport={handleAddHolidays}
+        existingDates={savedDates}
       />
     </div>
   );

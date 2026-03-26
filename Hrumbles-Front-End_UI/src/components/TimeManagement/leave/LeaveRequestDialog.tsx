@@ -1,114 +1,98 @@
-// Updated LeaveRequestDialog.tsx - Integrated LeaveDatePicker with onApply to set day_breakdown from payload (mapped types, sorted).
-// Removed auto-set useEffect (now handled by picker). Added holidays to props and passed to picker.
-// Kept day breakdown section for confirmation/editing, but sorted for stable display. Fixed reactivity by using sorted array with stable indices.
-// Updated MultiSelect badges to use motion for animation. Added total days display in breakdown section.
-
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { useWatch } from "react-hook-form";
-import { format } from 'date-fns';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { format } from "date-fns";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Dialog, DialogContent, DialogHeader,
+  DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form, FormControl, FormField, FormItem,
+  FormLabel, FormMessage,
+} from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { LeaveType, LeaveRequestFormValues, LeaveDayBreakdown } from "@/types/leave-types";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  LeaveType, LeaveRequestFormValues, LeaveDayBreakdown,
+  EmployeeLeaveBalance,
+} from "@/types/leave-types";
 import { LeaveDatePicker, ApplyPayload } from "@/components/ui/LeaveDatePicker";
 import { EmployeeOption } from "@/hooks/TimeManagement/useEmployeeEmail";
-import { Share2, Check, ChevronsUpDown, X } from "lucide-react";
+import { ClientDayStatus } from "@/hooks/TimeManagement/useOrgCalendarConfig";
+import { Share2, Check, ChevronsUpDown, X, AlertCircle } from "lucide-react";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
+  Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Command,
-  CommandInput,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-  CommandList,
+  Command, CommandInput, CommandEmpty,
+  CommandGroup, CommandItem, CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
+
+interface CalendarConfigProp {
+  getDayStatus:   (date: Date) => ClientDayStatus;
+  isWorkingDay:   (date: Date) => boolean;
+  getHolidayName: (date: Date) => string | null;
+  isLoading:      boolean;
+}
 
 interface LeaveRequestDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSubmit: (values: LeaveRequestFormValues) => void;
-  leaveTypes: LeaveType[];
-  allEmployees: EmployeeOption[];
+  open:              boolean;
+  onOpenChange:      (open: boolean) => void;
+  onSubmit:          (values: LeaveRequestFormValues) => void;
+  leaveTypes:        LeaveType[];
+  leaveBalances:     EmployeeLeaveBalance[];
+  allEmployees:      EmployeeOption[];
   isLoadingEmployees: boolean;
-  holidays?: Date[];
+  calendarConfig:    CalendarConfigProp;
   defaultRecipients?: string[];
 }
 
-interface MultiSelectProps {
-  options: EmployeeOption[];
-  selected: string[];
-  onChange: (selected: string[]) => void;
-  placeholder: string;
-  label: string;
-}
-
-function MultiSelect({ options, selected, onChange, placeholder, label }: MultiSelectProps) {
-  const [open, setOpen] = useState(false);
+// ── MultiSelect (unchanged logic, just lives here) ──────────
+function MultiSelect({
+  options, selected, onChange, placeholder, label,
+}: {
+  options: EmployeeOption[]; selected: string[];
+  onChange: (v: string[]) => void;
+  placeholder: string; label: string;
+}) {
+  const [open, setOpen]   = useState(false);
   const [search, setSearch] = useState("");
-
-  const filteredOptions = options.filter((option) =>
-    option.label.toLowerCase().includes(search.toLowerCase())
+  const filtered = options.filter((o) =>
+    o.label.toLowerCase().includes(search.toLowerCase())
   );
-
-  const handleSelect = (value: string) => {
-    const newSelected = selected.includes(value)
-      ? selected.filter((id) => id !== value)
-      : [...selected, value];
-    onChange(newSelected);
+  const toggle = (v: string) => {
+    onChange(selected.includes(v)
+      ? selected.filter((id) => id !== v)
+      : [...selected, v]);
     setSearch("");
   };
-
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          className="w-full justify-between"
-          onClick={() => setOpen(true)}
-        >
-          {selected.length > 0
-            ? `${selected.length} selected`
-            : placeholder}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        <Button variant="outline" role="combobox" className="w-full justify-between">
+          {selected.length > 0 ? `${selected.length} selected` : placeholder}
+          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
         <Command>
-          <CommandInput
-            placeholder={placeholder}
-            value={search}
-            onValueChange={setSearch}
-          />
-          <CommandEmpty>No {label.toLowerCase()} found.</CommandEmpty>
-          <CommandList className="max-h-[calc(40vh-4rem)]">
+          <CommandInput placeholder={placeholder} value={search} onValueChange={setSearch} />
+          <CommandEmpty>No {label} found.</CommandEmpty>
+          <CommandList className="max-h-[40vh]">
             <CommandGroup>
-              {filteredOptions.map((option) => (
-                <CommandItem
-                  key={option.value}
-                  value={option.label.toLowerCase()}
-                  onSelect={() => handleSelect(option.value)}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      selected.includes(option.value)
-                        ? "opacity-100"
-                        : "opacity-0"
-                    )}
-                  />
-                  {option.label}
+              {filtered.map((o) => (
+                <CommandItem key={o.value} value={o.label.toLowerCase()} onSelect={() => toggle(o.value)}>
+                  <Check className={cn("mr-2 h-4 w-4", selected.includes(o.value) ? "opacity-100" : "opacity-0")} />
+                  {o.label}
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -117,100 +101,92 @@ function MultiSelect({ options, selected, onChange, placeholder, label }: MultiS
       </PopoverContent>
       <div className="flex flex-wrap gap-1 mt-2">
         <AnimatePresence>
-          {selected.map((id) => {
-            const label = options.find((opt) => opt.value === id)?.label;
-            return (
-              <motion.div
-                key={id}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Badge
-                  variant="secondary"
-                  className="flex items-center gap-1 px-2 py-1"
-                >
-                  {label}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-4 w-4 p-0 ml-1"
-                    onClick={() => handleSelect(id)}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </Badge>
-              </motion.div>
-            );
-          })}
+          {selected.map((id) => (
+            <motion.div
+              key={id}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+            >
+              <Badge variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                {options.find((o) => o.value === id)?.label}
+                <Button variant="ghost" size="sm" className="h-4 w-4 p-0 ml-1" onClick={() => toggle(id)}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </Badge>
+            </motion.div>
+          ))}
         </AnimatePresence>
       </div>
     </Popover>
   );
 }
 
-export function LeaveRequestDialog({ open, onOpenChange, onSubmit, leaveTypes, allEmployees, isLoadingEmployees, holidays = [], defaultRecipients = [] }: LeaveRequestDialogProps) {
+// ── Main dialog ───────────────────────────────────────────────
+export function LeaveRequestDialog({
+  open, onOpenChange, onSubmit, leaveTypes,
+  leaveBalances, allEmployees, isLoadingEmployees,
+  calendarConfig, defaultRecipients = [],
+}: LeaveRequestDialogProps) {
+
   const form = useForm<LeaveRequestFormValues>({
     defaultValues: {
-      leave_type_id: "",
-      date_range: { startDate: null, endDate: null },
-      day_breakdown: [],
-      reason: "",
-      additional_recipient: [],
-      cc_recipient: [],
+      leave_type_id:         "",
+      date_range:            { startDate: null, endDate: null },
+      day_breakdown:         [],
+      reason:                "",
+      additional_recipients: [],  // ← standardised
+      cc_recipients:         [],
     },
   });
 
-  // NEW: Auto-populate default recipients when dialog opens
   useEffect(() => {
     if (open) {
       form.reset({
-        leave_type_id: "",
-        date_range: { startDate: null, endDate: null },
-        day_breakdown: [],
-        reason: "",
-        additional_recipient: defaultRecipients, // Injects HR/Configured users automatically
-        cc_recipient: [],
+        leave_type_id:         "",
+        date_range:            { startDate: null, endDate: null },
+        day_breakdown:         [],
+        reason:                "",
+        additional_recipients: defaultRecipients,
+        cc_recipients:         [],
       });
     }
-  }, [open, defaultRecipients, form]);
+  }, [open, defaultRecipients]);
 
-  const dateRange = form.watch("date_range");
+  const selectedLeaveTypeId = useWatch({ control: form.control, name: "leave_type_id" });
   const dayBreakdown = useWatch({ control: form.control, name: "day_breakdown" }) as LeaveDayBreakdown[];
 
-  // Handle date picker apply: set day_breakdown from payload (only working days, mapped types, sorted)
+  // Balance for the selected leave type
+  const selectedBalance = useMemo(
+    () => leaveBalances.find((b) => b.leave_type_id === selectedLeaveTypeId),
+    [leaveBalances, selectedLeaveTypeId]
+  );
+
   const handleDateApply = useCallback((payload: ApplyPayload) => {
     if (payload.range && payload.daySelections) {
       const breakdown: LeaveDayBreakdown[] = Object.entries(payload.daySelections)
-        .map(([isoStr, sel]) => {
-          const date = isoStr.split('T')[0]; // yyyy-MM-dd
-          let type: 'full' | 'half_am' | 'half_pm' = 'full';
-          if (sel === 'first') type = 'half_am';
-          if (sel === 'second') type = 'half_pm';
-          return { date, type };
-        })
-        .sort((a, b) => a.date.localeCompare(b.date)); // Ensure stable order
-      form.setValue('day_breakdown', breakdown, { shouldDirty: true });
+        .map(([isoStr, sel]) => ({
+          date: isoStr.split("T")[0],
+          type: sel === "first" ? "half_am" : sel === "second" ? "half_pm" : "full",
+        } as LeaveDayBreakdown))
+        .sort((a, b) => a.date.localeCompare(b.date));
+      form.setValue("day_breakdown", breakdown, { shouldDirty: true });
     }
   }, [form]);
 
-  // Sorted breakdown for stable display/editing
-  const sortedDayBreakdown = useMemo(() => 
-    [...(dayBreakdown || [])].sort((a, b) => a.date.localeCompare(b.date)), 
+  const sortedBreakdown = useMemo(
+    () => [...(dayBreakdown ?? [])].sort((a, b) => a.date.localeCompare(b.date)),
     [dayBreakdown]
   );
 
-  // Calculate total working days from breakdown
-  const totalWorkingDays = useMemo(() => {
-    return sortedDayBreakdown.reduce((sum, item) => {
-      return sum + (item.type === 'full' ? 1 : 0.5);
-    }, 0);
-  }, [sortedDayBreakdown]);
+  const totalWorkingDays = useMemo(
+    () => sortedBreakdown.reduce((s, d) => s + (d.type === "full" ? 1 : 0.5), 0),
+    [sortedBreakdown]
+  );
 
   const handleSubmit = (values: LeaveRequestFormValues) => {
     if (!values.date_range.startDate || !values.date_range.endDate) {
-      form.setError("date_range", { type: "manual", message: "Please select a valid date range." });
+      form.setError("date_range", { type: "manual", message: "Please select a date range." });
       return;
     }
     onSubmit(values);
@@ -218,30 +194,24 @@ export function LeaveRequestDialog({ open, onOpenChange, onSubmit, leaveTypes, a
     onOpenChange(false);
   };
 
+  const insufficientBalance =
+    selectedBalance !== undefined && totalWorkingDays > selectedBalance.remaining_days;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 300 }}
-            >
-              📅
-            </motion.div>
+            <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}>📅</motion.span>
             Request Leave
           </DialogTitle>
         </DialogHeader>
+
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6 pt-4">
-            {/* --- CORE LEAVE DETAILS --- */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="grid grid-cols-1 md:grid-cols-2 gap-4"
-            >
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-5 pt-4">
+            {/* ── Leave type + date range ─────────────────── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Leave type — controlled Select */}
               <FormField
                 control={form.control}
                 name="leave_type_id"
@@ -249,30 +219,69 @@ export function LeaveRequestDialog({ open, onOpenChange, onSubmit, leaveTypes, a
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Leave Type</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select
+                      value={field.value}               // ← controlled
+                      onValueChange={field.onChange}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select leave type" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {leaveTypes.filter(lt => lt.is_active).map((type) => (
-                          <SelectItem key={type.id} value={type.id}>
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="w-3 h-3 rounded-full"
-                                style={{ backgroundColor: type.color }}
-                              ></div>
-                              {type.name}
-                            </div>
-                          </SelectItem>
-                        ))}
+                        {leaveTypes.filter((lt) => lt.is_active).map((lt) => {
+                          const bal = leaveBalances.find((b) => b.leave_type_id === lt.id);
+                          return (
+                            <SelectItem key={lt.id} value={lt.id}>
+                              <div className="flex items-center justify-between w-full gap-3">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                                    style={{ background: lt.color }}
+                                  />
+                                  {lt.name}
+                                </div>
+                                {bal && (
+                                  <span className={cn(
+                                    "text-xs font-medium",
+                                    bal.remaining_days <= 2
+                                      ? "text-rose-500"
+                                      : "text-emerald-600"
+                                  )}>
+                                    {bal.remaining_days}d left
+                                  </span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
+
+                    {/* Balance indicator below select */}
+                    {selectedBalance && (
+                      <div className={cn(
+                        "flex items-center gap-2 text-xs mt-1 px-2 py-1.5 rounded-lg border",
+                        insufficientBalance
+                          ? "bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/20"
+                          : selectedBalance.remaining_days <= 2
+                          ? "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/20"
+                          : "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/20"
+                      )}>
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        <span>
+                          {insufficientBalance
+                            ? `Insufficient balance — ${selectedBalance.remaining_days} days remaining, ${totalWorkingDays} requested`
+                            : `${selectedBalance.remaining_days} days remaining`}
+                        </span>
+                      </div>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              {/* Date picker — org-aware */}
               <FormField
                 control={form.control}
                 name="date_range"
@@ -281,165 +290,161 @@ export function LeaveRequestDialog({ open, onOpenChange, onSubmit, leaveTypes, a
                   <FormItem className="flex flex-col mt-2">
                     <FormLabel>Leave Dates</FormLabel>
                     <FormControl>
-                      <LeaveDatePicker 
-                        value={field.value} 
+                      <LeaveDatePicker
+                        value={field.value}
                         onChange={field.onChange}
                         onApply={handleDateApply}
-                        holidays={holidays}
+                        calendarConfig={calendarConfig}  // ← org-aware
                       />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </motion.div>
+            </div>
 
-            {/* --- DYNAMIC DAY BREAKDOWN SECTION --- */}
+            {/* ── Day breakdown ───────────────────────────── */}
             <AnimatePresence>
-              {sortedDayBreakdown.length > 0 && (
+              {sortedBreakdown.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="space-y-3 rounded-lg border p-4 bg-muted/20"
+                  className="rounded-xl border p-4 bg-muted/20 space-y-3"
                 >
-                  <div className="flex items-center gap-2">
-                    <motion.div
-                      initial={{ rotate: 0 }}
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 0.5, repeat: 1 }}
-                    >
-                      ⚙️
-                    </motion.div>
+                  <div className="flex items-center justify-between">
                     <FormLabel>Day-by-Day Configuration</FormLabel>
-                    <div className="ml-auto text-sm text-muted-foreground">
-                      Total: <span className="font-semibold">{totalWorkingDays}</span> days
-                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      Total: <span className="font-semibold">{totalWorkingDays}</span> working days
+                    </span>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Adjust leave type for each working day if needed (e.g., for a half-day). Weekends and holidays are excluded.
+                  <p className="text-xs text-muted-foreground">
+                    Full = 1 day · 1st Half (AM) = 0.5 day · 2nd Half (PM) = 0.5 day.
+                    Weekends, holidays, and non-working days are excluded.
                   </p>
-                  <AnimatePresence>
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ staggerChildren: 0.05 }}
-                      className="space-y-2"
-                    >
-                      {sortedDayBreakdown.map((item, index) => (
-                        <motion.div
-                          key={`${item.date}-${index}`} // Stable key with index
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: 20 }}
-                          className="flex items-center justify-between p-2 bg-background rounded-md shadow-sm border"
-                        >
-                          <p className="font-medium text-sm">
-                            {format(new Date(item.date), 'EEEE, MMM dd')}
-                          </p>
-                          <Controller
-                            control={form.control}
-                            name={`day_breakdown.${index}.type`}
-                            render={({ field }) => (
-                              <RadioGroup
-                                onValueChange={field.onChange}
-                                value={field.value}
-                                className="flex items-center space-x-4"
-                              >
-                                <FormItem className="flex items-center space-x-2">
+                  <div className="space-y-1.5">
+                    {sortedBreakdown.map((item, idx) => (
+                      <div
+                        key={`${item.date}-${idx}`}
+                        className="flex items-center justify-between p-2 bg-background rounded-lg border"
+                      >
+                        <p className="text-sm font-medium">
+                          {format(new Date(item.date), "EEE, MMM dd")}
+                        </p>
+                        <Controller
+                          control={form.control}
+                          name={`day_breakdown.${idx}.type`}
+                          render={({ field }) => (
+                            <RadioGroup
+                              value={field.value}
+                              onValueChange={field.onChange}
+                              className="flex items-center gap-4"
+                            >
+                              {[
+                                { value: "full",    label: "Full" },
+                                { value: "half_am", label: "AM" },
+                                { value: "half_pm", label: "PM" },
+                              ].map(({ value, label }) => (
+                                <FormItem key={value} className="flex items-center gap-1.5 space-y-0">
                                   <FormControl>
-                                    <RadioGroupItem value="full" />
+                                    <RadioGroupItem value={value} />
                                   </FormControl>
-                                  <FormLabel className="font-normal text-sm">Full</FormLabel>
+                                  <FormLabel className="font-normal text-sm cursor-pointer">
+                                    {label}
+                                  </FormLabel>
                                 </FormItem>
-                                <FormItem className="flex items-center space-x-2">
-                                  <FormControl>
-                                    <RadioGroupItem value="half_am" />
-                                  </FormControl>
-                                  <FormLabel className="font-normal text-sm">AM</FormLabel>
-                                </FormItem>
-                                <FormItem className="flex items-center space-x-2">
-                                  <FormControl>
-                                    <RadioGroupItem value="half_pm" />
-                                  </FormControl>
-                                  <FormLabel className="font-normal text-sm">PM</FormLabel>
-                                </FormItem>
-                              </RadioGroup>
-                            )}
-                          />
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  </AnimatePresence>
+                              ))}
+                            </RadioGroup>
+                          )}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <FormField
-                control={form.control}
-                name="reason"
-                rules={{ required: "Reason is mandatory." }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Reason</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Provide a reason for your leave"
-                        className="min-h-[100px] resize-none"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+            {/* ── Pre-submit summary ──────────────────────── */}
+            {totalWorkingDays > 0 && selectedLeaveTypeId && (
+              <div className={cn(
+                "rounded-xl border p-4 text-sm space-y-1",
+                insufficientBalance
+                  ? "bg-rose-50 border-rose-200 dark:bg-rose-950/20"
+                  : "bg-indigo-50 border-indigo-200 dark:bg-indigo-950/20"
+              )}>
+                <p className="font-semibold text-foreground">Summary</p>
+                <p className="text-muted-foreground">
+                  <span className="font-medium text-foreground">{totalWorkingDays} working day{totalWorkingDays !== 1 ? "s" : ""}</span>{" "}
+                  will be deducted from{" "}
+                  <span className="font-medium" style={{ color: leaveTypes.find((t) => t.id === selectedLeaveTypeId)?.color }}>
+                    {leaveTypes.find((t) => t.id === selectedLeaveTypeId)?.name}
+                  </span>
+                </p>
+                {selectedBalance && (
+                  <p className="text-muted-foreground">
+                    Remaining after: {" "}
+                    <span className={cn(
+                      "font-semibold",
+                      (selectedBalance.remaining_days - totalWorkingDays) < 0
+                        ? "text-rose-600"
+                        : "text-emerald-600"
+                    )}>
+                      {Math.max(0, selectedBalance.remaining_days - totalWorkingDays)} days
+                    </span>
+                  </p>
                 )}
-              />
-            </motion.div>
+              </div>
+            )}
 
-            {/* --- RECIPIENTS SECTION --- */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="space-y-4 rounded-lg border p-4 bg-muted/10"
-            >
+            {/* ── Reason ─────────────────────────────────── */}
+            <FormField
+              control={form.control}
+              name="reason"
+              rules={{ required: "Reason is required." }}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Reason <span className="text-rose-500">*</span></FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Provide a reason for your leave"
+                      className="min-h-[90px] resize-none"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* ── Recipients ─────────────────────────────── */}
+            <div className="rounded-xl border p-4 bg-muted/10 space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <Share2 className="h-4 w-4 mr-2 text-primary" />
+                <div className="flex items-center gap-2">
+                  <Share2 className="h-4 w-4 text-primary" />
                   <FormLabel>Email Notification</FormLabel>
                 </div>
-                <span className="px-2 py-1 text-xs font-semibold text-gray-600 bg-gray-100 rounded-md">
-                  Optional
-                </span>
+                <Badge variant="outline" className="text-xs">Optional</Badge>
               </div>
+
               {isLoadingEmployees ? (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex items-center justify-center py-8"
-                >
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                  <p className="ml-2 text-sm text-muted-foreground">Loading employees...</p>
-                </motion.div>
+                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+                  Loading employees…
+                </div>
               ) : (
                 <>
                   <FormField
                     control={form.control}
-                    name="additional_recipient"
+                    name="additional_recipients"   // ← standardised
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-sm">Additional Recipients (To)</FormLabel>
+                        <FormLabel className="text-sm">To (additional recipients)</FormLabel>
                         <FormControl>
                           <MultiSelect
                             options={allEmployees}
                             selected={field.value}
                             onChange={field.onChange}
-                            placeholder="Add more recipients..."
+                            placeholder="Add recipients…"
                             label="recipients"
                           />
                         </FormControl>
@@ -448,16 +453,16 @@ export function LeaveRequestDialog({ open, onOpenChange, onSubmit, leaveTypes, a
                   />
                   <FormField
                     control={form.control}
-                    name="cc_recipient"
+                    name="cc_recipients"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-sm">CC Recipients</FormLabel>
+                        <FormLabel className="text-sm">CC</FormLabel>
                         <FormControl>
                           <MultiSelect
                             options={allEmployees}
                             selected={field.value}
                             onChange={field.onChange}
-                            placeholder="Add CC recipients..."
+                            placeholder="Add CC recipients…"
                             label="CC recipients"
                           />
                         </FormControl>
@@ -466,13 +471,25 @@ export function LeaveRequestDialog({ open, onOpenChange, onSubmit, leaveTypes, a
                   />
                 </>
               )}
-            </motion.div>
+            </div>
 
-            <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => { form.reset(); onOpenChange(false); }}>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { form.reset(); onOpenChange(false); }}
+              >
                 Cancel
               </Button>
-              <Button type="submit" className="bg-primary hover:bg-primary/90">
+              <Button
+                type="submit"
+                disabled={insufficientBalance}
+                className={cn(
+                  insufficientBalance
+                    ? "bg-rose-400 cursor-not-allowed"
+                    : "bg-primary hover:bg-primary/90"
+                )}
+              >
                 Submit Request
               </Button>
             </DialogFooter>
