@@ -104,6 +104,8 @@ import { EnhancedDateRangeSelector } from "@/components/ui/EnhancedDateRangeSele
 
 // integartion job board imports
 import { CareerjetShareModal } from "@/components/jobs/CareerjetShareModal";
+// demo job board imports
+import { JobBoardShareModal, getJobPosts } from "@/components/jobs/job-boards";
 
 interface DateRange {
   startDate: Date | null;
@@ -208,6 +210,13 @@ const Jobs = () => {
   // job Board states
   const [careerjetShareJob, setCareerjetShareJob] = useState<JobData | null>(null);
   const orgSlug = window.location.hostname.split(".")[0];
+
+
+const [postedBoards,     setPostedBoards]     = useState<Record<string, string[]>>({});
+const [broadcastJob, setBroadcastJob] = useState<JobData | null>(null);
+ 
+// Helper: read board post count for any job directly from localStorage
+const getBoardPostCount = (jobId: string) => Object.keys(getJobPosts(jobId)).length;
   
   // Check if current org is TUP
   // const isTupOrg = organization_id === TUP_ORG_CHECK || organization_id === TUP_ORG_ID;
@@ -779,6 +788,48 @@ if (isLoading) {
               <TooltipContent><p>Share to CareerJet</p></TooltipContent>
             </Tooltip>
           </TooltipProvider> */}
+
+
+          {/* demo modal */}
+{!isEmployee && (
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 rounded-full text-slate-500 hover:bg-violet-600 hover:text-white transition-colors relative"
+          onClick={() => setBroadcastJob(job)}
+        >
+          {/* Broadcast icon */}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className="h-4 w-4">
+            <path d="M6.18 15.64a2.18 2.18 0 0 1 0-7.27M17.82 15.64a2.18 2.18 0 0 0 0-7.27" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <path d="M3 17.27a6.55 6.55 0 0 1 0-10.54M21 17.27a6.55 6.55 0 0 0 0-10.54" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+          </svg>
+          {/* Board count badge — reads from localStorage */}
+          {(() => {
+            const count = getBoardPostCount(job.id);
+            return count > 0 ? (
+              <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full
+                text-white text-[7px] font-bold flex items-center justify-center
+                border border-white"
+                style={{ background: "linear-gradient(135deg, #9333ea, #ec4899)" }}>
+                {count}
+              </span>
+            ) : null;
+          })()}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {(() => {
+          const count = getBoardPostCount(job.id);
+          return <p>{count > 0 ? `Posted to ${count} board${count !== 1 ? "s" : ""}` : "Broadcast to Job Boards"}</p>;
+        })()}
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+)}
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-red-600 hover:text-white transition-colors" onClick={() => handleDeleteJob(job)}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger>
@@ -1122,6 +1173,18 @@ if (isLoading) {
     supabaseUrl={import.meta.env.VITE_SUPABASE_URL}
     isOpen={!!careerjetShareJob}
     onClose={() => setCareerjetShareJob(null)}
+  />
+)}
+
+{broadcastJob && (
+  <JobBoardShareModal
+    job={broadcastJob}
+    isOpen={!!broadcastJob}
+    onClose={() => setBroadcastJob(null)}
+    onPosted={() => {
+      // Force re-render so badge updates immediately after posting
+      setBroadcastJob(null);
+    }}
   />
 )}
     </div>
