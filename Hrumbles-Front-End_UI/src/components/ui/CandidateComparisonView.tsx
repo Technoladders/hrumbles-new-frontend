@@ -26,13 +26,10 @@ export interface ParsedCandidateProfile {
 interface CandidateComparisonViewProps {
   candidates: ParsedCandidateProfile[];
   selectedIndices: Set<number>;
-  onSelectionChange: (actualIndex: number) => void;
+  onSelectionChange: (index: number) => void;
   onSelectAll: () => void;
   onExit: () => void;
   onAddSingleCandidate: (candidate: ParsedCandidateProfile) => void;
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (newPage: number) => void;
   totalCandidates: number;
 }
 
@@ -56,12 +53,9 @@ export const CandidateComparisonView: React.FC<CandidateComparisonViewProps> = (
   onSelectAll,
   onExit,
   onAddSingleCandidate,
-  currentPage,
-  totalPages,
-  onPageChange,
   totalCandidates,
 }) => {
-  const startIndex = (currentPage - 1) * 5;
+
   console.log("Rendering CandidateComparisonView with candidates:", candidates);
 
   // This function makes the "View Resume" button work
@@ -78,7 +72,7 @@ export const CandidateComparisonView: React.FC<CandidateComparisonViewProps> = (
       <div className="flex justify-between items-center mb-6 flex-shrink-0">
         <div>
           <h2 className="text-xl font-bold">Review & Select Candidates</h2>
-          <p className="text-sm text-gray-500">Comparing {startIndex + 1}-{startIndex + candidates.length} of {totalCandidates} new candidates</p>
+          <p className="text-sm text-gray-500">Showing all {totalCandidates} parsed candidates</p>
         </div>
         <div className="flex items-center gap-4">
             <Button onClick={onSelectAll} variant="outline"><Users className="mr-2 h-4 w-4" />Select All ({selectedIndices.size}/{totalCandidates})</Button>
@@ -86,33 +80,28 @@ export const CandidateComparisonView: React.FC<CandidateComparisonViewProps> = (
         </div>
       </div>
 
+      {/* The container MUST have overflow-y-auto to allow scrolling through many rows */}
       <div className="flex-grow overflow-y-auto pr-2 -mr-2">
-      <motion.div
-  key={currentPage}
-  initial={{ opacity: 0 }}
-  animate={{ opacity: 1 }}
-  transition={{ duration: 0.3 }}
-  className="grid gap-5 h-full" // Removed responsive grid classes
-  // This style attribute is the key to the fix
-  style={{ gridTemplateColumns: `repeat(${candidates.length}, minmax(300px, 1fr))` }}
->
-          {candidates.map((candidate, pageIndex) => {
-            const actualIndex = startIndex + pageIndex;
-            const isSelected = selectedIndices.has(actualIndex);
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 pb-8"
+          // DELETE: style={{ gridTemplateColumns: ... }}
+        >
+          {candidates.map((candidate, index) => {
+            // In a full list, index IS the actualIndex
+            const isSelected = selectedIndices.has(index);
             
-            return (
+             return (
               <motion.div
-                key={actualIndex}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: pageIndex * 0.05 }}
-                className={`flex flex-col border rounded-lg bg-white transition-all duration-300 ${isSelected ? 'border-purple-500 shadow-lg' : 'border-gray-200 hover:shadow-md'}`}
+                key={index}
+                className={`flex flex-col border rounded-lg bg-white min-h-[500px] transition-all duration-300 ${isSelected ? 'border-purple-500 shadow-lg' : 'border-gray-200 hover:shadow-md'}`}
               >
                 <div className="p-4 flex justify-between items-start">
                     <div className="flex items-center">
-                        <Checkbox 
+                         <Checkbox 
                             checked={isSelected}
-                            onCheckedChange={() => onSelectionChange(actualIndex)}
+                            onCheckedChange={() => onSelectionChange(index)}
                             className="h-5 w-5 mr-3"
                         />
                         <h3 className="font-bold text-lg" title={candidate.candidate_name}>{candidate.candidate_name || 'Unnamed'}</h3>
@@ -169,13 +158,7 @@ export const CandidateComparisonView: React.FC<CandidateComparisonViewProps> = (
         </motion.div>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex justify-center items-center mt-4 pt-4 border-t border-gray-200 flex-shrink-0">
-          <Button variant="outline" size="sm" onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1}><ChevronLeft className="h-4 w-4" /></Button>
-          <span className="text-sm font-medium mx-4">Page {currentPage} of {totalPages}</span>
-          <Button variant="outline" size="sm" onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages}><ChevronRight className="h-4 w-4" /></Button>
-        </div>
-      )}
+
     </div>
   );
 };

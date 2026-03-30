@@ -218,14 +218,30 @@ export default function TanstackContactsPage() {
   }, []);
 
   // ── Reset when entering file route ───────────────────────────────────────────
-  useEffect(() => {
-    if (fileId) {
-      dispatch(setDiscoveryMode(false));
+const lastFileId = React.useRef(fileId);
+
+useEffect(() => {
+  if (fileId) {
+    dispatch(setDiscoveryMode(false));
+    
+    // Only reset if the list ID actually changed (switching lists)
+    // If it's the same ID, we are likely returning from a sub-page (Back button)
+    if (fileId !== lastFileId.current) {
       dispatch(resetSearch());
       dispatch(setPage(1));
-      setHasSearched(true);
+      lastFileId.current = fileId;
     }
-  }, [fileId]);
+    
+    // Ensure we hydrate the page from URL if it exists
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlPage = parseInt(urlParams.get('page') || '1', 10);
+    if (urlPage > 1) {
+      dispatch(setPage(urlPage));
+    }
+
+    setHasSearched(true);
+  }
+}, [fileId, dispatch]);
 
   // ── Reload correct recent-search history when mode changes ───────────────────
   useEffect(() => {

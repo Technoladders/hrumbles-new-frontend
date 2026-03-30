@@ -111,7 +111,7 @@ export const useCandidateSearch = ({
           person_locations:     f.locations,
           person_seniorities:   f.seniorities,
           // always send verified — never shown in UI, always applied
-          contact_email_status: ["verified"],
+          // contact_email_status: ["verified"],
           page,
           per_page: RESULTS_PER_PAGE,
         },
