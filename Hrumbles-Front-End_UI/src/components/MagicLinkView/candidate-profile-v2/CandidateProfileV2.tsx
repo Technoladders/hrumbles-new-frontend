@@ -31,6 +31,7 @@ import { V2LoadingState } from "./components/V2LoadingState";
 import { V2ErrorState } from "./components/V2ErrorState";
 import { V2OverviewTab } from "./components/V2OverviewTab";
 import { V2BgvResults } from "./components/V2BgvResults";
+import V2WhatsAppFloat     from "./components/V2WhatsAppFloat";
 
 // ─── Helpers ───
 const parseJsonArray = (data: any) => {
@@ -711,6 +712,14 @@ const CandidateProfileV2: React.FC<CandidateProfileV2Props> = ({
           documents={verifiedDocuments}
         />
       )}
+      {!shareMode && candidate && (
+         <V2WhatsAppFloat
+           candidateId={candidate.id}
+           jobId={jobId}
+           candidateName={candidate.name}
+           candidatePhone={candidate.phone ?? candidate.metadata?.phone ?? null}
+         />
+       )}
     </>
   );
 };
