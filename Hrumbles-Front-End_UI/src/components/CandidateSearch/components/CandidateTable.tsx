@@ -195,7 +195,7 @@ const CandidateRow: React.FC<RowProps> = ({
               )}>
                 {c.first_name} {c.last_name_obfuscated}
               </p>
-              {isInCrm && <InCrmBadge selected={selected} />}
+              {/* {isInCrm && <InCrmBadge selected={selected} />} */}
               {(emailRevealed || phoneRevealed) && (
                 <RevealedBadge
                   emailRevealed={emailRevealed}

@@ -13,26 +13,24 @@ const INTENT_KEYWORDS: Record<string, string> = {
 };
 
 interface UseSearchOptions {
-  keywords:           string;
-  titles:             string[];
-  locations:          string[];
-  seniorities:        string[];
-  companyNames:       string[];
+  keywords: string;
+  titles: string[];
+  locations: string[];
+  seniorities: string[];
+  companyNames: string[];
   availabilityIntent: string[];
-  initialPage?:       number;  // page to start on — read from URL on mount
 }
 
 interface UseSearchReturn {
-  state:        SearchState;
-  people:       ApolloCandidate[];
+  state: SearchState;
+  people: ApolloCandidate[];
   totalEntries: number;
-  currentPage:  number;
-  error:        SearchError | null;
-  search:       (page?: number) => Promise<void>;
-  loadPage:     (page: number) => void;   // navigate to any page directly
-  loadMore:     () => void;               // kept for backward compat
-  loadPrev:     () => void;               // kept for backward compat
-  reset:        () => void;
+  currentPage: number;
+  error: SearchError | null;
+  search: (page?: number) => Promise<void>;
+  loadMore: () => void;
+  loadPrev: () => void;
+  reset: () => void;
 }
 
 const classifyError = (statusCode: number, message: string): SearchError => {
@@ -79,13 +77,11 @@ const buildKeywords = (
 
 export const useCandidateSearch = ({
   keywords, titles, locations, seniorities, companyNames, availabilityIntent,
-  initialPage = 1,
 }: UseSearchOptions): UseSearchReturn => {
   const [state,        setState]        = useState<SearchState>("idle");
   const [people,       setPeople]       = useState<ApolloCandidate[]>([]);
   const [totalEntries, setTotalEntries] = useState(0);
-  // Start on initialPage — restored from URL on mount
-  const [currentPage,  setCurrentPage]  = useState(initialPage);
+  const [currentPage,  setCurrentPage]  = useState(1);
   const [error,        setError]        = useState<SearchError | null>(null);
 
   const lastFilters = useRef({ keywords, titles, locations, seniorities, companyNames, availabilityIntent });
@@ -110,8 +106,6 @@ export const useCandidateSearch = ({
           person_titles:        f.titles,
           person_locations:     f.locations,
           person_seniorities:   f.seniorities,
-          // always send verified — never shown in UI, always applied
-          // contact_email_status: ["verified"],
           page,
           per_page: RESULTS_PER_PAGE,
         },
@@ -151,12 +145,11 @@ export const useCandidateSearch = ({
     }
   }, [keywords, titles, locations, seniorities, companyNames, availabilityIntent]);
 
-  const loadPage = useCallback((page: number) => { search(page); }, [search]);
   const loadMore = useCallback(() => search(currentPage + 1), [search, currentPage]);
   const loadPrev = useCallback(() => { if (currentPage > 1) search(currentPage - 1); }, [search, currentPage]);
   const reset    = useCallback(() => {
     setState("idle"); setPeople([]); setTotalEntries(0); setCurrentPage(1); setError(null);
   }, []);
 
-  return { state, people, totalEntries, currentPage, error, search, loadPage, loadMore, loadPrev, reset };
+  return { state, people, totalEntries, currentPage, error, search, loadMore, loadPrev, reset };
 };
