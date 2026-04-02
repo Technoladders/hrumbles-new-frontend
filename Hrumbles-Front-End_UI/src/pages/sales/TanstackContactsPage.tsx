@@ -218,14 +218,30 @@ export default function TanstackContactsPage() {
   }, []);
 
   // ── Reset when entering file route ───────────────────────────────────────────
-  useEffect(() => {
-    if (fileId) {
-      dispatch(setDiscoveryMode(false));
+const lastFileId = React.useRef(fileId);
+
+useEffect(() => {
+  if (fileId) {
+    dispatch(setDiscoveryMode(false));
+    
+    // Only reset if the list ID actually changed (switching lists)
+    // If it's the same ID, we are likely returning from a sub-page (Back button)
+    if (fileId !== lastFileId.current) {
       dispatch(resetSearch());
       dispatch(setPage(1));
-      setHasSearched(true);
+      lastFileId.current = fileId;
     }
-  }, [fileId]);
+    
+    // Ensure we hydrate the page from URL if it exists
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlPage = parseInt(urlParams.get('page') || '1', 10);
+    if (urlPage > 1) {
+      dispatch(setPage(urlPage));
+    }
+
+    setHasSearched(true);
+  }
+}, [fileId, dispatch]);
 
   // ── Reload correct recent-search history when mode changes ───────────────────
   useEffect(() => {
@@ -486,33 +502,99 @@ export default function TanstackContactsPage() {
     }
   };
 
-  const handleEnrich = async (contactId: string, apolloId: string | null, type: 'email' | 'phone', personDetails?: any) => {
-    try {
-      toast({ title: 'Verifying…', description: `Checking ${type}` });
-      const { data, error } = await supabase.functions.invoke('enrich-contact', {
-        body: {
-          contactId, apolloPersonId: apolloId, revealType: type,
-          organizationId: organization_id, userId: user.id,
-          email: personDetails?.email, name: personDetails?.name,
-          linkedin_url: personDetails?.linkedin_url,
-          organization_name: personDetails?.company_name,
-          domain: personDetails?.company_domain,
-        },
-      });
-      if (error) throw new Error(error.message);
-      if (data?.error === 'insufficient_credits') {
-        toast({ variant: 'destructive', title: 'Insufficient Credits', description: data.message }); return;
+const handleEnrich = async (
+  contactId: string, 
+  apolloId: string | null, 
+  type: 'email' | 'phone', 
+  personDetails?: any
+) => {
+  try {
+    toast({ title: 'Verifying…', description: `Checking ${type}` });
+
+    const { data, error } = await supabase.functions.invoke('enrich-contact', {
+      body: {
+        contactId,
+        apolloPersonId: apolloId,
+        revealType: type,
+        organizationId: organization_id,
+        userId: user.id,
+        email: personDetails?.email,
+        name: personDetails?.name,
+        linkedin_url: personDetails?.linkedin_url,
+        organization_name: personDetails?.company_name,
+        domain: personDetails?.company_domain,
+      },
+    });
+
+    // === NEW ERROR HANDLING ===
+    if (error) {
+      // This catches 402, 404, 500, etc.
+      let errorBody: any = null;
+
+      try {
+        // Try to get the actual JSON body returned by your function
+        if (error instanceof Error && 'context' in error) {
+          errorBody = await (error as any).context?.json?.();
+        }
+      } catch (e) {
+        // fallback if body can't be parsed
       }
-      if (data?.error === 'no_match') {
-        toast({ variant: 'destructive', title: 'No Match Found', description: data.message }); return;
+
+      const msg = errorBody?.message || error.message || 'Something went wrong';
+
+      if (errorBody?.error === 'insufficient_credits' || error.statusCode === 402) {
+        toast({
+          variant: 'destructive',
+          title: 'Insufficient Credits',
+          description: msg || 'Please recharge your credits to continue enriching contacts.'
+        });
+        return;
       }
-      const credit = data?.credits?.deducted ? ` (${data.credits.deducted} credit${data.credits.deducted > 1 ? 's' : ''})` : '';
-      toast({ title: 'Success', description: (data?.message || 'Enrichment complete') + credit });
-      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error', description: err.message });
+
+      if (errorBody?.error === 'no_match' || error.statusCode === 404) {
+        toast({
+          variant: 'destructive',
+          title: 'No Match Found',
+          description: msg
+        });
+        return;
+      }
+
+      // Generic error
+      toast({ variant: 'destructive', title: 'Error', description: msg });
+      return;
     }
-  };
+
+    // Success path (200 OK)
+    if (data?.error === 'insufficient_credits') {
+      toast({ variant: 'destructive', title: 'Insufficient Credits', description: data.message });
+      return;
+    }
+    if (data?.error === 'no_match') {
+      toast({ variant: 'destructive', title: 'No Match Found', description: data.message });
+      return;
+    }
+
+    const credit = data?.credits?.deducted 
+      ? ` (${data.credits.deducted} credit${data.credits.deducted > 1 ? 's' : ''})` 
+      : '';
+
+    toast({ 
+      title: 'Success', 
+      description: (data?.message || 'Enrichment complete') + credit 
+    });
+
+    queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+
+  } catch (err: any) {
+    console.error("Enrich error:", err);
+    toast({ 
+      variant: 'destructive', 
+      title: 'Error', 
+      description: err.message || 'Failed to enrich contact' 
+    });
+  }
+};
 
   // ── Bulk: Save selected discovery rows to CRM ────────────────────────────────
   const handleBulkSaveToCRM = async () => {

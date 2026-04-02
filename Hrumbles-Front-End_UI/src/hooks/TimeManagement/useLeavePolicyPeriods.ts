@@ -1,140 +1,136 @@
-
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { LeavePolicyPeriod } from '@/types/leave-types';
-import { toast } from 'sonner';
-import { getAuthDataFromLocalStorage } from '@/utils/localstorage';
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { LeavePolicyPeriod } from "@/types/leave-types";
+import { toast } from "sonner";
+import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
 
 export const useLeavePolicyPeriods = () => {
-  const [leavePeriods, setLeavePeriods] = useState<LeavePolicyPeriod[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [leavePeriods, setLeavePeriods]           = useState<LeavePolicyPeriod[]>([]);
+  const [policyPeriod, setPolicyPeriod]           = useState<LeavePolicyPeriod | null>(null);
+  const [loading, setLoading]                     = useState(true);
+  const [isSubmitting, setIsSubmitting]           = useState(false);
   const [isEditPeriodDialogOpen, setIsEditPeriodDialogOpen] = useState(false);
-  // Add a default policy period state
-  const [policyPeriod, setPolicyPeriod] = useState<LeavePolicyPeriod | null>(null);
-const authData = getAuthDataFromLocalStorage();
-    if (!authData) {
-      throw new Error('Failed to retrieve authentication data');
-    }
-    const { organization_id, userId } = authData;
 
-  // Load leave policy periods
-  const loadLeavePolicyPeriods = async () => {
+  // ── Auth: read inside the hook body, never at module level ───────────
+  const authData        = getAuthDataFromLocalStorage();
+  const organization_id = authData?.organization_id as string | undefined;
+
+  // ── Load ─────────────────────────────────────────────────────────────
+  const loadLeavePolicyPeriods = useCallback(async () => {
+    if (!organization_id) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('leave_policy_periods')
-        .select('*')
-        .order('start_month', { ascending: true });
+        .from("leave_policy_periods")
+        .select("*")
+        .eq("organization_id", organization_id)
+        .order("start_month", { ascending: true });
 
       if (error) throw error;
-      setLeavePeriods(data || []);
-      // Set first period as default if available
-      if (data && data.length > 0) {
-        setPolicyPeriod(data[0]);
-      }
-    } catch (error) {
-      console.error('Error loading leave policy periods:', error);
-      toast.error('Failed to load leave policy periods');
+      setLeavePeriods(data ?? []);
+      if (data && data.length > 0) setPolicyPeriod(data[0]);
+    } catch (err) {
+      console.error("Error loading leave policy periods:", err);
+      toast.error("Failed to load leave policy periods");
     } finally {
       setLoading(false);
     }
-  };
+  }, [organization_id]);
 
-  // Create a new leave policy period
-  const createLeavePolicyPeriod = async (period: Omit<LeavePolicyPeriod, 'id' | 'created_at' | 'updated_at'>) => {
+  // ── Create ────────────────────────────────────────────────────────────
+  const createLeavePolicyPeriod = async (
+    period: Omit<LeavePolicyPeriod, "id" | "created_at" | "updated_at">
+  ) => {
+    if (!organization_id) return false;
     setIsSubmitting(true);
     try {
-      const { error } = await supabase
-        .from('leave_policy_periods')
-        .insert({
-          is_calendar_year: period.is_calendar_year,
-          start_month: period.start_month,
-          organization_id
-        });
-
+      const { error } = await supabase.from("leave_policy_periods").insert({
+        organization_id,
+        is_calendar_year: period.is_calendar_year,
+        start_month:      period.start_month,
+      });
       if (error) throw error;
-      toast.success('Leave policy period created successfully');
+      toast.success("Leave policy period created");
       await loadLeavePolicyPeriods();
       return true;
-    } catch (error) {
-      console.error('Error creating leave policy period:', error);
-      toast.error('Failed to create leave policy period');
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to create leave policy period");
       return false;
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Update leave policy period
-  const updateLeavePolicyPeriod = async (id: string, period: Partial<LeavePolicyPeriod>) => {
-    // Ensure start_month exists before inserting
-    if (period.start_month === undefined) {
-      toast.error('Start month is required');
+  // ── Update ────────────────────────────────────────────────────────────
+  const updateLeavePolicyPeriod = async (
+    id: string,
+    period: Partial<LeavePolicyPeriod>
+  ) => {
+    if (period.start_month === undefined && period.is_calendar_year === undefined) {
+      toast.error("Nothing to update");
       return false;
     }
-    
     setIsSubmitting(true);
     try {
       const { error } = await supabase
-        .from('leave_policy_periods')
+        .from("leave_policy_periods")
         .update({
           is_calendar_year: period.is_calendar_year,
-          start_month: period.start_month
+          start_month:      period.start_month,
         })
-        .eq('id', id);
+        .eq("id", id)
+        .eq("organization_id", organization_id!);
 
       if (error) throw error;
-      toast.success('Leave policy period updated successfully');
+      toast.success("Leave year settings updated");
       await loadLeavePolicyPeriods();
+      setIsEditPeriodDialogOpen(false);
       return true;
-    } catch (error) {
-      console.error('Error updating leave policy period:', error);
-      toast.error('Failed to update leave policy period');
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update leave policy period");
       return false;
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Added updatePolicyPeriod function for compatibility with LeavePolicies.tsx
-  const updatePolicyPeriod = updateLeavePolicyPeriod;
-
-  // Delete leave policy period
+  // ── Delete ────────────────────────────────────────────────────────────
   const deleteLeavePolicyPeriod = async (id: string) => {
     try {
       const { error } = await supabase
-        .from('leave_policy_periods')
+        .from("leave_policy_periods")
         .delete()
-        .eq('id', id);
-
+        .eq("id", id)
+        .eq("organization_id", organization_id!);
       if (error) throw error;
-      toast.success('Leave policy period deleted successfully');
+      toast.success("Leave policy period deleted");
       await loadLeavePolicyPeriods();
       return true;
-    } catch (error) {
-      console.error('Error deleting leave policy period:', error);
-      toast.error('Failed to delete leave policy period');
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to delete leave policy period");
       return false;
     }
   };
 
   useEffect(() => {
     loadLeavePolicyPeriods();
-  }, []);
+  }, [loadLeavePolicyPeriods]);
 
   return {
     leavePeriods,
+    policyPeriod,
     loading,
-    isLoading: loading,  // Add isLoading alias for loading
+    isLoading:  loading,
     isSubmitting,
     createLeavePolicyPeriod,
     updateLeavePolicyPeriod,
-    updatePolicyPeriod,  // Add alias for updateLeavePolicyPeriod
+    updatePolicyPeriod: updateLeavePolicyPeriod,
     deleteLeavePolicyPeriod,
     loadLeavePolicyPeriods,
-    policyPeriod,
     isEditPeriodDialogOpen,
-    setIsEditPeriodDialogOpen
+    setIsEditPeriodDialogOpen,
   };
 };

@@ -1,58 +1,54 @@
 import { useState, useEffect } from "react";
-import { useSelector } from 'react-redux';
-import { supabase } from '@/integrations/supabase/client';
-import { startOfMonth, endOfMonth } from 'date-fns';
+import { useSelector } from "react-redux";
+import { supabase } from "@/integrations/supabase/client";
+import { startOfMonth, endOfMonth } from "date-fns";
 import { useAttendanceData, type DateRange } from "@/hooks/TimeManagement/useAttendanceData";
 import { useAttendanceMarking } from "@/hooks/TimeManagement/useAttendanceMarking";
 import { AttendanceMarkingDialog } from "@/components/TimeManagement/attendance/AttendanceMarkingDialog";
 import { AttendanceHeader } from "@/components/TimeManagement/attendance/AttendanceHeader";
 import { AttendanceContent } from "@/components/TimeManagement/attendance/AttendanceContent";
-import { toast } from 'sonner';
+import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
+import { toast } from "sonner";
 
-// Default: full current month
 const defaultRange = (): DateRange => ({
   startDate: startOfMonth(new Date()),
   endDate:   endOfMonth(new Date()),
 });
 
 const Attendance = () => {
-  const [dateRange, setDateRange] = useState<DateRange | null>(defaultRange());
+  const [dateRange,  setDateRange]  = useState<DateRange | null>(defaultRange());
   const [isExternal, setIsExternal] = useState(false);
 
-  const user       = useSelector((state: any) => state.auth.user);
-  const employeeId = user?.id ?? "";
+  const user           = useSelector((state: any) => state.auth.user);
+  const employeeId     = user?.id ?? "";
+  const authData       = getAuthDataFromLocalStorage();
+  const organizationId = (authData?.organization_id as string) ?? "";
 
   useEffect(() => {
-    const fetchDepartment = async () => {
-      if (!employeeId) { setIsExternal(false); return; }
-      try {
-        const { data, error } = await supabase
-          .from('hr_employees')
-          .select('hr_departments(name)')
-          .eq('id', employeeId)
-          .single();
-        if (error) throw error;
-        setIsExternal(data?.hr_departments?.name === 'External');
-      } catch (err: any) {
-        console.error('Error fetching department:', err);
-        toast.error('Failed to load department data');
-        setIsExternal(false);
-      }
-    };
-    fetchDepartment();
+    if (!employeeId) { setIsExternal(false); return; }
+    supabase
+      .from("hr_employees")
+      .select("hr_departments(name)")
+      .eq("id", employeeId)
+      .single()
+      .then(({ data, error }) => {
+        if (error) { toast.error("Failed to load department data"); return; }
+        setIsExternal(data?.hr_departments?.name === "External");
+      });
   }, [employeeId]);
 
-  const { attendanceData, isLoading, error, refetch } = useAttendanceData(dateRange, employeeId);
+  // ── Pass organizationId so the hook uses org-aware day status ────────────
+  const { attendanceData, isLoading, error, refetch } = useAttendanceData(
+    dateRange,
+    employeeId,
+    organizationId,    // ← new param
+  );
 
   const {
-    markAttendanceOpen,
-    setMarkAttendanceOpen,
-    markAttendanceDate,
-    setMarkAttendanceDate,
-    markAttendanceTime,
-    setMarkAttendanceTime,
-    isSubmitting,
-    handleMarkAttendance,
+    markAttendanceOpen,   setMarkAttendanceOpen,
+    markAttendanceDate,   setMarkAttendanceDate,
+    markAttendanceTime,   setMarkAttendanceTime,
+    isSubmitting,         handleMarkAttendance,
   } = useAttendanceMarking(employeeId, refetch);
 
   if (error) {
@@ -69,10 +65,7 @@ const Attendance = () => {
 
   return (
     <div className="content-area">
-      <AttendanceHeader
-        isExternal={isExternal}
-        onMarkAttendance={() => setMarkAttendanceOpen(true)}
-      />
+      <AttendanceHeader isExternal={isExternal} onMarkAttendance={() => setMarkAttendanceOpen(true)} />
 
       <AttendanceContent
         dateRange={dateRange}

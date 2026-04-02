@@ -81,7 +81,7 @@ const detailViewStyles = {
 };
 
 Modal.setAppElement('#root');
-const ITEMS_PER_PAGE = 5;
+
 
 // --- SELF-CONTAINED HELPER FUNCTIONS ---
 
@@ -530,7 +530,7 @@ const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'bulk'>('upload'
   const [progress, setProgress] = useState(0);
   const [parsedCandidates, setParsedCandidates] = useState<ParsedCandidateProfile[]>([]);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
-  const [currentPage, setCurrentPage] = useState(1);
+
   const [resumeText, setResumeText] = useState('');
   const [singleFile, setSingleFile] = useState<File | null>(null);
   const user = useSelector((state: any) => state.auth.user);
@@ -703,10 +703,7 @@ const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'bulk'>('upload'
     }
   };
   
-  const totalPages = Math.ceil(parsedCandidates.length / ITEMS_PER_PAGE);
-  const candidatesToDisplay = parsedCandidates.length > ITEMS_PER_PAGE
-    ? parsedCandidates.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
-    : parsedCandidates;
+
 
   const getModalStyle = () => {
     if (view === 'detail') return detailViewStyles;
@@ -816,7 +813,7 @@ const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'bulk'>('upload'
         {view === 'compare' && (
           <>
             <CandidateComparisonView
-              candidates={candidatesToDisplay}
+              candidates={parsedCandidates}
               selectedIndices={selectedIndices}
               onSelectionChange={handleSelectionChange}
               onSelectAll={handleSelectAll}
@@ -824,9 +821,6 @@ const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'bulk'>('upload'
               // --- CRITICAL FIX ---
               // The single add button from the compare view now calls the correct handler
               onAddSingleCandidate={(candidate) => handleBulkAddToJob([candidate])}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
               totalCandidates={parsedCandidates.length}
             />
             <div className="flex justify-end gap-2 p-4 border-t mt-auto bg-gray-50 flex-shrink-0">

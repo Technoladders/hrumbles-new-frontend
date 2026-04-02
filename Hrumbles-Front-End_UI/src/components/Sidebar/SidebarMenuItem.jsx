@@ -9,7 +9,7 @@ import { FaFileInvoiceDollar, FaSackDollar, FaArrowsDownToPeople, FaRegCalendarC
 import { TbCheckbox } from "react-icons/tb";
 import { GoOrganization } from "react-icons/go";
 import { VscOrganization } from "react-icons/vsc";
-import { GrDocumentTime } from "react-icons/gr";
+import { GrDocumentTime, GrIntegration } from "react-icons/gr";
 import { LuCalendarPlus, LuUserSearch, LuCalendarCog, LuSend } from "react-icons/lu";
 import { BsShieldLock, BsShieldCheck, BsPin, BsGraphUpArrow } from "react-icons/bs";
 import { FaUserShield, FaProjectDiagram, FaUserTie } from 'react-icons/fa';
@@ -263,6 +263,8 @@ const masterMenuItems = [
   { icon: LuSend, label: "My Invites", path: "/my-invites", suite: "RECRUITMENT", permission: "access_invite" },
   { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients", suite: "RECRUITMENT", permission: "access_client_management" },
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects", suite: "RECRUITMENT", permission: "access_project_management" },
+  { icon: GrIntegration, label: "Market Places", path: "/job-boards", suite: "RECRUITMENT", permission: "access_jobs_boards" },
+
 
   // --- VERIFICATION SUITE ---
   { icon: LuUserSearch, label: "Verification", path: "/all-candidates", suite: "VERIFICATION", permission: "access_verifications" },

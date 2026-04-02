@@ -19,7 +19,7 @@ import {
   X, Building2, MapPin, Calendar, Mail, Phone,
   Check, ExternalLink,
   Pencil, Loader2, AlertCircle,
-  Send, UserCheck, Copy, Bookmark, BookmarkCheck, Star, Eye
+  Send, UserCheck, Copy, Bookmark, BookmarkCheck, Star, Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -39,14 +39,23 @@ import { FolderPickerModal } from "./FolderPickerModal";
 import { EnrichedProfileSection } from "./EnrichedProfileSection";
 
 // ─── Cache row shape ──────────────────────────────────────────────────────────
+interface EmailEntry {
+  email:        string;
+  email_status: string | null;
+  source:       string | null;
+  is_primary:   boolean;
+}
+
 interface RevealCacheRow {
   email:                   string | null;
   email_status:            string | null;
+  all_emails:              EmailEntry[] | null;
   phone:                   string | null;
   phone_status:            string | null;
   manually_entered_email:  string | null;
   manually_entered_phone:  string | null;
   manually_entered_by_org: string | null;
+  snapshot_name:           string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -124,57 +133,205 @@ const InlineEditInput: React.FC<{
   );
 };
 
-// ─── RevealButton — credit-gated reveal ──────────────────────────────────────
+// ─── EmailSourceBadge ─────────────────────────────────────────────────────────
+const EMAIL_SOURCE_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
+  work:         { label: "Work",     bg: "#EFF6FF", color: "#1D4ED8" },
+  personal:     { label: "Personal", bg: "#F0FDF4", color: "#166534" },
+  direct:       { label: "Direct",   bg: "#EDE9FE", color: "#6D28D9" },
+  extrapolated: { label: "Guessed",  bg: "#FEF9C3", color: "#854D0E" },
+  apollo:       { label: "Apollo",   bg: "#F3F4F6", color: "#374151" },
+};
+const EMAIL_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  verified:     { label: "✓ Verified",    color: "#166534" },
+  extrapolated: { label: "~ Guessed",     color: "#854D0E" },
+  guessed:      { label: "~ Guessed",     color: "#854D0E" },
+};
+
+// EmailSourceBadge — shows only verification status (not source type)
+const EmailSourceBadge: React.FC<{ source: string | null; status: string | null }> = ({ source: _source, status }) => {
+  const sts = status ? EMAIL_STATUS_CONFIG[status.toLowerCase()] || null : null;
+  if (!sts) return null;
+  return (
+    <span className="text-[9px] font-semibold flex-shrink-0" style={{ color: sts.color }}>
+      {sts.label}
+    </span>
+  );
+};
+
+// ─── MultiEmailDisplay — shows all revealed emails with source badges ─────────
+const MultiEmailDisplay: React.FC<{
+  emails:         { email: string; email_status: string | null; source: string | null; is_primary: boolean }[];
+  manualEmail:    string | null;
+  onManualSave:   (v: string) => void;
+  isSavingManual: boolean;
+  revealStatus:   "idle" | "loading" | "revealed" | "error" | "insufficient_credits";
+  onReveal:       () => void;
+  onInvite?:      (email: string) => void;
+}> = ({ emails, manualEmail, onManualSave, isSavingManual, revealStatus, onReveal, onInvite }) => {
+  const [editingManual, setEditingManual] = useState(false);
+  const hasEmails = emails.length > 0 || !!manualEmail;
+
+  return (
+    <div className="py-2 border-b border-violet-50 last:border-0">
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-2">
+          <Mail size={11} className={cn(
+            hasEmails ? "text-violet-500" : "text-slate-300"
+          )} />
+          <span className="text-[11px] text-slate-500">Email address</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {!hasEmails && revealStatus === "idle" && (
+            <RevealButton type="email" onClick={onReveal} isLoading={false} />
+          )}
+          {!hasEmails && revealStatus === "loading" && (
+            <RevealButton type="email" onClick={() => {}} isLoading={true} />
+          )}
+          {!editingManual && (
+            <button onClick={() => setEditingManual(true)}
+              className="p-1 rounded hover:bg-violet-50 text-slate-400 hover:text-violet-500 transition-colors"
+              title="Add email manually">
+              <Pencil size={10} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Multiple email rows */}
+      {emails.map((entry, i) => (
+        <div key={i} className={cn(
+          "flex items-center justify-between gap-2 px-2 py-1 rounded-md mb-1",
+          entry.is_primary ? "bg-violet-50/60" : "bg-slate-50/60"
+        )}>
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            {entry.is_primary && (
+              <span className="text-[8px] font-bold text-violet-400 uppercase tracking-wide flex-shrink-0">Primary</span>
+            )}
+            <span className="text-[11px] font-medium text-slate-700 truncate">{entry.email}</span>
+            <CopyButton text={entry.email} />
+            <EmailSourceBadge source={entry.source} status={entry.email_status} />
+          </div>
+          {onInvite && (
+            <button
+              onClick={() => onInvite(entry.email)}
+              title={`Invite using ${entry.email}`}
+              className="flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border border-violet-200 bg-white text-violet-600 hover:bg-violet-50 transition-colors">
+              <Send size={8} /> Invite
+            </button>
+          )}
+        </div>
+      ))}
+
+      {/* Manual email if present and not already in the list */}
+      {manualEmail && !emails.some(e => e.email === manualEmail) && (
+        <div className="flex items-center justify-between gap-2 px-2 py-1 rounded-md mb-1 bg-amber-50/60">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[8px] font-bold text-amber-500 uppercase tracking-wide flex-shrink-0">Manual</span>
+            <span className="text-[11px] font-medium text-slate-700 truncate">{manualEmail}</span>
+            <CopyButton text={manualEmail} />
+          </div>
+          <span className="text-[9px] text-amber-500 flex-shrink-0">entered</span>
+        </div>
+      )}
+
+      {/* Reveal errors */}
+      {revealStatus === "insufficient_credits" && (
+        <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 border border-amber-200">
+          <AlertCircle size={10} className="text-amber-500 flex-shrink-0" />
+          <span className="text-[10px] text-amber-700">Insufficient credits. Top up to reveal.</span>
+        </div>
+      )}
+      {revealStatus === "error" && (
+        <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-50 border border-red-200">
+          <AlertCircle size={10} className="text-red-500 flex-shrink-0" />
+          <span className="text-[10px] text-red-700">Reveal failed. Try again.</span>
+        </div>
+      )}
+
+      {/* Manual edit input */}
+      {editingManual && (
+        <InlineEditInput
+          value={manualEmail || ""}
+          placeholder="Enter email address"
+          onSave={(v) => { onManualSave(v); setEditingManual(false); }}
+          onCancel={() => setEditingManual(false)}
+          isSaving={isSavingManual}
+        />
+      )}
+    </div>
+  );
+};
+
+// ─── RevealButton — credit-gated, tooltip shows credit cost on hover ────────
+const REVEAL_CREDITS = { email: 1, phone: 5 } as const;
 const RevealButton: React.FC<{
   type:      "email" | "phone";
-  creditCost: number;
   onClick:   () => void;
   isLoading: boolean;
-}> = ({ type, creditCost, onClick, isLoading }) => (
-  <button
-    onClick={onClick}
-    disabled={isLoading}
-    className={cn(
-      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold",
-      "border transition-all",
-      isLoading
-        ? "bg-violet-50 border-violet-200 text-violet-400 cursor-not-allowed"
-        : "bg-white border-violet-300 text-violet-600 hover:bg-violet-50 hover:border-violet-500",
-    )}
-  >
-    {isLoading ? <Loader2 size={11} className="animate-spin" /> : <Eye size={11} />}
-    {isLoading ? "Revealing…" : `Reveal ${type === "email" ? "Email" : "Phone"}`}
-    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600">
-      {creditCost} cr
-    </span>
-  </button>
-);
+}> = ({ type, onClick, isLoading }) => {
+  const credits = REVEAL_CREDITS[type];
+  const tooltip = type === "email"
+    ? `Reveal Email · ${credits} credit will be charged`
+    : `Reveal Phone · ${credits} credits will be charged`;
+  return (
+    <button
+      onClick={onClick}
+      disabled={isLoading}
+      title={tooltip}
+      className={cn(
+        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold",
+        "border transition-all",
+        isLoading
+          ? "bg-violet-50 border-violet-200 text-violet-400 cursor-not-allowed"
+          : "bg-white border-violet-300 text-violet-600 hover:bg-violet-50 hover:border-violet-500",
+      )}
+    >
+      {isLoading ? <Loader2 size={11} className="animate-spin" /> : <Eye size={11} />}
+      {isLoading ? "Revealing…" : `Reveal ${type === "email" ? "Email" : "Phone"}`}
+    </button>
+  );
+};
 
 // ─── ContactField — single contact row with reveal / manual / display ────────
+// ── Flag helper — derive country flag emoji from E.164 phone number ──────────
+function phoneFlag(phone: string | null): string {
+  if (!phone) return "";
+  const country_prefixes: Record<string, string> = {
+    "+91": "🇮🇳", "+1": "🇺🇸", "+44": "🇬🇧", "+61": "🇦🇺", "+65": "🇸🇬",
+    "+971": "🇦🇪", "+49": "🇩🇪", "+33": "🇫🇷", "+81": "🇯🇵", "+86": "🇨🇳",
+    "+55": "🇧🇷", "+52": "🇲🇽", "+27": "🇿🇦", "+234": "🇳🇬", "+60": "🇲🇾",
+    "+62": "🇮🇩", "+63": "🇵🇭", "+66": "🇹🇭", "+84": "🇻🇳", "+880": "🇧🇩",
+    "+92": "🇵🇰", "+94": "🇱🇰", "+977": "🇳🇵",
+  };
+  // Try longest prefix first
+  for (const prefix of ["+971","+880","+234","+977","+92","+94","+91","+86","+81","+66","+65","+63","+62","+61","+60","+55","+52","+49","+44","+33","+27","+1"]) {
+    if (phone.startsWith(prefix)) return country_prefixes[prefix] ?? "";
+  }
+  return "";
+}
+
 const ContactField: React.FC<{
   type:          "email" | "phone";
   icon:          React.ElementType;
   label:         string;
-  creditCost:    number;
   // What we know
-  apolloValue:   string | null;   // from Apollo reveal
-  manualValue:   string | null;   // from manual entry (org-specific)
-  existingValue: string | null;   // from contacts table (CRM)
+  apolloValue:   string | null;
+  manualValue:   string | null;
+  existingValue: string | null;
   // Reveal state
   revealStatus:  "idle" | "loading" | "revealed" | "error" | "insufficient_credits";
   onReveal:      () => void;
-  // Manual edit state
+  // Manual edit
   onManualSave:  (v: string) => void;
   isSavingManual: boolean;
 }> = ({
-  type, icon: Icon, label, creditCost,
+  type, icon: Icon, label,
   apolloValue, manualValue, existingValue,
   revealStatus, onReveal,
   onManualSave, isSavingManual,
 }) => {
   const [editingManual, setEditingManual] = useState(false);
 
-  // Display priority: Apollo-revealed > CRM existing > manually-entered
   const displayValue = apolloValue || existingValue || manualValue;
   const isRevealed   = !!(apolloValue || existingValue);
   const isManualOnly = !isRevealed && !!manualValue;
@@ -194,9 +351,13 @@ const ContactField: React.FC<{
           {/* Show value if available */}
           {displayValue && (
             <span className={cn(
-              "text-[11px] font-medium",
+              "text-[11px] font-medium flex items-center gap-1",
               isManualOnly && !isRevealed ? "text-amber-700" : "text-slate-700"
             )}>
+              {/* Country flag for phone numbers */}
+              {type === "phone" && phoneFlag(displayValue) && (
+                <span className="text-[13px] leading-none">{phoneFlag(displayValue)}</span>
+              )}
               {displayValue}
               <CopyButton text={displayValue} />
               {isManualOnly && !isRevealed && (
@@ -205,25 +366,20 @@ const ContactField: React.FC<{
             </span>
           )}
 
-          {/* Reveal button — show if not yet revealed from Apollo/CRM */}
+          {/* Reveal button — show if not yet revealed */}
           {!isRevealed && revealStatus === "idle" && (
-            <RevealButton
-              type={type}
-              creditCost={creditCost}
-              onClick={onReveal}
-              isLoading={false}
-            />
+            <RevealButton type={type} onClick={onReveal} isLoading={false} />
           )}
           {!isRevealed && revealStatus === "loading" && (
-            <RevealButton type={type} creditCost={creditCost} onClick={() => {}} isLoading={true} />
+            <RevealButton type={type} onClick={() => {}} isLoading={true} />
           )}
 
-          {/* Manual edit pencil — always available */}
-          {!editingManual && revealStatus !== "loading" && (
+          {/* Manual add pencil — always visible (even after reveal) */}
+          {!editingManual && (
             <button
               onClick={() => setEditingManual(true)}
               className="p-1 rounded hover:bg-violet-50 text-slate-400 hover:text-violet-500 transition-colors"
-              title={`Manually enter ${label.toLowerCase()}`}
+              title={`${displayValue ? "Edit" : "Add"} ${label.toLowerCase()} manually`}
             >
               <Pencil size={10} />
             </button>
@@ -283,7 +439,6 @@ export const DetailPanelV2: React.FC<DetailPanelV2Props> = ({
   const userId     = useSelector((s: any) => s.auth.user?.id);
   const navigate   = useNavigate();
   const avCls      = avatarColor(c.id);
-  const init       = initials(c.first_name, c.last_name_obfuscated);
   const org        = c.organization?.name || null;
   const hasLoc     = c.has_city || c.has_state || c.has_country;
   const hasPhone   = c.has_direct_phone === "Yes";
@@ -293,7 +448,6 @@ export const DetailPanelV2: React.FC<DetailPanelV2Props> = ({
     c.has_state   && "State",
     c.has_country && "Country",
   ].filter(Boolean).join(", ") || null;
-  
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [inviteOpen,       setInviteOpen]       = useState(false);
@@ -329,8 +483,9 @@ export const DetailPanelV2: React.FC<DetailPanelV2Props> = ({
       const { data } = await supabase
         .from("candidate_reveal_cache")
         .select(
-          "email, email_status, phone, phone_status, " +
-          "manually_entered_email, manually_entered_phone, manually_entered_by_org"
+          "email, email_status, all_emails, phone, phone_status, " +
+          "manually_entered_email, manually_entered_phone, manually_entered_by_org, " +
+          "snapshot_name"
         )
         .eq("apollo_person_id", c.id)
         .maybeSingle();
@@ -347,6 +502,7 @@ export const DetailPanelV2: React.FC<DetailPanelV2Props> = ({
     ? (cacheRow?.manually_entered_phone ?? null)
     : null;
 
+ 
   // ── Hooks ──────────────────────────────────────────────────────────────────
   const emailReveal = useRevealContact({
     apolloPersonId: c.id,
@@ -416,6 +572,39 @@ export const DetailPanelV2: React.FC<DetailPanelV2Props> = ({
     phoneReveal.status === "insufficient_credits" ? "insufficient_credits" :
     !!(phoneValue || revealHistory?.phoneRevealed) ? "revealed"            : "idle"
   );
+
+   // Full name: prefer snapshotName from reveal (unmasked) over Apollo search result
+  const revealedSnapshotName = emailReveal.result?.snapshotName
+    || phoneReveal.result?.snapshotName
+    || cacheRow?.snapshot_name
+    || null;
+  const displayFirstName = revealedSnapshotName
+    ? revealedSnapshotName.split(' ')[0]
+    : c.first_name;
+  const displayLastName = revealedSnapshotName
+    ? revealedSnapshotName.split(' ').slice(1).join(' ')
+    : c.last_name_obfuscated;
+
+  // All emails: merge allEmails from reveal + cache + manual (deduplicated)
+  const revealedAllEmails: EmailEntry[] =
+    emailReveal.result?.allEmails?.length
+      ? emailReveal.result.allEmails
+      : (Array.isArray(cacheRow?.all_emails) ? (cacheRow!.all_emails as EmailEntry[]) : []);
+  // If no allEmails array but we have a primary email, build a single-entry list
+  const primaryEmail =
+    emailReveal.result?.email ??
+    crossCheckResult?.email ??
+    cacheRow?.email ??
+    manualEmail ?? null;
+  const emailsToShow: EmailEntry[] =
+    revealedAllEmails.length > 0
+      ? revealedAllEmails
+      : primaryEmail
+        ? [{ email: primaryEmail, email_status: cacheRow?.email_status ?? null, source: 'apollo', is_primary: true }]
+        : [];
+
+  const init       = initials(displayFirstName, displayLastName);
+
 
   // After reveal, refresh the cache row so it reflects the new data immediately
   const handleRevealComplete = useCallback(() => {
@@ -497,7 +686,7 @@ export const DetailPanelV2: React.FC<DetailPanelV2Props> = ({
             </div>
             <div className="min-w-0 flex-1 pt-0.5">
               <h2 className="text-[14px] font-bold text-white leading-tight">
-                {c.first_name} {c.last_name_obfuscated}
+                {displayFirstName} {displayLastName}
               </h2>
               {c.title && (
                 <p className="text-[11px] text-violet-200/80 mt-0.5 leading-snug line-clamp-2">{c.title}</p>
@@ -529,24 +718,19 @@ export const DetailPanelV2: React.FC<DetailPanelV2Props> = ({
           {/* CONTACT REVEAL */}
           <div className="px-4 py-3 border-b border-violet-100">
             <SHead>Contact</SHead>
-            <ContactField
-              type="email"
-              icon={Mail}
-              label="Email address"
-              creditCost={1}
-              apolloValue={emailReveal.result?.email ?? cacheRow?.email ?? null}
-              manualValue={manualEmail}
-              existingValue={revealHistory?.emailRevealed ? revealHistory.revealedEmail : (crossCheckResult?.email || null)}
+            <MultiEmailDisplay
+              emails={emailsToShow}
+              manualEmail={manualEmail}
               revealStatus={emailStatus}
               onReveal={handleEmailReveal}
               onManualSave={handleManualEmailSave}
               isSavingManual={manualSave.status === "saving"}
+              onInvite={() => setInviteOpen(true)}
             />
             <ContactField
               type="phone"
               icon={Phone}
               label="Direct phone"
-              creditCost={3}
               apolloValue={phoneReveal.result?.phone ?? cacheRow?.phone ?? null}
               manualValue={manualPhone}
               existingValue={revealHistory?.phoneRevealed ? revealHistory.revealedPhone : null}
@@ -686,7 +870,7 @@ export const DetailPanelV2: React.FC<DetailPanelV2Props> = ({
           style={{ background: "rgba(109,40,217,0.03)" }}
         >
           <p className="text-[9px] text-violet-400/70 text-center">
-            Reveal costs: Email 1 cr · Phone 3 cr · All data from Apollo
+            Reveal costs: Email 1 cr · Phone 5 cr · All data from Apollo
           </p>
         </div>
       </div>
@@ -694,7 +878,7 @@ export const DetailPanelV2: React.FC<DetailPanelV2Props> = ({
       {/* Invite gate — renders its own modals */}
       {inviteOpen && (
         <CandidateInviteGate
-          candidateName={`${c.first_name} ${c.last_name_obfuscated}`}
+          candidateName={`${displayFirstName} ${displayLastName}`}
           candidateEmail={inviteEmail}
           candidatePhone={invitePhone}
           candidate={c}

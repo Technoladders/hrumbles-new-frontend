@@ -14,16 +14,25 @@ import { useQueryClient } from "@tanstack/react-query";
 export type RevealType   = "email" | "phone";
 export type RevealStatus = "idle" | "loading" | "revealed" | "error" | "insufficient_credits";
 
+export interface RevealEmailEntry {
+  email:        string;
+  email_status: string | null;
+  source:       string | null;  // "work" | "personal" | "direct" | "apollo" | null
+  is_primary:   boolean;
+}
+
 export interface RevealResult {
   revealType:       RevealType;
   email:            string | null;
   emailStatus:      string | null;
+  allEmails:        RevealEmailEntry[];   // all emails returned by Apollo
   phone:            string | null;
   phoneStatus:      string | null;
   servedFromCache:  boolean;
   creditsCharged:   number;
   creditsRemaining: number | null;
   contactId:        string | null;
+  snapshotName:     string | null;       // full unmasked name from Apollo
 }
 
 export interface UseRevealContactReturn {
@@ -117,12 +126,14 @@ export function useRevealContact(params: RevealContactParams): UseRevealContactR
         revealType:       type,
         email:            data.email           ?? null,
         emailStatus:      data.emailStatus     ?? null,
+        allEmails:        Array.isArray(data.allEmails) ? data.allEmails : [],
         phone:            data.phone           ?? null,
         phoneStatus:      data.phoneStatus     ?? null,
         servedFromCache:  data.servedFromCache ?? false,
         creditsCharged:   data.creditsCharged  ?? 0,
         creditsRemaining: data.creditsRemaining ?? null,
         contactId:        data.contactId       ?? null,
+        snapshotName:     data.snapshotName    ?? null,
       };
 
       setResult(revealResult);

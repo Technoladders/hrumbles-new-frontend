@@ -153,12 +153,11 @@ export const RecruiterTimesheetForm: React.FC<RecruiterTimesheetFormProps> = ({
   }, [timesheet.employee_id]);
 
   // Notify parent of data changes and validate
+// Notify parent of data changes and validate
   useEffect(() => {
     onDataChange({ logs: jobLogs, report: overallWorkReport });
     
     // Validation logic
-    const hasLoggedJobs = jobLogs.length > 0;
-    
     // Calculate total time from all jobs (job-level time)
     const totalMinutes = jobLogs.reduce((sum, log) => {
       const hours = log.hours || 0;
@@ -169,7 +168,11 @@ export const RecruiterTimesheetForm: React.FC<RecruiterTimesheetFormProps> = ({
     const hasPositiveTime = totalMinutes > 0;
     const hasWorkReport = overallWorkReport.replace(/<[^>]+>/g, "").trim().length > 0;
     
-    onValidationChange(hasLoggedJobs && hasPositiveTime && hasWorkReport);
+    // Job logs are now optional. If they are completely empty, we just check for the work report.
+    // If they have added jobs, we also ensure they've logged time for them.
+    const isJobLogsValid = jobLogs.length === 0 || hasPositiveTime;
+    
+    onValidationChange(hasWorkReport && isJobLogsValid);
   }, [jobLogs, overallWorkReport, onDataChange, onValidationChange]);
 
   const handleAddJobLog = async (jobId: string) => {

@@ -206,6 +206,8 @@ import UserActivityDetailsPage from "./components/reports/UserActivityDetailsPag
 
 // Job Board Integrations
 import JobBoardIntegrations from "./pages/integrations/JobBoardIntegrations.tsx";
+// dummy import for JobBoardsHub
+import { JobBoardsHub } from "@/components/jobs/job-boards";
 
 // settings
 import WhatsAppSettings from "./components/settings/WhatsAppSettings.tsx";
@@ -586,6 +588,7 @@ useEffect(() => {
 
               {/* Job Board Integrations */}
               <Route path="/integrations/job-boards" element={<JobBoardIntegrations />} />
+              <Route path="/job-boards" element={<JobBoardsHub />} />
 
 
 

@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { Plus, Settings2, CalendarDays, TrendingUp, Building2 } from "lucide-react";
+import { Plus, Settings2, CalendarDays, TrendingUp, Building2, Download } from "lucide-react";
 import { HolidayStats } from "@/hooks/TimeManagement/useHolidays";
 import { cn } from "@/lib/utils";
 
 interface HolidayHeaderProps {
   onAddHolidayClick: () => void;
   onWeekendConfigClick: () => void;
+  onImportClick: () => void;
   stats: HolidayStats;
   year: number;
 }
@@ -42,6 +43,7 @@ function StatCard({ icon: Icon, label, value, sub, iconClass, valueClass }: Stat
 export const HolidayHeader = ({
   onAddHolidayClick,
   onWeekendConfigClick,
+  onImportClick,
   stats,
   year,
 }: HolidayHeaderProps) => {
@@ -67,7 +69,15 @@ export const HolidayHeader = ({
           </p>
         </div>
 
-        <div className="flex gap-2 shrink-0">
+        <div className="flex gap-2 shrink-0 flex-wrap">
+          <Button
+            variant="outline"
+            className="gap-2 border-orange-200 text-orange-700 hover:bg-orange-50 dark:border-orange-800 dark:text-orange-300 dark:hover:bg-orange-950"
+            onClick={onImportClick}
+          >
+            <Download className="h-4 w-4" />
+            Import Holidays
+          </Button>
           <Button
             variant="outline"
             className="gap-2 border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950"

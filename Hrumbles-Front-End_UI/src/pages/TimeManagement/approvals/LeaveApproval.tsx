@@ -1,126 +1,150 @@
 import { useState, useMemo } from "react";
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
+import { useSelector } from "react-redux";
+import {
+  Card, CardContent, CardDescription,
+  CardHeader, CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, CheckSquare, Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useSelector } from 'react-redux';
-import { useLeaveApprovals } from "@/hooks/TimeManagement/leave-approvals/useLeaveApprovals";
-import { PendingLeaveTable } from "@/components/TimeManagement/leave-approval/PendingLeaveTable";
-import { RecentApprovalsTable } from "@/components/TimeManagement/leave-approval/RecentApprovalsTable";
-import { LeaveApprovalActionDialog } from "@/components/TimeManagement/leave-approval/LeaveApprovalActionDialog";
-import { LeaveRequest } from "@/types/leave-types";
+import { CheckSquare, Search } from "lucide-react";
+import { useLeaveApprovals }         from "@/hooks/TimeManagement/leave-approvals/useLeaveApprovals";
+import { PendingLeaveTable }          from "@/components/TimeManagement/leave-approval/PendingLeaveTable";
+import { RecentApprovalsTable }       from "@/components/TimeManagement/leave-approval/RecentApprovalsTable";
+import { LeaveApprovalActionDialog }  from "@/components/TimeManagement/leave-approval/LeaveApprovalActionDialog";
+import { BulkApproveDialog }          from "@/components/TimeManagement/leave-approval/BulkApproveDialog";
+import { LeaveRequest }               from "@/types/leave-types";
+import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
 
 const LeaveApproval = () => {
-  const user = useSelector((state: any) => state.auth.user);
-  const currentEmployeeId = user?.id || "";
-  const { 
-    pendingRequests, 
-    recentApprovals, 
+  const user              = useSelector((state: any) => state.auth.user);
+  const currentEmployeeId = user?.id ?? "";
+  const authData          = getAuthDataFromLocalStorage();
+  const organization_id   = authData?.organization_id as string ?? "";
+
+  const {
+    pendingRequests,
+    recentApprovals,
     isLoading,
     approveLeaveRequest,
     rejectLeaveRequest,
     cancelApprovedLeave,
     selectedRequest,
-    setSelectedRequest
+    setSelectedRequest,
   } = useLeaveApprovals(currentEmployeeId);
 
-  console.log("requests", pendingRequests);
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [dialogAction, setDialogAction] = useState<'approve' | 'reject' | 'cancel'>('approve');
+  const [searchTerm, setSearchTerm]           = useState("");
+  const [dialogAction, setDialogAction]       = useState<"approve" | "reject" | "cancel">("approve");
   const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
+  const [isBulkDialogOpen, setIsBulkDialogOpen]     = useState(false);
+  const [selectedBulkIds, setSelectedBulkIds]       = useState<Set<string>>(new Set());
 
-  const filteredPendingRequests = useMemo(() => {
-    console.log('Filtering pending requests', { searchTerm, pendingRequests });
-    return pendingRequests.filter(req => {
-      const name = req.employee?.name || req.employee?.email || 'Unknown';
-      return name.toLowerCase().includes(searchTerm.toLowerCase());
-    });
-  }, [pendingRequests, searchTerm]);
+  const filteredPending = useMemo(() =>
+    pendingRequests.filter((r) => {
+      const emp = r.employee as any;
+      const name = emp
+        ? `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.toLowerCase()
+        : "";
+      return !searchTerm || name.includes(searchTerm.toLowerCase());
+    }),
+    [pendingRequests, searchTerm]
+  );
 
-  const filteredRecentApprovals = useMemo(() => {
-    return recentApprovals.filter(req => {
-      const name = req.employee?.name || req.employee?.email || 'Unknown';
-      return name.toLowerCase().includes(searchTerm.toLowerCase());
-    });
-  }, [recentApprovals, searchTerm]);
-
-  const handleApproveClick = (request: LeaveRequest) => {
-    setSelectedRequest(request);
-    setDialogAction('approve');
+  const handleApproveClick = (req: LeaveRequest) => {
+    setSelectedRequest(req);
+    setDialogAction("approve");
     setIsActionDialogOpen(true);
   };
 
-  const handleRejectClick = (request: LeaveRequest) => {
-    setSelectedRequest(request);
-    setDialogAction('reject');
+  const handleRejectClick = (req: LeaveRequest) => {
+    setSelectedRequest(req);
+    setDialogAction("reject");
     setIsActionDialogOpen(true);
   };
 
-  const handleCancelClick = (request: LeaveRequest) => {
-    setSelectedRequest(request);
-    setDialogAction('cancel');
+  const handleCancelClick = (req: LeaveRequest) => {
+    setSelectedRequest(req);
+    setDialogAction("cancel");
     setIsActionDialogOpen(true);
   };
 
   const handleActionConfirm = (requestId: string, reason?: string) => {
     switch (dialogAction) {
-      case 'approve':
-        approveLeaveRequest(requestId);
-        break;
-      case 'reject':
-        if (reason) {
-          rejectLeaveRequest({ requestId, reason });
-        }
-        break;
-      case 'cancel':
-        if (reason) {
-          cancelApprovedLeave({ requestId, reason });
-        }
-        break;
+      case "approve": approveLeaveRequest(requestId); break;
+      case "reject":  reason && rejectLeaveRequest({ requestId, reason }); break;
+      case "cancel":  reason && cancelApprovedLeave({ requestId, reason }); break;
     }
     setIsActionDialogOpen(false);
   };
 
+  const toggleBulkId = (id: string) => {
+    setSelectedBulkIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  // Requests available for bulk (filtered by search)
+  const bulkCandidates = filteredPending;
+
   return (
-    <div className="content-area">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Leave Approvals</h1>
-        <p className="text-muted-foreground">
-          Review and manage employee leave requests
-        </p>
+    <div className="content-area space-y-6 p-6">
+      {/* Header */}
+      <div className="flex justify-between items-start gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Leave Approvals</h1>
+          <p className="text-muted-foreground mt-1">
+            Review and manage employee leave requests.
+          </p>
+        </div>
       </div>
 
-      <Card className="mb-6">
+      {/* Pending requests */}
+      <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Pending Requests</CardTitle>
-            <div className="flex gap-2 items-center">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                Pending Requests
+                {filteredPending.length > 0 && (
+                  <Badge className="bg-amber-100 text-amber-700 border-amber-200 border">
+                    {filteredPending.length}
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription>Leave requests awaiting approval</CardDescription>
+            </div>
+
+            <div className="flex items-center gap-2">
               <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  type="search"
-                  placeholder="Search employees..."
-                  className="w-[250px] pl-8"
+                  className="w-52 pl-8 h-9"
+                  placeholder="Search employees…"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
+
+              {filteredPending.length > 1 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                  onClick={() => setIsBulkDialogOpen(true)}
+                >
+                  <CheckSquare className="h-4 w-4" />
+                  Bulk Approve
+                </Button>
+              )}
             </div>
           </div>
-          <CardDescription>
-            Leave requests awaiting your approval
-          </CardDescription>
         </CardHeader>
+
         <CardContent>
-          <PendingLeaveTable 
-            requests={filteredPendingRequests} 
+          <PendingLeaveTable
+            requests={filteredPending}
             isLoading={isLoading}
             onApprove={handleApproveClick}
             onReject={handleRejectClick}
@@ -128,28 +152,39 @@ const LeaveApproval = () => {
         </CardContent>
       </Card>
 
+      {/* Recent approvals */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Approvals</CardTitle>
+          <CardTitle>Recent Activity</CardTitle>
           <CardDescription>
-            Recently approved or rejected leave requests
+            Recently approved, rejected, or cancelled leave requests
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <RecentApprovalsTable 
-            approvals={filteredRecentApprovals} 
+          <RecentApprovalsTable
+            approvals={recentApprovals}
             isLoading={isLoading}
             onCancel={handleCancelClick}
           />
         </CardContent>
       </Card>
 
+      {/* Action dialog (single) */}
       <LeaveApprovalActionDialog
         open={isActionDialogOpen}
         onOpenChange={setIsActionDialogOpen}
         request={selectedRequest}
         actionType={dialogAction}
         onConfirm={handleActionConfirm}
+      />
+
+      {/* Bulk approve dialog */}
+      <BulkApproveDialog
+        open={isBulkDialogOpen}
+        onOpenChange={setIsBulkDialogOpen}
+        requests={bulkCandidates}
+        approverId={currentEmployeeId}
+        organization_id={organization_id}
       />
     </div>
   );

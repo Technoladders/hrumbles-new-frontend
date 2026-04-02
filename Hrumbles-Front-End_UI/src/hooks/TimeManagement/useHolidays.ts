@@ -112,32 +112,56 @@ export const useHolidays = () => {
   ) => {
     if (!organization_id) return;
     try {
-      const rows = newHolidays.map(h => ({
+      // Deduplicate by holiday_date within the incoming batch.
+      // Multiple holidays can share the same date (e.g. April 14 = Tamil New Year
+      // + Ambedkar Jayanti + Vishu + Bihu). Postgres upsert errors with code 21000
+      // if two rows in the same command target the same conflict key.
+      // Fix: merge same-date names into one row before sending.
+      const dateMap = new Map<string, typeof newHolidays[0]>();
+      for (const h of newHolidays) {
+        if (dateMap.has(h.date)) {
+          const prev = dateMap.get(h.date)!;
+          if (!prev.name.includes(h.name)) {
+            dateMap.set(h.date, {
+              ...prev,
+              name: `${prev.name} / ${h.name}`,
+              type: prev.type === "National" || h.type === "National" ? "National" : prev.type,
+            });
+          }
+        } else {
+          dateMap.set(h.date, h);
+        }
+      }
+
+      const deduped = Array.from(dateMap.values());
+      const merged  = newHolidays.length - deduped.length;
+
+      const rows = deduped.map(h => ({
         organization_id,
-        holiday_name:  h.name,
-        holiday_date:  h.date,
-        day_of_week:   h.day_of_week,
-        holiday_type:  h.type,
-        is_recurring:  h.is_recurring ?? false,
+        holiday_name:       h.name,
+        holiday_date:       h.date,
+        day_of_week:        h.day_of_week,
+        holiday_type:       h.type,
+        is_recurring:       h.is_recurring ?? false,
         applicable_regions: h.applicable_regions ?? "All",
       }));
 
+      // ignoreDuplicates:true silently skips dates already in DB (no 21000 error)
       const { error } = await supabase
         .from("official_holidays")
-        .upsert(rows, { onConflict: "organization_id,holiday_date", ignoreDuplicates: false });
+        .upsert(rows, { onConflict: "organization_id,holiday_date", ignoreDuplicates: true });
 
       if (error) throw error;
-      toast.success(`Added ${newHolidays.length} holiday${newHolidays.length !== 1 ? "s" : ""}`);
+
+      const label = merged > 0
+        ? `Saved ${deduped.length} holiday${deduped.length !== 1 ? "s" : ""} (${merged} same-date entries merged)`
+        : `Saved ${deduped.length} holiday${deduped.length !== 1 ? "s" : ""}`;
+      toast.success(label);
       setIsDialogOpen(false);
       await Promise.all([fetchHolidays(), fetchStats()]);
     } catch (err: any) {
-      if (err?.code === "23505") {
-        toast.error("One or more dates already have holidays. They were skipped.");
-        await Promise.all([fetchHolidays(), fetchStats()]);
-      } else {
-        console.error("Error adding holidays:", err);
-        toast.error("Failed to add holidays");
-      }
+      console.error("Error adding holidays:", err);
+      toast.error(err?.message ?? "Failed to add holidays");
     }
   };
 

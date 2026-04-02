@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { format, addDays, startOfMonth, getDay } from "date-fns";
+import { format, addDays, startOfDay, startOfMonth, getDay, isSameDay } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Calendar } from "@/components/ui/calendar";
+import { HolidayDatePicker } from "./HolidayDatePicker";
 import {
   Select,
   SelectContent,
@@ -45,12 +45,15 @@ import {
   PATTERN_LABELS,
 } from "@/types/time-tracker-types";
 import { useWeekendConfig } from "@/hooks/TimeManagement/useWeekendConfig";
+import { Holiday } from "@/types/time-tracker-types";
 import { weekOfMonth } from "@/utils/holidayUtils";
 import { cn } from "@/lib/utils";
 
 interface WeekendConfigDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Official holidays to show as orange indicators in the exception picker */
+  holidays?: Holiday[];
 }
 
 const WORKING_DAYS = [1, 2, 3, 4, 5]; // Mon–Fri (cannot be made weekend)
@@ -101,7 +104,7 @@ function useMonthPreview(configs: WeekendConfig[], exceptions: WorkingDayExcepti
   return days;
 }
 
-export function WeekendConfigDialog({ open, onOpenChange }: WeekendConfigDialogProps) {
+export function WeekendConfigDialog({ open, onOpenChange, holidays = [] }: WeekendConfigDialogProps) {
   const {
     weekendConfig,
     exceptions,
@@ -114,7 +117,10 @@ export function WeekendConfigDialog({ open, onOpenChange }: WeekendConfigDialogP
   } = useWeekendConfig();
 
   const [localConfig, setLocalConfig] = useState<WeekendConfig[]>([]);
-  const [exceptionDate, setExceptionDate] = useState<Date | undefined>();
+
+  // Map holidays → { date, name } for HolidayDatePicker orange indicators
+  const holidayDateInfos = holidays.map(h => ({ date: h.date, name: h.name }));
+  const [exceptionDate, setExceptionDate] = useState<Date | null>(null);
   const [exceptionType, setExceptionType] = useState<"working" | "nonworking">("working");
   const [exceptionReason, setExceptionReason] = useState("");
   const [activeTab, setActiveTab] = useState("weekend");
@@ -169,7 +175,7 @@ export function WeekendConfigDialog({ open, onOpenChange }: WeekendConfigDialogP
       exceptionType === "working",
       exceptionReason || undefined
     );
-    setExceptionDate(undefined);
+    setExceptionDate(null);
     setExceptionReason("");
   };
 
@@ -210,7 +216,7 @@ export function WeekendConfigDialog({ open, onOpenChange }: WeekendConfigDialogP
             </TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="flex-1 px-6 h-full overflow-auto">
+          <ScrollArea className="flex-1 px-6 overflow-auto">
             {/* ─── WEEKLY SCHEDULE ─────────────────────────────── */}
             <TabsContent value="weekend" className="mt-6 space-y-6">
               {/* Mon–Fri: read-only info */}
@@ -358,13 +364,19 @@ export function WeekendConfigDialog({ open, onOpenChange }: WeekendConfigDialogP
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Select date</Label>
-                    <Calendar
-                      mode="single"
-                      selected={exceptionDate}
-                      onSelect={setExceptionDate}
-                      className="rounded-md border w-full"
-                      initialFocus
-                    />
+                    <div className="rounded-xl border border-violet-100 dark:border-violet-900 bg-violet-50/30 dark:bg-violet-950/20 p-3">
+                      <HolidayDatePicker
+                        selected={exceptionDate ? [exceptionDate] : []}
+                        onChange={dates => setExceptionDate(dates.length > 0 ? dates[dates.length - 1] : null)}
+                        holidayDates={holidayDateInfos}
+                        existingExceptions={exceptions.map(e => e.exception_date)}
+                      />
+                    </div>
+                    {exceptionDate && (
+                      <p className="text-xs text-muted-foreground">
+                        Selected: <span className="font-semibold text-violet-700 dark:text-violet-300">{format(exceptionDate, "EEEE, MMM d, yyyy")}</span>
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-4">
@@ -419,8 +431,7 @@ export function WeekendConfigDialog({ open, onOpenChange }: WeekendConfigDialogP
                       disabled={!exceptionDate}
                       className="w-full bg-violet-600 hover:bg-violet-700"
                     >
-                      Add exception for{" "}
-                      {exceptionDate ? format(exceptionDate, "MMM d, yyyy") : "selected date"}
+                      Add exception{exceptionDate ? " for " + format(exceptionDate, "MMM d, yyyy") : ""}
                     </Button>
                   </div>
                 </div>

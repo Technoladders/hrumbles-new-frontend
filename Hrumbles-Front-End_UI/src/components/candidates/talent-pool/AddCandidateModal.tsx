@@ -59,57 +59,68 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     throw new Error('Unsupported file type. Please use PDF or DOCX.');
   };
 
-  const analyseAndSaveProfile = async (text: string, resumeFile?: File): Promise<{status: string; profile: any}> => {
-    let resumePath: string | null = null;
-    if (resumeFile) {
-        const sanitizedName = sanitizeFileName(resumeFile.name);
-        const fileName = `${uuidv4()}-${sanitizedName}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-            .from(BUCKET_NAME)
-            .upload(fileName, resumeFile, {
-                cacheControl: '3600',
-                upsert: false,
-            });
-        
-        if (uploadError) throw new Error(`File Upload Error: ${uploadError.message}`);
+// === IMPROVED analyseAndSaveProfile ===
+const analyseAndSaveProfile = async (text: string, resumeFile?: File): Promise<{status: string; profile: any}> => {
+  let resumePath: string | null = null;
 
-        const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uploadData.path);
-        resumePath = urlData.publicUrl;
+  if (resumeFile) {
+    const sanitizedName = sanitizeFileName(resumeFile.name);
+    const fileName = `${uuidv4()}-${sanitizedName}`;
+    
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(fileName, resumeFile, { cacheControl: '3600', upsert: false });
+    
+    if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+    const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uploadData.path);
+    resumePath = urlData.publicUrl;
+  }
+
+  // Call Edge Function
+  const { data, error: edgeError } = await supabase.functions.invoke('talent-analyse-resume', {
+    body: {
+      resumeText: text,
+      organizationId,
+      userId: user.id,
+      resumePath,
+    },
+  });
+
+  if (edgeError) {
+    let errorMsg = edgeError.message || 'Unknown server error';
+
+    // Extract real error body from non-2xx responses
+    try {
+      if (edgeError.context && typeof edgeError.context.json === 'function') {
+        const errorBody = await edgeError.context.json();
+        errorMsg = errorBody?.error || errorBody?.message || errorMsg;
+      }
+    } catch (e) {
+      console.warn('Could not parse error body from Edge Function');
     }
 
-    // --- CALL THE NEW SUPABASE EDGE FUNCTION ---
-    const { data, error: edgeFunctionError } = await supabase.functions.invoke('talent-analyse-resume', {
-        body: {
-            resumeText: text,
-            organizationId: organizationId, // Pass these to the Edge Function
-            userId: user.id,             // Pass these to the Edge Function
-            resumePath: resumePath,      // Pass the uploaded path
-        },
-        // headers: { 'Content-Type': 'application/json' } // invoke handles this for JSON body
-    });
-
- if (edgeFunctionError) {
-     console.error('Edge Function invocation error:', edgeFunctionError);
-     // edgeFunctionError.context is the raw Response for non-2xx replies.
-     // Read the JSON body from it to surface the real "error" field.
-     let errorMessage = edgeFunctionError.message;
-     try {
-         const errorBody = await (edgeFunctionError as any).context?.json();
-         if (errorBody?.error) errorMessage = errorBody.error;
-     } catch { /* ignore – fall back to the generic message */ }
-     throw new Error(errorMessage);
- }
-    
-    // The Edge Function now returns the status and profile directly
-    const { status, profile } = data;
-
-    if (status === 'SKIPPED_NO_EMAIL') {
-        throw new Error('Could not extract a valid email from the resume.');
+    // Clean up common ugly messages
+    if (errorMsg.includes('unsupported Unicode escape sequence')) {
+      errorMsg = 'Resume contains invalid characters. Please try a clean PDF/DOCX.';
     }
-    
-    return { status, profile };
-  };
+    if (errorMsg.includes('SKIPPED_NO_EMAIL') || errorMsg.includes('email')) {
+      errorMsg = 'Could not find a valid email address in the resume.';
+    }
+
+    throw new Error(errorMsg);
+  }
+
+  if (!data) throw new Error('No response from analysis service');
+
+  const { status, profile } = data;
+
+  if (status === 'SKIPPED_NO_EMAIL') {
+    throw new Error('Could not find a valid email in the resume.');
+  }
+
+  return { status, profile };
+};
 
   // --- HANDLERS (No changes needed below this line) ---
   const handleSingleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -161,36 +172,58 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     );
   };
 
-  const handleBulkFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
+const handleBulkFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const files = event.target.files;
+  if (!files || files.length === 0) return;
 
-    setIsLoading(true);
-    setIsBulkProcessing(true);
-    setBulkResults([]);
-    setBulkProgress(0);
-    const results: BulkUploadResult[] = [];
+  setIsLoading(true);
+  setIsBulkProcessing(true);
+  setBulkResults([]);
+  setBulkProgress(0);
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      try {
-        const text = await parseFileToText(file);
-        const { status, profile } = await analyseAndSaveProfile(text, file);
-        if (status === 'INSERTED' || status === 'UPDATED') {
-          results.push({ fileName: file.name, status: 'success', message: `${profile.candidate_name || 'N/A'} - Profile ${status.toLowerCase()}` });
-        } else if (status === 'SKIPPED_RECENT') {
-          results.push({ fileName: file.name, status: 'skipped', message: `${profile.candidate_name || 'N/A'} - Skipped (already exists)` });
-        }
-      } catch (error) {
-        results.push({ fileName: file.name, status: 'failed', message: error instanceof Error ? error.message : 'Unknown error' });
+  const results: BulkUploadResult[] = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    try {
+      const text = await parseFileToText(file);
+      const { status, profile } = await analyseAndSaveProfile(text, file);
+
+      if (status === 'INSERTED' || status === 'UPDATED') {
+        results.push({
+          fileName: file.name,
+          status: 'success',
+          message: `${profile?.candidate_name || 'Candidate'} — Profile ${status.toLowerCase()}`
+        });
+      } else if (status === 'SKIPPED_RECENT') {
+        results.push({
+          fileName: file.name,
+          status: 'skipped',
+          message: `${profile?.candidate_name || 'Candidate'} — Skipped (recently added)`
+        });
       }
-      setBulkProgress(((i + 1) / files.length) * 100);
-      setBulkResults([...results]);
+    } catch (err: any) {
+      const msg = err.message || 'Processing failed';
+
+      results.push({
+        fileName: file.name,
+        status: 'failed',
+        message: msg.length > 150 ? msg.substring(0, 147) + '...' : msg
+      });
+
+      console.error(`Failed ${file.name}:`, err);
     }
-    
-    toast.success("Bulk processing complete. Check results below.");
-    setIsLoading(false);
-  };
+
+    setBulkProgress(Math.round(((i + 1) / files.length) * 100));
+    setBulkResults([...results]);   // live update
+  }
+
+  setIsLoading(false);
+  setIsBulkProcessing(false);
+
+  const successCount = results.filter(r => r.status === 'success').length;
+  toast.success(`Bulk complete — ${successCount}/${files.length} successful`);
+};
   
   const handleClose = () => {
     if (isBulkProcessing) {
