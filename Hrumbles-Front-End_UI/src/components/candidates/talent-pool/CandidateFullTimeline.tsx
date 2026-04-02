@@ -784,3 +784,4 @@ const CandidateFullTimeline = ({
 };
 
 export default CandidateFullTimeline;
+// full ui change

@@ -27,6 +27,7 @@ import EnrichDataDialog from '@/components/candidates/talent-pool/EnrichDataDial
 import CircularProgress from '@/components/jobs/ui/CircularProgress';
 import JobMatchModal from '@/components/candidates/talent-pool/JobMatchModal';
 import WishlistModal from '@/components/candidates/talent-pool/WishlistModal';
+import { CandidateActivityButton } from '@/components/candidates/activity/CandidateActivityButton';
 
 export interface TalentPoolCandidate {
   id: string;
@@ -400,6 +401,12 @@ const TalentPoolPage: FC = () => {
                       </TooltipTrigger>
                       <TooltipContent><p>Enrich Data</p></TooltipContent>
                     </Tooltip>
+                    <div className="h-5 w-px bg-slate-300" />     
+     <CandidateActivityButton                         
+       candidateId={candidate.id}                     
+       candidateName={candidate.candidate_name}       
+     />                                                
+ 
                   </div>
                 </div>
 
