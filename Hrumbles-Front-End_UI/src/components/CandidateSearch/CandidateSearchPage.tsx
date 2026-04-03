@@ -101,7 +101,7 @@ const CandidateSearchPage: React.FC = () => {
 
   const {
     state, people, totalEntries, currentPage, error,
-    search, loadPage, reset,
+    search, reset,
   } = useCandidateSearch({
     keywords:           filters.keywords,
     titles:             filters.titles,
@@ -206,13 +206,13 @@ const CandidateSearchPage: React.FC = () => {
     setCheckedIds(v ? new Set(displayPeople.map(p => p.id)) : new Set());
   }, [displayPeople]);
 
-  const handlePrev = useCallback(() => {
-    if (currentPage > 1) loadPage(currentPage - 1);
-  }, [currentPage, loadPage]);
+const handlePrev = useCallback(() => {
+    if (currentPage > 1) search(currentPage - 1);
+  }, [currentPage, search]);
 
   const handleNext = useCallback(() => {
-    if (displayPeople.length >= RESULTS_PER_PAGE) loadPage(currentPage + 1);
-  }, [displayPeople.length, currentPage, loadPage]);
+    if (displayPeople.length >= RESULTS_PER_PAGE) search(currentPage + 1);
+  },[displayPeople.length, currentPage, search]);
 
   const totalPages = Math.ceil(totalEntries / RESULTS_PER_PAGE);
 
