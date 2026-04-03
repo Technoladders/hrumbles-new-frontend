@@ -19,6 +19,7 @@ interface UseSearchOptions {
   seniorities: string[];
   companyNames: string[];
   availabilityIntent: string[];
+  initialPage?: number;
 }
 
 interface UseSearchReturn {
@@ -76,24 +77,23 @@ const buildKeywords = (
 };
 
 export const useCandidateSearch = ({
-  keywords, titles, locations, seniorities, companyNames, availabilityIntent,
+  keywords, titles, locations, seniorities, companyNames, availabilityIntent, initialPage = 1,
 }: UseSearchOptions): UseSearchReturn => {
   const [state,        setState]        = useState<SearchState>("idle");
   const [people,       setPeople]       = useState<ApolloCandidate[]>([]);
   const [totalEntries, setTotalEntries] = useState(0);
-  const [currentPage,  setCurrentPage]  = useState(1);
+  const [currentPage, setCurrentPage] = useState(initialPage);
   const [error,        setError]        = useState<SearchError | null>(null);
 
   const lastFilters = useRef({ keywords, titles, locations, seniorities, companyNames, availabilityIntent });
 
-  const search = useCallback(async (page = 1) => {
-    const f = page === 1
-      ? { keywords, titles, locations, seniorities, companyNames, availabilityIntent }
-      : lastFilters.current;
-
+  const search = useCallback(async (page: number = 1) => {
+    // On new filter search (page 1), update lastFilters
     if (page === 1) {
       lastFilters.current = { keywords, titles, locations, seniorities, companyNames, availabilityIntent };
     }
+
+    const f = lastFilters.current;
 
     setState("loading");
     setError(null);
