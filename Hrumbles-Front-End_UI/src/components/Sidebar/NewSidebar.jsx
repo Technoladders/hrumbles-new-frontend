@@ -9,10 +9,14 @@ import { ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
 import { menuItemsByRole } from "./SidebarMenuItem";
 import { ChevronsLeft, ChevronsRight } from 'lucide-react';
 import supabase from "../../config/supabaseClient";
+import { useWhatsAppConversations } from '@/hooks/useWhatsAppConversations';
 
 // 1. MEMOIZED MENU ITEM - Entry animations removed to prevent flickering/reloading feel
-const MenuItem = memo(({ item, isExpanded, currentPath, openDropdown, handleDropdownToggle }) => {
-  const { icon, label, path, dropdown } = item;
+const MenuItem = memo(({ item, isExpanded, currentPath, openDropdown, handleDropdownToggle, waUnreadCount }) => {
+  const { icon, label, path, dropdown, badge } = item;
+
+  // Resolve badge count — only "wa_unread" supported for now, easy to extend
+  const badgeCount = badge === 'wa_unread' ? waUnreadCount : 0;
   const isDropdownOpen = openDropdown === label;
 
   const isActive = useMemo(() => {
@@ -47,9 +51,22 @@ const MenuItem = memo(({ item, isExpanded, currentPath, openDropdown, handleDrop
             if (dropdown) handleDropdownToggle(label, e);
           }}
         >
-          <Icon as={icon} fontSize="16px" />
-          {isExpanded && (
-            <Flex justify="space-between" align="center" w="full" ml={4} >
+         <Box position="relative" display="inline-flex">
+            <Icon as={icon} fontSize="16px" />
+            {!isExpanded && badgeCount > 0 && (
+              <Box
+                position="absolute" top="-6px" right="-8px"
+                minW="15px" h="15px" borderRadius="full" px="3px"
+                bg="#25D366" color="white" fontSize="9px" fontWeight="bold"
+                display="flex" alignItems="center" justifyContent="center"
+                lineHeight="1"
+              >
+                {badgeCount > 9 ? '9+' : badgeCount}
+              </Box>
+            )}
+          </Box>
+{isExpanded && (
+            <Flex justify="space-between" align="center" w="full" ml={4}>
               <Box position="relative" display="inline-block">
                 <Text fontWeight="medium" fontSize="sm">{label}</Text>
                 {item.beta && (
@@ -58,7 +75,19 @@ const MenuItem = memo(({ item, isExpanded, currentPath, openDropdown, handleDrop
                   </Box>
                 )}
               </Box>
-              {dropdown && <Icon as={isDropdownOpen ? ChevronUpIcon : ChevronDownIcon} />}
+              <Flex align="center" gap={2}>
+                {badgeCount > 0 && (
+                  <Box
+                    display="inline-flex" alignItems="center" justifyContent="center"
+                    minW="18px" h="18px" borderRadius="full" px="4px"
+                    bg="#25D366" color="white" fontSize="10px" fontWeight="bold"
+                    lineHeight="1"
+                  >
+                    {badgeCount > 9 ? '9+' : badgeCount}
+                  </Box>
+                )}
+                {dropdown && <Icon as={isDropdownOpen ? ChevronUpIcon : ChevronDownIcon} />}
+              </Flex>
             </Flex>
           )}
         </MotionFlex>
@@ -89,7 +118,20 @@ const MenuItem = memo(({ item, isExpanded, currentPath, openDropdown, handleDrop
   );
 });
 
-const NewSidebar = memo(({ isExpanded, toggleSidebar, headerHeight }) => {
+const NewSidebar = ({ isExpanded, toggleSidebar, headerHeight }) => {
+  const { totalUnread: waUnreadCount } = useWhatsAppConversations();
+  return (
+    <NewSidebarInner
+      isExpanded={isExpanded}
+      toggleSidebar={toggleSidebar}
+      headerHeight={headerHeight}
+      waUnreadCount={waUnreadCount}
+    />
+  );
+};
+
+// Inner component (memoized) — receives count as a plain prop, re-renders when it changes
+const NewSidebarInner = memo(({ isExpanded, toggleSidebar, headerHeight, waUnreadCount }) => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { userPermissions } = useSelector((state) => state.permissions);
@@ -220,7 +262,8 @@ const menuConfig = useMemo(() => {
               isExpanded={isExpanded} 
               currentPath={pathname} 
               openDropdown={openDropdown} 
-              handleDropdownToggle={handleDropdownToggle} 
+              handleDropdownToggle={handleDropdownToggle}
+              waUnreadCount={waUnreadCount}
             />
           ))}
         </VStack>

@@ -209,6 +209,9 @@ import JobBoardIntegrations from "./pages/integrations/JobBoardIntegrations.tsx"
 // dummy import for JobBoardsHub
 import { JobBoardsHub } from "@/components/jobs/job-boards";
 
+// whatsapp inbox
+ import WhatsAppInbox from '@/components/whatsapp/WhatsAppInbox';
+
 // settings
 import WhatsAppSettings from "./components/settings/WhatsAppSettings.tsx";
 
@@ -672,6 +675,8 @@ useEffect(() => {
               {/* Bench Profiles */}
               <Route path="/bench-pool" element={<BenchProfilesPage />} />
 
+              {/* whatpapp inbox */}
+              <Route path="/whatsapp-conversations" element={<WhatsAppInbox />} />
               {/* settings */}
               <Route path="/whatsapp-settings" element={<WhatsAppSettings />} />
             </Route>
