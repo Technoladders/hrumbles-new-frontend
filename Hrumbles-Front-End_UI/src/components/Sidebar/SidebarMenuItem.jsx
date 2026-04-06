@@ -13,7 +13,7 @@ import { GrDocumentTime, GrIntegration } from "react-icons/gr";
 import { LuCalendarPlus, LuUserSearch, LuCalendarCog, LuSend, LuMessageSquare } from "react-icons/lu";
 import { BsShieldLock, BsShieldCheck, BsPin, BsGraphUpArrow } from "react-icons/bs";
 import { FaUserShield, FaProjectDiagram, FaUserTie } from 'react-icons/fa';
-import { RiCustomerService2Fill } from 'react-icons/ri';
+import { RiCustomerService2Fill, RiProfileLine } from 'react-icons/ri';
 import { TbDatabaseSearch } from "react-icons/tb";
 import { LiaBusinessTimeSolid } from "react-icons/lia";
 import { CgOrganisation } from "react-icons/cg";
@@ -249,6 +249,8 @@ const masterMenuItems = [
     dropdown: [
       { icon: IoCalendarNumberOutline, label: "Official Holidays", path: "/admin/holidays", permission: "manage_holidays" },
       { icon: BsShieldLock, label: "Password", path: "/password", permission: "change_password" },
+      {icon: RiProfileLine, label: "Organization Profile", path: "/settings/organization-profile", permission: "access_org_profile_settings" },
+
     ],
   },
 

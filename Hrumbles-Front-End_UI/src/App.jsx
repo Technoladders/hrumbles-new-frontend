@@ -214,6 +214,7 @@ import { JobBoardsHub } from "@/components/jobs/job-boards";
 
 // settings
 import WhatsAppSettings from "./components/settings/WhatsAppSettings.tsx";
+import OrganizationProfilePage from "./pages/settings/OrganizationProfilePage.tsx"
 
 // --- Simple Loader for Organization Check ---
 const FullScreenLoader = () => (
@@ -679,6 +680,7 @@ useEffect(() => {
               <Route path="/whatsapp-conversations" element={<WhatsAppInbox />} />
               {/* settings */}
               <Route path="/whatsapp-settings" element={<WhatsAppSettings />} />
+              <Route path="/settings/organization-profile" element={<OrganizationProfilePage />} />
             </Route>
           </Route>
         </Route>
