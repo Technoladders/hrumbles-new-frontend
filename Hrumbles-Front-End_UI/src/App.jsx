@@ -165,6 +165,9 @@ import ApolloUsageReport from '@/components/reports/ApolloUsageReport'
 
 import ActivityLogReport from '@/components/reports/ActivityLogReport.tsx';
 
+// Rocket Reach
+import RocketReachSearchPage from "./components/rocketreach/RocketReachSearchPage";
+
 
 
 // Clients
@@ -651,6 +654,9 @@ useEffect(() => {
               <Route path="/contacts-v2" element={<ContactsV2Page />} />
               <Route path="/contacts-v2/list/:fileId" element={<ContactsV2Page />} />
               <Route path="/contacts-v2/discovery" element={<ContactsV2Page />} />
+
+              {/* rocket reach */}
+              <Route path="/rocket-reach" element={<RocketReachSearchPage />} />
 
               {/* TimeTracker, Timesheet, Attendance and Leave */}
               {/* Employee routes */}

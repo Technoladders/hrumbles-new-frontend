@@ -23,14 +23,15 @@ import { format } from 'date-fns';
 import { motion } from "framer-motion";
 import InvoiceForm from '@/components/accounts/InvoiceForm';
 import InvoiceDetails from '@/components/accounts/InvoiceDetails';
+import { printInvoicePDF } from '@/utils/printInvoicePDF';
 
 const InvoicesPage = () => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const[searchParams, setSearchParams] = useSearchParams();
 
   const [invoices, setInvoices] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const[isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [viewInvoiceId, setViewInvoiceId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -40,16 +41,16 @@ const InvoicesPage = () => {
   // Payment dialog
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [paymentType, setPaymentType] = useState<'full' | 'manual'>('full');
-  const [paymentData, setPaymentData] = useState({ id: '', status: '', amount: '' as string | number, date: format(new Date(), 'yyyy-MM-dd'), method: 'Bank Transfer' });
+  const[paymentData, setPaymentData] = useState({ id: '', status: '', amount: '' as string | number, date: format(new Date(), 'yyyy-MM-dd'), method: 'Bank Transfer' });
 
   // Edit billing dialog
   const [isBillingEditOpen, setIsBillingEditOpen] = useState(false);
   const [billingEditId, setBillingEditId] = useState('');
-  const [billingForm, setBillingForm] = useState({ name: '', address: '', city: '', state: '', zipCode: '', country: 'India', taxId: '', currency: 'INR' });
+  const[billingForm, setBillingForm] = useState({ name: '', address: '', city: '', state: '', zipCode: '', country: 'India', taxId: '', currency: 'INR' });
 
   // Filters
-  const [dateRange, setDateRange] = useState<{ start: string; end: string } | null>(null);
-  const [amountFilter, setAmountFilter] = useState('all');
+  const[dateRange, setDateRange] = useState<{ start: string; end: string } | null>(null);
+  const[amountFilter, setAmountFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
 
   const searchQuery = searchParams.get('search') || '';
@@ -76,7 +77,7 @@ const InvoicesPage = () => {
     setIsLoading(true);
     const { data, error } = await supabase.from('hr_invoices').select('*, status_history, updated_by').eq('organization_id', organizationId).eq('type', 'Client').order('created_at', { ascending: false });
     if (error) toast.error('Failed to fetch invoices');
-    else setInvoices((data || []).map(inv => ({ ...inv, items: typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items || [] })));
+    else setInvoices((data ||[]).map(inv => ({ ...inv, items: typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items ||[] })));
     setIsLoading(false);
   };
 
@@ -104,7 +105,7 @@ const InvoicesPage = () => {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedInvoices = filteredInvoices.slice(startIndex, startIndex + itemsPerPage);
 
-  const toggleSelectAll = () => setSelectedIds(selectedIds.length === paginatedInvoices.length ? [] : paginatedInvoices.map(i => i.id));
+  const toggleSelectAll = () => setSelectedIds(selectedIds.length === paginatedInvoices.length ?[] : paginatedInvoices.map(i => i.id));
   const toggleSelect = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
 
   const handleBulkAction = async (action: string) => {
@@ -196,7 +197,7 @@ const InvoicesPage = () => {
     return `₹${n.toLocaleString()}`;
   };
 
-  const openPreview = (inv: any) => { setPreviewInvoice({ ...inv, items: typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items || [] }); setIsPreviewOpen(true); };
+  const openPreview = (inv: any) => { setPreviewInvoice({ ...inv, items: typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items ||[] }); setIsPreviewOpen(true); };
 
   return (
     <div className="p-6 space-y-6 bg-gray-50/50 min-h-screen">
@@ -371,7 +372,7 @@ const InvoicesPage = () => {
                                 <div className="p-4 bg-white rounded-lg">
                                   <h4 className="font-semibold text-xs text-gray-900 mb-3 flex items-center gap-2 border-b pb-2"><Clock className="h-3.5 w-3.5 text-purple-600" />Status History</h4>
                                   <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-                                    {(() => { const h = inv.status_history ? (Array.isArray(inv.status_history) ? inv.status_history : JSON.parse(inv.status_history)) : []; return h.length > 0 ? h.slice().reverse().map((c: any, i: number) => (<div key={i} className="flex items-start gap-3"><div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ring-2 ring-white ${c.status === 'Paid' ? 'bg-green-500' : c.status === 'Overdue' ? 'bg-red-500' : 'bg-gray-300'}`} /><div><span className="text-xs font-medium text-gray-900 block">{c.status}</span><span className="text-[10px] text-gray-500">{c.changed_at ? format(new Date(c.changed_at), 'dd MMM, HH:mm') : '-'}</span></div></div>)) : <div className="text-xs text-gray-400 text-center py-2">No history</div>; })()}
+                                    {(() => { const h = inv.status_history ? (Array.isArray(inv.status_history) ? inv.status_history : JSON.parse(inv.status_history)) :[]; return h.length > 0 ? h.slice().reverse().map((c: any, i: number) => (<div key={i} className="flex items-start gap-3"><div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ring-2 ring-white ${c.status === 'Paid' ? 'bg-green-500' : c.status === 'Overdue' ? 'bg-red-500' : 'bg-gray-300'}`} /><div><span className="text-xs font-medium text-gray-900 block">{c.status}</span><span className="text-[10px] text-gray-500">{c.changed_at ? format(new Date(c.changed_at), 'dd MMM, HH:mm') : '-'}</span></div></div>)) : <div className="text-xs text-gray-400 text-center py-2">No history</div>; })()}
                                   </div>
                                 </div>
                               </PopoverContent>
@@ -387,7 +388,20 @@ const InvoicesPage = () => {
                             { icon: Eye, tip: 'View Invoice', onClick: () => setViewInvoiceId(inv.id), hover: 'hover:bg-purple-600 hover:text-white' },
                             { icon: Edit, tip: 'Edit Invoice', onClick: () => { setSelectedInvoice(inv); setIsCreateOpen(true); }, hover: 'hover:bg-purple-600 hover:text-white' },
                             { icon: UserCog, tip: 'Edit Billing Details', onClick: (e: React.MouseEvent) => openBillingEdit(inv, e), hover: 'hover:bg-indigo-600 hover:text-white' },
-                            { icon: Download, tip: 'Download PDF', onClick: () => { toast.info('Generating PDF...'); setTimeout(() => toast.success('Downloaded!'), 1500); }, hover: 'hover:bg-purple-600 hover:text-white' },
+                            { 
+                              icon: Download, 
+                              tip: 'Download PDF', 
+                              onClick: async () => { 
+                                try {
+                                  toast.info('Generating PDF...');
+                                  await printInvoicePDF(inv.id);
+                                  toast.success('Downloaded!');
+                                } catch (error) {
+                                  toast.error('Failed to download PDF');
+                                }
+                              }, 
+                              hover: 'hover:bg-purple-600 hover:text-white' 
+                            },
                             { icon: Trash2, tip: 'Delete', onClick: () => handleDelete(inv.id), hover: 'hover:bg-red-600 hover:text-white' },
                           ].map(({ icon: Icon, tip, onClick, hover }) => (
                             <TooltipProvider key={tip}>
@@ -553,7 +567,19 @@ const InvoicesPage = () => {
                       { label: 'View', icon: Eye, onClick: () => setViewInvoiceId(previewInvoice.id) },
                       { label: 'Edit', icon: Edit, onClick: () => { setSelectedInvoice(previewInvoice); setIsCreateOpen(true); } },
                       { label: 'Billing', icon: UserCog, onClick: (e: any) => openBillingEdit(previewInvoice, e) },
-                      { label: 'Download', icon: Download, onClick: () => { toast.info('Preparing PDF...'); setTimeout(() => toast.success('Downloaded!'), 1500); } },
+                      { 
+                        label: 'Download', 
+                        icon: Download, 
+                        onClick: async () => { 
+                          try {
+                            toast.info('Preparing PDF...');
+                            await printInvoicePDF(previewInvoice.id);
+                            toast.success('Downloaded!');
+                          } catch (error) {
+                            toast.error('Failed to download PDF');
+                          }
+                        } 
+                      },
                     ].map(({ label, icon: Icon, onClick }) => (
                       <Button key={label} variant="ghost" size="sm" className="h-9 bg-white border border-gray-200 hover:border-purple-300 hover:bg-purple-50 text-gray-700 hover:text-purple-700 text-[10px] font-semibold shadow-sm" onClick={onClick as any}>
                         <Icon className="h-4 w-4 mr-1 text-purple-600" />{label}
@@ -569,6 +595,5 @@ const InvoicesPage = () => {
     </div>
   );
 };
-
 
 export default InvoicesPage;

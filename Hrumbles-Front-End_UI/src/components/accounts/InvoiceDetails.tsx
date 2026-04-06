@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { format } from 'date-fns';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import { printInvoicePDF } from '@/utils/printInvoicePDF';
 
 interface Props { invoiceId: string | null; }
 
@@ -16,6 +15,7 @@ const InvoiceDetails: React.FC<Props> = ({ invoiceId }) => {
   const [biller, setBiller] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
+  // printRef kept for the visible Card layout only — PDF generation uses shared utility
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -85,35 +85,19 @@ const InvoiceDetails: React.FC<Props> = ({ invoiceId }) => {
     return `₹${v.toLocaleString('en-IN')}`;
   };
 
-  // ── PDF ────────────────────────────────────────────────────────────────────
+  // ── PDF — uses shared printInvoicePDF utility (same renderer everywhere) ──
   const handleDownloadPDF = async () => {
-    if (!printRef.current) return;
+    if (!invoiceId) return;
     try {
       setIsDownloading(true);
       toast.info('Generating PDF...');
-      const el = printRef.current;
-      const clone = el.cloneNode(true) as HTMLElement;
-      clone.style.cssText = `position:absolute;left:-9999px;top:0;width:${el.offsetWidth}px;height:auto;overflow:visible;background:#fff;`;
-      document.body.appendChild(clone);
-      clone.querySelectorAll('*').forEach((e: Element) => {
-        const s = (e as HTMLElement).style;
-        if (s.paddingTop) s.paddingTop = `${Math.max(parseFloat(s.paddingTop) * 0.6, 2)}px`;
-        if (s.paddingBottom) s.paddingBottom = `${Math.max(parseFloat(s.paddingBottom) * 0.6, 2)}px`;
-        if (s.marginTop) s.marginTop = `${Math.max(parseFloat(s.marginTop) * 0.5, 1)}px`;
-        if (s.marginBottom) s.marginBottom = `${Math.max(parseFloat(s.marginBottom) * 0.5, 1)}px`;
-        if ((e as HTMLElement).tagName === 'TD' || (e as HTMLElement).tagName === 'TH') { s.padding = '4px 6px'; s.lineHeight = '1.1'; }
-      });
-      const canvas = await html2canvas(clone, { scale: 2.5, useCORS: true, logging: false, backgroundColor: '#ffffff', width: el.offsetWidth, height: clone.scrollHeight, scrollX: 0, scrollY: 0, allowTaint: true });
-      document.body.removeChild(clone);
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pW = 210, pH = 297, m = 8, avail = pH - 2 * m, iW = pW - 2 * m, iH = (canvas.height * iW) / canvas.width;
-      const sc = iH > avail ? avail / iH : 1;
-      pdf.addImage(imgData, 'PNG', (pW - iW * sc) / 2, m, iW * sc, iH * sc);
-      pdf.save(`${invoice?.invoice_number || 'Invoice'}.pdf`);
+      await printInvoicePDF(invoiceId);
       toast.success('PDF downloaded');
-    } catch { toast.error('Failed to generate PDF'); }
-    finally { setIsDownloading(false); }
+    } catch {
+      toast.error('Failed to generate PDF');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   if (!invoiceId || isLoading) return <div className="flex h-[400px] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-purple-600" /></div>;
@@ -294,3 +278,4 @@ const InvoiceDetails: React.FC<Props> = ({ invoiceId }) => {
 };
 
 export default InvoiceDetails;
+// 

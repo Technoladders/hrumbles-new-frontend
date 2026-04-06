@@ -28,7 +28,17 @@ const generateNextInvoiceNumber = async (orgId: string): Promise<string> => {
   const fy = getFinancialYear();
   const { data: org } = await supabase.from('hr_organizations').select('invoice_prefix, name').eq('id', orgId).single();
   const prefix = org?.invoice_prefix || org?.name?.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 4) || 'INV';
-  const { count } = await supabase.from('hr_invoices').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('type', 'Client');
+
+  // Count only invoices in the CURRENT financial year by matching the number pattern.
+  // This means the sequence resets to 001 at the start of each new FY.
+  const fyPattern = `${prefix}/${fy}/%`;
+  const { count } = await supabase
+    .from('hr_invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+    .eq('type', 'Client')
+    .like('invoice_number', fyPattern);
+
   return `${prefix}/${fy}/${((count || 0) + 1).toString().padStart(3, '0')}`;
 };
 
