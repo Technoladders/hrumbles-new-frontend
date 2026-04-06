@@ -10,10 +10,10 @@ import { TbCheckbox } from "react-icons/tb";
 import { GoOrganization } from "react-icons/go";
 import { VscOrganization } from "react-icons/vsc";
 import { GrDocumentTime, GrIntegration } from "react-icons/gr";
-import { LuCalendarPlus, LuUserSearch, LuCalendarCog, LuSend } from "react-icons/lu";
+import { LuCalendarPlus, LuUserSearch, LuCalendarCog, LuSend, LuMessageSquare } from "react-icons/lu";
 import { BsShieldLock, BsShieldCheck, BsPin, BsGraphUpArrow } from "react-icons/bs";
 import { FaUserShield, FaProjectDiagram, FaUserTie } from 'react-icons/fa';
-import { RiCustomerService2Fill } from 'react-icons/ri';
+import { RiCustomerService2Fill, RiProfileLine } from 'react-icons/ri';
 import { TbDatabaseSearch } from "react-icons/tb";
 import { LiaBusinessTimeSolid } from "react-icons/lia";
 import { CgOrganisation } from "react-icons/cg";
@@ -249,6 +249,8 @@ const masterMenuItems = [
     dropdown: [
       { icon: IoCalendarNumberOutline, label: "Official Holidays", path: "/admin/holidays", permission: "manage_holidays" },
       { icon: BsShieldLock, label: "Password", path: "/password", permission: "change_password" },
+      {icon: RiProfileLine, label: "Organization Profile", path: "/settings/organization-profile", permission: "access_org_profile_settings" },
+
     ],
   },
 
@@ -261,6 +263,7 @@ const masterMenuItems = [
   { icon: TbDatabaseSearch, label: "Candidate Search", path: "/search/candidates/beta", suite: "RECRUITMENT", permission: "access_candidate_search", beta: true },
 
   { icon: LuSend, label: "My Invites", path: "/my-invites", suite: "RECRUITMENT", permission: "access_invite" },
+  { icon: LuMessageSquare, label: "Conversations", path: "/whatsapp-conversations", suite: "RECRUITMENT", permission: "access_whatsapp_conversation", badge: "wa_unread" },
   { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients", suite: "RECRUITMENT", permission: "access_client_management" },
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects", suite: "RECRUITMENT", permission: "access_project_management" },
   { icon: GrIntegration, label: "Market Places", path: "/job-boards", suite: "RECRUITMENT", permission: "access_jobs_boards" },

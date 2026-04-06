@@ -34,6 +34,10 @@ interface WaMessage {
   wa_message_id:     string | null;
   status:            'sent' | 'delivered' | 'read' | 'failed';
   sent_at:           string;
+  sent_by?:          string | null;   // hr_employees.id of sender
+  // joined from view (only in inbox mode)
+  sent_by_first_name?: string | null;
+  sent_by_last_name?:  string | null;
 }
 
 interface WaTemplate {
@@ -439,6 +443,7 @@ const V2WhatsAppFloat: React.FC<V2WhatsAppFloatProps> = ({
   candidatePhone,
 }) => {
   const organizationId = useSelector((s: any) => s.auth.organization_id);
+  const userId         = useSelector((s: any) => s.auth.user?.id ?? s.auth.userId);
 
   const [isOpen,       setIsOpen]       = useState(false);
   const [isMaximized,  setIsMaximized]  = useState(false);
@@ -581,7 +586,7 @@ const V2WhatsAppFloat: React.FC<V2WhatsAppFloatProps> = ({
     setInputText('');
     try {
       const { data, error } = await supabase.functions.invoke('wa-send', {
-        body: { organizationId, candidateId, jobId: jobId ?? null, phone: candidatePhone, messageType: 'text', content: text },
+        body: { organizationId, candidateId, jobId: jobId ?? null, phone: candidatePhone, messageType: 'text', content: text, sentBy: userId },
       });
       if (error)       throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
@@ -599,7 +604,7 @@ const V2WhatsAppFloat: React.FC<V2WhatsAppFloatProps> = ({
     setIsSending(true);
     try {
       const { data, error } = await supabase.functions.invoke('wa-send', {
-        body: { organizationId, candidateId, jobId: jobId ?? null, phone: candidatePhone, messageType: 'template', templateName: tpl.name, templateLanguage: tpl.language },
+        body: { organizationId, candidateId, jobId: jobId ?? null, phone: candidatePhone, messageType: 'template', templateName: tpl.name, templateLanguage: tpl.language, sentBy: userId },
       });
       if (error)       throw new Error(error.message);
       if (data?.error) throw new Error(data.error);

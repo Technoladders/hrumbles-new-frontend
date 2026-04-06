@@ -209,8 +209,12 @@ import JobBoardIntegrations from "./pages/integrations/JobBoardIntegrations.tsx"
 // dummy import for JobBoardsHub
 import { JobBoardsHub } from "@/components/jobs/job-boards";
 
+// whatsapp inbox
+ import WhatsAppInbox from '@/components/whatsapp/WhatsAppInbox';
+
 // settings
 import WhatsAppSettings from "./components/settings/WhatsAppSettings.tsx";
+import OrganizationProfilePage from "./pages/settings/OrganizationProfilePage.tsx"
 
 // --- Simple Loader for Organization Check ---
 const FullScreenLoader = () => (
@@ -672,8 +676,11 @@ useEffect(() => {
               {/* Bench Profiles */}
               <Route path="/bench-pool" element={<BenchProfilesPage />} />
 
+              {/* whatpapp inbox */}
+              <Route path="/whatsapp-conversations" element={<WhatsAppInbox />} />
               {/* settings */}
               <Route path="/whatsapp-settings" element={<WhatsAppSettings />} />
+              <Route path="/settings/organization-profile" element={<OrganizationProfilePage />} />
             </Route>
           </Route>
         </Route>
