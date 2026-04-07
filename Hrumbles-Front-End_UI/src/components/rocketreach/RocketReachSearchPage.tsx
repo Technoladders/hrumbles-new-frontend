@@ -1,54 +1,611 @@
-// Hrumbles-Front-End_UI/src/pages/search/RocketReachSearchPage.tsx
-// New route — add to your router however your other search pages are wired up.
-// Suggested path: /search/rocketreach  (or /search/candidates/pro)
-//
-// Example in your router:
-//   { path: "rocketreach", element: <RocketReachSearchPage /> }
+/**
+ * RocketReachSearchPage.tsx — v3 (FINAL)
+ *
+ * Complete search page:
+ *   - Provider toggle: RocketReach ↔ ContactOut (same UI, different API)
+ *   - Link to Saved Candidates page in top bar
+ *   - ContactOut-style result rows (RRResultsArea) — not table
+ *   - Sidebar: RRSearchSidebar with Skills at top
+ *   - Detail panel: RRDetailPanel (4 tabs, separate email/phone reveal)
+ *   - Folder modal for shortlisting
+ *   - URL state serialization (bookmarkable)
+ *   - Debounced auto-search (600ms)
+ *
+ * Routes:
+ *   /search/rocketreach              ← RocketReach provider
+ *   /search/rocketreach?p=contactout ← ContactOut provider (same page, toggle)
+ *   /search/rocketreach/saved        ← SavedRRCandidatesPage
+ */
 
-import PeopleSearchUI from "@/components/rocketreach/PeopleSearchUI";
+import React, {
+  useState, useEffect, useCallback, useRef, useMemo,
+} from "react";
+import { useSearchParams, useNavigate, Link } from "react-router-dom";
+import { useSelector }    from "react-redux";
+import { useQueryClient } from "@tanstack/react-query";
+import { cn }             from "@/lib/utils";
+import { supabase }       from "@/integrations/supabase/client";
+import {
+  ChevronLeft, ChevronRight, Bookmark, Loader2,
+  Settings, ChevronDown,
+} from "lucide-react";
 
-export default function RocketReachSearchPage() {
+import { RRSearchSidebar }  from "./RRSearchSidebar";
+import { RRResultsArea }    from "./RRResultsArea";
+import { RRDetailPanel }    from "./RRDetailPanel";
+import { FolderPickerModal } from "@/components/CandidateSearch/components/FolderPickerModal";
+import { IdleState }         from "@/components/CandidateSearch/components/states/IdleState";
+import { EmptyState }        from "@/components/CandidateSearch/components/states/EmptyState";  
+import { ErrorState }        from "@/components/CandidateSearch/components/states/ErrorState";
+import { useFolders }        from "@/components/CandidateSearch/hooks/useFolders";
+
+import { useRRSearch }       from "./hooks/useRRSearch";
+import { useRRRevealedIds }  from "./hooks/useRRRevealedIds";
+import { useSavedCandidatesCount } from "@/components/CandidateSearch/hooks/useSavedCandidates";
+
+import type { RRProfile, SkillChip } from "./types";
+
+// ─── Provider types ───────────────────────────────────────────────────────────
+type SearchProvider = "rocketreach" | "contactout";
+
+interface ProviderConfig {
+  id:          SearchProvider;
+  label:       string;
+  shortLabel:  string;
+  color:       string;
+  bgClass:     string;
+  badgeCls:    string;
+  totalLabel:  string;
+  note:        string;
+}
+
+const PROVIDERS: Record<SearchProvider, ProviderConfig> = {
+  rocketreach: {
+    id:         "rocketreach",
+    label:      "RocketReach",
+    shortLabel: "RR",
+    color:      "#f97316",
+    bgClass:    "bg-orange-500",
+    badgeCls:   "bg-orange-50 text-orange-700 border-orange-200",
+    totalLabel: "700M+ profiles",
+    note:       "Reveal email/phone separately after search",
+  },
+  contactout: {
+    id:         "contactout",
+    label:      "ContactOut",
+    shortLabel: "CO",
+    color:      "#7c3aed",
+    bgClass:    "bg-violet-600",
+    badgeCls:   "bg-violet-50 text-violet-700 border-violet-200",
+    totalLabel: "300M+ profiles",
+    note:       "Richer metadata · contact info at search time",
+  },
+};
+
+// ─── Filter state ─────────────────────────────────────────────────────────────
+interface FilterState {
+  name:             string;
+  titles:           string[];
+  locations:        string[];
+  currentEmployer:  string[];
+  keyword:          string;
+  skillChips:       SkillChip[];
+  managementLevels: string[];
+  department:       string;
+  companyIndustry:  string;
+  companySize:      string;
+  orderBy:          "popularity" | "relevance";
+  pageSize:         number;
+  page:             number;
+  provider:         SearchProvider;
+}
+
+const DEFAULT_FILTERS: FilterState = {
+  name: "", titles: [], locations: [], currentEmployer: [],
+  keyword: "", skillChips: [], managementLevels: [],
+  department: "", companyIndustry: "", companySize: "",
+  orderBy: "popularity", pageSize: 25, page: 1,
+  provider: "rocketreach",
+};
+
+function encodeFilters(f: FilterState): URLSearchParams {
+  const p = new URLSearchParams();
+  if (f.name.trim())            p.set("name",    f.name.trim());
+  if (f.titles.length)          p.set("titles",  f.titles.join("|"));
+  if (f.locations.length)       p.set("locs",    f.locations.join("|"));
+  if (f.currentEmployer.length) p.set("cos",     f.currentEmployer.join("|"));
+  if (f.keyword.trim())         p.set("kw",      f.keyword.trim());
+  if (f.skillChips.length)      p.set("skills",  JSON.stringify(f.skillChips));
+  if (f.managementLevels.length) p.set("mgmt",   f.managementLevels.join("|"));
+  if (f.department.trim())      p.set("dept",    f.department.trim());
+  if (f.companyIndustry.trim()) p.set("ind",     f.companyIndustry.trim());
+  if (f.companySize.trim())     p.set("size",    f.companySize.trim());
+  if (f.orderBy !== "popularity") p.set("order", f.orderBy);
+  if (f.pageSize !== 25)        p.set("per",     String(f.pageSize));
+  if (f.page > 1)               p.set("pg",      String(f.page));
+  if (f.provider !== "rocketreach") p.set("p",   f.provider);
+  return p;
+}
+
+function decodeFilters(p: URLSearchParams): FilterState {
+  let skillChips: SkillChip[] = [];
+  try { skillChips = JSON.parse(p.get("skills") ?? "[]"); } catch { /* ignore */ }
+  const provider = (p.get("p") as SearchProvider | null) ?? "rocketreach";
+  return {
+    name:             p.get("name")   ?? "",
+    titles:           p.get("titles") ? p.get("titles")!.split("|") : [],
+    locations:        p.get("locs")   ? p.get("locs")!.split("|")   : [],
+    currentEmployer:  p.get("cos")    ? p.get("cos")!.split("|")    : [],
+    keyword:          p.get("kw")     ?? "",
+    skillChips,
+    managementLevels: p.get("mgmt")   ? p.get("mgmt")!.split("|")   : [],
+    department:       p.get("dept")   ?? "",
+    companyIndustry:  p.get("ind")    ?? "",
+    companySize:      p.get("size")   ?? "",
+    orderBy:          (p.get("order") as any) ?? "popularity",
+    pageSize:         parseInt(p.get("per") ?? "25", 10),
+    page:             parseInt(p.get("pg")  ?? "1",  10),
+    provider:         (["rocketreach", "contactout"] as SearchProvider[]).includes(provider)
+                        ? provider : "rocketreach",
+  };
+}
+
+// ─── Provider toggle button ────────────────────────────────────────────────────
+const ProviderToggle: React.FC<{
+  current:  SearchProvider;
+  onChange: (p: SearchProvider) => void;
+}> = ({ current, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fn = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
+  }, []);
+
+  const cfg = PROVIDERS[current];
+
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-white">
-      {/* Page header — matches your other search page headers */}
-      <header className="flex-shrink-0 px-6 py-4 border-b border-slate-200 bg-white flex items-center gap-3">
-        <div className="flex items-center gap-2.5">
-          {/* RocketReach icon */}
-          <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-              <circle cx="11" cy="11" r="8"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-sm font-bold text-slate-800 leading-tight" style={{ fontFamily: "Syne, sans-serif" }}>
-              RocketReach Search
-            </h1>
-            <p className="text-[10px] text-slate-400 leading-tight">700M+ professional profiles</p>
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={cn(
+          "flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-lg border text-[11px] font-bold transition-all",
+          current === "rocketreach"
+            ? "bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400"
+            : "bg-violet-50 text-violet-700 border-violet-200 hover:border-violet-400"
+        )}
+      >
+        {/* Provider dot */}
+        <span className={cn("w-4 h-4 rounded-md flex items-center justify-center text-[7px] text-white font-black flex-shrink-0", cfg.bgClass)}>
+          {cfg.shortLabel}
+        </span>
+        {cfg.label}
+        <ChevronDown size={10} className={cn("transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden py-1">
+          {(Object.values(PROVIDERS) as ProviderConfig[]).map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => { onChange(p.id); setOpen(false); }}
+              className={cn(
+                "w-full flex items-start gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left",
+                p.id === current && "bg-slate-50"
+              )}
+            >
+              <span className={cn("w-6 h-6 rounded-lg flex items-center justify-center text-[9px] text-white font-black flex-shrink-0 mt-0.5", p.bgClass)}>
+                {p.shortLabel}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-[12px] font-bold text-slate-800">{p.label}</p>
+                  {p.id === current && <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">Active</span>}
+                </div>
+                <p className="text-[9px] text-slate-400 mt-0.5">{p.totalLabel}</p>
+                <p className="text-[9px] text-slate-400">{p.note}</p>
+              </div>
+            </button>
+          ))}
+
+          {/* Coming soon notice for contactout */}
+          <div className="mx-3 mb-2 mt-1 px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200">
+            <p className="text-[9px] text-slate-500 leading-relaxed">
+              <span className="font-semibold text-violet-600">ContactOut</span> uses the same search UI.
+              Configure <span className="font-mono font-semibold">CONTACTOUT_API_TOKEN</span> in Supabase secrets to activate.
+            </p>
           </div>
         </div>
-
-        {/* Right side — API docs link */}
-        <div className="ml-auto flex items-center gap-3">
-          <a
-            href="https://rocketreach.co/account?section=nav_gen_api"
-            target="_blank"
-            rel="noreferrer"
-            className="text-[11px] text-slate-400 hover:text-violet-600 transition-colors flex items-center gap-1"
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-            </svg>
-            API Key
-          </a>
-        </div>
-      </header>
-
-      {/* Full-height search UI */}
-      <div className="flex-1 overflow-hidden">
-        <PeopleSearchUI />
-      </div>
+      )}
     </div>
   );
-}
+};
+
+// ─── Saved candidates badge ───────────────────────────────────────────────────
+const SavedBadge: React.FC<{ orgId: string | null }> = ({ orgId }) => {
+  const { count, isLoading } = useSavedCandidatesCount(orgId);
+  return (
+    <Link
+      to="/search/rocketreach/saved"
+      className={cn(
+        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition-all",
+        "bg-white text-slate-600 border-slate-200 hover:border-violet-400 hover:text-violet-700 hover:bg-violet-50"
+      )}
+    >
+      <Bookmark size={11} />
+      Saved Candidates
+      {!isLoading && count > 0 && (
+        <span className="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </Link>
+  );
+};
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+export const RocketReachSearchPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate   = useNavigate();
+  const queryClient = useQueryClient();
+
+  // Auth
+  const orgId  = useSelector((s: any) =>
+    s.auth?.organization_id ?? s.auth?.user?.organization_id ?? null
+  );
+  const userId = useSelector((s: any) =>
+    s.auth?.user?.id ?? s.auth?.id ?? null
+  );
+
+  // ── Filters from URL ────────────────────────────────────────────────────
+  const [filters, setFilters] = useState<FilterState>(
+    () => decodeFilters(searchParams)
+  );
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
+  const setFilter = useCallback(<K extends keyof FilterState>(k: K, v: FilterState[K]) => {
+    setFilters(prev => {
+      const next = { ...prev, [k]: v, ...(k !== "page" && { page: 1 }) };
+      setSearchParams(encodeFilters(next), { replace: true });
+      return next;
+    });
+  }, [setSearchParams]);
+
+  const clearAll = useCallback(() => {
+    const cleared = { ...DEFAULT_FILTERS, provider: filters.provider };
+    setFilters(cleared);
+    setSearchParams(encodeFilters(cleared), { replace: true });
+  }, [filters.provider, setSearchParams]);
+
+  // Provider shortcut
+  const provider     = filters.provider;
+  const providerCfg  = PROVIDERS[provider];
+  const setProvider  = useCallback((p: SearchProvider) => setFilter("provider", p), [setFilter]);
+
+  // ── Search ──────────────────────────────────────────────────────────────
+  // Both providers use the same hook — edge function name differs
+  const { state, profiles, totalEntries, error, search } = useRRSearch({
+    name:             filters.name,
+    titles:           filters.titles,
+    locations:        filters.locations,
+    currentEmployer:  filters.currentEmployer,
+    keyword:          filters.keyword,
+    skillChips:       filters.skillChips,
+    managementLevels: filters.managementLevels,
+    department:       filters.department,
+    companyIndustry:  filters.companyIndustry,
+    companySize:      filters.companySize,
+    orderBy:          filters.orderBy,
+    pageSize:         filters.pageSize,
+    // Pass provider so useRRSearch can call the right edge function
+    provider,
+  });
+
+  // ── Enriched / revealed IDs ─────────────────────────────────────────────
+  const { revealedIds } = useRRRevealedIds(orgId);
+
+  // ── Selection ───────────────────────────────────────────────────────────
+  const [selectedProfile, setSelectedProfile] = useState<RRProfile | null>(null);
+  const [checkedIds,      setCheckedIds]       = useState<Set<number>>(new Set());
+
+  // ── In-place enrichment merge ────────────────────────────────────────────
+  const [enrichedProfiles, setEnrichedProfiles] = useState<RRProfile[]>([]);
+  useEffect(() => {
+    setEnrichedProfiles(profiles);
+    setSelectedProfile(null); // close panel when results change
+    setCheckedIds(new Set());
+  }, [profiles]);
+
+  const handleRevealComplete = useCallback((rrProfileId: number, data: any) => {
+    const update = (p: RRProfile): RRProfile =>
+      p.id !== rrProfileId ? p : {
+        ...p,
+        _enriched:          true,
+        _allEmails:         data.allEmails    ?? [],
+        _allPhones:         data.allPhones    ?? [],
+        _jobHistory:        data.jobHistory   ?? [],
+        _education:         data.education    ?? [],
+        _skills:            data.skills       ?? [],
+        _contactId:         data.contactId    ?? null,
+        _candidateProfileId:data.candidateProfileId ?? null,
+        name:               data.name         ?? p.name,
+        current_title:      data.title        ?? p.current_title,
+        current_employer:   data.company      ?? p.current_employer,
+        profile_pic:        data.profilePic   ?? p.profile_pic,
+        linkedin_url:       data.linkedinUrl  ?? p.linkedin_url,
+      };
+
+    setEnrichedProfiles(prev => prev.map(update));
+    setSelectedProfile(prev => prev ? update(prev) : null);
+    queryClient.invalidateQueries({ queryKey: ["rr-revealed-ids"] });
+  }, [queryClient]);
+
+  // ── Folder modal ─────────────────────────────────────────────────────────
+  const [folderModal, setFolderModal] = useState<{
+    open: boolean; rrProfileId: string; savedId?: string;
+  }>({ open: false, rrProfileId: "" });
+
+  const { folders, createFolder } = useFolders(orgId, userId);
+
+  const handleShortlist = useCallback((rrProfileId: string, savedId: string | undefined, _snapshot: any) => {
+    setFolderModal({ open: true, rrProfileId, savedId });
+  }, []);
+
+  // ── Auto-search debounced 600ms ──────────────────────────────────────────
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    const hasFilters =
+      filters.name.trim() || filters.titles.length || filters.locations.length ||
+      filters.currentEmployer.length || filters.keyword.trim() ||
+      filters.skillChips.length || filters.managementLevels.length ||
+      filters.department.trim() || filters.companyIndustry.trim() || filters.companySize.trim();
+
+    if (!hasFilters) return;
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => { search(filters.page); }, 600);
+    return () => clearTimeout(timerRef.current);
+  }, [
+    filters.name, JSON.stringify(filters.titles), JSON.stringify(filters.locations),
+    JSON.stringify(filters.currentEmployer), filters.keyword,
+    JSON.stringify(filters.skillChips), JSON.stringify(filters.managementLevels),
+    filters.department, filters.companyIndustry, filters.companySize,
+    filters.orderBy, filters.pageSize, filters.provider,
+  ]);
+
+  const filterCount = useMemo(() =>
+    [filters.name, filters.keyword, filters.department, filters.companyIndustry, filters.companySize]
+      .filter(v => v.trim()).length
+    + filters.titles.length + filters.locations.length + filters.currentEmployer.length
+    + filters.managementLevels.length + filters.skillChips.length,
+  [filters]);
+
+  const hasFilters   = filterCount > 0;
+  const isLoading    = state === "loading";
+  const totalPages   = Math.ceil(totalEntries / filters.pageSize) || 0;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  return (
+    <div
+      className="flex h-screen overflow-hidden bg-white"
+      style={{ fontFamily: "var(--font-sans, 'Inter', sans-serif)" }}
+    >
+      {/* ── Sidebar ────────────────────────────────────────────────────────── */}
+      <div className="w-[242px] flex-shrink-0 h-full overflow-hidden">
+        <RRSearchSidebar
+          // Filter values
+          name={filters.name}
+          titles={filters.titles}
+          locations={filters.locations}
+          currentEmployer={filters.currentEmployer}
+          keyword={filters.keyword}
+          skillChips={filters.skillChips}
+          managementLevels={filters.managementLevels}
+          department={filters.department}
+          companyIndustry={filters.companyIndustry}
+          companySize={filters.companySize}
+          orderBy={filters.orderBy}
+          pageSize={filters.pageSize}
+          // Setters
+          onSetName={v             => setFilter("name", v)}
+          onSetTitles={v           => setFilter("titles", v)}
+          onSetLocations={v        => setFilter("locations", v)}
+          onSetCurrentEmployer={v  => setFilter("currentEmployer", v)}
+          onSetKeyword={v          => setFilter("keyword", v)}
+          onSetSkillChips={v       => setFilter("skillChips", v)}
+          onToggleMgmtLevel={v     => setFilter("managementLevels",
+            filters.managementLevels.includes(v)
+              ? filters.managementLevels.filter(x => x !== v)
+              : [...filters.managementLevels, v]
+          )}
+          onSetDepartment={v       => setFilter("department", v)}
+          onSetCompanyIndustry={v  => setFilter("companyIndustry", v)}
+          onSetCompanySize={v      => setFilter("companySize", v)}
+          onSetOrderBy={v          => setFilter("orderBy", v)}
+          onSetPageSize={v         => setFilter("pageSize", v)}
+          onClearAll={clearAll}
+          // Status
+          isLoading={isLoading}
+          totalEntries={totalEntries}
+          filterCount={filterCount}
+          hasFilters={hasFilters}
+          // Provider-aware labels
+          providerLabel={providerCfg.label}
+        />
+      </div>
+
+      {/* ── Main ─────────────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+
+        {/* ── Top bar ── */}
+        <div className="flex-shrink-0 h-11 px-4 flex items-center justify-between border-b border-slate-100 bg-white gap-3">
+          {/* Left: Provider identity */}
+          <div className="flex items-center gap-2.5">
+            {/* Provider badge */}
+            <span className={cn("w-6 h-6 rounded-lg flex items-center justify-center text-[8px] text-white font-black flex-shrink-0", providerCfg.bgClass)}>
+              {providerCfg.shortLabel}
+            </span>
+
+            <div className="hidden sm:block">
+              <p className="text-[11px] font-bold text-slate-700 leading-tight">
+                {providerCfg.label} People Search
+              </p>
+              <p className="text-[9px] text-slate-400">{providerCfg.totalLabel}</p>
+            </div>
+
+            {isLoading && <Loader2 size={12} className="animate-spin text-slate-400" />}
+          </div>
+
+          {/* Center: count + pagination */}
+          <div className="flex items-center gap-2">
+            {totalEntries > 0 && !isLoading && (
+              <span className="text-[10px] text-slate-500">
+                <span className="font-semibold text-slate-700">{totalEntries.toLocaleString()}</span> profiles
+                {totalPages > 1 && (
+                  <span className="ml-1.5 text-slate-400">· Page {filters.page}/{totalPages}</span>
+                )}
+              </span>
+            )}
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={filters.page <= 1}
+                  onClick={() => setFilter("page", filters.page - 1)}
+                  className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 text-slate-500 hover:border-violet-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft size={11} />
+                </button>
+                <button
+                  disabled={filters.page >= totalPages}
+                  onClick={() => setFilter("page", filters.page + 1)}
+                  className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 text-slate-500 hover:border-violet-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight size={11} />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2">
+            {/* Provider toggle */}
+            <ProviderToggle current={provider} onChange={setProvider} />
+
+            {/* Divider */}
+            <div className="h-4 w-px bg-slate-200" />
+
+            {/* Saved candidates link */}
+            <SavedBadge orgId={orgId} />
+          </div>
+        </div>
+
+        {/* ── Body ── */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {state === "idle" && (
+            <div className="flex-1 overflow-y-auto">
+              <IdleState
+                recentSearches={[]}
+                onApplyRecent={() => {}}
+                onRemoveRecent={() => {}}
+                onQuickSearch={skills => setFilter("titles", skills)}
+              />
+            </div>
+          )}
+
+          {state === "empty" && (
+            <div className="flex-1 overflow-y-auto">
+              <EmptyState onClearAll={clearAll} />
+            </div>
+          )}
+
+          {state === "error" && error && (
+            <div className="flex-1 overflow-y-auto">
+              <ErrorState
+                error={error as any}
+                onRetry={() => search(filters.page)}
+                onClearAll={clearAll}
+              />
+            </div>
+          )}
+
+          {(state === "loading" || state === "results") && (
+            <RRResultsArea
+              profiles={enrichedProfiles}
+              loading={isLoading}
+              totalEntries={totalEntries}
+              page={filters.page}
+              pageSize={filters.pageSize}
+              totalPages={totalPages}
+              selectedId={selectedProfile?.id ?? null}
+              checkedIds={checkedIds}
+              revealedIds={revealedIds}
+              onSelectRow={p  => setSelectedProfile(prev => prev?.id === p?.id ? null : p)}
+              onCheckRow={(id, v) => setCheckedIds(prev => {
+                const s = new Set(prev); v ? s.add(id) : s.delete(id); return s;
+              })}
+              onCheckAll={v => setCheckedIds(
+                v ? new Set(enrichedProfiles.map(p => p.id)) : new Set()
+              )}
+              onPrev={() => setFilter("page", Math.max(1, filters.page - 1))}
+              onNext={() => setFilter("page", filters.page + 1)}
+              onRevealComplete={handleRevealComplete}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* ── Detail panel ─────────────────────────────────────────────────── */}
+      {selectedProfile && (
+        <RRDetailPanel
+          profile={selectedProfile}
+          onClose={() => setSelectedProfile(null)}
+          onRevealComplete={handleRevealComplete}
+          onShortlist={handleShortlist}
+          folders={folders}
+          onCreateFolder={createFolder}
+        />
+      )}
+
+      {/* ── Folder picker modal ───────────────────────────────────────────── */}
+      {folderModal.open && (
+        <FolderPickerModal
+          folders={folders}
+          title="Save to Folder"
+          showSkip
+          onClose={() => setFolderModal(prev => ({ ...prev, open: false }))}
+          onSelect={async (folderId) => {
+            if (!folderModal.savedId || !userId) return;
+            await supabase.from("candidate_folder_members").upsert({
+              folder_id:          folderId,
+              saved_candidate_id: folderModal.savedId,
+              added_by:           userId,
+            }, { onConflict: "folder_id,saved_candidate_id", ignoreDuplicates: true });
+            queryClient.invalidateQueries({ queryKey: ["candidate-folders"] });
+            queryClient.invalidateQueries({ queryKey: ["saved-candidates"] });
+            setFolderModal(prev => ({ ...prev, open: false }));
+          }}
+          onCreate={async name => {
+            const id = await createFolder(name);
+            if (id && folderModal.savedId && userId) {
+              await supabase.from("candidate_folder_members").upsert({
+                folder_id: id, saved_candidate_id: folderModal.savedId, added_by: userId,
+              }, { onConflict: "folder_id,saved_candidate_id", ignoreDuplicates: true });
+              queryClient.invalidateQueries({ queryKey: ["saved-candidates"] });
+            }
+            setFolderModal(prev => ({ ...prev, open: false }));
+          }}
+          onSkip={() => setFolderModal(prev => ({ ...prev, open: false }))}
+        />
+      )}
+    </div>
+  );
+};
+
+export default RocketReachSearchPage;

@@ -102,6 +102,7 @@ import MyInvitesPage      from './pages/invites/MyInvitesPage.jsx';
 // candidate search beta
 import CandidateSearch from "@/components/CandidateSearch";
 import SavedCandidatesPage from "@/pages/candidates/SavedCandidatesPage";
+import SavedRRCandidatesPage from "@/components/rocketreach/SavedRRCandidatesPage";
 
 
 // Job Route Handler
@@ -592,6 +593,8 @@ useEffect(() => {
               {/* Candidate Search Beta */}
               <Route path="/search/candidates/beta" element={<CandidateSearch />} />
               <Route path="/search/candidates/saved" element={<SavedCandidatesPage />} />
+              <Route path="/search/rocketreach/saved" element={<SavedRRCandidatesPage />} />
+
 
               {/* Job Board Integrations */}
               <Route path="/integrations/job-boards" element={<JobBoardIntegrations />} />
