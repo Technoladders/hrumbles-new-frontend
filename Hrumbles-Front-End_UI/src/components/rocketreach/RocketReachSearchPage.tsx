@@ -42,6 +42,7 @@ import { useFolders }        from "@/components/CandidateSearch/hooks/useFolders
 import { useRRSearch }       from "./hooks/useRRSearch";
 import { useRRRevealedIds }  from "./hooks/useRRRevealedIds";
 import { useSavedCandidatesCount } from "@/components/CandidateSearch/hooks/useSavedCandidates";
+import { scrapeRRProfiles } from "./rrBrowserScraper";
 
 import type { RRProfile, SkillChip } from "./types";
 
@@ -62,8 +63,8 @@ interface ProviderConfig {
 const PROVIDERS: Record<SearchProvider, ProviderConfig> = {
   rocketreach: {
     id:         "rocketreach",
-    label:      "RocketReach",
-    shortLabel: "RR",
+    label:      "Search",
+    shortLabel: "",
     color:      "#f97316",
     bgClass:    "bg-orange-500",
     badgeCls:   "bg-orange-50 text-orange-700 border-orange-200",
@@ -232,7 +233,7 @@ const SavedBadge: React.FC<{ orgId: string | null }> = ({ orgId }) => {
   const { count, isLoading } = useSavedCandidatesCount(orgId);
   return (
     <Link
-      to="/search/rocketreach/saved"
+      to="/search/global/saved"
       className={cn(
         "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition-all",
         "bg-white text-slate-600 border-slate-200 hover:border-violet-400 hover:text-violet-700 hover:bg-violet-50"
@@ -454,7 +455,7 @@ export const RocketReachSearchPage: React.FC = () => {
 
             <div className="hidden sm:block">
               <p className="text-[11px] font-bold text-slate-700 leading-tight">
-                {providerCfg.label} People Search
+                {providerCfg.label} People
               </p>
               <p className="text-[9px] text-slate-400">{providerCfg.totalLabel}</p>
             </div>

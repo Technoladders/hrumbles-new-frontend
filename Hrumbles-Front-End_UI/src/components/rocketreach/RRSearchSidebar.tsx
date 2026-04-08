@@ -502,7 +502,7 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
           <div className="flex items-center gap-2">
             <UserSearch size={12} style={{ stroke: "url(#rr-gradient)" }} />
             <span className="text-[10px] font-medium bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-              RocketReach Search
+            Search Profiles
             </span>
             {isLoading && <Loader2 size={11} className="animate-spin text-slate-400" />}
           </div>

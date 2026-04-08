@@ -605,7 +605,7 @@ export default function PeopleSearchUI() {
         if (ctx) {
           const body = await ctx.json().catch(() => ({}));
           msg = body?.error ?? msg;
-          if (ctx.status === 401) msg = "Invalid RocketReach API key.";
+          if (ctx.status === 401) msg = "Invalid Search API key.";
           if (ctx.status === 429) msg = "Rate limit hit — slow down.";
         }
       } catch { /* ignore */ }

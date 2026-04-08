@@ -593,7 +593,7 @@ useEffect(() => {
               {/* Candidate Search Beta */}
               <Route path="/search/candidates/beta" element={<CandidateSearch />} />
               <Route path="/search/candidates/saved" element={<SavedCandidatesPage />} />
-              <Route path="/search/rocketreach/saved" element={<SavedRRCandidatesPage />} />
+              <Route path="/search/global/saved" element={<SavedRRCandidatesPage />} />
 
 
               {/* Job Board Integrations */}
@@ -659,7 +659,7 @@ useEffect(() => {
               <Route path="/contacts-v2/discovery" element={<ContactsV2Page />} />
 
               {/* rocket reach */}
-              <Route path="/rocket-reach" element={<RocketReachSearchPage />} />
+              <Route path="/global-search" element={<RocketReachSearchPage />} />
 
               {/* TimeTracker, Timesheet, Attendance and Leave */}
               {/* Employee routes */}

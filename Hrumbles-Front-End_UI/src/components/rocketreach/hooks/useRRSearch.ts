@@ -6,7 +6,7 @@ import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { RRProfile, RRSearchState, RRSearchError, SkillChip } from "../types";
 
-const RESULTS_PER_PAGE = 25;
+const RESULTS_PER_PAGE = 10;
 
 type SearchProvider = "rocketreach" | "contactout";
 

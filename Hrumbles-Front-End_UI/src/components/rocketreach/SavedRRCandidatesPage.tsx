@@ -280,16 +280,16 @@ const EmptyState: React.FC<{ tab: SaveTypeFilter; onSearch: () => void }> = ({ t
         <span className="text-2xl font-black text-orange-300">RR</span>
       </div>
       <p className="text-[13px] font-semibold text-slate-700 mb-1">
-        {tab === "all" ? "No saved RocketReach candidates yet" : `No ${tab.replace("_"," ")} candidates`}
+        {tab === "all" ? "No saved candidates yet" : `No ${tab.replace("_"," ")} candidates`}
       </p>
       <p className="text-[11px] text-slate-400 max-w-xs mb-4">
-        Candidates appear here when you reveal, shortlist, or save from RocketReach search.
+        Candidates appear here when you reveal, shortlist, or save from search.
       </p>
       {tab === "all" && (
         <button onClick={onSearch}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-semibold text-white transition-colors"
           style={{ background: "linear-gradient(135deg,#f97316,#ea580c)" }}>
-          Go to RocketReach Search
+          Go to Search
         </button>
       )}
     </div>
@@ -362,7 +362,7 @@ const SavedRRCandidatesPage: React.FC = () => {
       {/* Topbar */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-20">
         <div className="px-6 py-3 flex items-center gap-4">
-          <button onClick={() => navigate("/search/rocketreach")}
+          <button onClick={() => navigate("/global-search")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-[12px] font-medium hover:bg-slate-50 transition-colors">
             <ArrowLeft size={13} /> Back to Search
           </button>
@@ -372,7 +372,7 @@ const SavedRRCandidatesPage: React.FC = () => {
               <span className="text-[8px] text-white font-black leading-none">RR</span>
             </div>
             <div>
-              <p className="text-[14px] font-bold text-slate-800 leading-tight">Saved RocketReach Candidates</p>
+              <p className="text-[14px] font-bold text-slate-800 leading-tight">Saved Candidates</p>
               <p className="text-[10px] text-slate-400">{isLoading ? "Loading…" : `${totalCount} candidate${totalCount !== 1 ? "s" : ""}`}</p>
             </div>
           </div>
@@ -469,7 +469,7 @@ const SavedRRCandidatesPage: React.FC = () => {
                             </tr>
                           ))
                         : displayCandidates.length === 0
-                        ? <EmptyState tab={tab} onSearch={() => navigate("/search/rocketreach")} />
+                        ? <EmptyState tab={tab} onSearch={() => navigate("/global-search")} />
                         : displayCandidates.map(c => (
                             <TableRow
                               key={c.id} row={c}
