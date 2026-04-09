@@ -12,7 +12,7 @@ import { VscOrganization } from "react-icons/vsc";
 import { GrDocumentTime, GrIntegration } from "react-icons/gr";
 import { LuCalendarPlus, LuUserSearch, LuCalendarCog, LuSend, LuMessageSquare } from "react-icons/lu";
 import { BsShieldLock, BsShieldCheck, BsPin, BsGraphUpArrow } from "react-icons/bs";
-import { FaUserShield, FaProjectDiagram, FaUserTie } from 'react-icons/fa';
+import { FaUserShield, FaProjectDiagram, FaUserTie, FaSearch } from 'react-icons/fa';
 import { RiCustomerService2Fill, RiProfileLine } from 'react-icons/ri';
 import { TbDatabaseSearch } from "react-icons/tb";
 import { LiaBusinessTimeSolid } from "react-icons/lia";
@@ -260,6 +260,7 @@ const masterMenuItems = [
   { icon: BsPin, label: "Bench Pool", path: "/bench-pool", suite: "RECRUITMENT", permission: "view_bench_pool" },
   { icon: AiOutlineProfile, label: "My Submission", path: "/my-submission", suite: "RECRUITMENT", permission: "view_my_submission" },
   { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", suite: "RECRUITMENT", permission: "access_zive_x", beta: true },
+  { icon: FaSearch, label: "Recruiter-X", path: "/recruiter-x", suite: "RECRUITMENT", permission: "access_recruiter_x", beta: true },
   { icon: TbDatabaseSearch, label: "Candidate Search", path: "/search/candidates/beta", suite: "RECRUITMENT", permission: "access_candidate_search", beta: true },
 
   { icon: LuSend, label: "My Invites", path: "/my-invites", suite: "RECRUITMENT", permission: "access_invite" },

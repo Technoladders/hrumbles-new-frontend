@@ -42,7 +42,6 @@ import { useFolders }        from "@/components/CandidateSearch/hooks/useFolders
 import { useRRSearch }       from "./hooks/useRRSearch";
 import { useRRRevealedIds }  from "./hooks/useRRRevealedIds";
 import { useSavedCandidatesCount } from "@/components/CandidateSearch/hooks/useSavedCandidates";
-import { scrapeRRProfiles } from "./rrBrowserScraper";
 
 import type { RRProfile, SkillChip } from "./types";
 
@@ -64,7 +63,7 @@ const PROVIDERS: Record<SearchProvider, ProviderConfig> = {
   rocketreach: {
     id:         "rocketreach",
     label:      "Search",
-    shortLabel: "",
+    shortLabel: "RR",
     color:      "#f97316",
     bgClass:    "bg-orange-500",
     badgeCls:   "bg-orange-50 text-orange-700 border-orange-200",
@@ -103,7 +102,7 @@ interface FilterState {
 
 const DEFAULT_FILTERS: FilterState = {
   name: "", titles: [], locations: [], currentEmployer: [],
-  keyword: "", skillChips: [], managementLevels: [],
+  keyword: "", skillChips: [], managementLevels:[],
   department: "", companyIndustry: "", companySize: "",
   orderBy: "popularity", pageSize: 25, page: 1,
   provider: "rocketreach",
@@ -129,17 +128,17 @@ function encodeFilters(f: FilterState): URLSearchParams {
 }
 
 function decodeFilters(p: URLSearchParams): FilterState {
-  let skillChips: SkillChip[] = [];
+  let skillChips: SkillChip[] =[];
   try { skillChips = JSON.parse(p.get("skills") ?? "[]"); } catch { /* ignore */ }
   const provider = (p.get("p") as SearchProvider | null) ?? "rocketreach";
   return {
     name:             p.get("name")   ?? "",
-    titles:           p.get("titles") ? p.get("titles")!.split("|") : [],
-    locations:        p.get("locs")   ? p.get("locs")!.split("|")   : [],
-    currentEmployer:  p.get("cos")    ? p.get("cos")!.split("|")    : [],
+    titles:           p.get("titles") ? p.get("titles")!.split("|") :[],
+    locations:        p.get("locs")   ? p.get("locs")!.split("|")   :[],
+    currentEmployer:  p.get("cos")    ? p.get("cos")!.split("|")    :[],
     keyword:          p.get("kw")     ?? "",
     skillChips,
-    managementLevels: p.get("mgmt")   ? p.get("mgmt")!.split("|")   : [],
+    managementLevels: p.get("mgmt")   ? p.get("mgmt")!.split("|")   :[],
     department:       p.get("dept")   ?? "",
     companyIndustry:  p.get("ind")    ?? "",
     companySize:      p.get("size")   ?? "",
@@ -156,7 +155,7 @@ const ProviderToggle: React.FC<{
   current:  SearchProvider;
   onChange: (p: SearchProvider) => void;
 }> = ({ current, onChange }) => {
-  const [open, setOpen] = useState(false);
+  const[open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -165,7 +164,7 @@ const ProviderToggle: React.FC<{
     };
     document.addEventListener("mousedown", fn);
     return () => document.removeEventListener("mousedown", fn);
-  }, []);
+  },[]);
 
   const cfg = PROVIDERS[current];
 
@@ -277,7 +276,7 @@ export const RocketReachSearchPage: React.FC = () => {
       setSearchParams(encodeFilters(next), { replace: true });
       return next;
     });
-  }, [setSearchParams]);
+  },[setSearchParams]);
 
   const clearAll = useCallback(() => {
     const cleared = { ...DEFAULT_FILTERS, provider: filters.provider };
@@ -318,11 +317,114 @@ export const RocketReachSearchPage: React.FC = () => {
 
   // ── In-place enrichment merge ────────────────────────────────────────────
   const [enrichedProfiles, setEnrichedProfiles] = useState<RRProfile[]>([]);
-  useEffect(() => {
-    setEnrichedProfiles(profiles);
-    setSelectedProfile(null); // close panel when results change
-    setCheckedIds(new Set());
-  }, [profiles]);
+const [scrapingIds, setScrapingIds] = useState<Set<number>>(new Set());
+ 
+// ── Replace the profiles useEffect ───────────────────────────────────────────
+useEffect(() => {
+  setEnrichedProfiles(profiles);
+  setSelectedProfile(null);
+  setCheckedIds(new Set());
+ 
+  // Profiles that need scraping:
+  //   _is_cached === false  → never scraped
+  //   _needs_rescrape === true → scraped but stale (update_time changed)
+  const toScrape = profiles.filter(p =>
+    (p as any)._provider !== "contactout" &&
+    (!(p as any)._is_cached || (p as any)._needs_rescrape)
+  );
+ 
+  if (!toScrape.length) return;
+ 
+  // Mark all these profiles as loading immediately
+  setScrapingIds(new Set(toScrape.map(p => p.id)));
+ 
+  const WORKER_URL  = "https://proxy.xrilic.ai/";
+  const BATCH_SIZE  = 5;    // Max 5 per call — stays within Cloudflare subrequest limit
+  const BATCH_DELAY = 800;  // ms between batches to respect ScrapingBee concurrency
+ 
+  const scrapeAllBatches = async () => {
+    for (let i = 0; i < toScrape.length; i += BATCH_SIZE) {
+      const batch = toScrape.slice(i, i + BATCH_SIZE);
+ 
+      try {
+        const res = await fetch(WORKER_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ids: batch.map(p => ({ id: p.id, name: p.name ?? "" })),
+          }),
+        });
+ 
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.results) {
+            // Merge scraped data into profiles — happens per-profile as results arrive
+            setEnrichedProfiles(prev => prev.map(p => {
+              const result = data.results.find((r: any) =>
+                r.success && (r.data?.id === p.id || r.id === p.id)
+              );
+              if (!result?.data) return p;
+ 
+              const scraped = result.data;
+              const updated = {
+                ...p,
+                // Fill gaps only — don't overwrite data already from RR search API
+                _jobHistory: (p._jobHistory && p._jobHistory.length > 0) ? p._jobHistory : (scraped.work_history ?? []),
+                _education:  (p._education  && p._education.length  > 0) ? p._education  : (scraped.education   ?? []),
+                _skills:     (p._skills     && p._skills.length     > 0) ? p._skills     : (scraped.skills      ?? []),
+                profile_pic:  p.profile_pic  || scraped.profile_pic  || undefined,
+                linkedin_url: p.linkedin_url || scraped.linkedin_url || null,
+                _is_cached:   true,
+                _needs_rescrape: false,
+                _scraped: true,
+              };
+              return updated;
+            }));
+ 
+            // Remove this batch from scrapingIds (they're done)
+            const batchIds = new Set(batch.map(p => p.id));
+            setScrapingIds(prev => {
+              const next = new Set(prev);
+              batchIds.forEach(id => next.delete(id));
+              return next;
+            });
+ 
+            // Also update detail panel if one of the scraped profiles is open
+            setSelectedProfile(prev => {
+              if (!prev) return prev;
+              const result = data.results.find((r: any) => r.success && r.data?.id === prev.id);
+              if (!result?.data) return prev;
+              const scraped = result.data;
+              return {
+                ...prev,
+                _jobHistory: (prev._jobHistory?.length) ? prev._jobHistory : (scraped.work_history ?? []),
+                _education:  (prev._education?.length)  ? prev._education  : (scraped.education   ?? []),
+                _skills:     (prev._skills?.length)     ? prev._skills     : (scraped.skills      ?? []),
+                profile_pic:  prev.profile_pic  || scraped.profile_pic  || undefined,
+                linkedin_url: prev.linkedin_url || scraped.linkedin_url || null,
+              };
+            });
+          }
+        } else {
+          // On error, still remove from scrapingIds so skeleton goes away
+          const batchIds = new Set(batch.map(p => p.id));
+          setScrapingIds(prev => { const next = new Set(prev); batchIds.forEach(id => next.delete(id)); return next; });
+        }
+      } catch (e) {
+        console.warn("[scrape] Batch failed (non-fatal):", e);
+        const batchIds = new Set(batch.map(p => p.id));
+        setScrapingIds(prev => { const next = new Set(prev); batchIds.forEach(id => next.delete(id)); return next; });
+      }
+ 
+      // Wait before next batch (except last batch)
+      if (i + BATCH_SIZE < toScrape.length) {
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+      }
+    }
+  };
+ 
+  scrapeAllBatches();
+}, [profiles]);
 
   const handleRevealComplete = useCallback((rrProfileId: number, data: any) => {
     const update = (p: RRProfile): RRProfile =>
@@ -330,10 +432,10 @@ export const RocketReachSearchPage: React.FC = () => {
         ...p,
         _enriched:          true,
         _allEmails:         data.allEmails    ?? [],
-        _allPhones:         data.allPhones    ?? [],
+        _allPhones:         data.allPhones    ??[],
         _jobHistory:        data.jobHistory   ?? [],
-        _education:         data.education    ?? [],
-        _skills:            data.skills       ?? [],
+        _education:         data.education    ??[],
+        _skills:            data.skills       ??[],
         _contactId:         data.contactId    ?? null,
         _candidateProfileId:data.candidateProfileId ?? null,
         name:               data.name         ?? p.name,
@@ -357,7 +459,7 @@ export const RocketReachSearchPage: React.FC = () => {
 
   const handleShortlist = useCallback((rrProfileId: string, savedId: string | undefined, _snapshot: any) => {
     setFolderModal({ open: true, rrProfileId, savedId });
-  }, []);
+  },[]);
 
   // ── Auto-search debounced 600ms ──────────────────────────────────────────
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -372,7 +474,7 @@ export const RocketReachSearchPage: React.FC = () => {
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => { search(filters.page); }, 600);
     return () => clearTimeout(timerRef.current);
-  }, [
+  },[
     filters.name, JSON.stringify(filters.titles), JSON.stringify(filters.locations),
     JSON.stringify(filters.currentEmployer), filters.keyword,
     JSON.stringify(filters.skillChips), JSON.stringify(filters.managementLevels),
@@ -380,8 +482,7 @@ export const RocketReachSearchPage: React.FC = () => {
     filters.orderBy, filters.pageSize, filters.provider,
   ]);
 
-  const filterCount = useMemo(() =>
-    [filters.name, filters.keyword, filters.department, filters.companyIndustry, filters.companySize]
+  const filterCount = useMemo(() =>[filters.name, filters.keyword, filters.department, filters.companyIndustry, filters.companySize]
       .filter(v => v.trim()).length
     + filters.titles.length + filters.locations.length + filters.currentEmployer.length
     + filters.managementLevels.length + filters.skillChips.length,
@@ -423,7 +524,7 @@ export const RocketReachSearchPage: React.FC = () => {
           onToggleMgmtLevel={v     => setFilter("managementLevels",
             filters.managementLevels.includes(v)
               ? filters.managementLevels.filter(x => x !== v)
-              : [...filters.managementLevels, v]
+              :[...filters.managementLevels, v]
           )}
           onSetDepartment={v       => setFilter("department", v)}
           onSetCompanyIndustry={v  => setFilter("companyIndustry", v)}
@@ -537,27 +638,24 @@ export const RocketReachSearchPage: React.FC = () => {
           )}
 
           {(state === "loading" || state === "results") && (
-            <RRResultsArea
-              profiles={enrichedProfiles}
-              loading={isLoading}
-              totalEntries={totalEntries}
-              page={filters.page}
-              pageSize={filters.pageSize}
-              totalPages={totalPages}
-              selectedId={selectedProfile?.id ?? null}
-              checkedIds={checkedIds}
-              revealedIds={revealedIds}
-              onSelectRow={p  => setSelectedProfile(prev => prev?.id === p?.id ? null : p)}
-              onCheckRow={(id, v) => setCheckedIds(prev => {
-                const s = new Set(prev); v ? s.add(id) : s.delete(id); return s;
-              })}
-              onCheckAll={v => setCheckedIds(
-                v ? new Set(enrichedProfiles.map(p => p.id)) : new Set()
-              )}
-              onPrev={() => setFilter("page", Math.max(1, filters.page - 1))}
-              onNext={() => setFilter("page", filters.page + 1)}
-              onRevealComplete={handleRevealComplete}
-            />
+<RRResultsArea
+  profiles={enrichedProfiles}
+  loading={isLoading}
+  totalEntries={totalEntries}
+  page={filters.page}
+  pageSize={filters.pageSize}
+  totalPages={totalPages}
+  selectedId={selectedProfile?.id ?? null}
+  checkedIds={checkedIds}
+  revealedIds={revealedIds}
+  scrapingIds={scrapingIds}          // ← ADD THIS
+  onSelectRow={p  => setSelectedProfile(prev => prev?.id === p?.id ? null : p)}
+  onCheckRow={(id, v) => setCheckedIds(prev => { const s = new Set(prev); v ? s.add(id) : s.delete(id); return s; })}
+  onCheckAll={v => setCheckedIds(v ? new Set(enrichedProfiles.map(p => p.id)) : new Set())}
+  onPrev={() => setFilter("page", Math.max(1, filters.page - 1))}
+  onNext={() => setFilter("page", filters.page + 1)}
+  onRevealComplete={handleRevealComplete}
+/>
           )}
         </div>
       </div>

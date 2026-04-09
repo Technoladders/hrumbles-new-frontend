@@ -51,6 +51,7 @@ export interface UseSavedCandidatesOptions {
   sort?:            SortOption;
   page?:            number;
   perPage?:         number;
+  searchSource?:    "apollo" | "rocketreach"; 
 }
 
 export interface UseSavedCandidatesReturn {
@@ -72,11 +73,13 @@ export function useSavedCandidates({
   sort      = "newest",
   page      = 1,
   perPage   = 20,
+  searchSource,
 }: UseSavedCandidatesOptions): UseSavedCandidatesReturn {
 
   const qk = [
     SAVED_CANDIDATES_QUERY_KEY, organizationId,
     saveType, status, jobId, folderId, search, tags.join(","), sort, page, perPage,
+    searchSource,                                
   ];
 
   const query = useQuery({
@@ -111,6 +114,7 @@ export function useSavedCandidates({
       if (status   !== "all")    q = q.eq("status",    status);
       else                       q = q.neq("status",   "archived"); // default: hide archived
       if (jobId)                 q = q.eq("linked_job_id", jobId);
+      if (searchSource) q = q.eq("search_source", searchSource);
       if (search.trim()) {
         q = q.or(
           `snapshot_name.ilike.%${search}%,snapshot_title.ilike.%${search}%,snapshot_company.ilike.%${search}%,email.ilike.%${search}%`
@@ -149,6 +153,7 @@ export function useSavedCandidates({
         if (status   !== "all")    fallback = fallback.eq("status", status);
         else                       fallback = fallback.neq("status", "archived");
         if (jobId)                 fallback = fallback.eq("linked_job_id", jobId);
+         if (searchSource) fallback = fallback.eq("search_source", searchSource);
         if (search.trim())         fallback = fallback.or(
           `snapshot_name.ilike.%${search}%,snapshot_title.ilike.%${search}%,snapshot_company.ilike.%${search}%,email.ilike.%${search}%`
         );

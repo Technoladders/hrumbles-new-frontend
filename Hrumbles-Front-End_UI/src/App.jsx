@@ -659,7 +659,7 @@ useEffect(() => {
               <Route path="/contacts-v2/discovery" element={<ContactsV2Page />} />
 
               {/* rocket reach */}
-              <Route path="/global-search" element={<RocketReachSearchPage />} />
+              <Route path="/recruiter-x" element={<RocketReachSearchPage />} />
 
               {/* TimeTracker, Timesheet, Attendance and Leave */}
               {/* Employee routes */}
