@@ -114,9 +114,9 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
     // 2. Logic for PROCESSED group
     } else if ((selectedSubStatus.name === 'Processed (Internal)' || selectedSubStatus.name === 'Future Fit' || selectedSubStatus.name === 'Internal Reject' || selectedSubStatus.name === 'Internal Hold' || selectedSubStatus.name === 'Candidate on hold') && mainStatus.name === 'Processed') {
       baseOptions = mainStatus.subStatuses.filter(s => ['Processed (Client)', 'Future Fit', 'Duplicate (Internal)', 'Internal Reject', 'Internal Hold'].includes(s.name));
-    } else if (selectedSubStatus.name === 'Processed (Client)' || selectedSubStatus.name === 'Client Hold' || selectedSubStatus.name === 'Candidate on hold') {
+    } else if (selectedSubStatus.name === 'Processed (Client)' || selectedSubStatus.name === 'Client Hold' || selectedSubStatus.name === 'Candidate on hold' || selectedSubStatus.name === 'Position Hold by Client') {
       if (mainStatus.name === 'Processed') {
-        baseOptions = mainStatus.subStatuses.filter(s => ['Duplicate (Client)', 'Client Reject', 'Client Hold'].includes(s.name));
+        baseOptions = mainStatus.subStatuses.filter(s => ['Duplicate (Client)', 'Client Reject', 'Client Hold', 'Position Hold by Client'].includes(s.name));
       } else if (mainStatus.name === 'Interview') {
         baseOptions = mainStatus.subStatuses.filter(s => ['Technical Assessment', 'L1', 'L2', 'L3', 'End Client Round'].includes(s.name));
       }

@@ -78,6 +78,7 @@ export const useStatusReport = () => {
         'Duplicate (Client)',
         'Client Hold',
         'Client Reject',
+        'Position Hold by Client' 
       ];
 
       // Map sub-statuses to their main status, excluding 'Candidate on hold'
@@ -439,38 +440,40 @@ const fetchRecruiterReport = async (startDate: Date, endDate: Date): Promise<Rec
         };
   
         // Categorize other statuses
-        switch (mainStatus) {
-          case 'processed':
-            if (subStatus === 'internal reject') incrementMap(internalRejectById, recruiterId, count);
-            if (subStatus === 'candidate on hold') incrementMap(internalHoldById, recruiterId, count);
-            if (subStatus === 'processed (client)') incrementMap(sentToClientById, recruiterId, count);
-            if (subStatus === 'client reject') incrementMap(clientRejectById, recruiterId, count);
-            if (subStatus === 'duplicate (client)' || subStatus === 'duplicate (internal)') {
-              incrementMap(clientDuplicateById, recruiterId, count);
-            }
-            break;
-          case 'interview':
-            if (subStatus === 'technical assessment') incrementMap(interviewsTechnicalById, recruiterId, count);
-            if (subStatus === 'technical assessment selected') incrementMap(interviewsTechnicalSelectedById, recruiterId, count);
-            if (subStatus === 'technical assessment rejected') incrementMap(interviewsTechnicalRejectById, recruiterId, count);
-            if (subStatus === 'l1') incrementMap(interviewsL1ById, recruiterId, count);
-            if (subStatus === 'l1 selected') incrementMap(interviewsL1SelectedById, recruiterId, count);
-            if (subStatus === 'l1 rejected') incrementMap(interviewsL1RejectById, recruiterId, count);
-            if (subStatus === 'l2') incrementMap(interviewsL2ById, recruiterId, count);
-            if (subStatus === 'l2 rejected') incrementMap(interviewsL2RejectById, recruiterId, count);
-            if (subStatus === 'l3' || subStatus === 'end client round') incrementMap(interviewsEndClientById, recruiterId, count);
-            if (subStatus === 'l3 rejected' || subStatus === 'end client rejected') incrementMap(interviewsEndClientRejectById, recruiterId, count);
-            break;
-          case 'offered':
-            if (subStatus === 'offer issued') incrementMap(offersMadeById, recruiterId, count);
-            if (subStatus === 'offer on hold') incrementMap(offersAcceptedById, recruiterId, count);
-            if (subStatus === 'offer rejected') incrementMap(offersRejectedById, recruiterId, count);
-            break;
-          case 'joined':
-            if (subStatus === 'joined') incrementMap(joiningJoinedById, recruiterId, count);
-            if (subStatus === 'no show') incrementMap(joiningNoShowById, recruiterId, count);
-            break;
-        }
+switch (mainStatus) {
+  case 'processed':
+    if (subStatus === 'internal reject') incrementMap(internalRejectById, recruiterId, count);
+    if (subStatus === 'candidate on hold') incrementMap(internalHoldById, recruiterId, count);
+    if (subStatus === 'processed (client)') incrementMap(sentToClientById, recruiterId, count);
+    if (subStatus === 'client reject') incrementMap(clientRejectById, recruiterId, count);
+    if (subStatus === 'client hold' || subStatus === 'position hold by client') incrementMap(clientHoldById, recruiterId, count); // <--- UPDATED THIS LINE
+    if (subStatus === 'duplicate (client)' || subStatus === 'duplicate (internal)') {
+      incrementMap(clientDuplicateById, recruiterId, count);
+    }
+    break;
+  case 'interview':
+    // Make sure we catch iTech rounds too!
+    if (subStatus === 'technical assessment') incrementMap(interviewsTechnicalById, recruiterId, count);
+    if (subStatus === 'technical assessment selected') incrementMap(interviewsTechnicalSelectedById, recruiterId, count);
+    if (subStatus === 'technical assessment rejected') incrementMap(interviewsTechnicalRejectById, recruiterId, count);
+    if (subStatus === 'l1' || subStatus === 'interview scheduled' || subStatus === 'in-person interview' || subStatus === 'hr round') incrementMap(interviewsL1ById, recruiterId, count); // <--- UPDATED
+    if (subStatus === 'l1 selected') incrementMap(interviewsL1SelectedById, recruiterId, count);
+    if (subStatus === 'l1 rejected') incrementMap(interviewsL1RejectById, recruiterId, count);
+    if (subStatus === 'l2') incrementMap(interviewsL2ById, recruiterId, count);
+    if (subStatus === 'l2 rejected') incrementMap(interviewsL2RejectById, recruiterId, count);
+    if (subStatus === 'l3' || subStatus === 'end client round') incrementMap(interviewsEndClientById, recruiterId, count);
+    if (subStatus === 'l3 rejected' || subStatus === 'end client rejected') incrementMap(interviewsEndClientRejectById, recruiterId, count);
+    break;
+  case 'offered':
+    if (subStatus === 'offer issued' || subStatus === 'offer made') incrementMap(offersMadeById, recruiterId, count); // <--- UPDATED
+    if (subStatus === 'offer on hold') incrementMap(offersAcceptedById, recruiterId, count);
+    if (subStatus === 'offer rejected') incrementMap(offersRejectedById, recruiterId, count); // <--- UPDATED
+    break;
+  case 'joined':
+    if (subStatus === 'joined') incrementMap(joiningJoinedById, recruiterId, count);
+    if (subStatus === 'no show') incrementMap(joiningNoShowById, recruiterId, count);
+    break;
+}
       });
   
       // 4. Build Final Result

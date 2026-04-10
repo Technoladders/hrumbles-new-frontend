@@ -411,7 +411,7 @@ useEffect(() => {
           <meta name="twitter:description" content={jobDescriptionPreview} />
         </Helmet>
       )}
-     <div className="flex items-center justify-between mb-4 gap-2 flex-nowrap">
+     <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-gray-500 hover:text-gray-700">
             <ArrowLeft size={20} />
@@ -532,7 +532,7 @@ useEffect(() => {
         {/* Action Buttons */}
 
        {/* --- ACTION BUTTONS & TABS --- */}
-        <div className="flex items-center gap-2 flex-nowrap shrink-0">
+    <div className="flex items-center gap-2 flex-nowrap w-full md:w-auto ml-auto">
           
           {/* 1. Analyse with AI Dropdown */}
           <DropdownMenu>
@@ -621,14 +621,18 @@ useEffect(() => {
           
 
           {/* 3. Add Candidate Button (3D Style) */}
+         
+        </div>
+         <div className="w-full flex justify-end md:w-auto md:flex md:justify-end ml-auto">
+
           <button
             onClick={() => setIsAddCandidateDrawerOpen(true)}
-            className="flex items-center text-xs gap-3 pl-1.5 pr-6 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 group h-10"
+            className="flex items-center text-xs gap-1 pl-1.5 pr-3 py-1 rounded-full text-white font-bold bg-[#7731E8] hover:bg-[#6528cc] shadow-[0_4px_15px_rgba(119,49,232,0.4)] hover:shadow-[0_6px_20px_rgba(119,49,232,0.6)] transform hover:scale-105 transition-all duration-300 group h-10 max-w-full"
           >
-            <div className="relative flex items-center justify-center w-7 h-7 mr-1">
+            <div className="relative flex items-center justify-center w-6 h-6 mr-1">
               <div className="absolute inset-0 bg-white blur-md scale-110 opacity-50 animate-pulse"></div>
-              <div className="relative w-full h-full text-xs rounded-full flex items-center justify-center z-10 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.2)]" style={{ background: 'radial-gradient(circle at 30% 30%, #ffffff, #f1f5f9)' }}>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className="w-5 h-5" style={{ filter: 'drop-shadow(0 2px 2px rgba(119,49,232,0.3))' }}>
+              <div className="relative w-6 h-6 text-xs rounded-full flex items-center justify-center z-10 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.2)]" style={{ background: 'radial-gradient(circle at 30% 30%, #ffffff, #f1f5f9)' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className="w-4 h-4" style={{ filter: 'drop-shadow(0 2px 2px rgba(119,49,232,0.3))' }}>
                   <defs>
                     <linearGradient id="purpleIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                       <stop offset="0%" stopColor="#9d5cff" />
@@ -642,7 +646,7 @@ useEffect(() => {
             </div>
             <span className="tracking-wide text-xs relative z-10">Add Candidate</span>
           </button>
-        </div>
+          </div>
       </div>
  
       <JobDetailView 

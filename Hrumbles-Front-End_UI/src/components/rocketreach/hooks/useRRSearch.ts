@@ -25,6 +25,7 @@ interface UseRRSearchOptions {
   pageSize:         number;
   initialPage?:     number;
   provider?:        SearchProvider;
+  organizationId?: string | null;
 }
 
 interface UseRRSearchReturn {
@@ -347,7 +348,7 @@ export function useRRSearch(opts: UseRRSearchOptions): UseRRSearchReturn {
       } else {
         const query = buildRRQuery(f);
         ({ data, error: fnError } = await supabase.functions.invoke("rocketreach-search", {
-          body: { query, order_by: f.orderBy, page_size: f.pageSize, start: (page - 1) * f.pageSize + 1 },
+          body: { query, order_by: f.orderBy, page_size: f.pageSize, start: (page - 1) * f.pageSize + 1, organizationId: f.organizationId ?? null, },
         }));
       }
 

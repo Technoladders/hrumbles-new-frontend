@@ -629,13 +629,7 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
                     <option value="relevance">Relevance</option>
                   </select>
                 </div>
-                <div>
-                  <SLabel>Per Page</SLabel>
-                  <select value={pageSize} onChange={e => onSetPageSize(Number(e.target.value))}
-                    className="w-full h-7 rounded-lg border border-slate-200 bg-white text-[11px] text-slate-600 px-2 focus:outline-none focus:border-violet-400">
-                    {[10, 25, 50].map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
+
               </div>
             </>
           )}

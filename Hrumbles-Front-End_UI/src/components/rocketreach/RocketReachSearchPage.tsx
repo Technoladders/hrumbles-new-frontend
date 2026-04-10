@@ -42,6 +42,7 @@ import { useFolders }        from "@/components/CandidateSearch/hooks/useFolders
 import { useRRSearch }       from "./hooks/useRRSearch";
 import { useRRRevealedIds }  from "./hooks/useRRRevealedIds";
 import { useSavedCandidatesCount } from "@/components/CandidateSearch/hooks/useSavedCandidates";
+import { CandidateInviteGate } from "@/components/CandidateSearch/components/CandidateInviteGate";
 
 import type { RRProfile, SkillChip } from "./types";
 
@@ -63,7 +64,7 @@ const PROVIDERS: Record<SearchProvider, ProviderConfig> = {
   rocketreach: {
     id:         "rocketreach",
     label:      "Search",
-    shortLabel: "RR",
+    shortLabel: "",
     color:      "#f97316",
     bgClass:    "bg-orange-500",
     badgeCls:   "bg-orange-50 text-orange-700 border-orange-200",
@@ -306,6 +307,7 @@ export const RocketReachSearchPage: React.FC = () => {
     pageSize:         filters.pageSize,
     // Pass provider so useRRSearch can call the right edge function
     provider,
+    organizationId:   orgId,
   });
 
   // ── Enriched / revealed IDs ─────────────────────────────────────────────
@@ -317,114 +319,55 @@ export const RocketReachSearchPage: React.FC = () => {
 
   // ── In-place enrichment merge ────────────────────────────────────────────
   const [enrichedProfiles, setEnrichedProfiles] = useState<RRProfile[]>([]);
-const [scrapingIds, setScrapingIds] = useState<Set<number>>(new Set());
+
  
 // ── Replace the profiles useEffect ───────────────────────────────────────────
 useEffect(() => {
+  // Map search results into local state — no scraping here anymore
   setEnrichedProfiles(profiles);
   setSelectedProfile(null);
   setCheckedIds(new Set());
- 
-  // Profiles that need scraping:
-  //   _is_cached === false  → never scraped
-  //   _needs_rescrape === true → scraped but stale (update_time changed)
-  const toScrape = profiles.filter(p =>
-    (p as any)._provider !== "contactout" &&
-    (!(p as any)._is_cached || (p as any)._needs_rescrape)
-  );
- 
-  if (!toScrape.length) return;
- 
-  // Mark all these profiles as loading immediately
-  setScrapingIds(new Set(toScrape.map(p => p.id)));
- 
-  const WORKER_URL  = "https://proxy.xrilic.ai/";
-  const BATCH_SIZE  = 5;    // Max 5 per call — stays within Cloudflare subrequest limit
-  const BATCH_DELAY = 800;  // ms between batches to respect ScrapingBee concurrency
- 
-  const scrapeAllBatches = async () => {
-    for (let i = 0; i < toScrape.length; i += BATCH_SIZE) {
-      const batch = toScrape.slice(i, i + BATCH_SIZE);
- 
-      try {
-        const res = await fetch(WORKER_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ids: batch.map(p => ({ id: p.id, name: p.name ?? "" })),
-          }),
-        });
- 
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.results) {
-            // Merge scraped data into profiles — happens per-profile as results arrive
-            setEnrichedProfiles(prev => prev.map(p => {
-              const result = data.results.find((r: any) =>
-                r.success && (r.data?.id === p.id || r.id === p.id)
-              );
-              if (!result?.data) return p;
- 
-              const scraped = result.data;
-              const updated = {
-                ...p,
-                // Fill gaps only — don't overwrite data already from RR search API
-                _jobHistory: (p._jobHistory && p._jobHistory.length > 0) ? p._jobHistory : (scraped.work_history ?? []),
-                _education:  (p._education  && p._education.length  > 0) ? p._education  : (scraped.education   ?? []),
-                _skills:     (p._skills     && p._skills.length     > 0) ? p._skills     : (scraped.skills      ?? []),
-                profile_pic:  p.profile_pic  || scraped.profile_pic  || undefined,
-                linkedin_url: p.linkedin_url || scraped.linkedin_url || null,
-                _is_cached:   true,
-                _needs_rescrape: false,
-                _scraped: true,
-              };
-              return updated;
-            }));
- 
-            // Remove this batch from scrapingIds (they're done)
-            const batchIds = new Set(batch.map(p => p.id));
-            setScrapingIds(prev => {
-              const next = new Set(prev);
-              batchIds.forEach(id => next.delete(id));
-              return next;
-            });
- 
-            // Also update detail panel if one of the scraped profiles is open
-            setSelectedProfile(prev => {
-              if (!prev) return prev;
-              const result = data.results.find((r: any) => r.success && r.data?.id === prev.id);
-              if (!result?.data) return prev;
-              const scraped = result.data;
-              return {
-                ...prev,
-                _jobHistory: (prev._jobHistory?.length) ? prev._jobHistory : (scraped.work_history ?? []),
-                _education:  (prev._education?.length)  ? prev._education  : (scraped.education   ?? []),
-                _skills:     (prev._skills?.length)     ? prev._skills     : (scraped.skills      ?? []),
-                profile_pic:  prev.profile_pic  || scraped.profile_pic  || undefined,
-                linkedin_url: prev.linkedin_url || scraped.linkedin_url || null,
-              };
-            });
-          }
-        } else {
-          // On error, still remove from scrapingIds so skeleton goes away
-          const batchIds = new Set(batch.map(p => p.id));
-          setScrapingIds(prev => { const next = new Set(prev); batchIds.forEach(id => next.delete(id)); return next; });
-        }
-      } catch (e) {
-        console.warn("[scrape] Batch failed (non-fatal):", e);
-        const batchIds = new Set(batch.map(p => p.id));
-        setScrapingIds(prev => { const next = new Set(prev); batchIds.forEach(id => next.delete(id)); return next; });
-      }
- 
-      // Wait before next batch (except last batch)
-      if (i + BATCH_SIZE < toScrape.length) {
-        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
-      }
-    }
-  };
- 
-  scrapeAllBatches();
 }, [profiles]);
+
+useEffect(() => {
+  const channel = supabase
+    .channel("scrape-results")
+    .on("broadcast", { event: "profile-scraped" }, ({ payload }) => {
+      if (!payload?.profileId) return;
+ 
+      // Normalize profileId — could be number or string depending on broadcast
+      const targetId = typeof payload.profileId === "string"
+        ? parseInt(payload.profileId, 10)
+        : payload.profileId;
+ 
+      console.log("[search] Realtime: received profile-scraped for", targetId,
+        "jobs:", payload.jobHistory?.length ?? 0,
+        "skills:", payload.skills?.length ?? 0);
+ 
+      const merge = (p: RRProfile): RRProfile => {
+        if (p.id !== targetId) return p;
+        return {
+          ...p,
+          // Only fill gaps — if profile already has data from a previous reveal, keep it
+          _jobHistory:     payload.jobHistory?.length  ? payload.jobHistory  : p._jobHistory,
+          _education:      payload.education?.length   ? payload.education   : p._education,
+          _skills:         payload.skills?.length      ? payload.skills      : p._skills,
+          profile_pic:     payload.profilePic  || p.profile_pic  || undefined,
+          linkedin_url:    payload.linkedinUrl || p.linkedin_url || null,
+          _is_cached:      true,
+          _needs_rescrape: false,
+        };
+      };
+ 
+      setEnrichedProfiles(prev => prev.map(merge));
+      setSelectedProfile(prev => prev ? merge(prev) : null);
+    })
+    .subscribe((status, err) => {
+      console.log("[search] Realtime status:", status, err ?? "");
+    });
+ 
+  return () => { supabase.removeChannel(channel); };
+}, []);  // empty deps: subscribe once on mount
 
   const handleRevealComplete = useCallback((rrProfileId: number, data: any) => {
     const update = (p: RRProfile): RRProfile =>
@@ -451,15 +394,16 @@ useEffect(() => {
   }, [queryClient]);
 
   // ── Folder modal ─────────────────────────────────────────────────────────
-  const [folderModal, setFolderModal] = useState<{
-    open: boolean; rrProfileId: string; savedId?: string;
-  }>({ open: false, rrProfileId: "" });
+
+  const [rrInviteTarget, setRrInviteTarget] = useState<{
+  profile: RRProfile;
+  email: string | null;
+  phone: string | null;
+} | null>(null);
 
   const { folders, createFolder } = useFolders(orgId, userId);
 
-  const handleShortlist = useCallback((rrProfileId: string, savedId: string | undefined, _snapshot: any) => {
-    setFolderModal({ open: true, rrProfileId, savedId });
-  },[]);
+
 
   // ── Auto-search debounced 600ms ──────────────────────────────────────────
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -579,14 +523,22 @@ useEffect(() => {
               <div className="flex items-center gap-1">
                 <button
                   disabled={filters.page <= 1}
-                  onClick={() => setFilter("page", filters.page - 1)}
+                     onClick={() => {
+     const newPage = filters.page - 1;
+     setFilter("page", newPage);
+     search(newPage);
+   }}
                   className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 text-slate-500 hover:border-violet-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronLeft size={11} />
                 </button>
                 <button
                   disabled={filters.page >= totalPages}
-                  onClick={() => setFilter("page", filters.page + 1)}
+                     onClick={() => {
+     const newPage = filters.page + 1;
+     setFilter("page", newPage);
+     search(newPage);
+   }}
                   className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 text-slate-500 hover:border-violet-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronRight size={11} />
@@ -596,16 +548,37 @@ useEffect(() => {
           </div>
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-2">
-            {/* Provider toggle */}
-            <ProviderToggle current={provider} onChange={setProvider} />
+ <div className="flex items-center gap-2">
+     {/* Per-page selector — compact */}
+     <div className="flex items-center gap-1">
+       <span className="text-[10px] text-slate-400 whitespace-nowrap">Per page</span>
+       <select
+         value={filters.pageSize}
+         onChange={e => {
+           setFilter("pageSize", Number(e.target.value));
+           // Re-search with new page size, reset to page 1
+           setTimeout(() => search(1), 0);
+         }}
+         className="h-6 px-1 rounded border border-slate-200 text-[11px] text-slate-600 bg-white focus:outline-none focus:border-violet-400"
+       >
+         <option value={10}>10</option>
+         <option value={25}>25</option>
+         <option value={50}>50</option>
+       </select>
+     </div>
 
-            {/* Divider */}
-            <div className="h-4 w-px bg-slate-200" />
+     {/* Divider */}
+     <div className="h-4 w-px bg-slate-200" />
 
-            {/* Saved candidates link */}
-            <SavedBadge orgId={orgId} />
-          </div>
+     {/* Provider toggle */}
+     <ProviderToggle current={provider} onChange={setProvider} />
+
+     {/* Divider */}
+     <div className="h-4 w-px bg-slate-200" />
+
+     {/* Saved candidates link */}
+     <SavedBadge orgId={orgId} />
+   </div>
         </div>
 
         {/* ── Body ── */}
@@ -648,61 +621,59 @@ useEffect(() => {
   selectedId={selectedProfile?.id ?? null}
   checkedIds={checkedIds}
   revealedIds={revealedIds}
-  scrapingIds={scrapingIds}          // ← ADD THIS
-  onSelectRow={p  => setSelectedProfile(prev => prev?.id === p?.id ? null : p)}
+  scrapingIds={new Set()}
+  activeSkillChips={filters.skillChips}           // ← NEW
+  onSelectRow={p => setSelectedProfile(prev => prev?.id === p?.id ? null : p)}
   onCheckRow={(id, v) => setCheckedIds(prev => { const s = new Set(prev); v ? s.add(id) : s.delete(id); return s; })}
   onCheckAll={v => setCheckedIds(v ? new Set(enrichedProfiles.map(p => p.id)) : new Set())}
-  onPrev={() => setFilter("page", Math.max(1, filters.page - 1))}
-  onNext={() => setFilter("page", filters.page + 1)}
+   onPrev={() => {
+     const newPage = Math.max(1, filters.page - 1);
+     setFilter("page", newPage);
+     search(newPage);
+   }}
+   onNext={() => {
+     const newPage = filters.page + 1;
+     setFilter("page", newPage);
+     search(newPage);
+   }}
   onRevealComplete={handleRevealComplete}
+  onInvite={(profile, email, phone) => setRrInviteTarget({ profile, email, phone })}   // ← NEW
 />
           )}
         </div>
       </div>
 
       {/* ── Detail panel ─────────────────────────────────────────────────── */}
-      {selectedProfile && (
-        <RRDetailPanel
-          profile={selectedProfile}
-          onClose={() => setSelectedProfile(null)}
-          onRevealComplete={handleRevealComplete}
-          onShortlist={handleShortlist}
-          folders={folders}
-          onCreateFolder={createFolder}
+{selectedProfile && (
+  <RRDetailPanel
+    profile={selectedProfile}
+    onClose={() => setSelectedProfile(null)}
+    onRevealComplete={handleRevealComplete}
+    // onShortlist removed — now handled inside RRDetailPanel v3
+    onInvite={(rrProfileId, email, phone) => {
+      const p = enrichedProfiles.find(x => String(x.id) === rrProfileId);
+      if (p) setRrInviteTarget({ profile: p, email, phone });
+    }}
+  />
+)}
+
+           {/* Invite Gate */}
+      {rrInviteTarget && (
+        <CandidateInviteGate
+          candidateName={rrInviteTarget.profile.name ?? ""}
+          candidateEmail={rrInviteTarget.email ?? undefined}
+          candidatePhone={rrInviteTarget.phone ?? undefined}
+          apolloPersonId={`rr_${rrInviteTarget.profile.id}`}
+          organizationId={orgId}
+          userId={userId}
+          onClose={() => setRrInviteTarget(null)}
+          onInviteSent={() => {
+            setRrInviteTarget(null);
+            queryClient.invalidateQueries({ queryKey: ["saved-candidates"] });
+          }}
         />
       )}
 
-      {/* ── Folder picker modal ───────────────────────────────────────────── */}
-      {folderModal.open && (
-        <FolderPickerModal
-          folders={folders}
-          title="Save to Folder"
-          showSkip
-          onClose={() => setFolderModal(prev => ({ ...prev, open: false }))}
-          onSelect={async (folderId) => {
-            if (!folderModal.savedId || !userId) return;
-            await supabase.from("candidate_folder_members").upsert({
-              folder_id:          folderId,
-              saved_candidate_id: folderModal.savedId,
-              added_by:           userId,
-            }, { onConflict: "folder_id,saved_candidate_id", ignoreDuplicates: true });
-            queryClient.invalidateQueries({ queryKey: ["candidate-folders"] });
-            queryClient.invalidateQueries({ queryKey: ["saved-candidates"] });
-            setFolderModal(prev => ({ ...prev, open: false }));
-          }}
-          onCreate={async name => {
-            const id = await createFolder(name);
-            if (id && folderModal.savedId && userId) {
-              await supabase.from("candidate_folder_members").upsert({
-                folder_id: id, saved_candidate_id: folderModal.savedId, added_by: userId,
-              }, { onConflict: "folder_id,saved_candidate_id", ignoreDuplicates: true });
-              queryClient.invalidateQueries({ queryKey: ["saved-candidates"] });
-            }
-            setFolderModal(prev => ({ ...prev, open: false }));
-          }}
-          onSkip={() => setFolderModal(prev => ({ ...prev, open: false }))}
-        />
-      )}
     </div>
   );
 };

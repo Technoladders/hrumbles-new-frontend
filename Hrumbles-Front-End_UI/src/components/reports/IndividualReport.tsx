@@ -72,6 +72,7 @@ const statusOrder = [
   'Processed - Internal Reject',
   'Processed - Client Reject',
   'Processed - Candidate on hold',
+  'Processed - Position hold by client', // <--- ADDED
   'Interview - Technical Assessment',
   'Interview - Reschedule Interview',
   'Interview - Technical Assessment Selected',
@@ -88,8 +89,14 @@ const statusOrder = [
   'Interview - End Client Round',
   'Interview - End Client Selected',
   'Interview - End Client Rejected',
+  // --- ADDED iTECH SPECIFIC STATUSES JUST IN CASE ---
+  'Interview - Interview Scheduled',
+  'Interview - In-Person Interview',
+  'Interview - HR Round',
   'Offered - Offer Issued',
+  'Offered - Offer Made', // <--- ADDED
   'Offered - Offer On Hold',
+  'Offered - Offer Rejected', // <--- ADDED
   'Joined - Joined',
   'Joined - No Show',
 ];
