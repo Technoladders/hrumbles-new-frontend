@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import CompareWithJobDialog  from "@/components/candidates/talent-pool/CompareWithJobDialog";
 import AnalysisHistoryDialog from "@/components/candidates/AnalysisHistoryDialog";
 import EnrichDataDialog      from "@/components/candidates/talent-pool/EnrichDataDialog";
+import V2WhatsAppFloat from "@/components/MagicLinkView/candidate-profile-v2/components/V2WhatsAppFloat";
 import { generateDocx, generatePdf } from "@/utils/cvGenerator";
 import ResumeViewer          from "@/components/candidates/talent-pool/ResumeViewer";
 import CandidateFullTimeline from "@/components/candidates/talent-pool/CandidateFullTimeline";
@@ -726,6 +727,14 @@ const CandidateProfilePage = () => {
           <CompareWithJobDialog  isOpen={isCompareOpen} onClose={() => setCompareOpen(false)}  candidateId={candidateId} />
           <AnalysisHistoryDialog isOpen={isHistoryOpen} onClose={() => setHistoryOpen(false)} candidateId={candidateId} candidateName={candidate.candidate_name} />
           <EnrichDataDialog      isOpen={isEnrichOpen}  onClose={() => setEnrichOpen(false)}  candidate={candidate} />
+            \{/* WhatsApp float — shows when candidate has a phone */}
+{candidate?.phone && candidateId && (
+<V2WhatsAppFloat
+candidateId={candidateId}
+candidateName={candidate.candidate_name || 'Candidate'}
+candidatePhone={candidate.phone}
+/>
+)}
         </>
       )}
     </div>

@@ -105,6 +105,7 @@ export interface SendInviteParams {
   // WhatsApp
   whatsappTemplateName?: string;
   whatsappTemplateLanguage?: string;
+  whatsappBodyVars?: string[];   // Variable values for {{N}} in template
 }
 
 // ── Send invite ───────────────────────────────────────────────────────────────
@@ -405,3 +406,4 @@ export const applyProfileUpdate = async (
     .eq('id', responseId);
   if (responseErr) throw responseErr;
 };
+// all templates accept

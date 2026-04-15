@@ -21,6 +21,7 @@ import { createPortal } from 'react-dom';
 import { supabase }      from '@/integrations/supabase/client';
 import { useSelector }   from 'react-redux';
 import { toast }         from 'sonner';
+import WaTemplateVarsModal, { templateHasVars } from '@/components/jobs/job/invite/WaTemplateVarsModal';
 
 // ── Types ───────────────────────────────────────────────────────────────────────
 
@@ -456,6 +457,8 @@ const V2WhatsAppFloat: React.FC<V2WhatsAppFloatProps> = ({
   const [templates,    setTemplates]    = useState<WaTemplate[]>([]);
   const [trayOpen,     setTrayOpen]     = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
+  // Template variable modal — shown when selected template has {{N}} vars
+  const [pendingTpl,   setPendingTpl]   = useState<WaTemplate | null>(null);
 
   const endRef     = useRef<HTMLDivElement>(null);
   const inputRef   = useRef<HTMLTextAreaElement>(null);
@@ -599,12 +602,28 @@ const V2WhatsAppFloat: React.FC<V2WhatsAppFloatProps> = ({
     }
   };
 
-  const handleSendTemplate = async (tpl: WaTemplate) => {
+  // Called when template is clicked in tray/card.
+  // If template has variables → open var modal first; else send directly.
+  const handleSendTemplate = (tpl: WaTemplate) => {
     if (isSending || !hasPhone) return;
+    if (templateHasVars(tpl)) {
+      setPendingTpl(tpl);   // show var fill modal
+    } else {
+      doSendTemplate(tpl, []);
+    }
+  };
+
+  const doSendTemplate = async (tpl: WaTemplate, bodyVars: string[]) => {
     setIsSending(true);
+    setPendingTpl(null);
     try {
       const { data, error } = await supabase.functions.invoke('wa-send', {
-        body: { organizationId, candidateId, jobId: jobId ?? null, phone: candidatePhone, messageType: 'template', templateName: tpl.name, templateLanguage: tpl.language, sentBy: userId },
+        body: {
+          organizationId, candidateId, jobId: jobId ?? null, phone: candidatePhone,
+          messageType: 'template', templateName: tpl.name, templateLanguage: tpl.language,
+          sentBy: userId,
+          ...(bodyVars.length > 0 ? { bodyVars } : {}),
+        },
       });
       if (error)       throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
@@ -855,6 +874,14 @@ const V2WhatsAppFloat: React.FC<V2WhatsAppFloatProps> = ({
           </div>
         )}
       </button>
+
+      {/* Template variable fill modal — shown when template has {{N}} vars */}
+      <WaTemplateVarsModal
+        template={pendingTpl}
+        onSend={(tpl, vars) => doSendTemplate(tpl, vars)}
+        onClose={() => setPendingTpl(null)}
+        isSending={isSending}
+      />
     </>
   );
 

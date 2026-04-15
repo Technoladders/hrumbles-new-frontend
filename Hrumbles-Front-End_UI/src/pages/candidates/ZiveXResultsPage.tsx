@@ -156,6 +156,26 @@ const ZiveXResultsPage: FC = () => {
   // bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+    // Fetch WhatsApp config for template defaults
+  const { data: waCfg } = useQuery({
+    queryKey: ['whatsapp-config', organizationId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('hr_organizations')
+        .select('whatsapp_config')
+        .eq('id', organizationId)
+        .single();
+
+      if (error) throw error;
+      return data?.whatsapp_config || null;
+    },
+    enabled: !!organizationId,
+  });
+
+  const orgName = useMemo(() => {
+    return waCfg?.company_name || 'DCS Group';
+  }, [waCfg]);
+
   const { data: jobs = [] } = useQuery<JobOption[]>({
     queryKey: ['zx-jobs-for-invite', organizationId],
     queryFn: async () => {
@@ -476,6 +496,10 @@ const ZiveXResultsPage: FC = () => {
           onClose={() => { setBulkModalOpen(false); setPendingBulkList([]); setSelectedJob(null); setSelectedIds(new Set()); }}
           candidates={pendingBulkList} jobId={selectedJob.id}
           jobTitle={selectedJob.title} inviteSource="zivex"
+          job={selectedJob}                    
+  waTemplateName={waCfg?.default_template_name}
+  waTemplateLanguage={waCfg?.default_template_language || 'en_US'}
+  waOrgName={waCfg?.company_name || orgName || 'DCS Group'}
         />
       )}
     </>

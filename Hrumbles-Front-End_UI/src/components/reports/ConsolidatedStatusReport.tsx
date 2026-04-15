@@ -1,1036 +1,637 @@
+// Hrumbles-Front-End_UI\src\components\reports\ConsolidatedStatusReport.tsx
+// Compact modern redesign — same data logic, tightened layout, inline visualization
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { supabase } from '@/integrations/supabase/client';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-
 import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
 import { format, isValid } from 'date-fns';
-import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, Calendar, ChevronLeft, ChevronRight, Sigma, ArrowUp, Activity, TrendingUp, CheckCircle, Tag, Building, User } from 'lucide-react';
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  LabelList,
+  AlertCircle, Layers, List, Search, Download,
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
+  Sigma, ArrowUp, Activity, TrendingUp, Tag, Building, User,
+} from 'lucide-react';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip, LabelList,
 } from 'recharts';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import { Candidate as OriginalCandidate } from '@/lib/types';
+import { autoTable } from 'jspdf-autotable';
+import {
+  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
 
-interface DateRange {
-  startDate: Date | null;
-  endDate: Date | null;
-}
-
-// --- Type Definitions ---
+// ─── Types (unchanged from original) ─────────────────────────────────────────
+interface DateRange { startDate: Date | null; endDate: Date | null }
 interface Candidate {
-  id: string;
-  name: string;
-  created_at: string;
-  updated_at: string;
-  main_status_id: string | null;
-  sub_status_id: string | null;
-  job_title: string | null;
-  recruiter_name: string | null;
-  client_name: string | null;
-  current_salary: number | null;
-  expected_salary: number | null;
-  location: string | null;
-  notice_period: string | null;
-  overall_score: number | null;
-   job_id: string; // Made non-nullable for Link
-  // --- ADDED FIELDS ---
-  schedule_date_time?: string;
-  rejection_reason?: string;
+  id: string; name: string; created_at: string; updated_at: string;
+  main_status_id: string | null; sub_status_id: string | null;
+  job_title: string | null; recruiter_name: string | null;
+  client_name: string | null; current_salary: number | null;
+  expected_salary: number | null; location: string | null;
+  notice_period: string | null; overall_score: number | null;
+  job_id: string; schedule_date_time?: string; rejection_reason?: string;
 }
-
-interface StatusMap { [key: string]: string; }
-interface GroupedData { [statusName: string]: Candidate[]; }
+interface StatusMap { [key: string]: string }
+interface GroupedData { [statusName: string]: Candidate[] }
 interface TableRowData {
   type: 'header' | 'data';
-  statusName?: string;
-  count?: number;
-  candidate?: Candidate;
+  statusName?: string; count?: number; candidate?: Candidate;
 }
+interface GroupedStatusOption { mainStatus: string; subStatuses: string[] }
 
-
-interface GroupedStatusOption {
-    mainStatus: string;
-    subStatuses: string[];
-}
-
-// --- Color map from previous request ---
-const statusColorMap: { [key: string]: string } = {
-  'New Applicants': '#F87171',       // Red
-  'Client Reject': '#F472B6',       // Pink
-  'Internal Reject': '#F472B6',       // Pink
-  'Duplicate (Internal)': '#A3E635',  // Lime Green
-  'Sourced': '#A3E635',              // Lime Green
-  'Internal Hold': '#60A5FA',       // Blue
-  'Processed (Internal)': '#60A5FA',       // Blue
-  'Processed (Client)': '#2DD4BF',    // Teal
-  'L1 Interview': '#60A5FA',       // Blue
-  'L2 Interview': '#818CF8',       // Indigo
-  'HR Round': '#F472B6',       // Pink
-  'Offered': '#FBBF24',             // Amber
-  'Joined': '#A78BFA',              // Purple
-  // Adding colors from the latest screenshot to ensure coverage
-  'End Client Round': '#F97316',   // Orange
-  'L1': '#F97316',                 // Orange
-  'L2': '#F97316',                 // Orange
-  'Technical Assessment': '#FBBF24', // Amber/Yellow
+// ─── Color map (unchanged) ────────────────────────────────────────────────────
+const statusColorMap: Record<string, string> = {
+  'New Applicants': '#F87171', 'Client Reject': '#F472B6', 'Internal Reject': '#F472B6',
+  'Duplicate (Internal)': '#A3E635', 'Sourced': '#A3E635', 'Internal Hold': '#60A5FA',
+  'Processed (Internal)': '#60A5FA', 'Processed (Client)': '#2DD4BF',
+  'L1 Interview': '#60A5FA', 'L2 Interview': '#818CF8', 'HR Round': '#F472B6',
+  'Offered': '#FBBF24', 'Joined': '#A78BFA', 'End Client Round': '#F97316',
+  'L1': '#F97316', 'L2': '#F97316', 'Technical Assessment': '#FBBF24',
 };
-const defaultColor = '#9CA3AF'; // Default gray for any unmapped status
+const defaultColor = '#9CA3AF';
 
-
-// --- Helper Functions (No changes here) ---
-const formatCurrency = (value: number | null | undefined) => {
-  if (value == null) return 'N/A';
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
+// ─── Helpers (unchanged) ──────────────────────────────────────────────────────
+const formatCurrency = (v: number | null | undefined) =>
+  v == null ? 'N/A' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
+const formatValue = (v: string | number | null | undefined) => v != null ? String(v) : 'N/A';
+const formatDate = (d: string) => { const p = new Date(d); return isValid(p) ? format(p, 'MMM d, yyyy') : d; };
+const formatScheduleDateTime = (dt: string | null | undefined): string | null => {
+  if (!dt) return null;
+  const p = new Date(dt); return isValid(p) ? format(p, 'MMM d, yyyy | h:mm a') : null;
 };
+const getScoreBadgeClass = (s: number | null | undefined) =>
+  s == null ? 'bg-gray-100 text-gray-800' : s > 80 ? 'bg-green-100 text-green-800' : s > 50 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800';
 
-const formatValue = (value: string | number | null | undefined) => {
-  return value != null ? String(value) : 'N/A';
+const colorToClassMap: Record<string, string> = {
+  '#F87171': 'bg-red-100 text-red-800', '#F472B6': 'bg-pink-100 text-pink-800',
+  '#A3E635': 'bg-lime-100 text-lime-800', '#60A5FA': 'bg-blue-100 text-blue-800',
+  '#2DD4BF': 'bg-teal-100 text-teal-800', '#818CF8': 'bg-indigo-100 text-indigo-800',
+  '#FBBF24': 'bg-amber-100 text-amber-800', '#A78BFA': 'bg-purple-100 text-purple-800',
+  '#F97316': 'bg-orange-100 text-orange-800',
 };
+const getStatusBadgeClass = (name: string | null | undefined) =>
+  name ? (colorToClassMap[statusColorMap[name]] ?? 'bg-gray-100 text-gray-800') : 'bg-gray-100 text-gray-800';
 
-const formatDate = (date: string) => {
-  const parsedDate = new Date(date);
-  return isValid(parsedDate) ? format(parsedDate, 'MMM d, yyyy') : date;
-};
-
-
-const formatScheduleDateTime = (dateTime: string | null | undefined): string | null => {
-    if (!dateTime) return null;
-    const parsedDate = new Date(dateTime);
-    return isValid(parsedDate) ? format(parsedDate, 'MMM d, yyyy | h:mm a') : null;
-};
-
-
-const getScoreBadgeClass = (score: number | null | undefined): string => {
-  if (score == null) {
-    return 'bg-gray-100 text-gray-800';
-  }
-  if (score > 80) {
-    return 'bg-green-100 text-green-800';
-  }
-  if (score > 50) {
-    return 'bg-amber-100 text-amber-800';
-  }
-  return 'bg-red-100 text-red-800';
-};
-
-
-// --- Tooltip (No changes here) ---
-const CustomFunnelTooltip = (props: any) => {
-  const { active, payload, label, barDefinitions } = props;
-
-  if (active && payload && payload.length) {
-    const currentRowData = payload[0].payload;
-    const activeBars = barDefinitions.filter((bar: any) => (currentRowData[bar.key] || 0) > 0);
-
-    return (
-      <div className="p-3 text-sm bg-white border border-gray-200 rounded-lg shadow-lg animate-fade-in">
-        <p className="font-bold text-gray-800 mb-2">{label}</p>
-        <div className="space-y-1.5">
-          {activeBars.map((bar: any, index: number) => {
-            const value = currentRowData[bar.key];
-            const displayName = (label === 'Joined') ? 'Joined' : bar.name;
-
-            return (
-              <div key={index} className="flex items-center">
-                <div
-                  className="w-3 h-3 rounded-sm mr-2"
-                  style={{ backgroundColor: bar.color }}
-                />
-                <span className="text-gray-600">{`${displayName}: `}</span>
-                <span className="font-semibold text-gray-800">{value}</span>
-              </div>
-            );
-          })}
+// ─── Compact tooltip for chart ────────────────────────────────────────────────
+const ChartTooltip = ({ active, payload, label, barDefs }: any) => {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  const active2 = barDefs?.filter((b: any) => (row[b.key] || 0) > 0) ?? [];
+  return (
+    <div className="bg-white border border-gray-100 rounded-lg shadow-xl p-2 text-[10px]" style={{ maxWidth: 180 }}>
+      <p className="font-bold text-gray-700 mb-1">{label}</p>
+      {active2.map((b: any) => (
+        <div key={b.key} className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: b.color }} />
+          <span className="text-gray-500 flex-1">{b.name}:</span>
+          <span className="font-bold text-gray-800">{row[b.key]}</span>
         </div>
-        <div className="border-t border-gray-200 mt-3 pt-2 flex justify-between font-bold text-gray-900">
-          <span>Total:</span>
-          <span>{currentRowData.total}</span>
-        </div>
+      ))}
+      <div className="border-t border-gray-100 mt-1.5 pt-1 flex justify-between font-bold text-gray-800">
+        <span>Total</span><span>{row.total}</span>
       </div>
-    );
-  }
-  return null;
+    </div>
+  );
 };
 
-
-// --- Main Component ---
+// ─── Main ─────────────────────────────────────────────────────────────────────
 const ConsolidatedStatusReport: React.FC = () => {
-  const organizationId = useSelector((state: any) => state.auth.organization_id);
-    const { user, role } = useSelector((state: any) => state.auth);
+  const { organization_id: organizationId, user, role } = useSelector((s: any) => s.auth);
 
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [mainStatuses, setMainStatuses] = useState<{ id: string; name: string; display_order: number }[]>([]);
-  const [subStatuses, setSubStatuses] = useState<{ id: string; name: string; parent_id: string; color: string }[]>([]);
+  const [candidates, setCandidates]       = useState<Candidate[]>([]);
+  const [mainStatuses, setMainStatuses]   = useState<{ id: string; name: string; display_order: number }[]>([]);
+  const [subStatuses, setSubStatuses]     = useState<{ id: string; name: string; parent_id: string; color: string; display_order: number }[]>([]);
   const [statusNameMap, setStatusNameMap] = useState<StatusMap>({});
+  const [groupedStatusOptions, setGroupedStatusOptions] = useState<GroupedStatusOption[]>([]);
 
-   const [groupedStatusOptions, setGroupedStatusOptions] = useState<GroupedStatusOption[]>([]);
+  const [isLoading,     setIsLoading]     = useState(true);
+  const [error,         setError]         = useState<string | null>(null);
+  const [isGrouped,     setIsGrouped]     = useState(false);
+  const [searchTerm,    setSearchTerm]    = useState('');
 
-   const [orderedStatusOptions, setOrderedStatusOptions] = useState<string[]>([])
+  const [statusFilter,       setStatusFilter]       = useState<string[]>([]);
+  const [tempStatusFilter,   setTempStatusFilter]   = useState<string[]>([]);
+  const [clientFilter,       setClientFilter]       = useState<string[]>([]);
+  const [tempClientFilter,   setTempClientFilter]   = useState<string[]>([]);
+  const [recruiterFilter,    setRecruiterFilter]    = useState<string[]>([]);
+  const [tempRecruiterFilter,setTempRecruiterFilter]= useState<string[]>([]);
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isGrouped, setIsGrouped] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-const [statusFilter, setStatusFilter] = useState<string[]>([]);
-const [tempStatusFilter, setTempStatusFilter] = useState<string[]>([]);
-const [clientFilter, setClientFilter] = useState<string[]>([]);
-const [tempClientFilter, setTempClientFilter] = useState<string[]>([]);
-const [tempRecruiterFilter, setTempRecruiterFilter] = useState<string[]>([]);
-const [recruiterFilter, setRecruiterFilter] = useState<string[]>([]);
-  const [clientOptions, setClientOptions] = useState<string[]>([]);
+  const [clientOptions,    setClientOptions]    = useState<string[]>([]);
   const [recruiterOptions, setRecruiterOptions] = useState<string[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(20);
-  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
-    const [dateRange, setDateRange] = useState<DateRange>({ startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)), endDate: new Date() });
+  const [currentPage,      setCurrentPage]      = useState(1);
+  const [itemsPerPage,     setItemsPerPage]     = useState(20);
+  const [expandedGroups,   setExpandedGroups]   = useState<string[]>([]);
+  const [dateRange, setDateRange] = useState<DateRange>({
+    startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)),
+    endDate: new Date(),
+  });
+  const [deptName,      setDeptName]      = useState<string | null>(null);
+  const [deptLoading,   setDeptLoading]   = useState(true);
 
-  const [departmentName, setDepartmentName] = useState<string | null>(null);
-  const [isDepartmentLoading, setIsDepartmentLoading] = useState(true);
-  
-  const isRestrictedView = role === 'employee' && departmentName === 'Human Resource';
+  const isRestrictedView = role === 'employee' && deptName === 'Human Resource';
 
+  // Department fetch (unchanged)
   useEffect(() => {
-    const fetchDepartmentName = async () => {
-      if (!user?.id) {
-        setIsDepartmentLoading(false);
-        return;
-      }
-      setIsDepartmentLoading(true);
+    (async () => {
+      if (!user?.id) { setDeptLoading(false); return; }
       try {
-        const { data: employeeData, error: employeeError } = await supabase
-          .from("hr_employees").select("department_id").eq("id", user.id).single();
-        if (employeeError || !employeeData?.department_id) {
-          throw new Error(employeeError?.message || "No department found");
-        }
-        const { data: departmentData, error: departmentError } = await supabase
-          .from("hr_departments").select("name").eq("id", employeeData.department_id).single();
-        if (departmentError) throw departmentError;
-        setDepartmentName(departmentData.name || null);
-      } catch (error: any) {
-        console.error("Error fetching department:", error.message);
-        setDepartmentName(null); 
-      } finally {
-        setIsDepartmentLoading(false);
-      }
-    };
-    fetchDepartmentName();
+        const { data: emp } = await supabase.from('hr_employees').select('department_id').eq('id', user.id).single();
+        if (!emp?.department_id) throw new Error();
+        const { data: dept } = await supabase.from('hr_departments').select('name').eq('id', emp.department_id).single();
+        setDeptName(dept?.name ?? null);
+      } catch { setDeptName(null); }
+      finally { setDeptLoading(false); }
+    })();
   }, [user?.id]);
 
-
-
+  // Main data fetch (unchanged logic)
   useEffect(() => {
-    const fetchData = async () => {
-      if (!organizationId || isDepartmentLoading || !dateRange.startDate || !dateRange.endDate) return;
-      
-      setIsLoading(true);
-      setError(null);
-     try {
-        const selectFields = `
-            id, name, created_at, updated_at, main_status_id, sub_status_id, 
-            current_salary, expected_salary, location, notice_period, overall_score, 
+    if (!organizationId || deptLoading || !dateRange.startDate || !dateRange.endDate) return;
+    setIsLoading(true); setError(null);
+    (async () => {
+      try {
+        let q = supabase.from('hr_job_candidates')
+          .select(`id, name, created_at, updated_at, main_status_id, sub_status_id,
+            current_salary, expected_salary, location, notice_period, overall_score,
             job_id, interview_date, interview_time, interview_feedback, metadata,
-            job:hr_jobs!hr_job_candidates_job_id_fkey(title, client_details), 
-            recruiter:hr_employees!hr_job_candidates_created_by_fkey(first_name, last_name)
-        `;
-        let candidatesQuery = supabase
-          .from('hr_job_candidates')
-          .select(selectFields)
+            job:hr_jobs!hr_job_candidates_job_id_fkey(title, client_details),
+            recruiter:hr_employees!hr_job_candidates_created_by_fkey(first_name, last_name)`)
           .eq('organization_id', organizationId)
-          .gte('created_at', dateRange.startDate.toISOString())
-          .lte('created_at', dateRange.endDate.toISOString())
+          .gte('created_at', dateRange.startDate!.toISOString())
+          .lte('created_at', dateRange.endDate!.toISOString())
           .order('created_at', { ascending: false });
+        if (isRestrictedView && user?.id) q = q.eq('created_by', user.id);
 
-        if (isRestrictedView && user?.id) {
-            candidatesQuery = candidatesQuery.eq('created_by', user.id);
-        }
-
-        const [candidatesResponse, statusesResponse] = await Promise.all([
-          candidatesQuery,
+        const [{ data: cData, error: cErr }, { data: sData, error: sErr }] = await Promise.all([
+          q,
           supabase.from('job_statuses').select('id, name, type, parent_id, color, display_order').eq('organization_id', organizationId),
         ]);
+        if (cErr) throw cErr; if (sErr) throw sErr;
 
-        if (candidatesResponse.error) throw candidatesResponse.error;
-        if (statusesResponse.error) throw statusesResponse.error;
-        
-const formattedCandidates: Candidate[] = candidatesResponse.data.map((c: any) => {
-    // Helper function to safely combine date and time strings
-    const combineDateTime = (dateStr: string, timeStr: string): string | null => {
-        if (!dateStr || !timeStr) return null;
-        const combined = new Date(`${dateStr}T${timeStr}`);
-        if (isNaN(combined.getTime())) return null;
-        return combined.toISOString();
-    };
-
-    const scheduleDateTime = combineDateTime(c.interview_date, c.interview_time);
-
-    // --- NEW: Safely access metadata from the JSONB field ---
-    const metadata = c.metadata || {};
-
-    return {
-        id: c.id,
-        job_id: c.job_id,
-        name: c.name,
-        created_at: c.created_at,
-        updated_at: c.updated_at,
-        main_status_id: c.main_status_id,
-        sub_status_id: c.sub_status_id,
-        job_title: c.job?.title || 'N/A',
-        recruiter_name: c.recruiter ? `${c.recruiter.first_name} ${c.recruiter.last_name}`.trim() : 'N/A',
-        client_name: c.job?.client_details?.clientName || 'N/A',
-        
-        // --- UPDATED LOGIC: Use top-level value OR fallback to metadata value ---
-        current_salary: c.current_salary ?? metadata.currentSalary,
-        expected_salary: c.expected_salary ?? metadata.expectedSalary,
-        location: c.location ?? metadata.currentLocation,
-        notice_period: c.notice_period ?? metadata.noticePeriod,
-
-        overall_score: c.overall_score,
-        schedule_date_time: scheduleDateTime,
-        rejection_reason: c.interview_feedback,
-    };
-});
-
-
-        setCandidates(formattedCandidates);
-
-        // ... rest of the logic is unchanged ...
-        const allStatuses = statusesResponse.data || [];
-        const nameMap = allStatuses.reduce((acc: StatusMap, status) => { acc[status.id] = status.name; return acc; }, {});
-        setStatusNameMap(nameMap);
-        const mains = allStatuses.filter(s => s.type === 'main').sort((a, b) => a.display_order - b.display_order);
-        const subs = allStatuses.filter(s => s.type === 'sub');
-        setMainStatuses(mains);
-        setSubStatuses(subs);
-
-
-        // --- NEW LOGIC: Create grouped and ordered structure for the filter ---
-        const groupedOptions: GroupedStatusOption[] = mains.map(mainStatus => {
-            const children = subs
-                .filter(sub => sub.parent_id === mainStatus.id)
-                .sort((a, b) => a.display_order - b.display_order)
-                .map(child => child.name);
-            return { mainStatus: mainStatus.name, subStatuses: children };
-        }).filter(group => group.subStatuses.length > 0); // Only include groups that have sub-statuses
-        setGroupedStatusOptions(groupedOptions);
-        // --- END OF NEW LOGIC ---
-
-                // --- NEW LOGIC TO CREATE ORDERED STATUS LIST FOR FILTER ---
-        const sortedSubStatusNames: string[] = [];
-        mains.forEach(mainStatus => {
-            const children = subs
-                .filter(sub => sub.parent_id === mainStatus.id)
-                .sort((a, b) => a.display_order - b.display_order);
-            
-            children.forEach(child => {
-                sortedSubStatusNames.push(child.name);
-            });
+        const formatted: Candidate[] = (cData ?? []).map((c: any) => {
+          const combine = (d: string, t: string) => {
+            if (!d || !t) return null;
+            const dt = new Date(`${d}T${t}`); return isNaN(dt.getTime()) ? null : dt.toISOString();
+          };
+          const meta = c.metadata || {};
+          return {
+            id: c.id, job_id: c.job_id, name: c.name,
+            created_at: c.created_at, updated_at: c.updated_at,
+            main_status_id: c.main_status_id, sub_status_id: c.sub_status_id,
+            job_title: c.job?.title || 'N/A',
+            recruiter_name: c.recruiter ? `${c.recruiter.first_name} ${c.recruiter.last_name}`.trim() : 'N/A',
+            client_name: c.job?.client_details?.clientName || 'N/A',
+            current_salary: c.current_salary ?? meta.currentSalary,
+            expected_salary: c.expected_salary ?? meta.expectedSalary,
+            location: c.location ?? meta.currentLocation,
+            notice_period: c.notice_period ?? meta.noticePeriod,
+            overall_score: c.overall_score,
+            schedule_date_time: combine(c.interview_date, c.interview_time),
+            rejection_reason: c.interview_feedback,
+          };
         });
-        setOrderedStatusOptions(sortedSubStatusNames);
-        // --- END OF NEW LOGIC ---
+        setCandidates(formatted);
 
+        const all = sData ?? [];
+        setStatusNameMap(all.reduce((acc: StatusMap, s) => { acc[s.id] = s.name; return acc; }, {}));
+        const mains = all.filter((s: any) => s.type === 'main').sort((a: any, b: any) => a.display_order - b.display_order);
+        const subs  = all.filter((s: any) => s.type === 'sub');
+        setMainStatuses(mains); setSubStatuses(subs);
 
+        setGroupedStatusOptions(mains.map((m: any) => ({
+          mainStatus: m.name,
+          subStatuses: subs.filter((s: any) => s.parent_id === m.id).sort((a: any, b: any) => a.display_order - b.display_order).map((s: any) => s.name),
+        })).filter((g: GroupedStatusOption) => g.subStatuses.length > 0));
 
-        const uniqueClients = [...new Set(formattedCandidates.map(c => c.client_name).filter(Boolean))].sort();
-        const uniqueRecruiters = [...new Set(formattedCandidates.map(c => c.recruiter_name).filter(Boolean))].sort();
-        setClientOptions(uniqueClients);
-        setRecruiterOptions(uniqueRecruiters);
+        setClientOptions([...new Set(formatted.map(c => c.client_name).filter(Boolean))].sort() as string[]);
+        setRecruiterOptions([...new Set(formatted.map(c => c.recruiter_name).filter(Boolean))].sort() as string[]);
+      } catch (e: any) { setError(e.message ?? 'Error'); }
+      finally { setIsLoading(false); }
+    })();
+  }, [organizationId, dateRange, user?.id, deptLoading, isRestrictedView]);
 
-      } catch (err: any) {
-        setError(err.message || 'An unknown error occurred.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  }, [organizationId, dateRange, user?.id, isDepartmentLoading, isRestrictedView]);
-  
+  // ── Derived state (unchanged logic) ──────────────────────────────────────
+  const filteredCandidates = useMemo(() => candidates.filter(c => {
+    const sn = (statusNameMap[c.sub_status_id ?? ''] || 'New Applicants').trim();
+    const cl = (c.client_name || 'N/A').trim();
+    const re = (c.recruiter_name || 'N/A').trim();
+    const sl = searchTerm.toLowerCase();
+    return (
+      (!statusFilter.length    || statusFilter.includes(sn)) &&
+      (!clientFilter.length    || clientFilter.includes(cl)) &&
+      (isRestrictedView || !recruiterFilter.length || recruiterFilter.includes(re)) &&
+      (!searchTerm || c.name.toLowerCase().includes(sl) || (c.job_title||'').toLowerCase().includes(sl) || (c.client_name||'').toLowerCase().includes(sl) || (c.recruiter_name||'').toLowerCase().includes(sl))
+    );
+  }), [candidates, searchTerm, statusNameMap, statusFilter, clientFilter, recruiterFilter, isRestrictedView]);
 
-const filteredCandidates = useMemo(() => {
-  return candidates.filter(c => {
-    const statusName = (statusNameMap[c.sub_status_id || ''] || 'New Applicants').trim();
-    const clientName = (c.client_name || 'N/A').trim();
-    const recruiterName = (c.recruiter_name || 'N/A').trim();
-
-    const statusMatch = statusFilter.length === 0 || statusFilter.includes(statusName);
-    const clientMatch = clientFilter.length === 0 || clientFilter.includes(clientName);
-    const recruiterMatch = isRestrictedView || recruiterFilter.length === 0 || recruiterFilter.includes(recruiterName);
-    
-    // ADD THIS SEARCH LOGIC
-    const searchLower = searchTerm.toLowerCase();
-    const searchMatch = !searchTerm || 
-      c.name.toLowerCase().includes(searchLower) ||
-      (c.job_title || '').toLowerCase().includes(searchLower) ||
-      (c.client_name || '').toLowerCase().includes(searchLower) ||
-      (c.recruiter_name || '').toLowerCase().includes(searchLower);
-    
-    return statusMatch && clientMatch && recruiterMatch && searchMatch;
-  });
-}, [candidates, searchTerm, statusNameMap, statusFilter, clientFilter, recruiterFilter, isRestrictedView]);
-
-  const groupedBySubStatus = useMemo<GroupedData>(() => {
-    return filteredCandidates.reduce((acc: GroupedData, candidate) => {
-      const statusName = statusNameMap[candidate.sub_status_id || ''] || 'New Applicant';
-      if (!acc[statusName]) acc[statusName] = [];
-      acc[statusName].push(candidate);
-      return acc;
-    }, {});
-  }, [filteredCandidates, statusNameMap]);
-
-  const chartData = useMemo(() => {
-    return Object.entries(groupedBySubStatus)
-      .map(([name, group]) => ({ name, value: group.length }))
-      .sort((a, b) => b.value - a.value);
-  }, [groupedBySubStatus]);
+  const groupedBySubStatus = useMemo<GroupedData>(() => filteredCandidates.reduce((acc: GroupedData, c) => {
+    const sn = statusNameMap[c.sub_status_id ?? ''] || 'New Applicant';
+    if (!acc[sn]) acc[sn] = [];
+    acc[sn].push(c); return acc;
+  }, {}), [filteredCandidates, statusNameMap]);
 
   const dynamicChartConfig = useMemo(() => {
-    if (mainStatuses.length === 0) {
-      return { barDefinitions: [], funnelData: [] };
-    }
-
-    const barDefinitions = subStatuses.map(sub => ({
-      key: sub.name.replace(/\s+/g, ''),
-      name: sub.name,
-      color: statusColorMap[sub.name] || sub.color || defaultColor, 
-      parent_id: sub.parent_id,
+    if (!mainStatuses.length) return { barDefinitions: [], funnelData: [] };
+    const barDefs = subStatuses.map(s => ({
+      key: s.name.replace(/\s+/g, ''),
+      name: s.name,
+      color: statusColorMap[s.name] || s.color || defaultColor,
+      parent_id: s.parent_id,
     }));
-
-    const subToMainIdMap = new Map(subStatuses.map(s => [s.id, s.parent_id]));
-    
-    const dataTemplate = new Map(mainStatuses.map(main => [main.id, {
-        name: main.name,
-        total: 0,
-        ...barDefinitions.reduce((acc, bar) => ({ ...acc, [bar.key]: 0 }), {})
+    const subToMain = new Map(subStatuses.map(s => [s.id, s.parent_id]));
+    const tmpl = new Map(mainStatuses.map(m => [m.id, {
+      name: m.name, total: 0,
+      ...barDefs.reduce((a: any, b) => ({ ...a, [b.key]: 0 }), {}),
     }]));
-
-    filteredCandidates.forEach(candidate => {
-        const subStatusId = candidate.sub_status_id;
-        const mainStatusId = candidate.main_status_id || (subStatusId ? subToMainIdMap.get(subStatusId) : null);
-        if (mainStatusId && dataTemplate.has(mainStatusId)) {
-            const entry = dataTemplate.get(mainStatusId)!;
-            const subStatusName = statusNameMap[subStatusId || ''] || 'New Applicant';
-            const subStatusKey = subStatusName.replace(/\s+/g, '');
-            if (entry.hasOwnProperty(subStatusKey)) {
-                entry[subStatusKey]++;
-                entry.total++;
-            }
-        }
+    filteredCandidates.forEach(c => {
+      const mid = c.main_status_id || (c.sub_status_id ? subToMain.get(c.sub_status_id) : null);
+      if (mid && tmpl.has(mid)) {
+        const entry = tmpl.get(mid)!;
+        const sn = statusNameMap[c.sub_status_id ?? ''] || 'New Applicant';
+        const sk = sn.replace(/\s+/g, '');
+        if (sk in entry) { (entry as any)[sk]++; entry.total++; }
+      }
     });
-
-    const funnelData = Array.from(dataTemplate.values());
-    
-    funnelData.forEach((row: any) => {
-        const orderedKeys = barDefinitions.map(b => b.key);
-        const lastVisibleKey = [...orderedKeys].reverse().find(key => row[key] > 0);
-        if (lastVisibleKey) {
-            row.lastKey = lastVisibleKey;
-        }
+    const funnelData = Array.from(tmpl.values()) as any[];
+    funnelData.forEach(row => {
+      const last = [...barDefs.map(b => b.key)].reverse().find(k => row[k] > 0);
+      if (last) row.lastKey = last;
     });
-
-    return { barDefinitions, funnelData };
+    return { barDefinitions: barDefs, funnelData };
   }, [mainStatuses, subStatuses, filteredCandidates, statusNameMap]);
 
-
   const tableRows = useMemo<TableRowData[]>(() => {
-    if (!isGrouped) {
-      return filteredCandidates.map(c => ({ type: 'data', candidate: c, statusName: statusNameMap[c.sub_status_id || ''] || 'New Applicant' }));
-    }
-    return Object.entries(groupedBySubStatus)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .flatMap(([statusName, candidatesInGroup]) => [
-        { type: 'header', statusName, count: candidatesInGroup.length },
-        ...expandedGroups.includes(statusName) ? candidatesInGroup.map(c => ({ type: 'data', candidate: c, statusName })) : [],
-      ]);
+    if (!isGrouped) return filteredCandidates.map(c => ({ type: 'data', candidate: c, statusName: statusNameMap[c.sub_status_id ?? ''] || 'New Applicant' }));
+    return Object.entries(groupedBySubStatus).sort((a, b) => a[0].localeCompare(b[0])).flatMap(([sn, list]) => [
+      { type: 'header', statusName: sn, count: list.length } as TableRowData,
+      ...(expandedGroups.includes(sn) ? list.map(c => ({ type: 'data' as const, candidate: c, statusName: sn })) : []),
+    ]);
   }, [isGrouped, filteredCandidates, groupedBySubStatus, expandedGroups, statusNameMap]);
 
-
-
   const totalCandidates = filteredCandidates.length;
-  const peakStatus = chartData.reduce((max, item) => item.value > max.value ? item : max, { name: 'N/A', value: 0 });
-  const averageCandidates = chartData.length > 0 ? (totalCandidates / chartData.length).toFixed(1) : '0.0';
-  const topStatus = chartData[0] || { name: 'N/A', value: 0 };
+  const chartData2 = useMemo(() => Object.entries(groupedBySubStatus).map(([name, g]) => ({ name, value: g.length })).sort((a, b) => b.value - a.value), [groupedBySubStatus]);
+  const peakStatus = chartData2.reduce((m, i) => i.value > m.value ? i : m, { name: 'N/A', value: 0 });
+  const avgCandidates = (chartData2.length > 0 ? totalCandidates / chartData2.length : 0).toFixed(1);
+  const topStatus = chartData2[0] || { name: 'N/A', value: 0 };
 
-  const totalPages = Math.ceil(tableRows.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedData = tableRows.slice(startIndex, startIndex + itemsPerPage);
+  const totalPages  = Math.ceil(tableRows.length / itemsPerPage);
+  const startIndex  = (currentPage - 1) * itemsPerPage;
+  const paginated   = tableRows.slice(startIndex, startIndex + itemsPerPage);
+
+  // Axis helper (unchanged)
+  const getAxis = (data: any[], step: number) => {
+    const mx = Math.max(...data.map(d => d.total), 0);
+    if (!mx) return { domain: [0, 40] as [number, number], ticks: [0,10,20,30,40] };
+    const top = Math.ceil((mx + step/4) / step) * step;
+    return { domain: [0, top] as [number, number], ticks: Array.from({ length: top/step + 1 }, (_, i) => i * step) };
+  };
+  const { domain: axisDomain, ticks: axisTicks } = getAxis(dynamicChartConfig.funnelData, 20);
 
   const exportToCSV = () => {
-    const dataForExport = filteredCandidates.map(c => ({ 'Candidate Name': c.name, 'Status': statusNameMap[c.sub_status_id || ''] || 'New Applicant', 'AI Score': formatValue(c.overall_score), 'Job Title': formatValue(c.job_title), 'Client': formatValue(c.client_name), 'Recruiter': formatValue(c.recruiter_name), 'Applied': formatDate(c.created_at), 'CCTC (INR)': formatCurrency(c.current_salary), 'ECTC (INR)': formatCurrency(c.expected_salary), 'Notice Period': formatValue(c.notice_period), 'Location': formatValue(c.location) }));
-    const csv = Papa.unparse(dataForExport, { header: true });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `consolidated_status_report_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
+    const blob = new Blob([Papa.unparse(filteredCandidates.map(c => ({
+      'Candidate Name': c.name, 'Status': statusNameMap[c.sub_status_id ?? ''] || 'New Applicant',
+      'AI Score': formatValue(c.overall_score), 'Job Title': formatValue(c.job_title),
+      'Client': formatValue(c.client_name), 'Recruiter': formatValue(c.recruiter_name),
+      'Applied': formatDate(c.created_at), 'CCTC': formatCurrency(c.current_salary),
+      'ECTC': formatCurrency(c.expected_salary), 'Notice': formatValue(c.notice_period), 'Location': formatValue(c.location),
+    })), { header: true })], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `consolidated_report_${new Date().toISOString().split('T')[0]}.csv`; a.click();
   };
 
   const exportToPDF = () => {
     const doc = new jsPDF({ orientation: 'landscape' });
-    doc.text('Consolidated Status Report', 14, 20);
-    const tableData = filteredCandidates.map(c => [ c.name, statusNameMap[c.sub_status_id || ''] || 'New Applicant', formatValue(c.overall_score), formatValue(c.job_title), formatValue(c.client_name), formatValue(c.recruiter_name), formatDate(c.created_at), formatCurrency(c.current_salary), formatCurrency(c.expected_salary), formatValue(c.notice_period), formatValue(c.location) ]);
-    (doc as any).autoTable({ head: [['Candidate Name', 'Status', 'AI Score', 'Job Title', 'Client', 'Recruiter', 'Applied', 'CCTC (INR)', 'ECTC (INR)', 'Notice Period', 'Location']], body: tableData, startY: 30, theme: 'grid', styles: { fontSize: 7, cellPadding: 2 }, headStyles: { fillColor: [123, 67, 241] } });
-    doc.save(`consolidated_status_report_${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.setFontSize(12); doc.text('Consolidated Status Report', 14, 16);
+    autoTable(doc, {
+      head: [['Candidate','Status','Score','Job Title','Client','Recruiter','Applied','CCTC','ECTC','Notice','Location']],
+      body: filteredCandidates.map(c => [c.name, statusNameMap[c.sub_status_id??'']||'New Applicant', formatValue(c.overall_score), formatValue(c.job_title), formatValue(c.client_name), formatValue(c.recruiter_name), formatDate(c.created_at), formatCurrency(c.current_salary), formatCurrency(c.expected_salary), formatValue(c.notice_period), formatValue(c.location)]),
+      startY: 22, styles: { fontSize: 7, cellPadding: 2 }, headStyles: { fillColor: [123, 67, 241] },
+    });
+    doc.save(`consolidated_report_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
-  const toggleGroup = (statusName: string) => {
-    setExpandedGroups(prev => prev.includes(statusName) ? prev.filter(g => g !== statusName) : [...prev, statusName]);
-  };
-
-  const onFilterChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (value: string) => {
-    setter(value);
-    setCurrentPage(1);
-  };
-
-// --- After (Modified Code) ---
-
-// This function now dynamically calculates the axis based on the data.
-const generateAxisTicks = (data: any[], step: number) => {
-  const maxTotalInData = Math.max(...data.map(d => d.total), 0);
-  
-  // If there's no data, default to a small range.
-  if (maxTotalInData === 0) {
-    const defaultMax = 40;
-    const defaultTicks = [];
-    for (let i = 0; i <= defaultMax; i += 10) {
-      defaultTicks.push(i);
-    }
-    return { domain: [0, defaultMax], ticks: defaultTicks };
-  }
-
-  // Add a small buffer to the max value to prevent the bar from touching the edge,
-  // then round up to the nearest 'step' to keep the axis clean.
-  const axisTopValue = Math.ceil((maxTotalInData + (step / 4)) / step) * step;
-  
-  const ticks = [];
-  for (let i = 0; i <= axisTopValue; i += step) {
-    ticks.push(i);
-  }
-  return { domain: [0, axisTopValue], ticks };
-};
-
-
-  // // --- NEW: Handler for the multi-select dropdown ---
-  // const handleStatusFilterChange = (statusName: string, checked: boolean) => {
-  //   setStatusFilter(prev => {
-  //       if (checked) {
-  //           // Add status to the filter array if it's not already there
-  //           return [...prev, statusName];
-  //       } else {
-  //           // Remove status from the filter array
-  //           return prev.filter(s => s !== statusName);
-  //       }
-  //   });
-  // };
-
-// Updated the function call to remove the hardcoded '200'
-const { domain: axisDomain, ticks: axisTicks } = generateAxisTicks(dynamicChartConfig.funnelData, 20);
-
-
-const handleStatusFilterChange = (statusName: string, checked: boolean) => {
-  setTempStatusFilter(prev => {
-    if (checked) {
-      return [...prev, statusName];
-    } else {
-      return prev.filter(s => s !== statusName);
-    }
-  });
-};
- const handleClientFilterChange = (clientName: string, checked: boolean) => {
-  setTempClientFilter(prev => checked ? [...prev, clientName] : prev.filter(c => c !== clientName));
-};
-const handleRecruiterFilterChange = (recruiterName: string, checked: boolean) => {
-  setTempRecruiterFilter(prev => checked ? [...prev, recruiterName] : prev.filter(r => r !== recruiterName));
-};
- if ((isLoading && candidates.length === 0 && !error) || isDepartmentLoading) {
-    return ( <div className="flex h-screen items-center justify-center"> <LoadingSpinner size={60} className="border-[6px] animate-spin text-indigo-600" /> </div> );
-  }
-  if (error) {
-    return ( <div className="p-8"> <Alert variant="destructive"> <AlertCircle className="h-4 w-4" /> <AlertDescription>{error}</AlertDescription> </Alert> </div> );
-  }
-
-const getStatusBadgeClass = (statusName: string | null | undefined): string => {
-  if (!statusName) {
-    return 'bg-gray-100 text-gray-800'; // Default for undefined status
-  }
-
-  // A map to convert your hex colors to Tailwind background/text color classes
-  const colorToClassMap: { [key: string]: string } = {
-    '#F87171': 'bg-red-100 text-red-800',         // New Applicants
-    '#F472B6': 'bg-pink-100 text-pink-800',       // Client Reject, Internal Reject, HR Round
-    '#A3E635': 'bg-lime-100 text-lime-800',       // Duplicate (Internal), Sourced
-    '#60A5FA': 'bg-blue-100 text-blue-800',       // Internal Hold, Processed (Internal), L1 Interview
-    '#2DD4BF': 'bg-teal-100 text-teal-800',       // Processed (Client)
-    '#818CF8': 'bg-indigo-100 text-indigo-800',   // L2 Interview
-    '#FBBF24': 'bg-amber-100 text-amber-800',     // Offered, Technical Assessment
-    '#A78BFA': 'bg-purple-100 text-purple-800',   // Joined
-    '#F97316': 'bg-orange-100 text-orange-800',   // End Client Round, L1, L2
-  };
-  
-  const hexColor = statusColorMap[statusName];
-  return colorToClassMap[hexColor] || 'bg-gray-100 text-gray-800'; // Default gray
-};
-
-console.log("return data", paginatedData)
+  if ((isLoading && !candidates.length && !error) || deptLoading)
+    return <div className="flex h-64 items-center justify-center"><LoadingSpinner size={40} /></div>;
+  if (error)
+    return <div className="p-4 text-xs text-red-600 bg-red-50 rounded-lg flex items-center gap-2"><AlertCircle size={14} />{error}</div>;
 
   return (
-      <TooltipProvider>
-    {/* 1. Changed w-screen/min-h-screen to w-full and h-full */}
-{/* 2. Removed padding (p-6 md:p-10) because MainLayout already has p={6} */}
-{/* 3. Removed bg-gradient because MainLayout handles background */}
-<div className="w-full h-full animate-fade-in overflow-x-hidden">
-      <main className="w-full space-y-8">
-        <div>
-          <h1 className="text-xl md:text-2xl font-semibold text-gray-800">Consolidated Candidate Status Report</h1>
-          <p className="text-sm text-gray-500 mt-2">Analyze candidate distribution by status within the selected period.</p>
-        </div>
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl"> <CardContent className="p-6 flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-2">Total Candidates</p> <h3 className="text-2xl font-bold text-gray-800">{totalCandidates}</h3> <p className="text-xs text-gray-500 mt-1">in selected period</p> </div> <div className="bg-gradient-to-br from-purple-400 to-purple-600 p-3 rounded-full"> <Sigma size={24} className="text-white" /> </div> </CardContent> </Card>
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl"> <CardContent className="p-6 flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-2">Peak Status</p> <h3 className="text-2xl font-bold text-gray-800 truncate" title={peakStatus.name}>{peakStatus.name}</h3> <p className="text-xs text-gray-500.mount mt-1">{peakStatus.value} candidates</p> </div> <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full"> <ArrowUp size={24} className="text-white" /> </div> </CardContent> </Card>
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl"> <CardContent className="p-6 flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-2">Average Candidates</p> <h3 className="text-2xl font-bold text-gray-800">{averageCandidates}</h3> <p className="text-xs text-gray-500 mt-1">per status</p> </div> <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-full"> <Activity size={24} className="text-white" /> </div> </CardContent> </Card>
-          <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl"> <CardContent className="p-6 flex items-center justify-between"> <div> <p className="text-sm font-medium text-gray-500 mb-2">Top Status</p> <h3 className="text-2xl font-bold text-gray-800 truncate" title={topStatus.name}>{topStatus.name}</h3> <p className="text-xs text-gray-500 mt-1">{topStatus.value} candidates</p> </div> <div className="bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-full"> <TrendingUp size={24} className="text-white" /> </div> </CardContent> </Card>
-        </div>
+    <TooltipProvider>
+      <div className="p-4 space-y-4">
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-         <Card className="shadow-xl border-none bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl lg:col-span-2">
-            <CardHeader className="bg-gray-50 border-b p-4"> <CardTitle className="text-lg text-gray-800">Candidate per Status</CardTitle> </CardHeader>
-            <CardContent className="p-6">
-                <div className="h-[450px] w-full animate-fade-in">
-                {isLoading ? ( <div className="flex h-full w-full items-center justify-center"> <LoadingSpinner size={60} /> </div>
-                ) : dynamicChartConfig.funnelData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dynamicChartConfig.funnelData} layout="vertical" margin={{ top: 20, right: 50, left: 20, bottom: 20 }} >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" horizontal={false} />
-                        <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12, fill: '#6b7280' }} domain={axisDomain} ticks={axisTicks} />
-                        <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12, fill: '#374151', fontWeight: 'bold' }} interval={0} />
-                       <RechartsTooltip 
-    cursor={{ fill: 'rgba(239, 246, 255, 0.7)' }} 
-    content={<CustomFunnelTooltip barDefinitions={dynamicChartConfig.barDefinitions} />} 
-/>
-                         {dynamicChartConfig.barDefinitions.map(bar => (
-      <Bar 
-        key={bar.key} 
-        dataKey={bar.key} 
-        stackId="a" 
-        name={bar.name} 
-        fill={bar.color} 
-        stroke="#fff" 
-        strokeWidth={2} 
-        radius={[0, 8, 8, 0]} 
-      >
-                            {/* --- THIS IS THE FIX --- */}
-                            <LabelList dataKey={bar.key} position="center" fill="#fff" fontSize={12} fontWeight="bold" formatter={(value: number) => (value > 0 ? value : '')} />
-                            
-                            <LabelList dataKey="total" content={(props) => {
-                                const { x, y, width, height, index, value } = props;
-                                const currentRow = dynamicChartConfig.funnelData[index];
-                                if (currentRow && currentRow.lastKey === bar.key && value > 0) {
-                                    return ( <text x={Number(x) + Number(width) + 8} y={Number(y) + Number(height) / 2} dy={5} textAnchor="start" fill="#111827" fontSize={14} fontWeight="bold" > {value} </text> );
-                                }
-                                return null;
-                                }}
-                            />
-                        </Bar>
-                        ))}
-                    </BarChart>
-                    </ResponsiveContainer>
-                ) : ( <div className="flex h-full w-full items-center justify-center"> <Alert className="w-auto bg-gray-50 border-gray-200"> <AlertCircle className="h-4 w-4 text-gray-500" /> <AlertDescription className="text-gray-600">No data for this period.</AlertDescription> </Alert> </div> )}
-                </div>
-            </CardContent>
-            </Card>
-        </div>
-
-<Card className="shadow-xl border-none bg-white transition-all duration-300 hover:shadow-2xl">
-
-    <CardContent className="p-6">
-<div className="relative z-10">
-  <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
-    {/* Date Range */}
-    <div className="flex-shrink-0 order-5 w-full sm:w-auto min-w-0 overflow-hidden">
-      <EnhancedDateRangeSelector 
-        value={dateRange} 
-        onChange={setDateRange} 
-      />
-    </div>
-
-    {/* Status Filter */}
-    <div className="flex-shrink-0 order-2 w-full sm:w-[150px] min-w-0 overflow-hidden">
-      <DropdownMenu
-        onOpenChange={(isOpen) => {
-          if (isOpen) {
-            setTempStatusFilter(statusFilter);
-          }
-        }}
-      >
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button variant='outline' className="group w-full rounded-full justify-start h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 shadow-inner text-sm relative z-0">
-                <Tag size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
-                <div className="truncate min-w-0">
-                  {statusFilter.length === 0
-                    ? "All Statuses"
-                    : statusFilter.length === 1
-                    ? statusFilter[0]
-                    : `${statusFilter.length} statuses selected`}
-                </div>
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          {statusFilter.length > 1 && (
-            <TooltipContent side="bottom" align="start" className="z-[70]">
-              <div className="p-1">
-                <h4 className="font-semibold mb-2 text-center">Selected Statuses</h4>
-                <ul className="list-disc list-inside space-y-1 max-w-48">
-                  {statusFilter.map((status) => (
-                    <li key={status}>{status}</li>
-                  ))}
-                </ul>
+        {/* ── KPIs ──────────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {[
+            { label: 'Total Candidates', value: totalCandidates, icon: Sigma,     color: '#7B43F1' },
+            { label: 'Peak Status',      value: peakStatus.name, icon: ArrowUp,   color: '#059669' },
+            { label: 'Avg per Status',   value: avgCandidates,   icon: Activity,  color: '#2563EB' },
+            { label: 'Top Status',       value: topStatus.name,  icon: TrendingUp, color: '#059669' },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className="bg-white rounded-xl border border-gray-100 px-3 py-2.5 flex items-center gap-2.5 shadow-sm">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${color}18` }}>
+                <Icon size={13} style={{ color }} />
               </div>
-            </TooltipContent>
-          )}
-        </Tooltip>
-        <DropdownMenuContent className="w-60 max-h-96 z-[60] flex flex-col origin-top">
-          <div className="overflow-y-auto">
-            <DropdownMenuCheckboxItem
-              checked={tempStatusFilter.length === 0}
-              onCheckedChange={() => setTempStatusFilter([])}
-              onSelect={(e) => e.preventDefault()}
-            >
-              All Statuses
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuSeparator />
-            {groupedStatusOptions.map((group) => (
-              <React.Fragment key={group.mainStatus}>
-                <DropdownMenuLabel>{group.mainStatus}</DropdownMenuLabel>
-                {group.subStatuses.map((subStatus) => (
-                  <DropdownMenuCheckboxItem
-                    key={subStatus}
-                    checked={tempStatusFilter.includes(subStatus)}
-                    onCheckedChange={(checked) => handleStatusFilterChange(subStatus, checked)}
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    {subStatus}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </React.Fragment>
-            ))}
-          </div>
-          <DropdownMenuSeparator />
-          <div className="p-2 border-t">
-            <Button 
-              className="w-full" 
-              size="sm"
-              onClick={() => {
-                setStatusFilter(tempStatusFilter);
-              }}
-            >
-              Apply Filter
-            </Button>
-          </div>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider leading-none">{label}</p>
+                <p className="text-sm font-bold text-gray-800 leading-tight truncate">{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
 
-    {/* Client Filter */}
-    <div className="flex-shrink-0 order-3 w-full sm:w-[150px] min-w-0 overflow-hidden">
-      <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempClientFilter(clientFilter); } }}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button variant='outline' className="group w-full rounded-full justify-start font-normal h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 shadow-inner text-sm relative z-0">
-                <Building size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
-                <div className="truncate min-w-0">
-                  {clientFilter.length === 0 ? "All Clients" : `${clientFilter.length} clients selected`}
-                </div>
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          {clientFilter.length > 1 && (
-            <TooltipContent side="bottom" align="start" className="z-[70]">
-              <p className="max-w-48">Selected: {clientFilter.join(', ')}</p>
-            </TooltipContent>
+        {/* ── Compact chart ─────────────────────────────────────────────── */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
+          <p className="text-[10px] font-semibold text-gray-500 mb-2">Candidates per Status</p>
+          {isLoading ? (
+            <div className="flex h-40 items-center justify-center"><LoadingSpinner size={28} /></div>
+          ) : dynamicChartConfig.funnelData.length > 0 ? (
+            <div style={{ height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dynamicChartConfig.funnelData} layout="vertical"
+                  margin={{ top: 4, right: 44, left: 4, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="2 2" stroke="#f3f4f6" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} domain={axisDomain} ticks={axisTicks}
+                    tick={{ fontSize: 9, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+                  <YAxis dataKey="name" type="category" width={100}
+                    tick={{ fontSize: 9, fill: '#374151', fontWeight: 600 }} interval={0} />
+                  <Tooltip content={<ChartTooltip barDefs={dynamicChartConfig.barDefinitions} />} cursor={{ fill: '#F5F3FF55' }} />
+                  {dynamicChartConfig.barDefinitions.map((bar, idx, arr) => (
+                    <Bar key={bar.key} dataKey={bar.key} stackId="a" name={bar.name}
+                      fill={bar.color} stroke="#fff" strokeWidth={1}
+                      radius={idx === arr.length - 1 ? [0, 4, 4, 0] : undefined}
+                    >
+                      <LabelList dataKey={bar.key} position="center" fill="#fff"
+                        fontSize={9} fontWeight="bold"
+                        formatter={(v: number) => v > 0 ? v : ''} />
+                      <LabelList dataKey="total" content={(props: any) => {
+                        const { x, y, width, height, index, value } = props;
+                        const row = dynamicChartConfig.funnelData[index];
+                        if (row?.lastKey === bar.key && value > 0) {
+                          return <text x={Number(x)+Number(width)+6} y={Number(y)+Number(height)/2} dy={4}
+                            textAnchor="start" fill="#374151" fontSize={10} fontWeight="bold">{value}</text>;
+                        }
+                        return null;
+                      }} />
+                    </Bar>
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="flex h-24 items-center justify-center text-xs text-gray-400">No data for this period</div>
           )}
-        </Tooltip>
-        <DropdownMenuContent className="w-64 max-h-96 z-[60] flex flex-col origin-top">
-          <div className="overflow-y-auto">
-            <DropdownMenuCheckboxItem
-              checked={tempClientFilter.length === 0}
-              onCheckedChange={() => setTempClientFilter([])}
-              onSelect={(e) => e.preventDefault()}
-            >
-              All Clients
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuSeparator />
-            {clientOptions.map(client => (
-              <DropdownMenuCheckboxItem
-                key={client}
-                checked={tempClientFilter.includes(client)}
-                onCheckedChange={(checked) => handleClientFilterChange(client, !!checked)}
-                onSelect={(e) => e.preventDefault()}
-              >
-                {client}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </div>
-          <DropdownMenuSeparator />
-          <div className="p-2 border-t">
-            <Button className="w-full" size="sm" onClick={() => setClientFilter(tempClientFilter)}>
-              Apply Filter
-            </Button>
-          </div>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+        </div>
 
-    {/* Recruiter Filter */}
-    {!isRestrictedView && (
-      <div className="flex-shrink-0 order-4 w-full sm:w-[150px] min-w-0 overflow-hidden">
-        <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempRecruiterFilter(recruiterFilter); } }}>
-          <Tooltip>
-            <TooltipTrigger asChild>
+        {/* ── Filters + table card ───────────────────────────────────────── */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+
+          {/* Filter bar */}
+          <div className="px-4 pt-3 pb-3 border-b border-gray-50 flex flex-wrap items-center gap-2">
+            <EnhancedDateRangeSelector value={dateRange} onChange={setDateRange} />
+
+            {/* Search */}
+            <div className="relative flex-1 min-w-[180px]">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input value={searchTerm}
+                onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                placeholder="Search name, job, client…"
+                className="w-full pl-7 pr-3 py-1.5 text-[11px] rounded-lg border border-gray-200 focus:outline-none focus:border-violet-300 bg-gray-50" />
+            </div>
+
+            {/* Status filter */}
+            <DropdownMenu onOpenChange={o => o && setTempStatusFilter(statusFilter)}>
               <DropdownMenuTrigger asChild>
-                <Button variant='outline' className="group w-full rounded-full justify-start font-normal h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 shadow-inner text-sm relative z-0">
-                  <User size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
-                  <div className="truncate min-w-0">
-                    {recruiterFilter.length === 0 ? "All Recruiters" : `${recruiterFilter.length} recruiters selected`}
-                  </div>
-                </Button>
+                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-[11px] text-gray-600 hover:border-violet-300 transition-colors">
+                  <Tag size={11} />
+                  {statusFilter.length === 0 ? 'All Statuses' : statusFilter.length === 1 ? statusFilter[0] : `${statusFilter.length} statuses`}
+                  <ChevronDown size={10} className="text-gray-400" />
+                </button>
               </DropdownMenuTrigger>
-            </TooltipTrigger>
-            {recruiterFilter.length > 1 && (
-              <TooltipContent side="bottom" align="start" className="z-[70]">
-                <p className="max-w-48">Selected: {recruiterFilter.join(', ')}</p>
-              </TooltipContent>
+              <DropdownMenuContent className="w-56 max-h-80 flex flex-col z-50">
+                <div className="overflow-y-auto flex-1">
+                  <DropdownMenuCheckboxItem checked={tempStatusFilter.length === 0}
+                    onCheckedChange={() => setTempStatusFilter([])} onSelect={e => e.preventDefault()}>
+                    All Statuses
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuSeparator />
+                  {groupedStatusOptions.map(g => (
+                    <React.Fragment key={g.mainStatus}>
+                      <DropdownMenuLabel>{g.mainStatus}</DropdownMenuLabel>
+                      {g.subStatuses.map(s => (
+                        <DropdownMenuCheckboxItem key={s}
+                          checked={tempStatusFilter.includes(s)}
+                          onCheckedChange={c => setTempStatusFilter(prev => c ? [...prev, s] : prev.filter(x => x !== s))}
+                          onSelect={e => e.preventDefault()}>{s}</DropdownMenuCheckboxItem>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </div>
+                <DropdownMenuSeparator />
+                <div className="p-2">
+                  <Button size="sm" className="w-full" onClick={() => setStatusFilter(tempStatusFilter)}>Apply</Button>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Client filter */}
+            <DropdownMenu onOpenChange={o => o && setTempClientFilter(clientFilter)}>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-[11px] text-gray-600 hover:border-violet-300 transition-colors">
+                  <Building size={11} />
+                  {clientFilter.length === 0 ? 'All Clients' : `${clientFilter.length} clients`}
+                  <ChevronDown size={10} className="text-gray-400" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56 max-h-80 flex flex-col z-50">
+                <div className="overflow-y-auto flex-1">
+                  <DropdownMenuCheckboxItem checked={tempClientFilter.length === 0}
+                    onCheckedChange={() => setTempClientFilter([])} onSelect={e => e.preventDefault()}>
+                    All Clients
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuSeparator />
+                  {clientOptions.map(c => (
+                    <DropdownMenuCheckboxItem key={c} checked={tempClientFilter.includes(c)}
+                      onCheckedChange={ch => setTempClientFilter(prev => ch ? [...prev, c] : prev.filter(x => x !== c))}
+                      onSelect={e => e.preventDefault()}>{c}</DropdownMenuCheckboxItem>
+                  ))}
+                </div>
+                <DropdownMenuSeparator />
+                <div className="p-2"><Button size="sm" className="w-full" onClick={() => setClientFilter(tempClientFilter)}>Apply</Button></div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Recruiter filter */}
+            {!isRestrictedView && (
+              <DropdownMenu onOpenChange={o => o && setTempRecruiterFilter(recruiterFilter)}>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-[11px] text-gray-600 hover:border-violet-300 transition-colors">
+                    <User size={11} />
+                    {recruiterFilter.length === 0 ? 'All Recruiters' : `${recruiterFilter.length} recruiters`}
+                    <ChevronDown size={10} className="text-gray-400" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56 max-h-80 flex flex-col z-50">
+                  <div className="overflow-y-auto flex-1">
+                    <DropdownMenuCheckboxItem checked={tempRecruiterFilter.length === 0}
+                      onCheckedChange={() => setTempRecruiterFilter([])} onSelect={e => e.preventDefault()}>
+                      All Recruiters
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuSeparator />
+                    {recruiterOptions.map(r => (
+                      <DropdownMenuCheckboxItem key={r} checked={tempRecruiterFilter.includes(r)}
+                        onCheckedChange={ch => setTempRecruiterFilter(prev => ch ? [...prev, r] : prev.filter(x => x !== r))}
+                        onSelect={e => e.preventDefault()}>{r}</DropdownMenuCheckboxItem>
+                    ))}
+                  </div>
+                  <DropdownMenuSeparator />
+                  <div className="p-2"><Button size="sm" className="w-full" onClick={() => setRecruiterFilter(tempRecruiterFilter)}>Apply</Button></div>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-          </Tooltip>
-          <DropdownMenuContent className="w-64 max-h-96 z-[60] flex flex-col origin-top">
-            <div className="overflow-y-auto">
-              <DropdownMenuCheckboxItem
-                checked={tempRecruiterFilter.length === 0}
-                onCheckedChange={() => setTempRecruiterFilter([])}
-                onSelect={(e) => e.preventDefault()}
-              >
-                All Recruiters
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              {recruiterOptions.map(recruiter => (
-                <DropdownMenuCheckboxItem
-                  key={recruiter}
-                  checked={tempRecruiterFilter.includes(recruiter)}
-                  onCheckedChange={(checked) => handleRecruiterFilterChange(recruiter, !!checked)}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  {recruiter}
-                </DropdownMenuCheckboxItem>
-              ))}
+
+            {/* Group toggle */}
+            <button onClick={() => setIsGrouped(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-[11px] text-gray-600 hover:border-violet-300 transition-colors">
+              {isGrouped ? <List size={11} /> : <Layers size={11} />}
+              {isGrouped ? 'Ungroup' : 'Group'}
+            </button>
+
+            {/* Export */}
+            <div className="flex gap-1.5 ml-auto">
+              <button onClick={exportToCSV}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-[11px] text-gray-600 hover:bg-violet-50 hover:text-violet-700 transition-colors">
+                <Download size={11} /> CSV
+              </button>
+              <button onClick={exportToPDF}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-[11px] text-gray-600 hover:bg-violet-50 hover:text-violet-700 transition-colors">
+                <Download size={11} /> PDF
+              </button>
             </div>
-            <DropdownMenuSeparator />
-            <div className="p-2 border-t">
-              <Button className="w-full" size="sm" onClick={() => setRecruiterFilter(tempRecruiterFilter)}>
-                Apply Filter
-              </Button>
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    )}
+          </div>
 
-    {/* Search Bar */}
-    <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
-      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-      <Input 
-        placeholder="Search name, job, client..." 
-        className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm" 
-        value={searchTerm} 
-        onChange={(e) => { 
-          setSearchTerm(e.target.value); 
-          setCurrentPage(1); 
-        }} 
-      />
-    </div>
-
-    {/* Group Button */}
-    <Button 
-      variant="outline" 
-      onClick={() => setIsGrouped(!isGrouped)} 
-      className="flex-shrink-0 order-6 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500"
-    >
-      {isGrouped ? <List className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />} 
-      {isGrouped ? 'Ungroup' : 'Group by Status'}
-    </Button>
-
-    {/* Export Buttons */}
-    <div className="flex gap-2 flex-shrink-0 order-7">
-      <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500">
-        <Download className="w-4 h-4 mr-2" /> Export CSV
-      </Button>
-      <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm hover:bg-purple-500">
-        <Download className="w-4 h-4 mr-2" /> Export PDF
-      </Button>
-    </div>
-  </div>
-</div>
-<div className="relative w-full rounded-lg border overflow-x-auto">
-    <Table style={{ minWidth: '1600px' }}>
-        <TableHeader>
-            <TableRow className="bg-gray-50 hover:bg-gray-50">
-                <TableHead className="sticky left-0 bg-gray-50 z-20 font-medium text-gray-800 px-4 py-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[250px]">Candidate</TableHead>
-                <TableHead className="text-left font-medium text-gray-500 px-4 py-3 min-w-[220px]">Status</TableHead>
-                <TableHead className="text-left font-medium text-gray-500 px-4 py-3 min-w-[100px]">AI Score</TableHead>
-                <TableHead className="text-left font-medium text-gray-500 px-4 py-3 min-w-[250px]">Job Title</TableHead>
-                <TableHead className="text-left font-medium text-gray-500 px-4 py-3 min-w-[200px]">Client</TableHead>
-                <TableHead className="text-left font-medium text-gray-500 px-4 py-3 min-w-[200px]">Recruiter</TableHead>
-                <TableHead className="text-left font-medium text-gray-500 px-4 py-3 min-w-[120px]">Applied</TableHead>
-                <TableHead className="text-left font-medium text-gray-500 px-4 py-3 min-w-[120px]">CCTC</TableHead>
-                <TableHead className="text-left font-medium text-gray-500 px-4 py-3 min-w-[120px]">ECTC</TableHead>
-                <TableHead className="text-left font-medium text-gray-500 px-4 py-3 min-w-[100px]">Notice</TableHead>
-                <TableHead className="text-left font-medium text-gray-500 px-4 py-3 min-w-[150px]">Location</TableHead>
-            </TableRow>
-        </TableHeader>
-        <TableBody>
-            {paginatedData.length > 0 ? ( paginatedData.map((row) => {
-                if (row.type === 'header') {
-                    return ( 
-                        <TableRow key={row.statusName} className="bg-gray-50 hover:bg-gray-100 transition"> 
-                            {/* CHANGE: Added shadow to sticky header cell */}
-                            <TableCell colSpan={11} className="sticky left-0 bg-gray-50 z-10 font-bold text-gray-800 px-4 py-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"> 
-                                <div className="flex items-center gap-2"> 
-                                    <Button variant="ghost" size="sm" onClick={() => toggleGroup(row.statusName!)} className="p-0 h-6 w-6" > 
-                                        {expandedGroups.includes(row.statusName!) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />} 
-                                    </Button> 
-                                    {row.statusName} 
-                                    <Badge variant="secondary">{row.count}</Badge> 
-                                </div> 
-                            </TableCell> 
-                        </TableRow> 
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full" style={{ minWidth: 1100 }}>
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/60">
+                  {['Candidate','Status','Score','Job Title','Client','Recruiter','Applied','CCTC','ECTC','Notice','Location'].map(h => (
+                    <th key={h} className="px-3 py-2 text-left whitespace-nowrap"
+                      style={{ fontSize: 9, color: '#94A3B8', fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {paginated.length > 0 ? paginated.map(row => {
+                  if (row.type === 'header') {
+                    return (
+                      <tr key={row.statusName} className="border-b border-gray-50 bg-gray-50/80">
+                        <td colSpan={11} className="px-3 py-1.5">
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => setExpandedGroups(prev => prev.includes(row.statusName!) ? prev.filter(g => g !== row.statusName) : [...prev, row.statusName!])}
+                              className="w-5 h-5 rounded flex items-center justify-center hover:bg-gray-200 transition-colors">
+                              {expandedGroups.includes(row.statusName!) ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                            </button>
+                            <span className="text-xs font-bold text-gray-700">{row.statusName}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600 font-semibold">{row.count}</span>
+                          </div>
+                        </td>
+                      </tr>
                     );
-                }
-                const { candidate, statusName } = row;
-                if (!candidate) return null;
+                  }
+                  const { candidate, statusName } = row;
+                  if (!candidate) return null;
+                  const sched = formatScheduleDateTime(candidate.schedule_date_time);
+                  const snl = (statusName ?? '').toLowerCase();
+                  const showSched = sched && ['interview','round','l1','l2','l3','assessment','reschedule'].some(k => snl.includes(k)) && !['rejected','selected','no show','hold'].some(k => snl.includes(k));
+                  const showReason = candidate.rejection_reason && snl.includes('reject');
+                  return (
+                    <tr key={candidate.id} className="border-b border-gray-50 hover:bg-violet-50/20 transition-colors group">
+                      <td className="px-3 py-1.5 whitespace-nowrap">
+                        <Link to={candidate.job_id ? `/jobs/candidateprofile/${candidate.id}/${candidate.job_id}` : `/jobs/unassigned/candidate/${candidate.id}/bgv`}
+                          className="text-xs font-medium text-violet-600 hover:underline hover:text-violet-800 truncate max-w-[160px] block">
+                          {candidate.name}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <div>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold ${getStatusBadgeClass(statusName)}`}>
+                            {statusName}
+                          </span>
+                          {showReason && (
+                            <UITooltip>
+                              <TooltipTrigger asChild>
+                                <p className="text-[10px] text-gray-400 mt-0.5 cursor-help truncate max-w-[140px]">{candidate.rejection_reason}</p>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs"><p>{candidate.rejection_reason}</p></TooltipContent>
+                            </UITooltip>
+                          )}
+                          {showSched && <p className="text-[10px] text-gray-400 mt-0.5">{sched}</p>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold ${getScoreBadgeClass(candidate.overall_score)}`}>
+                          {formatValue(candidate.overall_score)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <Link to={`/jobs/${candidate.job_id}`} className="text-[11px] text-violet-600 hover:underline truncate max-w-[180px] block">
+                          {formatValue(candidate.job_title)}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-1.5 text-[11px] text-gray-600 whitespace-nowrap">{formatValue(candidate.client_name)}</td>
+                      <td className="px-3 py-1.5 text-[11px] text-gray-600 whitespace-nowrap">{formatValue(candidate.recruiter_name)}</td>
+                      <td className="px-3 py-1.5 text-[11px] text-gray-500 whitespace-nowrap">{formatDate(candidate.created_at)}</td>
+                      <td className="px-3 py-1.5 text-[11px] text-gray-600 whitespace-nowrap">{formatCurrency(candidate.current_salary)}</td>
+                      <td className="px-3 py-1.5 text-[11px] text-gray-600 whitespace-nowrap">{formatCurrency(candidate.expected_salary)}</td>
+                      <td className="px-3 py-1.5 text-[11px] text-gray-600 whitespace-nowrap">{formatValue(candidate.notice_period)}</td>
+                      <td className="px-3 py-1.5 text-[11px] text-gray-600 whitespace-nowrap">{formatValue(candidate.location)}</td>
+                    </tr>
+                  );
+                }) : (
+                  <tr><td colSpan={11} className="px-3 py-8 text-center text-xs text-gray-400">No data found matching your criteria</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
 
-                const scheduledTime = formatScheduleDateTime(candidate.schedule_date_time);
-                const statusNameLower = statusName?.toLowerCase() || '';
-                const showSchedule = scheduledTime && (statusNameLower.includes('interview') || statusNameLower.includes('round') || statusNameLower.includes('l1') || statusNameLower.includes('l2') || statusNameLower.includes('l3') || statusNameLower.includes('assessment') || statusNameLower.includes('reschedule')) && !statusNameLower.includes('rejected') && !statusNameLower.includes('selected') && !statusNameLower.includes('no show') && !statusNameLower.includes('hold');
-                const showReason = candidate.rejection_reason && statusNameLower.includes('reject');
-
-                return (
-                    <TableRow key={candidate!.id} className="hover:bg-gray-50 transition group">
-                        {/* CHANGE: Added group-hover:bg-gray-50 and shadow */}
-                        <TableCell className="sticky left-0 bg-white group-hover:bg-gray-50 z-10 font-medium text-gray-800 px-4 py-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                            <Link to={ candidate!.job_id ? `/jobs/candidateprofile/${candidate!.id}/${candidate!.job_id}` : `/jobs/unassigned/candidate/${candidate!.id}/bgv` } className="text-indigo-600 hover:underline hover:text-indigo-800" >
-                                {candidate!.name}
-                            </Link>
-                        </TableCell>
-                        <TableCell className="px-4 py-2">
-                            <div>
-                                <Badge className={getStatusBadgeClass(statusName)}>
-                                    {statusName}
-                                </Badge>
-                                {showReason && (
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <p className="text-xs text-gray-500 mt-1 cursor-help truncate w-48">
-                                                {candidate.rejection_reason}
-                                            </p>
-                                        </TooltipTrigger>
-                                        <TooltipContent className="max-w-xs">
-                                            <p>{candidate.rejection_reason}</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                )}
-                                {showSchedule && (
-                                    <p className="text-xs text-gray-500 mt-1">{scheduledTime}</p>
-                                )}
-                            </div>
-                        </TableCell>
-                        <TableCell className="text-gray-600 px-4 py-2">
-                            <Badge className={getScoreBadgeClass(candidate!.overall_score)}>
-                                {formatValue(candidate!.overall_score)}
-                            </Badge>
-                        </TableCell>
-                        <TableCell className="text-gray-600 px-4 py-2">
-                            <Link to={`/jobs/${candidate!.job_id}`} className="text-indigo-600 hover:underline hover:text-indigo-800" >
-                                {formatValue(candidate!.job_title)}
-                            </Link>
-                        </TableCell>
-                        <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.client_name)}</TableCell>
-                        <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.recruiter_name)}</TableCell>
-                        <TableCell className="text-gray-600 px-4 py-2">{formatDate(candidate!.created_at)}</TableCell>
-                        <TableCell className="text-gray-600 px-4 py-2">{formatCurrency(candidate!.current_salary)}</TableCell>
-                        <TableCell className="text-gray-600 px-4 py-2">{formatCurrency(candidate!.expected_salary)}</TableCell>
-                        <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.notice_period)}</TableCell>
-                        <TableCell className="text-gray-600 px-4 py-2">{formatValue(candidate!.location)}</TableCell>
-                    </TableRow>
-                );
-            }) ) : ( <TableRow> <TableCell colSpan={11} className="h-24 text-center text-gray-500"> No data found matching your criteria. </TableCell> </TableRow> )}
-        </TableBody>
-    </Table>
-</div>
-
-      
-        {totalPages > 1 && ( <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4"> <div className="flex items-center gap-2"> <span className="text-sm text-gray-600">Rows per page:</span> <select value={itemsPerPage} onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }} className="w-[70px] h-10 border border-gray-200 rounded-md text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" > <option value="10">10</option> <option value="20">20</option> <option value="50">50</option> <option value="100">100</option> </select> </div> <div className="flex items-center gap-2"> <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} > <ChevronLeft className="h-4 w-4" /> </Button> <span className="text-sm font-medium">Page {currentPage} of {totalPages}</span> <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} > <ChevronRight className="h-4 w-4" /> </Button> </div> <span className="text-sm text-gray-600"> Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, tableRows.length)} of {tableRows.length} </span> </div> )}
-    </CardContent>
-</Card>
-      </main>
-    </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="px-4 py-2 border-t border-gray-50 flex items-center justify-between gap-3 text-[11px] text-gray-500">
+              <div className="flex items-center gap-1.5">
+                <span>Rows:</span>
+                <select value={itemsPerPage} onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                  className="border border-gray-200 rounded-md px-1.5 py-0.5 text-[11px] focus:outline-none focus:border-violet-300 bg-white">
+                  {[10,20,50,100].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setCurrentPage(p => Math.max(p-1,1))} disabled={currentPage === 1}
+                  className="w-6 h-6 rounded flex items-center justify-center border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                  <ChevronLeft size={11} />
+                </button>
+                <span className="px-2 font-medium">Page {currentPage} of {totalPages}</span>
+                <button onClick={() => setCurrentPage(p => Math.min(p+1,totalPages))} disabled={currentPage === totalPages}
+                  className="w-6 h-6 rounded flex items-center justify-center border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                  <ChevronRight size={11} />
+                </button>
+              </div>
+              <span>{startIndex+1}–{Math.min(startIndex+itemsPerPage, tableRows.length)} of {tableRows.length}</span>
+            </div>
+          )}
+        </div>
+      </div>
     </TooltipProvider>
   );
 };
-  
-
 
 export default ConsolidatedStatusReport;

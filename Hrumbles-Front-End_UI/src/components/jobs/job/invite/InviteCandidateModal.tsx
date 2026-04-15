@@ -1,9 +1,20 @@
 // src/components/jobs/job/invite/InviteCandidateModal.tsx
-// Compact two-column: job preview left, form right. Professional tight layout.
+//
+// FIXES:
+//   1. Portal rendering via createPortal → overrides parent z-index completely
+//   2. Fixed height (88vh max, no growing) with internal scroll
+//   3. Channel-aware sections: email only shows email preview,
+//      whatsapp only shows template picker + preview,
+//      both shows both
+//   4. WA config fetched on modal open (not just on channel switch)
+//      so prefillPhone works immediately when WA is chosen
+//   5. whatsappBodyVars added to SendInviteParams call
 
 import React, { useState, useEffect } from 'react';
-import { X, Send, Copy, Check, Mail, MessageSquare, Phone, Clock, ChevronDown, MapPin, Briefcase, ChevronRight } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, Send, Copy, Check, Mail, MessageSquare, Phone, MapPin, Briefcase, ChevronRight } from 'lucide-react';
 import { sendCandidateInvite } from '@/services/inviteService';
+import WaTemplatePreviewSection from './WaTemplatePreviewSection';
 import { useSelector } from 'react-redux';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -16,6 +27,7 @@ interface Job {
   hiringMode?: string; jobType?: string;
   clientDetails?: { clientName?: string };
   noticePeriod?: string; department?: string;
+  budget?: string; budgetType?: string; currencyType?: string;
 }
 
 interface InviteCandidateModalProps {
@@ -33,12 +45,85 @@ const EXPIRY = [
   { label: '14d', value: 14 }, { label: '30d', value: 30 },
 ];
 
-function tpl(name: string, title: string, src: string) {
+function emailTpl(name: string, title: string, src: string) {
   const fn = name ? name.split(' ')[0] : '';
   const g  = fn ? `Hi ${fn},` : 'Hi there,';
   return src === 'pipeline'
     ? `${g}\n\nWe'd like to update your profile for the ${title} position. It takes 2 minutes — no login needed.`
     : `${g}\n\nYou're invited to apply for the ${title} role. Takes ~3 minutes — no account needed.`;
+}
+
+function formatSalary(budget?: string, budgetType?: string): string {
+  if (!budget) return '';
+  const num = parseFloat(budget);
+  if (isNaN(num) || num === 0) return '';
+  if (budgetType === 'LPA') {
+    const lac = num / 100000;
+    return `Upto ${lac % 1 === 0 ? lac : lac.toFixed(1)} LPA`;
+  }
+  return `Upto ${num.toLocaleString('en-IN')}/-`;
+}
+
+function computeExpiryLabel(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  });
+}
+
+function countTemplateVars(text: string): number {
+  const m = text.match(/\{\{\d+\}\}/g);
+  if (!m) return 0;
+  return new Set(m.map(x => x.replace(/[{}]/g, ''))).size;
+}
+
+// Build vars array for a specific template dynamically.
+// Returns a flat array: [headerVars..., bodyVars...] matching the template's actual structure.
+// Known slot semantics (works for both dcs_job_invite_v2 and candidate_invite):
+//   header {{1}} → company/org name  (if header has vars)
+//   body   {{1}} → candidate first name
+//   body   {{2}} → industry
+//   body   {{3}} → job title/profile
+//   body   {{4}} → qualification (empty by default)
+//   body   {{5}} → salary
+//   body   {{6}} → location
+//   body   {{7}} → expiry date
+// For templates with fewer body vars (e.g. candidate_invite has 3),
+// only the first N slots are used — so body slots map to:
+//   {{1}}=firstName, {{2}}=jobTitle, {{3}}=expiry (skipping industry/qual/salary/location)
+function buildVarsForTemplate(
+  tpl: any,
+  opts: { orgName: string; firstName: string; industry: string; profile: string; salary: string; location: string; expiryLabel: string; }
+): string[] {
+  const headerComp = tpl?.components?.find((c: any) => c.type === 'HEADER');
+  const bodyComp   = tpl?.components?.find((c: any) => c.type === 'BODY');
+
+  const headerHasVars = headerComp?.text
+    ? /\{\{\d+\}\}/.test(headerComp.text) : false;
+  const bodyVarCount = bodyComp?.text
+    ? countTemplateVars(bodyComp.text) : 0;
+
+  const result: string[] = [];
+
+  // Header vars (only if header has {{N}})
+  if (headerHasVars) result.push(opts.orgName);
+
+  // Body vars — map by position depending on total body var count
+  // Templates with 3 body vars: name, jobTitle, expiry (no industry/salary/location)
+  // Templates with 7 body vars: name, industry, jobTitle, qual, salary, location, expiry
+  const bodyVarValues: Record<number, string> = {};
+  if (bodyVarCount >= 1) bodyVarValues[0] = opts.firstName;
+  if (bodyVarCount >= 2) bodyVarValues[1] = bodyVarCount <= 4 ? opts.profile : opts.industry;
+  if (bodyVarCount >= 3) bodyVarValues[2] = bodyVarCount <= 4 ? opts.expiryLabel : opts.profile;
+  if (bodyVarCount >= 4) bodyVarValues[3] = '';          // qualification
+  if (bodyVarCount >= 5) bodyVarValues[4] = opts.salary;
+  if (bodyVarCount >= 6) bodyVarValues[5] = opts.location;
+  if (bodyVarCount >= 7) bodyVarValues[6] = opts.expiryLabel;
+
+  for (let i = 0; i < bodyVarCount; i++) {
+    result.push(bodyVarValues[i] ?? '');
+  }
+
+  return result;
 }
 
 const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
@@ -47,82 +132,166 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
   candidateId, candidateOwnerId, inviteSource = 'zivex',
 }) => {
   const organizationId = useSelector((s: any) => s.auth.organization_id);
-  const [name,       setName]       = useState(prefillName);
-  const [email,      setEmail]      = useState(prefillEmail);
-  const [phone,      setPhone]      = useState(prefillPhone);
-  const [channel,    setChannel]    = useState<Channel>('email');
-  const [expiry,     setExpiry]     = useState(7);
-  const [msg,        setMsg]        = useState('');
-  const [sending,    setSending]    = useState(false);
-  const [sentLink,   setSentLink]   = useState('');
-  const [copied,     setCopied]     = useState(false);
-  const [showExpDrop,setShowExpDrop]= useState(false);
-  const [descOpen,   setDescOpen]   = useState(false);
-  const [waCfg,      setWaCfg]      = useState<any>(null);
-  const [waTpl,      setWaTpl]      = useState('');
-  const [waTplLang,  setWaTplLang]  = useState('en_US');
 
+  const [name,          setName]          = useState(prefillName);
+  const [email,         setEmail]         = useState(prefillEmail);
+  const [phone,         setPhone]         = useState(prefillPhone);
+  const [channel,       setChannel]       = useState<Channel>('email');
+  const [expiry,        setExpiry]        = useState(7);
+  const [msg,           setMsg]           = useState('');
+  const [sending,       setSending]       = useState(false);
+  const [sentLink,      setSentLink]      = useState('');
+  const [copied,        setCopied]        = useState(false);
+  const [descOpen,      setDescOpen]      = useState(false);
+  const [waCfg,         setWaCfg]         = useState<any>(null);
+  const [waTpl,         setWaTpl]         = useState('');
+  const [waTplLang,     setWaTplLang]     = useState('en_US');
+  const [waTplVars,     setWaTplVars]     = useState<string[]>(Array(8).fill(''));
+  const [showWaPreview, setShowWaPreview] = useState(false);
+
+  // ── Reset + fetch WA config on open ────────────────────────────────────────
   useEffect(() => {
-    if (isOpen && job?.title) setMsg(tpl(prefillName, job.title, inviteSource));
-  }, [isOpen, prefillName, job?.title, inviteSource]);
+    if (!isOpen) return;
+    setName(prefillName);
+    setEmail(prefillEmail);
+    setPhone(prefillPhone);
+    setChannel('email');
 
- useEffect(() => {
-    if (!isOpen || !organizationId || channel === 'email') return;
-    supabase
-      .from('hr_organizations')
-      .select('whatsapp_config')
-      .eq('id', organizationId)
-      .single()
-      .then(({ data }) => {
-        const cfg = data?.whatsapp_config;
-        if (!cfg?.is_active) return;
- 
-        setWaCfg(cfg);
- 
-        const approved = (cfg.templates || []).filter((t: any) => t.status === 'APPROVED');
- 
-        // Resolve template: default → first approved → empty
-        const resolvedName = cfg.default_template_name || approved[0]?.name || '';
-        const resolvedLang = cfg.default_template_language || approved[0]?.language || 'en_US';
- 
-        setWaTpl(resolvedName);
-        setWaTplLang(resolvedLang);
-      });
-  }, [isOpen, channel, organizationId]);
+    // AUTO-FETCH PHONE: ZiveX search view doesn't include phone column.
+    // If no phone was passed but we have a candidateId (talent pool record),
+    // fetch it from hr_talent_pool (for ZiveX) or hr_job_candidates (for pipeline).
+    if (!prefillPhone && candidateId) {
+      // Try hr_talent_pool first (ZiveX / talent search candidates)
+      supabase
+        .from('hr_talent_pool')
+        .select('phone')
+        .eq('id', candidateId)
+        .single()
+        .then(({ data }) => {
+          if (data?.phone) {
+            setPhone(data.phone);
+          } else {
+            // Fallback: hr_job_candidates (pipeline candidates)
+            supabase
+              .from('hr_job_candidates')
+              .select('phone')
+              .eq('id', candidateId)
+              .single()
+              .then(({ data: d }) => { if (d?.phone) setPhone(d.phone); });
+          }
+        });
+    }
+    setExpiry(7);
+    setSentLink('');
+    setCopied(false);
+    setDescOpen(false);
+    setWaTpl('');
+    setWaTplVars(Array(8).fill(''));
+    setShowWaPreview(false);
+    setMsg(emailTpl(prefillName, job?.title || '', inviteSource));
+
+    // Fetch WA config eagerly so it's ready when recruiter switches channel
+    if (organizationId) {
+      supabase
+        .from('hr_organizations')
+        .select('whatsapp_config, name')
+        .eq('id', organizationId)
+        .single()
+        .then(({ data }) => {
+          const cfg = data?.whatsapp_config;
+          if (!cfg?.is_active) return;
+          setWaCfg(cfg);
+
+          const approved     = (cfg.templates || []).filter((t: any) => t.status === 'APPROVED');
+          const resolvedName = cfg.default_template_name   || approved[0]?.name     || '';
+          const resolvedLang = cfg.default_template_language || approved[0]?.language || 'en_US';
+          setWaTpl(resolvedName);
+          setWaTplLang(resolvedLang);
+
+          // Auto-fill vars
+          const orgName    = cfg.company_name || data?.name || '';
+          const firstName  = (prefillName || '').split(' ')[0] || '';
+          const industry   = job?.department || '';
+          const profile    = job?.title || '';
+          const salary     = formatSalary(job?.budget, job?.budgetType);
+          const locationArr = job?.location
+            ? (Array.isArray(job.location) ? job.location : [job.location])
+            : [];
+          const location   = locationArr.join(', ');
+          const expiryLabel = computeExpiryLabel(7);
+
+          // Find the resolved template object to pass to buildVarsForTemplate
+          const resolvedTplObj = approved.find((t: any) => t.name === resolvedName);
+          const vars = buildVarsForTemplate(resolvedTplObj, { orgName, firstName, industry, profile, salary, location, expiryLabel });
+          setWaTplVars(vars);
+        });
+    }
+  }, [isOpen]);
+
+  // ── Keep expiry var in sync ─────────────────────────────────────────────────
+  const handleExpiryChange = (days: number) => {
+    setExpiry(days);
+    setWaTplVars(prev => {
+      const next = [...prev];
+      next[7] = computeExpiryLabel(days);
+      return next;
+    });
+  };
 
   if (!isOpen) return null;
 
-  const locs = job?.location ? (Array.isArray(job.location) ? job.location : [job.location]) : [];
-  const expMin = job?.experience?.min?.value;
-  const expMax = job?.experience?.max?.value;
-  const expTxt = expMin != null && expMax != null ? `${expMin}–${expMax} yrs`
+  const locs    = job?.location ? (Array.isArray(job.location) ? job.location : [job.location]) : [];
+  const expMin  = job?.experience?.min?.value;
+  const expMax  = job?.experience?.max?.value;
+  const expTxt  = expMin != null && expMax != null ? `${expMin}–${expMax} yrs`
     : expMin != null ? `${expMin}+ yrs` : expMax != null ? `≤${expMax} yrs` : null;
-  const desc = job?.description || '';
+  const desc      = job?.description || '';
   const descShort = desc.length > 220 ? desc.slice(0, 220) + '…' : desc;
   const waApproved = waCfg?.templates?.filter((t: any) => t.status === 'APPROVED') || [];
 
+  const needsEmail = channel === 'email' || channel === 'both';
+  const needsWA    = channel === 'whatsapp' || channel === 'both';
+
   const handleSend = async () => {
-    if (!email && (channel === 'email' || channel === 'both')) { toast.error('Email required'); return; }
-    if (!phone && (channel === 'whatsapp' || channel === 'both')) { toast.error('Phone required'); return; }
+    if (!email && needsEmail) { toast.error('Email required'); return; }
+    if (!phone && needsWA)    { toast.error('Phone required'); return; }
     setSending(true);
     try {
       const r = await sendCandidateInvite({
-        jobId, jobTitle: job?.title || '', candidateName: name || undefined,
-        candidateEmail: email || undefined, candidatePhone: phone || undefined,
-        channel, expiryDays: expiry, customMessage: msg || undefined,
-        candidateId, candidateOwnerId, inviteSource,
-        ...(waTpl ? { whatsappTemplateName: waTpl, whatsappTemplateLanguage: waTplLang } : {}),
+        jobId,
+        jobTitle:        job?.title || '',
+        candidateName:   name || undefined,
+        candidateEmail:  email || undefined,
+        candidatePhone:  phone || undefined,
+        channel,
+        expiryDays:      expiry,
+        customMessage:   msg || undefined,
+        candidateId,
+        candidateOwnerId,
+        inviteSource,
+        ...(waTpl ? {
+          whatsappTemplateName:     waTpl,
+          whatsappTemplateLanguage: waTplLang,
+          whatsappBodyVars:         waTplVars.some(Boolean) ? waTplVars : undefined,
+        } : {}),
       });
       setSentLink(r.link);
       toast.success('Invite sent!');
-    } catch (e: any) { toast.error(e.message || 'Failed'); }
-    finally { setSending(false); }
+    } catch (e: any) {
+      toast.error(e.message || 'Failed');
+    } finally {
+      setSending(false);
+    }
   };
 
-  const handleCopy = () => { navigator.clipboard.writeText(sentLink); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  const handleCopy = () => {
+    navigator.clipboard.writeText(sentLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const close = () => { setSentLink(''); setCopied(false); onClose(); };
 
-  // ── Shared input style ──
   const inp: React.CSSProperties = {
     width: '100%', padding: '6px 9px', borderRadius: '6px',
     border: '1px solid #E5E7EB', fontSize: '12px', color: '#111827',
@@ -133,26 +302,37 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
     textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px',
   };
 
-  return (
+  const modal = (
     <>
+      {/* Backdrop */}
       <div onClick={close} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 99999 }} />
+
+      {/* Modal */}
       <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        zIndex: 100000, width: 'calc(100vw - 24px)', maxWidth: '740px', maxHeight: '88vh',
+        zIndex: 100000, width: 'calc(100vw - 24px)', maxWidth: '740px',
+        height: '88vh', maxHeight: '88vh',
         background: '#fff', borderRadius: '12px', boxShadow: '0 20px 56px rgba(0,0,0,0.18)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
+
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           padding: '10px 14px', borderBottom: '1px solid #F3F4F6', flexShrink: 0,
-          background: 'linear-gradient(135deg,#6D28D9,#7C3AED)' }}>
+          background: 'linear-gradient(135deg,#6D28D9,#7C3AED)',
+        }}>
           <div>
             <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#fff' }}>
               {inviteSource === 'pipeline' ? 'Request Profile Update' : 'Invite Candidate'}
             </p>
             <p style={{ margin: 0, fontSize: '10px', color: 'rgba(255,255,255,0.7)' }}>
               {job?.title || jobId}
-              {inviteSource === 'pipeline' && <span style={{ marginLeft: 6, padding: '1px 6px', borderRadius: '99px', background: 'rgba(255,255,255,0.2)', fontSize: '9px', fontWeight: 700 }}>Pipeline</span>}
+              {inviteSource === 'pipeline' && (
+                <span style={{ marginLeft: 6, padding: '1px 6px', borderRadius: '99px', background: 'rgba(255,255,255,0.2)', fontSize: '9px', fontWeight: 700 }}>
+                  Pipeline
+                </span>
+              )}
             </p>
           </div>
           <button onClick={close} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex' }}>
@@ -160,22 +340,21 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
           </button>
         </div>
 
-        {/* Body */}
+        {/* Body — scrollable */}
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
           {/* LEFT: Job preview */}
-          <div style={{ width: '38%', flexShrink: 0, borderRight: '1px solid #F3F4F6',
-            background: '#FAFAFA', overflowY: 'auto', padding: '12px' }}>
+          <div style={{ width: '38%', flexShrink: 0, borderRight: '1px solid #F3F4F6', background: '#FAFAFA', overflowY: 'auto', padding: '12px' }}>
             {job ? (
               <>
                 <p style={{ margin: '0 0 6px 0', fontSize: '13px', fontWeight: 700, color: '#111827', lineHeight: 1.3 }}>{job.title}</p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px' }}>
                   {job.hiringMode && <Chip text={job.hiringMode} bg="#EDE9FE" color="#7C3AED" />}
-                  {job.department && <Chip text={job.department} bg="#D1FAE5" color="#065F46" />}
+                  {job.department  && <Chip text={job.department}  bg="#D1FAE5" color="#065F46" />}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginBottom: '10px' }}>
                   {locs.length > 0 && <MetaRow icon={<MapPin size={11} />}>{locs.join(' · ')}</MetaRow>}
-                  {expTxt         && <MetaRow icon={<Briefcase size={11} />}>{expTxt} exp</MetaRow>}
+                  {expTxt          && <MetaRow icon={<Briefcase size={11} />}>{expTxt} exp</MetaRow>}
                 </div>
                 {job.skills && job.skills.length > 0 && (
                   <div style={{ marginBottom: '10px' }}>
@@ -191,7 +370,9 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                 {desc && (
                   <div>
                     <p style={{ margin: '0 0 4px 0', fontSize: '9px', fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.4px' }}>About</p>
-                    <p style={{ margin: 0, fontSize: '11px', color: '#6B7280', lineHeight: 1.65, whiteSpace: 'pre-line' }}>{descOpen ? desc : descShort}</p>
+                    <p style={{ margin: 0, fontSize: '11px', color: '#6B7280', lineHeight: 1.65, whiteSpace: 'pre-line' }}>
+                      {descOpen ? desc : descShort}
+                    </p>
                     {desc.length > 220 && (
                       <button onClick={() => setDescOpen(!descOpen)} style={{ marginTop: '3px', background: 'none', border: 'none', color: '#7C3AED', fontSize: '10px', fontWeight: 600, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '2px' }}>
                         {descOpen ? 'Less' : 'More'}<ChevronRight size={10} style={{ transform: descOpen ? 'rotate(90deg)' : 'none' }} />
@@ -208,25 +389,30 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
             )}
           </div>
 
-          {/* RIGHT: Form */}
+          {/* RIGHT: Form — scrollable */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
             {sentLink ? (
+              /* ── Sent state ── */
               <div>
                 <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px', textAlign: 'center' }}>
-                  <p style={{ margin: '0 0 2px 0', fontSize: '12px', fontWeight: 700, color: '#15803D' }}>✅ Invite sent!</p>
+                  <p style={{ margin: '0 0 2px 0', fontSize: '12px', fontWeight: 700, color: '#15803D' }}>Invite sent!</p>
                   <p style={{ margin: 0, fontSize: '10px', color: '#166534' }}>Candidate will receive the link by {channel}.</p>
                 </div>
                 <label style={lbl}>Application Link</label>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <input readOnly value={sentLink} style={{ ...inp, fontFamily: 'monospace', fontSize: '10px', flex: 1, background: '#F9FAFB' }} />
                   <button onClick={handleCopy} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', background: copied ? '#D1FAE5' : '#7C3AED', color: copied ? '#065F46' : '#fff', fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    {copied ? <Check size={12} /> : <Copy size={12} />}{copied ? 'Copied' : 'Copy'}
+                    {copied ? <Check size={12} /> : <Copy size={12} />}
+                    {copied ? 'Copied' : 'Copy'}
                   </button>
                 </div>
-                <button onClick={close} style={{ width: '100%', marginTop: '10px', padding: '8px', borderRadius: '7px', border: '1px solid #E5E7EB', background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#374151' }}>Close</button>
+                <button onClick={close} style={{ width: '100%', marginTop: '10px', padding: '8px', borderRadius: '7px', border: '1px solid #E5E7EB', background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#374151' }}>
+                  Close
+                </button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
                 {/* Name */}
                 <div>
                   <label style={lbl}>Name <span style={{ color: '#9CA3AF', fontWeight: 400, textTransform: 'none' }}>(optional)</span></label>
@@ -237,7 +423,7 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                 <div>
                   <label style={lbl}>Send Via</label>
                   <div style={{ display: 'flex', gap: '5px' }}>
-                    {(['email','whatsapp','both'] as Channel[]).map(ch => (
+                    {(['email', 'whatsapp', 'both'] as Channel[]).map(ch => (
                       <button key={ch} onClick={() => setChannel(ch)} style={{
                         flex: 1, padding: '5px 3px', borderRadius: '6px',
                         border: channel === ch ? '2px solid #7C3AED' : '1px solid #E5E7EB',
@@ -246,33 +432,33 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                         fontSize: '10px', fontWeight: 700, cursor: 'pointer',
                         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
                       }}>
-                        {ch === 'email' && <Mail size={12} />}
+                        {ch === 'email'    && <Mail size={12} />}
                         {ch === 'whatsapp' && <MessageSquare size={12} />}
-                        {ch === 'both' && <Phone size={12} />}
+                        {ch === 'both'     && <Phone size={12} />}
                         {ch.charAt(0).toUpperCase() + ch.slice(1)}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Email */}
-                {(channel === 'email' || channel === 'both') && (
+                {/* Email — only when channel includes email */}
+                {needsEmail && (
                   <div>
                     <label style={lbl}>Email <span style={{ color: '#EF4444' }}>*</span></label>
                     <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="candidate@example.com" style={inp} />
                   </div>
                 )}
 
-                {/* Phone */}
-                {(channel === 'whatsapp' || channel === 'both') && (
+                {/* Phone — only when channel includes WA */}
+                {needsWA && (
                   <div>
                     <label style={lbl}>Phone <span style={{ color: '#EF4444' }}>*</span></label>
                     <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91 9876543210" style={inp} />
                   </div>
                 )}
 
-                {/* WA template */}
-                {(channel === 'whatsapp' || channel === 'both') && (
+                {/* WA template selector — only when WA */}
+                {needsWA && (
                   <div>
                     <label style={lbl}>WA Template</label>
                     {!waCfg ? (
@@ -282,20 +468,52 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                     ) : waApproved.length === 0 ? (
                       <p style={{ margin: 0, fontSize: '10px', color: '#9CA3AF' }}>No approved templates. Sync in Settings → WhatsApp.</p>
                     ) : (
-                      <select value={waTpl} onChange={e => { const t = waApproved.find((x: any) => x.name === e.target.value); setWaTpl(e.target.value); if (t) setWaTplLang(t.language); }} style={inp}>
+                      <select value={waTpl} onChange={e => {
+                        const t = waApproved.find((x: any) => x.name === e.target.value);
+                        setWaTpl(e.target.value);
+                        if (t) {
+                          setWaTplLang(t.language);
+                          // Rebuild vars for the new template structure
+                          const orgName     = waCfg?.company_name || '';
+                          const firstName   = (name || prefillName || '').split(' ')[0] || '';
+                          const industry    = job?.department || '';
+                          const profile     = job?.title || '';
+                          const salary      = formatSalary(job?.budget, job?.budgetType);
+                          const locationArr = job?.location ? (Array.isArray(job.location) ? job.location : [job.location]) : [];
+                          const location    = locationArr.join(', ');
+                          const expiryLabel = computeExpiryLabel(expiry);
+                          setWaTplVars(buildVarsForTemplate(t, { orgName, firstName, industry, profile, salary, location, expiryLabel }));
+                        }
+                      }} style={inp}>
                         <option value="">— Select template —</option>
-                        {waApproved.map((t: any) => <option key={t.name} value={t.name}>{t.display_name} ({t.language})</option>)}
+                        {waApproved.map((t: any) => (
+                          <option key={t.name} value={t.name}>{t.display_name} ({t.language})</option>
+                        ))}
                       </select>
                     )}
                   </div>
                 )}
 
-                {/* Expiry row */}
+                {/* WA preview panel — only when WA + template selected */}
+                {needsWA && waTpl && (
+                  <WaTemplatePreviewSection
+                    waCfg={waCfg}
+                    waTpl={waTpl}
+                    waTplVars={waTplVars}
+                    setWaTplVars={setWaTplVars}
+                    showWaPreview={showWaPreview}
+                    setShowWaPreview={setShowWaPreview}
+                    inp={inp}
+                    lbl={lbl}
+                  />
+                )}
+
+                {/* Expiry */}
                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                   <label style={{ ...lbl, marginBottom: 0, whiteSpace: 'nowrap' }}>Expires</label>
                   <div style={{ display: 'flex', gap: '3px' }}>
                     {EXPIRY.map(o => (
-                      <button key={o.value} onClick={() => setExpiry(o.value)} style={{
+                      <button key={o.value} onClick={() => handleExpiryChange(o.value)} style={{
                         padding: '3px 8px', borderRadius: '5px', fontSize: '10px', fontWeight: 600,
                         border: expiry === o.value ? '2px solid #7C3AED' : '1px solid #E5E7EB',
                         background: expiry === o.value ? '#EDE9FE' : '#fff',
@@ -305,17 +523,21 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                   </div>
                 </div>
 
-                {/* Message */}
-                <div>
-                  <label style={lbl}>Message</label>
-                  <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={5}
-                    style={{ ...inp, height: 'auto', resize: 'vertical', minHeight: '80px', lineHeight: 1.6 }} />
-                  <p style={{ margin: '2px 0 0 0', fontSize: '9px', color: '#9CA3AF' }}>Pre-filled — edit as needed.</p>
-                </div>
+                {/* Email message — only when channel includes email */}
+                {needsEmail && (
+                  <div>
+                    <label style={lbl}>Email Message</label>
+                    <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={5}
+                      style={{ ...inp, height: 'auto', resize: 'vertical', minHeight: '80px', lineHeight: 1.6 }} />
+                    <p style={{ margin: '2px 0 0 0', fontSize: '9px', color: '#9CA3AF' }}>Pre-filled — edit as needed.</p>
+                  </div>
+                )}
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: '7px' }}>
-                  <button onClick={close} style={{ flex: 1, padding: '8px', borderRadius: '7px', border: '1px solid #E5E7EB', background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#374151' }}>Cancel</button>
+                  <button onClick={close} style={{ flex: 1, padding: '8px', borderRadius: '7px', border: '1px solid #E5E7EB', background: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: '#374151' }}>
+                    Cancel
+                  </button>
                   <button onClick={handleSend} disabled={sending} style={{
                     flex: 2, padding: '8px', borderRadius: '7px', border: 'none',
                     background: sending ? '#C4B5FD' : 'linear-gradient(135deg,#6D28D9,#7C3AED)',
@@ -327,6 +549,7 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                     {sending ? <><Ring /> Sending…</> : <><Send size={12} />{inviteSource === 'pipeline' ? 'Send Update Request' : 'Send Invite'}</>}
                   </button>
                 </div>
+
               </div>
             )}
           </div>
@@ -335,6 +558,8 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
       <style>{`@keyframes ring-spin{to{transform:rotate(360deg)}}`}</style>
     </>
   );
+
+  return createPortal(modal, document.body);
 };
 
 function Chip({ text, bg, color }: { text: string; bg: string; color: string }) {

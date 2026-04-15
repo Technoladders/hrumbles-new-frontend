@@ -1,27 +1,199 @@
 // src/components/RocketReachSearch/components/RRSearchSidebar.tsx
-// Mirrors SearchSidebar.tsx design exactly:
-//   - Same gradient header, same font, same section labels
-//   - SKILLS at the top (Boolean chip builder)
-//   - Job Title, Seniority (management_levels), Location, Company below
-//   - Auto-triggers search debounced 600ms on change
-//   - PortalDropdown for location (prevents ScrollArea clipping)
+// v3 — Full filter coverage with collapsible groups
+//
+// Filter groups (each independently collapsible):
+//   CORE (open):    Skills · Job Title · Seniority · Location
+//   COMPANY (closed): Employer · Size · Industry · Revenue · Funding · Tags
+//   ROLE (closed):    Department · Exp · Previous Employer/Title
+//   EDUCATION (closed): School · Degree · Major
+//   SIGNALS (closed):   Contact Method · Job Change · News · Job Postings · Email Grade
+//   SORT (closed):      Order By · Name Search
+//
+// Every text input fires onSearch on Enter.
+// Run Search button always visible in header.
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import ReactDOM from "react-dom";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Country, State, City } from "country-state-city";
 import {
-  Search, UserSearch, RotateCcw, Loader2, X, Plus, Check,
-  MapPin, Briefcase, Building2, ChevronDown, Code2,
+  Search, UserSearch, RotateCcw, Loader2, X, MapPin, Briefcase,
+  Building2, ChevronDown, Code2, Play, GraduationCap, Bell,
+  Phone, DollarSign, Users, Filter,
 } from "lucide-react";
 import type { SkillChip, SkillMode } from "./types";
 
-// ─── Gradient SVG def ────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+export interface RRFilters {
+  // Core
+  keyword:          string;
+  name:             string;
+  titles:           string[];
+  locations:        string[];
+  managementLevels: string[];
+  skillChips:       SkillChip[];
+  // Company
+  currentEmployer:  string[];
+  companySize:      string[];
+  companyIndustry:  string[];
+  companyRevenue:   string;
+  companyPubliclyTraded: boolean;
+  companyFundingMin: string;
+  companyFundingMax: string;
+  companyTags:      string[];
+  // Role
+  department:       string[];
+  yearsExperience:  string;
+  previousEmployer: string[];
+  previousTitle:    string[];
+  // Education
+  school:           string[];
+  degree:           string[];
+  major:            string[];
+  // Signals
+  contactMethod:    string[];
+  jobChangeSignal:  string;
+  newsSignal:       string;
+  jobPostingSignal: string;
+  emailGrade:       string;
+  // Sort
+  orderBy:          "popularity" | "relevance";
+}
+
+export const DEFAULT_RR_FILTERS: RRFilters = {
+  keyword: "", name: "", titles: [], locations: [], managementLevels: [], skillChips: [],
+  currentEmployer: [], companySize: [], companyIndustry: [], companyRevenue: "",
+  companyPubliclyTraded: false, companyFundingMin: "", companyFundingMax: "", companyTags: [],
+  department: [], yearsExperience: "", previousEmployer: [], previousTitle: [],
+  school: [], degree: [], major: [],
+  contactMethod: [], jobChangeSignal: "", newsSignal: "", jobPostingSignal: "", emailGrade: "",
+  orderBy: "popularity",
+};
+
+// ─── Filter data ──────────────────────────────────────────────────────────────
+const MANAGEMENT_LEVELS = [
+  "Founder/Owner", "C-Level", "Vice President", "Head", "Director",
+  "Manager", "Senior", "Individual Contributor", "Entry", "Intern", "Unpaid",
+];
+
+const DEPARTMENTS = [
+  // Product & Engineering
+  "Software Development", "Web Development", "Data Science", "Product Management",
+  "Information Technology", "DevOps", "Information Security", "Quality Assurance",
+  "Artificial Intelligence / Machine Learning", "Digital Transformation",
+  "Project Engineering", "Network Operations", "Systems Administration",
+  "Mechanical Engineering", "Electrical Engineering", "Graphic Design",
+  "Product Design", "Web Design",
+  // Sales
+  "Business Development", "Customer Success", "Account Management",
+  "Inside Sales", "Channel Sales", "Sales Operations", "Sales Enablement",
+  // Marketing
+  "Digital Marketing", "Content Marketing", "Product Marketing", "Brand Management",
+  "Public Relations (PR)", "Event Marketing", "Advertising", "Customer Experience",
+  "Demand Generation", "Search Engine Optimization (SEO)", "Social Media Marketing",
+  // Finance
+  "Accounting", "Tax", "Investment Management", "Financial Planning & Analysis",
+  "Risk", "Financial Reporting", "Investor Relations", "Financial Strategy",
+  "Internal Audit & Control",
+  // HR
+  "Recruiting", "Compensation & Benefits", "Learning & Development",
+  "Diversity & Inclusion", "Employee & Labor Relations", "Talent Management",
+  // Operations
+  "Logistics", "Project Management", "Customer Service / Support", "Call Center",
+  "Corporate Strategy", "Facilities Management", "Quality Management",
+  "Supply Chain", "Manufacturing", "Real Estate", "Office Operations",
+  // Legal
+  "Legal Counsel", "Compliance", "Contracts", "Corporate Secretary",
+  "Litigation", "Privacy",
+  // Health
+  "Doctor", "Nursing", "Therapy", "Dental", "Fitness", "Wellness",
+  "Medical Administration", "Medical Education & Training", "Medical Research",
+  "Clinical Operations",
+  // Education
+  "Administration", "Professor", "Teacher", "Researcher",
+];
+
+const COMPANY_SIZES = [
+  "1-10", "11-50", "51-200", "201-500",
+  "501-1000", "1001-5000", "5001-10000", "10001+",
+];
+
+const REVENUE_OPTIONS = [
+  { label: "Any", value: "" },
+  { label: "< $1M",       value: "0-1000000" },
+  { label: "$1M–$10M",    value: "1000000-10000000" },
+  { label: "$10M–$50M",   value: "10000000-50000000" },
+  { label: "$50M–$100M",  value: "50000000-100000000" },
+  { label: "$100M–$500M", value: "100000000-500000000" },
+  { label: "> $500M",     value: "500000000-999999999999" },
+];
+
+const YEARS_EXP_OPTIONS = [
+  { label: "Any", value: "" },
+  { label: "1–3 years",  value: "1-3" },
+  { label: "3–5 years",  value: "3-5" },
+  { label: "5–10 years", value: "5-10" },
+  { label: "10+ years",  value: "10-100" },
+];
+
+const CONTACT_METHODS = ["mobile", "phone", "personal email", "work email"];
+
+const JOB_CHANGE_SIGNALS = [
+  { label: "Any", value: "" },
+  { label: "Company Change – 1 month",  value: "Company Change::one_month" },
+  { label: "Company Change – 3 months", value: "Company Change::three_months" },
+  { label: "Promotion – 1 month",       value: "Promotion::one_month" },
+  { label: "Promotion – 3 months",      value: "Promotion::three_months" },
+];
+
+const NEWS_SIGNALS = [
+  { label: "Any", value: "" },
+  { label: "Funding – 1 month",        value: "Funding::one_month" },
+  { label: "Funding – 3 months",       value: "Funding::three_months" },
+  { label: "Executive Hire – 1 month", value: "Executive Hire::one_month" },
+  { label: "IPO – 1 month",            value: "IPO::one_month" },
+  { label: "M&A – 1 month",            value: "Mergers & Acquisitions::one_month" },
+  { label: "Increases Headcount",      value: "Increases Headcount::one_month" },
+  { label: "Launches Product",         value: "Launches Product::one_month" },
+  { label: "Partnership – 1 month",    value: "Partnership::one_month" },
+  { label: "New Customer",             value: "New Customer::one_month" },
+];
+
+const JOB_POSTING_SIGNALS = [
+  { label: "Any", value: "" },
+  { label: "Engineering Roles",    value: "Engineering Roles::one_month" },
+  { label: "Sales Roles",          value: "Sales Roles::one_month" },
+  { label: "Marketing Roles",      value: "Marketing Roles::one_month" },
+  { label: "HR Roles",             value: "Human Resources Roles::one_month" },
+  { label: "Finance Roles",        value: "Finance Roles::one_month" },
+  { label: "ML / AI Roles",        value: "Machine Learning Roles::one_month" },
+  { label: "Operations Roles",     value: "Operations Roles::one_month" },
+  { label: "IT Roles",             value: "Information Technology Roles::one_month" },
+  { label: "Recruiting Roles",     value: "Recruiting Roles::one_month" },
+  { label: "Legal Roles",          value: "Legal Roles::one_month" },
+  { label: "Accounting Roles",     value: "Accounting Roles::one_month" },
+  { label: "R&D Roles",            value: "Research and Development Roles::one_month" },
+];
+
+const EMAIL_GRADES = [
+  { label: "Any",                   value: "" },
+  { label: "A (highest)",          value: "A" },
+  { label: "A- (high)",            value: "A-" },
+  { label: "B (medium)",           value: "B" },
+  { label: "A (professional only)", value: "A::professional only" },
+  { label: "A (personal only)",    value: "A::personal only" },
+];
+
+const COMPANY_TAGS = ["unicorn", "fortune500", "startup", "nonprofit", "public", "private"];
+
+const DEGREES = ["Bachelor's", "Master's", "MBA", "PhD", "Associate's", "JD", "MD"];
+
+// ─── Gradient def ─────────────────────────────────────────────────────────────
 const GradientDef = () => (
   <svg width="0" height="0" style={{ position: "absolute" }}>
     <defs>
-      <linearGradient id="rr-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <linearGradient id="rr-sidebar-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
         <stop offset="0%" stopColor="#9333ea" />
         <stop offset="100%" stopColor="#ec4899" />
       </linearGradient>
@@ -29,22 +201,41 @@ const GradientDef = () => (
   </svg>
 );
 
-// ─── Section label ────────────────────────────────────────────────────────────
-const SLabel: React.FC<{ children: React.ReactNode; count?: number }> = ({ children, count }) => (
-  <div className="flex items-center justify-between mb-2">
-    <span className="text-[9px] font-bold uppercase tracking-wider bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-      {children}
-    </span>
-    {!!count && (
-      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white">
-        {count}
+// ─── Collapsible section header ───────────────────────────────────────────────
+const SectionHeader: React.FC<{
+  label:       string;
+  icon:        React.ElementType;
+  isOpen:      boolean;
+  onToggle:    () => void;
+  count?:      number;
+  hasActive?:  boolean;
+}> = ({ label, icon: Icon, isOpen, onToggle, count, hasActive }) => (
+  <button type="button" onClick={onToggle}
+    className="w-full flex items-center justify-between py-2 group">
+    <div className="flex items-center gap-2">
+      <Icon size={11} className={cn("transition-colors",
+        hasActive ? "text-violet-500" : "text-slate-400 group-hover:text-slate-600")} />
+      <span className={cn("text-[10px] font-bold uppercase tracking-wider transition-colors",
+        hasActive
+          ? "bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent"
+          : "text-slate-500 group-hover:text-slate-700")}>
+        {label}
       </span>
-    )}
-  </div>
+      {(count ?? 0) > 0 && (
+        <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white">
+          {count}
+        </span>
+      )}
+    </div>
+    <ChevronDown size={10} className={cn(
+      "text-slate-400 transition-transform duration-200",
+      isOpen && "rotate-180"
+    )} />
+  </button>
 );
 
-// ─── Portal dropdown ──────────────────────────────────────────────────────────
-function PortalDropdown({ anchorRef, isOpen, maxH = 260, children }: {
+// ─── Portal dropdown for location ────────────────────────────────────────────
+function PortalDropdown({ anchorRef, isOpen, maxH = 220, children }: {
   anchorRef: React.RefObject<HTMLDivElement>; isOpen: boolean; maxH?: number; children: React.ReactNode;
 }) {
   const [style, setStyle] = useState<React.CSSProperties>({});
@@ -54,8 +245,8 @@ function PortalDropdown({ anchorRef, isOpen, maxH = 260, children }: {
     const update = () => {
       rafId = requestAnimationFrame(() => {
         if (!anchorRef.current) return;
-        const r = anchorRef.current.getBoundingClientRect();
-        const w = Math.max(r.width, 220);
+        const r    = anchorRef.current.getBoundingClientRect();
+        const w    = Math.max(r.width, 200);
         const left = Math.min(r.left, window.innerWidth - w - 8);
         const goUp = window.innerHeight - r.bottom < maxH && r.top > maxH;
         setStyle({
@@ -71,7 +262,7 @@ function PortalDropdown({ anchorRef, isOpen, maxH = 260, children }: {
   }, [isOpen, anchorRef, maxH]);
   if (!isOpen) return null;
   return ReactDOM.createPortal(
-    <div style={style} className="bg-white border border-slate-200 rounded-xl shadow-xl flex flex-col overflow-hidden">
+    <div style={style} className="bg-white border border-slate-200 rounded-xl shadow-xl flex flex-col overflow-hidden overflow-y-auto">
       {children}
     </div>,
     document.body
@@ -79,42 +270,193 @@ function PortalDropdown({ anchorRef, isOpen, maxH = 260, children }: {
 }
 
 // ─── Chip tag ─────────────────────────────────────────────────────────────────
-const ChipTag: React.FC<{ label: string; onRemove: () => void }> = ({ label, onRemove }) => (
-  <span className="inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full text-[10px] font-medium bg-white border-[1px] text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 [border-image:linear-gradient(to_right,#9333ea,#ec4899)_1]">
+const Chip: React.FC<{ label: string; onRemove: () => void; color?: string }> = ({ label, onRemove, color }) => (
+  <span className={cn(
+    "inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[10px] font-medium border",
+    color ?? "bg-violet-50 text-violet-700 border-violet-200"
+  )}>
     {label}
-    <button type="button" onClick={onRemove}
-      className="flex items-center text-slate-400 hover:text-red-400 transition-colors">
+    <button type="button" onClick={onRemove} className="text-slate-400 hover:text-red-400 transition-colors ml-0.5">
       <X size={8} />
     </button>
   </span>
 );
 
-// ─── Skill chip builder (at the top) ─────────────────────────────────────────
+// ─── Generic tag input (text → Enter/comma adds chip) ────────────────────────
+function TagInput({ selected, onChange, onSearch, placeholder, icon: Icon, chipColor }: {
+  selected: string[]; onChange: (v: string[]) => void; onSearch: () => void;
+  placeholder: string; icon: React.ElementType; chipColor?: string;
+}) {
+  const [input, setInput] = useState("");
+  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.key === "Enter" || e.key === ",") && input.trim()) {
+      e.preventDefault();
+      if (!selected.includes(input.trim())) onChange([...selected, input.trim()]);
+      setInput("");
+    } else if (e.key === "Enter" && !input.trim()) {
+      e.preventDefault(); onSearch();
+    } else if (e.key === "Backspace" && !input && selected.length) {
+      onChange(selected.slice(0, -1));
+    }
+  };
+  return (
+    <div className="space-y-1.5">
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selected.map(t => <Chip key={t} label={t} onRemove={() => onChange(selected.filter(x => x !== t))} color={chipColor} />)}
+        </div>
+      )}
+      <div className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 focus-within:border-violet-400 transition-colors">
+        <Icon size={10} className="text-slate-400 flex-shrink-0" />
+        <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
+          placeholder={placeholder}
+          className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Searchable multi-select dropdown ────────────────────────────────────────
+function SearchableMultiSelect({ label, options, selected, onChange, onSearch, icon: Icon, chipColor }: {
+  label: string; options: string[]; selected: string[]; onChange: (v: string[]) => void;
+  onSearch: () => void; icon: React.ElementType; chipColor?: string;
+}) {
+  const [q, setQ]       = useState("");
+  const [open, setOpen] = useState(false);
+  const wrapRef         = useRef<HTMLDivElement>(null);
+  const anchorRef       = useRef<HTMLDivElement>(null);
+  const inputRef        = useRef<HTMLInputElement>(null);
+
+  const filtered = useMemo(() =>
+    options.filter(o => !selected.includes(o) && o.toLowerCase().includes(q.toLowerCase())).slice(0, 30),
+  [options, selected, q]);
+
+  useEffect(() => {
+    const fn = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setOpen(false); setQ(""); }
+    };
+    document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
+  }, []);
+
+  return (
+    <div ref={wrapRef} className="space-y-1.5">
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selected.map(v => <Chip key={v} label={v} onRemove={() => onChange(selected.filter(x => x !== v))} color={chipColor} />)}
+        </div>
+      )}
+      <div ref={anchorRef}>
+        <div onClick={() => { setOpen(true); inputRef.current?.focus(); }}
+          className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 focus-within:border-violet-400 transition-colors cursor-text">
+          <Icon size={10} className="text-slate-400 flex-shrink-0" />
+          <input ref={inputRef} type="text" value={q}
+            onChange={e => { setQ(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={e => { if (e.key === "Escape") setOpen(false); if (e.key === "Enter" && !q.trim()) { setOpen(false); onSearch(); } }}
+            placeholder={label}
+            className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none" />
+          <ChevronDown size={9} className={cn("text-slate-400 flex-shrink-0 transition-transform", open && "rotate-180")} />
+        </div>
+        <PortalDropdown anchorRef={anchorRef} isOpen={open && filtered.length > 0}>
+          {filtered.map(opt => (
+            <button key={opt} type="button"
+              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange([...selected, opt]); setQ(""); setTimeout(() => inputRef.current?.focus(), 50); }}
+              className="w-full px-3 py-1.5 text-[11px] text-slate-700 hover:bg-violet-50 text-left transition-colors">
+              {opt}
+            </button>
+          ))}
+        </PortalDropdown>
+      </div>
+    </div>
+  );
+}
+
+// ─── Simple select dropdown ───────────────────────────────────────────────────
+function SimpleSelect({ value, onChange, options, placeholder }: {
+  value: string; onChange: (v: string) => void;
+  options: { label: string; value: string }[]; placeholder?: string;
+}) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)}
+      className="w-full h-8 rounded-lg border border-slate-200 bg-white text-[11px] text-slate-600 px-2.5 focus:outline-none focus:border-violet-400 cursor-pointer">
+      {placeholder && <option value="">{placeholder}</option>}
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+}
+
+// ─── Text input (single) ──────────────────────────────────────────────────────
+function TextInput({ value, onChange, onSearch, placeholder, icon: Icon }: {
+  value: string; onChange: (v: string) => void; onSearch: () => void;
+  placeholder: string; icon: React.ElementType;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 focus-within:border-violet-400 transition-colors">
+      <Icon size={10} className="text-slate-400 flex-shrink-0" />
+      <input type="text" value={value} onChange={e => onChange(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); onSearch(); } }}
+        placeholder={placeholder}
+        className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none" />
+      {value && <button type="button" onClick={() => onChange("")}><X size={9} className="text-slate-400 hover:text-red-400" /></button>}
+    </div>
+  );
+}
+
+// ─── Multi-checkbox pills ─────────────────────────────────────────────────────
+function CheckboxPills({ options, selected, onChange }: {
+  options: string[]; selected: string[]; onChange: (v: string[]) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {options.map(o => {
+        const active = selected.includes(o);
+        return (
+          <button key={o} type="button"
+            onClick={() => onChange(active ? selected.filter(x => x !== o) : [...selected, o])}
+            className={cn(
+              "px-2 py-0.5 rounded-full text-[9px] font-semibold border transition-all",
+              active
+                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white border-transparent"
+                : "bg-white text-slate-500 border-slate-200 hover:border-violet-300"
+            )}>
+            {o}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Skills chip builder ──────────────────────────────────────────────────────
 const SKILL_MODE_CONFIG: Record<SkillMode, { label: string; dot: string; chip: string }> = {
   must:    { label: "Must",    dot: "bg-violet-500", chip: "bg-violet-50 text-violet-700 border-violet-200" },
   nice:    { label: "Nice",    dot: "bg-blue-400",   chip: "bg-blue-50 text-blue-700 border-blue-200" },
   exclude: { label: "Exclude", dot: "bg-red-400",    chip: "bg-red-50 text-red-600 border-red-200" },
 };
 
-const SkillChipBuilder: React.FC<{ chips: SkillChip[]; onChange: (c: SkillChip[]) => void }> = ({ chips, onChange }) => {
-  const [input,    setInput]    = useState("");
-  const [mode,     setMode]     = useState<SkillMode>("must");
+const SkillChipBuilder: React.FC<{ chips: SkillChip[]; onChange: (c: SkillChip[]) => void; onSearch: () => void }> = ({ chips, onChange, onSearch }) => {
+  const [input, setInput]     = useState("");
+  const [mode, setMode]       = useState<SkillMode>("must");
   const [showBool, setShowBool] = useState(false);
-  const [boolIn,   setBoolIn]   = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [boolIn, setBoolIn]   = useState("");
+  const inputRef              = useRef<HTMLInputElement>(null);
 
   const addChips = (raw: string, m: SkillMode) => {
-    const labels = raw.split(",").map(s => s.trim()).filter(Boolean);
+    const labels   = raw.split(",").map(s => s.trim()).filter(Boolean);
     const existing = new Set(chips.map(c => c.label.toLowerCase()));
-    const next = labels.filter(l => !existing.has(l.toLowerCase())).map(l => ({ label: l, mode: m }));
+    const next     = labels.filter(l => !existing.has(l.toLowerCase())).map(l => ({ label: l, mode: m }));
     if (next.length) onChange([...chips, ...next]);
   };
 
   const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if ((e.key === "Enter" || e.key === ",") && input.trim()) {
       e.preventDefault(); addChips(input, mode); setInput("");
+    } else if (e.key === "Enter" && !input.trim()) {
+      e.preventDefault(); onSearch();
+    } else if (e.key === "Backspace" && !input && chips.length) {
+      onChange(chips.slice(0, -1));
     }
-    if (e.key === "Backspace" && !input && chips.length) onChange(chips.slice(0, -1));
   };
 
   const applyBoolean = () => {
@@ -146,22 +488,17 @@ const SkillChipBuilder: React.FC<{ chips: SkillChip[]; onChange: (c: SkillChip[]
     onChange(chips.map((c, i) => i === idx ? { ...c, mode: next } : c));
   };
 
-  const counts = {
-    must:    chips.filter(c => c.mode === "must").length,
-    nice:    chips.filter(c => c.mode === "nice").length,
-    exclude: chips.filter(c => c.mode === "exclude").length,
-  };
+  const counts = { must: chips.filter(c => c.mode === "must").length, nice: chips.filter(c => c.mode === "nice").length, exclude: chips.filter(c => c.mode === "exclude").length };
 
   return (
     <div className="space-y-1.5">
-      {/* Mode selector + AND/NOT */}
       <div className="flex items-center gap-1">
-        {(["must", "nice", "exclude"] as SkillMode[]).map(m => {
+        {(["must","nice","exclude"] as SkillMode[]).map(m => {
           const cfg = SKILL_MODE_CONFIG[m];
           return (
             <button key={m} type="button" onClick={() => setMode(m)}
               className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all",
-                mode === m ? `${cfg.chip} border-current` : "text-slate-400 border-slate-200 bg-white hover:border-slate-300")}>
+                mode === m ? `${cfg.chip} border-current` : "text-slate-400 border-slate-200 bg-white")}>
               <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
               {cfg.label}
               {counts[m] > 0 && <span className="opacity-70">({counts[m]})</span>}
@@ -175,46 +512,37 @@ const SkillChipBuilder: React.FC<{ chips: SkillChip[]; onChange: (c: SkillChip[]
         </button>
       </div>
 
-      {/* Boolean input */}
       {showBool && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 space-y-1.5">
-          <p className="text-[8px] text-slate-400">
-            e.g. <span className="text-violet-500">Python AND React NOT PHP</span> · <span className="text-violet-500">MUST:Python</span>
-          </p>
+          <p className="text-[8px] text-slate-400">e.g. <span className="text-violet-500">Python AND React NOT PHP</span></p>
           <div className="flex gap-1">
             <input type="text" value={boolIn} onChange={e => setBoolIn(e.target.value)}
               onKeyDown={e => e.key === "Enter" && applyBoolean()} placeholder="Python AND React NOT PHP"
               className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] focus:outline-none focus:border-violet-400" />
             <button type="button" onClick={applyBoolean}
-              className="px-2 py-1 rounded bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] font-bold">
-              Parse
-            </button>
+              className="px-2 py-1 rounded bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] font-bold">Parse</button>
           </div>
         </div>
       )}
 
-      {/* Chip input box */}
       <div onClick={() => inputRef.current?.focus()}
         className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 flex flex-wrap gap-1 min-h-[34px] cursor-text focus-within:border-violet-400 transition-colors">
         {chips.map((chip, i) => {
           const cfg = SKILL_MODE_CONFIG[chip.mode];
           return (
             <span key={i} onClick={() => cycleMode(i)}
-              className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-medium cursor-pointer", cfg.chip)}
-              title={`Click to cycle mode`}>
+              className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-medium cursor-pointer", cfg.chip)}>
               <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
               {chip.label}
-              <button type="button" onClick={e => { e.stopPropagation(); onChange(chips.filter((_, j) => j !== i)); }}
-                className="ml-0.5 opacity-60 hover:opacity-100">×</button>
+              <button type="button" onClick={e => { e.stopPropagation(); onChange(chips.filter((_, j) => j !== i)); }} className="ml-0.5 opacity-60 hover:opacity-100">×</button>
             </span>
           );
         })}
-        <input ref={inputRef} type="text" value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKey} placeholder={chips.length === 0 ? "Type skill, Enter…" : ""}
+        <input ref={inputRef} type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
+          placeholder={chips.length === 0 ? "Type skill, Enter…" : ""}
           className="flex-1 min-w-[60px] bg-transparent text-[11px] text-slate-700 placeholder-slate-300 focus:outline-none" />
       </div>
 
-      {/* Legend */}
       <div className="flex items-center gap-2 text-[8px] text-slate-400">
         {(["must","nice","exclude"] as SkillMode[]).map(m => (
           <span key={m} className="flex items-center gap-0.5">
@@ -222,68 +550,55 @@ const SkillChipBuilder: React.FC<{ chips: SkillChip[]; onChange: (c: SkillChip[]
             {m === "must" ? "strict" : m === "nice" ? "boost" : "exclude"}
           </span>
         ))}
-        <span className="ml-auto">click chip to cycle</span>
+        <span className="ml-auto">click to cycle</span>
       </div>
     </div>
   );
 };
 
-// ─── Location multi-select ────────────────────────────────────────────────────
+// ─── Location select ──────────────────────────────────────────────────────────
 type LocType = "country" | "state" | "city";
-interface LocOpt { value: string; label: string; type: LocType; }
 const LOC_STYLE: Record<LocType, string> = {
   country: "bg-blue-50 text-blue-700 border-blue-200",
   state:   "bg-orange-50 text-orange-700 border-orange-200",
   city:    "bg-purple-50 text-purple-700 border-purple-200",
 };
-const ALL_COUNTRIES: LocOpt[] = Country.getAllCountries().map(c => ({ value: c.name, label: `${c.flag ?? ""} ${c.name}`.trim(), type: "country" }));
-const ALL_STATES: LocOpt[] = State.getAllStates().map(s => ({ value: s.name, label: s.name, type: "state" }));
-const POPULAR_COUNTRIES = ["India","United States","United Kingdom","Canada","Australia","Germany","Singapore","UAE","France","Netherlands"];
-function searchLocs(q: string, selected: string[]): LocOpt[] {
+const ALL_COUNTRIES = Country.getAllCountries().map(c => ({ value: c.name, label: `${c.flag ?? ""} ${c.name}`.trim(), type: "country" as LocType }));
+const ALL_STATES    = State.getAllStates().map(s => ({ value: s.name, label: s.name, type: "state" as LocType }));
+const POPULAR       = ["India","United States","United Kingdom","Canada","Australia","Germany","Singapore","UAE","France","Netherlands"];
+
+function searchLocs(q: string, selected: string[]) {
   const lq = q.toLowerCase().trim();
-  if (!lq) return ALL_COUNTRIES.filter(c => POPULAR_COUNTRIES.includes(c.value) && !selected.includes(c.value)).slice(0, 10);
-  const out: LocOpt[] = [];
-  ALL_COUNTRIES.filter(c => c.value.toLowerCase().includes(lq) && !selected.includes(c.value)).slice(0, 6).forEach(c => out.push(c));
-  ALL_STATES.filter(s => s.value.toLowerCase().includes(lq) && !selected.includes(s.value)).slice(0, 5).forEach(s => out.push(s));
-  if (lq.length >= 3) City.getAllCities().filter(c => c.name.toLowerCase().includes(lq) && !selected.includes(c.name)).slice(0, 8).forEach(c => out.push({ value: c.name, label: c.name, type: "city" }));
+  if (!lq) return ALL_COUNTRIES.filter(c => POPULAR.includes(c.value) && !selected.includes(c.value)).slice(0, 10);
+  const out: typeof ALL_COUNTRIES = [];
+  ALL_COUNTRIES.filter(c => c.value.toLowerCase().includes(lq) && !selected.includes(c.value)).slice(0, 5).forEach(c => out.push(c));
+  ALL_STATES.filter(s => s.value.toLowerCase().includes(lq) && !selected.includes(s.value)).slice(0, 4).forEach(s => out.push({ ...s, type: "state" }));
+  if (lq.length >= 3) City.getAllCities().filter(c => c.name.toLowerCase().includes(lq) && !selected.includes(c.name)).slice(0, 6).forEach(c => out.push({ value: c.name, label: c.name, type: "city" }));
   return out.slice(0, 20);
 }
+
 function getLocType(val: string): LocType {
   if (ALL_COUNTRIES.some(c => c.value === val)) return "country";
   if (ALL_STATES.some(s => s.value === val)) return "state";
   return "city";
 }
 
-function LocationSelect({ selected, onChange }: { selected: string[]; onChange: (v: string[]) => void }) {
-  const [q, setQ] = useState("");
+function LocationSelect({ selected, onChange, onSearch }: { selected: string[]; onChange: (v: string[]) => void; onSearch: () => void }) {
+  const [q, setQ]   = useState("");
   const [open, setOpen] = useState(false);
   const wrapRef   = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLInputElement>(null);
-  const options = useMemo(() => searchLocs(q, selected), [q, selected]);
- 
-  // Close on outside click
+  const options   = useMemo(() => searchLocs(q, selected), [q, selected]);
+
   useEffect(() => {
     const fn = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setQ("");
-      }
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setOpen(false); setQ(""); }
     };
     document.addEventListener("mousedown", fn);
     return () => document.removeEventListener("mousedown", fn);
   }, []);
- 
-  const handleOptionMouseDown = (opt: LocOpt, e: React.MouseEvent) => {
-    // Prevent the document mousedown handler from firing and closing the dropdown
-    e.preventDefault();
-    e.stopPropagation();
-    onChange([...selected, opt.value]);
-    setQ("");
-    // Keep dropdown open so user can add more
-    setTimeout(() => inputRef.current?.focus(), 50);
-  };
- 
+
   return (
     <div ref={wrapRef} className="space-y-1.5">
       {selected.length > 0 && (
@@ -293,216 +608,101 @@ function LocationSelect({ selected, onChange }: { selected: string[]; onChange: 
             return (
               <span key={val} className={cn("inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full text-[10px] font-medium border", LOC_STYLE[t])}>
                 {val}
-                <button
-                  type="button"
-                  onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange(selected.filter(x => x !== val)); }}
-                >
-                  <X size={8} />
-                </button>
+                <button type="button" onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange(selected.filter(x => x !== val)); }}><X size={8} /></button>
               </span>
             );
           })}
         </div>
       )}
       <div ref={anchorRef}>
-        <div
-          className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8"
-          onMouseDown={e => { e.stopPropagation(); }}
-          onClick={() => { setOpen(true); inputRef.current?.focus(); }}
-        >
+        <div onClick={() => { setOpen(true); inputRef.current?.focus(); }}
+          className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 focus-within:border-violet-400 transition-colors cursor-text"
+          onMouseDown={e => e.stopPropagation()}>
           <MapPin size={10} className="text-slate-400 flex-shrink-0" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={q}
+          <input ref={inputRef} type="text" value={q}
             onChange={e => { setQ(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)}
+            onKeyDown={e => { if (e.key === "Enter" && !q.trim()) { setOpen(false); onSearch(); } }}
             placeholder="Country, state or city…"
-            className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none"
-          />
-          {q && (
-            <button
-              type="button"
-              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setQ(""); }}
-              className="text-slate-400 hover:text-slate-600"
-            >
-              <X size={9} />
-            </button>
-          )}
+            className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none" />
+          {q && <button type="button" onMouseDown={e => { e.preventDefault(); setQ(""); }} className="text-slate-400 hover:text-slate-600"><X size={9} /></button>}
         </div>
- 
         <PortalDropdown anchorRef={anchorRef} isOpen={open && options.length > 0}>
-          <div className="overflow-y-auto" style={{ maxHeight: 220 }}>
-            {options.map(opt => (
-              <button
-                key={opt.value}
-                type="button"
-                // Use onMouseDown instead of onClick to fire BEFORE document mousedown
-                onMouseDown={e => handleOptionMouseDown(opt, e)}
-                className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-violet-50 text-left transition-colors"
-              >
-                <span className={cn("text-[8px] px-1 py-0.5 rounded border font-semibold", LOC_STYLE[opt.type])}>
-                  {opt.type[0].toUpperCase()}
-                </span>
-                <span className="text-[11px] text-slate-700 truncate">{opt.label}</span>
-              </button>
-            ))}
-          </div>
+          {options.map(opt => (
+            <button key={opt.value} type="button"
+              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange([...selected, opt.value]); setQ(""); setTimeout(() => inputRef.current?.focus(), 50); }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-violet-50 text-left transition-colors">
+              <span className={cn("text-[8px] px-1 py-0.5 rounded border font-semibold", LOC_STYLE[opt.type])}>{opt.type[0].toUpperCase()}</span>
+              <span className="text-[11px] text-slate-700 truncate">{opt.label}</span>
+            </button>
+          ))}
         </PortalDropdown>
       </div>
     </div>
   );
 }
 
-// ─── Title multi-select (free text + Enter) ───────────────────────────────────
-function TitleSelect({ selected, onChange }: { selected: string[]; onChange: (v: string[]) => void }) {
-  const [input, setInput] = useState("");
-  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === "Enter" || e.key === ",") && input.trim()) {
-      e.preventDefault();
-      if (!selected.includes(input.trim())) onChange([...selected, input.trim()]);
-      setInput("");
-    }
-    if (e.key === "Backspace" && !input && selected.length) onChange(selected.slice(0, -1));
-  };
-  return (
-    <div className="space-y-1.5">
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {selected.map(t => <ChipTag key={t} label={t} onRemove={() => onChange(selected.filter(x => x !== t))} />)}
-        </div>
-      )}
-      <div className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8">
-        <Briefcase size={10} className="text-slate-400 flex-shrink-0" />
-        <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
-          placeholder="Type title, Enter to add…"
-          className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none" />
-      </div>
-    </div>
-  );
-}
+// ─── Divider ──────────────────────────────────────────────────────────────────
+const Div = () => <div className="h-px bg-slate-100" />;
 
-// ─── Company select ───────────────────────────────────────────────────────────
-function CompanySelect({ selected, onChange }: { selected: string[]; onChange: (v: string[]) => void }) {
-  const [input, setInput] = useState("");
-  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === "Enter" || e.key === ",") && input.trim()) {
-      e.preventDefault();
-      if (!selected.includes(input.trim())) onChange([...selected, input.trim()]);
-      setInput("");
-    }
-    if (e.key === "Backspace" && !input && selected.length) onChange(selected.slice(0, -1));
-  };
-  return (
-    <div className="space-y-1.5">
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {selected.map(c => <ChipTag key={c} label={c} onRemove={() => onChange(selected.filter(x => x !== c))} />)}
-        </div>
-      )}
-      <div className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8">
-        <Building2 size={10} className="text-slate-400 flex-shrink-0" />
-        <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
-          placeholder="Type company, Enter to add…"
-          className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none" />
-      </div>
-    </div>
-  );
-}
+// ─── Sub-label ────────────────────────────────────────────────────────────────
+const SL: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{children}</p>
+);
 
-// ─── Management level pills ───────────────────────────────────────────────────
-const MGMT_LEVELS = ["Entry", "Senior", "Manager", "Director", "VP", "C-Suite", "Owner"];
-function MgmtLevelSelect({ selected, onChange }: { selected: string[]; onChange: (v: string) => void }) {
-  return (
-    <div className="flex flex-wrap gap-1">
-      {MGMT_LEVELS.map(l => {
-        const active = selected.includes(l);
-        return (
-          <button key={l} type="button" onClick={() => onChange(l)}
-            className={cn(
-              "px-2 py-0.5 rounded-full text-[9px] font-semibold border transition-all",
-              active
-                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white border-transparent"
-                : "bg-white text-slate-500 border-slate-200 hover:border-violet-300"
-            )}>
-            {l}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── Advanced section ─────────────────────────────────────────────────────────
-function SimpleTextInput({ value, onChange, placeholder, icon: Icon }: {
-  value: string; onChange: (v: string) => void; placeholder: string; icon: React.ElementType;
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8">
-      <Icon size={10} className="text-slate-400 flex-shrink-0" />
-      <input type="text" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none" />
-    </div>
-  );
-}
-
-// ─── Main Sidebar ─────────────────────────────────────────────────────────────
+// ─── Props ────────────────────────────────────────────────────────────────────
 interface RRSearchSidebarProps {
-  // Filter state
-  name:             string;
-  titles:           string[];
-  locations:        string[];
-  currentEmployer:  string[];
-  keyword:          string;
-  skillChips:       SkillChip[];
-  managementLevels: string[];
-  department:       string;
-  companyIndustry:  string;
-  companySize:      string;
-  orderBy:          "popularity" | "relevance";
-  pageSize:         number;
-  // Setters
-  onSetName:            (v: string) => void;
-  onSetTitles:          (v: string[]) => void;
-  onSetLocations:       (v: string[]) => void;
-  onSetCurrentEmployer: (v: string[]) => void;
-  onSetKeyword:         (v: string) => void;
-  onSetSkillChips:      (v: SkillChip[]) => void;
-  onToggleMgmtLevel:    (v: string) => void;
-  onSetDepartment:      (v: string) => void;
-  onSetCompanyIndustry: (v: string) => void;
-  onSetCompanySize:     (v: string) => void;
-  onSetOrderBy:         (v: "popularity" | "relevance") => void;
-  onSetPageSize:        (v: number) => void;
-  onClearAll:           () => void;
-  // Status
-  isLoading:    boolean;
+  filters:    RRFilters;
+  onChange:   (patch: Partial<RRFilters>) => void;
+  onClearAll: () => void;
+  onSearch:   () => void;
+  isLoading:  boolean;
   totalEntries: number;
   filterCount:  number;
   hasFilters:   boolean;
 }
 
+// ─── Main sidebar ─────────────────────────────────────────────────────────────
 export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
-  name, titles, locations, currentEmployer, keyword, skillChips,
-  managementLevels, department, companyIndustry, companySize, orderBy, pageSize,
-  onSetName, onSetTitles, onSetLocations, onSetCurrentEmployer, onSetKeyword,
-  onSetSkillChips, onToggleMgmtLevel, onSetDepartment, onSetCompanyIndustry,
-  onSetCompanySize, onSetOrderBy, onSetPageSize, onClearAll,
+  filters, onChange, onClearAll, onSearch,
   isLoading, totalEntries, filterCount, hasFilters,
 }) => {
-  const [showAdv, setShowAdv] = useState(false);
+  // Section open/closed state
+  const [open, setOpen] = useState({
+    core:      true,
+    company:   false,
+    role:      false,
+    education: false,
+    signals:   false,
+    sort:      false,
+  });
+
+  const toggle = (k: keyof typeof open) =>
+    setOpen(prev => ({ ...prev, [k]: !prev[k] }));
+
+  const s = filters; // shorthand
+  const set = (patch: Partial<RRFilters>) => onChange(patch);
+
+  // Active filter counts per section
+  const companyCnt = s.currentEmployer.length + s.companySize.length + s.companyIndustry.length
+    + (s.companyRevenue ? 1 : 0) + (s.companyPubliclyTraded ? 1 : 0)
+    + (s.companyFundingMin ? 1 : 0) + (s.companyFundingMax ? 1 : 0) + s.companyTags.length;
+  const roleCnt = s.department.length + (s.yearsExperience ? 1 : 0) + s.previousEmployer.length + s.previousTitle.length;
+  const eduCnt  = s.school.length + s.degree.length + s.major.length;
+  const sigCnt  = s.contactMethod.length + (s.jobChangeSignal ? 1 : 0) + (s.newsSignal ? 1 : 0) + (s.jobPostingSignal ? 1 : 0) + (s.emailGrade ? 1 : 0);
+  const coreCnt = s.titles.length + s.locations.length + s.managementLevels.length + s.skillChips.length;
 
   return (
-    <div className="flex flex-col h-full bg-white border-r border-slate-150">
+    <div className="flex flex-col h-full bg-white border-r border-slate-100">
       <GradientDef />
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex-shrink-0 px-4 pt-4 pb-3 border-b border-slate-100">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <UserSearch size={12} style={{ stroke: "url(#rr-gradient)" }} />
+            <UserSearch size={12} style={{ stroke: "url(#rr-sidebar-gradient)" }} />
             <span className="text-[10px] font-medium bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-            Search Profiles
+              Search Profiles
             </span>
             {isLoading && <Loader2 size={11} className="animate-spin text-slate-400" />}
           </div>
@@ -517,135 +717,223 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
         {/* Result count */}
         {totalEntries > 0 && (
           <div className="mb-3 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between">
-            <span className="text-[10px] bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent font-medium">Profiles found</span>
+            <span className="text-[10px] bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent font-medium">Found</span>
             <span className="text-[10px] font-semibold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">{totalEntries.toLocaleString()}</span>
           </div>
         )}
 
-        {/* Keyword search */}
-        <div className="rounded-lg p-[1px] bg-slate-200 focus-within:bg-gradient-to-r focus-within:from-purple-600 focus-within:to-pink-600 transition-all">
+        {/* Keyword */}
+        <div className="rounded-lg p-[1px] bg-slate-200 focus-within:bg-gradient-to-r focus-within:from-purple-600 focus-within:to-pink-600 transition-all mb-3">
           <div className="relative bg-white rounded-lg">
             <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input type="text" placeholder="Keyword, name…" value={keyword} onChange={e => onSetKeyword(e.target.value)}
+            <input type="text" placeholder="Keyword search…" value={s.keyword}
+              onChange={e => set({ keyword: e.target.value })}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); onSearch(); } }}
               className="w-full h-8 pl-7 pr-3 rounded-lg text-[11px] text-slate-600 placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic bg-transparent border-none outline-none" />
           </div>
         </div>
+
+        {/* Run Search */}
+        <button type="button" onClick={onSearch} disabled={isLoading || !hasFilters}
+          className={cn("w-full flex items-center justify-center gap-2 py-2 rounded-lg text-[12px] font-bold transition-all",
+            hasFilters && !isLoading
+              ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:opacity-90 shadow-sm"
+              : "bg-slate-100 text-slate-400 cursor-not-allowed")}>
+          {isLoading
+            ? <><Loader2 size={12} className="animate-spin" /> Searching…</>
+            : <><Play size={11} className="fill-current" /> Run Search</>}
+        </button>
       </div>
 
-      {/* Filters */}
+      {/* ── Filter sections ── */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="px-4 py-3 space-y-4">
+        <div className="px-4">
 
-          {/* ── SKILLS (at the top) ── */}
-          <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Code2 size={11} style={{ stroke: "url(#rr-gradient)" }} />
-              <SLabel count={skillChips.length}>Skills</SLabel>
+          {/* ── CORE ── */}
+          <SectionHeader label="Core Filters" icon={Filter} isOpen={open.core} onToggle={() => toggle("core")} count={coreCnt} hasActive={coreCnt > 0} />
+          {open.core && (
+            <div className="pb-3 space-y-3">
+              <div>
+                <SL>Skills</SL>
+                <SkillChipBuilder chips={s.skillChips} onChange={v => set({ skillChips: v })} onSearch={onSearch} />
+              </div>
+              <div>
+                <SL>Job Title</SL>
+                <TagInput selected={s.titles} onChange={v => set({ titles: v })} onSearch={onSearch} placeholder="Add title, Enter…" icon={Briefcase} />
+              </div>
+              <div>
+                <SL>Seniority Level</SL>
+                <CheckboxPills options={MANAGEMENT_LEVELS} selected={s.managementLevels} onChange={v => set({ managementLevels: v })} />
+              </div>
+              <div>
+                <SL>Location</SL>
+                <LocationSelect selected={s.locations} onChange={v => set({ locations: v })} onSearch={onSearch} />
+              </div>
             </div>
-            <SkillChipBuilder chips={skillChips} onChange={onSetSkillChips} />
-          </div>
+          )}
 
-          <div className="h-px bg-slate-100" />
+          <Div />
 
-          {/* ── Name ── */}
-          <div>
-            <SLabel>Name</SLabel>
-            <div className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8">
-              <Search size={10} className="text-slate-400 flex-shrink-0" />
-              <input type="text" value={name} onChange={e => onSetName(e.target.value)} placeholder="e.g. Marc Benioff"
-                className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none" />
-              {name && <button type="button" onClick={() => onSetName("")}><X size={9} className="text-slate-400 hover:text-red-400" /></button>}
-            </div>
-          </div>
-
-          <div className="h-px bg-slate-100" />
-
-          {/* ── Job Title ── */}
-          <div>
-            <SLabel count={titles.length}>Job Title</SLabel>
-            <TitleSelect selected={titles} onChange={onSetTitles} />
-          </div>
-
-          <div className="h-px bg-slate-100" />
-
-          {/* ── Management Level ── */}
-          <div>
-            <SLabel count={managementLevels.length}>Management Level</SLabel>
-            <MgmtLevelSelect selected={managementLevels} onChange={onToggleMgmtLevel} />
-          </div>
-
-          <div className="h-px bg-slate-100" />
-
-          {/* ── Location ── */}
-          <div>
-            <SLabel count={locations.length}>Location</SLabel>
-            <LocationSelect selected={locations} onChange={onSetLocations} />
-          </div>
-
-          <div className="h-px bg-slate-100" />
-
-          {/* ── Company ── */}
-          <div>
-            <SLabel count={currentEmployer.length}>Current Company</SLabel>
-            <CompanySelect selected={currentEmployer} onChange={onSetCurrentEmployer} />
-          </div>
-
-          <div className="h-px bg-slate-100" />
-
-          {/* ── Advanced toggle ── */}
-          <button type="button" onClick={() => setShowAdv(v => !v)}
-            className="flex items-center gap-1.5 text-[10px] font-medium bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-            <ChevronDown size={10} className={cn("transition-transform text-violet-500", showAdv && "rotate-180")} />
-            {showAdv ? "Hide" : "More"} filters
-          </button>
-
-          {showAdv && (
-            <>
+          {/* ── COMPANY ── */}
+          <SectionHeader label="Company" icon={Building2} isOpen={open.company} onToggle={() => toggle("company")} count={companyCnt} hasActive={companyCnt > 0} />
+          {open.company && (
+            <div className="pb-3 space-y-3">
               <div>
-                <SLabel>Industry</SLabel>
-                <SimpleTextInput value={companyIndustry} onChange={onSetCompanyIndustry}
-                  placeholder="e.g. Software Engineering" icon={Building2} />
+                <SL>Current Employer</SL>
+                <TagInput selected={s.currentEmployer} onChange={v => set({ currentEmployer: v })} onSearch={onSearch} placeholder="Add company, Enter…" icon={Building2} chipColor="bg-blue-50 text-blue-700 border-blue-200" />
               </div>
               <div>
-                <SLabel>Company Size</SLabel>
-                <SimpleTextInput value={companySize} onChange={onSetCompanySize}
-                  placeholder="e.g. 51-200" icon={Building2} />
+                <SL>Company Size</SL>
+                <CheckboxPills options={COMPANY_SIZES} selected={s.companySize} onChange={v => set({ companySize: v })} />
               </div>
               <div>
-                <SLabel>Department</SLabel>
-                <SimpleTextInput value={department} onChange={onSetDepartment}
-                  placeholder="e.g. Engineering" icon={Briefcase} />
+                <SL>Industry</SL>
+                <TagInput selected={s.companyIndustry} onChange={v => set({ companyIndustry: v })} onSearch={onSearch} placeholder="e.g. Software Engineering" icon={Building2} chipColor="bg-teal-50 text-teal-700 border-teal-200" />
               </div>
-
-              <div className="h-px bg-slate-100" />
-
-              {/* Order + Page size */}
+              <div>
+                <SL>Revenue</SL>
+                <SimpleSelect value={s.companyRevenue} onChange={v => set({ companyRevenue: v })} options={REVENUE_OPTIONS} placeholder="Any revenue" />
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="pub-traded" checked={s.companyPubliclyTraded}
+                  onChange={e => set({ companyPubliclyTraded: e.target.checked })}
+                  className="accent-violet-600 cursor-pointer" />
+                <label htmlFor="pub-traded" className="text-[11px] text-slate-600 cursor-pointer">Publicly Traded only</label>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <SLabel>Order By</SLabel>
-                  <select value={orderBy} onChange={e => onSetOrderBy(e.target.value as any)}
-                    className="w-full h-7 rounded-lg border border-slate-200 bg-white text-[11px] text-slate-600 px-2 focus:outline-none focus:border-violet-400">
-                    <option value="popularity">Popularity</option>
-                    <option value="relevance">Relevance</option>
-                  </select>
+                  <SL>Funding Min ($)</SL>
+                  <input type="number" value={s.companyFundingMin} onChange={e => set({ companyFundingMin: e.target.value })}
+                    onKeyDown={e => { if (e.key === "Enter") onSearch(); }}
+                    placeholder="e.g. 1000000"
+                    className="w-full h-8 rounded-lg border border-slate-200 px-2.5 text-[11px] text-slate-600 focus:outline-none focus:border-violet-400" />
                 </div>
-
+                <div>
+                  <SL>Funding Max ($)</SL>
+                  <input type="number" value={s.companyFundingMax} onChange={e => set({ companyFundingMax: e.target.value })}
+                    onKeyDown={e => { if (e.key === "Enter") onSearch(); }}
+                    placeholder="e.g. 50000000"
+                    className="w-full h-8 rounded-lg border border-slate-200 px-2.5 text-[11px] text-slate-600 focus:outline-none focus:border-violet-400" />
+                </div>
               </div>
-            </>
+              <div>
+                <SL>Company Tags</SL>
+                <CheckboxPills options={COMPANY_TAGS} selected={s.companyTags} onChange={v => set({ companyTags: v })} />
+              </div>
+            </div>
           )}
+
+          <Div />
+
+          {/* ── ROLE ── */}
+          <SectionHeader label="Role Details" icon={Briefcase} isOpen={open.role} onToggle={() => toggle("role")} count={roleCnt} hasActive={roleCnt > 0} />
+          {open.role && (
+            <div className="pb-3 space-y-3">
+              <div>
+                <SL>Department</SL>
+                <SearchableMultiSelect label="Search departments…" options={DEPARTMENTS} selected={s.department} onChange={v => set({ department: v })} onSearch={onSearch} icon={Briefcase} chipColor="bg-amber-50 text-amber-700 border-amber-200" />
+              </div>
+              <div>
+                <SL>Years of Experience</SL>
+                <SimpleSelect value={s.yearsExperience} onChange={v => set({ yearsExperience: v })} options={YEARS_EXP_OPTIONS} placeholder="Any experience" />
+              </div>
+              <div>
+                <SL>Previous Employer</SL>
+                <TagInput selected={s.previousEmployer} onChange={v => set({ previousEmployer: v })} onSearch={onSearch} placeholder="Past company, Enter…" icon={Building2} chipColor="bg-slate-100 text-slate-700 border-slate-200" />
+              </div>
+              <div>
+                <SL>Previous Title</SL>
+                <TagInput selected={s.previousTitle} onChange={v => set({ previousTitle: v })} onSearch={onSearch} placeholder="Past title, Enter…" icon={Briefcase} chipColor="bg-slate-100 text-slate-700 border-slate-200" />
+              </div>
+            </div>
+          )}
+
+          <Div />
+
+          {/* ── EDUCATION ── */}
+          <SectionHeader label="Education" icon={GraduationCap} isOpen={open.education} onToggle={() => toggle("education")} count={eduCnt} hasActive={eduCnt > 0} />
+          {open.education && (
+            <div className="pb-3 space-y-3">
+              <div>
+                <SL>School / University</SL>
+                <TagInput selected={s.school} onChange={v => set({ school: v })} onSearch={onSearch} placeholder="e.g. IIT Bombay, Enter…" icon={GraduationCap} chipColor="bg-green-50 text-green-700 border-green-200" />
+              </div>
+              <div>
+                <SL>Degree</SL>
+                <SearchableMultiSelect label="Search degrees…" options={DEGREES} selected={s.degree} onChange={v => set({ degree: v })} onSearch={onSearch} icon={GraduationCap} chipColor="bg-green-50 text-green-700 border-green-200" />
+              </div>
+              <div>
+                <SL>Major / Field</SL>
+                <TagInput selected={s.major} onChange={v => set({ major: v })} onSearch={onSearch} placeholder="e.g. Computer Science, Enter…" icon={GraduationCap} chipColor="bg-green-50 text-green-700 border-green-200" />
+              </div>
+            </div>
+          )}
+
+          <Div />
+
+          {/* ── CONTACT & SIGNALS ── */}
+          <SectionHeader label="Contact & Signals" icon={Bell} isOpen={open.signals} onToggle={() => toggle("signals")} count={sigCnt} hasActive={sigCnt > 0} />
+          {open.signals && (
+            <div className="pb-3 space-y-3">
+              <div>
+                <SL>Contact Method</SL>
+                <CheckboxPills options={CONTACT_METHODS} selected={s.contactMethod} onChange={v => set({ contactMethod: v })} />
+              </div>
+              <div>
+                <SL>Email Grade</SL>
+                <SimpleSelect value={s.emailGrade} onChange={v => set({ emailGrade: v })} options={EMAIL_GRADES} placeholder="Any grade" />
+              </div>
+              <div>
+                <SL>Job Change Signal</SL>
+                <SimpleSelect value={s.jobChangeSignal} onChange={v => set({ jobChangeSignal: v })} options={JOB_CHANGE_SIGNALS} placeholder="Any job change" />
+              </div>
+              <div>
+                <SL>Company News</SL>
+                <SimpleSelect value={s.newsSignal} onChange={v => set({ newsSignal: v })} options={NEWS_SIGNALS} placeholder="Any news" />
+              </div>
+              <div>
+                <SL>Hiring Signal (Job Postings)</SL>
+                <SimpleSelect value={s.jobPostingSignal} onChange={v => set({ jobPostingSignal: v })} options={JOB_POSTING_SIGNALS} placeholder="Any posting" />
+              </div>
+            </div>
+          )}
+
+          <Div />
+
+          {/* ── SORT ── */}
+          <SectionHeader label="Sort & Display" icon={Search} isOpen={open.sort} onToggle={() => toggle("sort")} />
+          {open.sort && (
+            <div className="pb-3 space-y-3">
+              <div>
+                <SL>Name Search</SL>
+                <TextInput value={s.name} onChange={v => set({ name: v })} onSearch={onSearch} placeholder="e.g. Rahul Gupta" icon={Users} />
+              </div>
+              <div>
+                <SL>Order By</SL>
+                <SimpleSelect value={s.orderBy} onChange={v => set({ orderBy: v as any })}
+                  options={[{ label: "Popularity", value: "popularity" }, { label: "Relevance", value: "relevance" }]} />
+              </div>
+            </div>
+          )}
+
+          <div className="h-3" />
         </div>
       </ScrollArea>
 
-      {/* Status bar */}
+      {/* ── Status bar ── */}
       <div className="flex-shrink-0 px-4 py-2.5 border-t border-slate-100 bg-slate-50/60">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <span className={cn("w-1.5 h-1.5 rounded-full", isLoading ? "bg-amber-400 animate-pulse" : hasFilters ? "bg-emerald-400" : "bg-slate-300")} />
+            <span className={cn("w-1.5 h-1.5 rounded-full",
+              isLoading ? "bg-amber-400 animate-pulse"
+              : hasFilters ? "bg-emerald-400" : "bg-slate-300")} />
             <span className="text-[10px] text-slate-500">
-              {isLoading ? "Searching…" : hasFilters ? `${filterCount} filter${filterCount !== 1 ? "s" : ""} active` : "Add filters to search"}
+              {isLoading ? "Searching…"
+               : hasFilters ? `${filterCount} filter${filterCount !== 1 ? "s" : ""} active`
+               : "Set filters to search"}
             </span>
           </div>
-          <span className="text-[9px] text-slate-400 font-mono">700M+ profiles</span>
+          <span className="text-[9px] text-slate-400 font-mono">700M+</span>
         </div>
       </div>
     </div>

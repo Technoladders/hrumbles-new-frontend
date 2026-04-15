@@ -18,6 +18,7 @@ import { useSelector }   from 'react-redux';
 import { useNavigate }   from 'react-router-dom';
 import { supabase }      from '@/integrations/supabase/client';
 import { toast }         from 'sonner';
+import WaTemplateVarsModal, { templateHasVars } from '@/components/jobs/job/invite/WaTemplateVarsModal';
 import {
   useWhatsAppConversations,
   fetchConversationMessages,
@@ -298,6 +299,7 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
   const [templates,   setTemplates]   = useState<any[]>([]);
   const [trayOpen,    setTrayOpen]    = useState(false);
   const [employeeMap, setEmployeeMap] = useState<Record<string, string>>({});
+  const [pendingTpl,  setPendingTpl]  = useState<any>(null); // template var modal
 
   const endRef     = useRef<HTMLDivElement>(null);
   const inputRef   = useRef<HTMLTextAreaElement>(null);
@@ -461,9 +463,19 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
     }
   };
 
-  const handleSendTemplate = async (tpl: any) => {
+  // If template has {{N}} variables → open fill modal first; else send directly
+  const handleSendTemplate = (tpl: any) => {
     if (isSending) return;
+    if (templateHasVars(tpl)) {
+      setPendingTpl(tpl);
+    } else {
+      doSendTemplate(tpl, []);
+    }
+  };
+
+  const doSendTemplate = async (tpl: any, bodyVars: string[]) => {
     setIsSending(true);
+    setPendingTpl(null);
     setTrayOpen(false);
     try {
       const { data, error } = await supabase.functions.invoke('wa-send', {
@@ -475,6 +487,7 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
           templateName:     tpl.name,
           templateLanguage: tpl.language,
           sentBy:           userId,
+          ...(bodyVars.length > 0 ? { bodyVars } : {}),
         },
       });
       if (error)       throw new Error(error.message);
@@ -515,7 +528,7 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
             {conv.candidate_email && ` · ${conv.candidate_email}`}
           </div>
         </div>
-        {/* {conv.candidate_id && (
+        {conv.candidate_id && (
           <button
             onClick={() => navigate(`/candidates/${conv.candidate_id}`)}
             style={{
@@ -527,7 +540,7 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
           >
             View Profile →
           </button>
-        )} */}
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <div style={{
             width: 8, height: 8, borderRadius: '50%',
@@ -741,6 +754,14 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
               </svg>}
         </button>
       </div>
+
+      {/* Template variable fill modal */}
+      <WaTemplateVarsModal
+        template={pendingTpl}
+        onSend={(tpl, vars) => doSendTemplate(tpl, vars)}
+        onClose={() => setPendingTpl(null)}
+        isSending={isSending}
+      />
     </div>
   );
 }
