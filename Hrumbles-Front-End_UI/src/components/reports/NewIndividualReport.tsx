@@ -93,7 +93,7 @@ const [dateRange, setDateRange] = useState<DateRange>({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('totalCandidates');
   const [sortAsc, setSortAsc] = useState(false);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [activeMainId, setActiveMainId] = useState<string | null>(null);
 
   // ── Fetch ───────────────────────────────────────────────────────────────
@@ -496,34 +496,26 @@ doc.text(`Period: ${periodText} | Total: ${totalCands} | Recruiters: ${recruiter
                   </thead>
                   <tbody>
                     {filtered.map((row, i) => {
-                      const isExp = expanded.has(row.id);
+        
                       const eff = row.totalCandidates > 0 ? Math.round((row.joinedCount/row.totalCandidates)*100) : 0;
                       return (
                         <React.Fragment key={row.id}>
-                          <tr
-                            className="border-b border-gray-50 hover:bg-violet-50/30 transition-colors cursor-pointer group"
-                            onClick={() => setExpanded(prev => {
-                              const n = new Set(prev);
-                              isExp ? n.delete(row.id) : n.add(row.id);
-                              return n;
-                            })}
-                          >
+<tr className="border-b border-gray-50 hover:bg-violet-50/30 transition-colors">
                             {tableCols.map(col => {
                               let cell: any;
                               if (col.key === 'name') {
-                                cell = (
-                                  <span className="flex items-center gap-1.5">
-                                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
-                                      style={{ background: ACCENT[i%ACCENT.length] }}>
-                                      {row.name.charAt(0).toUpperCase()}
-                                    </span>
-                                    <span className="font-medium text-gray-800 text-xs truncate max-w-[110px]">{row.name}</span>
-                                    {eff > 0 && (
-                                      <span className="text-[8px] px-1 rounded bg-emerald-50 text-emerald-600 font-semibold hidden group-hover:inline flex-shrink-0">{eff}%</span>
-                                    )}
-                                    {isExp ? <ChevronUp size={9} className="text-gray-400 flex-shrink-0"/> : <ChevronDown size={9} className="text-gray-400 flex-shrink-0"/>}
-                                  </span>
-                                );
+cell = (
+  <span className="flex items-center gap-1.5">
+    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+      style={{ background: ACCENT[i%ACCENT.length] }}>
+      {row.name.charAt(0).toUpperCase()}
+    </span>
+    <span className="font-medium text-gray-800 text-xs truncate max-w-[110px]">{row.name}</span>
+    {eff > 0 && (
+      <span className="text-[8px] px-1 rounded bg-emerald-50 text-emerald-600 font-semibold flex-shrink-0">{eff}%</span>
+    )}
+  </span>
+);
                               } else if (col.key === 'totalCandidates') {
                                 const pct = topRecruiter ? (row.totalCandidates/topRecruiter.totalCandidates)*100 : 0;
                                 cell = (
@@ -554,7 +546,7 @@ doc.text(`Period: ${periodText} | Total: ${totalCands} | Recruiters: ${recruiter
                             })}
                           </tr>
                           {/* Expanded: all sub-statuses grouped by parent */}
-                          {isExp && (
+                          {/* {isExp && (
                             <tr>
                               <td colSpan={tableCols.length} className="px-4 py-2 bg-violet-50/30 border-b border-gray-100">
                                 <div className="space-y-2">
@@ -583,7 +575,7 @@ doc.text(`Period: ${periodText} | Total: ${totalCands} | Recruiters: ${recruiter
                                 </div>
                               </td>
                             </tr>
-                          )}
+                          )} */}
                         </React.Fragment>
                       );
                     })}

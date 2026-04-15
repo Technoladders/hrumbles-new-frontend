@@ -101,7 +101,7 @@ const [dateRange, setDateRange] = useState<DateRange>({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('totalCandidates');
   const [sortAsc, setSortAsc] = useState(false);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // Vertical sub-menu: which main status is selected for detail view (null = overview)
   const [activeMainId, setActiveMainId] = useState<string | null>(null);
 
@@ -550,30 +550,22 @@ doc.text(
                   </thead>
                   <tbody>
                     {filtered.map((row, i) => {
-                      const isExp = expanded.has(row.clientName);
+                      // const isExp = expanded.has(row.clientName);
                       return (
                         <React.Fragment key={row.clientName}>
-                          <tr
-                            className="border-b border-gray-50 hover:bg-violet-50/30 transition-colors cursor-pointer"
-                            onClick={() => setExpanded(prev => {
-                              const n = new Set(prev);
-                              isExp ? n.delete(row.clientName) : n.add(row.clientName);
-                              return n;
-                            })}
-                          >
+<tr className="border-b border-gray-50 hover:bg-violet-50/30 transition-colors">
                             {tableCols.map((col) => {
                               let cell: any;
                               if (col.key === 'clientName') {
-                                cell = (
-                                  <span className="flex items-center gap-1.5">
-                                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
-                                      style={{ background: ACCENT[i % ACCENT.length] }}>
-                                      {row.clientName.charAt(0).toUpperCase()}
-                                    </span>
-                                    <span className="font-medium text-gray-800 text-xs truncate max-w-[120px]">{row.clientName}</span>
-                                    {isExp ? <ChevronUp size={9} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={9} className="text-gray-400 flex-shrink-0" />}
-                                  </span>
-                                );
+cell = (
+  <span className="flex items-center gap-1.5">
+    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+      style={{ background: ACCENT[i % ACCENT.length] }}>
+      {row.clientName.charAt(0).toUpperCase()}
+    </span>
+    <span className="font-medium text-gray-800 text-xs truncate max-w-[120px]">{row.clientName}</span>
+  </span>
+);
                               } else if (col.key === 'totalCandidates') {
                                 const pct = topClient ? (row.totalCandidates / topClient.totalCandidates) * 100 : 0;
                                 cell = (
@@ -606,7 +598,7 @@ doc.text(
                             })}
                           </tr>
                           {/* Expanded row: show all sub-statuses regardless of nav selection */}
-                          {isExp && (
+                          {/* {isExp && (
                             <tr>
                               <td colSpan={tableCols.length} className="px-4 py-2 bg-violet-50/30 border-b border-gray-100">
                                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-1.5">
@@ -632,7 +624,7 @@ doc.text(
                                 </div>
                               </td>
                             </tr>
-                          )}
+                          )} */}
                         </React.Fragment>
                       );
                     })}

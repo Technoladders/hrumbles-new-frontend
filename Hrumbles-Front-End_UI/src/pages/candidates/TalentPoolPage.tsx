@@ -635,8 +635,8 @@ const TalentPoolPage: FC = () => {
             prefillEmail={singleInviteCandidate.email || ''}
             prefillName={singleInviteCandidate.candidate_name || ''}
             prefillPhone={singleInviteCandidate.phone || ''}
-            candidateId={singleInviteCandidate.id}
-            candidateOwnerId={null}
+            candidateId={null}
+            candidateOwnerId={singleInviteCandidate.id}
             inviteSource="talentpool"
           />
         )}

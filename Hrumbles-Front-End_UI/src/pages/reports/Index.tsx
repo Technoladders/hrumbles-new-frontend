@@ -106,7 +106,7 @@ const ALL_CATEGORIES: CategoryDef[] = [
     bgLight: '#ECFDF5',
     reports: [
       { type: 'attendance',    label: 'Attendance',    description: 'Daily attendance records & summaries' },
-      { type: 'user_activity', label: 'User Activity', description: 'Active, idle & session time tracking' },
+      // { type: 'user_activity', label: 'User Activity', description: 'Active, idle & session time tracking' },
     ],
   },
 ];
