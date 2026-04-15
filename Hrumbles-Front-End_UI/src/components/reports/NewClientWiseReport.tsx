@@ -220,6 +220,14 @@ const fetchData = useCallback(async () => {
     return orderedSubs.filter(s => s.parent_id === activeMainId);
   }, [orderedSubs, activeMainId]);
 
+  const mainStatusColorMap = useMemo(() => {
+  const m: Record<string, string> = {};
+  mainStatuses.forEach(s => {
+    m[s.id] = s.color ?? P;
+  });
+  return m;
+}, [mainStatuses]);
+
   const filtered = useMemo(() => {
     let d = clients.filter(c => !search || c.clientName.toLowerCase().includes(search.toLowerCase()));
     return [...d].sort((a, b) => {
@@ -359,7 +367,12 @@ doc.text(
     { key: 'totalCandidates', label: 'Total', fixed: true },
     { key: 'submittedCount', label: 'Submitted', fixed: true },
     { key: 'joinedCount', label: 'Joined', fixed: true },
-    ...visibleSubs.map(s => ({ key: s.id, label: s.name, fixed: false, color: s.color })),
+    ...visibleSubs.map(s => ({
+  key: s.id,
+  label: s.name,
+  fixed: false,
+  color: mainStatusColorMap[s.parent_id ?? ''] ?? P
+})),
   ], [visibleSubs]);
 
   if (loading && clients.length === 0) return <div className="flex h-48 items-center justify-center"><LoadingSpinner size={32} /></div>;
@@ -539,7 +552,15 @@ doc.text(
                       {tableCols.map(col => (
                         <th key={col.key} onClick={() => doSort(col.key)}
                           className="px-3 py-2 text-left font-semibold cursor-pointer hover:text-violet-600 whitespace-nowrap select-none border-l first:border-l-0 border-gray-50"
-                          style={{ fontSize: 9, color: sortKey === col.key ? P : '#94A3B8' }}>
+                          style={{
+  fontSize: 9,
+  color: col.fixed
+    ? (sortKey === col.key ? P : '#94A3B8')
+    : '#fff',
+  background: col.fixed
+    ? (sortKey === col.key ? `${P}10` : 'transparent')
+    : `${col.color ?? P}cc`
+}}>
                           <span className="flex items-center gap-0.5">
                             {col.label}
                             {sortKey === col.key ? (sortAsc ? <ChevronUp size={9} /> : <ChevronDown size={9} />) : null}
@@ -591,7 +612,15 @@ cell = (
                                   : <span className="text-gray-200 text-[10px]">0</span>;
                               }
                               return (
-                                <td key={col.key} className="px-3 py-1.5 whitespace-nowrap border-l first:border-l-0 border-gray-50">
+                                <td
+  key={col.key}
+  className="px-3 py-1.5 whitespace-nowrap border-l first:border-l-0 border-gray-50"
+  style={
+    !col.fixed
+      ? { background: `${col.color ?? P}0d` }
+      : {}
+  }
+>
                                   {cell}
                                 </td>
                               );

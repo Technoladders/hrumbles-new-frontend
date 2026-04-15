@@ -535,9 +535,9 @@ const renderActivityLog = () => {
 
       {type === 'normal' ? (
         <>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {renderBreakLogs()}
-            {renderActivityLog()}
+            {/* {renderActivityLog()} */}
           </div>
           {renderProjectDetails()}
       
@@ -552,9 +552,9 @@ const renderActivityLog = () => {
             <h4 className="text-xs font-bold text-blue-600 uppercase mb-2">Employee's Clarification</h4>
             <p className="text-sm text-gray-700">{dialogTimesheet.clarification_response || 'No clarification provided'}</p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {renderBreakLogs()}
-            {renderActivityLog()}
+            {/* {renderActivityLog()} */}
           </div>
           {renderProjectDetails()}
          

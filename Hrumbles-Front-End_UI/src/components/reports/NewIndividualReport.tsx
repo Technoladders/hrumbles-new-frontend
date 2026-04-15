@@ -1,5 +1,5 @@
 // Hrumbles-Front-End_UI\src\components\reports\NewIndividualReport.tsx
-// v2: parent→child sub-status ordering, vertical sub-menu nav, full export
+// v3: sub-status columns inherit parent main status color throughout table UI
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSelector } from 'react-redux';
@@ -82,10 +82,10 @@ const TT = ({ active, payload, label }: any) => {
 const NewIndividualReport: React.FC = () => {
   const { organization_id: orgId } = useSelector((s: any) => s.auth);
 
-const [dateRange, setDateRange] = useState<DateRange>({
-  startDate: null,
-  endDate: null,
-});
+  const [dateRange, setDateRange] = useState<DateRange>({
+    startDate: null,
+    endDate: null,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recruiters, setRecruiters] = useState<RecruiterRow[]>([]);
@@ -93,71 +93,68 @@ const [dateRange, setDateRange] = useState<DateRange>({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('totalCandidates');
   const [sortAsc, setSortAsc] = useState(false);
-  // const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [activeMainId, setActiveMainId] = useState<string | null>(null);
 
   // ── Fetch ───────────────────────────────────────────────────────────────
-const fetchData = useCallback(async () => {
-  if (!orgId) return;
+  const fetchData = useCallback(async () => {
+    if (!orgId) return;
 
-  setLoading(true);
-  setError(null);
+    setLoading(true);
+    setError(null);
 
-  try {
-    const hasDateFilter = !!(dateRange.startDate && dateRange.endDate);
+    try {
+      const hasDateFilter = !!(dateRange.startDate && dateRange.endDate);
 
-    // 1. Statuses
-    const { data: st, error: stErr } = await supabase
-      .from('job_statuses')
-      .select('id, name, parent_id, type, display_order, color')
-      .eq('organization_id', orgId);
+      // 1. Statuses
+      const { data: st, error: stErr } = await supabase
+        .from('job_statuses')
+        .select('id, name, parent_id, type, display_order, color')
+        .eq('organization_id', orgId);
 
-    if (stErr) throw stErr;
-    setStatuses((st ?? []) as StatusDef[]);
+      if (stErr) throw stErr;
+      setStatuses((st ?? []) as StatusDef[]);
 
-    // 2. Status change counts
-    let query = supabase
-      .from('hr_status_change_counts')
-      .select(`
-        id, candidate_id, sub_status_id,
-        hr_job_candidates!hr_status_change_counts_candidate_id_fkey!inner(
-          created_by,
+      // 2. Status change counts
+      let query = supabase
+        .from('hr_status_change_counts')
+        .select(`
+          id, candidate_id, sub_status_id,
+          hr_job_candidates!hr_status_change_counts_candidate_id_fkey!inner(
+            created_by,
+            hr_employees!hr_job_candidates_created_by_fkey(id, first_name, last_name)
+          )
+        `)
+        .eq('organization_id', orgId)
+        .not('candidate_id', 'is', null)
+        .not('hr_job_candidates.created_by', 'is', null);
+
+      if (hasDateFilter) {
+        query = query
+          .gte('created_at', dateRange.startDate!.toISOString())
+          .lte('created_at', dateRange.endDate!.toISOString());
+      }
+
+      const { data: rows, error: rErr } = await query;
+      if (rErr) throw rErr;
+
+      // 3. Candidates
+      let candQuery = supabase
+        .from('hr_job_candidates')
+        .select(`
+          id, submission_date, joining_date, created_by,
           hr_employees!hr_job_candidates_created_by_fkey(id, first_name, last_name)
-        )
-      `)
-      .eq('organization_id', orgId)
-      .not('candidate_id', 'is', null)
-      .not('hr_job_candidates.created_by', 'is', null);
+        `)
+        .eq('organization_id', orgId)
+        .not('created_by', 'is', null);
 
-    if (hasDateFilter) {
-      query = query
-        .gte('created_at', dateRange.startDate!.toISOString())
-        .lte('created_at', dateRange.endDate!.toISOString());
-    }
+      if (hasDateFilter) {
+        candQuery = candQuery
+          .gte('created_at', dateRange.startDate!.toISOString())
+          .lte('created_at', dateRange.endDate!.toISOString());
+      }
 
-    const { data: rows, error: rErr } = await query;
-    if (rErr) throw rErr;
-
-    // 3. Candidates
-    let candQuery = supabase
-      .from('hr_job_candidates')
-      .select(`
-        id, submission_date, joining_date, created_by,
-        hr_employees!hr_job_candidates_created_by_fkey(id, first_name, last_name)
-      `)
-      .eq('organization_id', orgId)
-      .not('created_by', 'is', null);
-
-    if (hasDateFilter) {
-      candQuery = candQuery
-        .gte('created_at', dateRange.startDate!.toISOString())
-        .lte('created_at', dateRange.endDate!.toISOString());
-    }
-
-    const { data: cands, error: cErr } = await candQuery;
-    if (cErr) throw cErr;
-
-    // 👉 KEEP YOUR EXISTING AGGREGATION LOGIC SAME
+      const { data: cands, error: cErr } = await candQuery;
+      if (cErr) throw cErr;
 
       // ── Aggregate ───────────────────────────────────────────────────────
       const map: Record<string, RecruiterRow> = {};
@@ -214,6 +211,14 @@ const fetchData = useCallback(async () => {
     return orderedSubs.filter(s => s.parent_id === activeMainId);
   }, [orderedSubs, activeMainId]);
 
+  // ── CHANGE 1: Build main status color map (main_id → color) ─────────────
+  // This is the single source of truth for all status-related colors in the table.
+  const mainStatusColorMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    mainStatuses.forEach(s => { m[s.id] = s.color ?? P; });
+    return m;
+  }, [mainStatuses]);
+
   const filtered = useMemo(() => {
     let d = recruiters.filter(r => !search || r.name.toLowerCase().includes(search.toLowerCase()));
     return [...d].sort((a, b) => {
@@ -264,8 +269,8 @@ const fetchData = useCallback(async () => {
     const blob = new Blob([Papa.unparse(buildExportRows(), { header: true })], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = `individual_report_${
-  dateRange.startDate ? fmt(dateRange.startDate) : 'all_time'
-}.csv`;
+      dateRange.startDate ? fmt(dateRange.startDate) : 'all_time'
+    }.csv`;
     a.click();
   };
 
@@ -275,10 +280,10 @@ const fetchData = useCallback(async () => {
     doc.text('Individual Recruiter Report', 14, 16);
     doc.setFontSize(8); doc.setFont('helvetica','normal');
     const periodText = dateRange.startDate && dateRange.endDate
-  ? `${fmt(dateRange.startDate)} – ${fmt(dateRange.endDate)}`
-  : 'All Time';
+      ? `${fmt(dateRange.startDate)} – ${fmt(dateRange.endDate)}`
+      : 'All Time';
 
-doc.text(`Period: ${periodText} | Total: ${totalCands} | Recruiters: ${recruiters.length}`, 14, 22);
+    doc.text(`Period: ${periodText} | Total: ${totalCands} | Recruiters: ${recruiters.length}`, 14, 22);
 
     const baseH = ['Recruiter','Total','Submitted','Joined'];
     const dynH: string[] = [];
@@ -317,13 +322,24 @@ doc.text(`Period: ${periodText} | Total: ${totalCands} | Recruiters: ${recruiter
 
   const doSort = (k: string) => { if(sortKey===k) setSortAsc(v=>!v); else { setSortKey(k); setSortAsc(false); }};
 
+  // ── CHANGE 2: tableCols — sub-status columns use parent main color, not their own color ──
+  // Each sub-status column's `color` field is now resolved from mainStatusColorMap
+  // via the sub's parent_id. This is the single mapping point — all downstream
+  // rendering (header bg, header text, cell bg, cell text) reads col.color
+  // and will consistently show the parent main status color.
   const tableCols = useMemo(() => [
-    { key: 'name', label: 'Recruiter', fixed: true },
-    { key: 'totalCandidates', label: 'Total', fixed: true },
-    { key: 'submittedCount', label: 'Submitted', fixed: true },
-    { key: 'joinedCount', label: 'Joined', fixed: true },
-    ...visibleSubs.map(s => ({ key: s.id, label: s.name, fixed: false, color: s.color })),
-  ], [visibleSubs]);
+    { key: 'name',           label: 'Recruiter', fixed: true,  color: null },
+    { key: 'totalCandidates',label: 'Total',     fixed: true,  color: null },
+    { key: 'submittedCount', label: 'Submitted', fixed: true,  color: null },
+    { key: 'joinedCount',    label: 'Joined',    fixed: true,  color: null },
+    // ↓ color comes from parent main status, NOT from the sub-status itself
+    ...visibleSubs.map(s => ({
+      key:   s.id,
+      label: s.name,
+      fixed: false,
+      color: mainStatusColorMap[s.parent_id ?? ''] ?? P,
+    })),
+  ], [visibleSubs, mainStatusColorMap]);
 
   if (loading && recruiters.length === 0) return <div className="flex h-48 items-center justify-center"><LoadingSpinner size={32} /></div>;
   if (error) return <div className="text-xs text-red-600 bg-red-50 rounded-lg p-3">{error}</div>;
@@ -454,68 +470,132 @@ doc.text(`Period: ${periodText} | Total: ${totalCands} | Recruiters: ${recruiter
               <div className="overflow-x-auto">
                 <table className="w-full" style={{ minWidth: `${tableCols.length * 72 + 180}px` }}>
                   <thead>
-                    {/* Group headers */}
+
+                    {/*
+                      ── CHANGE 3: Group header row (Overview mode) ─────────────
+                      Each main status <th> now uses:
+                        - solid main color as background  (was: faded `#color0d`)
+                        - white text for contrast         (was: colored text)
+                      This makes each status group a clearly distinct solid color block.
+                    */}
                     {!activeMainId && (
-                      <tr className="bg-gray-50 border-b border-gray-100">
-                        <th colSpan={4} className="px-3 py-1 text-left text-[9px] text-gray-400" />
+                      <tr className="border-b border-gray-100">
+                        <th colSpan={4} className="px-3 py-1 text-left text-[9px] text-gray-400 bg-gray-50" />
                         {mainStatuses.map(main => {
                           const cnt = orderedSubs.filter(s=>s.parent_id===main.id).length;
                           if (!cnt) return null;
+                          const mainColor = mainStatusColorMap[main.id] ?? P;
                           return (
-                            <th key={main.id} colSpan={cnt}
-                              className="px-2 py-1 text-center text-[9px] font-bold border-l border-gray-100"
-                              style={{ color: main.color ?? P, background: `${main.color ?? P}0d` }}>
+                            <th
+                              key={main.id}
+                              colSpan={cnt}
+                              className="px-2 py-1 text-center text-[9px] font-bold border-l border-white/20"
+                              style={{
+                                color: '#fff',                // white text for contrast
+                                background: mainColor,        // solid main status color
+                              }}
+                            >
                               {main.name}
                             </th>
                           );
                         })}
                       </tr>
                     )}
+
+                    {/*
+                      ── CHANGE 4: Active main header row (single-status view) ──
+                      Uses solid main status color as background + white text,
+                      consistent with the overview group headers above.
+                    */}
                     {activeMainId && (
-                      <tr className="bg-gray-50 border-b border-gray-100">
-                        <th colSpan={4} className="px-3 py-1" />
-                        <th colSpan={visibleSubs.length}
-                          className="px-2 py-1 text-center text-[9px] font-bold border-l border-gray-100"
-                          style={{ color: mainStatuses.find(m=>m.id===activeMainId)?.color ?? P, background: `${P}0d` }}>
+                      <tr className="border-b border-gray-100">
+                        <th colSpan={4} className="px-3 py-1 bg-gray-50" />
+                        <th
+                          colSpan={visibleSubs.length}
+                          className="px-2 py-1 text-center text-[9px] font-bold border-l border-white/20"
+                          style={{
+                            color: '#fff',                                   // white text
+                            background: mainStatusColorMap[activeMainId] ?? P, // solid main color
+                          }}
+                        >
                           {mainStatuses.find(m=>m.id===activeMainId)?.name}
                         </th>
                       </tr>
                     )}
+
+                    {/*
+                      ── CHANGE 5: Sub-column header row ────────────────────────
+                      Fixed columns (Recruiter, Total, Submitted, Joined) keep their
+                      existing style: transparent bg, gray/purple sort indicator.
+
+                      Non-fixed sub-status columns now get:
+                        - background: main status color at ~80% opacity (`cc` hex alpha)
+                        - text: white for contrast
+                        - removes the hover:text-violet-600 class on sub columns
+                          since white text on colored bg looks better without it
+
+                      col.color is already the parent main color (set in tableCols, CHANGE 2),
+                      so no additional lookup is needed here.
+                    */}
                     <tr className="border-b border-gray-100">
                       {tableCols.map(col => (
-                        <th key={col.key} onClick={() => doSort(col.key)}
-                          className="px-3 py-2 text-left font-semibold cursor-pointer hover:text-violet-600 whitespace-nowrap select-none border-l first:border-l-0 border-gray-50"
-                          style={{ fontSize: 9, color: sortKey === col.key ? P : '#94A3B8' }}>
+                        <th
+                          key={col.key}
+                          onClick={() => doSort(col.key)}
+                          className={[
+                            'px-3 py-2 text-left font-semibold cursor-pointer whitespace-nowrap select-none',
+                            'border-l first:border-l-0',
+                            col.fixed ? 'border-gray-50 hover:text-violet-600' : 'border-white/20',
+                          ].join(' ')}
+                          style={{
+                            fontSize: 9,
+                            // Fixed columns: purple when sorted, gray otherwise — unchanged
+                            // Sub-status columns: white text on main-color background
+                            color: col.fixed
+                              ? (sortKey === col.key ? P : '#94A3B8')
+                              : '#fff',
+                            background: col.fixed
+                              ? (sortKey === col.key ? `${P}10` : 'transparent')
+                              : `${col.color ?? P}cc`,  // 80% opacity of parent main color
+                          }}
+                        >
                           <span className="flex items-center gap-0.5">
                             {col.label}
-                            {sortKey===col.key ? (sortAsc ? <ChevronUp size={9}/> : <ChevronDown size={9}/>) : null}
+                            {sortKey === col.key
+                              ? (sortAsc ? <ChevronUp size={9}/> : <ChevronDown size={9}/>)
+                              : null
+                            }
                           </span>
                         </th>
                       ))}
                     </tr>
                   </thead>
+
                   <tbody>
                     {filtered.map((row, i) => {
-        
                       const eff = row.totalCandidates > 0 ? Math.round((row.joinedCount/row.totalCandidates)*100) : 0;
                       return (
                         <React.Fragment key={row.id}>
-<tr className="border-b border-gray-50 hover:bg-violet-50/30 transition-colors">
+                          <tr className="border-b border-gray-50 hover:bg-violet-50/30 transition-colors">
                             {tableCols.map(col => {
                               let cell: any;
+
                               if (col.key === 'name') {
-cell = (
-  <span className="flex items-center gap-1.5">
-    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
-      style={{ background: ACCENT[i%ACCENT.length] }}>
-      {row.name.charAt(0).toUpperCase()}
-    </span>
-    <span className="font-medium text-gray-800 text-xs truncate max-w-[110px]">{row.name}</span>
-    {eff > 0 && (
-      <span className="text-[8px] px-1 rounded bg-emerald-50 text-emerald-600 font-semibold flex-shrink-0">{eff}%</span>
-    )}
-  </span>
-);
+                                cell = (
+                                  <span className="flex items-center gap-1.5">
+                                    <span
+                                      className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+                                      style={{ background: ACCENT[i%ACCENT.length] }}
+                                    >
+                                      {row.name.charAt(0).toUpperCase()}
+                                    </span>
+                                    <span className="font-medium text-gray-800 text-xs truncate max-w-[110px]">{row.name}</span>
+                                    {eff > 0 && (
+                                      <span className="text-[8px] px-1 rounded bg-emerald-50 text-emerald-600 font-semibold flex-shrink-0">{eff}%</span>
+                                    )}
+                                  </span>
+                                );
+
                               } else if (col.key === 'totalCandidates') {
                                 const pct = topRecruiter ? (row.totalCandidates/topRecruiter.totalCandidates)*100 : 0;
                                 cell = (
@@ -526,73 +606,104 @@ cell = (
                                     </div>
                                   </span>
                                 );
+
                               } else if (col.key === 'submittedCount') {
                                 cell = row.submittedCount > 0
                                   ? <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background:'#EDE9FE', color: P }}>{row.submittedCount}</span>
                                   : <span className="text-gray-200 text-[10px]">—</span>;
+
                               } else if (col.key === 'joinedCount') {
                                 cell = row.joinedCount > 0
                                   ? <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700">{row.joinedCount}</span>
                                   : <span className="text-gray-200 text-[10px]">—</span>;
+
                               } else {
+                                /*
+                                  ── CHANGE 6: Sub-status body cells ────────────────
+                                  col.color is now the parent main status color (CHANGE 2).
+                                  - Cell badge background: light tint of main color (`18` = ~9% opacity)
+                                  - Cell badge text: main color (solid, for readability)
+                                  - Zero values: unchanged gray dash
+                                  No sub-status own color is used anywhere.
+                                */
                                 const n = row.statusCounts[col.key] ?? 0;
+                                const mainColor = col.color ?? P;
                                 cell = n > 0
-                                  ? <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold" style={{ background:`${col.color??P}18`, color: col.color??P }}>{n}</span>
+                                  ? (
+                                    <span
+                                      className="px-1.5 py-0.5 rounded text-[9px] font-semibold"
+                                      style={{
+                                        background: `${mainColor}18`,  // light tint of parent main color
+                                        color: mainColor,               // parent main color text
+                                      }}
+                                    >
+                                      {n}
+                                    </span>
+                                  )
                                   : <span className="text-gray-200 text-[10px]">0</span>;
                               }
+
                               return (
-                                <td key={col.key} className="px-3 py-1.5 whitespace-nowrap border-l first:border-l-0 border-gray-50">{cell}</td>
+<td
+  key={col.key}
+  className="px-3 py-1.5 whitespace-nowrap border-l first:border-l-0 border-gray-50"
+  style={
+    !col.fixed
+      ? {
+          background: `${col.color ?? P}0d`, // 🔥 FULL COLUMN LIGHT BG
+        }
+      : {}
+  }
+>
+  {cell}
+</td>
                               );
                             })}
                           </tr>
-                          {/* Expanded: all sub-statuses grouped by parent */}
-                          {/* {isExp && (
-                            <tr>
-                              <td colSpan={tableCols.length} className="px-4 py-2 bg-violet-50/30 border-b border-gray-100">
-                                <div className="space-y-2">
-                                  {mainStatuses.map(main => {
-                                    const children = orderedSubs.filter(s=>s.parent_id===main.id && (row.statusCounts[s.id]??0)>0);
-                                    if (!children.length) return null;
-                                    return (
-                                      <div key={main.id}>
-                                        <p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: main.color??P }}>{main.name}</p>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-1.5">
-                                          {children.map(s => (
-                                            <div key={s.id} className="flex items-center justify-between bg-white rounded-lg px-2 py-1 border border-gray-100">
-                                              <span className="text-[9px] text-gray-600 truncate">{s.name}</span>
-                                              <span className="text-[10px] font-bold ml-1.5 flex-shrink-0" style={{ color: s.color??P }}>{row.statusCounts[s.id]}</span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                <div className="flex gap-4 mt-2 text-[9px] text-gray-500">
-                                  <span>Submitted: <strong className="text-gray-800">{row.submittedCount}</strong></span>
-                                  <span>Joined: <strong className="text-emerald-700">{row.joinedCount}</strong></span>
-                                  {eff > 0 && <span>Join rate: <strong style={{ color: P }}>{eff}%</strong></span>}
-                                </div>
-                              </td>
-                            </tr>
-                          )} */}
                         </React.Fragment>
                       );
                     })}
                   </tbody>
+
                   <tfoot>
                     <tr className="border-t-2 border-gray-200 bg-gray-50 font-bold">
                       {tableCols.map(col => {
                         let val: any = '';
-                        if (col.key==='name') val=<span className="text-xs font-bold text-gray-700">Total</span>;
-                        else if (col.key==='totalCandidates') val=<span className="text-xs">{filtered.reduce((s,r)=>s+r.totalCandidates,0)}</span>;
-                        else if (col.key==='submittedCount') val=<span className="text-xs">{filtered.reduce((s,r)=>s+r.submittedCount,0)}</span>;
-                        else if (col.key==='joinedCount') val=<span className="text-xs">{filtered.reduce((s,r)=>s+r.joinedCount,0)}</span>;
-                        else {
+                        if (col.key==='name') {
+                          val = <span className="text-xs font-bold text-gray-700">Total</span>;
+                        } else if (col.key==='totalCandidates') {
+                          val = <span className="text-xs">{filtered.reduce((s,r)=>s+r.totalCandidates,0)}</span>;
+                        } else if (col.key==='submittedCount') {
+                          val = <span className="text-xs">{filtered.reduce((s,r)=>s+r.submittedCount,0)}</span>;
+                        } else if (col.key==='joinedCount') {
+                          val = <span className="text-xs">{filtered.reduce((s,r)=>s+r.joinedCount,0)}</span>;
+                        } else {
+                          /*
+                            ── CHANGE 7: Footer totals for sub-status columns ──────
+                            Uses parent main color (col.color) for the total badge,
+                            consistent with the body cells above.
+                          */
                           const t = filtered.reduce((s,r)=>s+(r.statusCounts[col.key]??0),0);
-                          val = t>0 ? <span className="text-[10px]">{t}</span> : <span className="text-gray-300 text-[10px]">0</span>;
+                          const mainColor = col.color ?? P;
+                          val = t > 0
+                            ? (
+                              <span
+                                className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                                style={{
+                                  background: `${mainColor}18`,
+                                  color: mainColor,
+                                }}
+                              >
+                                {t}
+                              </span>
+                            )
+                            : <span className="text-gray-300 text-[10px]">0</span>;
                         }
-                        return <td key={col.key} className="px-3 py-2 whitespace-nowrap border-l first:border-l-0 border-gray-100">{val}</td>;
+                        return (
+                          <td key={col.key} className="px-3 py-2 whitespace-nowrap border-l first:border-l-0 border-gray-100">
+                            {val}
+                          </td>
+                        );
                       })}
                     </tr>
                   </tfoot>

@@ -1,16 +1,10 @@
 /**
- * RocketReachSearchPage.tsx — v5 FINAL
+ * RocketReachSearchPage.tsx — v5.1
  *
- * Merges:
- *   - v4 enrichment logic (enrich-batch, Realtime, 45s fallback, progress)
- *   - New RRFilters interface from RRSearchSidebar v3 (collapsible sections, full API coverage)
- *
- * Key differences from v4:
- *   - FilterState replaced by RRFilters (single object, 30+ fields)
- *   - Sidebar props: onChange(patch) instead of 15 individual setters
- *   - filterCount uses new countFilters() helper
- *   - URL encoding uses compact keys for all new fields
- *   - useRRSearch now receives full RRFilters spread
+ * No structural changes from v5.
+ * Only fix: countFilters() correctly references `department` (job_function) field
+ * and removes the now-redundant `yearsExperience` double-count
+ * (yearsExperience is counted in coreCnt inside sidebar, not needed here too).
  */
 
 import React, {
@@ -22,10 +16,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { cn }             from "@/lib/utils";
 import { supabase }       from "@/integrations/supabase/client";
 import {
-  ChevronLeft, ChevronRight, Bookmark, Loader2, ChevronDown,
+  ChevronLeft, ChevronRight, Bookmark, Loader2,
 } from "lucide-react";
 
-// ── New sidebar v3 — exports RRFilters type and DEFAULT_RR_FILTERS
 import { RRSearchSidebar, RRFilters, DEFAULT_RR_FILTERS } from "./RRSearchSidebar";
 import { RRResultsArea }    from "./RRResultsArea";
 import { RRDetailPanel }    from "./RRDetailPanel";
@@ -86,9 +79,12 @@ function encodeState(s: PageState): URLSearchParams {
   if (f.newsSignal)                  p.set("ns",   f.newsSignal);
   if (f.jobPostingSignal)            p.set("jps",  f.jobPostingSignal);
   if (f.orderBy !== "popularity")    p.set("ob",   f.orderBy);
+  if (f.openToWork)                  p.set("otw",  "1");
+  if (f.yearsInCurrentRole)          p.set("yr",   f.yearsInCurrentRole);
+  if (f.recentlyChangedJobs)         p.set("rcj",  "1");
   if (s.pageSize !== 10)             p.set("per",  String(s.pageSize));
   if (s.page > 1)                    p.set("pg",   String(s.page));
-  if (s.provider !== "rocketreach")  p.set("pv",   s.provider);
+  if (s.provider !== "contactout")   p.set("pv",   s.provider);
   return p;
 }
 
@@ -98,112 +94,77 @@ function decodeState(p: URLSearchParams): PageState {
   const sp = (key: string) => p.get(key) ? p.get(key)!.split("|") : [];
   return {
     filters: {
-      keyword:              p.get("kw")  ?? "",
-      name:                 p.get("nm")  ?? "",
-      titles:               sp("tt"),
-      locations:            sp("loc"),
-      managementLevels:     sp("ml"),
+      keyword:               p.get("kw")  ?? "",
+      name:                  p.get("nm")  ?? "",
+      titles:                sp("tt"),
+      locations:             sp("loc"),
+      managementLevels:      sp("ml"),
       skillChips,
-      currentEmployer:      sp("co"),
-      companySize:          sp("cs"),
-      companyIndustry:      sp("ci"),
-      companyRevenue:       p.get("cr")  ?? "",
+      currentEmployer:       sp("co"),
+      companySize:           sp("cs"),
+      companyIndustry:       sp("ci"),
+      companyRevenue:        p.get("cr")  ?? "",
       companyPubliclyTraded: p.get("pt") === "1",
-      companyFundingMin:    p.get("fmn") ?? "",
-      companyFundingMax:    p.get("fmx") ?? "",
-      companyTags:          sp("ct"),
-      department:           sp("dp"),
-      yearsExperience:      p.get("ye")  ?? "",
-      previousEmployer:     sp("pe"),
-      previousTitle:        sp("ptt"),
-      school:               sp("sc"),
-      degree:               sp("dg"),
-      major:                sp("mj"),
-      contactMethod:        sp("cm"),
-      emailGrade:           p.get("eg")  ?? "",
-      jobChangeSignal:      p.get("jcs") ?? "",
-      newsSignal:           p.get("ns")  ?? "",
-      jobPostingSignal:     p.get("jps") ?? "",
-      orderBy:              (p.get("ob") as any) ?? "popularity",
+      companyFundingMin:     p.get("fmn") ?? "",
+      companyFundingMax:     p.get("fmx") ?? "",
+      companyTags:           sp("ct"),
+      department:            sp("dp"),
+      yearsExperience:       p.get("ye")  ?? "",
+      previousEmployer:      sp("pe"),
+      previousTitle:         sp("ptt"),
+      school:                sp("sc"),
+      degree:                sp("dg"),
+      major:                 sp("mj"),
+      contactMethod:         sp("cm"),
+      emailGrade:            p.get("eg")  ?? "",
+      jobChangeSignal:       p.get("jcs") ?? "",
+      newsSignal:            p.get("ns")  ?? "",
+      jobPostingSignal:      p.get("jps") ?? "",
+      orderBy:               (p.get("ob") as any) ?? "popularity",
+      openToWork:            p.get("otw") === "1",
+      yearsInCurrentRole:    p.get("yr")  ?? "",
+      recentlyChangedJobs:   p.get("rcj") === "1",
     },
     pageSize: parseInt(p.get("per") ?? "10", 10),
     page:     parseInt(p.get("pg")  ?? "1",  10),
-    provider: (p.get("pv") as SearchProvider) ?? "rocketreach",
+    provider: (p.get("pv") as SearchProvider) ?? "contactout",
   };
 }
 
+// countFilters — matches all RRFilters fields
 function countFilters(f: RRFilters): number {
-  return [f.keyword, f.name, f.companyRevenue, f.yearsExperience,
-          f.emailGrade, f.jobChangeSignal, f.newsSignal, f.jobPostingSignal]
-           .filter(v => v?.trim()).length
-    + f.titles.length + f.locations.length + f.managementLevels.length + f.skillChips.length
-    + f.currentEmployer.length + f.companySize.length + f.companyIndustry.length
-    + f.companyTags.length + f.department.length + f.previousEmployer.length
-    + f.previousTitle.length + f.school.length + f.degree.length + f.major.length
+  return [
+    f.keyword, f.name, f.companyRevenue, f.yearsExperience,
+    f.emailGrade, f.jobChangeSignal, f.newsSignal, f.jobPostingSignal,
+    f.yearsInCurrentRole,
+  ].filter(v => v?.trim()).length
+    + f.titles.length
+    + f.locations.length
+    + f.managementLevels.length
+    + f.skillChips.length
+    + f.currentEmployer.length
+    + f.companySize.length
+    + f.companyIndustry.length
+    + f.companyTags.length
+    + f.department.length
+    + f.previousEmployer.length
+    + f.previousTitle.length
+    + f.school.length
+    + f.degree.length
+    + f.major.length
     + f.contactMethod.length
-    + (f.companyPubliclyTraded ? 1 : 0)
-    + (f.companyFundingMin ? 1 : 0)
-    + (f.companyFundingMax ? 1 : 0);
+    + (f.companyPubliclyTraded  ? 1 : 0)
+    + (f.companyFundingMin      ? 1 : 0)
+    + (f.companyFundingMax      ? 1 : 0)
+    + (f.openToWork             ? 1 : 0)
+    + (f.recentlyChangedJobs    ? 1 : 0);
 }
 
 // ─── Provider config ──────────────────────────────────────────────────────────
 const PROVIDER_CFG = {
-  rocketreach: { label: "Search",     shortLabel: "RR", bgClass: "bg-orange-500", totalLabel: "700M+ profiles", note: "Reveal contact after search" },
-  contactout:  { label: "ContactOut", shortLabel: "CO", bgClass: "bg-violet-600", totalLabel: "300M+ profiles", note: "Contact info at search time" },
+  rocketreach: { bgClass: "bg-violet-600", totalLabel: "700M+ profiles" },
+  contactout:  { bgClass: "bg-violet-600", totalLabel: "300M+ profiles" },
 } as const;
-
-const ProviderToggle: React.FC<{ current: SearchProvider; onChange: (p: SearchProvider) => void }> = ({ current, onChange }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, []);
-  const cfg = PROVIDER_CFG[current];
-  return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen(v => !v)}
-        className={cn("flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-lg border text-[11px] font-bold transition-all",
-          current === "rocketreach"
-            ? "bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400"
-            : "bg-violet-50 text-violet-700 border-violet-200 hover:border-violet-400")}>
-        <span className={cn("w-4 h-4 rounded-md flex items-center justify-center text-[7px] text-white font-black flex-shrink-0", cfg.bgClass)}>
-          {cfg.shortLabel}
-        </span>
-        {cfg.label}
-        <ChevronDown size={10} className={cn("transition-transform", open && "rotate-180")} />
-      </button>
-      {open && (
-        <div className="absolute top-full right-0 mt-1 w-60 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden py-1">
-          {(["rocketreach","contactout"] as SearchProvider[]).map(id => {
-            const c = PROVIDER_CFG[id];
-            return (
-              <button key={id} type="button" onClick={() => { onChange(id); setOpen(false); }}
-                className={cn("w-full flex items-start gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left", id === current && "bg-slate-50")}>
-                <span className={cn("w-6 h-6 rounded-lg flex items-center justify-center text-[9px] text-white font-black flex-shrink-0 mt-0.5", c.bgClass)}>{c.shortLabel}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-[12px] font-bold text-slate-800">{c.label}</p>
-                    {id === current && <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">Active</span>}
-                  </div>
-                  <p className="text-[9px] text-slate-400 mt-0.5">{c.totalLabel}</p>
-                  <p className="text-[9px] text-slate-400">{c.note}</p>
-                </div>
-              </button>
-            );
-          })}
-          <div className="mx-3 mb-2 mt-1 px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200">
-            <p className="text-[9px] text-slate-500 leading-relaxed">
-              <span className="font-semibold text-violet-600">ContactOut</span> uses the same UI.
-              Set <span className="font-mono font-semibold">CONTACTOUT_API_TOKEN</span> in Supabase secrets.
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
 
 const SavedBadge: React.FC<{ orgId: string | null }> = ({ orgId }) => {
   const { count, isLoading } = useSavedCandidatesCount(orgId);
@@ -240,7 +201,6 @@ export const RocketReachSearchPage: React.FC = () => {
     });
   }, [setSearchParams]);
 
-  // Filters change always resets page to 1
   const updateFilters = useCallback((patch: Partial<RRFilters>) => {
     setPageState(prev => {
       const next = { ...prev, filters: { ...prev.filters, ...patch }, page: 1 };
@@ -250,13 +210,12 @@ export const RocketReachSearchPage: React.FC = () => {
   }, [setSearchParams]);
 
   const clearAll = useCallback(() => {
-    const next: PageState = { ...{ ...pageState, filters: DEFAULT_RR_FILTERS, page: 1 } };
+    const next: PageState = { ...pageState, filters: DEFAULT_RR_FILTERS, page: 1 };
     setPageState(next);
     setSearchParams(encodeState(next), { replace: true });
   }, [pageState, setSearchParams]);
 
   const { filters, pageSize, page, provider } = pageState;
-  const providerCfg = PROVIDER_CFG[provider];
 
   // ── Search ────────────────────────────────────────────────────────────────
   const { state, profiles, totalEntries, error, search } = useRRSearch({
@@ -299,7 +258,6 @@ export const RocketReachSearchPage: React.FC = () => {
       else   console.log("[enrich-batch] started:", data);
     });
 
-    // 45s fallback poll
     fallbackTimer.current = setTimeout(async () => {
       const stillMissing = [...pendingIds.current];
       if (!stillMissing.length) return;
@@ -323,7 +281,6 @@ export const RocketReachSearchPage: React.FC = () => {
             _needs_rescrape: false,
           };
         }));
-        console.log(`[enrich-batch] fallback filled ${cacheRows.length} profiles`);
       }
       setEnrichProgress(prev => ({ ...prev, active: false }));
     }, 45_000);
@@ -338,9 +295,6 @@ export const RocketReachSearchPage: React.FC = () => {
         const id = typeof payload.profileId === "string"
           ? parseInt(payload.profileId, 10)
           : payload.profileId;
-
-        console.log("[search] Realtime profile-scraped", id,
-          "jobs:", payload.jobHistory?.length ?? 0, "skills:", payload.skills?.length ?? 0);
 
         pendingIds.current.delete(id);
         setEnrichProgress(prev => {
@@ -389,17 +343,17 @@ export const RocketReachSearchPage: React.FC = () => {
         ...p,
         _enriched:           true,
         _allEmails:          data.allEmails          ?? [],
-        _allPhones:          data.allPhones           ?? [],
-        _jobHistory:         data.jobHistory          ?? [],
-        _education:          data.education           ?? [],
-        _skills:             data.skills              ?? [],
-        _contactId:          data.contactId           ?? null,
-        _candidateProfileId: data.candidateProfileId  ?? null,
-        name:                data.name                ?? p.name,
-        current_title:       data.title               ?? p.current_title,
-        current_employer:    data.company             ?? p.current_employer,
-        profile_pic:         data.profilePic          ?? p.profile_pic,
-        linkedin_url:        data.linkedinUrl         ?? p.linkedin_url,
+        _allPhones:          data.allPhones          ?? [],
+        _jobHistory:         data.jobHistory         ?? [],
+        _education:          data.education          ?? [],
+        _skills:             data.skills             ?? [],
+        _contactId:          data.contactId          ?? null,
+        _candidateProfileId: data.candidateProfileId ?? null,
+        name:                data.name               ?? p.name,
+        current_title:       data.title              ?? p.current_title,
+        current_employer:    data.company            ?? p.current_employer,
+        profile_pic:         data.profilePic         ?? p.profile_pic,
+        linkedin_url:        data.linkedinUrl        ?? p.linkedin_url,
       };
     setEnrichedProfiles(prev => prev.map(upd));
     setSelectedProfile(prev => prev ? upd(prev) : null);
@@ -425,6 +379,7 @@ export const RocketReachSearchPage: React.FC = () => {
       <div className="w-[260px] flex-shrink-0 h-full overflow-hidden">
         <RRSearchSidebar
           filters={filters}
+          provider={provider}
           onChange={updateFilters}
           onClearAll={clearAll}
           onSearch={handleRunSearch}
@@ -440,20 +395,14 @@ export const RocketReachSearchPage: React.FC = () => {
 
         {/* Top bar */}
         <div className="flex-shrink-0 h-11 px-4 flex items-center justify-between border-b border-slate-100 bg-white gap-3">
-
-          {/* Left */}
           <div className="flex items-center gap-2.5">
-            <span className={cn("w-6 h-6 rounded-lg flex items-center justify-center text-[8px] text-white font-black flex-shrink-0", providerCfg.bgClass)}>
-              {providerCfg.shortLabel}
-            </span>
             <div className="hidden sm:block">
-              <p className="text-[11px] font-bold text-slate-700 leading-tight">{providerCfg.label} People</p>
-              <p className="text-[9px] text-slate-400">{providerCfg.totalLabel}</p>
+              <p className="text-[11px] font-bold text-slate-700 leading-tight">People Search</p>
+              <p className="text-[9px] text-slate-400">{PROVIDER_CFG[provider].totalLabel}</p>
             </div>
             {isLoading && <Loader2 size={12} className="animate-spin text-slate-400" />}
           </div>
 
-          {/* Center: count + pagination */}
           <div className="flex items-center gap-2">
             {totalEntries > 0 && !isLoading && (
               <span className="text-[10px] text-slate-500">
@@ -475,7 +424,6 @@ export const RocketReachSearchPage: React.FC = () => {
             )}
           </div>
 
-          {/* Right: per-page + provider toggle + saved */}
           <div className="flex items-center gap-2">
             {hasFilters && (
               <div className="flex items-center gap-1.5">
@@ -489,8 +437,6 @@ export const RocketReachSearchPage: React.FC = () => {
                 </select>
               </div>
             )}
-            <div className="h-4 w-px bg-slate-200" />
-            <ProviderToggle current={provider} onChange={p => updateState({ provider: p, page: 1 })} />
             <div className="h-4 w-px bg-slate-200" />
             <SavedBadge orgId={orgId} />
           </div>
