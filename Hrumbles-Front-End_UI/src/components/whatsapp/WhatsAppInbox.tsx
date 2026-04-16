@@ -166,24 +166,24 @@ function MediaBubble({ content, isOut }: { content: ParsedContent; isOut: boolea
           display: 'flex', alignItems: 'center', gap: 10, minWidth: 180, maxWidth: 260,
         }}>
           <div style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-            background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+            background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>
             {content.filename.endsWith('.pdf') ? '📄'
               : content.filename.endsWith('.doc') || content.filename.endsWith('.docx') ? '📝'
               : content.filename.endsWith('.xls') || content.filename.endsWith('.xlsx') ? '📊'
               : '📎'}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#111827',
+            <div style={{ fontSize: 10, fontWeight: 600, color: '#111827',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {content.filename}
             </div>
             {content.url
               ? <a href={content.url} target="_blank" rel="noopener noreferrer" download={content.filename}
-                  style={{ fontSize: 11, color: B.primary, fontWeight: 600, textDecoration: 'none',
+                  style={{ fontSize: 10, color: B.primary, fontWeight: 600, textDecoration: 'none',
                     display: 'flex', alignItems: 'center', gap: 3, marginTop: 3 }}>
                   ↓ Download
                 </a>
-              : <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 3 }}>Unavailable</div>
+              : <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3 }}>Unavailable</div>
             }
           </div>
         </div>
@@ -193,7 +193,7 @@ function MediaBubble({ content, isOut }: { content: ParsedContent; isOut: boolea
     case 'video':
       return <video controls src={content.url} style={{ maxWidth: 260, maxHeight: 180, borderRadius: 10 }} />;
     case 'placeholder':
-      return <div style={{ fontSize: 13, color: '#6B7280', fontStyle: 'italic', padding: '4px 0' }}>{content.label}</div>;
+      return <div style={{ fontSize: 12, color: '#6B7280', fontStyle: 'italic', padding: '4px 0' }}>{content.label}</div>;
     default: return null;
   }
 }
@@ -238,7 +238,7 @@ function ConvItem({ conv, isSelected, onClick }: {
     <div
       onClick={onClick}
       style={{
-        padding: '12px 16px', cursor: 'pointer',
+        padding: '10px 14px', cursor: 'pointer',
         background: isSelected ? B.selBg : 'transparent',
         borderLeft: `3px solid ${isSelected ? B.selBorder : 'transparent'}`,
         borderBottom: '1px solid #F3F4F6',
@@ -250,10 +250,10 @@ function ConvItem({ conv, isSelected, onClick }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Avatar */}
         <div style={{
-          width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+          width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
           background: isSelected ? B.primary : '#EDE9FE',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 16, fontWeight: 700,
+          fontSize: 12, fontWeight: 700,
           color: isSelected ? '#fff' : B.primaryDark,
         }}>
           {initials(conv.candidate_name)}
@@ -262,7 +262,7 @@ function ConvItem({ conv, isSelected, onClick }: {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#111827',
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#111827',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
                 {conv.candidate_name || conv.phone_number}
               </span>
@@ -278,7 +278,7 @@ function ConvItem({ conv, isSelected, onClick }: {
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{
-              fontSize: 12,
+              fontSize: 10,
               color:      conv.unread_count > 0 ? '#111827' : '#9CA3AF',
               fontWeight: conv.unread_count > 0 ? 500 : 400,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -495,14 +495,14 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
 
       {/* Chat header — brand gradient (no dark green) */}
       <div style={{
-        background: B.header, padding: '12px 20px',
-        display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+        background: B.header, padding: '8px 14px',
+        display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
       }}>
         <div style={{
-          width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+          width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
           background: 'rgba(255,255,255,0.2)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 15, fontWeight: 700, color: '#fff',
+          fontSize: 12, fontWeight: 700, color: '#fff',
         }}>
           {initials(conv.candidate_name)}
         </div>
@@ -511,7 +511,7 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {conv.candidate_name || `+${conv.phone_number}`}
           </div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', marginTop: 1 }}>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)', marginTop: 1 }}>
             +{conv.phone_number}
             {conv.candidate_email && ` · ${conv.candidate_email}`}
           </div>
@@ -522,14 +522,14 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
             style={{
               padding: '5px 12px', borderRadius: 8, border: 'none',
               background: 'rgba(255,255,255,0.15)', color: '#fff',
-              fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              fontSize: 10, fontWeight: 600, cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 4,
             }}
           >
             View Profile →
           </button>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
           <div style={{
             width: 8, height: 8, borderRadius: '50%',
             background: win.open ? '#A78BFA' : '#FCD34D',
@@ -542,16 +542,16 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
 
       {/* Messages */}
       <div style={{
-        flex: 1, overflowY: 'auto', padding: '12px 20px',
-        background: B.msgBg, display: 'flex', flexDirection: 'column', gap: 5,
+        flex: 1, overflowY: 'auto', padding: '8px 14px',
+        background: B.msgBg, display: 'flex', flexDirection: 'column', gap: 3,
       }}>
         {isLoading ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: 40 }}>
             <Spin />
-            <span style={{ fontSize: 12, color: '#9CA3AF' }}>Loading conversation…</span>
+            <span style={{ fontSize: 10, color: '#9CA3AF' }}>Loading conversation…</span>
           </div>
         ) : messages.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#9CA3AF', fontSize: 13 }}>
+          <div style={{ textAlign: 'center', padding: 40, color: '#9CA3AF', fontSize: 12 }}>
             No messages yet. Send a template to start.
           </div>
         ) : (
@@ -567,7 +567,7 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
                 <Fragment key={msg.id}>
                   {newDay && (
                     <div style={{
-                      alignSelf: 'center', fontSize: 11, color: '#6B7280',
+                      alignSelf: 'center', fontSize: 10, color: '#6B7280',
                       background: 'rgba(255,255,255,0.9)', padding: '3px 12px',
                       borderRadius: 99, margin: '6px 0',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
@@ -608,7 +608,7 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
                           ? '0 1px 3px rgba(109,40,217,0.1)'
                           : '0 1px 2px rgba(0,0,0,0.07)',
                         border: isOut ? '1px solid #DDD6FE' : '1px solid #F3F4F6',
-                        fontSize: 13, color: '#111827', lineHeight: 1.6,
+                        fontSize: 12, color: '#111827', lineHeight: 1.6,
                         wordBreak: 'break-word', whiteSpace: 'pre-wrap',
                       }}>
                         {parsed.kind === 'text' ? parsed.text
@@ -639,7 +639,7 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
               padding: '8px 16px', border: 'none', cursor: 'pointer',
               background: convState === 'closed' ? '#FFFBEB' : B.tray,
               color: convState === 'closed' ? '#92400E' : '#6B7280',
-              fontSize: 11, fontWeight: 700,
+              fontSize: 10, fontWeight: 700,
             }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -672,7 +672,7 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
                     width: '100%', marginBottom: 5, padding: '9px 12px', borderRadius: 10,
                     border: '1px solid #EDE9FE', background: '#fff',
                     cursor: isSending ? 'not-allowed' : 'pointer',
-                    textAlign: 'left', fontSize: 12, color: '#374151', fontWeight: 600,
+                    textAlign: 'left', fontSize: 10, color: '#374151', fontWeight: 600,
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     gap: 8, opacity: isSending ? 0.6 : 1,
                   }}
@@ -711,8 +711,8 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
           }
           rows={1}
           style={{
-            flex: 1, borderRadius: 22, border: '1px solid #DDD6FE', padding: '9px 14px',
-            fontSize: 13, fontFamily: 'inherit', background: '#fff',
+            flex: 1, borderRadius: 22, border: '1px solid #DDD6FE', padding: '7px 12px',
+            fontSize: 12, fontFamily: 'inherit', background: '#fff',
             resize: 'none', outline: 'none', color: '#111827',
             maxHeight: 100, lineHeight: 1.5,
             opacity: canType ? 1 : 0.45, cursor: canType ? 'text' : 'not-allowed',
@@ -722,7 +722,7 @@ function ChatPanel({ conv, organizationId, userId, onRead }: ChatPanelProps) {
           onClick={handleSend}
           disabled={!inputText.trim() || !canType || isSending}
           style={{
-            width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+            width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
             background: inputText.trim() && canType ? B.sendActive : '#CBD5E1',
             border: 'none',
             cursor: inputText.trim() && canType ? 'pointer' : 'default',
@@ -830,16 +830,16 @@ const WhatsAppInbox: React.FC = () => {
     <>
       <style>{`
         @keyframes wai-spin { to { transform: rotate(360deg); } }
-        .wai-filter-btn { padding: 5px 14px; border-radius: 99px; border: 1px solid #E5E7EB; background: transparent; cursor: pointer; font-size: 12px; font-weight: 600; color: #6B7280; transition: all 0.15s; font-family: inherit; }
+        .wai-filter-btn { padding: 4px 10px; border-radius: 99px; border: 1px solid #E5E7EB; background: transparent; cursor: pointer; font-size: 10px; font-weight: 600; color: #6B7280; transition: all 0.15s; font-family: inherit; }
         .wai-filter-btn.active { background: ${B.primary}; color: #fff; border-color: ${B.primary}; }
         .wai-filter-btn:hover:not(.active) { background: ${B.primaryLight}; color: ${B.primary}; border-color: ${B.primary}; }
       `}</style>
 
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#F9FAFB', fontFamily: 'inherit' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%',minHeight: 0, background: '#F9FAFB', fontFamily: 'inherit',  overflow: 'hidden' }}>
 
         {/* Page header */}
         <div style={{
-          padding: '16px 24px', borderBottom: '1px solid #E5E7EB',
+          padding: '10px 16px', borderBottom: '1px solid #E5E7EB',
           background: '#fff', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
         }}>
           <div style={{
@@ -850,10 +850,10 @@ const WhatsAppInbox: React.FC = () => {
             <IcoChatPage />
           </div>
           <div>
-            <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#111827' }}>
+            <h1 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111827' }}>
               Candidate Conversations
             </h1>
-            <p style={{ margin: 0, fontSize: 12, color: '#9CA3AF' }}>
+            <p style={{ margin: 0, fontSize: 10, color: '#9CA3AF' }}>
               {conversations.length} conversations · {totalUnread} unread
             </p>
           </div>
@@ -864,7 +864,7 @@ const WhatsAppInbox: React.FC = () => {
 
           {/* Left panel */}
           <div style={{
-            width: 340, flexShrink: 0, borderRight: '1px solid #E5E7EB',
+            width: 280, flexShrink: 0, borderRight: '1px solid #E5E7EB',
             display: 'flex', flexDirection: 'column', background: '#fff',
           }}>
             {/* Search */}
@@ -875,8 +875,8 @@ const WhatsAppInbox: React.FC = () => {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 style={{
-                  width: '100%', padding: '8px 12px', borderRadius: 10,
-                  border: '1px solid #E5E7EB', fontSize: 13,
+                  width: '100%', padding: '6px 10px', borderRadius: 10,
+                  border: '1px solid #E5E7EB', fontSize: 12,
                   fontFamily: 'inherit', outline: 'none',
                   boxSizing: 'border-box', background: '#F9FAFB',
                   transition: 'border-color 0.15s',
@@ -906,9 +906,9 @@ const WhatsAppInbox: React.FC = () => {
               {isLoading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spin /></div>
               ) : error ? (
-                <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: '#EF4444' }}>{error}</div>
+                <div style={{ padding: 24, textAlign: 'center', fontSize: 10, color: '#EF4444' }}>{error}</div>
               ) : filtered.length === 0 ? (
-                <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>
+                <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 12 }}>
                   {search ? 'No matching conversations' : 'No conversations yet'}
                 </div>
               ) : (
@@ -953,7 +953,7 @@ const WhatsAppInbox: React.FC = () => {
                   <div style={{ fontSize: 16, fontWeight: 700, color: '#374151', marginBottom: 6 }}>
                     Select a conversation
                   </div>
-                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>
+                  <div style={{ fontSize: 12, color: '#9CA3AF' }}>
                     Choose from the list to view messages
                   </div>
                   {/* <div style={{ fontSize: 10, color: '#C4B5FD', marginTop: 10 }}>
@@ -970,3 +970,4 @@ const WhatsAppInbox: React.FC = () => {
 };
 
 export default WhatsAppInbox;
+// final version

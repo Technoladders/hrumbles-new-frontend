@@ -250,7 +250,11 @@ const DailyAttendanceReport: React.FC<DailyAttendanceReportProps> = ({
 
                             <TableCell>{formatTime(log.clock_in_time)}</TableCell>
                             <TableCell>{formatTime(log.clock_out_time)}</TableCell>
-                            <TableCell>{formatDuration(computedDuration)}</TableCell>
+                            <TableCell>
+  <span className={cn('font-medium', netMins < 0 ? 'text-red-500' : 'text-emerald-600')}>
+    {computedDuration !== null ? formatDuration(Math.max(0, netMins)) : '—'}
+  </span>
+</TableCell>
 
                             <TableCell>
                               {hasBreaks ? (
@@ -273,11 +277,7 @@ const DailyAttendanceReport: React.FC<DailyAttendanceReportProps> = ({
                               )}
                             </TableCell>
 
-                            <TableCell>
-                              <span className={cn('font-medium', netMins < 0 ? 'text-red-500' : 'text-emerald-600')}>
-                                {computedDuration !== null ? formatDuration(Math.max(0, netMins)) : '—'}
-                              </span>
-                            </TableCell>
+<TableCell>{formatDuration(computedDuration)}</TableCell>
                           </TableRow>
 
                           {/* Expanded break detail */}

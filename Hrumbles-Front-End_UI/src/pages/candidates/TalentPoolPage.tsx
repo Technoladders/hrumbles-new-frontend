@@ -307,7 +307,7 @@ const TalentPoolPage: FC = () => {
 
   const bulkCandidates: BulkInviteCandidate[] = paginatedCandidates
     .filter(c => selectedIds.has(c.id))
-    .map(c => ({ id: c.id, name: c.candidate_name, email: c.email, phone: c.phone, candidateId: null, candidateOwnerId: c.id }));
+    .map(c => ({ id: c.id, name: c.candidate_name, email: c.email, phone: c.phone, candidateId: null, candidateOwnerId: user?.id || '' }));
 
   // ── Table ──────────────────────────────────────────────────────────────────
   const renderTable = () => {
@@ -636,7 +636,7 @@ const TalentPoolPage: FC = () => {
             prefillName={singleInviteCandidate.candidate_name || ''}
             prefillPhone={singleInviteCandidate.phone || ''}
             candidateId={null}
-            candidateOwnerId={singleInviteCandidate.id}
+            candidateOwnerId={user.id}
             inviteSource="talentpool"
           />
         )}

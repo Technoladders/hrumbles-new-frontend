@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { RRProfile, RREmailEntry, RRPhoneEntry, SkillChip } from "./types";
 import { useRRUpsertSaved } from "./hooks/useRRUpsertSaved";
+import{ MasterProfileCV } from "./MasterProfileCV";
 
 const ROW_LABEL_CLASS = "w-[85px] text-slate-400 font-semibold flex-shrink-0";
 
@@ -296,13 +297,14 @@ interface RightCardProps {
   onInvite?:      () => void;
   canInvite:      boolean;
   provider:       string;
+  onViewCV?:      (linkedinUrl: string) => void;
 }
 
 const RightCard: React.FC<RightCardProps> = ({
   profile, enriched, allEmailsRaw, allPhones,
   teaserEmails, teaserPhones, emailAvailable, phoneAvailable,
   revealingEmail, revealingPhone, onRevealEmail, onRevealPhone,
-  onInvite, canInvite, provider,
+  onInvite, canInvite, provider, onViewCV,
 }) => {
   const [showEmailTeaser, setShowEmailTeaser] = useState(false);
   const [showPhoneTeaser, setShowPhoneTeaser] = useState(false);
@@ -457,6 +459,20 @@ const RightCard: React.FC<RightCardProps> = ({
           <span>{saveStatus === "saved" ? "Saved" : "Save"}</span>
         </button>
       </div>
+      <div className="grid grid-cols-1 gap-1.5">
+{onViewCV && (
+    <button
+      onClick={e => {
+        e.stopPropagation();
+        onViewCV(profile.linkedin_url);
+      }}
+      className="w-full text-[10px] font-semibold border border-violet-300 text-violet-600 hover:bg-violet-50 rounded-md py-1.5 transition-colors flex items-center justify-center gap-1.5"
+    >
+      <span>View Full CV</span>
+      <span className="text-xs">↗</span>
+    </button>
+  )}
+      </div>
     </div>
   );
 };
@@ -523,6 +539,68 @@ const InvitePicker: React.FC<InvitePickerProps> = ({ emails, phones, onConfirm, 
   );
 };
 
+// ─── Certifications Row ───────────────────────────────────────────────────────
+const CertificationsRow: React.FC<{ 
+  certifications: any[]; 
+  loading: boolean; 
+}> = ({ certifications, loading }) => {
+  const [showAll, setShowAll] = useState(false);
+
+  if (loading && !certifications.length) {
+    return (
+      <div className="mt-2 flex gap-2">
+        <Shimmer w="w-[85px]" h="h-2.5" className="flex-shrink-0" />
+        <div className="flex gap-1 flex-wrap">
+          {[80, 65, 90].map((w, i) => (
+            <Shimmer key={i} w={`w-[${w}px]`} h="h-4" className="rounded-full" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!certifications.length) return null;
+
+  const MAX = 3;
+  const visible = showAll ? certifications : certifications.slice(0, MAX);
+
+  return (
+    <div className="mt-2 text-[10px]">
+      <div className="flex items-start">
+        <span className={ROW_LABEL_CLASS}>Certifications</span>
+        <div className="flex-1 flex flex-wrap gap-1">
+          {visible.map((cert: any, i: number) => (
+            <span 
+              key={i} 
+              className="text-[9px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1"
+            >
+              <Award size={8} />
+              {cert.name ?? cert}
+            </span>
+          ))}
+
+          {certifications.length > MAX && (
+            <button 
+              type="button" 
+              onClick={e => { 
+                e.stopPropagation(); 
+                setShowAll(v => !v); 
+              }}
+              className="text-[9px] text-violet-500 hover:underline whitespace-nowrap flex items-center gap-0.5"
+            >
+              {showAll ? (
+                <><ChevronUp size={8} className="inline" /> less</>
+              ) : (
+                <>+{certifications.length - MAX} more</>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Single result row ────────────────────────────────────────────────────────
 export interface RRResultRowProps {
   profile:           RRProfile;
@@ -572,6 +650,10 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
 
   const emailAvailable = teaserAll.length > 0 ? true  : (p.teaser ? false : null);
   const phoneAvailable = teaserPhones.length > 0 ? true : (p.teaser ? false : null);
+
+  // View full cv
+  const [showCV, setShowCV] = useState(false);
+const [cvUrl, setCvUrl] = useState<string>("");
 
   const displayJobs = React.useMemo(() => {
     if (jobHist.length > 0) return jobHist;
@@ -662,16 +744,13 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
           <SkillsRow skills={skills} loading={isEnriching && !skills.length} activeLabels={activeLabels.size > 0 ? activeLabels : undefined} />
 
           {/* ContactOut certifications */}
-          {certs.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {certs.slice(0, 3).map((c: any, i: number) => (
-                <span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
-                  <Award size={8} />{c.name ?? c}
-                </span>
-              ))}
-              {certs.length > 3 && <span className="text-[9px] text-slate-400">+{certs.length - 3} certs</span>}
-            </div>
-          )}
+{/* Certifications - Improved with left title + expandable */}
+{certs.length > 0 && (
+  <CertificationsRow 
+    certifications={certs} 
+    loading={isEnriching && !certs.length} 
+  />
+)}
 
           {revealError && <p className="mt-1 text-[9px] text-red-500">{revealError}</p>}
         </div>
@@ -695,6 +774,10 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
               onInvite={canInvite ? () => setShowInvitePick(v => !v) : undefined}
               canInvite={canInvite}
               provider={provider}
+              onViewCV={(url) => {
+    setCvUrl(url);
+    setShowCV(true);
+  }}
             />
             {showInvitePick && onInvite && (
               <div className="absolute bottom-0 right-0 z-50">
@@ -709,6 +792,12 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
           </div>
         </div>
       </div>
+       {showCV && (
+  <MasterProfileCV 
+    linkedinUrl={cvUrl} 
+    onClose={() => setShowCV(false)} 
+  />
+)}
     </div>
   );
 };

@@ -194,43 +194,131 @@ function PhoneSection({ phones, teaserPhones, loading }: { phones: RRPhoneEntry[
 }
 
 // ─── Career timeline ────────────────────────────────────────────────────────────
+// ─── Compact Career Timeline ───────────────────────────────
 function CareerTimeline({ jobs }: { jobs: RRJobHistoryEntry[] }) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? jobs : jobs.slice(0, 3);
+
   return (
     <>
-      <div className="space-y-0">
-        {visible.map((j, i) => (
-          <div key={i} className="flex gap-3">
-            <div className="flex flex-col items-center flex-shrink-0 pt-1">
-              <div className={cn("w-2.5 h-2.5 rounded-full border-2 flex-shrink-0", j.is_current ? "bg-violet-500 border-violet-400" : "bg-white border-slate-300")} />
-              {i < visible.length - 1 && <div className="w-px flex-1 bg-slate-200 mt-1.5 min-h-[16px]" />}
-            </div>
-            <div className="pb-4 min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-1">
-                <p className={cn("text-[11px] font-bold leading-tight", j.is_current ? "text-slate-800" : "text-slate-600")}>
-                  {j.title ?? "—"}
-                  {j.is_current && <span className="ml-1.5 text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600">Current</span>}
-                </p>
-                {j.highest_level && <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-slate-100 text-slate-500 capitalize flex-shrink-0">{j.highest_level}</span>}
-              </div>
-              <p className="text-[10px] text-slate-500 mt-0.5 font-medium">{j.company_name ?? (j as any).company ?? "—"}</p>
-              <div className="flex items-center gap-2 mt-0.5 flex-wrap text-[9px] text-slate-400">
-                {(j.start_date || j.end_date) && (
-                  <span className="flex items-center gap-0.5"><Calendar size={8} />
-                    {j.start_date ? j.start_date.slice(0,7) : "?"} → {j.is_current ? "Present" : (j.end_date?.slice(0,7) ?? "?")}
-                  </span>
+      <div className="space-y-4">
+        {visible.map((j, i) => {
+          const companyName = j.company_name ?? (j as any).company ?? "—";
+          const logoUrl = j.logo_url;
+          const linkedinUrl = j.linkedin_url;
+          const websiteUrl = j.domain ? `https://${j.domain}` : null;
+
+          return (
+            <div key={i} className="flex gap-4 bg-white border border-slate-100 rounded-2xl p-4 hover:border-slate-200 transition-colors">
+              {/* Company Logo */}
+              <div className="flex-shrink-0 pt-0.5">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt={companyName}
+                    className="w-10 h-10 rounded-xl border border-slate-200 bg-white object-contain p-1 shadow-sm"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-[16px] font-bold text-slate-500 shadow-sm">
+                    {companyName[0]?.toUpperCase() || "?"}
+                  </div>
                 )}
-                {j.department && <span>· {j.department}{j.sub_department ? ` / ${j.sub_department}` : ""}</span>}
               </div>
-              {j.description && <p className="text-[9px] text-slate-400 mt-1 leading-relaxed line-clamp-2">{j.description}</p>}
+
+              {/* Job Details - More Compact */}
+              <div className="flex-1 min-w-0">
+                {/* Title + Current + Links in ONE line */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <p className={cn(
+                      "text-[13px] font-semibold leading-tight truncate",
+                      j.is_current ? "text-slate-900" : "text-slate-700"
+                    )}>
+                      {j.title ?? "—"}
+                    </p>
+
+                    {j.is_current && (
+                      <span className="text-[9px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 whitespace-nowrap">
+                        Current
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Compact Icons */}
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    {linkedinUrl && (
+                      <a
+                        href={linkedinUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="text-blue-600 hover:text-blue-700 transition-colors"
+                        title="LinkedIn"
+                      >
+                        <Linkedin size={14} />
+                      </a>
+                    )}
+                    {websiteUrl && (
+                      <a
+                        href={websiteUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="text-violet-600 hover:text-violet-700 transition-colors"
+                        title="Website"
+                      >
+                        <Globe size={14} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Company Name */}
+                <p className="text-[12px] text-slate-500 mt-0.5 font-medium">
+                  {companyName}
+                </p>
+
+                {/* Date + Department */}
+                <div className="flex items-center gap-2 mt-2 text-[10px] text-slate-400">
+                  {(j.start_date || j.end_date) && (
+                    <span className="flex items-center gap-1">
+                      <Calendar size={9} />
+                      {j.start_date ? j.start_date.slice(0, 7) : "?"} —{" "}
+                      {j.is_current ? "Present" : (j.end_date?.slice(0, 7) ?? "?")}
+                    </span>
+                  )}
+                  {j.department && (
+                    <span className="truncate">· {j.department}{j.sub_department ? ` / ${j.sub_department}` : ""}</span>
+                  )}
+                </div>
+
+                {/* Description */}
+                {j.description && (
+                  <p className="text-[10px] text-slate-600 mt-3 leading-relaxed line-clamp-2">
+                    {j.description}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {/* Show More Button */}
       {jobs.length > 3 && (
-        <button type="button" onClick={() => setShowAll(v => !v)} className="flex items-center gap-1 text-[10px] font-semibold text-violet-500 hover:text-violet-700 mt-1 transition-colors">
-          {showAll ? <><ChevronUp size={10}/> Show less</> : <><ChevronDown size={10}/> +{jobs.length-3} more roles</>}
+        <button
+          type="button"
+          onClick={() => setShowAll(v => !v)}
+          className="flex items-center gap-1 text-[10px] font-semibold text-violet-500 hover:text-violet-700 mt-3 transition-colors"
+        >
+          {showAll ? (
+            <><ChevronUp size={10} /> Show less</>
+          ) : (
+            <><ChevronDown size={10} /> +{jobs.length - 3} more roles</>
+          )}
         </button>
       )}
     </>
@@ -347,8 +435,62 @@ const PanelInvitePicker: React.FC<{
   );
 };
 
+// ─── Certifications Section ───────────────────────────────────────────────────
+function CertificationsSection({ certifications }: { certifications: any[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const MAX = 5;
+
+  if (!certifications || certifications.length === 0) return null;
+
+  const visible = showAll ? certifications : certifications.slice(0, MAX);
+
+  return (
+    <div>
+      <SectionHead>Certifications ({certifications.length})</SectionHead>
+      <div className="space-y-3">
+        {visible.map((cert: any, i: number) => (
+          <div key={i} className="flex gap-3 bg-amber-50/60 border border-amber-100 rounded-xl p-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Award size={16} className="text-amber-600" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold text-slate-800 leading-tight">
+                {cert.name}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                {cert.authority}
+                {/* {cert.license && <span className="font-mono text-[9px] ml-2 text-amber-600">• {cert.license}</span>} */}
+              </p>
+              {(cert.start_date_year || cert.start_date_month) && (
+                <p className="text-[9px] text-slate-400 mt-1">
+                  Issued {cert.start_date_month ? `${cert.start_date_month}/${cert.start_date_year}` : cert.start_date_year}
+                  {cert.end_date_year && ` • Expires ${cert.end_date_year}`}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {certifications.length > MAX && (
+        <button
+          type="button"
+          onClick={() => setShowAll(v => !v)}
+          className="flex items-center gap-1 text-[10px] font-semibold text-violet-500 hover:text-violet-700 mt-3 transition-colors"
+        >
+          {showAll ? (
+            <><ChevronUp size={10} /> Show less</>
+          ) : (
+            <><ChevronDown size={10} /> +{certifications.length - MAX} more certifications</>
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Main panel ─────────────────────────────────────────────────────────────────
-type PanelTab = "overview" | "contact" | "career" | "raw";
+type PanelTab = "overview" | "contact" | "career" | "education" | "raw";
 
 interface RRDetailPanelProps {
   profile:           RRProfile;
@@ -440,6 +582,7 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
     { key: "overview", label: "Overview" },
     { key: "contact",  label: `Contact${emailRevealed ? " ✓" : ""}` },
     { key: "career",   label: "Career"  },
+    { key: "education", label: "Education" },
     // { key: "raw",      label: "Raw"     },
   ];
 
@@ -517,23 +660,62 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
             {/* OVERVIEW */}
             {tab === "overview" && (
               <>
-                {(displayTitle !== "—" || displayCo !== "—") && (
-                  <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3.5">
-                    <SectionHead>Current Position</SectionHead>
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-8 h-8 rounded-lg border border-violet-200 bg-white flex items-center justify-center text-[11px] font-bold text-violet-600 flex-shrink-0 shadow-sm">{(displayCo[0] ?? "?").toUpperCase()}</div>
-                      <div>
-                        <p className="text-[12px] font-bold text-slate-800">{displayTitle}</p>
-                        <p className="text-[11px] text-violet-600 font-semibold">{displayCo}</p>
-                        {profile.current_employer_domain && (
-                          <a href={`https://${profile.current_employer_domain}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] text-slate-400 hover:text-violet-600 hover:underline flex items-center gap-1 mt-0.5">
-                            <Globe size={8} />{profile.current_employer_domain}
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
+{(displayTitle !== "—" || displayCo !== "—") && (
+  <div className="rounded-2xl border border-violet-100 bg-violet-50/40 p-4">
+    <SectionHead>Current Position</SectionHead>
+    
+    <div className="flex items-start gap-4 mt-3">
+      {/* Company Logo - Bigger & Consistent */}
+      <div className="flex-shrink-0">
+        {(() => {
+          const logoUrl = 
+            (profile as any)._coData?.currentCompanyLogo || 
+            jobHistory.find(j => j.is_current)?.logo_url || 
+            jobHistory[0]?.logo_url;
+
+          return logoUrl ? (
+            <img
+              src={logoUrl}
+              alt={displayCo}
+              className="w-11 h-11 rounded-2xl border border-violet-200 bg-white object-contain p-1.5 shadow-sm"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
+          ) : (
+            <div className="w-11 h-11 rounded-2xl border border-violet-200 bg-white flex items-center justify-center text-[17px] font-bold text-violet-600 shadow-sm">
+              {(displayCo[0] ?? "?").toUpperCase()}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Position Details */}
+      <div className="flex-1 min-w-0 pt-1">
+        <p className="text-[13px] font-semibold text-slate-900 leading-tight">
+          {displayTitle}
+        </p>
+        <p className="text-[12px] text-violet-700 font-medium mt-0.5">
+          {displayCo}
+        </p>
+
+        {/* Domain / Website Link */}
+        {profile.current_employer_domain && (
+          <a 
+            href={`https://${profile.current_employer_domain}`} 
+            target="_blank" 
+            rel="noreferrer" 
+            onClick={e => e.stopPropagation()}
+            className="inline-flex items-center gap-1 mt-2 text-[10px] text-slate-500 hover:text-violet-600 hover:underline transition-colors"
+          >
+            <Globe size={9} />
+            {profile.current_employer_domain}
+          </a>
+        )}
+      </div>
+    </div>
+  </div>
+)}
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
@@ -545,6 +727,16 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
                     {revealErrors.phone && <p className="text-[9px] text-red-500">{revealErrors.phone}</p>}
                   </div>
                 </div>
+
+                {/* Summary */}
+    {profile._coData?.summary && (
+      <div>
+        <SectionHead>Summary</SectionHead>
+        <div className="text-[11px] leading-relaxed text-slate-600 whitespace-pre-line">
+          {profile._coData.summary}
+        </div>
+      </div>
+    )}
 
                 {skills.length > 0 && (<><Divider /><div><SectionHead>Top Skills ({skills.length})</SectionHead><div className="flex flex-wrap gap-1.5">{skills.slice(0,10).map((s,i) => <span key={i} className="px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 ring-1 ring-violet-200 text-[9px] font-semibold">{s}</span>)}{skills.length > 10 && <button type="button" onClick={() => setTab("career")} className="px-2 py-0.5 text-[9px] text-violet-500 hover:underline">+{skills.length-10} more →</button>}</div></div></>)}
                 {jobHistory.length > 0 && (<><Divider /><div><SectionHead>Recent Experience</SectionHead><CareerTimeline jobs={jobHistory.slice(0,2)} />{jobHistory.length > 2 && <button type="button" onClick={() => setTab("career")} className="text-[10px] text-violet-500 hover:underline mt-1">View full career →</button>}</div></>)}
@@ -605,59 +797,83 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
       </>
     )}
 
-    {education.length > 0 && (
-      <>
-        <Divider />
-        <div>
-          <SectionHead>Education</SectionHead>
-          <EducationSection education={education} />
-        </div>
-      </>
-    )}
+  {profile.current_employer && (
+  <>
+    <Divider />
+    <div>
+      <SectionHead>Current Company</SectionHead>
+      <div className="flex items-start gap-4 bg-white border border-slate-100 rounded-2xl p-4">
+        {/* Company Logo - Bigger & Consistent */}
+        <div className="flex-shrink-0">
+          {(() => {
+            const logoUrl = 
+              (profile as any)._coData?.currentCompanyLogo || 
+              jobHistory.find(j => j.is_current)?.logo_url || 
+              jobHistory[0]?.logo_url;
 
-    {profile.current_employer && (
-      <>
-        <Divider />
-        <div>
-          <SectionHead>Current Company</SectionHead>
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-[12px] font-bold text-slate-600 flex-shrink-0 shadow-sm">
-              {profile.current_employer[0].toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <p className="text-[12px] font-bold text-slate-800">{profile.current_employer}</p>
-              {profile.current_employer_industry && (
-                <p className="text-[10px] text-slate-500 capitalize">{profile.current_employer_industry}</p>
-              )}
-              <div className="flex gap-2 mt-1.5 flex-wrap">
-                {profile.current_employer_website && (
-                  <a 
-                    href={profile.current_employer_website} 
-                    target="_blank" 
-                    rel="noreferrer"
-                    onClick={e => e.stopPropagation()} 
-                    className="flex items-center gap-1 text-[9px] text-violet-600 hover:underline"
-                  >
-                    <Globe size={8} /> Website
-                  </a>
-                )}
-                {profile.current_employer_linkedin_url && (
-                  <a 
-                    href={profile.current_employer_linkedin_url} 
-                    target="_blank" 
-                    rel="noreferrer"
-                    onClick={e => e.stopPropagation()} 
-                    className="flex items-center gap-1 text-[9px] text-blue-600 hover:underline"
-                  >
-                    <Linkedin size={8} /> LinkedIn
-                  </a>
-                )}
+            return logoUrl ? (
+              <img
+                src={logoUrl}
+                alt={profile.current_employer}
+                className="w-12 h-12 rounded-2xl border border-slate-200 bg-white object-contain p-1.5 shadow-sm"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center text-[18px] font-bold text-slate-500 shadow-sm">
+                {profile.current_employer[0]?.toUpperCase() || "?"}
               </div>
-            </div>
-          </div>
+            );
+          })()}
         </div>
-      </>
-    )}
+
+        {/* Company Details */}
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-semibold text-slate-900">
+            {profile.current_employer}
+          </p>
+
+          {profile.current_employer_industry && (
+            <p className="text-[11px] text-slate-500 mt-0.5 capitalize">
+              {profile.current_employer_industry}
+            </p>
+          )}
+
+          {/* Links */}
+          {(profile.current_employer_website || profile.current_employer_linkedin_url) && (
+            <div className="flex gap-4 mt-4 pt-3 border-t border-slate-100">
+              {profile.current_employer_website && (
+                <a 
+                  href={profile.current_employer_website} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  onClick={e => e.stopPropagation()} 
+                  className="flex items-center gap-1.5 text-[10px] text-violet-600 hover:text-violet-700 hover:underline font-medium"
+                >
+                  <Globe size={11} />
+                  Website
+                </a>
+              )}
+              {profile.current_employer_linkedin_url && (
+                <a 
+                  href={profile.current_employer_linkedin_url} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  onClick={e => e.stopPropagation()} 
+                  className="flex items-center gap-1.5 text-[10px] text-blue-600 hover:text-blue-700 hover:underline font-medium"
+                >
+                  <Linkedin size={11} />
+                  LinkedIn
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </>
+)}
 
     {!skills.length && !jobHistory.length && !education.length && (
       <div className="py-8 text-center">
@@ -670,6 +886,32 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
         >
           Reveal →
         </button>
+      </div>
+    )}
+  </>
+)}
+
+{/* EDUCATION & CERTIFICATIONS */}
+{tab === "education" && (
+  <>
+    {education.length > 0 && (
+      <div>
+        <SectionHead>Education ({education.length})</SectionHead>
+        <EducationSection education={education} />
+      </div>
+    )}
+
+    {profile._coData?.certifications?.length > 0 && (
+      <>
+        {education.length > 0 && <Divider />}
+        <CertificationsSection certifications={profile._coData.certifications} />
+      </>
+    )}
+
+    {education.length === 0 && !profile._coData?.certifications?.length && (
+      <div className="py-12 text-center">
+        <GraduationCap size={32} className="text-slate-200 mx-auto mb-3" />
+        <p className="text-[12px] text-slate-400">No education or certification data available</p>
       </div>
     )}
   </>
