@@ -1,10 +1,12 @@
 // src/components/jobs/job/invite/BulkInviteReviewModal.tsx
 //
-// CHANGES from previous version:
-//   1. Fetches org WA config on open — no more hardcoded DCS template structure
-//   2. Uses WaTemplatePreviewSection for dynamic preview (reads actual template components)
-//   3. Variable fields derived from real template components, not hardcoded 8-slot array
-//   4. whatsappBodyVars passed correctly with header + body vars in flat slot order
+// IMPROVEMENTS over previous version:
+//   1. Frontend validation before handleSendAll: checks all shared template vars
+//      are filled, blocks send and shows toast listing which are missing
+//   2. computeExpirySlot helper shared with InviteCandidateModal logic:
+//      expiry slot is derived from real template structure, not position assumption
+//   3. Auto-expand preview panel when validation fails so the user sees
+//      the unfilled fields immediately
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -100,7 +102,45 @@ function extractVarCount(text: string): number {
   return new Set(m.map(x => x.replace(/[{}]/g, ''))).size;
 }
 
-// Render text with {{N}} replaced — for bubble preview
+// ── Compute expiry slot from real template structure ──────────────────────────
+// Returns the index of the last body slot (convention = expiry date), or -1 if none.
+function computeExpirySlot(tpl: WaTemplate | undefined): number {
+  if (!tpl) return -1;
+  const headerComp = tpl.components?.find(c => c.type === 'HEADER');
+  const bodyComp   = tpl.components?.find(c => c.type === 'BODY');
+  const headerVarCount = headerComp?.text ? extractVarCount(headerComp.text) : 0;
+  const bodyVarCount   = bodyComp?.text   ? extractVarCount(bodyComp.text)   : 0;
+  if (bodyVarCount === 0) return -1;
+  return headerVarCount + bodyVarCount - 1;
+}
+
+// ── Validate shared vars — returns missing field labels ───────────────────────
+// Excludes first body slot (candidate name — auto-personalised per row).
+function getMissingSharedVarLabels(tpl: WaTemplate | undefined, vars: string[]): string[] {
+  if (!tpl) return [];
+  const headerComp = tpl.components?.find(c => c.type === 'HEADER');
+  const bodyComp   = tpl.components?.find(c => c.type === 'BODY');
+  const headerVarCount = headerComp?.text ? extractVarCount(headerComp.text) : 0;
+  const bodyVarCount   = bodyComp?.text   ? extractVarCount(bodyComp.text)   : 0;
+
+  const missing: string[] = [];
+  let slot = 0;
+
+  // Header vars — all must be filled
+  for (let n = 1; n <= headerVarCount; n++) {
+    if (!vars[slot]?.trim()) missing.push(`Header {{${n}}}`);
+    slot++;
+  }
+
+  // Body vars — skip slot 0 (first name, auto-personalised), check rest
+  for (let n = 1; n <= bodyVarCount; n++) {
+    if (n > 1 && !vars[slot]?.trim()) missing.push(`Body {{${n}}}`);
+    slot++;
+  }
+
+  return missing;
+}
+
 function renderPreviewNode(text: string, vars: string[], offset: number): React.ReactNode {
   const parts = text.split(/(\*[^*]+\*|\{\{\d+\}\})/g);
   return parts.map((p, i) => {
@@ -138,7 +178,6 @@ const BulkInviteReviewModal: React.FC<BulkInviteReviewModalProps> = ({
   const [sharedVars,     setSharedVars]     = useState<string[]>(Array(12).fill(''));
   const [previewRowIdx,  setPreviewRowIdx]  = useState(0);
 
-  // ── Open: reset + fetch WA config ─────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) return;
     setRows(candidates.map(c => ({ ...c, sendStatus: 'idle', phoneInput: c.phone || '' })));
@@ -162,13 +201,13 @@ const BulkInviteReviewModal: React.FC<BulkInviteReviewModalProps> = ({
         setWaCfg(cfg);
 
         const approved = (cfg.templates || []).filter((t: WaTemplate) => t.status === 'APPROVED');
-        const tpl      = cfg.default_template_name     ? approved.find((t: WaTemplate) => t.name === cfg.default_template_name) || approved[0]
-                                                        : approved[0];
+        const tpl      = cfg.default_template_name
+          ? approved.find((t: WaTemplate) => t.name === cfg.default_template_name) || approved[0]
+          : approved[0];
         if (!tpl) return;
         setWaTpl(tpl.name);
         setWaTplLang(tpl.language);
 
-        // Auto-fill vars based on actual template structure
         const headerComp = tpl.components?.find((c: WaComponent) => c.type === 'HEADER');
         const bodyComp   = tpl.components?.find((c: WaComponent) => c.type === 'BODY');
         const headerVarCount = headerComp?.text ? extractVarCount(headerComp.text) : 0;
@@ -179,11 +218,8 @@ const BulkInviteReviewModal: React.FC<BulkInviteReviewModalProps> = ({
         const expiryLabel = computeExpiryLabel(7);
         const orgName  = cfg.company_name || data?.name || '';
 
-        // Build a default filled array — common known slots
-        // We can't know template-specific mappings dynamically, so pre-fill what we know
         const filled = Array(headerVarCount + bodyVarCount).fill('');
-        if (headerVarCount >= 1) filled[0] = orgName;         // header {{1}} = company
-        // Body slots — fill common patterns
+        if (headerVarCount >= 1) filled[0] = orgName;
         if (bodyVarCount >= 1)  filled[headerVarCount]     = candidates[0]?.name?.split(' ')[0] || '';
         if (bodyVarCount >= 2)  filled[headerVarCount + 1] = job?.department || '';
         if (bodyVarCount >= 3)  filled[headerVarCount + 2] = jobTitle;
@@ -195,35 +231,28 @@ const BulkInviteReviewModal: React.FC<BulkInviteReviewModalProps> = ({
       });
   }, [isOpen, candidates, jobTitle, inviteSource, organizationId, job]);
 
+  // ── FIX: use computeExpirySlot for dynamic slot resolution ─────────────────
   const handleExpiryChange = (days: number) => {
     setExpiryDays(days);
-    setSharedVars(prev => {
-      const next = [...prev];
-      // Update the last slot if it looks like an expiry date
-      const tpl = waCfg?.templates?.find((t: WaTemplate) => t.name === waTpl);
-      const bodyVarCount = tpl?.components?.find((c: WaComponent) => c.type === 'BODY')?.text
-        ? extractVarCount(tpl.components!.find((c: WaComponent) => c.type === 'BODY')!.text!)
-        : 0;
-      const headerVarCount = tpl?.components?.find((c: WaComponent) => c.type === 'HEADER')?.text
-        ? extractVarCount(tpl.components!.find((c: WaComponent) => c.type === 'HEADER')!.text!)
-        : 0;
-      // Last body slot typically holds expiry
-      const expirySlot = headerVarCount + bodyVarCount - 1;
-      if (expirySlot >= 0) next[expirySlot] = computeExpiryLabel(days);
-      return next;
-    });
+    const tpl = waCfg?.templates?.find((t: WaTemplate) => t.name === waTpl) as WaTemplate | undefined;
+    const expirySlot = computeExpirySlot(tpl);
+    if (expirySlot >= 0) {
+      setSharedVars(prev => {
+        const next = [...prev];
+        next[expirySlot] = computeExpiryLabel(days);
+        return next;
+      });
+    }
   };
 
-  // Preview vars: personalise first name for selected row
   const previewVars = (() => {
     const row = rows[previewRowIdx];
-    const tpl = waCfg?.templates?.find((t: WaTemplate) => t.name === waTpl);
+    const tpl = waCfg?.templates?.find((t: WaTemplate) => t.name === waTpl) as WaTemplate | undefined;
     if (!row || !tpl) return sharedVars;
     const headerVarCount = tpl.components?.find((c: WaComponent) => c.type === 'HEADER')?.text
       ? extractVarCount(tpl.components!.find((c: WaComponent) => c.type === 'HEADER')!.text!)
       : 0;
     const next = [...sharedVars];
-    // First body slot = first name
     next[headerVarCount] = row.name?.split(' ')[0] || '';
     return next;
   })();
@@ -236,13 +265,30 @@ const BulkInviteReviewModal: React.FC<BulkInviteReviewModalProps> = ({
   const handleSendAll = async () => {
     const toSend = rows.filter(r => r.sendStatus === 'idle');
     if (toSend.length === 0) return;
+
     if (channel !== 'email') {
       const missing = toSend.filter(r => !r.phoneInput?.trim());
       if (missing.length > 0) { toast.error(`${missing.length} candidate(s) missing phone`); return; }
     }
+
+    // ── FIX: validate shared template vars before firing any requests ─────────
+    if ((channel === 'whatsapp' || channel === 'both') && waTpl) {
+      const tpl = waCfg?.templates?.find((t: WaTemplate) => t.name === waTpl) as WaTemplate | undefined;
+      const missingVars = getMissingSharedVarLabels(tpl, sharedVars);
+      if (missingVars.length > 0) {
+        toast.error(
+          `Fill all template variables before sending:\n${missingVars.join(', ')}`,
+          { duration: 4000 }
+        );
+        // Auto-expand the preview panel so the user sees the empty fields
+        setShowWaPreview(true);
+        return;
+      }
+    }
+
     setIsSending(true);
 
-    const tpl = waCfg?.templates?.find((t: WaTemplate) => t.name === waTpl);
+    const tpl = waCfg?.templates?.find((t: WaTemplate) => t.name === waTpl) as WaTemplate | undefined;
     const headerVarCount = tpl?.components?.find((c: WaComponent) => c.type === 'HEADER')?.text
       ? extractVarCount(tpl.components!.find((c: WaComponent) => c.type === 'HEADER')!.text!)
       : 0;
@@ -253,7 +299,6 @@ const BulkInviteReviewModal: React.FC<BulkInviteReviewModalProps> = ({
         const firstName = row.name?.split(' ')[0] || 'there';
         const personalised = message.replace('[Candidate Name]', firstName);
 
-        // Build per-candidate vars — personalise first name (first body slot)
         const waBodyVars = [...sharedVars];
         waBodyVars[headerVarCount] = firstName;
 
@@ -288,7 +333,6 @@ const BulkInviteReviewModal: React.FC<BulkInviteReviewModalProps> = ({
   const idleCount   = rows.filter(r => r.sendStatus === 'idle').length;
   const needsPhone  = channel !== 'email';
 
-  // Template info for preview
   const activeTpl = waCfg?.templates?.find((t: WaTemplate) => t.name === waTpl) as WaTemplate | undefined;
   const headerComp = activeTpl?.components?.find(c => c.type === 'HEADER');
   const bodyComp   = activeTpl?.components?.find(c => c.type === 'BODY');
@@ -299,12 +343,10 @@ const BulkInviteReviewModal: React.FC<BulkInviteReviewModalProps> = ({
   const totalEditableVars = headerVarCount + bodyVarCount;
   const waApproved = waCfg?.templates?.filter((t: WaTemplate) => t.status === 'APPROVED') || [];
 
-  // Build editable field descriptors from actual template
   type VarField = { slot: number; label: string; isHeader: boolean };
   const varFields: VarField[] = [];
   for (let n = 1; n <= headerVarCount; n++) varFields.push({ slot: n - 1, label: `Header {{${n}}}`, isHeader: true });
   for (let n = 1; n <= bodyVarCount; n++) varFields.push({ slot: headerVarCount + n - 1, label: `Body {{${n}}}`, isHeader: false });
-  // Exclude first body slot (first name — auto-personalised per candidate)
   const editableFields = varFields.filter(f => !(f.slot === headerVarCount && !f.isHeader));
 
   const modal = (
@@ -509,8 +551,6 @@ const BulkInviteReviewModal: React.FC<BulkInviteReviewModalProps> = ({
 
                 {showWaPreview && (
                   <div style={{ border: '1px solid #DDD6FE', borderRadius: '8px', overflow: 'hidden', marginTop: '6px' }}>
-
-                    {/* Editable shared vars */}
                     {editableFields.length > 0 && (
                       <div style={{ padding: '10px 12px', background: '#FAFAFA', borderBottom: '1px solid #EDE9FE' }}>
                         <p style={{ ...lbl, fontSize: '10px', marginBottom: '4px' }}>
@@ -519,31 +559,42 @@ const BulkInviteReviewModal: React.FC<BulkInviteReviewModalProps> = ({
                         <p style={{ margin: '0 0 8px', fontSize: '10px', color: '#9CA3AF' }}>
                           Candidate name auto-personalises per row. Click a recipient to preview their message.
                         </p>
-                        {editableFields.map(({ slot, label, isHeader }) => (
-                          <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '5px' }}>
-                            <span style={{
-                              fontSize: '9px', fontWeight: 700,
-                              color: isHeader ? '#92400E' : '#7C3AED',
-                              background: isHeader ? '#FEF3C7' : '#EDE9FE',
-                              padding: '2px 5px', borderRadius: '4px',
-                              whiteSpace: 'nowrap', flexShrink: 0, fontFamily: 'monospace',
-                              minWidth: '44px', textAlign: 'center',
-                            }}>
-                              {isHeader ? 'Header' : label.split(' ')[1]}
-                            </span>
-                            <span style={{ fontSize: '10px', color: '#9CA3AF', flexShrink: 0, width: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {label}
-                            </span>
-                            <input type="text" value={sharedVars[slot] || ''}
-                              onChange={e => { const n = [...sharedVars]; n[slot] = e.target.value; setSharedVars(n); }}
-                              placeholder={isHeader ? 'Company name' : `Value for ${label.split(' ')[1]}`}
-                              style={{ ...ipt, padding: '4px 8px', fontSize: '11px', flex: 1 }} />
-                          </div>
-                        ))}
+                        {editableFields.map(({ slot, label, isHeader }) => {
+                          const isMissing = !sharedVars[slot]?.trim();
+                          return (
+                            <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '5px' }}>
+                              <span style={{
+                                fontSize: '9px', fontWeight: 700,
+                                color: isHeader ? '#92400E' : '#7C3AED',
+                                background: isHeader ? '#FEF3C7' : '#EDE9FE',
+                                padding: '2px 5px', borderRadius: '4px',
+                                whiteSpace: 'nowrap', flexShrink: 0, fontFamily: 'monospace',
+                                minWidth: '44px', textAlign: 'center',
+                              }}>
+                                {isHeader ? 'Header' : label.split(' ')[1]}
+                              </span>
+                              <span style={{ fontSize: '10px', color: '#9CA3AF', flexShrink: 0, width: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {label}
+                              </span>
+                              <input type="text" value={sharedVars[slot] || ''}
+                                onChange={e => { const n = [...sharedVars]; n[slot] = e.target.value; setSharedVars(n); }}
+                                placeholder={isHeader ? 'Company name' : `Value for ${label.split(' ')[1]}`}
+                                style={{
+                                  ...ipt, padding: '4px 8px', fontSize: '11px', flex: 1,
+                                  // ── highlight empty required fields ──
+                                  border: isMissing ? '1.5px solid #FCA5A5' : '1px solid #E5E7EB',
+                                  background: isMissing ? '#FFF1F2' : '#fff',
+                                }} />
+                              {isMissing && (
+                                <span style={{ fontSize: '9px', color: '#EF4444', whiteSpace: 'nowrap', flexShrink: 0 }}>Required</span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
 
-                    {/* Bubble preview for selected row */}
+                    {/* Bubble preview */}
                     <div style={{ padding: '10px 12px', background: '#ECE5DD' }}>
                       <p style={{ margin: '0 0 6px', fontSize: '10px', color: '#5a4a2a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                         Preview — {rows[previewRowIdx]?.name || 'Candidate'} (row {previewRowIdx + 1})

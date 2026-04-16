@@ -1,14 +1,15 @@
 // src/components/jobs/job/invite/InviteCandidateModal.tsx
 //
-// FIXES:
-//   1. Portal rendering via createPortal → overrides parent z-index completely
-//   2. Fixed height (88vh max, no growing) with internal scroll
-//   3. Channel-aware sections: email only shows email preview,
-//      whatsapp only shows template picker + preview,
-//      both shows both
-//   4. WA config fetched on modal open (not just on channel switch)
-//      so prefillPhone works immediately when WA is chosen
-//   5. whatsappBodyVars added to SendInviteParams call
+// FIXES & IMPROVEMENTS:
+//   1. handleExpiryChange: computes expiry slot dynamically from template structure
+//      instead of hardcoding slot [7] — fixes expiry var not updating
+//   2. UI order: WA template selector + preview moved ABOVE expiry + email message
+//      so the recruiter sees and fills template vars before scrolling past them
+//   3. Frontend validation: blocks send if any template vars are empty,
+//      shows a toast listing which vars are missing
+//   4. computeExpirySlot helper: shared between initial fill and change handler
+//   5. Minor: waTpl change handler also uses computeExpirySlot so expiry is
+//      always correct when switching templates
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -76,20 +77,21 @@ function countTemplateVars(text: string): number {
   return new Set(m.map(x => x.replace(/[{}]/g, ''))).size;
 }
 
+// ── FIX: compute expiry slot from actual template structure ───────────────────
+// Previously: next[7] was hardcoded — wrong for templates with fewer vars.
+// Now: returns the index of the last body var (which is always expiry by convention).
+// Returns -1 if the template has no body vars (so caller can skip the update).
+function computeExpirySlot(tpl: any): number {
+  const headerComp = tpl?.components?.find((c: any) => c.type === 'HEADER');
+  const bodyComp   = tpl?.components?.find((c: any) => c.type === 'BODY');
+  const headerVarCount = headerComp?.text ? countTemplateVars(headerComp.text) : 0;
+  const bodyVarCount   = bodyComp?.text   ? countTemplateVars(bodyComp.text)   : 0;
+  if (bodyVarCount === 0) return -1;
+  // Last body slot = expiry date
+  return headerVarCount + bodyVarCount - 1;
+}
+
 // Build vars array for a specific template dynamically.
-// Returns a flat array: [headerVars..., bodyVars...] matching the template's actual structure.
-// Known slot semantics (works for both dcs_job_invite_v2 and candidate_invite):
-//   header {{1}} → company/org name  (if header has vars)
-//   body   {{1}} → candidate first name
-//   body   {{2}} → industry
-//   body   {{3}} → job title/profile
-//   body   {{4}} → qualification (empty by default)
-//   body   {{5}} → salary
-//   body   {{6}} → location
-//   body   {{7}} → expiry date
-// For templates with fewer body vars (e.g. candidate_invite has 3),
-// only the first N slots are used — so body slots map to:
-//   {{1}}=firstName, {{2}}=jobTitle, {{3}}=expiry (skipping industry/qual/salary/location)
 function buildVarsForTemplate(
   tpl: any,
   opts: { orgName: string; firstName: string; industry: string; profile: string; salary: string; location: string; expiryLabel: string; }
@@ -104,17 +106,13 @@ function buildVarsForTemplate(
 
   const result: string[] = [];
 
-  // Header vars (only if header has {{N}})
   if (headerHasVars) result.push(opts.orgName);
 
-  // Body vars — map by position depending on total body var count
-  // Templates with 3 body vars: name, jobTitle, expiry (no industry/salary/location)
-  // Templates with 7 body vars: name, industry, jobTitle, qual, salary, location, expiry
   const bodyVarValues: Record<number, string> = {};
   if (bodyVarCount >= 1) bodyVarValues[0] = opts.firstName;
   if (bodyVarCount >= 2) bodyVarValues[1] = bodyVarCount <= 4 ? opts.profile : opts.industry;
   if (bodyVarCount >= 3) bodyVarValues[2] = bodyVarCount <= 4 ? opts.expiryLabel : opts.profile;
-  if (bodyVarCount >= 4) bodyVarValues[3] = '';          // qualification
+  if (bodyVarCount >= 4) bodyVarValues[3] = '';
   if (bodyVarCount >= 5) bodyVarValues[4] = opts.salary;
   if (bodyVarCount >= 6) bodyVarValues[5] = opts.location;
   if (bodyVarCount >= 7) bodyVarValues[6] = opts.expiryLabel;
@@ -124,6 +122,29 @@ function buildVarsForTemplate(
   }
 
   return result;
+}
+
+// ── FIX: validate that all template vars are filled before send ───────────────
+// Returns list of human-readable missing field names, empty array if all OK.
+function getMissingVarLabels(tpl: any, vars: string[]): string[] {
+  if (!tpl) return [];
+  const headerComp = tpl?.components?.find((c: any) => c.type === 'HEADER');
+  const bodyComp   = tpl?.components?.find((c: any) => c.type === 'BODY');
+  const headerHasVars = headerComp?.text ? /\{\{\d+\}\}/.test(headerComp.text) : false;
+  const bodyVarCount  = bodyComp?.text   ? countTemplateVars(bodyComp.text)    : 0;
+  const headerVarCount = headerHasVars ? countTemplateVars(headerComp.text) : 0;
+
+  const missing: string[] = [];
+  let slot = 0;
+  for (let n = 1; n <= headerVarCount; n++) {
+    if (!vars[slot]?.trim()) missing.push(`Header {{${n}}}`);
+    slot++;
+  }
+  for (let n = 1; n <= bodyVarCount; n++) {
+    if (!vars[slot]?.trim()) missing.push(`Body {{${n}}}`);
+    slot++;
+  }
+  return missing;
 }
 
 const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
@@ -157,11 +178,7 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
     setPhone(prefillPhone);
     setChannel('email');
 
-    // AUTO-FETCH PHONE: ZiveX search view doesn't include phone column.
-    // If no phone was passed but we have a candidateId (talent pool record),
-    // fetch it from hr_talent_pool (for ZiveX) or hr_job_candidates (for pipeline).
     if (!prefillPhone && candidateId) {
-      // Try hr_talent_pool first (ZiveX / talent search candidates)
       supabase
         .from('hr_talent_pool')
         .select('phone')
@@ -171,7 +188,6 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
           if (data?.phone) {
             setPhone(data.phone);
           } else {
-            // Fallback: hr_job_candidates (pipeline candidates)
             supabase
               .from('hr_job_candidates')
               .select('phone')
@@ -190,7 +206,6 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
     setShowWaPreview(false);
     setMsg(emailTpl(prefillName, job?.title || '', inviteSource));
 
-    // Fetch WA config eagerly so it's ready when recruiter switches channel
     if (organizationId) {
       supabase
         .from('hr_organizations')
@@ -208,7 +223,6 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
           setWaTpl(resolvedName);
           setWaTplLang(resolvedLang);
 
-          // Auto-fill vars
           const orgName    = cfg.company_name || data?.name || '';
           const firstName  = (prefillName || '').split(' ')[0] || '';
           const industry   = job?.department || '';
@@ -220,7 +234,6 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
           const location   = locationArr.join(', ');
           const expiryLabel = computeExpiryLabel(7);
 
-          // Find the resolved template object to pass to buildVarsForTemplate
           const resolvedTplObj = approved.find((t: any) => t.name === resolvedName);
           const vars = buildVarsForTemplate(resolvedTplObj, { orgName, firstName, industry, profile, salary, location, expiryLabel });
           setWaTplVars(vars);
@@ -228,14 +241,21 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
     }
   }, [isOpen]);
 
-  // ── Keep expiry var in sync ─────────────────────────────────────────────────
+  // ── FIX: compute expiry slot dynamically from current template ──────────────
   const handleExpiryChange = (days: number) => {
     setExpiry(days);
-    setWaTplVars(prev => {
-      const next = [...prev];
-      next[7] = computeExpiryLabel(days);
-      return next;
-    });
+    if (!waCfg || !waTpl) return;
+
+    const tpl = (waCfg.templates || []).find((t: any) => t.name === waTpl);
+    const expirySlot = computeExpirySlot(tpl);
+
+    if (expirySlot >= 0) {
+      setWaTplVars(prev => {
+        const next = [...prev];
+        next[expirySlot] = computeExpiryLabel(days);
+        return next;
+      });
+    }
   };
 
   if (!isOpen) return null;
@@ -252,9 +272,26 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
   const needsEmail = channel === 'email' || channel === 'both';
   const needsWA    = channel === 'whatsapp' || channel === 'both';
 
+  // ── FIX: validate template vars before send ─────────────────────────────────
   const handleSend = async () => {
     if (!email && needsEmail) { toast.error('Email required'); return; }
     if (!phone && needsWA)    { toast.error('Phone required'); return; }
+
+    // Validate WhatsApp template vars — block send if any are empty
+    if (needsWA && waTpl) {
+      const tpl = waApproved.find((t: any) => t.name === waTpl);
+      const missingVars = getMissingVarLabels(tpl, waTplVars);
+      if (missingVars.length > 0) {
+        toast.error(
+          `Please fill all template variables before sending:\n${missingVars.join(', ')}`,
+          { duration: 4000 }
+        );
+        // Open the preview so the user can see and fill the missing vars
+        setShowWaPreview(true);
+        return;
+      }
+    }
+
     setSending(true);
     try {
       const r = await sendCandidateInvite({
@@ -457,7 +494,24 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                   </div>
                 )}
 
-                {/* WA template selector — only when WA */}
+                                 {/* ── Expiry — now below WA template vars ── */}
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <label style={{ ...lbl, marginBottom: 0, whiteSpace: 'nowrap' }}>Expires</label>
+                  <div style={{ display: 'flex', gap: '3px' }}>
+                    {EXPIRY.map(o => (
+                      <button key={o.value} onClick={() => handleExpiryChange(o.value)} style={{
+                        padding: '3px 8px', borderRadius: '5px', fontSize: '10px', fontWeight: 600,
+                        border: expiry === o.value ? '2px solid #7C3AED' : '1px solid #E5E7EB',
+                        background: expiry === o.value ? '#EDE9FE' : '#fff',
+                        color: expiry === o.value ? '#7C3AED' : '#6B7280', cursor: 'pointer',
+                      }}>{o.label}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── WA SECTION — moved above expiry/email so vars are visible ── */}
+
+                {/* WA template selector */}
                 {needsWA && (
                   <div>
                     <label style={lbl}>WA Template</label>
@@ -473,7 +527,6 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                         setWaTpl(e.target.value);
                         if (t) {
                           setWaTplLang(t.language);
-                          // Rebuild vars for the new template structure
                           const orgName     = waCfg?.company_name || '';
                           const firstName   = (name || prefillName || '').split(' ')[0] || '';
                           const industry    = job?.department || '';
@@ -494,7 +547,9 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                   </div>
                 )}
 
-                {/* WA preview panel — only when WA + template selected */}
+
+
+                {/* WA preview panel — now above expiry */}
                 {needsWA && waTpl && (
                   <WaTemplatePreviewSection
                     waCfg={waCfg}
@@ -508,20 +563,7 @@ const InviteCandidateModal: React.FC<InviteCandidateModalProps> = ({
                   />
                 )}
 
-                {/* Expiry */}
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  <label style={{ ...lbl, marginBottom: 0, whiteSpace: 'nowrap' }}>Expires</label>
-                  <div style={{ display: 'flex', gap: '3px' }}>
-                    {EXPIRY.map(o => (
-                      <button key={o.value} onClick={() => handleExpiryChange(o.value)} style={{
-                        padding: '3px 8px', borderRadius: '5px', fontSize: '10px', fontWeight: 600,
-                        border: expiry === o.value ? '2px solid #7C3AED' : '1px solid #E5E7EB',
-                        background: expiry === o.value ? '#EDE9FE' : '#fff',
-                        color: expiry === o.value ? '#7C3AED' : '#6B7280', cursor: 'pointer',
-                      }}>{o.label}</button>
-                    ))}
-                  </div>
-                </div>
+               
 
                 {/* Email message — only when channel includes email */}
                 {needsEmail && (

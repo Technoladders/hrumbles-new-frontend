@@ -440,7 +440,7 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
     { key: "overview", label: "Overview" },
     { key: "contact",  label: `Contact${emailRevealed ? " ✓" : ""}` },
     { key: "career",   label: "Career"  },
-    { key: "raw",      label: "Raw"     },
+    // { key: "raw",      label: "Raw"     },
   ];
 
   const panel = (

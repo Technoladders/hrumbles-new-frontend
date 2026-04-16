@@ -230,3 +230,4 @@ export const BgvCandidateInfoCard: React.FC<BgvCandidateInfoCardProps> = ({ cand
     return years > 0 ? `${years} years and ${months} months` : `${months} months`;
   }
 };
+// compact

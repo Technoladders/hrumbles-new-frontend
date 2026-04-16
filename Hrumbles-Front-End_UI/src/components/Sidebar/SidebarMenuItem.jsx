@@ -261,7 +261,7 @@ const masterMenuItems = [
   { icon: AiOutlineProfile, label: "My Submission", path: "/my-submission", suite: "RECRUITMENT", permission: "view_my_submission" },
   { icon: TbDatabaseSearch, label: "Zive-X", path: "/zive-x", suite: "RECRUITMENT", permission: "access_zive_x", beta: true },
   { icon: FaSearch, label: "Recruiter-X", path: "/recruiter-x", suite: "RECRUITMENT", permission: "access_recruiter_x", beta: true },
-  { icon: TbDatabaseSearch, label: "Candidate Search", path: "/search/candidates/beta", suite: "RECRUITMENT", permission: "access_candidate_search", beta: true },
+  // { icon: TbDatabaseSearch, label: "Candidate Search", path: "/search/candidates/beta", suite: "RECRUITMENT", permission: "access_candidate_search", beta: true },
 
   { icon: LuSend, label: "My Invites", path: "/my-invites", suite: "RECRUITMENT", permission: "access_invite" },
   { icon: LuMessageSquare, label: "Conversations", path: "/whatsapp-conversations", suite: "RECRUITMENT", permission: "access_whatsapp_conversation", badge: "wa_unread" },

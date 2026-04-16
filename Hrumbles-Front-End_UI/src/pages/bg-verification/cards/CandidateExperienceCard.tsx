@@ -6,99 +6,62 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Candidate, CareerExperience } from "@/lib/types";
-import { StatusBadge, compareCompanyNames, compareDurations, UanRecord } from '../experienceComparisonUtils'; 
+import { StatusBadge, compareCompanyNames, compareDurations, UanRecord } from '../experienceComparisonUtils';
 import { EditExperienceModal } from "../EditExperienceModal";
 import { LinkExperienceModal } from "../LinkExperienceModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Trash2, Edit, Link2 } from "lucide-react";
-import { c } from "node_modules/framer-motion/dist/types.d-Bq-Qm38R";
+import { Trash2, Edit, Link2, AlertCircle } from "lucide-react";
 
 interface CandidateExperienceCardProps {
   candidate: Candidate;
   uanHistory: UanRecord[] | null;
 }
 
-// --- FORMAT DATE UTILITY FUNCTION ---
 const formatDate = (dateString: string | null | undefined): string => {
-  if (!dateString || dateString.toLowerCase() === 'present') {
-    return 'Present';
-  }
-  
+  if (!dateString || dateString.toLowerCase() === 'present') return 'Present';
   try {
-    // Handle various date formats
     const date = new Date(dateString);
-    
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-      return dateString; // Return original if invalid
-    }
-    
+    if (isNaN(date.getTime())) return dateString;
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const day = date.getDate();
-    const month = months[date.getMonth()];
-    const year = date.getFullYear();
-    
-    return `${day}-${month}-${year}`;
-  } catch (error) {
-    return dateString || 'N/A'; // Fallback to original string
+    return `${date.getDate()}-${months[date.getMonth()]}-${date.getFullYear()}`;
+  } catch {
+    return dateString || 'N/A';
   }
 };
 
-// --- ROW STYLING HELPER FUNCTION ---
 const getRowClassByStatus = (companyStatus: string): string => {
   switch (companyStatus) {
     case 'High Similarity':
     case 'Exact Match':
     case 'Alias Match':
-      return 'bg-green-50/70 hover:bg-green-50 border-l-4 border-green-400';
+      return 'bg-green-50/60 border-l-2 border-green-400';
     case 'Company Missing':
     case 'Mismatch':
-      return 'bg-red-50/70 hover:bg-red-50 border-l-4 border-red-400';
+      return 'bg-red-50/60 border-l-2 border-red-400';
     case 'Partial Match (Company)':
-      return 'bg-yellow-50/70 hover:bg-yellow-50 border-l-4 border-yellow-400';
+      return 'bg-yellow-50/60 border-l-2 border-yellow-400';
     case 'Not Claimed by Candidate':
-      return 'bg-orange-50/70 hover:bg-orange-50 border-l-4 border-orange-400';
+      return 'bg-orange-50/60 border-l-2 border-orange-400';
     default:
       return 'hover:bg-gray-50';
   }
 };
 
-// --- NEW HELPER FUNCTION TO DETERMINE THE SINGLE OVERALL STATUS ---
-const determineOverallStatus = (compStatus: any, durStatus: any): string => {
-  // Rule 1: If the company is a definite mismatch or missing, that's the most critical status.
-  if (compStatus.status === 'Mismatch' || compStatus.status === 'Company Missing') {
-    return compStatus.status;
-  }
-  // Rule 2: If the company is a partial match, prioritize showing that.
-  if (compStatus.status === 'Partial Match (Company)') {
-    return compStatus.status;
-  }
-  // Rule 3: If the company is a green match (Exact, Alias, High Similarity) but the duration is not, show the duration status.
-  if (durStatus.status !== 'Exact Match') {
-    return durStatus.status;
-  }
-  // Rule 4: If both are perfect matches, show Exact Match.
-  return 'Exact Match';
-};
-
-
 const CandidateExperienceCard: React.FC<CandidateExperienceCardProps> = ({ candidate, uanHistory }) => {
   const queryClient = useQueryClient();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<{ experience: CareerExperience; index: number } | null>(null);
-  const [linkingItem, setLinkingItem] = useState<{ experience: CareerExperience; index: number } | null>(null);
+  const [editingItem, setEditingItem] = useState<CareerExperience | null>(null);
+  const [linkingItem, setLinkingItem] = useState<CareerExperience | null>(null);
   const [currentExperiences, setCurrentExperiences] = useState<CareerExperience[]>([]);
 
   useEffect(() => {
     setCurrentExperiences(candidate.career_experience || []);
   }, [candidate.career_experience]);
 
-  console.log("uanHistory:", uanHistory)
-
- const verifiedExperiences = useMemo(() => {
+  const verifiedExperiences = useMemo(() => {
     if (!uanHistory) return null;
     const experiences = currentExperiences || [];
     const aligned: any[] = [];
@@ -114,7 +77,6 @@ const CandidateExperienceCard: React.FC<CandidateExperienceCardProps> = ({ candi
         const compStatus = compareCompanyNames(exp.company, uanCompanyName);
         if (compStatus.score >= 70 && (!bestMatch || compStatus.score > bestMatch.score)) {
           const durStatus = compareDurations(exp, uan);
-          // --- FIX: Correctly access compStatus.score instead of the undefined 'score' variable ---
           bestMatch = { score: compStatus.score, uanRecord: uan, compStatus, durStatus, uanIndex };
         }
       });
@@ -130,8 +92,8 @@ const CandidateExperienceCard: React.FC<CandidateExperienceCardProps> = ({ candi
     return { aligned, candidateMissing, uanExtra: uanRecordsCopy.filter(Boolean) };
   }, [currentExperiences, uanHistory]);
 
-  const findExperienceIndex = (expToFind: CareerExperience) => currentExperiences.findIndex(exp => exp.company === expToFind.company && exp.start_date === expToFind.start_date);
-  
+  const findExperienceIndex = (expToFind: CareerExperience) =>
+    currentExperiences.findIndex(exp => exp.company === expToFind.company && exp.start_date === expToFind.start_date);
 
   const persistChanges = async (updatedList: CareerExperience[], successMessage: string, errorMessage: string) => {
     const { error } = await supabase.from('hr_job_candidates').update({ career_experience: updatedList }).eq('id', candidate.id);
@@ -144,25 +106,15 @@ const CandidateExperienceCard: React.FC<CandidateExperienceCardProps> = ({ candi
     }
   };
 
- const handleEdit = (exp: CareerExperience) => {
-    setEditingItem(exp);
-    setIsEditModalOpen(true);
-  };
-  
-  const handleLink = (exp: CareerExperience) => {
-    setLinkingItem(exp);
-    setIsLinkModalOpen(true);
-  };
+  const handleEdit = (exp: CareerExperience) => { setEditingItem(exp); setIsEditModalOpen(true); };
+  const handleLink = (exp: CareerExperience) => { setLinkingItem(exp); setIsLinkModalOpen(true); };
 
   const handleSaveExperience = async (updatedExp: CareerExperience) => {
     if (!editingItem) return;
-    const indexToUpdate = findExperienceIndex(editingItem);
-    if (indexToUpdate === -1) {
-      toast.error("Could not find the experience to update.");
-      return;
-    }
+    const idx = findExperienceIndex(editingItem);
+    if (idx === -1) { toast.error("Could not find the experience to update."); return; }
     const updatedList = [...currentExperiences];
-    updatedList[indexToUpdate] = updatedExp;
+    updatedList[idx] = updatedExp;
     setCurrentExperiences(updatedList);
     setIsEditModalOpen(false);
     await persistChanges(updatedList, "Experience updated.", "Failed to save experience.");
@@ -171,55 +123,54 @@ const CandidateExperienceCard: React.FC<CandidateExperienceCardProps> = ({ candi
 
   const handleDelete = async (expToDelete: CareerExperience) => {
     if (!window.confirm(`Delete "${expToDelete.company}"?`)) return;
-    const indexToDelete = findExperienceIndex(expToDelete);
-    if (indexToDelete === -1) {
-      toast.error("Could not find the experience to delete.");
-      return;
-    }
-    const updatedList = currentExperiences.filter((_, index) => index !== indexToDelete);
+    const idx = findExperienceIndex(expToDelete);
+    if (idx === -1) { toast.error("Could not find the experience to delete."); return; }
+    const updatedList = currentExperiences.filter((_, i) => i !== idx);
     setCurrentExperiences(updatedList);
     await persistChanges(updatedList, "Experience deleted.", "Failed to delete experience.");
   };
-  
+
   const handleManualLink = async (uanRecord: UanRecord) => {
     if (!linkingItem) return;
-    const indexToUpdate = findExperienceIndex(linkingItem);
-    if (indexToUpdate === -1) {
-      toast.error("Could not find the experience to link.");
-      return;
-    }
+    const idx = findExperienceIndex(linkingItem);
+    if (idx === -1) { toast.error("Could not find the experience to link."); return; }
     const updatedList = [...currentExperiences];
-    const uanCompanyName = uanRecord['Establishment Name'] || uanRecord.establishment_name || 'Unknown';
-    updatedList[indexToUpdate].company = uanCompanyName;
+    updatedList[idx].company = uanRecord['Establishment Name'] || uanRecord.establishment_name || 'Unknown';
     setCurrentExperiences(updatedList);
     setIsLinkModalOpen(false);
     await persistChanges(updatedList, "Experience successfully linked.", "Failed to link experience.");
     setLinkingItem(null);
   };
-  console.log("verifiedExperiences", verifiedExperiences)
-  console.log("currentExperiences", currentExperiences)
-  
 
   if (!uanHistory) {
     return (
       <Card>
-        <CardHeader><CardTitle>Claimed Experience</CardTitle></CardHeader>
-        <CardContent>
-          <p className="text-sm text-gray-500 mb-4">Run 'Fetch Employment History' from the verification panel to compare against UAN records.</p>
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-sm font-semibold text-gray-700">Claimed Experience</CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <p className="text-xs text-gray-500 mb-3">Run 'Fetch Employment History' to compare against UAN records.</p>
           <Table>
-            <TableHeader><TableRow><TableHead>#</TableHead><TableHead>Company</TableHead><TableHead>Role</TableHead><TableHead>Duration</TableHead></TableRow></TableHeader>
+            <TableHeader>
+              <TableRow className="h-8">
+                <TableHead className="text-xs py-1 w-8">#</TableHead>
+                <TableHead className="text-xs py-1">Company</TableHead>
+                <TableHead className="text-xs py-1">Role</TableHead>
+                <TableHead className="text-xs py-1">Duration</TableHead>
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {currentExperiences.length > 0 ? (
                 currentExperiences.map((exp, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{index + 1}</TableCell>
-                    <TableCell>{exp.company}</TableCell>
-                    <TableCell>{exp.designation}</TableCell>
-                    <TableCell>{formatDate(exp.start_date)} – {formatDate(exp.end_date)}</TableCell>
+                  <TableRow key={index} className="h-8">
+                    <TableCell className="text-xs py-1 text-gray-500">{index + 1}</TableCell>
+                    <TableCell className="text-xs py-1 font-medium">{exp.company}</TableCell>
+                    <TableCell className="text-xs py-1 text-gray-600">{exp.designation}</TableCell>
+                    <TableCell className="text-xs py-1 text-gray-500">{formatDate(exp.start_date)} – {formatDate(exp.end_date)}</TableCell>
                   </TableRow>
                 ))
               ) : (
-                <TableRow><TableCell colSpan={4} className="text-center">No experience data provided.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={4} className="text-center text-xs text-gray-400 py-4">No experience data provided.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -228,114 +179,105 @@ const CandidateExperienceCard: React.FC<CandidateExperienceCardProps> = ({ candi
     );
   }
 
+  const allCandidateRows = [...(verifiedExperiences?.aligned || []), ...(verifiedExperiences?.candidateMissing || [])];
+
   return (
     <>
-       <Card>
-        <CardHeader><CardTitle className="text-xl">Experience Verification</CardTitle></CardHeader>
-        <CardContent>
-          <h3 className="text-md font-semibold mb-2 text-gray-700">Verification Summary</h3>
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-sm font-semibold text-gray-700">Experience Verification</CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
           <Table>
-            <TableHeader><TableRow><TableHead>#</TableHead><TableHead>Company & Role</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <TableHeader>
+              <TableRow className="h-7">
+                <TableHead className="text-[11px] py-1 w-7 font-semibold text-gray-500">#</TableHead>
+                <TableHead className="text-[11px] py-1 font-semibold text-gray-500">Company & Role</TableHead>
+                <TableHead className="text-[11px] py-1 font-semibold text-gray-500">Status</TableHead>
+                <TableHead className="text-[11px] py-1 font-semibold text-gray-500 w-20">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
             <TableBody>
-              {/* Render candidate's claimed experiences */}
-              {[...(verifiedExperiences?.aligned || []), ...(verifiedExperiences?.candidateMissing || [])].map((exp: any, index: number) => {
+              {allCandidateRows.map((exp: any, index: number) => {
                 const rowClass = getRowClassByStatus(exp.comparison.company.status);
-                
                 return (
-                  <TableRow key={index} className={rowClass}>
-                    <TableCell>{index + 1}</TableCell>
-                    <TableCell>
-                      {exp.company}
-                      <div className="text-xs text-gray-500">
-                        {exp.designation} | {formatDate(exp.start_date)} - {formatDate(exp.end_date)}
-                      </div>
+                  <TableRow key={index} className={`${rowClass} h-auto`}>
+                    <TableCell className="text-xs py-2 text-gray-400 font-medium align-top">{index + 1}</TableCell>
+                    <TableCell className="py-2 align-top">
+                      <p className="text-xs font-semibold text-gray-800 leading-tight">{exp.company}</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">{exp.designation}</p>
+                      <p className="text-[10px] text-gray-400">{formatDate(exp.start_date)} – {formatDate(exp.end_date)}</p>
                     </TableCell>
-                    <TableCell>
-                      {/* --- CHANGE: Display multiple badges with tooltips --- */}
-                      <div className="flex flex-wrap gap-2">
+                    <TableCell className="py-2 align-top">
+                      <div className="flex flex-wrap gap-1">
                         <TooltipProvider delayDuration={100}>
-                          {/* Company Status Badge */}
                           <Tooltip>
                             <TooltipTrigger><StatusBadge status={exp.comparison.company.status} /></TooltipTrigger>
-                            <TooltipContent><p>{exp.comparison.company.reason || exp.comparison.company.status}</p></TooltipContent>
+                            <TooltipContent><p className="text-xs">{exp.comparison.company.reason || exp.comparison.company.status}</p></TooltipContent>
                           </Tooltip>
-                          
-                          {/* Duration Status Badge (only if company is not missing) */}
                           {exp.comparison.company.status !== 'Company Missing' && (
                             <Tooltip>
                               <TooltipTrigger><StatusBadge status={exp.comparison.duration.status} /></TooltipTrigger>
-                              <TooltipContent><p>{exp.comparison.duration.reason || exp.comparison.duration.status}</p></TooltipContent>
+                              <TooltipContent><p className="text-xs">{exp.comparison.duration.reason || exp.comparison.duration.status}</p></TooltipContent>
                             </Tooltip>
                           )}
                         </TooltipProvider>
                       </div>
                     </TableCell>
-                    <TableCell className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(exp)}><Edit className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" className="text-red-500" onClick={() => handleDelete(exp)}><Trash2 className="h-4 w-4" /></Button>
-                      {exp.comparison.company.status === 'Company Missing' && verifiedExperiences?.uanExtra && verifiedExperiences.uanExtra.length > 0 && (
-                        <Button variant="ghost" size="icon" onClick={() => handleLink(exp)}><Link2 className="h-4 w-4 text-blue-500" /></Button>
-                      )}
+                    <TableCell className="py-2 align-top">
+                      <div className="flex gap-0.5">
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEdit(exp)}>
+                          <Edit className="h-3 w-3 text-gray-400" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDelete(exp)}>
+                          <Trash2 className="h-3 w-3 text-red-400" />
+                        </Button>
+                        {exp.comparison.company.status === 'Company Missing' && verifiedExperiences?.uanExtra && verifiedExperiences.uanExtra.length > 0 && (
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleLink(exp)}>
+                            <Link2 className="h-3 w-3 text-blue-400" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
               })}
-              
-              {/* Render UAN-detected companies not claimed by candidate */}
-         {verifiedExperiences && verifiedExperiences.uanExtra.length > 0 && 
-  verifiedExperiences.uanExtra.map((uan, index) => {
-    const companyName = uan['Establishment Name'] || uan.establishment_name;
-    const startDate = uan.Doj || uan.date_of_joining;
-    const endDate = uan.DateOfExitEpf || uan.date_of_exit || 'Present';
-    const totalRows = [...(verifiedExperiences?.aligned || []), ...(verifiedExperiences?.candidateMissing || [])].length;
-    
-    return (
-  <TableRow 
-  className="bg-orange-50/70 hover:bg-orange-50"
->
-  <TableCell className="text-gray-700 font-semibold border-l-4 border-orange-400">{totalRows + index + 1}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <TooltipProvider delayDuration={100}>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gradient-to-r from-orange-100 to-amber-100 border border-orange-200/50 text-orange-900 font-medium text-sm shadow-sm">
-                                  <svg className="w-3.5 h-3.5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  [{companyName}]
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="right" className="max-w-xs">
-                                <p className="font-semibold text-orange-600 mb-1">Auto-detected from UAN Records</p>
-                                <p className="text-xs">This company was found in official UAN records but not listed in the candidate's claimed experience. This may indicate missing or undisclosed work history.</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                     <div className="text-xs text-gray-700 font-medium mt-1.5 ml-1">
-  Duration: {formatDate(startDate)} - {formatDate(endDate)}
-</div>
-                      </TableCell>
-                      <TableCell>
+
+              {/* UAN Extra rows */}
+              {verifiedExperiences?.uanExtra && verifiedExperiences.uanExtra.length > 0 &&
+                verifiedExperiences.uanExtra.map((uan, index) => {
+                  const companyName = uan['Establishment Name'] || uan.establishment_name;
+                  const startDate = uan.Doj || uan.date_of_joining;
+                  const endDate = uan.DateOfExitEpf || uan.date_of_exit || 'Present';
+                  const rowNum = allCandidateRows.length + index + 1;
+
+                  return (
+                    <TableRow key={`uan-extra-${index}`} className="bg-orange-50/60 border-l-2 border-orange-400 h-auto">
+                      <TableCell className="text-xs py-2 text-gray-400 font-medium align-top">{rowNum}</TableCell>
+                      <TableCell className="py-2 align-top">
                         <TooltipProvider delayDuration={100}>
                           <Tooltip>
-                            <TooltipTrigger>
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-100 to-orange-100 border border-amber-200/50 text-amber-900 text-xs font-medium shadow-sm">
-                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                </svg>
-                               Not Mentioned in Candidate Resume
-                              </span>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3 text-orange-500 flex-shrink-0" />
+                                <span className="text-xs font-semibold text-orange-800 leading-tight">{companyName}</span>
+                              </div>
                             </TooltipTrigger>
-                            <TooltipContent>
-                              <p>This experience was not listed by the candidate but appears in UAN records</p>
+                            <TooltipContent side="right" className="max-w-xs">
+                              <p className="font-semibold text-orange-600 mb-1 text-xs">Auto-detected from UAN Records</p>
+                              <p className="text-xs">Found in official UAN records but not listed in candidate's claimed experience.</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
+                        <p className="text-[10px] text-gray-400 mt-0.5 ml-4">{formatDate(startDate)} – {formatDate(endDate)}</p>
                       </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-gray-400 italic">No actions available</span>
+                      <TableCell className="py-2 align-top">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-orange-100 border border-orange-200 text-orange-800 text-[10px] font-medium">
+                          Not in Resume
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-2 align-top">
+                        <span className="text-[10px] text-gray-300 italic">—</span>
                       </TableCell>
                     </TableRow>
                   );
@@ -345,8 +287,8 @@ const CandidateExperienceCard: React.FC<CandidateExperienceCardProps> = ({ candi
           </Table>
         </CardContent>
       </Card>
-      
-     <EditExperienceModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} experience={editingItem} onSave={handleSaveExperience}/>
+
+      <EditExperienceModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} experience={editingItem} onSave={handleSaveExperience} />
       <LinkExperienceModal isOpen={isLinkModalOpen} onClose={() => setIsLinkModalOpen(false)} missingExperience={linkingItem} uanExtraRecords={verifiedExperiences?.uanExtra || []} onLink={handleManualLink} />
     </>
   );

@@ -633,9 +633,9 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
               <span className="text-[8px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 capitalize">{coData.seniority}</span>
             )}
             {/* Provider badge */}
-            {isContactOut && (
+            {/* {isContactOut && (
               <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-500 border border-violet-100">CO</span>
-            )}
+            )} */}
             {/* Enriching indicator */}
             {isEnriching && !enriched && (
               <span className="flex items-center gap-1 text-[8px] text-slate-400">

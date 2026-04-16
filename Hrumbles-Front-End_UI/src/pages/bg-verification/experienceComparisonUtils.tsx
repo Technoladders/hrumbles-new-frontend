@@ -104,3 +104,4 @@ export const StatusBadge = ({ status }: { status: string }) => {
     };
     return <Badge variant="outline" className={styles[status] || 'bg-gray-100'}>{status}</Badge>;
 };
+// compact

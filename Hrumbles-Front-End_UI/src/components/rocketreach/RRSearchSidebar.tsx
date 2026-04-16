@@ -298,7 +298,7 @@ const REVENUE_OPTIONS = [
 
 // Years of experience — exact CSV values
 const YEARS_EXP_OPTIONS = [
-  { label: "Any",            value: "" },
+  { label: "Any experience",            value: "" },
   { label: "< 1 year",       value: "0_1" },
   { label: "1–2 years",      value: "1_2" },
   { label: "3–5 years",      value: "3_5" },
@@ -308,7 +308,7 @@ const YEARS_EXP_OPTIONS = [
 
 // Years in current role — exact CSV values
 const YEARS_ROLE_OPTIONS = [
-  { label: "Any",            value: "" },
+  { label: "Any experience",            value: "" },
   { label: "< 2 years",      value: "0_2" },
   { label: "2–4 years",      value: "2_4" },
   { label: "4–6 years",      value: "4_6" },
@@ -434,12 +434,18 @@ function PortalDropdown({ anchorRef, isOpen, maxH = 220, children }: {
     return () => { cancelAnimationFrame(rafId); window.removeEventListener("scroll", update, true); window.removeEventListener("resize", update); };
   }, [isOpen, anchorRef, maxH]);
   if (!isOpen) return null;
-  return ReactDOM.createPortal(
-    <div style={style} className="bg-white border border-slate-200 rounded-xl shadow-xl flex flex-col overflow-hidden overflow-y-auto">
-      {children}
-    </div>,
-    document.body
-  );
+return ReactDOM.createPortal(
+  <div
+    style={style}
+    className="bg-white border border-slate-200 rounded-xl shadow-lg flex flex-col overflow-hidden overflow-y-auto
+      animate-in fade-in zoom-in-95
+      duration-150 ease-out
+      ring-1 ring-black/5"
+  >
+    {children}
+  </div>,
+  document.body
+);
 }
 
 // ─── Chip tag ─────────────────────────────────────────────────────────────────
@@ -456,34 +462,81 @@ const Chip: React.FC<{ label: string; onRemove: () => void; color?: string }> = 
 );
 
 // ─── Generic tag input ────────────────────────────────────────────────────────
-function TagInput({ selected, onChange, onSearch, placeholder, icon: Icon, chipColor }: {
-  selected: string[]; onChange: (v: string[]) => void; onSearch: () => void;
-  placeholder: string; icon: React.ElementType; chipColor?: string;
+function TagInput({
+  selected,
+  onChange,
+  onSearch,
+  placeholder,
+  icon: Icon,
+  chipColor,
+}: {
+  selected: string[];
+  onChange: (v: string[]) => void;
+  onSearch: () => void;
+  placeholder: string;
+  icon: React.ElementType;
+  chipColor?: string;
 }) {
   const [input, setInput] = useState("");
+
   const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if ((e.key === "Enter" || e.key === ",") && input.trim()) {
       e.preventDefault();
-      if (!selected.includes(input.trim())) onChange([...selected, input.trim()]);
+      if (!selected.includes(input.trim()))
+        onChange([...selected, input.trim()]);
       setInput("");
     } else if (e.key === "Enter" && !input.trim()) {
-      e.preventDefault(); onSearch();
+      e.preventDefault();
+      onSearch();
     } else if (e.key === "Backspace" && !input && selected.length) {
       onChange(selected.slice(0, -1));
     }
   };
+
   return (
     <div className="space-y-1.5">
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {selected.map(t => <Chip key={t} label={t} onRemove={() => onChange(selected.filter(x => x !== t))} color={chipColor} />)}
+          {selected.map((t) => (
+            <Chip
+              key={t}
+              label={t}
+              onRemove={() =>
+                onChange(selected.filter((x) => x !== t))
+              }
+              color={chipColor}
+            />
+          ))}
         </div>
       )}
-      <div className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 focus-within:border-violet-400 transition-colors">
-        <Icon size={10} className="text-slate-400 flex-shrink-0" />
-        <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
+
+      {/* INPUT CONTAINER */}
+      <div className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8
+        transition-all duration-200
+        hover:border-purple-400
+        focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200">
+
+        {/* ICON */}
+        <Icon
+          size={10}
+          className="flex-shrink-0 text-slate-400 transition-colors duration-200
+            group-hover:text-purple-500
+            group-focus-within:text-purple-600"
+        />
+
+        {/* INPUT */}
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKey}
           placeholder={placeholder}
-          className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none" />
+          className="flex-1 bg-transparent text-[11px] text-slate-600
+            placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic
+            focus:outline-none
+            transition-colors duration-200
+            group-focus-within:text-slate-800"
+        />
       </div>
     </div>
   );
@@ -516,26 +569,48 @@ function SearchableMultiSelect({ label, options, selected, onChange, onSearch, i
     <div ref={wrapRef} className="space-y-1.5">
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {selected.map(v => <Chip key={v} label={v} onRemove={() => onChange(selected.filter(x => x !== v))} color={chipColor} />)}
+          {selected.map(v => <Chip key={v} label={v} onRemove={() => onChange(selected.filter(x => x !== v))} color={chipColor}  />)}
         </div>
       )}
       <div ref={anchorRef}>
         <div onClick={() => { setOpen(true); inputRef.current?.focus(); }}
-          className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 focus-within:border-violet-400 transition-colors cursor-text">
-          <Icon size={10} className="text-slate-400 flex-shrink-0" />
+          className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 cursor-text
+  transition-all duration-200
+  hover:border-purple-300
+  focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200">
+          <Icon
+  size={10}
+  className="text-slate-400 flex-shrink-0 transition-colors duration-200
+    group-hover:text-purple-500
+    group-focus-within:text-purple-600"
+/>
+
+
           <input ref={inputRef} type="text" value={q}
             onChange={e => { setQ(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)}
             onKeyDown={e => { if (e.key === "Escape") setOpen(false); if (e.key === "Enter" && !q.trim()) { setOpen(false); onSearch(); } }}
             placeholder={label}
-            className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none" />
-          <ChevronDown size={9} className={cn("text-slate-400 flex-shrink-0 transition-transform", open && "rotate-180")} />
+           className="flex-1 bg-transparent text-[11px] text-slate-600
+  focus:outline-none transition-colors duration-200
+  group-focus-within:text-slate-900
+  placeholder:text-slate-400 placeholder:italic placeholder:text-[10px]" />
+          <ChevronDown size={9} className={cn(
+    "text-slate-400 flex-shrink-0 transition-all duration-200",
+    "group-hover:text-purple-500",
+    open && "rotate-180 text-purple-600"
+  )} />
         </div>
         <PortalDropdown anchorRef={anchorRef} isOpen={open && filtered.length > 0}>
           {filtered.map(opt => (
             <button key={opt} type="button"
               onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange([...selected, opt]); setQ(""); setTimeout(() => inputRef.current?.focus(), 50); }}
-              className="w-full px-3 py-1.5 text-[11px] text-slate-700 hover:bg-violet-50 text-left transition-colors">
+              className={cn(
+  "group w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left",
+  "transition-all duration-150",
+  "hover:bg-violet-50 hover:pl-4",
+  selected.includes(opt) && "bg-purple-50 text-purple-600 font-medium"
+)}>
               {opt}
             </button>
           ))}
@@ -546,16 +621,76 @@ function SearchableMultiSelect({ label, options, selected, onChange, onSearch, i
 }
 
 // ─── Simple select ─────────────────────────────────────────────────────────────
-function SimpleSelect({ value, onChange, options, placeholder }: {
-  value: string; onChange: (v: string) => void;
-  options: { label: string; value: string }[]; placeholder?: string;
+function SimpleSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { label: string; value: string }[];
+  placeholder?: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
+
+  const selected = options.find(o => o.value === value);
+
   return (
-    <select value={value} onChange={e => onChange(e.target.value)}
-      className="w-full h-8 rounded-lg border border-slate-200 bg-white text-[11px] text-slate-600 px-2.5 focus:outline-none focus:border-violet-400 cursor-pointer">
-      {placeholder && <option value="">{placeholder}</option>}
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+    <div className="relative">
+      {/* Trigger */}
+      <div
+        ref={anchorRef}
+        onClick={() => setOpen(v => !v)}
+        className="group w-full h-8 rounded-lg border border-slate-200 bg-white px-2.5
+          flex items-center justify-between cursor-pointer
+          transition-all duration-200
+          hover:border-purple-300
+          focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200"
+      >
+        <span className={cn(
+          "text-[11px]",
+          value ? "text-slate-700" : "text-slate-400 italic"
+        )}>
+          {selected?.label || placeholder || "Select"}
+        </span>
+
+        <svg
+          className={cn(
+            "w-3 h-3 text-slate-400 transition-all duration-200",
+            "group-hover:text-purple-500",
+            open && "rotate-180 text-purple-600"
+          )}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path d="M5.25 7.5L10 12.25L14.75 7.5" />
+        </svg>
+      </div>
+
+      {/* Dropdown */}
+      <PortalDropdown anchorRef={anchorRef} isOpen={open}>
+        {options.map(opt => (
+          <button
+            key={opt.value}
+            type="button"
+            onMouseDown={e => {
+              e.preventDefault();
+              onChange(opt.value);
+              setOpen(false);
+            }}
+            className={cn(
+              "w-full text-left px-3 py-1.5 text-[11px] transition-all duration-150",
+              "hover:bg-violet-50 hover:pl-4",
+              value === opt.value && "bg-purple-50 text-purple-600 font-medium"
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </PortalDropdown>
+    </div>
   );
 }
 
@@ -689,28 +824,44 @@ const SkillChipBuilder: React.FC<{
           const cfg = SKILL_MODE_CONFIG[m];
           return (
             <button key={m} type="button" onClick={() => setMode(m)}
-              className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all",
-                mode === m ? `${cfg.chip} border-current` : "text-slate-400 border-slate-200 bg-white")}>
-              <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
+             className={cn(
+  "group flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all duration-200",
+  mode === m
+    ? `${cfg.chip} border-current shadow-sm scale-[1.02]`
+    : "text-slate-400 border-slate-200 bg-white hover:border-purple-300 hover:text-purple-500 hover:shadow-sm"
+)}>
+              <span
+  className={cn(
+    "w-1.5 h-1.5 rounded-full transition-all duration-200",
+    cfg.dot,
+    "group-hover:scale-125 group-hover:opacity-90"
+  )}
+/>
               {cfg.label}
               {counts[m] > 0 && <span className="opacity-70">({counts[m]})</span>}
             </button>
           );
         })}
         <button type="button" onClick={() => setShowBool(v => !v)}
-          className={cn("ml-auto text-[9px] px-1.5 py-0.5 rounded border transition-colors",
-            showBool ? "bg-slate-700 text-white border-slate-700" : "text-slate-400 border-slate-200 bg-white")}>
-          AND/NOT
+          className={cn(
+  "ml-auto text-[9px] px-1.5 py-0.5 rounded border transition-all duration-200",
+  showBool
+    ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white border-transparent shadow-sm"
+    : "text-slate-400 border-slate-200 bg-white hover:border-purple-300 hover:text-purple-500"
+)}>
+          Boolean
         </button>
       </div>
 
       {showBool && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 space-y-1.5">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 space-y-1.5
+  transition-all duration-200
+  focus-within:border-purple-400 focus-within:ring-1 focus-within:ring-purple-200">
           <p className="text-[8px] text-slate-400">e.g. <span className="text-violet-500">Python AND React NOT PHP</span></p>
           <div className="flex gap-1">
             <input type="text" value={boolIn} onChange={e => setBoolIn(e.target.value)}
               onKeyDown={e => e.key === "Enter" && applyBoolean()} placeholder="Python AND React NOT PHP"
-              className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] focus:outline-none focus:border-violet-400" />
+              className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] focus:outline-none focus:border-violet-400 placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic" />
             <button type="button" onClick={applyBoolean}
               className="px-2 py-1 rounded bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] font-bold">
               Parse
@@ -720,13 +871,26 @@ const SkillChipBuilder: React.FC<{
       )}
 
       <div onClick={() => inputRef.current?.focus()}
-        className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 flex flex-wrap gap-1 min-h-[34px] cursor-text focus-within:border-violet-400 transition-colors">
+        className="group rounded-lg border border-slate-200 bg-white px-2 py-1.5 flex flex-wrap gap-1 min-h-[34px] cursor-text
+  transition-all duration-200
+  hover:border-purple-300
+  focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200">
         {chips.map((chip, i) => {
           const cfg = SKILL_MODE_CONFIG[chip.mode];
           return (
             <span key={i} onClick={() => cycleMode(i)}
-              className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-medium cursor-pointer", cfg.chip)}>
-              <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
+              className={cn(
+  "group inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-medium cursor-pointer",
+  "transition-all duration-200 hover:scale-[1.05] hover:shadow-sm",
+  cfg.chip
+)}>
+             <span
+  className={cn(
+    "w-1.5 h-1.5 rounded-full flex-shrink-0 transition-all duration-200",
+    cfg.dot,
+    "group-hover:scale-125"
+  )}
+/>
               {chip.label}
               <button type="button" onClick={e => { e.stopPropagation(); onChange(chips.filter((_, j) => j !== i)); }} className="ml-0.5 opacity-60 hover:opacity-100">×</button>
             </span>
@@ -734,10 +898,10 @@ const SkillChipBuilder: React.FC<{
         })}
         <input ref={inputRef} type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
           placeholder={chips.length === 0 ? "Type skill, Enter…" : ""}
-          className="flex-1 min-w-[60px] bg-transparent text-[11px] text-slate-700 placeholder-slate-300 focus:outline-none" />
+          className="flex-1 min-w-[60px] bg-transparent text-[11px] text-slate-700 focus:outline-none placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic" />
       </div>
 
-      <div className="flex items-center gap-2 text-[8px] text-slate-400">
+      {/* <div className="flex items-center gap-2 text-[8px] text-slate-400">
         {(["must","nice","exclude"] as SkillMode[]).map(m => (
           <span key={m} className="flex items-center gap-0.5">
             <span className={cn("w-1.5 h-1.5 rounded-full", SKILL_MODE_CONFIG[m].dot)} />
@@ -745,7 +909,7 @@ const SkillChipBuilder: React.FC<{
           </span>
         ))}
         <span className="ml-auto">click to cycle</span>
-      </div>
+      </div> */}
     </div>
   );
 };
@@ -802,9 +966,23 @@ function LocationSelect({ selected, onChange, onSearch }: {
           {selected.map(val => {
             const t = getLocType(val);
             return (
-              <span key={val} className={cn("inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full text-[10px] font-medium border", LOC_STYLE[t])}>
+              <span key={val} className={cn(
+  "group inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full text-[10px] font-medium border",
+  "transition-all duration-200 hover:scale-[1.05] hover:shadow-sm",
+  LOC_STYLE[t]
+)}>
                 {val}
-                <button type="button" onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange(selected.filter(x => x !== val)); }}><X size={8} /></button>
+                <button
+  type="button"
+  onMouseDown={e => {
+    e.preventDefault();
+    e.stopPropagation();
+    onChange(selected.filter(x => x !== val));
+  }}
+  className="opacity-60 hover:opacity-100 hover:text-red-500 transition-all duration-150"
+>
+  <X size={8} />
+</button>
               </span>
             );
           })}
@@ -812,24 +990,48 @@ function LocationSelect({ selected, onChange, onSearch }: {
       )}
       <div ref={anchorRef}>
         <div onClick={() => { setOpen(true); inputRef.current?.focus(); }}
-          className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 focus-within:border-violet-400 transition-colors cursor-text"
+          className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 cursor-text
+  transition-all duration-200
+  hover:border-purple-300
+  focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200"
           onMouseDown={e => e.stopPropagation()}>
-          <MapPin size={10} className="text-slate-400 flex-shrink-0" />
+          <MapPin
+  size={10}
+  className="flex-shrink-0 text-slate-400 transition-colors duration-200
+    group-hover:text-purple-500
+    group-focus-within:text-purple-600"
+/>
           <input ref={inputRef} type="text" value={q}
             onChange={e => { setQ(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)}
             onKeyDown={e => { if (e.key === "Enter" && !q.trim()) { setOpen(false); onSearch(); } }}
-            placeholder="Country, state or city…"
-            className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none" />
-          {q && <button type="button" onMouseDown={e => { e.preventDefault(); setQ(""); }} className="text-slate-400 hover:text-slate-600"><X size={9} /></button>}
+            placeholder="Select a country, state or city…"
+            className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none transition-colors duration-200 group-focus-within:text-slate-900 placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic" />
+          {q && <button
+  type="button"
+  onMouseDown={e => { e.preventDefault(); setQ(""); }}
+  className="text-slate-400 hover:text-red-500 transition-colors duration-150"
+>
+  <X size={9} />
+</button>}
         </div>
         <PortalDropdown anchorRef={anchorRef} isOpen={open && options.length > 0}>
           {options.map(opt => (
             <button key={opt.value} type="button"
               onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange([...selected, opt.value]); setQ(""); setTimeout(() => inputRef.current?.focus(), 50); }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-violet-50 text-left transition-colors">
-              <span className={cn("text-[8px] px-1 py-0.5 rounded border font-semibold", LOC_STYLE[opt.type])}>{opt.type[0].toUpperCase()}</span>
-              <span className="text-[11px] text-slate-700 truncate">{opt.label}</span>
+              className="group w-full flex items-center gap-2 px-3 py-1.5 text-left
+  transition-all duration-150
+  hover:bg-violet-50 hover:pl-4">
+              <span
+  className={cn(
+    "text-[8px] px-1 py-0.5 rounded border font-semibold",
+    "transition-all duration-200 group-hover:scale-105",
+    LOC_STYLE[opt.type]
+  )}
+>
+  {opt.type[0].toUpperCase()}
+</span>
+              <span className="text-[11px] text-slate-700 truncate group-hover:text-pink-900">{opt.label}</span>
             </button>
           ))}
         </PortalDropdown>
@@ -841,7 +1043,9 @@ function LocationSelect({ selected, onChange, onSearch }: {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const Div = () => <div className="h-px bg-slate-100" />;
 const SL: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{children}</p>
+  <p className="text-[10px] font-medium uppercase tracking-wider bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-1">
+    {children}
+  </p>
 );
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -949,6 +1153,11 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
           <SectionHeader label="Core Filters" icon={Filter} isOpen={open.core} onToggle={() => toggle("core")} count={coreCnt} hasActive={coreCnt > 0} />
           {open.core && (
             <div className="pb-3 space-y-3">
+               {/* Skills */}
+              <div>
+                <SL>Skills</SL>
+                <SkillChipBuilder chips={s.skillChips} onChange={v => set({ skillChips: v })} onSearch={onSearch} />
+              </div>
               {/* Job Title */}
               <div>
                 <SL>Job Title</SL>
@@ -974,17 +1183,13 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
               </div>
 
               {/* Seniority — exact CO values */}
-              <div>
+              {/* <div>
                 <SL>Seniority Level</SL>
                 <StringPills options={MANAGEMENT_LEVELS} selected={s.managementLevels}
                   onChange={v => set({ managementLevels: v })} />
-              </div>
+              </div> */}
 
-              {/* Skills */}
-              <div>
-                <SL>Skills</SL>
-                <SkillChipBuilder chips={s.skillChips} onChange={v => set({ skillChips: v })} onSearch={onSearch} />
-              </div>
+             
 
               {/* Location */}
               <div>
@@ -1022,11 +1227,11 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
                   placeholder="Add company, Enter…" icon={Building2} chipColor="bg-blue-50 text-blue-700 border-blue-200" />
               </div>
 
-              <div>
+              {/* <div>
                 <SL>Company Size</SL>
                 <CheckboxPills options={COMPANY_SIZES} selected={s.companySize}
                   onChange={v => set({ companySize: v })} />
-              </div>
+              </div> */}
 
               {/* Industry — exact CO accepted values */}
               <div>
@@ -1037,20 +1242,20 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
                   chipColor="bg-teal-50 text-teal-700 border-teal-200" />
               </div>
 
-              <div>
+              {/* <div>
                 <SL>Revenue</SL>
                 <SimpleSelect value={s.companyRevenue} onChange={v => set({ companyRevenue: v })}
                   options={REVENUE_OPTIONS} placeholder="Any revenue" />
-              </div>
+              </div> */}
 
-              <div className="flex items-center gap-2">
+              {/* <div className="flex items-center gap-2">
                 <input type="checkbox" id="pub-traded" checked={s.companyPubliclyTraded}
                   onChange={e => set({ companyPubliclyTraded: e.target.checked })}
                   className="accent-violet-600 cursor-pointer" />
                 <label htmlFor="pub-traded" className="text-[11px] text-slate-600 cursor-pointer">Publicly Traded only</label>
-              </div>
+              </div> */}
 
-              <div className="grid grid-cols-2 gap-2">
+              {/* <div className="grid grid-cols-2 gap-2">
                 <div>
                   <SL>Funding Min ($)</SL>
                   <input type="number" value={s.companyFundingMin}
@@ -1067,13 +1272,13 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
                     placeholder="e.g. 50000000"
                     className="w-full h-8 rounded-lg border border-slate-200 px-2.5 text-[11px] text-slate-600 focus:outline-none focus:border-violet-400" />
                 </div>
-              </div>
+              </div> */}
 
-              <div>
+              {/* <div>
                 <SL>Company Tags</SL>
                 <StringPills options={COMPANY_TAGS} selected={s.companyTags}
                   onChange={v => set({ companyTags: v })} />
-              </div>
+              </div> */}
             </div>
           )}
 
@@ -1084,13 +1289,13 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
           {open.role && (
             <div className="pb-3 space-y-3">
               {/* Job Function — exact CO accepted values */}
-              <div>
+              {/* <div>
                 <SL>Job Function</SL>
                 <SearchableMultiSelect label="Search functions…" options={JOB_FUNCTIONS}
                   selected={s.department} onChange={v => set({ department: v })}
                   onSearch={onSearch} icon={Briefcase}
                   chipColor="bg-amber-50 text-amber-700 border-amber-200" />
-              </div>
+              </div> */}
 
               <div>
                 <SL>Previous Employer</SL>
@@ -1139,7 +1344,7 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
           <Div />
 
           {/* ── CONTACT & SIGNALS ── */}
-          <SectionHeader label="Contact & Signals" icon={Bell} isOpen={open.signals} onToggle={() => toggle("signals")} count={sigCnt} hasActive={sigCnt > 0} />
+          {/* <SectionHeader label="Contact & Signals" icon={Bell} isOpen={open.signals} onToggle={() => toggle("signals")} count={sigCnt} hasActive={sigCnt > 0} />
           {open.signals && (
             <div className="pb-3 space-y-3">
               <div>
@@ -1168,12 +1373,12 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
                   options={JOB_POSTING_SIGNALS} placeholder="Any posting" />
               </div>
             </div>
-          )}
+          )} */}
 
           <Div />
 
           {/* ── SORT ── */}
-          <SectionHeader label="Sort & Display" icon={Search} isOpen={open.sort} onToggle={() => toggle("sort")} />
+          {/* <SectionHeader label="Sort & Display" icon={Search} isOpen={open.sort} onToggle={() => toggle("sort")} />
           {open.sort && (
             <div className="pb-3 space-y-3">
               <div>
@@ -1190,7 +1395,7 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
                   ]} />
               </div>
             </div>
-          )}
+          )} */}
 
           <div className="h-3" />
         </div>
