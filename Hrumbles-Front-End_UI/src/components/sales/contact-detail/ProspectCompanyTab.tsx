@@ -27,7 +27,7 @@ export const ProspectCompanyTab = ({ contact }: { contact: any }) => {
       if (!contact.company_id) return [];
       const { data } = await supabase
         .from('contacts')
-        .select('id, name, job_title, email, mobile, photo_url, contact_stage, enrichment_people(seniority)')
+        .select('id, name, job_title, email, mobile, photo_url, contact_stage, enrichment_people(title)')
         .eq('company_id', contact.company_id)
         .neq('id', contact.id)
         .limit(20);

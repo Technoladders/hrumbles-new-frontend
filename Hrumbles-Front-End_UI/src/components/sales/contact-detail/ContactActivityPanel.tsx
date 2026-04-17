@@ -1,16 +1,15 @@
 // Hrumbles-Front-End_UI/src/components/sales/contact-detail/ContactActivityPanel.tsx
+// Updated: phone pending badge, purple/pink gradient theme accents, same all logic intact
 import React, { useState, useMemo } from 'react';
 import {
   PhoneCall, Mail, StickyNote, Calendar, CheckSquare, Linkedin,
   Clock, Copy, CheckCircle2, Circle, AlertCircle, ArrowUpRight, ArrowDownLeft,
-  MoreHorizontal, Pencil, Trash2, ChevronDown, ChevronUp, MapPin,
-  Globe, ExternalLink, Phone, CheckCheck, Filter
+  MoreHorizontal, Pencil, Trash2, ChevronDown, ChevronUp,
+  Globe, ExternalLink, Phone, CheckCheck, Loader2, Zap, Sparkles
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator
@@ -30,11 +29,11 @@ interface Props {
   onDeleteActivity: (activityId: string) => void;
   onRequestPhone: () => void;
   isRequestingPhone: boolean;
+  phonePending: boolean;
   refetch: () => void;
 }
 
-// ─── Activity type config ──────────────────────────────────────────────────
-
+// ── Activity config ──────────────────────────────────────────────────────────
 const ACTIVITY_CONFIG: Record<string, { icon: any; color: string; bg: string; label: string; border: string }> = {
   call:         { icon: PhoneCall,   color: 'text-amber-600',   bg: 'bg-amber-50',   border: 'border-amber-100', label: 'Call' },
   email:        { icon: Mail,        color: 'text-blue-600',    bg: 'bg-blue-50',    border: 'border-blue-100',  label: 'Email' },
@@ -46,47 +45,49 @@ const ACTIVITY_CONFIG: Record<string, { icon: any; color: string; bg: string; la
 };
 
 const QUICK_ACTIONS = [
-  { type: 'call' as const,     icon: PhoneCall,   label: 'Call',     color: 'text-amber-600',  hoverBg: 'hover:bg-amber-50 hover:border-amber-200',  activeBg: 'bg-amber-50 border-amber-200' },
-  { type: 'email' as const,    icon: Mail,        label: 'Email',    color: 'text-blue-600',   hoverBg: 'hover:bg-blue-50 hover:border-blue-200',    activeBg: 'bg-blue-50 border-blue-200' },
-  { type: 'linkedin' as const, icon: Linkedin,    label: 'LinkedIn', color: 'text-sky-600',    hoverBg: 'hover:bg-sky-50 hover:border-sky-200',      activeBg: 'bg-sky-50 border-sky-200' },
-  { type: 'note' as const,     icon: StickyNote,  label: 'Note',     color: 'text-purple-600', hoverBg: 'hover:bg-purple-50 hover:border-purple-200', activeBg: 'bg-purple-50 border-purple-200' },
-  { type: 'task' as const,     icon: CheckSquare, label: 'Task',     color: 'text-green-600',  hoverBg: 'hover:bg-green-50 hover:border-green-200',  activeBg: 'bg-green-50 border-green-200' },
-  { type: 'meeting' as const,  icon: Calendar,    label: 'Meeting',  color: 'text-indigo-600', hoverBg: 'hover:bg-indigo-50 hover:border-indigo-200', activeBg: 'bg-indigo-50 border-indigo-200' },
+  { type: 'call' as const,     icon: PhoneCall,   label: 'Call',     color: 'text-amber-600',  hoverBg: 'hover:bg-amber-50 hover:border-amber-200' },
+  { type: 'email' as const,    icon: Mail,        label: 'Email',    color: 'text-blue-600',   hoverBg: 'hover:bg-blue-50 hover:border-blue-200' },
+  { type: 'linkedin' as const, icon: Linkedin,    label: 'LinkedIn', color: 'text-sky-600',    hoverBg: 'hover:bg-sky-50 hover:border-sky-200' },
+  { type: 'note' as const,     icon: StickyNote,  label: 'Note',     color: 'text-purple-600', hoverBg: 'hover:bg-purple-50 hover:border-purple-200' },
+  { type: 'task' as const,     icon: CheckSquare, label: 'Task',     color: 'text-green-600',  hoverBg: 'hover:bg-green-50 hover:border-green-200' },
+  { type: 'meeting' as const,  icon: Calendar,    label: 'Meeting',  color: 'text-indigo-600', hoverBg: 'hover:bg-indigo-50 hover:border-indigo-200' },
 ];
 
-// ─── Main Component ────────────────────────────────────────────────────────
+const OUTCOME_STYLES: Record<string, string> = {
+  connected:       'bg-green-50 text-green-600',
+  pending:         'bg-yellow-50 text-yellow-600',
+  replied:         'bg-green-50 text-green-600',
+  no_answer:       'bg-gray-100 text-gray-500',
+  left_voicemail:  'bg-blue-50 text-blue-500',
+  busy:            'bg-orange-50 text-orange-500',
+  completed:       'bg-green-50 text-green-600',
+  no_show:         'bg-red-50 text-red-500',
+  bounced:         'bg-red-50 text-red-500',
+  inmail_sent:     'bg-sky-50 text-sky-600',
+  message_sent:    'bg-sky-50 text-sky-600',
+  connection_sent: 'bg-indigo-50 text-indigo-500',
+};
 
+// ── Main Component ────────────────────────────────────────────────────────────
 export const ContactActivityPanel: React.FC<Props> = ({
-  contact,
-  onOpenModal,
-  onEditActivity,
-  onCompleteTask,
-  onDeleteActivity,
-  onRequestPhone,
-  isRequestingPhone,
-  refetch,
+  contact, onOpenModal, onEditActivity, onCompleteTask, onDeleteActivity,
+  onRequestPhone, isRequestingPhone, phonePending, refetch,
 }) => {
   const { toast } = useToast();
   const data = extractFromRaw(contact);
   const [filterType, setFilterType] = useState<string>('all');
-  const [contactInfoOpen, setContactInfoOpen] = useState(true);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
-  // All activities sorted newest first, filter out internal stage_change for display count
   const allActivities: any[] = contact.contact_activities || [];
   const sortedActivities = useMemo(() =>
     [...allActivities].sort((a, b) =>
-      new Date(b.activity_date || b.created_at).getTime() -
-      new Date(a.activity_date || a.created_at).getTime()
+      new Date(b.activity_date || b.created_at).getTime() - new Date(a.activity_date || a.created_at).getTime()
     ), [allActivities]);
 
   const filteredActivities = useMemo(() =>
-    filterType === 'all'
-      ? sortedActivities
-      : sortedActivities.filter(a => a.type === filterType),
+    filterType === 'all' ? sortedActivities : sortedActivities.filter(a => a.type === filterType),
     [sortedActivities, filterType]);
 
-  // Group by date label
   const groupedActivities = useMemo(() => {
     return filteredActivities.reduce((acc: Record<string, any[]>, activity) => {
       const d = new Date(activity.activity_date || activity.created_at);
@@ -97,32 +98,16 @@ export const ContactActivityPanel: React.FC<Props> = ({
     }, {});
   }, [filteredActivities]);
 
-  // Pending tasks
-const tasks = sortedActivities.filter(
-  a => a.type === 'task' && !a.is_completed && a.due_date
-);
-
-const now = new Date();
-
-const overdueTasks = tasks.filter(a =>
-  isPast(parseISO(a.due_date)) && !isToday(parseISO(a.due_date))
-);
-
-const todayTasks = tasks.filter(a =>
-  isToday(parseISO(a.due_date))
-);
-
-const upcomingTasks = tasks.filter(a =>
-  !isPast(parseISO(a.due_date)) && !isToday(parseISO(a.due_date))
-);
-
-const overdueCount = overdueTasks.length;
-const pendingCount = todayTasks.length;
-const upcomingCount = upcomingTasks.length;
+  // Task counts
+  const tasks = sortedActivities.filter(a => a.type === 'task' && !a.is_completed && a.due_date);
+  const now = new Date();
+  const overdueTasks = tasks.filter(a => isPast(parseISO(a.due_date)) && !isToday(parseISO(a.due_date)));
+  const todayTasks = tasks.filter(a => isToday(parseISO(a.due_date)));
+  const upcomingTasks = tasks.filter(a => !isPast(parseISO(a.due_date)) && !isToday(parseISO(a.due_date)));
 
   const activityCounts = useMemo(() => {
     const counts: Record<string, number> = { all: allActivities.length };
-    ['call','email','linkedin','note','task','meeting'].forEach(t => {
+    ['call', 'email', 'linkedin', 'note', 'task', 'meeting'].forEach(t => {
       counts[t] = allActivities.filter(a => a.type === t).length;
     });
     return counts;
@@ -134,113 +119,28 @@ const upcomingCount = upcomingTasks.length;
     setExpandedItems(next);
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: 'Copied!', description: `${label} copied to clipboard` });
-  };
-
-  // Determine the stage badge color
-  const stageBadgeClass = {
-    Lead:       'bg-blue-50 text-blue-700 border-blue-200',
-    Prospect:   'bg-purple-50 text-purple-700 border-purple-200',
-    Customer:   'bg-green-50 text-green-700 border-green-200',
-    Contacted:  'bg-orange-50 text-orange-700 border-orange-200',
-    Identified: 'bg-gray-100 text-gray-600 border-gray-200',
-    Cold:       'bg-slate-100 text-slate-600 border-slate-200',
-  }[contact.contact_stage || ''] || 'bg-gray-100 text-gray-600 border-gray-200';
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
-      {/* ── Contact Mini Header ──────────────────────────────────────── */}
-      {/* <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-b from-gray-50 to-white flex-shrink-0">
-        <div className="flex items-start gap-3">
-          <Avatar className="h-11 w-11 border-2 border-white shadow-sm flex-shrink-0">
-            <AvatarImage src={contact.photo_url || data.photoUrl || undefined} />
-            <AvatarFallback className="bg-indigo-100 text-indigo-700 text-sm font-semibold">
-              {contact.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-sm font-semibold text-gray-900 truncate">{contact.name}</h2>
-              {contact.contact_stage && (
-                <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded border', stageBadgeClass)}>
-                  {contact.contact_stage}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 truncate mt-0.5">
-              {contact.job_title}
-              {contact.company_name ? ` · ${contact.company_name}` : ''}
-            </p>
-            <div className="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
-              {(data.city || contact.city) && (
-                <span className="flex items-center gap-0.5">
-                  <MapPin size={10} />
-                  {[data.city || contact.city, data.country || contact.country].filter(Boolean).join(', ')}
-                </span>
-              )}
-              {contact.medium && (
-                <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded text-[10px]">
-                  via {contact.medium}
-                </span>
-              )}
-            </div>
+      {/* ── Phone pending banner ─────────────────────────────────────── */}
+      {(phonePending || isRequestingPhone) && (
+        <div className="flex-shrink-0 mx-3 mt-2.5 mb-1 flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200">
+          <div className="relative flex-shrink-0">
+            <Loader2 size={14} className="animate-spin text-amber-500" />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-bold text-amber-800">Phone lookup in progress</p>
+            <p className="text-[9px] text-amber-600 leading-relaxed">
+              Apollo waterfall is processing. Usually delivers in 1–5 min.
+            </p>
+          </div>
+          <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
         </div>
-
-       
-        <div className="flex items-center gap-3 mt-3 pt-2.5 border-t border-gray-100">
-        
-          {contact.email ? (
-            <ContactInfoChip
-              icon={<Mail size={11} />}
-              label={contact.email}
-              onClick={() => copyToClipboard(contact.email, 'Email')}
-              verified
-            />
-          ) : data.allEmails?.[0]?.email ? (
-            <ContactInfoChip
-              icon={<Mail size={11} />}
-              label={data.allEmails[0].email}
-              onClick={() => copyToClipboard(data.allEmails[0].email, 'Email')}
-              verified={['verified', 'valid'].includes(data.allEmails[0].status?.toLowerCase())}
-            />
-          ) : null}
-
-         
-          {contact.mobile ? (
-            <ContactInfoChip
-              icon={<Phone size={11} />}
-              label={contact.mobile}
-              onClick={() => copyToClipboard(contact.mobile, 'Phone')}
-            />
-          ) : data.phoneNumbers?.[0] ? (
-            <ContactInfoChip
-              icon={<Phone size={11} />}
-              label={data.phoneNumbers[0].phone_number || data.phoneNumbers[0].raw_number}
-              onClick={() => copyToClipboard(data.phoneNumbers[0].phone_number || data.phoneNumbers[0].raw_number, 'Phone')}
-            />
-          ) : null}
-
-          
-          {(data.linkedinUrl || contact.linkedin_url) && (
-            <a
-              href={data.linkedinUrl || contact.linkedin_url}
-              target="_blank" rel="noreferrer"
-              className="flex items-center gap-1 px-2 py-1 bg-[#0A66C2] text-white text-[10px] font-medium rounded hover:opacity-90 transition-opacity"
-            >
-              <Linkedin size={10} />
-              LinkedIn
-            </a>
-          )}
-        </div>
-      </div> */}
+      )}
 
       {/* ── Quick Log Actions ────────────────────────────────────────── */}
       <div className="px-3 py-2.5 border-b border-gray-100 bg-white flex-shrink-0">
-        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1">Log Activity</p>
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Log Activity</p>
         <div className="grid grid-cols-6 gap-1">
           {QUICK_ACTIONS.map(({ type, icon: Icon, label, color, hoverBg }) => (
             <button
@@ -258,28 +158,30 @@ const upcomingCount = upcomingTasks.length;
         </div>
       </div>
 
-      {/* ── Pending Tasks Banner ─────────────────────────────────────── */}
-<p className="text-xs font-medium text-gray-700 flex items-center gap-6 justify-center flex-wrap">
-  {overdueCount > 0 && (
-    <span className="text-red-600 flex items-center gap-1">
-      <AlertCircle size={12} /> {overdueCount} overdue task
-    </span>
-  )}
+      {/* ── Task summary banner ──────────────────────────────────────── */}
+      {(overdueTasks.length > 0 || todayTasks.length > 0 || upcomingTasks.length > 0) && (
+        <div className="px-3 py-2 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            {overdueTasks.length > 0 && (
+              <span className="text-[10px] text-red-600 font-medium flex items-center gap-1">
+                <AlertCircle size={10} /> {overdueTasks.length} overdue
+              </span>
+            )}
+            {todayTasks.length > 0 && (
+              <span className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
+                <CheckSquare size={10} /> {todayTasks.length} today
+              </span>
+            )}
+            {upcomingTasks.length > 0 && (
+              <span className="text-[10px] text-violet-600 font-medium flex items-center gap-1">
+                <Clock size={10} /> {upcomingTasks.length} upcoming
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
-  {pendingCount > 0 && (
-    <span className="text-amber-600 flex items-center gap-1">
-      <CheckSquare size={12} /> {pendingCount} today task
-    </span>
-  )}
-
-  {upcomingCount > 0 && (
-    <span className="text-blue-600 flex items-center gap-1">
-      <Clock size={12} /> {upcomingCount} upcoming task
-    </span>
-  )}
-</p>
-
-      {/* ── Filter Tabs ──────────────────────────────────────────────── */}
+      {/* ── Filter tabs ──────────────────────────────────────────────── */}
       <div className="px-3 pt-2.5 flex-shrink-0">
         <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-hide">
           {(['all', 'call', 'email', 'linkedin', 'note', 'task', 'meeting'] as const).map(type => (
@@ -289,7 +191,7 @@ const upcomingCount = upcomingTasks.length;
               className={cn(
                 'flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-all',
                 filterType === type
-                  ? 'bg-gray-900 text-white'
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm'
                   : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
               )}
             >
@@ -297,7 +199,7 @@ const upcomingCount = upcomingTasks.length;
               {activityCounts[type] > 0 && (
                 <span className={cn(
                   'text-[9px] px-1 py-0.5 rounded-full min-w-[14px] text-center leading-none',
-                  filterType === type ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'
+                  filterType === type ? 'bg-white/25 text-white' : 'bg-gray-200 text-gray-500'
                 )}>
                   {activityCounts[type]}
                 </span>
@@ -307,21 +209,18 @@ const upcomingCount = upcomingTasks.length;
         </div>
       </div>
 
-      {/* ── Activity Timeline ────────────────────────────────────────── */}
+      {/* ── Activity timeline ────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-3 pb-4 mt-2">
         {filteredActivities.length === 0 ? (
           <EmptyActivities onOpenModal={onOpenModal} />
         ) : (
           Object.entries(groupedActivities).map(([dateLabel, activities]) => (
             <div key={dateLabel} className="mb-1">
-              {/* Date label */}
               <div className="sticky top-0 z-10 py-1.5 bg-white/90 backdrop-blur-sm mb-1">
-                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   {dateLabel}
                 </span>
               </div>
-
-              {/* Activity items */}
               <div className="space-y-1.5">
                 {activities.map((activity: any) => (
                   <ActivityCard
@@ -343,8 +242,7 @@ const upcomingCount = upcomingTasks.length;
   );
 };
 
-// ─── Activity Card ─────────────────────────────────────────────────────────
-
+// ── Activity Card ─────────────────────────────────────────────────────────────
 interface ActivityCardProps {
   activity: any;
   isExpanded: boolean;
@@ -373,11 +271,10 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   const htmlContent = activity.description_html || activity.description || '';
   const needsExpansion = htmlContent.length > 140;
 
-  // Lightweight stage change item
   if (isStageChange) {
     return (
       <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-400 italic">
-        <div className="w-1 h-1 rounded-full bg-gray-300 flex-shrink-0 ml-1" />
+        <div className="w-1.5 h-1.5 rounded-full bg-gradient-to-r from-purple-300 to-pink-300 flex-shrink-0 ml-1" />
         <span>{activity.description || activity.title}</span>
         <span className="ml-auto text-[10px]">
           {formatDistanceToNow(new Date(activity.activity_date || activity.created_at), { addSuffix: true })}
@@ -388,21 +285,18 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
 
   return (
     <div className={cn(
-      'rounded-xl border bg-white p-3 group transition-shadow hover:shadow-sm',
+      'rounded-xl border bg-white p-3 group transition-all hover:shadow-sm',
       isOverdue && 'border-red-200 bg-red-50/30',
-      isCompleted && 'opacity-60'
+      isCompleted && 'opacity-55',
+      !isOverdue && !isCompleted && 'hover:border-violet-200/60'
     )}>
-      {/* Card header */}
       <div className="flex items-start gap-2.5">
         {/* Type icon */}
         {isTask ? (
-          <button
-            className="mt-0.5 flex-shrink-0"
-            onClick={() => !isCompleted && onComplete(activity.id)}
-          >
+          <button className="mt-0.5 flex-shrink-0" onClick={() => !isCompleted && onComplete(activity.id)}>
             {isCompleted
               ? <CheckCircle2 size={16} className="text-green-500" />
-              : <Circle size={16} className={cn('transition-colors', isOverdue ? 'text-red-400 hover:text-red-500' : 'text-gray-300 hover:text-green-400')} />
+              : <Circle size={16} className={cn('transition-colors', isOverdue ? 'text-red-400 hover:text-red-500' : 'text-gray-300 hover:text-violet-400')} />
             }
           </button>
         ) : (
@@ -411,17 +305,11 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
           </div>
         )}
 
-        {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-1">
-            <h4 className={cn(
-              'text-xs font-medium text-gray-800 leading-snug',
-              isCompleted && 'line-through text-gray-400'
-            )}>
+            <h4 className={cn('text-xs font-medium text-gray-800 leading-snug', isCompleted && 'line-through text-gray-400')}>
               {activity.title}
             </h4>
-
-            {/* Actions menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 p-0.5 rounded hover:bg-gray-100">
@@ -445,34 +333,25 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
             </DropdownMenu>
           </div>
 
-          {/* Meta badges row */}
+          {/* Meta badges */}
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            {/* Activity type badge */}
-            <span className={cn('text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded', cfg.bg, cfg.color)}>
+            <span className={cn('text-[9px] font-bold uppercase px-1.5 py-0.5 rounded', cfg.bg, cfg.color)}>
               {cfg.label}
             </span>
-
-            {/* Direction */}
             {direction && (
               <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
                 {direction === 'inbound'
                   ? <ArrowDownLeft size={9} className="text-green-500" />
-                  : <ArrowUpRight size={9} className="text-blue-400" />}
-                {direction}
+                  : <ArrowUpRight size={9} className="text-blue-400" />
+                }{direction}
               </span>
             )}
-
-            {/* Outcome */}
             {outcome && <OutcomePill outcome={outcome} />}
-
-            {/* Duration */}
             {duration && (
               <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
-                <Clock size={9} /> {duration}m
+                <Clock size={9} />{duration}m
               </span>
             )}
-
-            {/* Priority */}
             {priority && priority !== 'none' && (
               <span className={cn(
                 'text-[9px] font-medium px-1.5 py-0.5 rounded capitalize',
@@ -483,29 +362,20 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 {priority}
               </span>
             )}
-
-            {/* Due date */}
             {isTask && dueDate && (
-              <span className={cn(
-                'text-[10px] flex items-center gap-0.5',
-                isOverdue ? 'text-red-600 font-medium' : 'text-gray-400'
-              )}>
+              <span className={cn('text-[10px] flex items-center gap-0.5', isOverdue ? 'text-red-600 font-medium' : 'text-gray-400')}>
                 {isOverdue && <AlertCircle size={9} />}
-                <Calendar size={9} />
-                {format(parseISO(dueDate), 'MMM d')}
+                <Calendar size={9} />{format(parseISO(dueDate), 'MMM d')}
               </span>
             )}
           </div>
 
-          {/* Description preview */}
+          {/* Description */}
           {htmlContent && (
             <div className="mt-1.5">
               {htmlContent.includes('<') ? (
                 <div
-                  className={cn(
-                    'text-[11px] text-gray-500 leading-relaxed prose prose-xs max-w-none [&>*]:text-[11px] [&>*]:text-gray-500',
-                    !isExpanded && 'line-clamp-2'
-                  )}
+                  className={cn('text-[11px] text-gray-500 leading-relaxed prose prose-xs max-w-none [&>*]:text-[11px] [&>*]:text-gray-500', !isExpanded && 'line-clamp-2')}
                   dangerouslySetInnerHTML={{ __html: htmlContent }}
                 />
               ) : (
@@ -514,37 +384,29 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 </p>
               )}
               {needsExpansion && (
-                <button
-                  onClick={onToggleExpand}
-                  className="text-[10px] text-indigo-500 hover:text-indigo-600 font-medium mt-0.5"
-                >
+                <button onClick={onToggleExpand} className="text-[10px] text-violet-500 hover:text-violet-700 font-medium mt-0.5 transition-colors">
                   {isExpanded ? 'Show less' : 'Show more'}
                 </button>
               )}
             </div>
           )}
 
-          {/* Footer: creator + time */}
+          {/* Footer */}
           <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-gray-50">
             <div className="flex items-center gap-1.5">
               {activity.creator && (
                 <>
                   <Avatar className="h-4 w-4">
                     <AvatarImage src={activity.creator.profile_picture_url} />
-                    <AvatarFallback className="text-[7px] bg-gray-200">
+                    <AvatarFallback className="text-[7px] bg-violet-100 text-violet-600">
                       {activity.creator.first_name?.[0]}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="text-[10px] text-gray-400">
-                    {activity.creator.first_name} {activity.creator.last_name}
-                  </span>
+                  <span className="text-[10px] text-gray-400">{activity.creator.first_name} {activity.creator.last_name}</span>
                 </>
               )}
-              {/* Assignee for tasks */}
               {isTask && activity.assignee && (
-                <span className="text-[10px] text-gray-400">
-                  → {activity.assignee.first_name}
-                </span>
+                <span className="text-[10px] text-gray-400">→ {activity.assignee.first_name}</span>
               )}
             </div>
             <span className="text-[10px] text-gray-300">
@@ -557,59 +419,17 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   );
 };
 
-// ─── Small helpers ─────────────────────────────────────────────────────────
-
-const OUTCOME_STYLES: Record<string, string> = {
-  connected:      'bg-green-50 text-green-600',
-  pending:        'bg-yellow-50 text-yellow-600',
-  replied:        'bg-green-50 text-green-600',
-  no_answer:      'bg-gray-100 text-gray-500',
-  left_voicemail: 'bg-blue-50 text-blue-500',
-  busy:           'bg-orange-50 text-orange-500',
-  completed:      'bg-green-50 text-green-600',
-  no_show:        'bg-red-50 text-red-500',
-  bounced:        'bg-red-50 text-red-500',
-  inmail_sent:    'bg-sky-50 text-sky-600',
-  message_sent:   'bg-sky-50 text-sky-600',
-  connection_sent:'bg-indigo-50 text-indigo-500',
-};
-
+// ── Small helpers ─────────────────────────────────────────────────────────────
 const OutcomePill: React.FC<{ outcome: string }> = ({ outcome }) => (
-  <span className={cn(
-    'text-[9px] font-medium px-1.5 py-0.5 rounded capitalize',
-    OUTCOME_STYLES[outcome] || 'bg-gray-50 text-gray-500'
-  )}>
+  <span className={cn('text-[9px] font-medium px-1.5 py-0.5 rounded capitalize', OUTCOME_STYLES[outcome] || 'bg-gray-50 text-gray-500')}>
     {outcome.replace(/_/g, ' ')}
   </span>
 );
 
-const ContactInfoChip: React.FC<{
-  icon: React.ReactNode;
-  label: string;
-  onClick?: () => void;
-  verified?: boolean;
-}> = ({ icon, label, onClick, verified }) => (
-  <TooltipProvider>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          onClick={onClick}
-          className="flex items-center gap-1 px-2 py-1 bg-gray-50 border border-gray-200 rounded-md text-[10px] text-gray-600 hover:bg-gray-100 transition-colors max-w-[120px] overflow-hidden"
-        >
-          <span className={cn(verified ? 'text-green-500' : 'text-gray-400')}>{icon}</span>
-          <span className="truncate">{label}</span>
-          {verified && <CheckCircle2 size={9} className="text-green-500 flex-shrink-0" />}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent className="text-xs max-w-xs break-all">{label} (click to copy)</TooltipContent>
-    </Tooltip>
-  </TooltipProvider>
-);
-
 const EmptyActivities: React.FC<{ onOpenModal: (type: ActivityModalType) => void }> = ({ onOpenModal }) => (
   <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-      <Clock size={20} className="text-gray-300" />
+    <div className="w-12 h-12 bg-gradient-to-br from-violet-50 to-pink-50 border border-violet-100 rounded-full flex items-center justify-center mb-3">
+      <Clock size={20} className="text-violet-200" />
     </div>
     <p className="text-sm font-medium text-gray-600 mb-1">No activities yet</p>
     <p className="text-xs text-gray-400 mb-4 max-w-[200px]">Start tracking your outreach to build a complete history</p>
@@ -621,10 +441,9 @@ const EmptyActivities: React.FC<{ onOpenModal: (type: ActivityModalType) => void
           <button
             key={type}
             onClick={() => onOpenModal(type as ActivityModalType)}
-            className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all', cfg.bg, cfg.color, cfg.border, 'hover:opacity-80')}
+            className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all hover:opacity-80', cfg.bg, cfg.color, cfg.border)}
           >
-            <Icon size={12} />
-            {cfg.label}
+            <Icon size={12} />{cfg.label}
           </button>
         );
       })}
@@ -633,4 +452,3 @@ const EmptyActivities: React.FC<{ onOpenModal: (type: ActivityModalType) => void
 );
 
 export default ContactActivityPanel;
-// 2
