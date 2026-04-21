@@ -573,13 +573,15 @@ const ContactCell = ({ row, table }: any) => {
           <button
             className={cn(
               'relative flex items-center justify-center h-7 w-7 rounded-lg transition-all border',
-              phones.length > 0
-                ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-100'
-                : phoneAvail === 'yes'
-                  ? 'bg-emerald-50/60 text-emerald-400 hover:bg-emerald-100 border-emerald-100 border-dashed'
-                  : phoneAvail === 'maybe'
-                    ? 'bg-amber-50 text-amber-500 hover:bg-amber-100 border-amber-200 border-dashed'
-                    : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border-slate-200',
+c.phone_enrichment_status === 'pending_phones'
+  ? 'bg-amber-50 text-amber-500 border-amber-300 animate-pulse ring-2 ring-amber-200 ring-offset-1'
+  : phones.length > 0
+    ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-100'
+    : phoneAvail === 'yes'
+      ? 'bg-emerald-50/60 text-emerald-400 hover:bg-emerald-100 border-emerald-100 border-dashed'
+      : phoneAvail === 'maybe'
+        ? 'bg-amber-50 text-amber-500 hover:bg-amber-100 border-amber-200 border-dashed'
+        : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border-slate-200',
             )}
           >
             <Phone size={12} />
@@ -622,11 +624,20 @@ const ContactCell = ({ row, table }: any) => {
               ))
             ) : (
               <div className="py-2 space-y-2">
-                {c.phone_enrichment_status === 'pending_phones' ? (
-                  <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-100">
-                    <Loader2 size={11} className="animate-spin text-amber-500" />
-                    <span className="text-[11px] font-semibold text-amber-700">Verifying phone…</span>
-                  </div>
+{c.phone_enrichment_status === 'pending_phones' ? (
+  <div className="rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 overflow-hidden">
+    <div className="flex items-center gap-2.5 px-3 py-2.5">
+      <div className="w-3.5 h-3.5 rounded-full border-2 border-amber-400 border-t-transparent animate-spin flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] font-bold text-amber-800 leading-tight">Phone lookup in progress</p>
+        <p className="text-[10px] text-amber-600 mt-0.5">Usually delivers in 1–2 min. Will update automatically.</p>
+      </div>
+      <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+    </div>
+    <div className="h-0.5 bg-amber-100">
+      <div className="h-full w-3/4 bg-gradient-to-r from-amber-400 to-orange-400 animate-pulse" />
+    </div>
+  </div>
                 ) : (
                   <>
                     <AvailBadge state={phoneAvail} label="Phone" />
@@ -1089,3 +1100,4 @@ export const columns: ColumnDef<any>[] = [
   { id: 'employee_count', accessorKey: 'employee_count', enableHiding: true, size: 0, header: () => <ColHeader title="Employees" />,   cell: () => null },
   { id: 'updated_at',     accessorKey: 'updated_at',     enableHiding: true, size: 0, header: () => <ColHeader title="Updated" />,     cell: () => null },
 ];
+// waterfall loader

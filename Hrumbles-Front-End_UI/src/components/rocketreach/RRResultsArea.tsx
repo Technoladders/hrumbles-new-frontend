@@ -673,13 +673,20 @@ const [cvUrl, setCvUrl] = useState<string>("");
     setter(true); setRevealError(null);
     const auth = await resolveAuth();
     if (!auth) { setter(false); setRevealError("Not authenticated"); return; }
-    try {
-      const data = await revealProfile(p, revealType, auth);
-      if (!data?.success) throw new Error(data?.error ?? "Reveal failed");
-      onRevealComplete(p.id, { ...data, _provider: provider });
-    } catch (e: any) {
-      setRevealError(e.message ?? "Reveal failed");
-    } finally { setter(false); }
+ try {
+     const data = await revealProfile(p, revealType, auth);
+     if (!data?.success) {
+       // Check for credit error specifically
+       if (data?.code === "INSUFFICIENT_CREDITS") {
+         setRevealError(`Insufficient credits. Need ${data.required}, have ${data.available?.toFixed(2)}.`);
+         return;
+       }
+       throw new Error(data?.error ?? "Reveal failed");
+     }
+     onRevealComplete(p.id, { ...data, _provider: provider });
+   } catch (e: any) {
+     setRevealError(e.message ?? "Reveal failed");
+   } finally { setter(false); }
   }, [p, provider, onRevealComplete]);
 
   return (

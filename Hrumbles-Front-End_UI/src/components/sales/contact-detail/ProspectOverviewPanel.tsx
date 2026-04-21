@@ -155,7 +155,7 @@ const RevealButton: React.FC<{
         <Loader2 size={12} className="animate-spin text-amber-500" />
         <div>
           <p className="text-[10px] font-semibold text-amber-700">Phone lookup in progress</p>
-          <p className="text-[9px] text-amber-500">Apollo is processing via waterfall. This usually takes 1–5 min.</p>
+          <p className="text-[9px] text-amber-500">Processing. This usually takes 1–2 min.</p>
         </div>
       </div>
     );
@@ -180,7 +180,7 @@ const RevealButton: React.FC<{
           {isLoading ? 'Revealing…' : `Reveal ${type === 'email' ? 'Email' : 'Phone'}`}
         </p>
         <p className="text-[9px] text-purple-400">
-          {type === 'phone' ? 'delivery takes 1–5 min' : 'Instant via data enrichment'}
+          {type === 'phone' ? 'Async delivery · usually 1–5 min' : 'Instant via data enrichment'}
         </p>
       </div>
       {isLoading
@@ -354,12 +354,8 @@ const LocationFieldsGroup: React.FC<{
         </>
       )}
 
-          {dropOpen && ReactDOM.createPortal(
-        <div 
-          style={dropStyle} 
-          data-loc-drop 
-          className="bg-white rounded-xl border border-slate-200 shadow-xl ring-1 ring-black/5 overflow-hidden animate-in fade-in zoom-in-95 duration-150"
-        >
+      {dropOpen && ReactDOM.createPortal(
+        <div style={dropStyle} data-loc-drop className="bg-white rounded-xl border border-slate-200 shadow-xl ring-1 ring-black/5 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
           <div className="p-2 border-b border-slate-100">
             <div className="rounded-lg p-[1px] bg-gradient-to-r from-purple-500 to-pink-500">
               <input
@@ -393,6 +389,7 @@ const LocationFieldsGroup: React.FC<{
         </div>,
         document.body
       )}
+      
     </div>
   );
 };
@@ -954,7 +951,7 @@ const AssetSectionManager: React.FC<{
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[11px] font-semibold text-emerald-700">{isRequestingPhone ? 'Requesting…' : 'Reveal Phone'}</p>
-            <p className="text-[9px] text-emerald-500">Phone number confirmed available</p>
+            <p className="text-[9px] text-emerald-500">Phone number confirmed available · async delivery</p>
           </div>
           {isRequestingPhone
             ? <Loader2 size={11} className="text-emerald-400 animate-spin flex-shrink-0" />
@@ -977,7 +974,7 @@ const AssetSectionManager: React.FC<{
             <p className="text-[11px] font-semibold text-amber-700">{isRequestingPhone ? 'Requesting…' : 'Request Direct Dial'}</p>
             <p className="text-[9px] text-amber-500 flex items-center gap-1">
               <AlertCircle size={8} className="flex-shrink-0" />
-              May or may not be available
+              May or may not be available · async delivery
             </p>
           </div>
           {isRequestingPhone
@@ -1027,147 +1024,283 @@ const AssetSectionManager: React.FC<{
 
 // ── Reveal email + phone buttons (for not-yet-enriched state) ────────────────
 // Uses apollo_people_search_masked for availability signals
-const RevealEmailPhoneButtons: React.FC<{
+// ── Compact contact info row (pre-reveal / masked style) ─────────────────────
+// Matches reference UI: icon + masked value on left, access button on right
+const ContactInfoRow: React.FC<{
+  type: 'email' | 'phone';
+  maskedValue: string;       // e.g. "****@****.com" or "(***) ***-****"
+  subLabel?: string;         // e.g. "Mobile · credits" or null
+  available: boolean;        // show access button at all
+  confirmed?: boolean;       // green style (phoneIsYes)
+  maybe?: boolean;           // amber style (phoneIsMaybe)
+  pending?: boolean;         // amber spinner (webhook in flight)
+  isLoading?: boolean;       // button spinner
+  onAccess: () => void;
+  onAddManually: () => void;
+}> = ({ type, maskedValue, subLabel, available, confirmed, maybe, pending, isLoading, onAccess, onAddManually }) => {
+  const isEmail = type === 'email';
+
+  // Determine access button style
+  const btnStyle = confirmed
+    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 hover:border-emerald-300'
+    : maybe
+      ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 hover:border-amber-300'
+      : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 hover:border-purple-300';
+
+  const btnLabel = isLoading
+    ? (isEmail ? 'Revealing…' : 'Requesting…')
+    : isEmail
+      ? 'Access email'
+      : confirmed ? 'Access mobile' : 'Request phone';
+
+  const iconBg = confirmed ? 'bg-emerald-100' : maybe ? 'bg-amber-100' : 'bg-slate-100';
+  const iconColor = confirmed ? 'text-emerald-600' : maybe ? 'text-amber-500' : 'text-slate-400';
+
+  return (
+    <div className="flex items-center justify-between gap-2 py-1.5">
+      {/* Left: icon + masked value */}
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className={cn('flex h-7 w-7 items-center justify-center rounded-lg flex-shrink-0', iconBg)}>
+          {isEmail
+            ? <Mail size={12} className={iconColor} />
+            : <Phone size={12} className={iconColor} />
+          }
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-slate-700 truncate font-mono tracking-wide">{maskedValue}</p>
+          {subLabel && <p className="text-[9px] text-slate-400 mt-0.5">{subLabel}</p>}
+        </div>
+      </div>
+
+      {/* Right: access button or pending */}
+      {pending ? (
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 flex-shrink-0">
+          <Loader2 size={10} className="animate-spin text-amber-500" />
+          <span className="text-[10px] font-semibold text-amber-700 whitespace-nowrap">Looking up…</span>
+        </div>
+      ) : available ? (
+        <button
+          onClick={onAccess}
+          disabled={isLoading}
+          className={cn(
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all flex-shrink-0 whitespace-nowrap disabled:opacity-60',
+            btnStyle
+          )}
+        >
+          {isLoading
+            ? <Loader2 size={10} className="animate-spin flex-shrink-0" />
+            : isEmail
+              ? <Mail size={10} className="flex-shrink-0" />
+              : <Phone size={10} className="flex-shrink-0" />
+          }
+          {btnLabel}
+        </button>
+      ) : (
+        <span className="text-[10px] text-slate-400 flex-shrink-0 italic">Not available</span>
+      )}
+    </div>
+  );
+};
+
+// ── Unified Contact Info section (pre + post reveal in one component) ─────────
+const ContactInfoSection: React.FC<{
   contact: any;
   onEnrich: () => void;
   onRequestPhone: () => void;
+  onFieldSave: (field: string, value: any) => Promise<void>;
   isEnriching: boolean;
   isRequestingPhone: boolean;
   phonePending: boolean;
-}> = ({ contact, onEnrich, onRequestPhone, isEnriching, isRequestingPhone, phonePending }) => {
+  isSaving: boolean;
+}> = ({ contact, onEnrich, onRequestPhone, onFieldSave, isEnriching, isRequestingPhone, phonePending, isSaving }) => {
   const { data: avail } = useContactAvailability(contact.apollo_person_id);
+  const hasApolloId = !!contact.apollo_person_id;
 
-  // If no apollo_person_id at all — contact was never in a search, show sync prompt
-  if (!contact.apollo_person_id) {
-    return (
-      <button
-        onClick={onEnrich}
-        disabled={isEnriching}
-        className="flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-left transition-all bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200 hover:from-purple-100 hover:to-pink-100 hover:border-purple-300 hover:shadow-sm disabled:opacity-60"
-      >
-        <div className="p-1.5 rounded-lg bg-gradient-to-br from-purple-100 to-pink-100 flex-shrink-0">
-          <Sparkles size={11} className="text-purple-600" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-semibold text-purple-700">
-            {isEnriching ? 'Syncing…' : 'Sync Contact Data'}
-          </p>
-          <p className="text-[9px] text-purple-400">Find and reveal emails & phone numbers</p>
-        </div>
-        {isEnriching
-          ? <Loader2 size={11} className="text-purple-400 animate-spin flex-shrink-0" />
-          : <Zap size={11} className="text-purple-300 flex-shrink-0" />
-        }
-      </button>
-    );
-  }
-
-  // Has apollo_person_id — show individual reveal buttons based on availability
-  // Default to true (show reveal) when avail is null/loading or no row exists
+  // Availability signals
+  // No apollo ID = we don't know yet → default to showing masked row (true)
   const emailAvail   = avail?.hasEmail   ?? true;
   const phoneAvail   = avail?.hasPhone   ?? true;
   const phoneIsYes   = avail?.phoneIsYes   ?? false;
   const phoneIsMaybe = avail?.phoneIsMaybe ?? true; // unknown = treat as maybe
 
+  // Has revealed data?
+  const hasEmails = !!(contact.email || (contact.enrichment_contact_emails?.length > 0));
+  const hasPhones = !!(contact.mobile || (contact.enrichment_contact_phones?.length > 0));
+
   return (
-    <div className="space-y-2">
-      {/* Email reveal */}
+    <div className="space-y-3">
+
+      {/* ── Email section ──────────────────────────────────────────── */}
       <div>
         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
           <Mail size={9} />Emails
         </p>
-        {emailAvail ? (
-          <button
-            onClick={onEnrich}
-            disabled={isEnriching}
-            className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg border text-left transition-all bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200 hover:from-purple-100 hover:to-pink-100 hover:border-purple-300 hover:shadow-sm disabled:opacity-60 group"
-          >
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-purple-100 to-pink-100 flex-shrink-0">
-              <Mail size={11} className="text-purple-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-semibold text-purple-700">{isEnriching ? 'Revealing…' : 'Reveal Email'}</p>
-              <p className="text-[9px] text-purple-400">Instant via data enrichment</p>
-            </div>
-            {isEnriching
-              ? <Loader2 size={11} className="text-purple-400 animate-spin flex-shrink-0" />
-              : <Zap size={11} className="text-purple-300 group-hover:text-purple-500 flex-shrink-0 transition-colors" />
-            }
-          </button>
+        {hasEmails ? (
+          /* Already revealed — show AssetSectionManager */
+          <AssetSectionManager
+            contact={contact} type="email"
+            onFieldSave={onFieldSave}
+            onEnrich={onEnrich}
+            isEnriching={isEnriching}
+            isSaving={isSaving}
+          />
+        ) : emailAvail ? (
+          /* Not yet revealed — masked row with Access Email button */
+          <>
+            <ContactInfoRow
+              type="email"
+              maskedValue="****@****.com"
+              available
+              isLoading={isEnriching}
+              onAccess={onEnrich}
+              onAddManually={() => {}}
+            />
+            <ManualAddTrigger type="email" onFieldSave={onFieldSave} contact={contact} />
+          </>
         ) : (
-          <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-100">
-            <AlertCircle size={10} className="text-slate-300 flex-shrink-0" />
-            <p className="text-[10px] text-slate-400">No email found in data</p>
+          /* Apollo confirmed: no email available */
+          <div className="flex items-center justify-between py-1.5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100">
+                <Mail size={12} className="text-slate-400" />
+              </div>
+              <span className="text-[10px] text-slate-400 italic">No email found in data</span>
+            </div>
+            <ManualAddTrigger type="email" onFieldSave={onFieldSave} contact={contact} inline />
           </div>
         )}
       </div>
 
-      {/* Phone reveal */}
+      {/* ── Phone section ──────────────────────────────────────────── */}
       <div>
         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
           <Phone size={9} />Phone Numbers
         </p>
-        {phonePending ? (
-          <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-amber-50 border border-amber-200">
-            <Loader2 size={11} className="animate-spin text-amber-500 flex-shrink-0" />
-            <div>
-              <p className="text-[10px] font-semibold text-amber-700">Lookup in progress</p>
-              <p className="text-[9px] text-amber-500">Usually delivers in 1–5 min</p>
+        {hasPhones ? (
+          /* Already revealed — show AssetSectionManager */
+          <AssetSectionManager
+            contact={contact} type="phone"
+            onFieldSave={onFieldSave}
+            onRequestPhone={onRequestPhone}
+            isRequestingPhone={isRequestingPhone}
+            phonePending={phonePending}
+            isSaving={isSaving}
+          />
+        ) : phonePending ? (
+          /* Webhook in flight */
+          <div className="flex items-center justify-between py-1.5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100">
+                <Phone size={12} className="text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-amber-700">(***) ***-****</p>
+                <p className="text-[9px] text-amber-500">Lookup in progress…</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 flex-shrink-0">
+              <Loader2 size={10} className="animate-spin text-amber-500" />
+              <span className="text-[10px] font-semibold text-amber-700 whitespace-nowrap">1–5 min</span>
             </div>
           </div>
         ) : phoneAvail && phoneIsYes ? (
-          /* Confirmed available — has_direct_phone: "Yes" */
-          <button
-            onClick={onRequestPhone}
-            disabled={isRequestingPhone}
-            className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg border text-left transition-all bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200 hover:from-emerald-100 hover:to-teal-100 hover:border-emerald-300 hover:shadow-sm disabled:opacity-60 group"
-          >
-            <div className="p-1.5 rounded-lg bg-emerald-100 flex-shrink-0">
-              <Phone size={11} className="text-emerald-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-semibold text-emerald-700">
-                {isRequestingPhone ? 'Requesting…' : 'Reveal Phone'}
-              </p>
-              <p className="text-[9px] text-emerald-500">Phone number confirmed available</p>
-            </div>
-            {isRequestingPhone
-              ? <Loader2 size={11} className="text-emerald-400 animate-spin flex-shrink-0" />
-              : <Zap size={11} className="text-emerald-300 group-hover:text-emerald-500 flex-shrink-0 transition-colors" />
-            }
-          </button>
+          /* Confirmed available */
+          <>
+            <ContactInfoRow
+              type="phone"
+              maskedValue="(***) ***-****"
+              subLabel="Mobile · credits"
+              available confirmed
+              isLoading={isRequestingPhone}
+              onAccess={onRequestPhone}
+              onAddManually={() => {}}
+            />
+            <ManualAddTrigger type="phone" onFieldSave={onFieldSave} contact={contact} />
+          </>
         ) : phoneAvail && phoneIsMaybe ? (
-          /* Maybe available — has_direct_phone: "Maybe: ..." or unknown */
-          <button
-            onClick={onRequestPhone}
-            disabled={isRequestingPhone}
-            className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg border text-left transition-all bg-amber-50 border-amber-200 hover:bg-amber-100 hover:border-amber-300 hover:shadow-sm disabled:opacity-60 group"
-          >
-            <div className="p-1.5 rounded-lg bg-amber-100 flex-shrink-0">
-              <Phone size={11} className="text-amber-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-semibold text-amber-700">
-                {isRequestingPhone ? 'Requesting…' : 'Request Direct Dial'}
-              </p>
-              <p className="text-[9px] text-amber-500 flex items-center gap-1">
-                <AlertCircle size={8} className="flex-shrink-0" />
-                May or may not be available
-              </p>
-            </div>
-            {isRequestingPhone
-              ? <Loader2 size={11} className="text-amber-400 animate-spin flex-shrink-0" />
-              : <Zap size={11} className="text-amber-300 group-hover:text-amber-500 flex-shrink-0 transition-colors" />
-            }
-          </button>
+          /* Maybe available (or unknown — default) */
+          <>
+            <ContactInfoRow
+              type="phone"
+              maskedValue="(***) ***-****"
+              subLabel={hasApolloId ? 'Mobile · may not be available' : 'Mobile · credits'}
+              available maybe
+              isLoading={isRequestingPhone}
+              onAccess={hasApolloId ? onRequestPhone : onEnrich}
+              onAddManually={() => {}}
+            />
+            <ManualAddTrigger type="phone" onFieldSave={onFieldSave} contact={contact} />
+          </>
         ) : (
-          <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-100">
-            <AlertCircle size={10} className="text-slate-300 flex-shrink-0" />
-            <p className="text-[10px] text-slate-400">No phone found in data</p>
+          /* Apollo confirmed: no phone available */
+          <div className="flex items-center justify-between py-1.5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100">
+                <Phone size={12} className="text-slate-400" />
+              </div>
+              <span className="text-[10px] text-slate-400 italic">No phone found in data</span>
+            </div>
+            <ManualAddTrigger type="phone" onFieldSave={onFieldSave} contact={contact} inline />
           </div>
         )}
       </div>
     </div>
+  );
+};
+
+// ── Inline manual add trigger (tiny link or button) ───────────────────────────
+const ManualAddTrigger: React.FC<{
+  type: 'email' | 'phone';
+  contact: any;
+  onFieldSave: (field: string, value: any) => Promise<void>;
+  inline?: boolean;
+}> = ({ type, contact, onFieldSave, inline = false }) => {
+  const [open, setOpen] = React.useState(false);
+  const { toast } = useToast();
+  const isEmail = type === 'email';
+
+  const handleSave = async (value: string, meta: any) => {
+    try {
+      if (isEmail) {
+        const { error } = await supabase.from('enrichment_contact_emails').upsert({
+          contact_id: contact.id, email: value,
+          email_status: meta.status || 'unverified', is_primary: false, source: 'Manual',
+        }, { onConflict: 'contact_id,email' });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('enrichment_contact_phones').upsert({
+          contact_id: contact.id, phone_number: value,
+          type: meta.type || 'mobile', status: meta.status || 'no_status',
+          source_name: 'Manual', is_primary: false,
+        }, { onConflict: 'contact_id,phone_number' });
+        if (error) throw error;
+      }
+      toast({ title: `${isEmail ? 'Email' : 'Phone'} added` });
+      await onFieldSave('__refresh__', null);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Failed', description: err.message });
+    }
+  };
+
+  return (
+    <>
+      {inline ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1 text-[10px] text-purple-500 hover:text-purple-700 font-medium transition-colors flex-shrink-0"
+        >
+          <Plus size={10} />Add
+        </button>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="mt-1 flex items-center gap-1 text-[10px] text-purple-500 hover:text-purple-700 font-medium transition-colors"
+        >
+          <Plus size={10} />Add {isEmail ? 'email' : 'phone'} manually
+        </button>
+      )}
+      <AssetDialog open={open} onOpenChange={setOpen} type={type} mode="add" onSave={handleSave} />
+    </>
   );
 };
 
@@ -1220,7 +1353,7 @@ export const ProspectOverviewPanel: React.FC<Props> = ({
       if (!contact.organization_id) return [];
       const { data: d } = await supabase
         .from('contacts')
-        .select('id, name, job_title, photo_url, contact_stage, city, enrichment_people(photo_url, seniority)')
+        .select('id, name, job_title, photo_url, contact_stage, city, enrichment_people(photo_url, title)')
         .eq('organization_id', contact.organization_id)
         .neq('id', contact.id)
         .ilike('job_title', `%${titleKeywords}%`)
@@ -1437,11 +1570,11 @@ export const ProspectOverviewPanel: React.FC<Props> = ({
         </div>
       </GradCard> */}
 
-      {/* ── Enriched Contact Info ───────────────────────────────────── */}
+      {/* ── Contact Info ─────────────────────────────────────────────── */}
       <GradCard>
         <SectionHeader
           title="Contact Info"
-          icon={Sparkles}
+          icon={Mail}
           aside={
             <div className="flex items-center gap-2">
               <LastEnriched at={lastEnrichedAt} />
@@ -1453,53 +1586,18 @@ export const ProspectOverviewPanel: React.FC<Props> = ({
             </div>
           }
         />
-
-        {!isEnriched ? (
-          /* Not yet enriched — show reveal buttons using availability from masked data */
-          <div className="p-3 space-y-2">
-            <RevealEmailPhoneButtons
-              contact={contact}
-              onEnrich={onEnrich}
-              onRequestPhone={onRequestPhone}
-              isEnriching={isEnriching}
-              isRequestingPhone={isRequestingPhone}
-              phonePending={phonePending}
-            />
-          </div>
-        ) : (
-          <div className="p-3 space-y-2.5">
-            {/* Emails section */}
-            <div>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                <Mail size={9} />
-                Emails
-              </p>
-              <AssetSectionManager
-                contact={contact} type="email"
-                onFieldSave={onFieldSave}
-                onEnrich={onEnrich}
-                isEnriching={isEnriching}
-                isSaving={isSaving}
-              />
-            </div>
-
-            {/* Phones section */}
-            <div>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                <Phone size={9} />
-                Phone Numbers
-              </p>
-              <AssetSectionManager
-                contact={contact} type="phone"
-                onFieldSave={onFieldSave}
-                onRequestPhone={onRequestPhone}
-                isRequestingPhone={isRequestingPhone}
-                phonePending={phonePending}
-                isSaving={isSaving}
-              />
-            </div>
-          </div>
-        )}
+        <div className="px-3 py-2.5">
+          <ContactInfoSection
+            contact={contact}
+            onEnrich={onEnrich}
+            onRequestPhone={onRequestPhone}
+            onFieldSave={onFieldSave}
+            isEnriching={isEnriching}
+            isRequestingPhone={isRequestingPhone}
+            phonePending={phonePending}
+            isSaving={isSaving}
+          />
+        </div>
       </GradCard>
 
       {/* ── Career Timeline ─────────────────────────────────────────── */}
@@ -1540,7 +1638,7 @@ export const ProspectOverviewPanel: React.FC<Props> = ({
       </GradCard>
 
       {/* ── Profile Details (metadata) ──────────────────────────────── */}
-      {/* {data.rawPerson && <MetadataCard rawPerson={data.rawPerson} isEnriched={isEnriched} />} */}
+      {data.rawPerson && <MetadataCard rawPerson={data.rawPerson} isEnriched={isEnriched} />}
 
       {/* ── Similar Prospects ───────────────────────────────────────── */}
       {(peers.length > 0 || peersLoading) && (

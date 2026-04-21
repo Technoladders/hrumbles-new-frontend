@@ -1,5 +1,5 @@
 // Hrumbles-Front-End_UI/src/pages/sales/ContactDetailPage.tsx
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,12 +8,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useSelector } from 'react-redux';
 
 // Components
-import { ContactDetailHeader } from '@/components/sales/contact-detail/ContactDetailHeader';
-import { ContactActivityPanel } from '@/components/sales/contact-detail/ContactActivityPanel';
-import { ProspectOverviewPanel } from '@/components/sales/contact-detail/ProspectOverviewPanel';
-import { ContactCompanyPanel } from '@/components/sales/contact-detail/ContactCompanyPanel';
-import { MasterRecordTab } from '@/components/sales/contact-detail/MasterRecordTab';
-import { AddToListModal } from '@/components/sales/contacts-table/AddToListModal';
+import { ContactHeroPanel }       from '@/components/sales/contact-detail/ContactHeroPanel';
+import { ContactLeftPanel }       from '@/components/sales/contact-detail/ContactLeftPanel';
+import { ContactRightPanel }      from '@/components/sales/contact-detail/ContactRightPanel';
+import { AddToListModal }         from '@/components/sales/contacts-table/AddToListModal';
 
 // Dialogs
 import {
@@ -22,39 +20,22 @@ import {
   ActivityLogData
 } from '@/components/sales/contact-detail/dialogs';
 
-// UI
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, User } from 'lucide-react';
-
 type ActivityModalType = 'call' | 'note' | 'email' | 'task' | 'meeting' | 'linkedin' | null;
 
-// ── Gradient defs shared across page ──────────────────────────────────────────
-const GradientDef = () => (
-  <svg width="0" height="0" style={{ position: 'absolute', pointerEvents: 'none' }}>
-    <defs>
-      <linearGradient id="cdp-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stopColor="#9333ea" />
-        <stop offset="100%" stopColor="#ec4899" />
-      </linearGradient>
-    </defs>
-  </svg>
-);
-
 const ContactDetailPage = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const user = useSelector((state: any) => state.auth.user);
-  const organizationId = useSelector((state: any) => state.auth.organization_id);
+  const { id }          = useParams();
+  const navigate        = useNavigate();
+  const { toast }       = useToast();
+  const queryClient     = useQueryClient();
+  const user            = useSelector((state: any) => state.auth.user);
+  const organizationId  = useSelector((state: any) => state.auth.organization_id);
 
-  const [activeModal, setActiveModal] = useState<ActivityModalType>(null);
-  const [editingActivity, setEditingActivity] = useState<any>(null);
-  const [isEnriching, setIsEnriching] = useState(false);
+  const [activeModal,       setActiveModal]       = useState<ActivityModalType>(null);
+  const [editingActivity,   setEditingActivity]   = useState<any>(null);
+  const [isEnriching,       setIsEnriching]       = useState(false);
   const [isRequestingPhone, setIsRequestingPhone] = useState(false);
-  const [phonePending, setPhonePending] = useState(false);
-  const [activeTab, setActiveTab] = useState('prospect');
-  const [listModalOpen, setListModalOpen] = useState(false);
+  const [phonePending,      setPhonePending]      = useState(false);
+  const [listModalOpen,     setListModalOpen]     = useState(false);
 
   // ─── Main contact query ───────────────────────────────────────────────────
   const { data: contact, isLoading, refetch } = useQuery({
@@ -92,31 +73,32 @@ const ContactDetailPage = () => {
       if (error) throw error;
       return data;
     },
-    enabled: !!id
+    enabled: !!id,
   });
 
-  // Detect if phone is pending (phone_enrichment_status = 'pending_phones')
+  // ─── Phone pending detection ──────────────────────────────────────────────
   useEffect(() => {
     if (!contact) return;
-    const hasPhone = !!(contact.mobile || (contact.enrichment_contact_phones?.length > 0));
+    const hasPhone = !!(contact.mobile || contact.enrichment_contact_phones?.length > 0);
     const isPending = contact.phone_enrichment_status === 'pending_phones';
-    if (isPending && !hasPhone) {
-      setPhonePending(true);
-    } else {
-      setPhonePending(false);
-    }
+    setPhonePending(isPending && !hasPhone);
   }, [contact]);
 
-  // Poll for phone when pending (check every 15s)
+  // ─── Poll when phone pending ──────────────────────────────────────────────
   useEffect(() => {
     if (!phonePending) return;
     const interval = setInterval(() => {
       refetch().then(({ data }) => {
-        const hasPhone = data?.mobile || (data?.enrichment_contact_phones?.length > 0);
+        const hasPhone = data?.mobile || data?.enrichment_contact_phones?.length > 0;
+        const noPhone  = data?.phone_enrichment_status === 'no_phone_found';
         if (hasPhone) {
           setPhonePending(false);
           setIsRequestingPhone(false);
-          toast({ title: 'Phone Received', description: 'Phone number has been delivered by Apollo.' });
+          toast({ title: 'Phone Received', description: 'Phone number has been delivered.' });
+        } else if (noPhone) {
+          setPhonePending(false);
+          setIsRequestingPhone(false);
+          toast({ variant: 'destructive', title: 'No phone found', description: 'Apollo couldn\'t find a number for this contact.' });
         }
       });
     }, 15000);
@@ -134,10 +116,10 @@ const ContactDetailPage = () => {
       if (error) throw error;
       return data || [];
     },
-    enabled: !!organizationId
+    enabled: !!organizationId,
   });
 
-  // ─── Inline field edit mutation ───────────────────────────────────────────
+  // ─── Mutations ────────────────────────────────────────────────────────────
   const editContactMutation = useMutation({
     mutationFn: async ({ field, value }: { field: string; value: any }) => {
       const { error } = await supabase
@@ -146,17 +128,15 @@ const ContactDetailPage = () => {
         .eq('id', id!);
       if (error) throw error;
     },
-    onSuccess: (_, { field }) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contact-full-detail', id] });
       queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-      toast({ title: 'Saved', description: `Field updated successfully.` });
     },
     onError: (err: any) => {
       toast({ variant: 'destructive', title: 'Save failed', description: err.message });
-    }
+    },
   });
 
-  // ─── Inline company edit mutation ─────────────────────────────────────────
   const editCompanyMutation = useMutation({
     mutationFn: async ({ field, value }: { field: string; value: any }) => {
       if (!contact?.companies?.id) throw new Error('No company linked');
@@ -172,68 +152,63 @@ const ContactDetailPage = () => {
     },
     onError: (err: any) => {
       toast({ variant: 'destructive', title: 'Save failed', description: err.message });
-    }
+    },
   });
 
-  // ─── Activity mutations ───────────────────────────────────────────────────
   const logActivityMutation = useMutation({
     mutationFn: async (payload: ActivityLogData) => {
       const dbData = {
-        contact_id: id,
-        organization_id: organizationId,
-        created_by: user?.id,
-        type: payload.type,
-        title: payload.title,
-        description: payload.description,
-        description_html: payload.descriptionHtml,
-        metadata: payload.metadata,
-        outcome: payload.metadata?.outcome || payload.metadata?.linkedinOutcome,
-        direction: payload.metadata?.direction,
-        duration_minutes: payload.metadata?.duration ? parseInt(payload.metadata.duration) : null,
-        activity_date: payload.metadata?.activityDate || payload.metadata?.startTime || new Date().toISOString(),
-        due_date: payload.metadata?.dueDate,
-        due_time: payload.metadata?.dueTime,
-        priority: payload.metadata?.priority,
-        task_type: payload.metadata?.taskType,
-        assigned_to: payload.metadata?.assignedTo || null
+        contact_id:        id,
+        organization_id:   organizationId,
+        created_by:        user?.id,
+        type:              payload.type,
+        title:             payload.title,
+        description:       payload.description,
+        description_html:  payload.descriptionHtml,
+        metadata:          payload.metadata,
+        outcome:           payload.metadata?.outcome || payload.metadata?.linkedinOutcome,
+        direction:         payload.metadata?.direction,
+        duration_minutes:  payload.metadata?.duration ? parseInt(payload.metadata.duration) : null,
+        activity_date:     payload.metadata?.activityDate || payload.metadata?.startTime || new Date().toISOString(),
+        due_date:          payload.metadata?.dueDate,
+        due_time:          payload.metadata?.dueTime,
+        priority:          payload.metadata?.priority,
+        task_type:         payload.metadata?.taskType,
+        assigned_to:       payload.metadata?.assignedTo || null,
       };
-
       if (payload.id) {
         const { error } = await supabase.from('contact_activities').update(dbData).eq('id', payload.id);
         if (error) throw error;
+      } else if (payload.createFollowUp) {
+        const { error } = await supabase.rpc('log_activity_with_followup', {
+          p_contact_id:          id,
+          p_organization_id:     organizationId,
+          p_created_by:          user?.id,
+          p_type:                payload.type,
+          p_title:               payload.title,
+          p_description:         payload.description,
+          p_description_html:    payload.descriptionHtml,
+          p_metadata:            payload.metadata || {},
+          p_create_followup:     true,
+          p_followup_task_type:  payload.createFollowUp.taskType,
+          p_followup_due_date:   payload.createFollowUp.dueDate,
+          p_followup_due_time:   payload.createFollowUp.dueTime || '09:00:00',
+        });
+        if (error) throw error;
       } else {
-        if (payload.createFollowUp) {
-          const { error } = await supabase.rpc('log_activity_with_followup', {
-            p_contact_id: id,
-            p_organization_id: organizationId,
-            p_created_by: user?.id,
-            p_type: payload.type,
-            p_title: payload.title,
-            p_description: payload.description,
-            p_description_html: payload.descriptionHtml,
-            p_metadata: payload.metadata || {},
-            p_create_followup: true,
-            p_followup_task_type: payload.createFollowUp.taskType,
-            p_followup_due_date: payload.createFollowUp.dueDate,
-            p_followup_due_time: payload.createFollowUp.dueTime || '09:00:00'
-          });
-          if (error) throw error;
-        } else {
-          const { error } = await supabase.from('contact_activities').insert(dbData);
-          if (error) throw error;
-        }
+        const { error } = await supabase.from('contact_activities').insert(dbData);
+        if (error) throw error;
       }
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['contact-full-detail', id] });
-      const action = variables.id ? 'Updated' : 'Logged';
-      toast({ title: 'Activity Saved', description: `${variables.type} ${action.toLowerCase()} successfully.` });
+      toast({ title: 'Activity Saved' });
       setActiveModal(null);
       setEditingActivity(null);
     },
     onError: (error: any) => {
       toast({ variant: 'destructive', title: 'Error', description: error.message });
-    }
+    },
   });
 
   const completeTaskMutation = useMutation({
@@ -244,7 +219,7 @@ const ContactDetailPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contact-full-detail', id] });
       toast({ title: 'Task Completed' });
-    }
+    },
   });
 
   const deleteActivityMutation = useMutation({
@@ -255,22 +230,11 @@ const ContactDetailPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contact-full-detail', id] });
       toast({ title: 'Activity Deleted' });
-    }
+    },
   });
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
-  const handleCloseModal = () => { setActiveModal(null); setEditingActivity(null); };
-  const handleEditActivity = (activity: any) => {
-    setEditingActivity(activity);
-    setActiveModal(activity.type as ActivityModalType);
-  };
-  const handleActivitySubmit = useCallback(async (data: ActivityLogData) => {
-    await logActivityMutation.mutateAsync(data);
-  }, [logActivityMutation]);
-
   const handleFieldSave = useCallback(async (field: string, value: any) => {
-    // __refresh__ is a signal from AssetSectionManager to just refetch after
-    // writing to enrichment tables directly — no contacts update needed
     if (field === '__refresh__') {
       await refetch();
       queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
@@ -283,46 +247,28 @@ const ContactDetailPage = () => {
     await editCompanyMutation.mutateAsync({ field, value });
   }, [editCompanyMutation]);
 
-  const handleListAdd = async (targetFileId: string) => {
-    if (!targetFileId || !contact?.id) {
-      toast({ variant: 'destructive', title: 'No list selected' });
-      return;
-    }
-    try {
-      const { error } = await supabase.from('contact_workspace_files').upsert({
-        contact_id: contact.id,
-        file_id: targetFileId,
-        added_by: user?.id,
-      });
-      if (error) throw error;
-      toast({ title: 'Added to List', description: `${contact.name} was successfully added.` });
-      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-      queryClient.invalidateQueries({ queryKey: ['listRecordCounts'] });
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Failed to add', description: err.message });
-    } finally {
-      setListModalOpen(false);
-    }
-  };
+  const handleActivitySubmit = useCallback(async (data: ActivityLogData) => {
+    await logActivityMutation.mutateAsync(data);
+  }, [logActivityMutation]);
 
   const handleEnrich = useCallback(async () => {
     setIsEnriching(true);
     try {
       const { data, error } = await supabase.functions.invoke('enrich-contact', {
         body: {
-          contactId: id,
+          contactId:        id,
           organizationId,
-          userId: user?.id,
-          revealType: 'email',
-          apolloPersonId: contact?.apollo_person_id || null,
-          email: contact?.email,
-          name: contact?.name,
-          linkedin: contact?.linkedin,
+          userId:           user?.id,
+          revealType:       'email',
+          apolloPersonId:   contact?.apollo_person_id || null,
+          email:            contact?.email,
+          name:             contact?.name,
+          linkedin:         contact?.linkedin_url,
           organization_name: contact?.company_name || contact?.companies?.name,
-          domain: contact?.companies?.website
-        }
+          domain:           contact?.companies?.website,
+        },
       });
-      if (error) throw new Error(error.message || "Function invocation failed");
+      if (error) throw new Error(error.message || 'Function invocation failed');
       if (data?.error === 'insufficient_credits') {
         toast({ variant: 'destructive', title: 'Insufficient Credits', description: data.message });
         return;
@@ -331,17 +277,14 @@ const ContactDetailPage = () => {
         toast({ variant: 'destructive', title: 'No Match Found', description: data.message });
         return;
       }
-      const creditInfo = data?.credits?.deducted ? ` (${data.credits.deducted} credit${data.credits.deducted > 1 ? 's' : ''} used)` : '';
-      toast({
-        title: contact?.apollo_person_id ? 'Intelligence Refreshed' : 'Contact Enriched',
-        description: (data?.message || 'Data has been updated.') + creditInfo
-      });
+      toast({ title: contact?.apollo_person_id ? 'Intelligence Refreshed' : 'Contact Enriched' });
       refetch();
       queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Enrichment Failed', description: err.message });
     } finally {
-      setIsEnriching(false); }
+      setIsEnriching(false);
+    }
   }, [contact, id, organizationId, user?.id, refetch, toast, queryClient]);
 
   const handleRequestPhone = useCallback(async () => {
@@ -354,12 +297,12 @@ const ContactDetailPage = () => {
     try {
       const { data, error } = await supabase.functions.invoke('enrich-contact', {
         body: {
-          contactId: id,
+          contactId:      id,
           organizationId,
-          userId: user?.id,
+          userId:         user?.id,
           apolloPersonId: contact.apollo_person_id,
-          revealType: 'phone'
-        }
+          revealType:     'phone',
+        },
       });
       if (error) throw new Error(error.message);
       if (data?.error === 'insufficient_credits') {
@@ -368,16 +311,14 @@ const ContactDetailPage = () => {
         setPhonePending(false);
         return;
       }
-      // Phone may arrive synchronously or via webhook
       const gotPhoneNow = data?.phone || data?.phoneStatus;
       if (gotPhoneNow) {
         setIsRequestingPhone(false);
         setPhonePending(false);
-        toast({ title: 'Phone Received', description: 'Phone number retrieved successfully.' });
+        toast({ title: 'Phone Received' });
         refetch();
       } else {
-        // Async — webhook will deliver
-        toast({ title: 'Phone Requested', description: 'Apollo is looking up the number. It will appear shortly.' });
+        toast({ title: 'Phone Requested', description: 'Usually delivers in 1–5 min.' });
       }
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Action Failed', description: err.message });
@@ -386,131 +327,115 @@ const ContactDetailPage = () => {
     }
   }, [contact, id, organizationId, user?.id, refetch, toast]);
 
+  const handleListAdd = async (targetFileId: string) => {
+    if (!targetFileId || !contact?.id) return;
+    try {
+      const { error } = await supabase.from('contact_workspace_files').upsert({
+        contact_id: contact.id,
+        file_id:    targetFileId,
+        added_by:   user?.id,
+      });
+      if (error) throw error;
+      toast({ title: 'Added to List' });
+      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Failed', description: err.message });
+    } finally {
+      setListModalOpen(false);
+    }
+  };
+
   // ─── Loading ───────────────────────────────────────────────────────────────
   if (isLoading || !contact) {
     return (
-      <div className="min-h-screen bg-[#F7F7F8]">
-        <div className="h-[65px] bg-white border-b border-gray-200 px-6 flex items-center">
-          <Skeleton className="h-8 w-72" />
-        </div>
-        <div className="flex h-[calc(100vh-65px)]">
-          <div className="w-[380px] border-r border-gray-200 bg-white p-4 space-y-3">
-            <Skeleton className="h-10 w-full" /><Skeleton className="h-64 w-full" /><Skeleton className="h-32 w-full" />
-          </div>
-          <div className="flex-1 p-6 space-y-4">
-            <Skeleton className="h-48 w-full" /><Skeleton className="h-48 w-full" />
-          </div>
+      <div className="min-h-screen bg-slate-50">
+        <Skeleton className="h-[61px] w-full" />
+        <Skeleton className="h-[110px] w-full mt-0" />
+        <div className="flex h-[calc(100vh-171px)]">
+          <Skeleton className="w-[300px] h-full" />
+          <Skeleton className="flex-1 h-full ml-0" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F7F8] flex flex-col">
-      <GradientDef />
-
-      <ContactDetailHeader
+    /*
+      SCROLL FIX — no position:fixed (that breaks sidebar responsiveness).
+      
+      The Chakra content Box has:
+        - p={1}  →  4px padding on all sides  →  cancel with margin: -4px
+        - ml={mainSidebarWidth}  →  already handled by Chakra, we don't touch it
+        - overflowY: auto  →  our overflow:hidden below prevents it from scrolling
+        - height fills remaining space after 70px header
+      
+      Result: our div is exactly the available viewport minus header, with no
+      scroll at the Box level. Each panel has its own overflow-y:auto.
+    */
+    <div
+      className="flex flex-col bg-[#F7F7F8]"
+      style={{
+        height: 'calc(100vh - 70px - 8px)', /* 70px header + 8px = p={1} top+bottom */
+        margin: '2px',                      /* cancel Chakra Box p={1} padding */
+        overflow: 'hidden',
+      }}
+    >
+      {/* ── Hero 3-col panel (includes back button, replaces ContactDetailHeader) ── */}
+      <ContactHeroPanel
         contact={contact}
-        onBack={() => navigate(-1)}
-        onEnrich={handleEnrich}
-        isEnriching={isEnriching}
-        onOpenModal={(m: ActivityModalType) => { setEditingActivity(null); setActiveModal(m); }}
-        refetch={refetch}
-        onAddToList={() => setListModalOpen(true)}
         onFieldSave={handleFieldSave}
+        onEnrich={handleEnrich}
+        onRequestPhone={handleRequestPhone}
+        onOpenModal={(m: ActivityModalType) => { setEditingActivity(null); setActiveModal(m); }}
+        onAddToList={() => setListModalOpen(true)}
+        onBack={() => navigate(-1)}
+        isEnriching={isEnriching}
+        isRequestingPhone={isRequestingPhone}
+        phonePending={phonePending}
         isSaving={editContactMutation.isPending}
       />
 
-      <div className="flex flex-1 min-h-0" style={{ height: 'calc(100vh - 65px)' }}>
-        {/* ── Left: Activity Panel ─────────────────────────────────── */}
-        <aside className="w-[380px] min-w-[380px] border-r border-gray-200 bg-white flex flex-col overflow-hidden">
-          <ContactActivityPanel
+      {/* ── Body: left + right panels with independent scroll ───────── */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+
+        {/* Left panel — summary + career + activity */}
+        <div
+          className="flex-shrink-0 border-r border-slate-200 bg-white overflow-y-auto m-2"
+          style={{ width: 320, minWidth: 320 }}
+        >
+          <ContactLeftPanel
             contact={contact}
+            onFieldSave={handleFieldSave}
             onOpenModal={(m: ActivityModalType) => { setEditingActivity(null); setActiveModal(m); }}
-            onEditActivity={handleEditActivity}
+            onEditActivity={(activity) => { setEditingActivity(activity); setActiveModal(activity.type as ActivityModalType); }}
             onCompleteTask={(taskId) => completeTaskMutation.mutate(taskId)}
             onDeleteActivity={(activityId) => deleteActivityMutation.mutate(activityId)}
             onRequestPhone={handleRequestPhone}
             isRequestingPhone={isRequestingPhone}
             phonePending={phonePending}
-            refetch={refetch}
           />
-        </aside>
+        </div>
 
-        {/* ── Right: Profile Tabs ──────────────────────────────────── */}
-        <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F7F7F8]">
-          {/* Sticky tab bar */}
-          <div className="flex-shrink-0 px-4 pt-3 pb-0 bg-[#F7F7F8] border-b border-gray-200 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="bg-white border border-gray-200 rounded-xl p-1 h-auto shadow-sm gap-1">
-                <TabsTrigger
-                  value="prospect"
-                  className="
-                    px-4 py-1.5 rounded-lg text-xs font-medium text-gray-500 transition-all duration-150
-                    flex items-center gap-1.5
-                    data-[state=active]:text-white data-[state=active]:shadow-sm
-                    data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-pink-600
-                  "
-                >
-                  <User size={13} />
-                  Prospect
-                </TabsTrigger>
-                <TabsTrigger
-                  value="company"
-                  className="
-                    px-4 py-1.5 rounded-lg text-xs font-medium text-gray-500 transition-all duration-150
-                    flex items-center gap-1.5
-                    data-[state=active]:text-white data-[state=active]:shadow-sm
-                    data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-pink-600
-                  "
-                >
-                  <Building2 size={13} />
-                  Company
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-
-          {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsContent value="prospect" className="mt-0 focus-visible:outline-none p-4">
-                <ProspectOverviewPanel
-                  contact={contact}
-                  onFieldSave={handleFieldSave}
-                  onRequestPhone={handleRequestPhone}
-                  onEnrich={handleEnrich}
-                  isRequestingPhone={isRequestingPhone}
-                  isEnriching={isEnriching}
-                  phonePending={phonePending}
-                  isSaving={editContactMutation.isPending}
-                />
-              </TabsContent>
-              <TabsContent value="company" className="mt-0 focus-visible:outline-none">
-                <ContactCompanyPanel
-                  contact={contact}
-                  onCompanyFieldSave={handleCompanyFieldSave}
-                  isSaving={editCompanyMutation.isPending}
-                />
-              </TabsContent>
-            </Tabs>
-          </div>
-        </main>
+        {/* Right panel — company + similar prospects */}
+        <div className="flex-1 min-w-0 overflow-y-auto bg-[#F7F7F8]">
+          <ContactRightPanel
+            contact={contact}
+            onCompanyFieldSave={handleCompanyFieldSave}
+            isSaving={editCompanyMutation.isPending}
+            organizationId={organizationId}
+            userId={user?.id}
+          />
+        </div>
       </div>
 
-      {/* Dialogs */}
-      <LogCallDialog open={activeModal === 'call'} onOpenChange={(o) => !o && handleCloseModal()}
-        contact={contact} activity={editingActivity} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
-      <LogEmailDialog open={activeModal === 'email'} onOpenChange={(o) => !o && handleCloseModal()}
-        contact={contact} activity={editingActivity} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
-      <CreateNoteDialog open={activeModal === 'note'} onOpenChange={(o) => !o && handleCloseModal()}
-        contact={contact} activity={editingActivity} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
-      <CreateTaskDialog open={activeModal === 'task'} onOpenChange={(o) => !o && handleCloseModal()}
-        contact={contact} activity={editingActivity} teamMembers={teamMembers || []} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
-      <LogMeetingDialog open={activeModal === 'meeting'} onOpenChange={(o) => !o && handleCloseModal()}
-        contact={contact} activity={editingActivity} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
-      <LogLinkedInDialog open={activeModal === 'linkedin'} onOpenChange={(o) => !o && handleCloseModal()}
-        contact={contact} activity={editingActivity} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
+      {/* ── Dialogs ──────────────────────────────────────────────────── */}
+      <LogCallDialog     open={activeModal === 'call'}    onOpenChange={o => !o && (setActiveModal(null), setEditingActivity(null))} contact={contact} activity={editingActivity} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
+      <LogEmailDialog    open={activeModal === 'email'}   onOpenChange={o => !o && (setActiveModal(null), setEditingActivity(null))} contact={contact} activity={editingActivity} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
+      <CreateNoteDialog  open={activeModal === 'note'}    onOpenChange={o => !o && (setActiveModal(null), setEditingActivity(null))} contact={contact} activity={editingActivity} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
+      <CreateTaskDialog  open={activeModal === 'task'}    onOpenChange={o => !o && (setActiveModal(null), setEditingActivity(null))} contact={contact} activity={editingActivity} teamMembers={teamMembers || []} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
+      <LogMeetingDialog  open={activeModal === 'meeting'} onOpenChange={o => !o && (setActiveModal(null), setEditingActivity(null))} contact={contact} activity={editingActivity} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
+      <LogLinkedInDialog open={activeModal === 'linkedin'}onOpenChange={o => !o && (setActiveModal(null), setEditingActivity(null))} contact={contact} activity={editingActivity} onSubmit={handleActivitySubmit} isSubmitting={logActivityMutation.isPending} />
+
       <AddToListModal
         open={listModalOpen}
         onOpenChange={setListModalOpen}

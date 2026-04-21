@@ -400,8 +400,66 @@ useEffect(() => {
     enabled: queryEnabled,
   });
 
+  
+
   const tableData = queryResult?.data  || [];
   const totalRows = queryResult?.count || 0;
+
+  // ── Poll for pending phone rows ───────────────────────────────────────────────
+// When any row has phone_enrichment_status === 'pending_phones', poll every 5s
+// and refresh those rows so the phone appears without a full page reload.
+useEffect(() => {
+  const hasPendingPhones = tableData.some(
+    (r: any) => r.phone_enrichment_status === 'pending_phones'
+  );
+  if (!hasPendingPhones) return;
+
+  const interval = setInterval(async () => {
+    const { data: updatedRows } = await supabase
+      .from('contacts')
+      .select('id, mobile, phone_enrichment_status')
+      .in('id', tableData
+        .filter((r: any) => r.phone_enrichment_status === 'pending_phones')
+        .map((r: any) => r.id)
+      );
+
+    if (!updatedRows?.length) return;
+
+    const completed = updatedRows.filter(
+      (r: any) => r.phone_enrichment_status !== 'pending_phones' || r.mobile
+    );
+
+    if (completed.length > 0) {
+      // Patch the query cache rows directly — no full refetch
+      queryClient.setQueryData(contactsQueryKey, (old: any) => {
+        if (!old?.data) return old;
+        return {
+          ...old,
+          data: old.data.map((row: any) => {
+            const updated = updatedRows.find((u: any) => u.id === row.id);
+            if (!updated) return row;
+            return {
+              ...row,
+              mobile: updated.mobile ?? row.mobile,
+              phone_enrichment_status: updated.phone_enrichment_status,
+            };
+          }),
+        };
+      });
+
+      // If all pending are resolved, do a full invalidate to refresh all_phones too
+      const allResolved = updatedRows.every(
+        (r: any) => r.phone_enrichment_status !== 'pending_phones'
+      );
+      if (allResolved) {
+        queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+        toast({ title: '📱 Phone received', description: `${completed.length} phone number${completed.length > 1 ? 's' : ''} delivered.` });
+      }
+    }
+  }, 5000);
+
+  return () => clearInterval(interval);
+}, [tableData, contactsQueryKey, queryClient, toast]);
 
   // Update result count in the most recent saved search
   useEffect(() => {
@@ -510,6 +568,20 @@ const handleEnrich = async (
 ) => {
   try {
     toast({ title: 'Verifying…', description: `Checking ${type}` });
+
+        if (type === 'phone') {
+      queryClient.setQueryData(contactsQueryKey, (old: any) => {
+        if (!old?.data) return old;
+        return {
+          ...old,
+          data: old.data.map((row: any) =>
+            row.id === contactId
+              ? { ...row, phone_enrichment_status: 'pending_phones' }
+              : row
+          ),
+        };
+      });
+    }
 
     const { data, error } = await supabase.functions.invoke('enrich-contact', {
       body: {

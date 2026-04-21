@@ -16,7 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { cn }             from "@/lib/utils";
 import { supabase }       from "@/integrations/supabase/client";
 import {
-  ChevronLeft, ChevronRight, Bookmark, Loader2,
+  ChevronLeft, ChevronRight, Bookmark, Loader2, AlertCircle, Coins, X 
 } from "lucide-react";
 
 import { RRSearchSidebar, RRFilters, DEFAULT_RR_FILTERS } from "./RRSearchSidebar";
@@ -26,10 +26,12 @@ import { IdleState }        from "@/components/CandidateSearch/components/states
 import { EmptyState }       from "@/components/CandidateSearch/components/states/EmptyState";
 import { ErrorState }       from "@/components/CandidateSearch/components/states/ErrorState";
 import { useFolders }       from "@/components/CandidateSearch/hooks/useFolders";
-import { useRRSearch }      from "./hooks/useRRSearch";
+import { useRRSearch, CreditError }      from "./hooks/useRRSearch";
 import { useRRRevealedIds } from "./hooks/useRRRevealedIds";
 import { useSavedCandidatesCount } from "@/components/CandidateSearch/hooks/useSavedCandidates";
 import { CandidateInviteGate }     from "@/components/CandidateSearch/components/CandidateInviteGate";
+import { ManageVerificationPricingModal } from "@/components/global/OrganizationManagement/ManageVerificationPricingModal";
+
 import type { RRProfile } from "./types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -47,6 +49,39 @@ interface EnrichProgress {
   done:   number;
   active: boolean;
 }
+
+interface InsufficientCreditsBannerProps {
+  creditError:          CreditError;
+  onOpenPricingModal?:  () => void;
+  onDismiss:            () => void;
+}
+
+export const InsufficientCreditsBanner: React.FC<InsufficientCreditsBannerProps> = ({
+  creditError, onOpenPricingModal, onDismiss,
+}) => (
+  <div className="mx-4 mt-3 flex items-start gap-3 p-3.5 rounded-xl border border-red-200 bg-red-50">
+    <AlertCircle size={16} className="text-red-500 flex-shrink-0 mt-0.5" />
+    <div className="flex-1 min-w-0">
+      <p className="text-sm font-semibold text-red-700">Insufficient Credits</p>
+      <p className="text-xs text-red-600 mt-0.5">
+        This search requires <strong>{creditError.required} credit(s)</strong>.
+        Your current balance is <strong>{creditError.available.toFixed(2)}</strong>.
+      </p>
+      {onOpenPricingModal && (
+        <button
+          onClick={onOpenPricingModal}
+          className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <Coins size={11} />
+          Top Up Credits
+        </button>
+      )}
+    </div>
+    <button onClick={onDismiss} className="text-red-400 hover:text-red-600 flex-shrink-0">
+      <X size={14} />
+    </button>
+  </div>
+);
 
 // ─── URL encode / decode ──────────────────────────────────────────────────────
 function encodeState(s: PageState): URLSearchParams {
@@ -125,7 +160,7 @@ function decodeState(p: URLSearchParams): PageState {
       yearsInCurrentRole:    p.get("yr")  ?? "",
       recentlyChangedJobs:   p.get("rcj") === "1",
     },
-    pageSize: parseInt(p.get("per") ?? "10", 10),
+    pageSize: parseInt(p.get("per") ?? (p.get("pv") === "contactout" ? "25" : "10"), 10),
     page:     parseInt(p.get("pg")  ?? "1",  10),
     provider: (p.get("pv") as SearchProvider) ?? "contactout",
   };
@@ -193,6 +228,9 @@ export const RocketReachSearchPage: React.FC = () => {
   // ── State ─────────────────────────────────────────────────────────────────
   const [pageState, setPageState] = useState<PageState>(() => decodeState(searchParams));
 
+  // credit
+  const [showPricingModal, setShowPricingModal] = useState(false);
+
   const updateState = useCallback((patch: Partial<PageState>) => {
     setPageState(prev => {
       const next = { ...prev, ...patch };
@@ -216,9 +254,10 @@ export const RocketReachSearchPage: React.FC = () => {
   }, [pageState, setSearchParams]);
 
   const { filters, pageSize, page, provider } = pageState;
-
+const effectivePageSize =
+  provider === "contactout" ? 25 : pageSize;
   // ── Search ────────────────────────────────────────────────────────────────
-  const { state, profiles, totalEntries, error, search } = useRRSearch({
+  const { state, profiles, totalEntries, error, creditError, search } = useRRSearch({
     ...filters,
     pageSize,
     provider,
@@ -428,12 +467,13 @@ export const RocketReachSearchPage: React.FC = () => {
             {hasFilters && (
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] text-slate-400 hidden sm:block">Per page</span>
-                <select value={pageSize}
+                <select value={provider === "contactout" ? 25 : pageSize}
+  disabled={provider === "contactout"}
                   onChange={e => { updateState({ pageSize: Number(e.target.value), page: 1 }); setTimeout(() => search(1), 0); }}
                   className="h-6 px-1.5 rounded border border-slate-200 text-[11px] text-slate-600 bg-white focus:outline-none focus:border-violet-400 cursor-pointer">
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
+{provider !== "contactout" && <option value={10}>10</option>}
+<option value={25}>25</option>
+<option value={50}>50</option>
                 </select>
               </div>
             )}
@@ -444,6 +484,20 @@ export const RocketReachSearchPage: React.FC = () => {
 
         {/* Body */}
         <div className="flex-1 overflow-hidden flex flex-col">
+           {creditError && (
+     <InsufficientCreditsBanner
+       creditError={creditError}
+       onDismiss={() => clearAll()}
+       onOpenPricingModal={() => setShowPricingModal(true)}
+     />
+   )}
+   {showPricingModal && (
+     <ManageVerificationPricingModal
+       organizationId={orgId ?? ""}
+       isOpen={showPricingModal}
+       onClose={() => setShowPricingModal(false)}
+     />
+   )}
           {state === "idle" && (
             <div className="flex-1 overflow-y-auto">
               <IdleState recentSearches={[]} onApplyRecent={() => {}} onRemoveRecent={() => {}}
