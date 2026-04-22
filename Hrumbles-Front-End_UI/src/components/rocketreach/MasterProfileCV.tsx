@@ -401,7 +401,7 @@ const ProfileContent: React.FC<{ profile: any; onClose: () => void }> = ({ profi
       {/* ── FOOTER ─────────────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 border-t border-slate-100 px-5 py-2.5 flex items-center justify-between bg-slate-50/50">
         <span className="text-[9px] text-slate-400">
-          ContactOut · Last updated {profile.updated_at ? new Date(profile.updated_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+          Last updated {profile.updated_at ? new Date(profile.updated_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}
         </span>
         <button onClick={onClose} className="text-[10px] text-violet-600 hover:text-violet-700 font-semibold transition-colors">
           Close ×

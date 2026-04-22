@@ -7,13 +7,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import {
   Building2, MapPin, Users, Factory, DollarSign, Search,
   Loader2, X, FilterX, Sparkles, TrendingUp,
-  Code, Calendar, ListFilter, Check, ChevronsUpDown,
+  Code, Calendar, ListFilter, Check, Globe, Play, ChevronRight,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { type ApolloCompanySearchFilters } from '@/services/sales/apolloCompanySearch';
 
@@ -25,7 +20,6 @@ interface CompanySearchFilterSidebarProps {
   totalResults?: number;
   onClose?: () => void;
   initialFilters?: ApolloCompanySearchFilters;
-  /** Called on every filter change so the parent can show pending chips in the empty state */
   onFiltersChange?: (chips: string[], count: number) => void;
 }
 
@@ -43,13 +37,13 @@ const EMPLOYEE_COUNT_RANGES = [
 ];
 
 const REVENUE_RANGES = [
-  { id: '0,1000000',           label: '< $1M'          },
-  { id: '1000000,10000000',    label: '$1M – $10M'     },
-  { id: '10000000,50000000',   label: '$10M – $50M'    },
-  { id: '50000000,100000000',  label: '$50M – $100M'   },
-  { id: '100000000,500000000', label: '$100M – $500M'  },
-  { id: '500000000,1000000000',label: '$500M – $1B'    },
-  { id: '1000000000,',         label: '$1B+'           },
+  { id: '0,1000000',           label: '< $1M'         },
+  { id: '1000000,10000000',    label: '$1M – $10M'    },
+  { id: '10000000,50000000',   label: '$10M – $50M'   },
+  { id: '50000000,100000000',  label: '$50M – $100M'  },
+  { id: '100000000,500000000', label: '$100M – $500M' },
+  { id: '500000000,1000000000',label: '$500M – $1B'   },
+  { id: '1000000000,',         label: '$1B+'          },
 ];
 
 const INDUSTRIES = [
@@ -73,397 +67,284 @@ const FUNDING_STAGES = [
   'Series E+', 'IPO', 'Private Equity', 'Debt Financing', 'Grant',
 ];
 
-// ─── Location helpers (shared with DiscoverySidebar) ─────────────────────────
+// ─── Dark theme shared styles ─────────────────────────────────────────────────
+
+const DARK_INPUT = [
+  'w-full h-8 text-xs rounded-lg',
+  'border border-white/12',
+  'placeholder:text-white/35 placeholder:italic placeholder:text-[10px]',
+  'focus:outline-none focus:ring-1 focus:ring-indigo-400/50 focus:border-indigo-400/50',
+  'transition-all',
+].join(' ');
+
+const DARK_INPUT_STYLE: React.CSSProperties = {
+  background: 'rgba(255,255,255,0.06)',
+  color: 'rgba(255,255,255,0.75)',
+  WebkitTextFillColor: 'rgba(255,255,255,0.75)',
+  caretColor: 'rgba(255,255,255,0.75)',
+};
+
+// ─── Location helpers ─────────────────────────────────────────────────────────
 
 type LocationType = 'country' | 'state' | 'city';
+interface LocationOption { value: string; label: string; type: LocationType; }
 
-interface LocationOption {
-  value: string;
-  label: string;
-  type:  LocationType;
-}
-
-const LOC_STYLE: Record<LocationType, { badge: string; dot: string; tag: string; label: string }> = {
+const LOC_STYLE: Record<LocationType, { dot: string; chip: string; dropBadge: string; label: string }> = {
   country: {
-    badge: 'bg-blue-50   text-blue-700   border-blue-200',
-    dot:   'bg-blue-400',
-    tag:   'bg-blue-100  text-blue-800   border-blue-200',
-    label: 'Country',
+    dot: 'bg-indigo-400', chip: 'bg-indigo-500/20 text-indigo-200 border-indigo-500/30',
+    dropBadge: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Country',
   },
   state: {
-    badge: 'bg-violet-50  text-violet-700  border-violet-200',
-    dot:   'bg-violet-400',
-    tag:   'bg-violet-100 text-violet-800  border-violet-200',
-    label: 'State',
+    dot: 'bg-violet-400', chip: 'bg-violet-500/20 text-violet-200 border-violet-500/30',
+    dropBadge: 'bg-violet-100 text-violet-700 border-violet-200', label: 'State',
   },
   city: {
-    badge: 'bg-emerald-50  text-emerald-700  border-emerald-200',
-    dot:   'bg-emerald-400',
-    tag:   'bg-emerald-100 text-emerald-800  border-emerald-200',
-    label: 'City',
+    dot: 'bg-cyan-400', chip: 'bg-cyan-500/20 text-cyan-200 border-cyan-500/30',
+    dropBadge: 'bg-cyan-100 text-cyan-700 border-cyan-200', label: 'City',
   },
 };
 
-// Pre-load countries + states once (fast)
 const ALL_COUNTRIES: LocationOption[] = Country.getAllCountries().map(c => ({
-  value: c.name,
-  label: `${c.flag ?? ''} ${c.name}`.trim(),
-  type:  'country' as LocationType,
+  value: c.name, label: `${c.flag ?? ''} ${c.name}`.trim(), type: 'country',
 }));
-
 const ALL_STATES: LocationOption[] = State.getAllStates().map(s => ({
-  value: s.name,
-  label: s.name,
-  type:  'state' as LocationType,
+  value: s.name, label: s.name, type: 'state',
 }));
+const POPULAR = ['United States','United Kingdom','Canada','Australia','India','Germany','France','Singapore','Netherlands','UAE'];
 
-const POPULAR_COUNTRIES = [
-  'United States', 'United Kingdom', 'Canada', 'Australia', 'India',
-  'Germany', 'France', 'Singapore', 'Netherlands', 'UAE',
-];
-
-function searchLocations(query: string, selected: string[]): LocationOption[] {
-  const q = query.toLowerCase().trim();
-
-  if (!q) {
-    return ALL_COUNTRIES
-      .filter(c => POPULAR_COUNTRIES.includes(c.value) && !selected.includes(c.value))
-      .slice(0, 10);
-  }
-
+function searchLoc(q: string, selected: string[]): LocationOption[] {
+  const lq = q.toLowerCase().trim();
+  if (!lq) return ALL_COUNTRIES.filter(c => POPULAR.includes(c.value) && !selected.includes(c.value)).slice(0, 10);
   const out: LocationOption[] = [];
-
-  ALL_COUNTRIES
-    .filter(c => c.value.toLowerCase().includes(q) && !selected.includes(c.value))
-    .slice(0, 8)
-    .forEach(c => out.push(c));
-
-  ALL_STATES
-    .filter(s => s.value.toLowerCase().includes(q) && !selected.includes(s.value))
-    .slice(0, 8)
-    .forEach(s => out.push(s));
-
-  if (q.length >= 3) {
-    City.getAllCities()
-      .filter(c => c.name.toLowerCase().includes(q) && !selected.includes(c.name))
-      .slice(0, 14)
-      .forEach(c => out.push({ value: c.name, label: c.name, type: 'city' }));
-  }
-
+  ALL_COUNTRIES.filter(c => c.value.toLowerCase().includes(lq) && !selected.includes(c.value)).slice(0, 8).forEach(c => out.push(c));
+  ALL_STATES.filter(s => s.value.toLowerCase().includes(lq) && !selected.includes(s.value)).slice(0, 8).forEach(s => out.push(s));
+  if (lq.length >= 3) City.getAllCities().filter(c => c.name.toLowerCase().includes(lq) && !selected.includes(c.name)).slice(0, 14).forEach(c => out.push({ value: c.name, label: c.name, type: 'city' }));
   return out.slice(0, 30);
 }
 
-function getLocationType(value: string): LocationType {
+function getLocType(value: string): LocationType {
   if (ALL_COUNTRIES.some(c => c.value === value)) return 'country';
-  if (ALL_STATES.some(s => s.value === value))    return 'state';
+  if (ALL_STATES.some(s => s.value === value)) return 'state';
   return 'city';
 }
 
-// ─── PortalDropdown ───────────────────────────────────────────────────────────
-// Rendered at document.body — escapes all overflow:hidden / z-index stacking
-// (ScrollArea, AccordionContent, Radix Popover, etc.)
+// ─── Portal dropdown ──────────────────────────────────────────────────────────
 
-interface PortalDropdownProps {
-  anchorRef: React.RefObject<HTMLDivElement>;
-  isOpen:    boolean;
-  options:   LocationOption[];
-  query:     string;
-  onSelect:  (opt: LocationOption) => void;
-}
+interface PortalProps { anchorRef: React.RefObject<HTMLDivElement>; isOpen: boolean; maxH?: number; children: React.ReactNode; }
 
-function PortalDropdown({ anchorRef, isOpen, options, query, onSelect }: PortalDropdownProps) {
-  const [pos, setPos] = useState<React.CSSProperties>({});
-
+function AbovePortal({ anchorRef, isOpen, maxH = 240, children }: PortalProps) {
+  const [style, setStyle] = useState<React.CSSProperties>({});
   useEffect(() => {
     if (!isOpen || !anchorRef.current) return;
     const update = () => {
-      const r = anchorRef.current!.getBoundingClientRect();
-      setPos({ position: 'fixed', top: r.bottom + 4, left: r.left, width: r.width, zIndex: 99999 });
+      if (!anchorRef.current) return;
+      const r = anchorRef.current.getBoundingClientRect();
+      const w = Math.max(r.width, 220);
+      const left = Math.min(r.left, window.innerWidth - w - 8);
+      setStyle({ position: 'fixed', bottom: window.innerHeight - r.top + 4, left: Math.max(4, left), width: w, zIndex: 99999, maxHeight: maxH, overflow: 'hidden' });
     };
     update();
     window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
-    return () => {
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
-    };
-  }, [isOpen, anchorRef]);
-
+    return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); };
+  }, [isOpen, anchorRef, maxH]);
   if (!isOpen) return null;
-
   return ReactDOM.createPortal(
-    <div style={pos} className="bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden">
-      {/* Legend */}
-      <div className="flex items-center gap-3 px-3 py-1.5 bg-slate-50 border-b border-slate-100">
-        {(Object.entries(LOC_STYLE) as [LocationType, typeof LOC_STYLE[LocationType]][]).map(([t, s]) => (
-          <span key={t} className="flex items-center gap-1 text-[9px] text-slate-500 font-medium">
-            <span className={cn('w-1.5 h-1.5 rounded-full', s.dot)} />
-            {s.label}
-          </span>
-        ))}
-      </div>
-
-      <div className="max-h-[220px] overflow-y-auto overscroll-contain">
-        {options.length === 0 ? (
-          <p className="px-3 py-3 text-[11px] text-slate-400 italic text-center">
-            {query.length > 0 && query.length < 3
-              ? 'Type 3+ characters to include cities'
-              : 'No matches found'}
-          </p>
-        ) : (
-          <div className="py-1">
-            {options.map((opt, i) => {
-              const s = LOC_STYLE[opt.type];
-              return (
-                <button
-                  key={`${opt.type}-${opt.value}-${i}`}
-                  type="button"
-                  onMouseDown={e => { e.preventDefault(); onSelect(opt); }}
-                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-slate-50 transition-colors text-left"
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', s.dot)} />
-                    <span className="text-[11px] text-slate-700 font-medium truncate">{opt.label}</span>
-                  </span>
-                  <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ml-2', s.badge)}>
-                    {s.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {!query && (
-        <p className="px-3 py-1.5 text-[9px] text-slate-400 border-t border-slate-100 bg-slate-50">
-          Showing popular countries · type to search all
-        </p>
-      )}
-    </div>,
+    <div style={style} className="bg-white border border-slate-200 rounded-xl shadow-2xl flex flex-col overflow-hidden">{children}</div>,
     document.body,
   );
 }
 
 // ─── LocationMultiSelect ──────────────────────────────────────────────────────
 
-interface LocationMultiSelectProps {
-  label:       string;
-  placeholder: string;
-  selected:    string[];
-  onChange:    (values: string[]) => void;
-}
-
-function LocationMultiSelect({ label, placeholder, selected, onChange }: LocationMultiSelectProps) {
-  const [query,  setQuery]  = useState('');
-  const [isOpen, setIsOpen] = useState(false);
-
-  const wrapperRef = useRef<HTMLDivElement>(null); // outside-click detection
-  const anchorRef  = useRef<HTMLDivElement>(null); // portal positioning
-  const inputRef   = useRef<HTMLInputElement>(null);
-
-  const options = useMemo(() => searchLocations(query, selected), [query, selected]);
+function LocationMultiSelect({ label, placeholder, selected, onChange }: {
+  label: string; placeholder: string; selected: string[]; onChange: (v: string[]) => void;
+}) {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const options = useMemo(() => searchLoc(q, selected), [q, selected]);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        setQuery('');
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const h = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setOpen(false); setQ(''); } };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  const add = (opt: LocationOption) => {
-    onChange([...selected, opt.value]);
-    setQuery('');
-    setIsOpen(true);
-    inputRef.current?.focus();
-  };
-
-  const remove = (value: string) => onChange(selected.filter(v => v !== value));
+  const add = (opt: LocationOption) => { onChange([...selected, opt.value]); setQ(''); setOpen(true); inputRef.current?.focus(); };
+  const remove = (v: string) => onChange(selected.filter(x => x !== v));
 
   return (
-    <div ref={wrapperRef} className="space-y-1.5">
-      <Label className="text-[10px] uppercase text-slate-500 font-semibold">{label}</Label>
-
-      {/* Selected tags */}
+    <div ref={wrapRef} className="space-y-1.5">
+      <p className="text-[9px] uppercase text-white/70 font-semibold tracking-wider">{label}</p>
       {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1 max-h-[64px] overflow-y-auto pb-0.5">
+        <div className="flex flex-wrap gap-1 max-h-14 overflow-y-auto">
           {selected.map(val => {
-            const type  = getLocationType(val);
-            const style = LOC_STYLE[type];
+            const s = LOC_STYLE[getLocType(val)];
             return (
-              <span
-                key={val}
-                className={cn(
-                  'inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full',
-                  'text-[10px] font-semibold border',
-                  style.tag,
-                )}
-              >
-                <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', style.dot)} />
-                {val}
-                <button
-                  type="button"
-                  onMouseDown={e => { e.preventDefault(); remove(val); }}
-                  className="ml-0.5 rounded-full hover:opacity-70 transition-opacity"
-                >
-                  <X size={9} />
-                </button>
+              <span key={val} className={cn('inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full text-[10px] font-semibold border', s.chip)}>
+                <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', s.dot)} />
+                <span className="truncate max-w-[80px]">{val}</span>
+                <button type="button" onMouseDown={e => { e.preventDefault(); remove(val); }} className="ml-0.5 hover:opacity-70"><X size={9} /></button>
               </span>
             );
           })}
         </div>
       )}
-
-      {/* Input + portal anchor */}
-      <div className="relative" ref={anchorRef}>
-        <Search className="absolute left-2.5 top-2 text-slate-400 pointer-events-none" size={12} />
-        <Input
-          ref={inputRef}
-          placeholder={placeholder}
-          className="pl-7 h-8 text-xs pr-8"
-          value={query}
-          onChange={e => { setQuery(e.target.value); setIsOpen(true); }}
-          onFocus={() => setIsOpen(true)}
-          onBlur={() => setTimeout(() => { setIsOpen(false); setQuery(''); }, 150)}
-        />
+      <div ref={anchorRef} className="relative">
+        <Search className="absolute left-2.5 top-2 text-white/40 pointer-events-none" size={11} />
+        <input ref={inputRef} placeholder={placeholder} className={cn(DARK_INPUT, 'pl-7 pr-7')} style={DARK_INPUT_STYLE}
+          value={q} onChange={e => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => { setOpen(false); setQ(''); }, 150)} />
         {selected.length > 0 && (
-          <span className="absolute right-2 top-1.5 bg-rose-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center pointer-events-none">
-            {selected.length}
-          </span>
+          <span className="absolute right-2 top-1.5 bg-indigo-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center pointer-events-none">{selected.length}</span>
         )}
-        <PortalDropdown
-          anchorRef={anchorRef}
-          isOpen={isOpen}
-          options={options}
-          query={query}
-          onSelect={add}
-        />
+        <AbovePortal anchorRef={anchorRef} isOpen={open} maxH={220}>
+          <div className="flex items-center gap-2.5 px-3 py-1.5 bg-slate-50 border-b border-slate-100 flex-shrink-0">
+            {(Object.entries(LOC_STYLE) as [LocationType, any][]).map(([t, s]) => (
+              <span key={t} className="flex items-center gap-1 text-[9px] text-slate-400 font-medium">
+                <span className={cn('w-1.5 h-1.5 rounded-full', s.dot)} />{s.label}
+              </span>
+            ))}
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {options.length === 0
+              ? <p className="px-3 py-3 text-[11px] text-slate-400 italic text-center">{q.length > 0 && q.length < 3 ? 'Type 3+ chars for cities' : 'No matches'}</p>
+              : <div className="py-1">{options.map((opt, i) => {
+                  const s = LOC_STYLE[opt.type];
+                  return (
+                    <button key={`${opt.type}-${i}`} type="button" onMouseDown={e => { e.preventDefault(); add(opt); }}
+                      className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-indigo-50/60 text-left transition-colors">
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', s.dot)} />
+                        <span className="text-[11px] text-slate-700 font-medium truncate">{opt.label}</span>
+                      </span>
+                      <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ml-2', s.dropBadge)}>{s.label}</span>
+                    </button>
+                  );
+                })}</div>
+            }
+          </div>
+          {!q && <p className="px-3 py-1.5 text-[9px] text-slate-400 border-t border-slate-100 bg-slate-50 flex-shrink-0">Popular countries · type to search all</p>}
+        </AbovePortal>
       </div>
-
-      {!query && selected.length === 0 && (
-        <p className="text-[9px] text-slate-400">Search any country, state / province or city</p>
-      )}
     </div>
   );
 }
 
-// ─── FilterCheckbox ───────────────────────────────────────────────────────────
+// ─── FilterChip ───────────────────────────────────────────────────────────────
 
-interface FilterCheckboxProps {
-  id:       string;
-  label:    string;
-  checked:  boolean;
-  onChange: () => void;
+function FilterChip({ id, label, checked, onChange }: {
+  id: string; label: string; checked: boolean; onChange: (v: boolean) => void;
+}) {
+  return (
+    <label htmlFor={id} className={cn(
+      'flex items-center gap-2 rounded-md px-2 py-1 cursor-pointer transition-colors select-none border',
+      checked ? 'bg-indigo-500/20 border-indigo-400/35' : 'border-transparent hover:bg-white/5',
+    )}>
+      <input type="checkbox" id={id} checked={checked} onChange={e => onChange(e.target.checked)}
+        className="h-3.5 w-3.5 rounded" style={{ accentColor: '#818cf8' }} />
+      <span className={cn('text-xs transition-colors', checked ? 'text-indigo-200 font-medium' : 'text-white/55')}>
+        {label}
+      </span>
+    </label>
+  );
 }
 
-const FilterCheckbox: React.FC<FilterCheckboxProps> = ({ id, label, checked, onChange }) => (
-  <div className="flex items-center space-x-2 py-1 px-1.5 hover:bg-slate-50 rounded transition-colors">
-    <Checkbox id={id} checked={checked} onCheckedChange={onChange} className="h-3.5 w-3.5" />
-    <label
-      htmlFor={id}
-      className={cn('text-xs cursor-pointer transition-colors flex-1', checked ? 'text-slate-900 font-medium' : 'text-slate-600')}
-    >
-      {label}
-    </label>
-  </div>
-);
+// ─── Section ──────────────────────────────────────────────────────────────────
 
-// ─── InlineSearchList (for Industry & Technology) ────────────────────────────
-// Replaces the Radix Popover+Command combo — inline expandable list with search
+function Section({ value, icon, label, count, children }: {
+  value: string; icon: React.ReactNode; label: string; count?: number; children: React.ReactNode;
+}) {
+  return (
+    <AccordionItem value={value} className="border-b border-white/5 last:border-0">
+      <AccordionTrigger className="px-2 py-2 rounded-lg transition-all group hover:bg-white/5 data-[state=open]:bg-white/5 [&>svg]:hidden">
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-2">
+            <div className="opacity-70 group-hover:opacity-100 transition">{icon}</div>
+            <span className="text-xs font-medium text-white group-hover:text-white/90 transition">{label}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {!!count && count > 0 && (
+              <span className="h-4 px-1.5 text-[9px] bg-indigo-500/25 text-indigo-300 rounded-full font-semibold flex items-center">{count}</span>
+            )}
+            <ChevronRight className="h-3.5 w-3.5 text-white transition-transform group-data-[state=open]:rotate-90" />
+          </div>
+        </div>
+      </AccordionTrigger>
+      <AccordionContent className="px-2 pb-3">{children}</AccordionContent>
+    </AccordionItem>
+  );
+}
+
+// ─── InlineSearchList ─────────────────────────────────────────────────────────
 
 interface InlineSearchListProps {
-  label:       string;
-  icon:        React.ReactNode;
-  items:       string[];
-  selected:    string[];
-  onToggle:    (value: string) => void;
-  placeholder: string;
-  badgeClass:  string;
-  tagClass:    string;
-  allowCustom?: boolean;
+  items: string[]; selected: string[]; onToggle: (v: string) => void;
+  placeholder: string; chipClass: string; allowCustom?: boolean;
 }
 
-function InlineSearchList({
-  label, icon, items, selected, onToggle, placeholder,
-  badgeClass, tagClass, allowCustom = false,
-}: InlineSearchListProps) {
+function InlineSearchList({ items, selected, onToggle, placeholder, chipClass, allowCustom = false }: InlineSearchListProps) {
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() =>
     items.filter(i => i.toLowerCase().includes(query.toLowerCase())).slice(0, 12),
     [items, query],
   );
 
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setExpanded(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
   return (
-    <div className="space-y-2">
-      {/* Selected tags */}
+    <div ref={wrapRef} className="space-y-1.5">
       {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1 max-h-14 overflow-y-auto">
           {selected.map(val => (
-            <span
-              key={val}
-              className={cn('inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[10px] font-semibold border cursor-pointer', tagClass)}
-              onClick={() => onToggle(val)}
-            >
-              {val.length > 18 ? val.slice(0, 18) + '…' : val}
+            <span key={val} className={cn('inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[10px] font-semibold border cursor-pointer', chipClass)}
+              onClick={() => onToggle(val)}>
+              <span className="truncate max-w-[90px]">{val.length > 18 ? val.slice(0, 18) + '…' : val}</span>
               <X size={9} />
             </span>
           ))}
         </div>
       )}
-
-      {/* Search input */}
-      <div className="relative">
-        <Search className="absolute left-2.5 top-2 text-slate-400 pointer-events-none" size={12} />
-        <Input
-          placeholder={placeholder}
-          className="pl-7 h-8 text-xs"
+      <div ref={anchorRef} className="relative">
+        <Search className="absolute left-2.5 top-2 text-white/40 pointer-events-none" size={11} />
+        <input placeholder={placeholder} className={cn(DARK_INPUT, 'pl-7 pr-7')} style={DARK_INPUT_STYLE}
           value={query}
           onChange={e => { setQuery(e.target.value); setExpanded(true); }}
           onFocus={() => setExpanded(true)}
-          onBlur={() => setTimeout(() => setExpanded(false), 150)}
-        />
+          onBlur={() => setTimeout(() => setExpanded(false), 150)} />
         {selected.length > 0 && (
-          <span className={cn('absolute right-2 top-1.5 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center pointer-events-none', badgeClass.includes('emerald') ? 'bg-emerald-500' : 'bg-violet-500')}>
-            {selected.length}
-          </span>
+          <span className="absolute right-2 top-1.5 bg-indigo-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center pointer-events-none">{selected.length}</span>
         )}
       </div>
-
-      {/* Inline dropdown list */}
       {expanded && (
-        <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm bg-white">
+        <div className="border border-white/10 rounded-lg overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
           <div className="max-h-[180px] overflow-y-auto">
             {filtered.length === 0 ? (
               allowCustom && query.trim() ? (
-                <button
-                  type="button"
-                  onMouseDown={e => { e.preventDefault(); onToggle(query.trim()); setQuery(''); }}
-                  className="w-full px-3 py-2 text-xs text-purple-600 hover:bg-purple-50 text-left"
-                >
-                  Add "{query.trim()}"
+                <button type="button" onMouseDown={e => { e.preventDefault(); onToggle(query.trim()); setQuery(''); }}
+                  className="w-full px-3 py-2 text-xs text-indigo-300 hover:bg-white/5 text-left flex items-center gap-2">
+                  <Sparkles size={10} className="text-indigo-400" />Add "{query.trim()}"
                 </button>
               ) : (
-                <p className="px-3 py-2 text-xs text-slate-400 italic">No results</p>
+                <p className="px-3 py-2 text-xs text-white/30 italic">No results</p>
               )
             ) : (
               filtered.map(item => (
-                <button
-                  key={item}
-                  type="button"
-                  onMouseDown={e => { e.preventDefault(); onToggle(item); }}
-                  className={cn(
-                    'w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors text-left',
-                    selected.includes(item) && 'bg-slate-50 font-medium',
-                  )}
-                >
-                  <Check className={cn('h-3 w-3 flex-shrink-0', selected.includes(item) ? 'text-purple-600' : 'opacity-0')} />
-                  <span className="truncate">{item}</span>
+                <button key={item} type="button" onMouseDown={e => { e.preventDefault(); onToggle(item); }}
+                  className={cn('w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-white/5 transition-colors text-left', selected.includes(item) && 'bg-white/5')}>
+                  <Check className={cn('h-3 w-3 flex-shrink-0', selected.includes(item) ? 'text-indigo-400' : 'opacity-0')} />
+                  <span className={cn('truncate', selected.includes(item) ? 'text-indigo-200 font-medium' : 'text-white/60')}>{item}</span>
                 </button>
               ))
             )}
@@ -502,8 +383,8 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
     foundedYearMin:   (initialFilters as any).organization_founded_year_range?.min?.toString() || '',
     foundedYearMax:   (initialFilters as any).organization_founded_year_range?.max?.toString() || '',
   });
+  const [openSections, setOpen] = useState<string[]>(['company', 'location']);
 
-  // Sync initialFilters when they change (browser back/forward)
   useEffect(() => {
     if (Object.keys(initialFilters).length > 0) {
       setFilters(prev => ({
@@ -519,22 +400,15 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
   const toggleArrayItem = useCallback(<K extends keyof typeof filters>(field: K, value: string) => {
     setFilters(prev => {
       const current = prev[field] as string[];
-      return {
-        ...prev,
-        [field]: current.includes(value) ? current.filter(i => i !== value) : [...current, value],
-      };
+      return { ...prev, [field]: current.includes(value) ? current.filter(i => i !== value) : [...current, value] };
     });
   }, []);
 
-  // ── Emit pending chips to parent on every filter change ────────────────────
-  // ADD THIS: Use a ref to store the latest callback without forcing re-renders
   const onFiltersChangeRef = useRef(onFiltersChange);
-  useEffect(() => {
-    onFiltersChangeRef.current = onFiltersChange;
-  }, [onFiltersChange]);
+  useEffect(() => { onFiltersChangeRef.current = onFiltersChange; }, [onFiltersChange]);
 
   useEffect(() => {
-    const chips: string[] =[];
+    const chips: string[] = [];
     if (filters.companyName)              chips.push(filters.companyName);
     filters.keywords.forEach(k           => chips.push(k));
     filters.industries.forEach(v         => chips.push(v));
@@ -546,57 +420,33 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
     filters.fundingStages.forEach(v      => chips.push(v));
     if (filters.foundedYearMin || filters.foundedYearMax)
       chips.push(`Founded: ${filters.foundedYearMin || '?'}–${filters.foundedYearMax || '?'}`);
-    
-    // Call via Ref safely without it being a dependency 
-    if (onFiltersChangeRef.current) {
-      onFiltersChangeRef.current(chips, chips.length);
-    }
-  }, [filters]); // <-- REMOVED onFiltersChange from dependency array
+    if (onFiltersChangeRef.current) onFiltersChangeRef.current(chips, chips.length);
+  }, [filters]);
 
-  // ── Build human-readable summary for recent-search storage ─────────────────
   const buildSearchSummary = useCallback((): string => {
     const parts: string[] = [];
-    if (filters.companyName)             parts.push(`"${filters.companyName}"`);
-    if (filters.industries.length)       parts.push(filters.industries.join(', '));
-    if (filters.locations.length)        parts.push(filters.locations.join(', '));
-    if (filters.employeeRanges.length)   parts.push(`${filters.employeeRanges.length} size range(s)`);
-    if (filters.technologies.length)     parts.push(filters.technologies.join(', '));
-    if (filters.keywords.length)         parts.push(filters.keywords.join(', '));
+    if (filters.companyName)           parts.push(`"${filters.companyName}"`);
+    if (filters.industries.length)     parts.push(filters.industries.join(', '));
+    if (filters.locations.length)      parts.push(filters.locations.join(', '));
+    if (filters.employeeRanges.length) parts.push(`${filters.employeeRanges.length} size range(s)`);
+    if (filters.technologies.length)   parts.push(filters.technologies.join(', '));
+    if (filters.keywords.length)       parts.push(filters.keywords.join(', '));
     return parts.join(' · ') || 'Company search';
   }, [filters]);
 
-  // ── Build chips snapshot for saving in recent search ───────────────────────
-  const buildCurrentChips = useCallback((): string[] => {
-    const chips: string[] = [];
-    if (filters.companyName)              chips.push(filters.companyName);
-    filters.keywords.forEach(k           => chips.push(k));
-    filters.industries.forEach(v         => chips.push(v));
-    filters.locations.forEach(v          => chips.push(v));
-    filters.employeeRanges.forEach(v     => chips.push(v.replace(',', '–')));
-    filters.technologies.forEach(v       => chips.push(v));
-    filters.fundingStages.forEach(v      => chips.push(v));
-    if (filters.foundedYearMin || filters.foundedYearMax)
-      chips.push(`Founded: ${filters.foundedYearMin || '?'}–${filters.foundedYearMax || '?'}`);
-    return chips;
-  }, [filters]);
-
-  // ── Build Apollo payload ────────────────────────────────────────────────────
   const handleSearch = useCallback(() => {
     const apolloFilters: ApolloCompanySearchFilters = {};
-
-    if (filters.companyName.trim())         apolloFilters.q_organization_name           = filters.companyName.trim();
-    if (filters.keywords.length)            apolloFilters.q_organization_keyword_tags   = filters.keywords;
-    if (filters.industries.length)          apolloFilters.organization_industries       = filters.industries;
-    if (filters.locations.length)           apolloFilters.organization_locations        = filters.locations;
-    if (filters.excludedLocations.length)   (apolloFilters as any).organization_not_locations = filters.excludedLocations;
-
+    if (filters.companyName.trim())       apolloFilters.q_organization_name           = filters.companyName.trim();
+    if (filters.keywords.length)          apolloFilters.q_organization_keyword_tags   = filters.keywords;
+    if (filters.industries.length)        apolloFilters.organization_industries       = filters.industries;
+    if (filters.locations.length)         apolloFilters.organization_locations        = filters.locations;
+    if (filters.excludedLocations.length) (apolloFilters as any).organization_not_locations = filters.excludedLocations;
     if (filters.employeeRanges.length) {
       apolloFilters.organization_num_employees_ranges = filters.employeeRanges.map(r => {
         const [min, max] = r.split(',');
         return { min: parseInt(min) || 1, max: max ? parseInt(max) : undefined };
       });
     }
-
     if (filters.revenueRanges.length) {
       apolloFilters.revenue_range = { min: null, max: null };
       filters.revenueRanges.forEach(r => {
@@ -609,19 +459,15 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
         }
       });
     }
-
     if (filters.technologies.length)
       apolloFilters.currently_using_any_of_technology_uids = filters.technologies.map(t => t.toLowerCase().replace(/\s+/g, '_'));
-
     if (filters.fundingStages.length)
       (apolloFilters as any).organization_latest_funding_stage_cd = filters.fundingStages;
-
     if (filters.foundedYearMin || filters.foundedYearMax)
       (apolloFilters as any).organization_founded_year_range = {
         min: filters.foundedYearMin ? parseInt(filters.foundedYearMin) : null,
         max: filters.foundedYearMax ? parseInt(filters.foundedYearMax) : null,
       };
-
     onSearch(apolloFilters, buildSearchSummary());
   }, [filters, onSearch, buildSearchSummary]);
 
@@ -635,7 +481,7 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
 
   const activeFiltersCount = useMemo(() => {
     let n = 0;
-    if (filters.companyName)         n++;
+    if (filters.companyName) n++;
     n += filters.keywords.length + filters.industries.length + filters.locations.length
        + filters.excludedLocations.length + filters.employeeRanges.length
        + filters.revenueRanges.length + filters.technologies.length + filters.fundingStages.length;
@@ -643,304 +489,180 @@ export const CompanySearchFilterSidebar: React.FC<CompanySearchFilterSidebarProp
     return n;
   }, [filters]);
 
-  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-white overflow-hidden">
+    <div className="relative flex flex-col h-full overflow-hidden text-white">
 
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/80 px-4 py-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ListFilter className="h-4 w-4 text-slate-600" />
-            <span className="text-xs font-bold uppercase tracking-wide text-slate-700">Cloud Search</span>
-            {activeFiltersCount > 0 && (
-              <Badge className="h-5 px-1.5 text-[10px] bg-purple-600 text-white">{activeFiltersCount}</Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            {activeFiltersCount > 0 && (
-              <Button onClick={handleReset} variant="ghost" size="sm" className="h-7 px-2 text-[10px] font-semibold text-red-600 hover:text-red-700 hover:bg-red-50">
-                <FilterX className="h-3 w-3 mr-1" /> Clear
-              </Button>
-            )}
-            {onClose && (
-              <Button onClick={onClose} variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-400 hover:text-slate-600">
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-100 rounded-lg p-3">
-          <div className="grid grid-cols-2 gap-3 text-center">
-            <div>
-              <div className="text-lg font-bold text-purple-900">{totalResults.toLocaleString()}</div>
-              <div className="text-[9px] text-purple-600 uppercase font-semibold">Results</div>
-            </div>
-            <div>
-              <div className="text-lg font-bold text-purple-900">{activeFiltersCount}</div>
-              <div className="text-[9px] text-purple-600 uppercase font-semibold">Filters Active</div>
-            </div>
-          </div>
-        </div>
+      {/* ── ANIMATED BACKGROUND ── */}
+      <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_20%_30%,rgba(99,102,241,0.25),transparent_40%),radial-gradient(circle_at_80%_70%,rgba(139,92,246,0.25),transparent_40%),linear-gradient(135deg,#0b0b1f,#1a1040,#2b18e0)]" />
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <div className="absolute w-[600px] h-[600px] bg-purple-500/20 blur-[120px] rounded-full top-[-100px] left-[-100px] animate-pulse" />
+        <div className="absolute w-[500px] h-[500px] bg-indigo-500/20 blur-[120px] rounded-full bottom-[-100px] right-[-100px] animate-pulse" />
       </div>
 
-      {/* ── Scrollable Filters ──────────────────────────────────────────────── */}
-      <ScrollArea className="flex-1 overflow-y-auto">
-        <Accordion type="multiple" defaultValue={['company', 'location']} className="w-full px-3 py-2">
+      {/* ── CONTENT ── */}
+      <div className="relative z-10 flex flex-col h-full">
 
-          {/* 1 ── COMPANY ──────────────────────────────────────────────────── */}
-          <AccordionItem value="company" className="border-b border-slate-100">
-            <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Building2 size={14} className="text-purple-500" /> Company
+        {/* HEADER */}
+        <div className="flex-shrink-0 px-3 pt-3 pb-2.5 border-b"
+          style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)', borderColor: 'rgba(255,255,255,0.08)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Globe size={14} className="text-indigo-300" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-indigo-200">Cloud Search</span>
+              {activeFiltersCount > 0 && (
+                <span className="text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center bg-indigo-500">{activeFiltersCount}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              {activeFiltersCount > 0 && (
+                <button onClick={handleReset} className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-red-400 hover:bg-red-500/10 transition-colors">
+                  <FilterX size={10} /> Clear
+                </button>
+              )}
+              {onClose && (
+                <button onClick={onClose} className="flex items-center text-white/40 hover:text-white/70 transition-colors p-1">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-2 mb-2.5">
+            {[
+              { val: totalResults.toLocaleString(), label: 'Results' },
+              { val: activeFiltersCount, label: 'Filters Active' },
+            ].map(({ val, label }) => (
+              <div key={label} className="rounded-lg px-2 py-1.5 text-center" style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.25)' }}>
+                <div className="text-base font-bold text-white leading-tight">{val}</div>
+                <div className="text-[9px] text-indigo-300 uppercase font-semibold mt-0.5">{label}</div>
               </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-2 pb-3 pt-1 space-y-3">
-              <div>
-                <Label className="text-[10px] uppercase text-slate-500 font-semibold">Company Name</Label>
-                <Input
-                  placeholder="Search by name..."
-                  className="mt-1 h-8 text-xs"
-                  value={filters.companyName}
-                  onChange={e => setFilters(prev => ({ ...prev, companyName: e.target.value }))}
-                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                />
+            ))}
+          </div>
+
+          {/* Company name input */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2 text-white/40 pointer-events-none" size={12} />
+            <input type="text" placeholder="Company name…"
+              className={cn(DARK_INPUT, 'pl-7 pr-3')} style={DARK_INPUT_STYLE}
+              value={filters.companyName}
+              onChange={e => setFilters(p => ({ ...p, companyName: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()} />
+          </div>
+
+          {/* Run Search */}
+          <button onClick={handleSearch} disabled={isSearching} data-run-search
+            className="mt-2 w-full h-9 text-xs font-semibold rounded-lg flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+            style={{ background: 'linear-gradient(135deg, #6d5cff 0%, #8b5cf6 50%, #2b18e0 100%)', boxShadow: '0 0 20px rgba(99,102,241,0.35)' }}>
+            {isSearching
+              ? <><Loader2 size={12} className="animate-spin" />Searching…</>
+              : <><Play size={10} className="fill-white" />Search Cloud{activeFiltersCount > 0 && <span className="text-[10px] text-white">· {activeFiltersCount} filter{activeFiltersCount !== 1 ? 's' : ''}</span>}</>
+            }
+          </button>
+        </div>
+
+        {/* FILTERS */}
+        <ScrollArea className="flex-1 min-h-0">
+          <Accordion type="multiple" value={openSections} onValueChange={setOpen} className="w-full px-2 py-1">
+
+            <Section value="location" icon={<MapPin size={12} className="text-pink-400" />} label="Account Location"
+              count={filters.locations.length + filters.excludedLocations.length}>
+              <div className="pt-1 space-y-3">
+                <LocationMultiSelect label="Include Locations" placeholder="Country, state or city…"
+                  selected={filters.locations} onChange={v => setFilters(p => ({ ...p, locations: v }))} />
+                <LocationMultiSelect label="Exclude Locations" placeholder="Country, state or city…"
+                  selected={filters.excludedLocations} onChange={v => setFilters(p => ({ ...p, excludedLocations: v }))} />
               </div>
-              <div>
-                <Label className="text-[10px] uppercase text-slate-500 font-semibold">Keywords</Label>
-                <Input
-                  placeholder="e.g. AI, SaaS, Fintech (comma-separated)"
-                  className="mt-1 h-8 text-xs"
-                  value={filters.keywords.join(', ')}
-                  onChange={e => setFilters(prev => ({
-                    ...prev,
-                    keywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean),
-                  }))}
-                />
-              </div>
-            </AccordionContent>
-          </AccordionItem>
+            </Section>
 
-          {/* 2 ── LOCATION ─────────────────────────────────────────────────── */}
-          <AccordionItem value="location" className="border-b border-slate-100">
-            <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
-              <div className="flex items-center justify-between w-full pr-2">
-                <div className="flex items-center gap-2">
-                  <MapPin size={14} className="text-rose-500" /> Account Location
-                </div>
-                {(filters.locations.length + filters.excludedLocations.length) > 0 && (
-                  <Badge className="h-4 px-1.5 text-[9px] bg-rose-100 text-rose-700">
-                    {filters.locations.length + filters.excludedLocations.length}
-                  </Badge>
-                )}
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-2 pb-3 pt-1 space-y-4">
-
-              <LocationMultiSelect
-                label="Include Locations"
-                placeholder="Search country, state or city…"
-                selected={filters.locations}
-                onChange={vals => setFilters(prev => ({ ...prev, locations: vals }))}
-              />
-
-              <LocationMultiSelect
-                label="Exclude Locations"
-                placeholder="Search country, state or city…"
-                selected={filters.excludedLocations}
-                onChange={vals => setFilters(prev => ({ ...prev, excludedLocations: vals }))}
-              />
-
-            </AccordionContent>
-          </AccordionItem>
-
-          {/* 3 ── EMPLOYEES ────────────────────────────────────────────────── */}
-          <AccordionItem value="employees" className="border-b border-slate-100">
-            <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
-              <div className="flex items-center justify-between w-full pr-2">
-                <div className="flex items-center gap-2">
-                  <Users size={14} className="text-cyan-500" /> # Employees
-                </div>
-                {filters.employeeRanges.length > 0 && (
-                  <Badge className="h-4 px-1.5 text-[9px] bg-cyan-100 text-cyan-700">{filters.employeeRanges.length}</Badge>
-                )}
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-2 pb-3 pt-1">
-              <div className="space-y-0.5 max-h-48 overflow-y-auto">
-                {EMPLOYEE_COUNT_RANGES.map(range => (
-                  <FilterCheckbox
-                    key={range.id}
-                    id={`emp-${range.id}`}
-                    label={range.label}
-                    checked={filters.employeeRanges.includes(range.id)}
-                    onChange={() => toggleArrayItem('employeeRanges', range.id)}
-                  />
+            <Section value="employees" icon={<Users size={12} className="text-cyan-300" />} label="# Employees" count={filters.employeeRanges.length}>
+              <div className="pt-1 grid grid-cols-2 gap-x-1 gap-y-0.5">
+                {EMPLOYEE_COUNT_RANGES.map(r => (
+                  <FilterChip key={r.id} id={`emp-${r.id}`} label={r.label}
+                    checked={filters.employeeRanges.includes(r.id)}
+                    onChange={() => toggleArrayItem('employeeRanges', r.id)} />
                 ))}
               </div>
-            </AccordionContent>
-          </AccordionItem>
+            </Section>
 
-          {/* 4 ── INDUSTRY ─────────────────────────────────────────────────── */}
-          <AccordionItem value="industry" className="border-b border-slate-100">
-            <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
-              <div className="flex items-center justify-between w-full pr-2">
-                <div className="flex items-center gap-2">
-                  <Factory size={14} className="text-emerald-500" /> Industry
-                </div>
-                {filters.industries.length > 0 && (
-                  <Badge className="h-4 px-1.5 text-[9px] bg-emerald-100 text-emerald-700">{filters.industries.length}</Badge>
-                )}
+            <Section value="industry" icon={<Factory size={12} className="text-emerald-400" />} label="Industry" count={filters.industries.length}>
+              <div className="pt-1">
+                <InlineSearchList items={INDUSTRIES} selected={filters.industries}
+                  onToggle={v => toggleArrayItem('industries', v)}
+                  placeholder="Search industries…"
+                  chipClass="bg-emerald-500/20 text-emerald-200 border-emerald-500/30" />
               </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-2 pb-3 pt-1">
-              <InlineSearchList
-                label="Industry"
-                icon={<Factory size={12} />}
-                items={INDUSTRIES}
-                selected={filters.industries}
-                onToggle={v => toggleArrayItem('industries', v)}
-                placeholder="Search industries…"
-                badgeClass="bg-emerald-100 text-emerald-700 border-emerald-200"
-                tagClass="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-              />
-            </AccordionContent>
-          </AccordionItem>
+            </Section>
 
-          {/* 5 ── TECHNOLOGIES ─────────────────────────────────────────────── */}
-          <AccordionItem value="technologies" className="border-b border-slate-100">
-            <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
-              <div className="flex items-center justify-between w-full pr-2">
-                <div className="flex items-center gap-2">
-                  <Code size={14} className="text-violet-500" /> Technologies
-                </div>
-                {filters.technologies.length > 0 && (
-                  <Badge className="h-4 px-1.5 text-[9px] bg-violet-100 text-violet-700">{filters.technologies.length}</Badge>
-                )}
+            <Section value="technologies" icon={<Code size={12} className="text-violet-300" />} label="Technologies" count={filters.technologies.length}>
+              <div className="pt-1">
+                <InlineSearchList items={TECHNOLOGY_KEYWORDS} selected={filters.technologies}
+                  onToggle={v => toggleArrayItem('technologies', v)}
+                  placeholder="Search technologies…"
+                  chipClass="bg-violet-500/20 text-violet-200 border-violet-500/30"
+                  allowCustom />
               </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-2 pb-3 pt-1">
-              <InlineSearchList
-                label="Technology"
-                icon={<Code size={12} />}
-                items={TECHNOLOGY_KEYWORDS}
-                selected={filters.technologies}
-                onToggle={v => toggleArrayItem('technologies', v)}
-                placeholder="Search technologies…"
-                badgeClass="bg-violet-100 text-violet-700 border-violet-200"
-                tagClass="bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
-                allowCustom
-              />
-            </AccordionContent>
-          </AccordionItem>
+            </Section>
 
-          {/* 6 ── REVENUE ──────────────────────────────────────────────────── */}
-          <AccordionItem value="revenue" className="border-b border-slate-100">
-            <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
-              <div className="flex items-center justify-between w-full pr-2">
-                <div className="flex items-center gap-2">
-                  <DollarSign size={14} className="text-green-500" /> Revenue
-                </div>
-                {filters.revenueRanges.length > 0 && (
-                  <Badge className="h-4 px-1.5 text-[9px] bg-green-100 text-green-700">{filters.revenueRanges.length}</Badge>
-                )}
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-2 pb-3 pt-1">
-              <div className="space-y-0.5">
-                {REVENUE_RANGES.map(range => (
-                  <FilterCheckbox
-                    key={range.id}
-                    id={`rev-${range.id}`}
-                    label={range.label}
-                    checked={filters.revenueRanges.includes(range.id)}
-                    onChange={() => toggleArrayItem('revenueRanges', range.id)}
-                  />
+            <Section value="revenue" icon={<DollarSign size={12} className="text-green-400" />} label="Revenue" count={filters.revenueRanges.length}>
+              <div className="pt-1 space-y-0.5">
+                {REVENUE_RANGES.map(r => (
+                  <FilterChip key={r.id} id={`rev-${r.id}`} label={r.label}
+                    checked={filters.revenueRanges.includes(r.id)}
+                    onChange={() => toggleArrayItem('revenueRanges', r.id)} />
                 ))}
               </div>
-            </AccordionContent>
-          </AccordionItem>
+            </Section>
 
-          {/* 7 ── FUNDING ──────────────────────────────────────────────────── */}
-          <AccordionItem value="funding" className="border-b border-slate-100">
-            <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
-              <div className="flex items-center justify-between w-full pr-2">
-                <div className="flex items-center gap-2">
-                  <TrendingUp size={14} className="text-amber-500" /> Funding
-                </div>
-                {filters.fundingStages.length > 0 && (
-                  <Badge className="h-4 px-1.5 text-[9px] bg-amber-100 text-amber-700">{filters.fundingStages.length}</Badge>
-                )}
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-2 pb-3 pt-1">
-              <div className="space-y-0.5 max-h-48 overflow-y-auto">
-                {FUNDING_STAGES.map(stage => (
-                  <FilterCheckbox
-                    key={stage}
-                    id={`fund-${stage}`}
-                    label={stage}
-                    checked={filters.fundingStages.includes(stage)}
-                    onChange={() => toggleArrayItem('fundingStages', stage)}
-                  />
+            <Section value="funding" icon={<TrendingUp size={12} className="text-amber-400" />} label="Funding" count={filters.fundingStages.length}>
+              <div className="pt-1 space-y-0.5">
+                {FUNDING_STAGES.map(s => (
+                  <FilterChip key={s} id={`fund-${s}`} label={s}
+                    checked={filters.fundingStages.includes(s)}
+                    onChange={() => toggleArrayItem('fundingStages', s)} />
                 ))}
               </div>
-            </AccordionContent>
-          </AccordionItem>
+            </Section>
 
-          {/* 8 ── FOUNDED YEAR ─────────────────────────────────────────────── */}
-          <AccordionItem value="founded" className="border-b-0">
-            <AccordionTrigger className="px-2 py-2.5 text-xs font-semibold text-slate-700 hover:no-underline hover:bg-slate-50 rounded-lg">
-              <div className="flex items-center justify-between w-full pr-2">
-                <div className="flex items-center gap-2">
-                  <Calendar size={14} className="text-blue-500" /> Founded Year
-                </div>
-                {(filters.foundedYearMin || filters.foundedYearMax) && (
-                  <Badge className="h-4 px-1.5 text-[9px] bg-blue-100 text-blue-700">1</Badge>
-                )}
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-2 pb-3 pt-1">
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number" placeholder="From" className="h-8 text-xs"
+            <Section value="founded" icon={<Calendar size={12} className="text-blue-300" />} label="Founded Year"
+              count={(filters.foundedYearMin || filters.foundedYearMax) ? 1 : 0}>
+              <div className="pt-1 flex items-center gap-2">
+                <input type="number" placeholder="From" className={cn(DARK_INPUT, 'px-2')} style={DARK_INPUT_STYLE}
                   value={filters.foundedYearMin}
-                  onChange={e => setFilters(prev => ({ ...prev, foundedYearMin: e.target.value }))}
-                  min={1900} max={new Date().getFullYear()}
-                />
-                <span className="text-slate-400 text-xs">–</span>
-                <Input
-                  type="number" placeholder="To" className="h-8 text-xs"
+                  onChange={e => setFilters(p => ({ ...p, foundedYearMin: e.target.value }))}
+                  min={1900} max={new Date().getFullYear()} />
+                <span className="text-white/30 text-xs flex-shrink-0">–</span>
+                <input type="number" placeholder="To" className={cn(DARK_INPUT, 'px-2')} style={DARK_INPUT_STYLE}
                   value={filters.foundedYearMax}
-                  onChange={e => setFilters(prev => ({ ...prev, foundedYearMax: e.target.value }))}
-                  min={1900} max={new Date().getFullYear()}
-                />
+                  onChange={e => setFilters(p => ({ ...p, foundedYearMax: e.target.value }))}
+                  min={1900} max={new Date().getFullYear()} />
               </div>
-            </AccordionContent>
-          </AccordionItem>
+            </Section>
 
-        </Accordion>
-      </ScrollArea>
+          </Accordion>
+        </ScrollArea>
 
-      {/* ── Search Button ───────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 p-3 border-t border-slate-200 bg-slate-50">
-        <Button
-          onClick={handleSearch}
-          disabled={isSearching}
-          data-run-search="true"
-          className="w-full h-9 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold text-xs shadow-md"
-        >
-          {isSearching ? (
-            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Searching...</>
-          ) : (
-            <><Search className="h-4 w-4 mr-2" />Search Cloud</>
-          )}
-        </Button>
-        <p className="text-[10px] text-slate-400 text-center mt-2 flex items-center justify-center gap-1">
-          <Sparkles className="h-3 w-3" />No credits consumed for search
-        </p>
+        {/* FOOTER */}
+        <div className="flex-shrink-0 p-3 border-t border-white/10 bg-white/5 backdrop-blur-md">
+          <button onClick={handleSearch} disabled={isSearching} data-run-search
+            className="w-full h-9 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+            style={{
+              background: activeFiltersCount > 0
+                ? 'linear-gradient(135deg, #6d5cff 0%, #8b5cf6 50%, #2b18e0 100%)'
+                : 'rgba(255,255,255,0.08)',
+              color: activeFiltersCount > 0 ? '#fff' : 'rgba(255,255,255,0.4)',
+            }}>
+            {isSearching
+              ? <><Loader2 size={12} className="animate-spin" />Searching…</>
+              : <><Play size={10} className={activeFiltersCount > 0 ? 'fill-white' : ''} />
+                  {activeFiltersCount > 0 ? `Search · ${activeFiltersCount} filter${activeFiltersCount !== 1 ? 's' : ''}` : 'Run Search'}</>
+            }
+          </button>
+          <p className="text-[10px] text-white/30 text-center mt-2 flex items-center justify-center gap-1">
+            <Sparkles className="h-3 w-3" />No credits consumed for search
+          </p>
+        </div>
+
       </div>
     </div>
   );

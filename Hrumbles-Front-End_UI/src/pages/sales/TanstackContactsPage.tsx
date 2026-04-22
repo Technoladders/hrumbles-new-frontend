@@ -177,7 +177,7 @@ export default function TanstackContactsPage() {
   const activeFileId = selectedListId || fileId || null;
 
   // ── On mount: re-hydrate Redux from URL params ────────────────────────────────
-  useEffect(() => {
+ useEffect(() => {
     if (hasActiveFilters(urlFilters) && !isDiscoveryMode) {
       const redux: any = {};
       if (urlFilters.search)                redux.search         = urlFilters.search;
@@ -195,14 +195,16 @@ export default function TanstackContactsPage() {
       if (urlFilters.hasPhone)              redux.hasPhone        = true;
       if (urlFilters.isEnriched)            redux.isEnriched      = true;
       dispatch(setFilters(redux));
-      // Also restore page from URL params
       const urlPage = parseInt(new URLSearchParams(window.location.search).get('page') || '1', 10);
       if (urlPage > 1) dispatch(setPage(urlPage));
       setHasSearched(true);
     }
-    // Determine initial tab: URL param > sessionStorage > default (discovery on fresh visit)
-    const urlMode      = new URLSearchParams(window.location.search).get('mode');
-    const sessionMode  = sessionStorage.getItem('contacts_mode');
+
+    // URL param is the single source of truth on mount — sessionStorage is only a fallback
+    // Never let this override a toggle that already updated Redux in the same session
+    const urlMode     = new URLSearchParams(window.location.search).get('mode');
+    const sessionMode = sessionStorage.getItem('contacts_mode');
+    // URL wins over sessionStorage; if neither exists, default to discovery on fresh visit
     const effectiveMode = urlMode || sessionMode;
 
     if (effectiveMode === 'crm') {
@@ -557,6 +559,22 @@ useEffect(() => {
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Save Failed', description: err.message });
       throw err;
+    }
+  };
+
+  // Save discovery contact to CRM then immediately open their detail page
+  const handleSaveAndOpen = async (person: any) => {
+    try {
+      const apolloPerson = person?.original_data || person;
+      const saved = await saveDiscoveryToCRM(apolloPerson, organization_id, user.id);
+      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+      if (saved?.id) {
+        navigate(`/contacts/${saved.id}`);
+      } else {
+        toast({ variant: 'destructive', title: 'Save failed', description: 'No contact ID returned.' });
+      }
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Save Failed', description: err.message });
     }
   };
 
@@ -951,6 +969,7 @@ const handleListAdd = async (targetFileIds: string[]) => {
     meta: {
       saveDiscoveryLead: handleSaveDiscovery,  // single row save to CRM (discovery)
       saveToCRM:         handleSaveDiscovery,  // alias for action column button
+      saveToCRMAndOpen:   handleSaveAndOpen,  // save + navigate to contact detail
       enrichContact:     handleEnrich,
       openListModal: (c: any, fromDiscovery = false) => {
         setSelectedContact(c); setIsFromDiscovery(fromDiscovery); setListModalOpen(true);
@@ -1015,10 +1034,11 @@ const handleListAdd = async (targetFileIds: string[]) => {
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
               <button
                 onClick={() => {
-                  dispatch(setDiscoveryMode(true));
-                  setHasSearched(false);
-                  sessionStorage.setItem('contacts_mode', 'discovery');
-                  setSearchParams(prev => { prev.set('mode', 'discovery'); return prev; });
+  setSearchParams(prev => { prev.set('mode', 'discovery'); return prev; }, { replace: true });
+  sessionStorage.setItem('contacts_mode', 'discovery');
+  dispatch(setDiscoveryMode(true));
+  setHasSearched(false);
+  setRecentSearches(loadRecentSearches(true));
                 }}
                 className={cn(
                   'px-3 py-1 rounded-md text-[11px] font-medium transition-all',
@@ -1029,11 +1049,12 @@ const handleListAdd = async (targetFileIds: string[]) => {
               </button>
               <button
                 onClick={() => {
-                  dispatch(setDiscoveryMode(false));
-                  dispatch(resetSearch());
-                  setHasSearched(true);
-                  sessionStorage.setItem('contacts_mode', 'crm');
-                  setSearchParams(prev => { prev.set('mode', 'crm'); return prev; });
+  setSearchParams(prev => { prev.set('mode', 'crm'); return prev; }, { replace: true });
+  sessionStorage.setItem('contacts_mode', 'crm');
+  dispatch(setDiscoveryMode(false));
+  dispatch(resetSearch());
+  setHasSearched(true);
+  setRecentSearches(loadRecentSearches(false));
                 }}
                 className={cn(
                   'px-3 py-1 rounded-md text-[11px] font-medium transition-all',

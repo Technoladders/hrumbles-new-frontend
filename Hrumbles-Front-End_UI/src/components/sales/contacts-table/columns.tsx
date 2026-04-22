@@ -871,7 +871,7 @@ const ActionCell = ({ row, table }: any) => {
     return (
       <div className="flex items-center gap-1.5 py-0.5">
         <button
-          onClick={() => meta.saveToCRM?.(row.original)}
+          onClick={() => meta.saveToCRMAndOpen?.(row.original)}
           className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg transition-colors whitespace-nowrap"
         >
           <DatabaseZap size={10} /> Save
@@ -986,7 +986,7 @@ export const columns: ColumnDef<any>[] = [
     accessorKey: 'name',
     header: () => <ColHeader title="Name" />,
     size: 210, minSize: 160, maxSize: 300, enableSorting: false,
-    cell: ({ row }) => {
+    cell: ({ row, table }) => {
       const c = row.original;
       return (
         <div className="flex items-center gap-2.5 py-1">
@@ -997,12 +997,17 @@ export const columns: ColumnDef<any>[] = [
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col min-w-0">
-            {c.is_discovery ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-semibold text-slate-800 truncate">{c.name}</span>
-                <Badge className="h-3.5 px-1 text-[8px] font-bold bg-violet-100 text-violet-700 border-0 rounded">NEW</Badge>
-              </div>
-            ) : (
+{c.is_discovery ? (
+  <div className="flex items-center gap-1.5">
+    <button
+      onClick={() => table.options.meta?.saveToCRMAndOpen?.(row.original)}
+      className="text-xs font-semibold text-slate-800 hover:text-indigo-600 truncate text-left transition-colors"
+    >
+      {c.name}
+    </button>
+    <Badge className="h-3.5 px-1 text-[8px] font-bold bg-violet-100 text-violet-700 border-0 rounded">NEW</Badge>
+  </div>
+) : (
               <Link to={`/contacts/${c.id}`} className="text-xs font-semibold text-slate-800 hover:text-indigo-600 truncate transition-colors">
                 {c.name}
               </Link>
@@ -1103,3 +1108,4 @@ export const columns: ColumnDef<any>[] = [
   { id: 'updated_at',     accessorKey: 'updated_at',     enableHiding: true, size: 0, header: () => <ColHeader title="Updated" />,     cell: () => null },
 ];
 // waterfall loader
+// onclick name to save and open profile

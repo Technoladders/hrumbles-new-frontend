@@ -510,7 +510,7 @@ export const ContactHeroPanel: React.FC<Props> = ({
 
   return (
     <>
-      <div className="bg-white border-b border-gray-100 flex-shrink-0">
+      <div className="bg-white border-b border-gray-100 flex-shrink-0 rounded-lg mx-2">
         <div className="h-[2px] bg-gradient-to-r from-purple-600 via-violet-500 to-indigo-600" />
         {/* Back button row */}
         <div className="px-4 py-1.5 border-b border-slate-50 flex items-center gap-2">

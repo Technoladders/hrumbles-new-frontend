@@ -1,20 +1,12 @@
 // src/components/sales/company-search/filters/CompanyStageFilterSelect.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useSelector } from 'react-redux';
-import { 
-  Tag, Search, X, Check, Loader2
-} from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Tag, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface Stage {
-  name: string;
-  count: number;
-}
+interface Stage { name: string; count: number; }
 
 interface CompanyStageFilterSelectProps {
   selectedStages: string[];
@@ -22,21 +14,23 @@ interface CompanyStageFilterSelectProps {
   fileId?: string | null;
 }
 
-const STAGE_COLORS: Record<string, string> = {
-  'Identified': 'bg-blue-100 text-blue-700 border-blue-200',
-  'Targeting': 'bg-indigo-100 text-indigo-700 border-indigo-200',
-  'In Outreach': 'bg-teal-100 text-teal-700 border-teal-200',
-  'Warm': 'bg-yellow-100 text-yellow-700 border-yellow-200',
-  'Qualified Company': 'bg-green-100 text-green-700 border-green-200',
-  'Proposal Sent / In Discussion': 'bg-purple-100 text-purple-700 border-purple-200',
-  'Negotiation': 'bg-orange-100 text-orange-700 border-orange-200',
-  'Closed - Won': 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  'Closed - Lost': 'bg-red-100 text-red-700 border-red-200',
-  'Re-engage Later': 'bg-gray-100 text-gray-700 border-gray-200',
-  'Active': 'bg-green-100 text-green-700 border-green-200',
-  'Intelligence': 'bg-slate-100 text-slate-600 border-slate-200',
-  'default': 'bg-slate-100 text-slate-600 border-slate-200',
+// Stage colour dots for dark theme
+const STAGE_DOT: Record<string, string> = {
+  'Identified':                      'bg-blue-400',
+  'Targeting':                       'bg-indigo-400',
+  'In Outreach':                     'bg-teal-400',
+  'Warm':                            'bg-yellow-400',
+  'Qualified Company':               'bg-green-400',
+  'Proposal Sent / In Discussion':   'bg-purple-400',
+  'Negotiation':                     'bg-orange-400',
+  'Closed - Won':                    'bg-emerald-400',
+  'Closed - Lost':                   'bg-red-400',
+  'Re-engage Later':                 'bg-slate-400',
+  'Active':                          'bg-green-400',
+  'Intelligence':                    'bg-slate-300',
 };
+
+const getStageColor = (stage: string) => STAGE_DOT[stage] || 'bg-white/30';
 
 export const CompanyStageFilterSelect: React.FC<CompanyStageFilterSelectProps> = ({
   selectedStages,
@@ -45,58 +39,35 @@ export const CompanyStageFilterSelect: React.FC<CompanyStageFilterSelectProps> =
 }) => {
   const organization_id = useSelector((state: any) => state.auth.organization_id);
 
-  // Fetch stages from companies table
   const { data: stages = [], isLoading } = useQuery({
     queryKey: ['company-stage-suggestions', organization_id, fileId],
     queryFn: async () => {
-      let query = supabase
-        .from('companies')
-        .select('stage')
-        .eq('organization_id', organization_id)
-        .not('stage', 'is', null);
-
-      if (fileId) {
-        query = query.eq('file_id', fileId);
-      }
-
+      let query = supabase.from('companies').select('stage')
+        .eq('organization_id', organization_id).not('stage', 'is', null);
+      if (fileId) query = query.eq('file_id', fileId);
       const { data, error } = await query;
       if (error) throw error;
-
-      // Count stages
       const stageMap = new Map<string, number>();
-
       (data || []).forEach((company: any) => {
-        if (company.stage) {
-          stageMap.set(company.stage, (stageMap.get(company.stage) || 0) + 1);
-        }
+        if (company.stage) stageMap.set(company.stage, (stageMap.get(company.stage) || 0) + 1);
       });
-
-      // Convert to array and sort by count
-      return Array.from(stageMap.entries())
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count);
+      return Array.from(stageMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
     },
     enabled: !!organization_id,
     staleTime: 30000,
   });
 
   const toggleStage = (stage: string) => {
-    const newStages = selectedStages.includes(stage)
+    onSelectionChange(selectedStages.includes(stage)
       ? selectedStages.filter(s => s !== stage)
-      : [...selectedStages, stage];
-    
-    onSelectionChange(newStages);
-  };
-
-  const getStageColor = (stage: string) => {
-    return STAGE_COLORS[stage] || STAGE_COLORS.default;
+      : [...selectedStages, stage]);
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-3">
-        <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
-        <span className="ml-2 text-xs text-slate-500">Loading stages...</span>
+      <div className="flex items-center justify-center py-3 gap-2">
+        <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+        <span className="text-xs text-white/40">Loading stages…</span>
       </div>
     );
   }
@@ -104,53 +75,38 @@ export const CompanyStageFilterSelect: React.FC<CompanyStageFilterSelectProps> =
   if (stages.length === 0) {
     return (
       <div className="py-3 text-center">
-        <Tag className="h-5 w-5 text-slate-300 mx-auto mb-1" />
-        <p className="text-xs text-slate-500">No stages found</p>
+        <Tag className="h-5 w-5 text-white/20 mx-auto mb-1" />
+        <p className="text-xs text-white/40">No stages found</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-      {stages.map((stage) => {
+    <div className="space-y-0.5 max-h-48 overflow-y-auto pr-1">
+      {stages.map(stage => {
         const isSelected = selectedStages.includes(stage.name);
-        
         return (
-          <div
-            key={stage.name}
-            className="flex items-center justify-between group hover:bg-slate-50 rounded px-1.5 py-1.5 transition-colors"
-          >
+          <label key={stage.name} htmlFor={`stage-${stage.name}`}
+            className={cn(
+              'flex items-center justify-between group rounded-md px-2 py-1.5 cursor-pointer transition-colors select-none border',
+              isSelected ? 'bg-indigo-500/20 border-indigo-400/35' : 'border-transparent hover:bg-white/5',
+            )}>
             <div className="flex items-center gap-2">
-              <Checkbox
-                id={`stage-${stage.name}`}
-                checked={isSelected}
-                onCheckedChange={() => toggleStage(stage.name)}
-                className="h-3.5 w-3.5"
-              />
-              <label
-                htmlFor={`stage-${stage.name}`}
-                className="cursor-pointer flex items-center gap-2"
-              >
-                <Badge 
-                  variant="outline"
-                  className={cn(
-                    "text-[10px] font-medium px-1.5 py-0.5",
-                    getStageColor(stage.name)
-                  )}
-                >
-                  {stage.name}
-                </Badge>
-              </label>
+              <input type="checkbox" id={`stage-${stage.name}`} checked={isSelected}
+                onChange={() => toggleStage(stage.name)}
+                className="h-3.5 w-3.5 rounded flex-shrink-0" style={{ accentColor: '#818cf8' }} />
+              <span className={cn('w-2 h-2 rounded-full flex-shrink-0', getStageColor(stage.name))} />
+              <span className={cn('text-xs transition-colors truncate', isSelected ? 'text-indigo-200 font-medium' : 'text-white/55')}>
+                {stage.name}
+              </span>
             </div>
             <span className={cn(
-              "text-[10px] tabular-nums px-1.5 py-0.5 rounded-full transition-colors",
-              stage.count > 0 
-                ? "text-slate-600 bg-slate-100 group-hover:bg-slate-200" 
-                : "text-slate-400"
+              'text-[10px] tabular-nums px-1.5 py-0.5 rounded-full flex-shrink-0 ml-1 transition-colors',
+              stage.count > 0 ? 'text-white/50 bg-white/10 group-hover:bg-white/15' : 'text-white/25',
             )}>
               {stage.count}
             </span>
-          </div>
+          </label>
         );
       })}
     </div>

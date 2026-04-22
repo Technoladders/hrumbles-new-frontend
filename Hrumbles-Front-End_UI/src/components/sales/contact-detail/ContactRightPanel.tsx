@@ -5,7 +5,7 @@ import {
   TrendingUp, Code2, Tag, ExternalLink, Coins, AlertCircle,
   Loader2, ChevronDown, ChevronUp, Pencil, Check, X,
   DatabaseZap, Search, Sparkles, Phone, Mail,
-  ChevronLeft, ChevronRight, ListPlus,
+  ChevronLeft, ChevronRight, ListPlus, Eye
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useNavigate } from 'react-router-dom';
@@ -301,6 +301,42 @@ export const ContactRightPanel: React.FC<Props> = ({ contact, onCompanyFieldSave
     }
   };
 
+  // Save to CRM and immediately open the contact detail page
+const [savingPersonId, setSavingPersonId] = useState<string | null>(null);
+
+const handleSaveAndOpen = async (person: any) => {
+  const pid = person.id || person.apollo_person_id || String(Math.random());
+  setSavingPersonId(pid);
+
+  try {
+    const saved = await saveDiscoveryToCRM(
+      person.original_data || person,
+      organizationId,
+      userId
+    );
+
+    queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+
+    if (saved?.id) {
+      navigate(`/contacts/${saved.id}`);
+    } else {
+      toast({
+        variant: 'destructive',
+        title: 'Save failed',
+        description: 'Could not get saved contact ID.',
+      });
+    }
+  } catch (err: any) {
+    toast({
+      variant: 'destructive',
+      title: 'Save Failed',
+      description: err.message,
+    });
+  } finally {
+    setSavingPersonId(null);
+  }
+};
+
   const similarPeople = useMemo(() => {
     if (!similarData?.people) return [];
     return similarData.people
@@ -381,16 +417,22 @@ export const ContactRightPanel: React.FC<Props> = ({ contact, onCompanyFieldSave
   };
 
   return (
-    <div className="p-3 space-y-3">
+    <div className="p-2 space-y-3">
 
       {/* ── Company Card ──────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <div className="h-[2px] bg-gradient-to-r from-violet-500 to-purple-400 opacity-60" />
+       <div className="crmtheme-header-bar px-3 py-2 flex items-center gap-2 flex-wrap">
+  <Building2 size={12} className="text-white/90" />
+
+  <span className="text-[10px] font-bold text-white uppercase tracking-widest">
+    Company Summary
+  </span>
+</div>
         <div className="p-3">
           {/* Company header row */}
           <div className="flex items-start gap-3 mb-2.5">
             {/* Logo — bigger (h-12 w-12) */}
-            <div className="w-12 h-12 rounded-lg border border-slate-200 bg-slate-50 flex-shrink-0 flex items-center justify-center overflow-hidden shadow-sm">
+            <div className="w-[80px] h-[80px] rounded-lg border border-slate-200 bg-slate-50 flex-shrink-0 flex items-center justify-center overflow-hidden shadow-sm">
               {org.logoUrl
                 ? <img src={org.logoUrl} alt={org.name} className="w-full h-full object-contain p-1" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                 : <Building2 size={20} className="text-slate-300" />
@@ -660,10 +702,15 @@ export const ContactRightPanel: React.FC<Props> = ({ contact, onCompanyFieldSave
                         </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
-                        {isCrm
-                          ? <button onClick={() => navigate(`/contacts/${person.id}`)} className="text-[10px] font-semibold text-slate-800 hover:text-indigo-600 truncate block max-w-[110px] text-left">{name}</button>
-                          : <p className="text-[10px] font-semibold text-slate-800 truncate max-w-[110px]">{name}</p>
-                        }
+                        <button
+                          onClick={() => isCrm ? navigate(`/contacts/${person.id}`) : handleSaveAndOpen(person)}
+                          disabled={!isCrm && savingPersonId === (person.id || person.apollo_person_id)}
+                          className="text-[10px] font-semibold text-slate-800 hover:text-indigo-600 truncate block max-w-[110px] text-left transition-colors disabled:opacity-60">
+                          {!isCrm && savingPersonId === (person.id || person.apollo_person_id)
+                            ? <span className="flex items-center gap-1"><Loader2 size={8} className="animate-spin" />Saving…</span>
+                            : name
+                          }
+                        </button>
                         <p className="text-[8px] text-slate-400 truncate max-w-[110px]">{title}</p>
                       </div>
                     </div>
@@ -698,26 +745,25 @@ export const ContactRightPanel: React.FC<Props> = ({ contact, onCompanyFieldSave
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 w-16 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                      {/* Add to List */}
+{/* Add to List — non-CRM only */}
                       {!isCrm && (
                         <button onClick={() => setListModalPerson(person)}
                           title="Add to List"
                           className="flex items-center justify-center h-5 w-5 rounded bg-slate-50 border border-slate-200 hover:bg-violet-50 hover:border-violet-200 transition-colors">
-                          <ListPlus size={8} className="text-slate-500 hover:text-violet-600" />
+                          <ListPlus size={8} className="text-slate-500" />
                         </button>
                       )}
-                      {/* Save / View */}
-                      {isCrm ? (
-                        <button onClick={() => navigate(`/contacts/${person.id}`)}
-                          className="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] font-semibold bg-slate-100 text-slate-600 border border-slate-200 rounded hover:bg-slate-200">
-                          View
-                        </button>
-                      ) : (
-                        <button onClick={() => handleSaveTocrm(person)}
-                          className="flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-100">
-                          <DatabaseZap size={7} />Save
-                        </button>
-                      )}
+                      {/* Eye = save & open contact detail */}
+                      <button
+                        onClick={() => isCrm ? navigate(`/contacts/${person.id}`) : handleSaveAndOpen(person)}
+                        disabled={!isCrm && savingPersonId === (person.id || person.apollo_person_id)}
+                        title={isCrm ? 'View contact' : 'Save & open contact'}
+                        className="flex items-center justify-center h-5 w-5 rounded bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-colors disabled:opacity-50">
+                        {!isCrm && savingPersonId === (person.id || person.apollo_person_id)
+                          ? <Loader2 size={8} className="animate-spin text-indigo-500" />
+                          : <Eye size={8} className="text-indigo-600" />
+                        }
+                      </button>
                     </div>
                   </div>
                 );
@@ -794,3 +840,4 @@ export const ContactRightPanel: React.FC<Props> = ({ contact, onCompanyFieldSave
 };
 
 export default ContactRightPanel;
+// onclick to save and open the similar contacts

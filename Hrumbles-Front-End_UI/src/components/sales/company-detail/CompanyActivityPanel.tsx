@@ -1,13 +1,14 @@
+// Hrumbles-Front-End_UI/src/components/sales/company-detail/CompanyActivityPanel.tsx
 import React, { useState, useMemo } from 'react';
 import {
   PhoneCall, Mail, StickyNote, Calendar, CheckSquare, Linkedin,
   Clock, CheckCircle2, Circle, AlertCircle, ArrowUpRight, ArrowDownLeft,
-  MoreHorizontal, Pencil, Trash2
+  MoreHorizontal, Pencil, Trash2, FileText,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuTrigger, DropdownMenuSeparator
+  DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow, isToday, isYesterday, parseISO, isPast } from 'date-fns';
@@ -23,36 +24,57 @@ interface Props {
 }
 
 const ACTIVITY_CONFIG: Record<string, { icon: any; color: string; bg: string; label: string }> = {
-  call:         { icon: PhoneCall,   color: 'text-amber-600',   bg: 'bg-amber-50',   label: 'Call' },
-  email:        { icon: Mail,        color: 'text-blue-600',    bg: 'bg-blue-50',    label: 'Email' },
-  linkedin:     { icon: Linkedin,    color: 'text-sky-600',     bg: 'bg-sky-50',     label: 'LinkedIn' },
-  note:         { icon: StickyNote,  color: 'text-purple-600',  bg: 'bg-purple-50',  label: 'Note' },
-  task:         { icon: CheckSquare, color: 'text-green-600',   bg: 'bg-green-50',   label: 'Task' },
-  meeting:      { icon: Calendar,    color: 'text-indigo-600',  bg: 'bg-indigo-50',  label: 'Meeting' },
-  stage_change: { icon: ArrowUpRight,color: 'text-gray-500',    bg: 'bg-gray-100',   label: 'Stage' },
+  call:         { icon: PhoneCall,    color: 'text-amber-600',   bg: 'bg-amber-50',   label: 'Call' },
+  email:        { icon: Mail,         color: 'text-blue-600',    bg: 'bg-blue-50',    label: 'Email' },
+  linkedin:     { icon: Linkedin,     color: 'text-sky-600',     bg: 'bg-sky-50',     label: 'LinkedIn' },
+  note:         { icon: StickyNote,   color: 'text-purple-600',  bg: 'bg-purple-50',  label: 'Note' },
+  task:         { icon: CheckSquare,  color: 'text-green-600',   bg: 'bg-green-50',   label: 'Task' },
+  meeting:      { icon: Calendar,     color: 'text-indigo-600',  bg: 'bg-indigo-50',  label: 'Meeting' },
+  stage_change: { icon: ArrowUpRight, color: 'text-slate-500',   bg: 'bg-slate-100',  label: 'Stage' },
 };
 
-const QUICK_ACTIONS =[
-  { type: 'call' as const,     icon: PhoneCall,   label: 'Call',     color: 'text-amber-600',  hoverBg: 'hover:bg-amber-50 hover:border-amber-200' },
-  { type: 'email' as const,    icon: Mail,        label: 'Email',    color: 'text-blue-600',   hoverBg: 'hover:bg-blue-50 hover:border-blue-200' },
-  { type: 'linkedin' as const, icon: Linkedin,    label: 'LinkedIn', color: 'text-sky-600',    hoverBg: 'hover:bg-sky-50 hover:border-sky-200' },
-  { type: 'note' as const,     icon: StickyNote,  label: 'Note',     color: 'text-purple-600', hoverBg: 'hover:bg-purple-50 hover:border-purple-200' },
-  { type: 'task' as const,     icon: CheckSquare, label: 'Task',     color: 'text-green-600',  hoverBg: 'hover:bg-green-50 hover:border-green-200' },
-  { type: 'meeting' as const,  icon: Calendar,    label: 'Meeting',  color: 'text-indigo-600', hoverBg: 'hover:bg-indigo-50 hover:border-indigo-200' },
+const QUICK_ACTIONS = [
+  { type: 'call' as const,     icon: PhoneCall,   label: 'Call',     color: 'text-amber-600',  hover: 'hover:bg-amber-50 hover:border-amber-200' },
+  { type: 'email' as const,    icon: Mail,        label: 'Email',    color: 'text-blue-600',   hover: 'hover:bg-blue-50 hover:border-blue-200' },
+  { type: 'linkedin' as const, icon: Linkedin,    label: 'LinkedIn', color: 'text-sky-600',    hover: 'hover:bg-sky-50 hover:border-sky-200' },
+  { type: 'note' as const,     icon: StickyNote,  label: 'Note',     color: 'text-purple-600', hover: 'hover:bg-purple-50 hover:border-purple-200' },
+  { type: 'task' as const,     icon: CheckSquare, label: 'Task',     color: 'text-green-600',  hover: 'hover:bg-green-50 hover:border-green-200' },
+  { type: 'meeting' as const,  icon: Calendar,    label: 'Meeting',  color: 'text-indigo-600', hover: 'hover:bg-indigo-50 hover:border-indigo-200' },
 ];
+
+const OUTCOME_STYLES: Record<string, string> = {
+  connected:       'bg-green-50 text-green-600',
+  replied:         'bg-green-50 text-green-600',
+  no_answer:       'bg-gray-100 text-gray-500',
+  left_voicemail:  'bg-blue-50 text-blue-500',
+  busy:            'bg-orange-50 text-orange-500',
+  completed:       'bg-green-50 text-green-600',
+  no_show:         'bg-red-50 text-red-500',
+  bounced:         'bg-red-50 text-red-500',
+  inmail_sent:     'bg-sky-50 text-sky-600',
+  message_sent:    'bg-sky-50 text-sky-600',
+  connection_sent: 'bg-indigo-50 text-indigo-500',
+};
+
+// ── Section header matching ContactLeftPanel ──────────────────────────────────
+const SectionHeader: React.FC<{ title: string; icon: React.ElementType; count?: number }> = ({ title, icon: Icon, count }) => (
+  <div className="flex items-center gap-2 px-3 py-2 crmtheme-section-header">
+    <Icon size={12} className="text-white" />
+    <span className="text-[10px] font-bold text-white uppercase tracking-widest">{title}</span>
+    {count !== undefined && <span className="ml-auto text-[10px] font-semibold text-white">{count}</span>}
+  </div>
+);
 
 export const CompanyActivityPanel: React.FC<Props> = ({
   company, onOpenModal, onEditActivity, onCompleteTask, onDeleteActivity
 }) => {
-  const [filterType, setFilterType] = useState<string>('all');
-  const[expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [filterType,      setFilterType]      = useState<string>('all');
+  const [expandedItems,   setExpandedItems]   = useState<Set<string>>(new Set());
 
   const allActivities: any[] = company.company_activities || [];
   const sortedActivities = useMemo(() =>
-    [...allActivities].sort((a, b) =>
-      new Date(b.activity_date || b.created_at).getTime() -
-      new Date(a.activity_date || a.created_at).getTime()
-    ),[allActivities]);
+    [...allActivities].sort((a, b) => new Date(b.activity_date || b.created_at).getTime() - new Date(a.activity_date || a.created_at).getTime()),
+    [allActivities]);
 
   const filteredActivities = useMemo(() =>
     filterType === 'all' ? sortedActivities : sortedActivities.filter(a => a.type === filterType),
@@ -61,7 +83,7 @@ export const CompanyActivityPanel: React.FC<Props> = ({
   const groupedActivities = useMemo(() => {
     return filteredActivities.reduce((acc: Record<string, any[]>, activity) => {
       const d = new Date(activity.activity_date || activity.created_at);
-      const key = isToday(d) ? 'Today' : isYesterday(d) ? 'Yesterday' : format(d, 'MMMM d, yyyy');
+      const key = isToday(d) ? 'Today' : isYesterday(d) ? 'Yesterday' : format(d, 'MMM d, yyyy');
       if (!acc[key]) acc[key] = [];
       acc[key].push(activity);
       return acc;
@@ -86,160 +108,197 @@ export const CompanyActivityPanel: React.FC<Props> = ({
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-white">
-      {/* Quick Log Actions */}
-      <div className="px-4 py-3 border-b border-[#F0EDE8] flex-shrink-0">
-        <p className="text-[10px] font-semibold text-[#9C9189] uppercase tracking-wider mb-2.5 px-1">Log Activity</p>
-        <div className="grid grid-cols-6 gap-1.5">
-          {QUICK_ACTIONS.map(({ type, icon: Icon, label, color, hoverBg }) => (
-            <button
-              key={type}
-              onClick={() => onOpenModal(type)}
-              className={cn('flex flex-col items-center gap-1.5 py-2.5 rounded-xl border border-transparent transition-all duration-150', hoverBg)}
-            >
-              <Icon size={16} className={color} />
-              <span className="text-[9px] font-medium text-[#6A6057] leading-none">{label}</span>
-            </button>
-          ))}
+    <div className="flex flex-col divide-y divide-slate-100">
+
+      {/* ── Quick Log ─────────────────────────────────────────────────── */}
+      <div>
+        <SectionHeader title="Log Activity" icon={FileText} />
+        <div className="px-3 py-2.5">
+          <div className="grid grid-cols-6 gap-1">
+            {QUICK_ACTIONS.map(({ type, icon: Icon, label, color, hover }) => (
+              <button key={type} onClick={() => onOpenModal(type)}
+                className={cn('flex flex-col items-center gap-0.5 py-2 rounded-md border border-transparent text-center transition-all', hover)}>
+                <Icon size={14} className={color} />
+                <span className="text-[8px] font-medium text-slate-500 leading-none">{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Pending Tasks Banner */}
+      {/* ── Pending task banner ──────────────────────────────────────── */}
       {pendingTasks.length > 0 && (
-        <div className={cn(
-          'mx-4 mt-3 rounded-xl border px-3 py-2.5 flex items-center gap-2.5 flex-shrink-0',
-          overdueCount > 0 ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
-        )}>
-          {overdueCount > 0 ? <AlertCircle size={14} className="text-red-500 flex-shrink-0" /> : <CheckSquare size={14} className="text-amber-600 flex-shrink-0" />}
+        <div className={cn('mx-3 mt-2 mb-0 flex items-center gap-2 px-2.5 py-2 rounded-lg',
+          overdueCount > 0 ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200')}>
+          {overdueCount > 0
+            ? <AlertCircle size={13} className="text-red-500 flex-shrink-0" />
+            : <CheckSquare size={13} className="text-amber-600 flex-shrink-0" />
+          }
           <p className={cn('text-xs font-semibold', overdueCount > 0 ? 'text-red-700' : 'text-amber-700')}>
-            {overdueCount > 0 ? `${overdueCount} overdue task${overdueCount > 1 ? 's' : ''} · ${pendingTasks.length} pending` : `${pendingTasks.length} pending task${pendingTasks.length > 1 ? 's' : ''}`}
+            {overdueCount > 0
+              ? `${overdueCount} overdue · ${pendingTasks.length} pending`
+              : `${pendingTasks.length} pending task${pendingTasks.length > 1 ? 's' : ''}`}
           </p>
         </div>
       )}
 
-      {/* Filter Tabs */}
-      <div className="px-4 pt-3 flex-shrink-0">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-          {(['all', 'call', 'email', 'linkedin', 'note', 'task', 'meeting'] as const).map(type => (
-            <button
-              key={type}
-              onClick={() => setFilterType(type)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-[600] whitespace-nowrap transition-all',
-                filterType === type ? 'bg-[#5B4FE8] text-white' : 'bg-[#F0EDE8] text-[#6A6057] hover:bg-[#E5E0D8]'
-              )}
-            >
-              {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
-              {activityCounts[type] > 0 && (
-                <span className={cn('text-[9px] px-1.5 py-0.5 rounded-md min-w-[16px] text-center leading-none', filterType === type ? 'bg-white/20 text-white' : 'bg-white text-[#9C9189]')}>
-                  {activityCounts[type]}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* ── Activity section ─────────────────────────────────────────── */}
+      <div>
+        <SectionHeader title="Activity" icon={Clock} count={allActivities.length} />
 
-      {/* Activity Timeline */}
-      <div className="flex-1 overflow-y-auto px-4 pb-6 mt-3 space-y-4">
-        {filteredActivities.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-            <div className="w-12 h-12 bg-[#F0EDE8] rounded-2xl flex items-center justify-center mb-3">
-              <Clock size={20} className="text-[#9C9189]" />
-            </div>
-            <p className="text-[13px] font-semibold text-[#1C1916] mb-1">No activities yet</p>
-            <p className="text-[11px] text-[#9C9189] max-w-[200px]">Start tracking your outreach with this company.</p>
+        {/* Filter pills — matching ContactLeftPanel style */}
+        <div className="px-2 py-1.5 border-b border-slate-100">
+          <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
+            {(['all', 'call', 'email', 'linkedin', 'note', 'task', 'meeting'] as const).map(type => (
+              <button key={type} onClick={() => setFilterType(type)}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap transition-all',
+                  filterType === type
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                )}>
+                {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
+                {activityCounts[type] > 0 && (
+                  <span className={cn('text-[8px] px-1 py-0.5 rounded-full min-w-[13px] text-center',
+                    filterType === type ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-500')}>
+                    {activityCounts[type]}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
-        ) : (
-          Object.entries(groupedActivities).map(([dateLabel, activities]) => (
-            <div key={dateLabel} className="space-y-2">
-              <div className="sticky top-0 z-10 py-1.5 bg-white/90 backdrop-blur-sm">
-                <span className="text-[10px] font-bold text-[#9C9189] uppercase tracking-wider">{dateLabel}</span>
-              </div>
-              <div className="space-y-2">
+        </div>
+
+        {/* Timeline */}
+        <div className="pb-4">
+          {filteredActivities.length === 0 ? (
+            <div className="py-8 text-center">
+              <Clock size={18} className="text-slate-200 mx-auto mb-2" />
+              <p className="text-[11px] text-slate-400">No activities yet</p>
+              <p className="text-[10px] text-slate-300 mt-0.5">Start tracking outreach with this company</p>
+            </div>
+          ) : (
+            Object.entries(groupedActivities).map(([dateLabel, activities]) => (
+              <div key={dateLabel}>
+                <div className="sticky top-0 z-10 px-3 py-1 bg-white/90 backdrop-blur-sm">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{dateLabel}</span>
+                </div>
                 {activities.map((activity: any) => (
-                  <ActivityCard key={activity.id} activity={activity} isExpanded={expandedItems.has(activity.id)} onToggleExpand={() => toggleExpanded(activity.id)} onComplete={onCompleteTask} onDelete={onDeleteActivity} onEdit={onEditActivity} />
+                  <ActivityCard
+                    key={activity.id}
+                    activity={activity}
+                    isExpanded={expandedItems.has(activity.id)}
+                    onToggleExpand={() => toggleExpanded(activity.id)}
+                    onComplete={onCompleteTask}
+                    onDelete={onDeleteActivity}
+                    onEdit={onEditActivity}
+                  />
                 ))}
               </div>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-// ── Activity Card Subcomponent ──
-const ActivityCard: React.FC<{ activity: any, isExpanded: boolean, onToggleExpand: () => void, onComplete: (id: string) => void, onDelete: (id: string) => void, onEdit: (activity: any) => void }> = ({ activity, isExpanded, onToggleExpand, onComplete, onDelete, onEdit }) => {
-  const cfg = ACTIVITY_CONFIG[activity.type] || ACTIVITY_CONFIG.note;
-  const Icon = cfg.icon;
-  const isTask = activity.type === 'task';
+// ── Activity Card ─────────────────────────────────────────────────────────────
+const ActivityCard: React.FC<{
+  activity: any; isExpanded: boolean;
+  onToggleExpand: () => void;
+  onComplete: (id: string) => void;
+  onDelete: (id: string) => void;
+  onEdit: (activity: any) => void;
+}> = ({ activity, isExpanded, onToggleExpand, onComplete, onDelete, onEdit }) => {
+  const cfg         = ACTIVITY_CONFIG[activity.type] || ACTIVITY_CONFIG.note;
+  const Icon        = cfg.icon;
+  const isTask      = activity.type === 'task';
   const isCompleted = activity.is_completed;
-  
+  const outcome     = activity.outcome || activity.metadata?.outcome;
+  const dueDate     = activity.due_date;
+  const isOverdue   = isTask && dueDate && !isCompleted && isPast(parseISO(dueDate));
   const htmlContent = activity.description_html || activity.description || '';
-  const needsExpansion = htmlContent.length > 140;
+  const needsExpand = htmlContent.length > 100;
 
   return (
-    <div className={cn('rounded-2xl border border-[#E5E0D8] bg-white p-3.5 group transition-shadow hover:shadow-sm hover:border-[#D5CFC5]', isCompleted && 'opacity-60 bg-[#FAFAF9]')}>
-      <div className="flex items-start gap-3">
+    <div className={cn(
+      'mx-2 mb-1.5 rounded-lg border bg-white p-2.5 group transition-all',
+      isOverdue ? 'border-red-200 bg-red-50/20' : isCompleted ? 'opacity-60' : 'hover:border-violet-200/60 hover:shadow-sm',
+    )}>
+      <div className="flex items-start gap-2">
         {isTask ? (
           <button className="mt-0.5 flex-shrink-0" onClick={() => !isCompleted && onComplete(activity.id)}>
-            {isCompleted ? <CheckCircle2 size={16} className="text-green-500" /> : <Circle size={16} className="text-[#C4BDB5] hover:text-green-500 transition-colors" />}
+            {isCompleted
+              ? <CheckCircle2 size={13} className="text-green-500" />
+              : <Circle size={13} className={cn('transition-colors', isOverdue ? 'text-red-400' : 'text-slate-300 hover:text-violet-400')} />
+            }
           </button>
         ) : (
-          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5', cfg.bg)}>
-            <Icon size={13} className={cfg.color} />
+          <div className={cn('p-1 rounded-md flex-shrink-0 mt-0.5', cfg.bg)}>
+            <Icon size={10} className={cfg.color} />
           </div>
         )}
-
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <h4 className={cn('text-[13px] font-semibold text-[#1C1916] leading-snug', isCompleted && 'line-through text-[#9C9189]')}>
+          <div className="flex items-start justify-between gap-1">
+            <p className={cn('text-[11px] font-medium text-slate-800 leading-tight', isCompleted && 'line-through text-slate-400')}>
               {activity.title}
-            </h4>
+            </p>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-[#F0EDE8]"><MoreHorizontal size={14} className="text-[#9C9189]" /></button>
+                <button className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-0.5 rounded hover:bg-slate-100">
+                  <MoreHorizontal size={11} className="text-slate-400" />
+                </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-32 text-xs rounded-xl">
-                <DropdownMenuItem onClick={() => onEdit(activity)}><Pencil size={12} className="mr-2" /> Edit</DropdownMenuItem>
+              <DropdownMenuContent align="end" className="w-28 text-xs rounded-xl">
+                <DropdownMenuItem onClick={() => onEdit(activity)} className="text-xs"><Pencil size={10} className="mr-2" />Edit</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onDelete(activity.id)} className="text-red-600 focus:bg-red-50 focus:text-red-700"><Trash2 size={12} className="mr-2" /> Delete</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onDelete(activity.id)} className="text-xs text-red-600"><Trash2 size={10} className="mr-2" />Delete</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
 
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-            <span className={cn('text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md', cfg.bg, cfg.color)}>{cfg.label}</span>
-            {activity.outcome && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md bg-[#F0EDE8] text-[#6A6057] uppercase tracking-wide">{activity.outcome.replace(/_/g, ' ')}</span>}
-            {isTask && activity.due_date && (
-              <span className="text-[10px] font-medium text-[#9C9189] flex items-center gap-1">
-                <Calendar size={10} /> {format(parseISO(activity.due_date), 'MMM d')}
+          <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+            {outcome && (
+              <span className={cn('text-[9px] font-medium px-1.5 py-0.5 rounded capitalize', OUTCOME_STYLES[outcome] || 'bg-slate-50 text-slate-500')}>
+                {outcome.replace(/_/g, ' ')}
+              </span>
+            )}
+            {isTask && dueDate && (
+              <span className={cn('text-[9px] flex items-center gap-0.5', isOverdue ? 'text-red-600 font-medium' : 'text-slate-400')}>
+                {isOverdue && <AlertCircle size={8} />}
+                <Calendar size={8} />{format(parseISO(dueDate), 'MMM d')}
               </span>
             )}
           </div>
 
           {htmlContent && (
-            <div className="mt-2.5">
-              <div className={cn('text-[12px] text-[#6A6057] leading-[1.6]', !isExpanded && 'line-clamp-2')} dangerouslySetInnerHTML={{ __html: htmlContent }} />
-              {needsExpansion && (
-                <button onClick={onToggleExpand} className="text-[10px] text-[#5B4FE8] font-bold mt-1 uppercase tracking-wide hover:underline">
-                  {isExpanded ? 'Show less' : 'Read more'}
+            <div className="mt-1">
+              {htmlContent.includes('<')
+                ? <div className={cn('text-[10px] text-slate-500 leading-relaxed prose prose-xs max-w-none [&>*]:text-[10px]', !isExpanded && 'line-clamp-2')} dangerouslySetInnerHTML={{ __html: htmlContent }} />
+                : <p className={cn('text-[10px] text-slate-500 leading-relaxed', !isExpanded && 'line-clamp-2')}>{htmlContent}</p>
+              }
+              {needsExpand && (
+                <button onClick={onToggleExpand} className="text-[9px] text-violet-500 mt-0.5">
+                  {isExpanded ? 'Show less' : 'Show more'}
                 </button>
               )}
             </div>
           )}
 
-          <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#F0EDE8]">
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-slate-50">
+            <div className="flex items-center gap-1">
               {activity.creator && (
                 <>
-                  <Avatar className="h-4 w-4"><AvatarImage src={activity.creator.profile_picture_url} /><AvatarFallback className="text-[8px] bg-[#F0EDE8]">{activity.creator.first_name?.[0]}</AvatarFallback></Avatar>
-                  <span className="text-[10px] font-medium text-[#9C9189]">{activity.creator.first_name} {activity.creator.last_name}</span>
+                  <Avatar className="h-3.5 w-3.5">
+                    <AvatarImage src={activity.creator.profile_picture_url} />
+                    <AvatarFallback className="text-[6px] bg-violet-100 text-violet-600">{activity.creator.first_name?.[0]}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-[9px] text-slate-400">{activity.creator.first_name}</span>
                 </>
               )}
             </div>
-            <span className="text-[10px] font-medium text-[#D5CFC5]">
+            <span className="text-[9px] text-slate-300">
               {formatDistanceToNow(new Date(activity.activity_date || activity.created_at), { addSuffix: true })}
             </span>
           </div>

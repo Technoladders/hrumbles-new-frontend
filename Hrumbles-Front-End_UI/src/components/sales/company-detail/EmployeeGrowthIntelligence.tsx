@@ -477,14 +477,124 @@ const EmployeeGrowthIntelligence: React.FC<EmployeeGrowthIntelligenceProps> = ({
   const displayedDepts = showAllDepts ? deptSummaries : deptSummaries.slice(0, 8);
 
   if (!metrics.length) {
+    // Fake data for the ghost chart — shows the container isn't broken
+    const ghostData = [
+      { month: 'Jan', retained: 0 },
+      { month: 'Feb', retained: 0 },
+      { month: 'Mar', retained: 0 },
+      { month: 'Apr', retained: 0 },
+      { month: 'May', retained: 0 },
+      { month: 'Jun', retained: 0 },
+    ];
+    const ghostFlow = [
+      { month: 'Jan', newHires: 0, churned: 0, net: 0 },
+      { month: 'Feb', newHires: 0, churned: 0, net: 0 },
+      { month: 'Mar', newHires: 0, churned: 0, net: 0 },
+      { month: 'Apr', newHires: 0, churned: 0, net: 0 },
+      { month: 'May', newHires: 0, churned: 0, net: 0 },
+      { month: 'Jun', newHires: 0, churned: 0, net: 0 },
+    ];
+ 
     return (
-      <div className="bg-white border border-[#E5E0D8] rounded-2xl p-8 flex flex-col items-center gap-3 font-['DM_Sans',system-ui,sans-serif]">
-        <div className="w-14 h-14 rounded-2xl bg-[#F0EDE8] flex items-center justify-center">
-          <Users size={22} className="text-[#D5CFC5]" />
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white border border-[#E5E0D8] rounded-2xl overflow-hidden font-['DM_Sans',system-ui,sans-serif]"
+      >
+        {/* Card Header — same as data state */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#F0EDE8] bg-gradient-to-r from-[#FDFCFB] to-white">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#5B4FE8] to-[#7C6FF7] flex items-center justify-center shadow-sm">
+              <Activity size={15} className="text-white" />
+            </div>
+            <div>
+              <h2 className="text-[14px] font-[700] text-[#1C1916] tracking-[-0.01em]">Employee Growth Intelligence</h2>
+              <p className="text-[10px] text-[#9C9189] mt-0.5">No data available — enrich to load growth metrics</p>
+            </div>
+          </div>
         </div>
-        <p className="text-[13px] font-[500] text-[#9C9189]">No employee metrics data available</p>
-        <p className="text-[11px] text-[#C4BDB5]">Enrich the company to load growth intelligence</p>
-      </div>
+ 
+        <div className="p-5 space-y-5">
+          {/* Ghost KPI row */}
+          <div className="grid grid-cols-4 gap-3">
+            {['Headcount Growth 6M', 'Headcount Growth 12M', 'Headcount Growth 24M', 'Latest Headcount'].map(label => (
+              <div key={label} className="flex flex-col gap-1 px-4 py-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl opacity-50">
+                <span className="text-[9px] font-[700] uppercase tracking-[0.08em] text-[#9C9189]">{label}</span>
+                <div className="h-5 bg-slate-200/60 rounded animate-pulse w-16" />
+              </div>
+            ))}
+          </div>
+ 
+          {/* Ghost charts side by side */}
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              { title: 'Headcount Trend', color: '#5B4FE8', grad: 'hcGhostGrad' },
+              { title: 'Hiring Flow',     color: '#16A34A', grad: 'flowGhostGrad' },
+            ].map(chart => (
+              <div key={chart.title} className="bg-[#F8F6F3] rounded-xl p-4 border border-[#EDE9E3] relative overflow-hidden">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[11px] font-[700] text-[#6A6057]">{chart.title}</p>
+                  <span className="text-[9px] text-[#C4BDB5] italic">No data</span>
+                </div>
+                {/* Ghost chart with zero-line trace */}
+                <div className="opacity-20">
+                  <ResponsiveContainer width="100%" height={150}>
+                    <AreaChart data={ghostData} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id={chart.grad} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={chart.color} stopOpacity={0.25} />
+                          <stop offset="100%" stopColor={chart.color} stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="2 4" stroke="#E5E0D8" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9C9189' }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: '#9C9189' }} tickLine={false} axisLine={false} width={24} domain={[0, 100]} />
+                      <Area type="monotone" dataKey="retained" stroke={chart.color} strokeWidth={1.5} strokeDasharray="4 4" fill={`url(#${chart.grad})`} dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                {/* Centered overlay */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <Activity size={16} className="text-slate-300 mx-auto mb-1" />
+                    <p className="text-[10px] font-medium text-slate-400">Enrich company to reveal</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+ 
+          {/* Ghost dept table */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[11px] font-[700] text-[#6A6057] uppercase tracking-[0.07em]">Department Movement</p>
+              <span className="text-[9px] text-[#C4BDB5] italic">No data available</span>
+            </div>
+            <div className="border border-dashed border-[#E5E0D8] rounded-xl overflow-hidden opacity-50">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-[#F8F6F3] border-b border-[#E5E0D8]">
+                    {['Department', 'Current', 'Net Δ', 'New / Churned', 'Signal'].map((h, i) => (
+                      <th key={i} className={`px-4 py-2.5 text-[10px] font-[700] text-[#C4BDB5] uppercase tracking-[0.08em] ${i > 0 ? 'text-right' : 'text-left'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[1,2,3].map(row => (
+                    <tr key={row} className="border-b border-[#F8F6F3]">
+                      {[1,2,3,4,5].map(col => (
+                        <td key={col} className="px-4 py-3">
+                          <div className={`h-3 bg-slate-100 rounded animate-pulse ${col === 1 ? 'w-24' : col === 5 ? 'w-16 ml-auto' : 'w-12 ml-auto'}`} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </motion.div>
     );
   }
 
