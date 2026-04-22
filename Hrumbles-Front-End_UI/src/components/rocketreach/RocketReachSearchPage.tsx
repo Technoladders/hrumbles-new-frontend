@@ -376,24 +376,33 @@ const effectivePageSize =
   }, [updateState, search]);
 
   // ── Reveal complete ───────────────────────────────────────────────────────
-  const handleRevealComplete = useCallback((rrProfileId: number, data: any) => {
-    const upd = (p: RRProfile): RRProfile =>
-      p.id !== rrProfileId ? p : {
+ const handleRevealComplete = useCallback((rrProfileId: number, data: any) => {
+    const upd = (p: RRProfile): RRProfile => {
+      if (p.id !== rrProfileId) return p;
+ 
+      const incomingEmails: any[] = data.allEmails ?? [];
+      const incomingPhones: any[] = data.allPhones ?? [];
+ 
+      return {
         ...p,
         _enriched:           true,
-        _allEmails:          data.allEmails          ?? [],
-        _allPhones:          data.allPhones          ?? [],
-        _jobHistory:         data.jobHistory         ?? [],
-        _education:          data.education          ?? [],
-        _skills:             data.skills             ?? [],
-        _contactId:          data.contactId          ?? null,
-        _candidateProfileId: data.candidateProfileId ?? null,
-        name:                data.name               ?? p.name,
-        current_title:       data.title              ?? p.current_title,
-        current_employer:    data.company            ?? p.current_employer,
-        profile_pic:         data.profilePic         ?? p.profile_pic,
-        linkedin_url:        data.linkedinUrl        ?? p.linkedin_url,
+        // ── Merge: only overwrite if new data came back ──────────────────
+        _allEmails:          incomingEmails.length > 0 ? incomingEmails : (p._allEmails ?? []),
+        _allPhones:          incomingPhones.length > 0 ? incomingPhones : (p._allPhones ?? []),
+        // ── Only update enrichment fields if response included them ──────
+        _jobHistory:         data.jobHistory?.length       ? data.jobHistory  : (p._jobHistory  ?? []),
+        _education:          data.education?.length        ? data.education   : (p._education   ?? []),
+        _skills:             data.skills?.length           ? data.skills      : (p._skills      ?? []),
+        _contactId:          data.contactId                ?? (p as any)._contactId         ?? null,
+        _candidateProfileId: data.candidateProfileId       ?? (p as any)._candidateProfileId ?? null,
+        name:                data.name                     ?? p.name,
+        current_title:       data.title                    ?? p.current_title,
+        current_employer:    data.company                  ?? p.current_employer,
+        profile_pic:         data.profilePic               ?? p.profile_pic,
+        linkedin_url:        data.linkedinUrl              ?? p.linkedin_url,
       };
+    };
+ 
     setEnrichedProfiles(prev => prev.map(upd));
     setSelectedProfile(prev => prev ? upd(prev) : null);
     queryClient.invalidateQueries({ queryKey: ["rr-revealed-ids"] });

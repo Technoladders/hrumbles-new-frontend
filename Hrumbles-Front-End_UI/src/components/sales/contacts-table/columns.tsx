@@ -831,13 +831,16 @@ const MediumSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
   return (
     <Select value={val || ''} onValueChange={v => table.options.meta?.updateData(row.index, column.id, v)}>
       <SelectTrigger className="h-7 text-[10px] border-none bg-transparent shadow-none px-0 w-full">
-        <SelectValue>
+        <SelectValue placeholder="Choose medium">
           {val ? (
             <Badge className="text-[9px] font-medium border"
               style={{ backgroundColor: (sel?.color || '#94a3b8') + '18', color: sel?.color || '#64748b', borderColor: (sel?.color || '#94a3b8') + '40' }}>
               {val}
             </Badge>
-          ) : <span className="text-slate-400">—</span>}
+          ) : <span className="flex items-center gap-1 text-[10px] text-white/40 italic">
+  <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
+  Choose medium
+</span>}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
@@ -853,7 +856,6 @@ const MediumSelectCell: React.FC<any> = ({ getValue, row, column, table }) => {
     </Select>
   );
 };
-
 // ── Action Cell ───────────────────────────────────────────────────────────────
 
 const ActionCell = ({ row, table }: any) => {
@@ -1046,10 +1048,10 @@ export const columns: ColumnDef<any>[] = [
   },
 
   // STAGE
-  { accessorKey: 'contact_stage', header: () => <ColHeader title="Stage" />,  size: 130, enableSorting: false, cell: StageSelectCell,  enableHiding: true },
+  { accessorKey: 'contact_stage', header: () => <ColHeader title="Stage" />,  size: 320, enableSorting: false, cell: StageSelectCell,  enableHiding: true },
 
   // SOURCE
-  { accessorKey: 'medium',        header: () => <ColHeader title="Source" />, size: 130, enableSorting: false, cell: MediumSelectCell, enableHiding: true },
+  { accessorKey: 'medium',        header: () => <ColHeader title="Source" />, size: 180, enableSorting: false, cell: MediumSelectCell, enableHiding: true },
 
   // OWNER
   {

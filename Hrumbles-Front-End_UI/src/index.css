@@ -85,6 +85,28 @@
     --sidebar-ring: 217.2 91.2% 59.8%;
     --tab: 211 24% 85%;
 
+     /* Core Colors */
+  --crm-primary: #6d5cff;
+  --crm-secondary: #8b5cf6;
+  --crm-accent: #2b18e0;
+
+  /* Backgrounds */
+  --crm-bg-dark: #0b0b1f;
+  --crm-bg-mid: #1a1040;
+  --crm-bg-light: rgba(255,255,255,0.06);
+
+  /* Text */
+  --crm-text-main: rgba(255,255,255,0.9);
+  --crm-text-muted: rgba(255,255,255,0.55);
+
+  /* Borders */
+  --crm-border: rgba(255,255,255,0.08);
+
+  /* Glow Colors */
+  --crm-glow-indigo: rgba(99,102,241,0.25);
+  --crm-glow-violet: rgba(139,92,246,0.25);
+
+
   }
 
   .dark {
@@ -371,4 +393,244 @@
   background: var(--zx-brand-bg);
   border-color: var(--zx-brand);
   box-shadow: 0 2px 8px rgba(108,43,217,0.15);
+}
+
+/* CRM Theme Background */
+.crmtheme-bg {
+  background:
+    radial-gradient(circle at 20% 30%, var(--crm-glow-indigo), transparent 40%),
+    radial-gradient(circle at 80% 70%, var(--crm-glow-violet), transparent 40%),
+    linear-gradient(135deg, var(--crm-bg-dark), var(--crm-bg-mid), var(--crm-accent));
+}
+
+.crmtheme-card {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--crm-border);
+  border-radius: 12px;
+}
+
+.crmtheme-btn-primary {
+  background: linear-gradient(
+    135deg,
+    var(--crm-primary) 0%,
+    var(--crm-secondary) 50%,
+    var(--crm-accent) 100%
+  );
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 20px rgba(99,102,241,0.35);
+}
+
+.crmtheme-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 25px rgba(99,102,241,0.5);
+}
+
+.crmtheme-input {
+  background: var(--crm-bg-light);
+  color: var(--crm-text-main);
+  border: 1px solid var(--crm-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  outline: none;
+}
+
+.crmtheme-input::placeholder {
+  color: var(--crm-text-muted);
+  font-style: italic;
+}
+
+.crmtheme-input:focus {
+  border-color: var(--crm-primary);
+  box-shadow: 0 0 0 1px rgba(99,102,241,0.4);
+}
+
+.crmtheme-chip {
+  background: rgba(99,102,241,0.2);
+  color: #c7d2fe;
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+
+.crmtheme-section-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--crm-text-muted);
+  font-weight: 600;
+}
+
+.crmtheme-sidebar {
+  color: var(--crm-text-main);
+  background:
+    radial-gradient(circle at 20% 30%, var(--crm-glow-indigo), transparent 40%),
+    radial-gradient(circle at 80% 70%, var(--crm-glow-violet), transparent 40%),
+    linear-gradient(135deg, var(--crm-bg-dark), var(--crm-bg-mid), var(--crm-accent));
+}
+
+.crmtheme-glow {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  background: rgba(139,92,246,0.2);
+  filter: blur(120px);
+  border-radius: 50%;
+}
+
+.crmtheme-section-header {
+  background: linear-gradient(
+    135deg,
+    var(--crm-primary),
+    var(--crm-secondary),
+    var(--crm-accent)
+  );
+  border-bottom: 1px solid var(--crm-border);
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 20px rgba(99,102,241,0.25);
+}
+
+.crmtheme-header-bar {
+  background: linear-gradient(
+    135deg,
+    var(--crm-accent),     /* DARK start */
+    var(--crm-secondary),  /* mid */
+    var(--crm-primary)     /* LIGHT end */
+  );
+
+  border-bottom: 1px solid var(--crm-border);
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 20px rgba(99,102,241,0.25);
+}
+
+/* 🔹 Gradient text (replace purple → pink) */
+.crmtheme-text-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--crm-primary),
+    var(--crm-secondary),
+    var(--crm-accent)
+  );
+
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
+
+  -webkit-text-fill-color: transparent !important;
+
+  /* fallback */
+  color: var(--crm-primary);
+}
+
+/* 🔹 Chip */
+.crmtheme-chip-sm {
+  font-size: 9px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--crm-border);
+  background: rgba(255,255,255,0.04);
+  color: var(--crm-text-main);
+}
+
+/* 🔹 Chip hover */
+.crmtheme-chip-hover:hover {
+  background: rgba(99,102,241,0.15);
+  border-color: rgba(99,102,241,0.3);
+}
+
+/* 🔹 Show more button */
+.crmtheme-link {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--crm-primary);
+  transition: all 0.2s ease;
+}
+.crmtheme-link:hover {
+  color: var(--crm-secondary);
+}
+
+/* 🔹 Card row (funding) */
+.crmtheme-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--crm-border);
+  background: rgba(255,255,255,0.04);
+  transition: all 0.2s ease;
+}
+.crmtheme-row:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(99,102,241,0.3);
+}
+
+/* 🔹 Filter button base */
+.crmtheme-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+
+  background: rgba(255,255,255,0.06);
+  color: var(--crm-text-muted);
+  border: 1px solid var(--crm-border);
+}
+
+/* 🔹 Hover */
+.crmtheme-filter-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--crm-text-main);
+}
+
+/* 🔹 Active (selected) */
+.crmtheme-filter-btn.active {
+  background: linear-gradient(
+    135deg,
+    var(--crm-primary),
+    var(--crm-secondary),
+    var(--crm-accent)
+  );
+  color: white;
+  box-shadow: 0 0 12px rgba(99,102,241,0.35);
+  border: none;
+}
+
+/* 🔹 Count badge */
+.crmtheme-filter-count {
+  font-size: 8px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  min-width: 13px;
+  text-align: center;
+}
+
+/* 🔹 Count active */
+.crmtheme-filter-count.active {
+  background: rgba(255,255,255,0.25);
+  color: white;
+}
+
+/* 🔹 Count inactive */
+.crmtheme-filter-count.inactive {
+  background: rgba(255,255,255,0.1);
+  color: var(--crm-text-muted);
 }

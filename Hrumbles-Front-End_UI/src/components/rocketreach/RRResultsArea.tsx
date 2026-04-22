@@ -1,16 +1,15 @@
 /**
- * RRResultsArea.tsx — v7
+ * RRResultsArea.tsx — v8
  *
- * Changes from v6:
- *   1. enrichProgress bar in top bar (replaces scrapingIds spinner)
- *   2. ContactOut-specific display: 
- *      - "Open to Work" badge
- *      - Seniority badge from _coData
- *      - Certifications row
- *      - Work email shown in right card for CO (CO returns emails at search time)
- *      - Email/Phone reveal shows different label for CO ("View" not "Email")
- *   3. Per-row skeleton via isEnriching (p._needs_rescrape && !p._is_cached && !p._enriched)
- *      already in v6 — kept
+ * Fixes from v7:
+ *   1. BUG FIX: After email/phone reveal, both buttons remain visible.
+ *      Root cause: hasEmailsFromCO hid the main grid after enrichment.
+ *      Solution: Separate the "CO emails shown at search time" display from
+ *      the reveal button logic. Buttons now always render in a unified grid
+ *      and reflect their current state correctly.
+ *   2. Phone button now matches email button color (violet-bordered) when
+ *      phone is available (phoneAvailable !== false), not slate/gray.
+ *   3. View CV button stopPropagation prevents row opening detail panel.
  */
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
@@ -23,7 +22,7 @@ import {
 } from "lucide-react";
 import type { RRProfile, RREmailEntry, RRPhoneEntry, SkillChip } from "./types";
 import { useRRUpsertSaved } from "./hooks/useRRUpsertSaved";
-import{ MasterProfileCV } from "./MasterProfileCV";
+import { MasterProfileCV } from "./MasterProfileCV";
 
 const ROW_LABEL_CLASS = "w-[85px] text-slate-400 font-semibold flex-shrink-0";
 
@@ -50,9 +49,9 @@ async function revealProfile(
   if (provider === "contactout") {
     const { data, error } = await supabase.functions.invoke("contactout-enrich", {
       body: {
-        linkedinUrl: profile.linkedin_url,
-        organizationId: auth.organizationId,
-        userId: auth.userId,
+        linkedinUrl:     profile.linkedin_url,
+        organizationId:  auth.organizationId,
+        userId:          auth.userId,
         revealType,
         snapshotName:    profile.name,
         snapshotTitle:   profile.current_title,
@@ -280,6 +279,44 @@ const TeaserPopover: React.FC<{ items: string[]; type: "email"|"phone"; onClose:
   );
 };
 
+// ─── Certifications Row ───────────────────────────────────────────────────────
+const CertificationsRow: React.FC<{ certifications: any[]; loading: boolean }> = ({ certifications, loading }) => {
+  const [showAll, setShowAll] = useState(false);
+  if (loading && !certifications.length) {
+    return (
+      <div className="mt-2 flex gap-2">
+        <Shimmer w="w-[85px]" h="h-2.5" className="flex-shrink-0" />
+        <div className="flex gap-1 flex-wrap">
+          {[80, 65, 90].map((w, i) => <Shimmer key={i} w={`w-[${w}px]`} h="h-4" className="rounded-full" />)}
+        </div>
+      </div>
+    );
+  }
+  if (!certifications.length) return null;
+  const MAX = 3;
+  const visible = showAll ? certifications : certifications.slice(0, MAX);
+  return (
+    <div className="mt-2 text-[10px]">
+      <div className="flex items-start">
+        <span className={ROW_LABEL_CLASS}>Certifications</span>
+        <div className="flex-1 flex flex-wrap gap-1">
+          {visible.map((cert: any, i: number) => (
+            <span key={i} className="text-[9px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+              <Award size={8} />{cert.name ?? cert}
+            </span>
+          ))}
+          {certifications.length > MAX && (
+            <button type="button" onClick={e => { e.stopPropagation(); setShowAll(v => !v); }}
+              className="text-[9px] text-violet-500 hover:underline whitespace-nowrap flex items-center gap-0.5">
+              {showAll ? <><ChevronUp size={8} className="inline" /> less</> : <>+{certifications.length - MAX} more</>}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Right action card ────────────────────────────────────────────────────────
 interface RightCardProps {
   profile:        RRProfile;
@@ -312,15 +349,12 @@ const RightCard: React.FC<RightCardProps> = ({
 
   const isContactOut = provider === "contactout";
 
-  // Personal emails first, then any email
   const personalEmails = allEmailsRaw.filter(e => e.type === "personal");
-  const workEmails     = allEmailsRaw.filter(e => e.type !== "personal");
   const displayEmail   = personalEmails[0] ?? allEmailsRaw[0] ?? null;
   const displayPhone   = allPhones[0] ?? null;
 
-  // ContactOut provides emails at search time — show them pre-reveal too
+  // CO emails present at search time (before any reveal)
   const hasEmailsFromCO = isContactOut && allEmailsRaw.length > 0;
-
   const personalTeaserDomains = profile.teaser?.personal_emails ?? teaserEmails.slice(0, 2);
 
   const handleSave = async (e: React.MouseEvent) => {
@@ -329,17 +363,36 @@ const RightCard: React.FC<RightCardProps> = ({
     const auth = await resolveAuth();
     if (!auth) return;
     await doSave({
-      rrProfileId:      String(profile.id),
-      saveType:         "shortlisted",
-      snapshotName:     profile.name,
-      snapshotTitle:    profile.current_title,
-      snapshotCompany:  profile.current_employer,
-      snapshotLocation: profile.location,
-      email:            displayEmail?.email ?? null,
-      phone:            displayPhone?.number ?? null,
+      rrProfileId:        String(profile.id),
+      saveType:           "shortlisted",
+      snapshotName:       profile.name,
+      snapshotTitle:      profile.current_title,
+      snapshotCompany:    profile.current_employer,
+      snapshotLocation:   profile.location,
+      email:              displayEmail?.email ?? null,
+      phone:              displayPhone?.number ?? null,
       candidateProfileId: (profile as any)._candidateProfileId ?? null,
     });
   };
+
+  // ── Email button state ────────────────────────────────────────────────────
+  const emailDone    = !!(enriched && displayEmail) || hasEmailsFromCO;
+  const emailDisabled = revealingEmail || emailAvailable === false;
+  const emailClass = emailDone
+    ? "text-emerald-600 border-emerald-200 bg-emerald-50"
+    : emailAvailable === false
+      ? "text-slate-400 border-slate-200 bg-slate-50"
+      : "text-violet-600 border-violet-300 bg-white hover:bg-violet-50";
+
+  // ── Phone button state ────────────────────────────────────────────────────
+  const phoneDone    = !!(enriched && displayPhone);
+  const phoneDisabled = revealingPhone || phoneAvailable === false;
+  // Match email: violet-bordered when available, emerald when revealed
+  const phoneClass = phoneDone
+    ? "text-emerald-600 border-emerald-200 bg-emerald-50"
+    : phoneAvailable === false
+      ? "text-slate-400 border-slate-200 bg-slate-50"
+      : "text-violet-600 border-violet-300 bg-white hover:bg-violet-50";
 
   return (
     <div className="rounded-xl border border-slate-100 bg-white shadow-sm p-2.5 space-y-2">
@@ -348,12 +401,12 @@ const RightCard: React.FC<RightCardProps> = ({
         <Avatar src={profile.profile_pic} name={profile.name} size={70} />
       </div>
 
-      {/* ContactOut: show email at search time (no reveal needed) */}
-      {hasEmailsFromCO && !enriched && (
+      {/* ContactOut: show emails from search time */}
+      {hasEmailsFromCO && (
         <div className="space-y-1">
           {allEmailsRaw.slice(0, 2).map((em, i) => (
-            <div key={i} className="flex items-center gap-1 bg-blue-50/60 rounded-md px-2 py-1">
-              <span className="w-[4px] h-[4px] rounded-full flex-shrink-0 bg-blue-400" />
+            <div key={i} className="flex items-center gap-1 bg-emerald-50/60 rounded-md px-2 py-1">
+              <span className="w-[4px] h-[4px] rounded-full flex-shrink-0 bg-emerald-400" />
               <span className="text-[10px] font-mono text-slate-700 truncate flex-1 min-w-0">{em.email}</span>
               <CopyBtn text={em.email} />
             </div>
@@ -361,8 +414,8 @@ const RightCard: React.FC<RightCardProps> = ({
         </div>
       )}
 
-      {/* Revealed email */}
-      {enriched && displayEmail && (
+      {/* Revealed email (RR or CO post-enrich when not already shown) */}
+      {enriched && displayEmail && !hasEmailsFromCO && (
         <div className="flex items-center gap-1 bg-emerald-50/60 rounded-md px-2 py-1">
           <span className={cn("w-[4px] h-[4px] rounded-full flex-shrink-0",
             displayEmail.smtp_valid === "valid" ? "bg-emerald-500" : "bg-slate-300")} />
@@ -370,75 +423,69 @@ const RightCard: React.FC<RightCardProps> = ({
           <CopyBtn text={displayEmail.email} />
         </div>
       )}
-      {/* Revealed phone */}
+
+      {/* Revealed phone — always shown when present */}
       {enriched && displayPhone && (
-        <div className="flex items-center gap-1 bg-slate-50 rounded-md px-2 py-1">
-          <Phone size={9} className="text-violet-400 flex-shrink-0" />
+        <div className="flex items-center gap-1 bg-emerald-50/60 rounded-md px-2 py-1">
+          <Phone size={9} className="text-emerald-500 flex-shrink-0" />
           <span className="text-[10px] font-mono text-slate-700 truncate flex-1 min-w-0">{displayPhone.number}</span>
           <CopyBtn text={displayPhone.number} />
         </div>
       )}
 
-      {/* Email + Phone buttons */}
-      {!hasEmailsFromCO && (
-        <div className="grid grid-cols-2 gap-1.5">
-          {/* Email */}
-          <div className="relative">
-            <button onClick={e => { e.stopPropagation(); onRevealEmail(); }}
-              onMouseEnter={() => { if (!enriched && personalTeaserDomains.length > 0) setShowEmailTeaser(true); }}
-              onMouseLeave={() => setShowEmailTeaser(false)}
-              disabled={revealingEmail || emailAvailable === false}
-              className={cn("w-full text-[10px] font-semibold border rounded-md px-1.5 py-1.5 flex items-center justify-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-                enriched && displayEmail ? "text-emerald-600 border-emerald-200 bg-emerald-50"
-                : emailAvailable === false ? "text-slate-400 border-slate-200 bg-slate-50"
-                : "text-violet-600 border-violet-300 bg-white hover:bg-violet-50")}>
-              {revealingEmail ? <Loader2 size={9} className="animate-spin" />
-                : enriched && displayEmail ? <Check size={9} /> : <Mail size={9} />}
-              <span className="truncate">
-                {revealingEmail ? "…" : enriched && displayEmail ? "Email ✓" : emailAvailable === false ? "No email" : "Email"}
-              </span>
-            </button>
-            {showEmailTeaser && personalTeaserDomains.length > 0 && (
-              <TeaserPopover items={personalTeaserDomains} type="email" onClose={() => setShowEmailTeaser(false)} />
-            )}
-          </div>
-
-          {/* Phone */}
-          <div className="relative">
-            <button onClick={e => { e.stopPropagation(); onRevealPhone(); }}
-              onMouseEnter={() => { if (!enriched && teaserPhones.length > 0) setShowPhoneTeaser(true); }}
-              onMouseLeave={() => setShowPhoneTeaser(false)}
-              disabled={revealingPhone || phoneAvailable === false}
-              className={cn("w-full text-[10px] font-semibold border rounded-md px-1.5 py-1.5 flex items-center justify-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-                enriched && displayPhone ? "text-emerald-600 border-emerald-200 bg-emerald-50"
-                : phoneAvailable === false ? "text-slate-400 border-slate-200 bg-slate-50"
-                : "text-slate-600 border-slate-200 bg-white hover:border-violet-400 hover:text-violet-600")}>
-              {revealingPhone ? <Loader2 size={9} className="animate-spin" />
-                : enriched && displayPhone ? <Check size={9} /> : <Phone size={9} />}
-              <span className="truncate">
-                {revealingPhone ? "…" : enriched && displayPhone ? "Phone ✓" : phoneAvailable === false ? "No phone" : "Phone"}
-              </span>
-            </button>
-            {showPhoneTeaser && teaserPhones.length > 0 && (
-              <TeaserPopover items={teaserPhones.map(ph => ph.number)} type="phone" onClose={() => setShowPhoneTeaser(false)} />
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ContactOut: just phone reveal (email already shown) */}
-      {hasEmailsFromCO && !enriched && (
+      {/* ── Unified Email + Phone buttons ── */}
+      {/* Always show both buttons; state reflects current situation */}
+      <div className="grid grid-cols-2 gap-1.5">
+        {/* Email button */}
         <div className="relative">
-          <button onClick={e => { e.stopPropagation(); onRevealPhone(); }}
-            disabled={revealingPhone || phoneAvailable === false}
-            className={cn("w-full text-[10px] font-semibold border rounded-md px-1.5 py-1.5 flex items-center justify-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-              phoneAvailable === false ? "text-slate-400 border-slate-200 bg-slate-50"
-              : "text-slate-600 border-slate-200 bg-white hover:border-violet-400 hover:text-violet-600")}>
-            {revealingPhone ? <Loader2 size={9} className="animate-spin" /> : <Phone size={9} />}
-            <span>{revealingPhone ? "…" : phoneAvailable === false ? "No phone" : "Get Phone"}</span>
+          <button
+            onClick={e => { e.stopPropagation(); if (!emailDone) onRevealEmail(); }}
+            onMouseEnter={() => { if (!emailDone && personalTeaserDomains.length > 0) setShowEmailTeaser(true); }}
+            onMouseLeave={() => setShowEmailTeaser(false)}
+            disabled={emailDisabled || (emailDone && !hasEmailsFromCO)}
+            className={cn(
+              "w-full text-[10px] font-semibold border rounded-md px-1.5 py-1.5 flex items-center justify-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+              emailClass
+            )}>
+            {revealingEmail
+              ? <Loader2 size={9} className="animate-spin" />
+              : emailDone ? <Check size={9} /> : <Mail size={9} />}
+            <span className="truncate">
+              {revealingEmail ? "…" : emailDone ? "Email ✓" : emailAvailable === false ? "No email" : "Email"}
+            </span>
           </button>
+          {showEmailTeaser && personalTeaserDomains.length > 0 && (
+            <TeaserPopover items={personalTeaserDomains} type="email" onClose={() => setShowEmailTeaser(false)} />
+          )}
         </div>
-      )}
+
+        {/* Phone button */}
+        <div className="relative">
+          <button
+            onClick={e => { e.stopPropagation(); if (!phoneDone) onRevealPhone(); }}
+            onMouseEnter={() => { if (!phoneDone && teaserPhones.length > 0) setShowPhoneTeaser(true); }}
+            onMouseLeave={() => setShowPhoneTeaser(false)}
+            disabled={phoneDisabled || phoneDone}
+            className={cn(
+              "w-full text-[10px] font-semibold border rounded-md px-1.5 py-1.5 flex items-center justify-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+              phoneClass
+            )}>
+            {revealingPhone
+              ? <Loader2 size={9} className="animate-spin" />
+              : phoneDone ? <Check size={9} /> : <Phone size={9} />}
+            <span className="truncate">
+              {revealingPhone ? "…"
+                : phoneDone ? "Phone ✓"
+                : phoneAvailable === false ? "No phone"
+                : isContactOut ? "Get Phone"
+                : "Phone"}
+            </span>
+          </button>
+          {showPhoneTeaser && teaserPhones.length > 0 && (
+            <TeaserPopover items={teaserPhones.map(ph => ph.number)} type="phone" onClose={() => setShowPhoneTeaser(false)} />
+          )}
+        </div>
+      </div>
 
       {/* Invite + Save */}
       <div className="grid grid-cols-2 gap-1.5">
@@ -459,20 +506,17 @@ const RightCard: React.FC<RightCardProps> = ({
           <span>{saveStatus === "saved" ? "Saved" : "Save"}</span>
         </button>
       </div>
-      <div className="grid grid-cols-1 gap-1.5">
-{onViewCV && (
-    <button
-      onClick={e => {
-        e.stopPropagation();
-        onViewCV(profile.linkedin_url);
-      }}
-      className="w-full text-[10px] font-semibold border border-violet-300 text-violet-600 hover:bg-violet-50 rounded-md py-1.5 transition-colors flex items-center justify-center gap-1.5"
-    >
-      <span>View Full CV</span>
-      <span className="text-xs">↗</span>
-    </button>
-  )}
-      </div>
+
+      {/* View Full CV */}
+      {onViewCV && (
+        <button
+          onClick={e => { e.stopPropagation(); e.preventDefault(); onViewCV(profile.linkedin_url ?? ""); }}
+          className="w-full text-[10px] font-semibold border border-violet-300 text-violet-600 hover:bg-violet-50 rounded-md py-1.5 transition-colors flex items-center justify-center gap-1.5"
+        >
+          <span>View Full CV</span>
+          <span className="text-xs">↗</span>
+        </button>
+      )}
     </div>
   );
 };
@@ -539,68 +583,6 @@ const InvitePicker: React.FC<InvitePickerProps> = ({ emails, phones, onConfirm, 
   );
 };
 
-// ─── Certifications Row ───────────────────────────────────────────────────────
-const CertificationsRow: React.FC<{ 
-  certifications: any[]; 
-  loading: boolean; 
-}> = ({ certifications, loading }) => {
-  const [showAll, setShowAll] = useState(false);
-
-  if (loading && !certifications.length) {
-    return (
-      <div className="mt-2 flex gap-2">
-        <Shimmer w="w-[85px]" h="h-2.5" className="flex-shrink-0" />
-        <div className="flex gap-1 flex-wrap">
-          {[80, 65, 90].map((w, i) => (
-            <Shimmer key={i} w={`w-[${w}px]`} h="h-4" className="rounded-full" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (!certifications.length) return null;
-
-  const MAX = 3;
-  const visible = showAll ? certifications : certifications.slice(0, MAX);
-
-  return (
-    <div className="mt-2 text-[10px]">
-      <div className="flex items-start">
-        <span className={ROW_LABEL_CLASS}>Certifications</span>
-        <div className="flex-1 flex flex-wrap gap-1">
-          {visible.map((cert: any, i: number) => (
-            <span 
-              key={i} 
-              className="text-[9px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1"
-            >
-              <Award size={8} />
-              {cert.name ?? cert}
-            </span>
-          ))}
-
-          {certifications.length > MAX && (
-            <button 
-              type="button" 
-              onClick={e => { 
-                e.stopPropagation(); 
-                setShowAll(v => !v); 
-              }}
-              className="text-[9px] text-violet-500 hover:underline whitespace-nowrap flex items-center gap-0.5"
-            >
-              {showAll ? (
-                <><ChevronUp size={8} className="inline" /> less</>
-              ) : (
-                <>+{certifications.length - MAX} more</>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // ─── Single result row ────────────────────────────────────────────────────────
 export interface RRResultRowProps {
   profile:           RRProfile;
@@ -623,14 +605,14 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
   const [revealingPhone, setRevealingPhone] = useState(false);
   const [revealError,    setRevealError]    = useState<string|null>(null);
   const [showInvitePick, setShowInvitePick] = useState(false);
+  const [showCV,         setShowCV]         = useState(false);
+  const [cvUrl,          setCvUrl]          = useState<string>("");
 
-  const provider    = (p as any)._provider ?? "rocketreach";
+  const provider     = (p as any)._provider ?? "rocketreach";
   const isContactOut = provider === "contactout";
-  const enriched    = !!p._enriched || revealed;
-  const coData      = (p as any)._coData;
-
-  // Per-row skeleton: show while enrichment is in-flight for this profile
-  const isEnriching = p._needs_rescrape && !p._is_cached && !p._enriched;
+  const enriched     = !!p._enriched || revealed;
+  const coData       = (p as any)._coData;
+  const isEnriching  = p._needs_rescrape && !p._is_cached && !p._enriched;
 
   const allEmailsRaw = p._allEmails ?? [];
   const allPhones    = p._allPhones ?? [];
@@ -644,16 +626,8 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
   const teaserAll          = [...teaserPersonal, ...teaserProfessional, ...(p.teaser?.emails ?? [])].filter((v,i,a) => a.indexOf(v) === i);
   const teaserPhones       = p.teaser?.phones ?? [];
 
-  // ContactOut emails come at search time
-  const coEmails        = isContactOut ? allEmailsRaw : [];
-  const hasEmailsFromCO = isContactOut && coEmails.length > 0;
-
-  const emailAvailable = teaserAll.length > 0 ? true  : (p.teaser ? false : null);
+  const emailAvailable = teaserAll.length > 0 ? true : (p.teaser ? false : null);
   const phoneAvailable = teaserPhones.length > 0 ? true : (p.teaser ? false : null);
-
-  // View full cv
-  const [showCV, setShowCV] = useState(false);
-const [cvUrl, setCvUrl] = useState<string>("");
 
   const displayJobs = React.useMemo(() => {
     if (jobHist.length > 0) return jobHist;
@@ -663,9 +637,8 @@ const [cvUrl, setCvUrl] = useState<string>("");
 
   const activeLabels = new Set((activeSkillChips ?? []).filter(c => c.mode !== "exclude").map(c => c.label.toLowerCase()));
 
-  // Invite: for CO, can invite if emails from search time; for RR, need reveal
   const canInvite = isContactOut
-    ? (hasEmailsFromCO || enriched && (allEmailsRaw.length > 0 || allPhones.length > 0))
+    ? (allEmailsRaw.length > 0 || (enriched && (allEmailsRaw.length > 0 || allPhones.length > 0)))
     : (enriched && (allEmailsRaw.length > 0 || allPhones.length > 0));
 
   const doReveal = useCallback(async (revealType: "email"|"phone") => {
@@ -673,24 +646,30 @@ const [cvUrl, setCvUrl] = useState<string>("");
     setter(true); setRevealError(null);
     const auth = await resolveAuth();
     if (!auth) { setter(false); setRevealError("Not authenticated"); return; }
- try {
-     const data = await revealProfile(p, revealType, auth);
-     if (!data?.success) {
-       // Check for credit error specifically
-       if (data?.code === "INSUFFICIENT_CREDITS") {
-         setRevealError(`Insufficient credits. Need ${data.required}, have ${data.available?.toFixed(2)}.`);
-         return;
-       }
-       throw new Error(data?.error ?? "Reveal failed");
-     }
-     onRevealComplete(p.id, { ...data, _provider: provider });
-   } catch (e: any) {
-     setRevealError(e.message ?? "Reveal failed");
-   } finally { setter(false); }
+    try {
+      const data = await revealProfile(p, revealType, auth);
+      if (!data?.success) {
+        if (data?.code === "INSUFFICIENT_CREDITS") {
+          setRevealError(`Insufficient credits. Need ${data.required}, have ${data.available?.toFixed(2)}.`);
+          return;
+        }
+        throw new Error(data?.error ?? "Reveal failed");
+      }
+      onRevealComplete(p.id, { ...data, _provider: provider });
+    } catch (e: any) {
+      setRevealError(e.message ?? "Reveal failed");
+    } finally { setter(false); }
   }, [p, provider, onRevealComplete]);
 
+  const handleRowClick = useCallback(() => {
+    // Don't open panel if CV modal is open
+    if (showCV) return;
+    onRowClick();
+  }, [showCV, onRowClick]);
+
   return (
-    <div onClick={onRowClick}
+    <div
+      onClick={handleRowClick}
       className={cn("border-b border-slate-100 px-3 py-3 cursor-pointer transition-colors",
         selected ? "bg-violet-50/60 border-l-2 border-l-violet-500" : "hover:bg-slate-50/40")}>
       <div className="flex items-start gap-2.5">
@@ -714,22 +693,15 @@ const [cvUrl, setCvUrl] = useState<string>("");
               </a>
             )}
             {enriched && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-200">✓</span>}
-            {/* ContactOut badges */}
             {isContactOut && coData?.workStatus === "open_to_work" && (
               <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Open to Work</span>
             )}
             {isContactOut && coData?.seniority && (
               <span className="text-[8px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 capitalize">{coData.seniority}</span>
             )}
-            {/* Provider badge */}
-            {/* {isContactOut && (
-              <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-500 border border-violet-100">CO</span>
-            )} */}
-            {/* Enriching indicator */}
             {isEnriching && !enriched && (
               <span className="flex items-center gap-1 text-[8px] text-slate-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
-                Loading…
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />Loading…
               </span>
             )}
           </div>
@@ -741,23 +713,10 @@ const [cvUrl, setCvUrl] = useState<string>("");
             {p.connections && <span className="ml-1">· {p.connections.toLocaleString()} connections</span>}
           </div>
 
-          {/* Jobs */}
           <JobsSection jobs={displayJobs} loading={isEnriching && !displayJobs.length} />
-
-          {/* Education */}
           <EduSection education={eduRaw} loading={isEnriching && !eduRaw.length} />
-
-          {/* Skills */}
           <SkillsRow skills={skills} loading={isEnriching && !skills.length} activeLabels={activeLabels.size > 0 ? activeLabels : undefined} />
-
-          {/* ContactOut certifications */}
-{/* Certifications - Improved with left title + expandable */}
-{certs.length > 0 && (
-  <CertificationsRow 
-    certifications={certs} 
-    loading={isEnriching && !certs.length} 
-  />
-)}
+          {certs.length > 0 && <CertificationsRow certifications={certs} loading={isEnriching && !certs.length} />}
 
           {revealError && <p className="mt-1 text-[9px] text-red-500">{revealError}</p>}
         </div>
@@ -781,10 +740,10 @@ const [cvUrl, setCvUrl] = useState<string>("");
               onInvite={canInvite ? () => setShowInvitePick(v => !v) : undefined}
               canInvite={canInvite}
               provider={provider}
-              onViewCV={(url) => {
-    setCvUrl(url);
-    setShowCV(true);
-  }}
+              onViewCV={isContactOut && p.linkedin_url ? (url) => {
+                setCvUrl(url);
+                setShowCV(true);
+              } : undefined}
             />
             {showInvitePick && onInvite && (
               <div className="absolute bottom-0 right-0 z-50">
@@ -799,37 +758,41 @@ const [cvUrl, setCvUrl] = useState<string>("");
           </div>
         </div>
       </div>
-       {showCV && (
-  <MasterProfileCV 
-    linkedinUrl={cvUrl} 
-    onClose={() => setShowCV(false)} 
-  />
-)}
+
+      {/* CV Modal — rendered inside row but click-isolated */}
+      {showCV && (
+        <div onClick={e => e.stopPropagation()}>
+          <MasterProfileCV
+            linkedinUrl={cvUrl}
+            onClose={() => setShowCV(false)}
+          />
+        </div>
+      )}
     </div>
   );
 };
 
 // ─── Results area ─────────────────────────────────────────────────────────────
 interface RRResultsAreaProps {
-  profiles:         RRProfile[];
-  loading:          boolean;
-  totalEntries:     number;
-  page:             number;
-  pageSize:         number;
-  totalPages:       number;
-  selectedId:       number | null;
-  checkedIds:       Set<number>;
-  revealedIds:      Set<number>;
-  scrapingIds?:     Set<number>;
+  profiles:          RRProfile[];
+  loading:           boolean;
+  totalEntries:      number;
+  page:              number;
+  pageSize:          number;
+  totalPages:        number;
+  selectedId:        number | null;
+  checkedIds:        Set<number>;
+  revealedIds:       Set<number>;
+  scrapingIds?:      Set<number>;
   activeSkillChips?: SkillChip[];
-  enrichProgress?: { total: number; done: number; active: boolean };
-  onSelectRow:      (p: RRProfile | null) => void;
-  onCheckRow:       (id: number, v: boolean) => void;
-  onCheckAll:       (v: boolean) => void;
-  onPrev:           () => void;
-  onNext:           () => void;
-  onRevealComplete: (id: number, data: any) => void;
-  onInvite?:        (profile: RRProfile, email: string|null, phone: string|null) => void;
+  enrichProgress?:   { total: number; done: number; active: boolean };
+  onSelectRow:       (p: RRProfile | null) => void;
+  onCheckRow:        (id: number, v: boolean) => void;
+  onCheckAll:        (v: boolean) => void;
+  onPrev:            () => void;
+  onNext:            () => void;
+  onRevealComplete:  (id: number, data: any) => void;
+  onInvite?:         (profile: RRProfile, email: string|null, phone: string|null) => void;
 }
 
 export const RRResultsArea: React.FC<RRResultsAreaProps> = ({
@@ -855,7 +818,6 @@ export const RRResultsArea: React.FC<RRResultsAreaProps> = ({
           </span>
         )}
 
-        {/* ── Enrichment progress bar ── */}
         {enrichProgress?.active && (
           <div className="flex items-center gap-2 ml-1">
             <div className="flex items-center gap-1">
@@ -865,10 +827,8 @@ export const RRResultsArea: React.FC<RRResultsAreaProps> = ({
               </span>
             </div>
             <div className="w-20 h-1.5 rounded-full bg-slate-100 overflow-hidden flex-shrink-0">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
-                style={{ width: `${Math.round((enrichProgress.done / Math.max(enrichProgress.total, 1)) * 100)}%` }}
-              />
+              <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
+                style={{ width: `${Math.round((enrichProgress.done / Math.max(enrichProgress.total, 1)) * 100)}%` }} />
             </div>
           </div>
         )}

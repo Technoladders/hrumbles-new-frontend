@@ -1,13 +1,12 @@
 /**
- * RRDetailPanel.tsx — v3
+ * RRDetailPanel.tsx — v4
  *
- * Changes from v2:
- *   1. Shortlist = save ONLY — no folder modal (onShortlist prop removed)
- *      Shows a ✓ toast inline after save
- *   2. Email display: personal emails prominently, professional in "Show more"
- *   3. Two-step invite: picks email/phone, then fires onInvite
- *   4. Education section uses normalizeEdu for scraped format compatibility
- *   5. No "RocketReach" brand text
+ * Fixes from v3:
+ *   1. BUG FIX: doReveal now routes to contactout-enrich for ContactOut profiles
+ *      instead of always calling rocketreach-lookup.
+ *      Mirrors the same revealProfile() logic used in RRResultsArea.
+ *   2. Reveal buttons in Overview tab also correctly route for CO profiles.
+ *   3. Phone button styled violet (matches email) when phoneAvailable.
  */
 
 import React, { useState, useEffect, useRef } from "react";
@@ -31,13 +30,52 @@ async function resolveAuth(): Promise<{ organizationId: string; userId: string }
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return null;
   const userId = session.user.id;
-  const org = session.user.user_metadata?.organization_id ?? session.user.user_metadata?.hr_organization_id ?? (session.user.app_metadata as any)?.organization_id ?? null;
+  const org = session.user.user_metadata?.organization_id
+    ?? session.user.user_metadata?.hr_organization_id
+    ?? (session.user.app_metadata as any)?.organization_id ?? null;
   if (org) return { organizationId: org, userId };
   const { data: emp } = await supabase.from("hr_employees").select("organization_id").eq("user_id", userId).maybeSingle();
   return emp?.organization_id ? { organizationId: emp.organization_id, userId } : null;
 }
 
-// ─── Education normalizer (same as RRResultsArea) ─────────────────────────────
+// ─── Provider-aware reveal ────────────────────────────────────────────────────
+async function revealContact(
+  profile: RRProfile,
+  revealType: "email" | "phone",
+  auth: { organizationId: string; userId: string }
+): Promise<any> {
+  const provider = (profile as any)._provider ?? "rocketreach";
+
+  if (provider === "contactout") {
+    const { data, error } = await supabase.functions.invoke("contactout-enrich", {
+      body: {
+        linkedinUrl:     profile.linkedin_url,
+        organizationId:  auth.organizationId,
+        userId:          auth.userId,
+        revealType,
+        snapshotName:    profile.name,
+        snapshotTitle:   profile.current_title,
+        snapshotCompany: profile.current_employer,
+      },
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // RocketReach
+  const { data, error } = await supabase.functions.invoke("rocketreach-lookup", {
+    body: {
+      rrProfileId:    profile.id,
+      organizationId: auth.organizationId,
+      userId:         auth.userId,
+      revealType,
+    },
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+// ─── Education normalizer ─────────────────────────────────────────────────────
 function normalizeEdu(e: any): { school: string; degree: string; major: string; start: string; end: string } {
   const school = e.school ?? e.institution ?? "";
   const degree = e.degree ?? "";
@@ -64,13 +102,20 @@ function Avatar({ src, name, size = 44 }: { src?: string; name?: string|null; si
 function CopyBtn({ text, className }: { text: string; className?: string }) {
   const [done, setDone] = useState(false);
   return (
-    <button type="button" onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 1500); }} className={cn("flex-shrink-0 transition-colors", className)}>
+    <button type="button" onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 1500); }}
+      className={cn("flex-shrink-0 transition-colors", className)}>
       {done ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
     </button>
   );
 }
 
-const GRADE_CLS: Record<string, string> = { "A": "bg-emerald-100 text-emerald-700 border-emerald-300", "A-": "bg-emerald-50 text-emerald-600 border-emerald-200", "B": "bg-blue-50 text-blue-700 border-blue-200", "C": "bg-amber-50 text-amber-700 border-amber-200", "F": "bg-red-50 text-red-600 border-red-200" };
+const GRADE_CLS: Record<string, string> = {
+  "A":  "bg-emerald-100 text-emerald-700 border-emerald-300",
+  "A-": "bg-emerald-50 text-emerald-600 border-emerald-200",
+  "B":  "bg-blue-50 text-blue-700 border-blue-200",
+  "C":  "bg-amber-50 text-amber-700 border-amber-200",
+  "F":  "bg-red-50 text-red-600 border-red-200",
+};
 function GradeBadge({ grade }: { grade: string|null }) {
   if (!grade) return null;
   return <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded border flex-shrink-0", GRADE_CLS[grade] ?? "bg-slate-100 text-slate-500 border-slate-200")}>{grade}</span>;
@@ -81,19 +126,23 @@ function SectionHead({ children }: { children: React.ReactNode }) {
 function Divider() { return <div className="h-px bg-violet-100 my-1" />; }
 
 // ─── Reveal button ─────────────────────────────────────────────────────────────
-const RevealBtn: React.FC<{ type: "email"|"phone"; loading: boolean; done: boolean; onClick: () => void }> = ({ type, loading, done, onClick }) => (
-  <button type="button" onClick={onClick} disabled={loading}
-    className={cn("flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-[11px] font-bold border transition-all",
-      done ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-        : type === "email" ? "bg-violet-600 hover:bg-violet-700 text-white border-transparent shadow-sm"
-        : "bg-white hover:bg-slate-50 text-slate-600 border-slate-200 hover:border-violet-400 hover:text-violet-700",
-      loading && "opacity-60 cursor-not-allowed")}>
+const RevealBtn: React.FC<{
+  type: "email"|"phone"; loading: boolean; done: boolean; onClick: () => void;
+}> = ({ type, loading, done, onClick }) => (
+  <button type="button" onClick={onClick} disabled={loading || done}
+    className={cn(
+      "flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-[11px] font-bold border transition-all",
+      done
+        ? "bg-emerald-50 text-emerald-700 border-emerald-200 cursor-default"
+        : "bg-violet-600 hover:bg-violet-700 text-white border-transparent shadow-sm",
+      loading && "opacity-60 cursor-not-allowed"
+    )}>
     {loading ? <Loader2 size={11} className="animate-spin" /> : done ? <Check size={11} /> : type === "email" ? <Mail size={11} /> : <Phone size={11} />}
     {loading ? "Looking up…" : done ? (type === "email" ? "Email revealed" : "Phone revealed") : type === "email" ? "Reveal Email" : "Find Phone"}
   </button>
 );
 
-// ─── Email section (personal first, professional collapsed) ────────────────────
+// ─── Email section ────────────────────────────────────────────────────────────
 function EmailSection({ emails, teaserEmails, loading }: { emails: RREmailEntry[]; teaserEmails: string[]; loading: boolean }) {
   const [showProfessional, setShowProfessional] = useState(false);
   const [showAllPersonal,  setShowAllPersonal]  = useState(false);
@@ -105,8 +154,7 @@ function EmailSection({ emails, teaserEmails, loading }: { emails: RREmailEntry[
       <div className="space-y-1">
         {teaserEmails.map((e, i) => (
           <div key={i} className="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-            ***@{e}
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />***@{e}
           </div>
         ))}
       </div>
@@ -130,7 +178,6 @@ function EmailSection({ emails, teaserEmails, loading }: { emails: RREmailEntry[
 
   return (
     <div className="space-y-2">
-      {/* Personal emails — shown prominently */}
       {personal.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-[9px] font-semibold text-blue-500 uppercase tracking-wider">Personal</p>
@@ -142,12 +189,9 @@ function EmailSection({ emails, teaserEmails, loading }: { emails: RREmailEntry[
           )}
         </div>
       )}
-
-      {/* Professional emails — collapsed by default */}
       {professional.length > 0 && (
         <div>
-          <button type="button" onClick={() => setShowProfessional(v => !v)}
-            className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 mb-1">
+          <button type="button" onClick={() => setShowProfessional(v => !v)} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 mb-1">
             {showProfessional ? <ChevronUp size={9}/> : <ChevronDown size={9}/>}
             {professional.length} professional email{professional.length > 1 ? "s" : ""}
           </button>
@@ -194,131 +238,60 @@ function PhoneSection({ phones, teaserPhones, loading }: { phones: RRPhoneEntry[
 }
 
 // ─── Career timeline ────────────────────────────────────────────────────────────
-// ─── Compact Career Timeline ───────────────────────────────
 function CareerTimeline({ jobs }: { jobs: RRJobHistoryEntry[] }) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? jobs : jobs.slice(0, 3);
-
   return (
     <>
       <div className="space-y-4">
         {visible.map((j, i) => {
           const companyName = j.company_name ?? (j as any).company ?? "—";
-          const logoUrl = j.logo_url;
+          const logoUrl     = j.logo_url;
           const linkedinUrl = j.linkedin_url;
-          const websiteUrl = j.domain ? `https://${j.domain}` : null;
-
+          const websiteUrl  = j.domain ? `https://${j.domain}` : null;
           return (
             <div key={i} className="flex gap-4 bg-white border border-slate-100 rounded-2xl p-4 hover:border-slate-200 transition-colors">
-              {/* Company Logo */}
               <div className="flex-shrink-0 pt-0.5">
                 {logoUrl ? (
-                  <img
-                    src={logoUrl}
-                    alt={companyName}
-                    className="w-10 h-10 rounded-xl border border-slate-200 bg-white object-contain p-1 shadow-sm"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = "none";
-                    }}
-                  />
+                  <img src={logoUrl} alt={companyName} className="w-10 h-10 rounded-xl border border-slate-200 bg-white object-contain p-1 shadow-sm" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                 ) : (
                   <div className="w-10 h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-[16px] font-bold text-slate-500 shadow-sm">
                     {companyName[0]?.toUpperCase() || "?"}
                   </div>
                 )}
               </div>
-
-              {/* Job Details - More Compact */}
               <div className="flex-1 min-w-0">
-                {/* Title + Current + Links in ONE line */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <p className={cn(
-                      "text-[13px] font-semibold leading-tight truncate",
-                      j.is_current ? "text-slate-900" : "text-slate-700"
-                    )}>
+                    <p className={cn("text-[13px] font-semibold leading-tight truncate", j.is_current ? "text-slate-900" : "text-slate-700")}>
                       {j.title ?? "—"}
                     </p>
-
-                    {j.is_current && (
-                      <span className="text-[9px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 whitespace-nowrap">
-                        Current
-                      </span>
-                    )}
+                    {j.is_current && <span className="text-[9px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 whitespace-nowrap">Current</span>}
                   </div>
-
-                  {/* Compact Icons */}
                   <div className="flex items-center gap-3 flex-shrink-0">
-                    {linkedinUrl && (
-                      <a
-                        href={linkedinUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="text-blue-600 hover:text-blue-700 transition-colors"
-                        title="LinkedIn"
-                      >
-                        <Linkedin size={14} />
-                      </a>
-                    )}
-                    {websiteUrl && (
-                      <a
-                        href={websiteUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="text-violet-600 hover:text-violet-700 transition-colors"
-                        title="Website"
-                      >
-                        <Globe size={14} />
-                      </a>
-                    )}
+                    {linkedinUrl && <a href={linkedinUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-blue-600 hover:text-blue-700 transition-colors"><Linkedin size={14} /></a>}
+                    {websiteUrl  && <a href={websiteUrl}  target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-violet-600 hover:text-violet-700 transition-colors"><Globe size={14} /></a>}
                   </div>
                 </div>
-
-                {/* Company Name */}
-                <p className="text-[12px] text-slate-500 mt-0.5 font-medium">
-                  {companyName}
-                </p>
-
-                {/* Date + Department */}
+                <p className="text-[12px] text-slate-500 mt-0.5 font-medium">{companyName}</p>
                 <div className="flex items-center gap-2 mt-2 text-[10px] text-slate-400">
                   {(j.start_date || j.end_date) && (
                     <span className="flex items-center gap-1">
                       <Calendar size={9} />
-                      {j.start_date ? j.start_date.slice(0, 7) : "?"} —{" "}
-                      {j.is_current ? "Present" : (j.end_date?.slice(0, 7) ?? "?")}
+                      {j.start_date ? j.start_date.slice(0, 7) : "?"} — {j.is_current ? "Present" : (j.end_date?.slice(0, 7) ?? "?")}
                     </span>
                   )}
-                  {j.department && (
-                    <span className="truncate">· {j.department}{j.sub_department ? ` / ${j.sub_department}` : ""}</span>
-                  )}
+                  {j.department && <span className="truncate">· {j.department}{j.sub_department ? ` / ${j.sub_department}` : ""}</span>}
                 </div>
-
-                {/* Description */}
-                {j.description && (
-                  <p className="text-[10px] text-slate-600 mt-3 leading-relaxed line-clamp-2">
-                    {j.description}
-                  </p>
-                )}
+                {j.description && <p className="text-[10px] text-slate-600 mt-3 leading-relaxed line-clamp-2">{j.description}</p>}
               </div>
             </div>
           );
         })}
       </div>
-
-      {/* Show More Button */}
       {jobs.length > 3 && (
-        <button
-          type="button"
-          onClick={() => setShowAll(v => !v)}
-          className="flex items-center gap-1 text-[10px] font-semibold text-violet-500 hover:text-violet-700 mt-3 transition-colors"
-        >
-          {showAll ? (
-            <><ChevronUp size={10} /> Show less</>
-          ) : (
-            <><ChevronDown size={10} /> +{jobs.length - 3} more roles</>
-          )}
+        <button type="button" onClick={() => setShowAll(v => !v)} className="flex items-center gap-1 text-[10px] font-semibold text-violet-500 hover:text-violet-700 mt-3 transition-colors">
+          {showAll ? <><ChevronUp size={10}/> Show less</> : <><ChevronDown size={10}/> +{jobs.length - 3} more roles</>}
         </button>
       )}
     </>
@@ -347,7 +320,10 @@ function EducationSection({ education }: { education: any[] }) {
   const [showAll, setShowAll] = useState(false);
   const normalized = education.map(normalizeEdu);
   const sorted = [...normalized].sort((a, b) => {
-    const rank = (d: string) => { const EDU_RANK: [string,number][] = [["phd",6],["doctor",6],["master",5],["mba",5],["bachelor",4],["b.tech",4],["be ",4],["diploma",3]]; return EDU_RANK.find(([k]) => d.toLowerCase().includes(k))?.[1] ?? 0; };
+    const rank = (d: string) => {
+      const R: [string,number][] = [["phd",6],["doctor",6],["master",5],["mba",5],["bachelor",4],["b.tech",4],["be ",4],["diploma",3]];
+      return R.find(([k]) => d.toLowerCase().includes(k))?.[1] ?? 0;
+    };
     return rank(b.degree) - rank(a.degree);
   });
   const visible = showAll ? sorted : sorted.slice(0, 2);
@@ -376,10 +352,46 @@ function EducationSection({ education }: { education: any[] }) {
   );
 }
 
-// ─── Inline invite picker (used in panel) ─────────────────────────────────────
+function CertificationsSection({ certifications }: { certifications: any[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const MAX = 5;
+  if (!certifications?.length) return null;
+  const visible = showAll ? certifications : certifications.slice(0, MAX);
+  return (
+    <div>
+      <SectionHead>Certifications ({certifications.length})</SectionHead>
+      <div className="space-y-3">
+        {visible.map((cert: any, i: number) => (
+          <div key={i} className="flex gap-3 bg-amber-50/60 border border-amber-100 rounded-xl p-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Award size={16} className="text-amber-600" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold text-slate-800 leading-tight">{cert.name}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">{cert.authority}</p>
+              {cert.start_date_year && (
+                <p className="text-[9px] text-slate-400 mt-1">
+                  Issued {cert.start_date_month ? `${cert.start_date_month}/${cert.start_date_year}` : cert.start_date_year}
+                  {cert.end_date_year && ` • Expires ${cert.end_date_year}`}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {certifications.length > MAX && (
+        <button type="button" onClick={() => setShowAll(v => !v)} className="flex items-center gap-1 text-[10px] font-semibold text-violet-500 hover:text-violet-700 mt-3 transition-colors">
+          {showAll ? <><ChevronUp size={10}/> Show less</> : <><ChevronDown size={10}/> +{certifications.length - MAX} more certifications</>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Panel invite picker ───────────────────────────────────────────────────────
 const PanelInvitePicker: React.FC<{
-  emails:  RREmailEntry[];
-  phones:  RRPhoneEntry[];
+  emails:    RREmailEntry[];
+  phones:    RRPhoneEntry[];
   onConfirm: (email: string|null, phone: string|null) => void;
   onClose:   () => void;
 }> = ({ emails, phones, onConfirm, onClose }) => {
@@ -435,68 +447,13 @@ const PanelInvitePicker: React.FC<{
   );
 };
 
-// ─── Certifications Section ───────────────────────────────────────────────────
-function CertificationsSection({ certifications }: { certifications: any[] }) {
-  const [showAll, setShowAll] = useState(false);
-  const MAX = 5;
-
-  if (!certifications || certifications.length === 0) return null;
-
-  const visible = showAll ? certifications : certifications.slice(0, MAX);
-
-  return (
-    <div>
-      <SectionHead>Certifications ({certifications.length})</SectionHead>
-      <div className="space-y-3">
-        {visible.map((cert: any, i: number) => (
-          <div key={i} className="flex gap-3 bg-amber-50/60 border border-amber-100 rounded-xl p-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <Award size={16} className="text-amber-600" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold text-slate-800 leading-tight">
-                {cert.name}
-              </p>
-              <p className="text-[10px] text-slate-500 mt-0.5">
-                {cert.authority}
-                {/* {cert.license && <span className="font-mono text-[9px] ml-2 text-amber-600">• {cert.license}</span>} */}
-              </p>
-              {(cert.start_date_year || cert.start_date_month) && (
-                <p className="text-[9px] text-slate-400 mt-1">
-                  Issued {cert.start_date_month ? `${cert.start_date_month}/${cert.start_date_year}` : cert.start_date_year}
-                  {cert.end_date_year && ` • Expires ${cert.end_date_year}`}
-                </p>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {certifications.length > MAX && (
-        <button
-          type="button"
-          onClick={() => setShowAll(v => !v)}
-          className="flex items-center gap-1 text-[10px] font-semibold text-violet-500 hover:text-violet-700 mt-3 transition-colors"
-        >
-          {showAll ? (
-            <><ChevronUp size={10} /> Show less</>
-          ) : (
-            <><ChevronDown size={10} /> +{certifications.length - MAX} more certifications</>
-          )}
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ─── Main panel ─────────────────────────────────────────────────────────────────
-type PanelTab = "overview" | "contact" | "career" | "education" | "raw";
+type PanelTab = "overview" | "contact" | "career" | "education";
 
 interface RRDetailPanelProps {
   profile:           RRProfile;
   onClose:           () => void;
   onRevealComplete?: (id: number, data: any) => void;
-  // FIX: onShortlist removed — shortlist is now self-contained (no folder modal)
   onInvite?:         (rrProfileId: string, email: string|null, phone: string|null) => void;
   folders?:          FolderItem[];
   onCreateFolder?:   (name: string) => Promise<string|null>;
@@ -505,6 +462,9 @@ interface RRDetailPanelProps {
 export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
   profile, onClose, onRevealComplete, onInvite,
 }) => {
+  const provider     = (profile as any)._provider ?? "rocketreach";
+  const isContactOut = provider === "contactout";
+
   const [tab,            setTab]           = useState<PanelTab>("overview");
   const [revealingEmail, setRevealingEmail] = useState(false);
   const [revealingPhone, setRevealingPhone] = useState(false);
@@ -527,7 +487,6 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
     if (profile._skills?.length)     setSkills(profile._skills);
   }, [profile._allEmails, profile._allPhones, profile._jobHistory, profile._education, profile._skills]);
 
-  // ── Shortlist (self-contained, no folder modal) ──────────────────────────
   const { status: saveStatus, upsert: doSave } = useRRUpsertSaved();
   const queryClient = useQueryClient();
 
@@ -547,28 +506,65 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
     });
     queryClient.invalidateQueries({ queryKey: ["saved-candidates"] });
     queryClient.invalidateQueries({ queryKey: ["saved-candidates-count"] });
-    // No folder modal — just show ✓ in button
   };
 
-  // ── Reveal ────────────────────────────────────────────────────────────────
-  const doReveal = async (revealType: "email"|"phone") => {
+  // ── Provider-aware reveal ─────────────────────────────────────────────────
+const doReveal = async (revealType: "email" | "phone") => {
     const setter = revealType === "email" ? setRevealingEmail : setRevealingPhone;
-    setter(true); setRevealErrors(prev => ({ ...prev, [revealType]: undefined }));
+    setter(true);
+    setRevealErrors(prev => ({ ...prev, [revealType]: undefined }));
+ 
     const auth = await resolveAuth();
-    if (!auth) { setter(false); setRevealErrors(prev => ({ ...prev, [revealType]: "Auth failed" })); return; }
-    const { data, error: fnError } = await supabase.functions.invoke("rocketreach-lookup", {
-      body: { rrProfileId: profile.id, organizationId: auth.organizationId, userId: auth.userId, revealType },
-    });
-    setter(false);
-    if (fnError || !data?.success) { setRevealErrors(prev => ({ ...prev, [revealType]: data?.error ?? fnError?.message ?? "Reveal failed" })); return; }
-    if (revealType === "email" && data.allEmails?.length) { setAllEmails(data.allEmails); setEmailRevealed(true); }
-    if (revealType === "phone" && data.allPhones?.length) { setAllPhones(data.allPhones); setPhoneRevealed(true); }
-    if (data.jobHistory?.length) setJobHistory(data.jobHistory);
-    if (data.education?.length)  setEducation(data.education);
-    if (data.skills?.length)     setSkills(data.skills);
-    onRevealComplete?.(profile.id, data);
-    queryClient.invalidateQueries({ queryKey: ["saved-candidates"] });
-    queryClient.invalidateQueries({ queryKey: ["rr-revealed-ids"] });
+    if (!auth) {
+      setter(false);
+      setRevealErrors(prev => ({ ...prev, [revealType]: "Authentication failed" }));
+      return;
+    }
+ 
+    try {
+      const data = await revealContact(profile, revealType, auth);
+      setter(false);
+ 
+      if (!data?.success) {
+        if (data?.code === "INSUFFICIENT_CREDITS") {
+          setRevealErrors(prev => ({
+            ...prev,
+            [revealType]: `Insufficient credits. Need ${data.required}, have ${data.available?.toFixed(2)}.`,
+          }));
+          return;
+        }
+        setRevealErrors(prev => ({ ...prev, [revealType]: data?.error ?? "Reveal failed" }));
+        return;
+      }
+ 
+      // ── Merge: only update if new data came back ─────────────────────
+      const incomingEmails: any[] = data.allEmails ?? [];
+      const incomingPhones: any[] = data.allPhones ?? [];
+ 
+      if (incomingEmails.length > 0) {
+        setAllEmails(incomingEmails);
+        setEmailRevealed(true);
+      }
+      // else: keep existing allEmails (phone reveal returns allEmails:[])
+ 
+      if (incomingPhones.length > 0) {
+        setAllPhones(incomingPhones);
+        setPhoneRevealed(true);
+      }
+      // else: keep existing allPhones (email reveal returns allPhones:[])
+ 
+      // Update enrichment fields only when response includes them
+      if (data.jobHistory?.length) setJobHistory(data.jobHistory);
+      if (data.education?.length)  setEducation(data.education);
+      if (data.skills?.length)     setSkills(data.skills);
+ 
+      onRevealComplete?.(profile.id, data);
+      queryClient.invalidateQueries({ queryKey: ["saved-candidates"] });
+      queryClient.invalidateQueries({ queryKey: ["rr-revealed-ids"] });
+    } catch (e: any) {
+      setter(false);
+      setRevealErrors(prev => ({ ...prev, [revealType]: e.message ?? "Reveal failed" }));
+    }
   };
 
   const displayName  = profile.name            ?? "—";
@@ -578,12 +574,13 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
   const teaserEmails = [...(profile.teaser?.personal_emails ?? []), ...(profile.teaser?.professional_emails ?? []), ...(profile.teaser?.emails ?? [])].filter((v, i, a) => a.indexOf(v) === i);
   const teaserPhones = profile.teaser?.phones ?? [];
 
+  const coData = (profile as any)._coData;
+
   const TABS: { key: PanelTab; label: string }[] = [
-    { key: "overview", label: "Overview" },
-    { key: "contact",  label: `Contact${emailRevealed ? " ✓" : ""}` },
-    { key: "career",   label: "Career"  },
-    { key: "education", label: "Education" },
-    // { key: "raw",      label: "Raw"     },
+    { key: "overview",   label: "Overview"   },
+    { key: "contact",    label: `Contact${emailRevealed ? " ✓" : ""}` },
+    { key: "career",     label: "Career"     },
+    { key: "education",  label: "Education"  },
   ];
 
   const panel = (
@@ -600,32 +597,32 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
               <h2 className="text-[15px] font-bold text-white leading-tight truncate">{displayName}</h2>
               <p className="text-[11px] text-white/80 truncate mt-0.5">{displayTitle}</p>
               <p className="text-[10px] text-white/60 truncate">{displayCo}</p>
+              {isContactOut && (
+                <span className="mt-1 inline-flex items-center text-[8px] text-white/60 bg-white/10 px-1.5 py-0.5 rounded-full">ContactOut</span>
+              )}
             </div>
             <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
               <button onClick={onClose} className="w-6 h-6 rounded-md bg-white/15 hover:bg-white/25 flex items-center justify-center"><X size={12} className="text-white/80" /></button>
-
-              {/* Shortlist — no folder modal */}
               <button onClick={handleShortlist} disabled={saveStatus === "saving"}
                 className={cn("flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border",
                   saveStatus === "saved" ? "bg-emerald-400/20 text-emerald-200 border-emerald-400/30" : "bg-white/15 hover:bg-white/25 text-white border-white/20")}>
                 {saveStatus === "saving" ? <Loader2 size={9} className="animate-spin" /> : saveStatus === "saved" ? <BookmarkCheck size={9} /> : <Bookmark size={9} />}
                 {saveStatus === "saved" ? "Saved ✓" : "Save"}
               </button>
-
-              {/* Invite — two-step picker */}
               {onInvite && (
                 <div className="relative">
                   <button onClick={() => setShowInvitePick(v => !v)}
-                    disabled={!emailRevealed && !phoneRevealed}
-                    title={emailRevealed || phoneRevealed ? "Invite candidate" : "Reveal email or phone first"}
+                    disabled={!emailRevealed && !phoneRevealed && !isContactOut}
+                    title={(emailRevealed || phoneRevealed || isContactOut) ? "Invite candidate" : "Reveal email or phone first"}
                     className={cn("flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all",
-                      emailRevealed || phoneRevealed ? "bg-violet-400/30 hover:bg-violet-400/40 text-white border-violet-300/40" : "bg-white/10 text-white/30 border-white/10 cursor-not-allowed")}>
+                      (emailRevealed || phoneRevealed || allEmails.length > 0)
+                        ? "bg-violet-400/30 hover:bg-violet-400/40 text-white border-violet-300/40"
+                        : "bg-white/10 text-white/30 border-white/10 cursor-not-allowed")}>
                     <Send size={9} /> Invite
                   </button>
                   {showInvitePick && (
                     <PanelInvitePicker
-                      emails={allEmails}
-                      phones={allPhones}
+                      emails={allEmails} phones={allPhones}
                       onConfirm={(email, phone) => { setShowInvitePick(false); onInvite(String(profile.id), email, phone); }}
                       onClose={() => setShowInvitePick(false)}
                     />
@@ -660,62 +657,49 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
             {/* OVERVIEW */}
             {tab === "overview" && (
               <>
-{(displayTitle !== "—" || displayCo !== "—") && (
-  <div className="rounded-2xl border border-violet-100 bg-violet-50/40 p-4">
-    <SectionHead>Current Position</SectionHead>
-    
-    <div className="flex items-start gap-4 mt-3">
-      {/* Company Logo - Bigger & Consistent */}
-      <div className="flex-shrink-0">
-        {(() => {
-          const logoUrl = 
-            (profile as any)._coData?.currentCompanyLogo || 
-            jobHistory.find(j => j.is_current)?.logo_url || 
-            jobHistory[0]?.logo_url;
+                {(displayTitle !== "—" || displayCo !== "—") && (
+                  <div className="rounded-2xl border border-violet-100 bg-violet-50/40 p-4">
+                    <SectionHead>Current Position</SectionHead>
+                    <div className="flex items-start gap-4 mt-3">
+                      <div className="flex-shrink-0">
+                        {(() => {
+                          const logoUrl = coData?.currentCompanyLogo || jobHistory.find(j => j.is_current)?.logo_url || jobHistory[0]?.logo_url;
+                          return logoUrl ? (
+                            <img src={logoUrl} alt={displayCo} className="w-11 h-11 rounded-2xl border border-violet-200 bg-white object-contain p-1.5 shadow-sm" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                          ) : (
+                            <div className="w-11 h-11 rounded-2xl border border-violet-200 bg-white flex items-center justify-center text-[17px] font-bold text-violet-600 shadow-sm">
+                              {(displayCo[0] ?? "?").toUpperCase()}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                      <div className="flex-1 min-w-0 pt-1">
+                        <p className="text-[13px] font-semibold text-slate-900 leading-tight">{displayTitle}</p>
+                        <p className="text-[12px] text-violet-700 font-medium mt-0.5">{displayCo}</p>
+                        {profile.current_employer_domain && (
+                          <a href={`https://${profile.current_employer_domain}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 mt-2 text-[10px] text-slate-500 hover:text-violet-600 hover:underline transition-colors">
+                            <Globe size={9} />{profile.current_employer_domain}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-          return logoUrl ? (
-            <img
-              src={logoUrl}
-              alt={displayCo}
-              className="w-11 h-11 rounded-2xl border border-violet-200 bg-white object-contain p-1.5 shadow-sm"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
-          ) : (
-            <div className="w-11 h-11 rounded-2xl border border-violet-200 bg-white flex items-center justify-center text-[17px] font-bold text-violet-600 shadow-sm">
-              {(displayCo[0] ?? "?").toUpperCase()}
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* Position Details */}
-      <div className="flex-1 min-w-0 pt-1">
-        <p className="text-[13px] font-semibold text-slate-900 leading-tight">
-          {displayTitle}
-        </p>
-        <p className="text-[12px] text-violet-700 font-medium mt-0.5">
-          {displayCo}
-        </p>
-
-        {/* Domain / Website Link */}
-        {profile.current_employer_domain && (
-          <a 
-            href={`https://${profile.current_employer_domain}`} 
-            target="_blank" 
-            rel="noreferrer" 
-            onClick={e => e.stopPropagation()}
-            className="inline-flex items-center gap-1 mt-2 text-[10px] text-slate-500 hover:text-violet-600 hover:underline transition-colors"
-          >
-            <Globe size={9} />
-            {profile.current_employer_domain}
-          </a>
-        )}
-      </div>
-    </div>
-  </div>
-)}
+                {/* CO: show emails already in profile */}
+                {isContactOut && allEmails.length > 0 && (
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 space-y-1.5">
+                    <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mb-1.5">Available Emails</p>
+                    {allEmails.slice(0, 3).map((em, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                        <span className="text-[11px] font-mono text-slate-700 truncate flex-1">{em.email}</span>
+                        <CopyBtn text={em.email} className="text-slate-300 hover:text-violet-500" />
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
@@ -728,15 +712,12 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
                   </div>
                 </div>
 
-                {/* Summary */}
-    {profile._coData?.summary && (
-      <div>
-        <SectionHead>Summary</SectionHead>
-        <div className="text-[11px] leading-relaxed text-slate-600 whitespace-pre-line">
-          {profile._coData.summary}
-        </div>
-      </div>
-    )}
+                {coData?.summary && (
+                  <div>
+                    <SectionHead>Summary</SectionHead>
+                    <div className="text-[11px] leading-relaxed text-slate-600 whitespace-pre-line">{coData.summary}</div>
+                  </div>
+                )}
 
                 {skills.length > 0 && (<><Divider /><div><SectionHead>Top Skills ({skills.length})</SectionHead><div className="flex flex-wrap gap-1.5">{skills.slice(0,10).map((s,i) => <span key={i} className="px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 ring-1 ring-violet-200 text-[9px] font-semibold">{s}</span>)}{skills.length > 10 && <button type="button" onClick={() => setTab("career")} className="px-2 py-0.5 text-[9px] text-violet-500 hover:underline">+{skills.length-10} more →</button>}</div></div></>)}
                 {jobHistory.length > 0 && (<><Divider /><div><SectionHead>Recent Experience</SectionHead><CareerTimeline jobs={jobHistory.slice(0,2)} />{jobHistory.length > 2 && <button type="button" onClick={() => setTab("career")} className="text-[10px] text-violet-500 hover:underline mt-1">View full career →</button>}</div></>)}
@@ -758,9 +739,7 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
                   <EmailSection emails={allEmails} teaserEmails={teaserEmails} loading={revealingEmail} />
                   {revealErrors.email && <p className="mt-1 text-[9px] text-red-500">{revealErrors.email}</p>}
                 </div>
-
                 <Divider />
-
                 <div>
                   <div className="flex items-center justify-between mb-2.5">
                     <SectionHead>Phone</SectionHead>
@@ -772,156 +751,70 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
                   <PhoneSection phones={allPhones} teaserPhones={teaserPhones} loading={revealingPhone} />
                   {revealErrors.phone && <p className="mt-1 text-[9px] text-red-500">{revealErrors.phone}</p>}
                 </div>
-
                 {(emailRevealed || phoneRevealed) && (<><Divider /><p className="text-[9px] text-slate-400">✓ Contact saved to CRM</p></>)}
               </>
             )}
 
-{/* CAREER */}
-{tab === "career" && (
-  <>
-    {skills.length > 0 && (
-      <div>
-        <SectionHead>Skills ({skills.length})</SectionHead>
-        <SkillsSection skills={skills} />
-      </div>
-    )}
+            {/* CAREER */}
+            {tab === "career" && (
+              <>
+                {skills.length > 0 && (<div><SectionHead>Skills ({skills.length})</SectionHead><SkillsSection skills={skills} /></div>)}
+                {jobHistory.length > 0 && (<>{skills.length > 0 && <Divider />}<div><SectionHead>Career History ({jobHistory.length} roles)</SectionHead><CareerTimeline jobs={jobHistory} /></div></>)}
+                {profile.current_employer && (
+                  <><Divider />
+                    <div>
+                      <SectionHead>Current Company</SectionHead>
+                      <div className="flex items-start gap-4 bg-white border border-slate-100 rounded-2xl p-4">
+                        <div className="flex-shrink-0">
+                          {(() => {
+                            const logoUrl = coData?.currentCompanyLogo || jobHistory.find(j => j.is_current)?.logo_url || jobHistory[0]?.logo_url;
+                            return logoUrl ? (
+                              <img src={logoUrl} alt={profile.current_employer} className="w-12 h-12 rounded-2xl border border-slate-200 bg-white object-contain p-1.5 shadow-sm" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            ) : (
+                              <div className="w-12 h-12 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center text-[18px] font-bold text-slate-500 shadow-sm">
+                                {profile.current_employer[0]?.toUpperCase() || "?"}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-semibold text-slate-900">{profile.current_employer}</p>
+                          {profile.current_employer_industry && <p className="text-[11px] text-slate-500 mt-0.5 capitalize">{profile.current_employer_industry}</p>}
+                          {(profile.current_employer_website || profile.current_employer_linkedin_url) && (
+                            <div className="flex gap-4 mt-4 pt-3 border-t border-slate-100">
+                              {profile.current_employer_website && <a href={profile.current_employer_website} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="flex items-center gap-1.5 text-[10px] text-violet-600 hover:underline font-medium"><Globe size={11} />Website</a>}
+                              {profile.current_employer_linkedin_url && <a href={profile.current_employer_linkedin_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="flex items-center gap-1.5 text-[10px] text-blue-600 hover:underline font-medium"><Linkedin size={11} />LinkedIn</a>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {!skills.length && !jobHistory.length && (
+                  <div className="py-8 text-center">
+                    <Award size={28} className="text-slate-200 mx-auto mb-2" />
+                    <p className="text-[12px] text-slate-400 mb-2">Reveal profile to see career data</p>
+                    <button type="button" onClick={() => { setTab("contact"); doReveal("email"); }} className="text-[11px] text-violet-600 hover:underline">Reveal →</button>
+                  </div>
+                )}
+              </>
+            )}
 
-    {jobHistory.length > 0 && (
-      <>
-        {skills.length > 0 && <Divider />}
-        <div>
-          <SectionHead>Career History ({jobHistory.length} roles)</SectionHead>
-          <CareerTimeline jobs={jobHistory} />
-        </div>
-      </>
-    )}
-
-  {profile.current_employer && (
-  <>
-    <Divider />
-    <div>
-      <SectionHead>Current Company</SectionHead>
-      <div className="flex items-start gap-4 bg-white border border-slate-100 rounded-2xl p-4">
-        {/* Company Logo - Bigger & Consistent */}
-        <div className="flex-shrink-0">
-          {(() => {
-            const logoUrl = 
-              (profile as any)._coData?.currentCompanyLogo || 
-              jobHistory.find(j => j.is_current)?.logo_url || 
-              jobHistory[0]?.logo_url;
-
-            return logoUrl ? (
-              <img
-                src={logoUrl}
-                alt={profile.current_employer}
-                className="w-12 h-12 rounded-2xl border border-slate-200 bg-white object-contain p-1.5 shadow-sm"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center text-[18px] font-bold text-slate-500 shadow-sm">
-                {profile.current_employer[0]?.toUpperCase() || "?"}
-              </div>
-            );
-          })()}
-        </div>
-
-        {/* Company Details */}
-        <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-slate-900">
-            {profile.current_employer}
-          </p>
-
-          {profile.current_employer_industry && (
-            <p className="text-[11px] text-slate-500 mt-0.5 capitalize">
-              {profile.current_employer_industry}
-            </p>
-          )}
-
-          {/* Links */}
-          {(profile.current_employer_website || profile.current_employer_linkedin_url) && (
-            <div className="flex gap-4 mt-4 pt-3 border-t border-slate-100">
-              {profile.current_employer_website && (
-                <a 
-                  href={profile.current_employer_website} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  onClick={e => e.stopPropagation()} 
-                  className="flex items-center gap-1.5 text-[10px] text-violet-600 hover:text-violet-700 hover:underline font-medium"
-                >
-                  <Globe size={11} />
-                  Website
-                </a>
-              )}
-              {profile.current_employer_linkedin_url && (
-                <a 
-                  href={profile.current_employer_linkedin_url} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  onClick={e => e.stopPropagation()} 
-                  className="flex items-center gap-1.5 text-[10px] text-blue-600 hover:text-blue-700 hover:underline font-medium"
-                >
-                  <Linkedin size={11} />
-                  LinkedIn
-                </a>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  </>
-)}
-
-    {!skills.length && !jobHistory.length && !education.length && (
-      <div className="py-8 text-center">
-        <Award size={28} className="text-slate-200 mx-auto mb-2" />
-        <p className="text-[12px] text-slate-400 mb-2">Reveal profile to see career data</p>
-        <button 
-          type="button" 
-          onClick={() => { setTab("contact"); doReveal("email"); }} 
-          className="text-[11px] text-violet-600 hover:underline"
-        >
-          Reveal →
-        </button>
-      </div>
-    )}
-  </>
-)}
-
-{/* EDUCATION & CERTIFICATIONS */}
-{tab === "education" && (
-  <>
-    {education.length > 0 && (
-      <div>
-        <SectionHead>Education ({education.length})</SectionHead>
-        <EducationSection education={education} />
-      </div>
-    )}
-
-    {profile._coData?.certifications?.length > 0 && (
-      <>
-        {education.length > 0 && <Divider />}
-        <CertificationsSection certifications={profile._coData.certifications} />
-      </>
-    )}
-
-    {education.length === 0 && !profile._coData?.certifications?.length && (
-      <div className="py-12 text-center">
-        <GraduationCap size={32} className="text-slate-200 mx-auto mb-3" />
-        <p className="text-[12px] text-slate-400">No education or certification data available</p>
-      </div>
-    )}
-  </>
-)}
-
-            {/* RAW */}
-            {tab === "raw" && (
-              <pre className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[9px] text-slate-500 overflow-auto font-mono leading-relaxed whitespace-pre-wrap break-words max-h-[500px]">
-                {JSON.stringify(profile, null, 2)}
-              </pre>
+            {/* EDUCATION */}
+            {tab === "education" && (
+              <>
+                {education.length > 0 && (<div><SectionHead>Education ({education.length})</SectionHead><EducationSection education={education} /></div>)}
+                {coData?.certifications?.length > 0 && (
+                  <>{education.length > 0 && <Divider />}<CertificationsSection certifications={coData.certifications} /></>
+                )}
+                {education.length === 0 && !coData?.certifications?.length && (
+                  <div className="py-12 text-center">
+                    <GraduationCap size={32} className="text-slate-200 mx-auto mb-3" />
+                    <p className="text-[12px] text-slate-400">No education or certification data available</p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </ScrollArea>
@@ -929,6 +822,7 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
       <style>{`@keyframes rrPanelIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
     </div>
   );
+
   return createPortal(panel, document.body);
 };
 

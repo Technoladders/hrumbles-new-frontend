@@ -70,14 +70,14 @@ const InlineEdit: React.FC<{
   }
   return (
     <div className="flex items-center gap-1">
-      <div className="rounded-md p-[1px] bg-gradient-to-r from-purple-500 to-pink-500">
+      <div className="rounded-md p-[1px] bg-gradient-to-r from-purple-500 to-indigo-500">
         <input ref={ref} value={draft}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel(); }}
           className={cn('bg-white rounded-[5px] px-2 py-0.5 focus:outline-none text-xs', inputClassName)}
         />
       </div>
-      <button onClick={commit} disabled={isSaving} className="p-0.5 rounded bg-gradient-to-r from-purple-600 to-pink-600 text-white">
+      <button onClick={commit} disabled={isSaving} className="p-0.5 rounded bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
         {isSaving ? <Loader2 size={8} className="animate-spin" /> : <Check size={8} />}
       </button>
       <button onClick={cancel} className="p-0.5 rounded bg-gray-100 text-gray-500"><X size={8} /></button>
@@ -109,7 +109,11 @@ const StageDropdown: React.FC<{ current: string | null; onSelect: (s: string) =>
   return (
     <div data-stage-dd>
       <button ref={ref} onClick={() => setOpen(v => !v)}
-        className="flex items-center w-[280px] gap-1 text-[10px] font-semibold px-2 py-1 rounded-full border transition-all hover:opacity-80"
+        className="
+  flex items-center justify-center w-full
+  gap-1 text-[10px] font-semibold px-2 py-1
+  rounded-full border transition-all hover:opacity-80
+"
         style={currentStage ? { backgroundColor: dotColor + '18', color: dotColor, borderColor: dotColor + '40' } : { backgroundColor: '#f1f5f9', color: '#64748b', borderColor: '#e2e8f0' }}
       >
         {isSaving ? <Loader2 size={8} className="animate-spin" /> : <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: dotColor }} />}
@@ -206,7 +210,7 @@ const SocialEditModal: React.FC<{
     <div className="fixed inset-0 z-[99998] flex items-center justify-center bg-black/30"
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white rounded-2xl shadow-2xl border-0 w-[320px] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        <div className="px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 flex items-center gap-2">
+        <div className="px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 flex items-center gap-2">
           <Pencil size={13} className="text-white/80" />
           <p className="text-xs font-bold text-white">Edit {label}</p>
         </div>
@@ -221,7 +225,7 @@ const SocialEditModal: React.FC<{
           />
           <div className="flex gap-2">
             <button onClick={onClose} className="flex-1 h-8 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Cancel</button>
-            <button onClick={commit} disabled={isSaving} className="flex-1 h-8 text-xs rounded-lg text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90">
+            <button onClick={commit} disabled={isSaving} className="flex-1 h-8 text-xs rounded-lg text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-90">
               {isSaving ? <Loader2 size={10} className="animate-spin mx-auto" /> : 'Save'}
             </button>
           </div>
@@ -311,7 +315,7 @@ const LocationChips: React.FC<{
       {dropOpen && ReactDOM.createPortal(
         <div style={dropStyle} data-loc-hero className="bg-white rounded-xl border border-slate-200 shadow-xl ring-1 ring-black/5 overflow-hidden">
           <div className="p-2 border-b border-slate-100">
-            <div className="rounded-lg p-[1px] bg-gradient-to-r from-purple-500 to-pink-500">
+            <div className="rounded-lg p-[1px] bg-gradient-to-r from-purple-500 to-indigo-500">
               <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
                 placeholder={`Search ${editField}…`}
                 className="w-full bg-white rounded-[7px] px-2 py-1 text-xs focus:outline-none" />
@@ -507,7 +511,7 @@ export const ContactHeroPanel: React.FC<Props> = ({
   return (
     <>
       <div className="bg-white border-b border-gray-100 flex-shrink-0">
-        <div className="h-[2px] bg-gradient-to-r from-purple-600 via-violet-500 to-pink-600" />
+        <div className="h-[2px] bg-gradient-to-r from-purple-600 via-violet-500 to-indigo-600" />
         {/* Back button row */}
         <div className="px-4 py-1.5 border-b border-slate-50 flex items-center gap-2">
           <button onClick={onBack} className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-purple-600 transition-colors">
@@ -523,7 +527,7 @@ export const ContactHeroPanel: React.FC<Props> = ({
           <div className="flex items-start gap-3 min-w-0">
             <Avatar className="h-[110px] w-[100px] border-2 border-white shadow-sm ring-2 ring-purple-100 flex-shrink-0 rounded-xl">
               <AvatarImage src={contact.photo_url || data.photoUrl || undefined} className="object-cover" />
-              <AvatarFallback className="bg-gradient-to-br from-purple-100 to-pink-100 text-purple-700 text-lg font-bold rounded-xl">
+              <AvatarFallback className="bg-gradient-to-br from-purple-100 to-indigo-100 text-purple-700 text-lg font-bold rounded-xl">
                 {contact.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
@@ -531,7 +535,7 @@ export const ContactHeroPanel: React.FC<Props> = ({
               <div className="flex items-center gap-1.5 flex-wrap">
                 <InlineEdit
                   value={contact.name || ''} onSave={v => onFieldSave('name', v)} isSaving={isSaving}
-                  placeholder="Contact name" className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600" inputClassName="w-36 text-sm font-bold"
+                  placeholder="Contact name" className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600" inputClassName="w-36 text-sm font-bold"
                 />
                 {isEnriched && (
                   <span className="text-[9px] font-bold bg-green-50 text-green-700 border border-green-200 px-1.5 py-0.5 rounded-full flex items-center gap-1 flex-shrink-0">
@@ -676,15 +680,15 @@ export const ContactHeroPanel: React.FC<Props> = ({
 
             {/* Revealed phones list */}
             {phones.map((item, i) => (
-              <div key={i} className={cn('flex items-center gap-1.5 px-1.5 py-1 rounded-md mb-0.5 group transition-all', item.isPrimary ? 'bg-emerald-50/60 border border-emerald-100' : 'hover:bg-slate-50')}>
-                <div className="flex h-5 w-5 items-center justify-center rounded flex-shrink-0 bg-emerald-50">
+              <div key={i} className={cn('flex items-center gap-1.5 px-1.5 py-1 rounded-md mb-0.5 group transition-all', item.isPrimary ? 'bg-purple-50/60 border border-purple-100' : 'hover:bg-slate-50')}>
+                <div className="flex h-5 w-5 items-center justify-center rounded flex-shrink-0 bg-purple-50">
                   <PhoneFlag number={item.value} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <span className="text-[10px] font-medium text-slate-800 truncate block font-mono">{item.value}</span>
                   <div className="flex items-center gap-1 text-[8px] text-slate-400">
                     <span className="capitalize">{item.type}</span>
-                    {item.isPrimary && <><span>·</span><span className="text-emerald-600 font-semibold">Primary</span></>}
+                    {item.isPrimary && <><span>·</span><span className="text-purple-600 font-semibold">Primary</span></>}
                   </div>
                 </div>
                 <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
@@ -718,12 +722,12 @@ export const ContactHeroPanel: React.FC<Props> = ({
             )}
             {!hasPhones && !phonePending && contact.phone_enrichment_status !== 'no_phone_found' && phoneIsYes && (
               <button onClick={onRequestPhone} disabled={isRequestingPhone}
-                className="flex items-center justify-between w-full px-2 py-1 mb-0.5 rounded-md bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition-colors disabled:opacity-50">
+                className="flex items-center justify-between w-full px-2 py-1 mb-0.5 rounded-md bg-purple-50 border border-purple-200 hover:bg-purple-100 transition-colors disabled:opacity-50">
                 <div className="flex items-center gap-1.5">
-                  <div className="h-5 w-5 flex items-center justify-center rounded bg-emerald-100"><Phone size={9} className="text-emerald-600" /></div>
+                  <div className="h-5 w-5 flex items-center justify-center rounded bg-purple-100"><Phone size={9} className="text-purple-600" /></div>
                   <span className="text-[10px] font-mono text-slate-400">(***) ***-****</span>
                 </div>
-                <span className="flex items-center gap-1 text-[9px] font-semibold text-emerald-700">
+                <span className="flex items-center gap-1 text-[9px] font-semibold text-purple-700">
                   {isRequestingPhone ? <Loader2 size={8} className="animate-spin" /> : <Zap size={8} />}
                   Access Phone
                 </span>
@@ -766,18 +770,33 @@ export const ContactHeroPanel: React.FC<Props> = ({
           <div className="space-y-1.5">
             {/* Stage */}
             <div className="flex items-center gap-2">
-              <span className="text-[9px] text-slate-400 w-10 flex-shrink-0">Stage</span>
+              <span className="text-[10px] text-slate-400 w-10 flex-shrink-0">Stage</span>
+              <div className="flex-1">
               <StageDropdown current={contact.contact_stage} onSelect={s => onFieldSave('contact_stage', s)} isSaving={isSaving} />
+           </div>
             </div>
 
             <div className="space-y-1 mt-1">
                 <div className="grid grid-cols-2 gap-1 flex items-center gap-1.5">
               {/* Enrich */}
-              <button onClick={onEnrich} disabled={isEnriching}
-                className="w-full flex items-center justify-center gap-1.5 h-7 text-[11px] font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg transition-all disabled:opacity-60">
-                <Sparkles size={10} className={cn(isEnriching && 'animate-spin')} />
-                {isEnriching ? 'Enriching…' : 'Enrich Contact'}
-              </button>
+ <button
+  onClick={onEnrich}
+  disabled={isEnriching}
+  className="
+    w-full flex items-center justify-center gap-1.5
+    h-7 text-[11px] font-semibold text-white
+    rounded-lg transition-all
+    disabled:opacity-60
+
+    bg-[linear-gradient(135deg,var(--crm-primary),var(--crm-secondary),var(--crm-accent))]
+    hover:bg-[linear-gradient(135deg,var(--crm-accent),var(--crm-secondary),var(--crm-primary))]
+    shadow-[0_0_20px_rgba(99,102,241,0.35)]
+    hover:shadow-[0_0_25px_rgba(99,102,241,0.5)]
+  "
+>
+  <Sparkles size={10} className={cn(isEnriching && 'animate-spin')} />
+  {isEnriching ? 'Enriching…' : 'Enrich Contact'}
+</button>
 
               {/* Add to list */}
               <button onClick={onAddToList}
@@ -820,7 +839,7 @@ export const ContactHeroPanel: React.FC<Props> = ({
       {/* ── Add Email Dialog ──────────────────────────────────────────── */}
       <Dialog open={addEmailOpen} onOpenChange={setAddEmailOpen}>
         <DialogContent className="sm:max-w-[300px] p-0 overflow-hidden rounded-2xl shadow-2xl border-0">
-          <div className="px-4 pt-4 pb-3 bg-gradient-to-br from-purple-600 to-pink-600 flex items-center gap-2">
+          <div className="px-4 pt-4 pb-3 bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center gap-2">
             <div className="h-6 w-6 rounded-lg bg-white/20 flex items-center justify-center"><Mail size={12} className="text-white" /></div>
             <p className="text-xs font-bold text-white">Add Email</p>
           </div>
@@ -831,7 +850,7 @@ export const ContactHeroPanel: React.FC<Props> = ({
       {/* ── Add Phone Dialog ──────────────────────────────────────────── */}
       <Dialog open={addPhoneOpen} onOpenChange={setAddPhoneOpen}>
         <DialogContent className="sm:max-w-[300px] p-0 overflow-hidden rounded-2xl shadow-2xl border-0">
-          <div className="px-4 pt-4 pb-3 bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center gap-2">
+          <div className="px-4 pt-4 pb-3 bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center gap-2">
             <div className="h-6 w-6 rounded-lg bg-white/20 flex items-center justify-center"><Phone size={12} className="text-white" /></div>
             <p className="text-xs font-bold text-white">Add Phone</p>
           </div>
@@ -843,7 +862,7 @@ export const ContactHeroPanel: React.FC<Props> = ({
       {editEmailItem && (
         <Dialog open={!!editEmailItem} onOpenChange={() => setEditEmailItem(null)}>
           <DialogContent className="sm:max-w-[300px] p-0 overflow-hidden rounded-2xl shadow-2xl border-0">
-            <div className="px-4 pt-4 pb-3 bg-gradient-to-br from-purple-600 to-pink-600 flex items-center gap-2">
+            <div className="px-4 pt-4 pb-3 bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center gap-2">
               <div className="h-6 w-6 rounded-lg bg-white/20 flex items-center justify-center"><Pencil size={12} className="text-white" /></div>
               <p className="text-xs font-bold text-white">Edit Email</p>
             </div>
@@ -870,7 +889,7 @@ export const ContactHeroPanel: React.FC<Props> = ({
       {editPhoneItem && (
         <Dialog open={!!editPhoneItem} onOpenChange={() => setEditPhoneItem(null)}>
           <DialogContent className="sm:max-w-[300px] p-0 overflow-hidden rounded-2xl shadow-2xl border-0">
-            <div className="px-4 pt-4 pb-3 bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center gap-2">
+            <div className="px-4 pt-4 pb-3 bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center gap-2">
               <div className="h-6 w-6 rounded-lg bg-white/20 flex items-center justify-center"><Pencil size={12} className="text-white" /></div>
               <p className="text-xs font-bold text-white">Edit Phone</p>
             </div>
@@ -927,7 +946,7 @@ const AddContactForm: React.FC<{
         <Label className="text-[9px] uppercase tracking-widest text-slate-400 font-bold block mb-1">{isEmail ? 'Email Address' : 'Phone Number'}</Label>
         {isEmail
           ? <Input value={val} onChange={e => setVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()} placeholder="name@company.com" className="h-8 text-xs border-slate-200 rounded-xl bg-slate-50 focus:border-purple-400" />
-          : <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 focus-within:border-emerald-400">
+          : <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 focus-within:border-purple-400">
               <PhoneInput international defaultCountry="US" value={val} onChange={v => setVal(v || '')} placeholder="+1 (555) 000-0000" className="h-8 px-3 text-xs bg-transparent w-full" />
             </div>
         }
@@ -954,7 +973,7 @@ const AddContactForm: React.FC<{
       </div>
       <div className="flex gap-2">
         <button onClick={onClose} className="flex-1 h-8 text-xs rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">Cancel</button>
-        <button onClick={handleSave} className={cn('flex-1 h-8 text-xs rounded-xl text-white', isEmail ? 'bg-gradient-to-r from-purple-600 to-pink-600' : 'bg-gradient-to-r from-emerald-600 to-teal-600')}>
+        <button onClick={handleSave} className={cn('flex-1 h-8 text-xs rounded-xl text-white', isEmail ? 'bg-gradient-to-r from-purple-600 to-indigo-600' : 'bg-gradient-to-r from-purple-600 to-indigo-600')}>
           Save
         </button>
       </div>

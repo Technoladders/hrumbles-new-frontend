@@ -66,11 +66,17 @@ const OUTCOME_STYLES: Record<string, string> = {
 
 // ── Section header ────────────────────────────────────────────────────────────
 const SectionHeader: React.FC<{ title: string; icon: React.ElementType; count?: number }> = ({ title, icon: Icon, count }) => (
-  <div className="flex items-center gap-1.5 px-3 py-2 border-b border-slate-100 bg-gradient-to-r from-purple-600 to-pink-600">
-    <Icon size={11} className="text-white" />
-    <span className="text-[10px] font-bold text-white uppercase tracking-widest">{title}</span>
+  <div className="flex items-center gap-2 px-3 py-2 crmtheme-section-header">
+    <Icon size={12} className="text-white" />
+
+    <span className="text-[10px] font-bold text-white uppercase tracking-widest">
+      {title}
+    </span>
+
     {count !== undefined && (
-      <span className="ml-auto text-[10px] font-semibold text-white">{count}</span>
+      <span className="ml-auto text-[10px] font-semibold text-white">
+        {count}
+      </span>
     )}
   </div>
 );
@@ -277,7 +283,7 @@ export const ContactLeftPanel: React.FC<Props> = ({
                 .filter((v, i, a) => a.indexOf(v) === i)
                 .slice(0, 5)
                 .map((tag: string, i: number) => (
-                  <span key={i} className="text-[9px] bg-gradient-to-r from-purple-600 to-pink-600 text-transparent bg-clip-text border border-purple-100 px-1.5 py-0.5 rounded-full capitalize font-medium">
+                  <span key={i} className="text-[9px] bg-gradient-to-r from-purple-600 to-indigo-600 text-transparent bg-clip-text border border-purple-100 px-1.5 py-0.5 rounded-full capitalize font-medium">
                     {tag.replace(/_/g, ' ')}
                   </span>
                 ))}
@@ -302,7 +308,7 @@ export const ContactLeftPanel: React.FC<Props> = ({
                 const endYear   = job.end_date   ? new Date(job.end_date).getFullYear()   : null;
                 return (
                   <div key={job.id || idx} className="relative">
-                    <div className={cn('absolute -left-[17px] mt-1 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm', isCurrent ? 'bg-gradient-to-br from-purple-500 to-pink-500' : 'bg-slate-300')} />
+                    <div className={cn('absolute -left-[17px] mt-1 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm', isCurrent ? 'bg-gradient-to-br from-purple-500 to-indigo-500' : 'bg-slate-300')} />
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="text-[11px] font-semibold text-slate-800 leading-tight">{job.title}</p>
@@ -365,7 +371,7 @@ export const ContactLeftPanel: React.FC<Props> = ({
                 className={cn(
                   'flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap transition-all',
                   filterType === type
-                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm'
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm'
                     : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                 )}>
                 {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}

@@ -66,13 +66,13 @@ const EditText: React.FC<{
   }
   return (
     <div className="flex items-start gap-1.5 w-full">
-      <div className="flex-1 rounded-lg p-[1px] bg-gradient-to-r from-purple-500 to-pink-500">
+      <div className="flex-1 rounded-lg p-[1px] bg-gradient-to-r from-purple-500 to-indigo-500">
         {multiline
           ? <textarea ref={ref} value={draft} rows={3} onChange={e => setDraft(e.target.value)} onKeyDown={e => e.key === 'Escape' && cancel()} className="w-full bg-white rounded-[7px] px-2 py-1 text-xs focus:outline-none resize-none" />
           : <input ref={ref} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel(); }} className="w-full bg-white rounded-[7px] px-2 py-0.5 text-xs focus:outline-none" />
         }
       </div>
-      <button onClick={commit} disabled={isSaving} className="p-0.5 rounded bg-gradient-to-r from-purple-600 to-pink-600 text-white mt-0.5">
+      <button onClick={commit} disabled={isSaving} className="p-0.5 rounded bg-gradient-to-r from-purple-600 to-indigo-600 text-white mt-0.5">
         {isSaving ? <Loader2 size={8} className="animate-spin" /> : <Check size={8} />}
       </button>
       <button onClick={cancel} className="p-0.5 rounded bg-slate-100 text-slate-500 mt-0.5"><X size={8} /></button>
@@ -114,7 +114,7 @@ const SocialEditPortal: React.FC<{
   return ReactDOM.createPortal(
     <div className="fixed inset-0 z-[99998] flex items-center justify-center bg-black/30" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white rounded-2xl shadow-2xl w-[300px] overflow-hidden">
-        <div className="px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 flex items-center gap-2">
+        <div className="px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 flex items-center gap-2">
           <Pencil size={12} className="text-white/80" />
           <p className="text-xs font-bold text-white">Edit {label}</p>
         </div>
@@ -125,7 +125,7 @@ const SocialEditPortal: React.FC<{
             className="w-full h-8 px-3 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-purple-400" />
           <div className="flex gap-2">
             <button onClick={onClose} className="flex-1 h-8 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Cancel</button>
-            <button onClick={commit} disabled={isSaving} className="flex-1 h-8 text-xs rounded-lg text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90">
+            <button onClick={commit} disabled={isSaving} className="flex-1 h-8 text-xs rounded-lg text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-90">
               {isSaving ? <Loader2 size={10} className="animate-spin mx-auto" /> : 'Save'}
             </button>
           </div>
@@ -325,7 +325,7 @@ export const ContactRightPanel: React.FC<Props> = ({ contact, onCompanyFieldSave
             {(showAllTech ? org.technologies : org.technologies.slice(0, 12)).map((tech: any, i: number) => {
               const name = tech.name || tech;
               return (
-                <span key={i} className={cn('text-[9px] font-medium px-2 py-0.5 rounded-md border', i % 2 === 0 ? 'text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600' : 'text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600')}>
+                <span key={i} className={cn('text-[9px] font-medium px-2 py-0.5 rounded-md border hover:bg-violet-50 hover:text-violet-700 hover:border-violet-200 transition-all cursor-default', i % 2 === 0 ? 'text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600' : 'text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600')}>
                   {name}
                 </span>
               );
@@ -344,7 +344,7 @@ export const ContactRightPanel: React.FC<Props> = ({ contact, onCompanyFieldSave
         <div>
           <div className="flex flex-wrap gap-1">
             {(showAllKeywords ? org.keywords : org.keywords.slice(0, 16)).map((kw: string, i: number) => (
-              <span key={i} className="text-[9px] font-medium text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 border border-slate-200 px-2 py-0.5 rounded-md hover:bg-violet-50 hover:text-violet-700 hover:border-violet-200 transition-all cursor-default">
+              <span key={i} className="text-[9px] font-medium text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600 border border-slate-200 px-2 py-0.5 rounded-md hover:bg-violet-50 hover:text-violet-700 hover:border-violet-200 transition-all cursor-default">
                 {kw}
               </span>
             ))}
@@ -403,7 +403,7 @@ export const ContactRightPanel: React.FC<Props> = ({ contact, onCompanyFieldSave
                   onSave={v => onCompanyFieldSave('name', v)}
                   isSaving={isSaving}
                   placeholder="Company name"
-                  className="text-sm font-bold text-slate-900 leading-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600"
+                  className="text-sm font-bold text-slate-900 leading-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600"
                 />
               </div>
               {/* Industry + location + founded */}
@@ -572,16 +572,24 @@ export const ContactRightPanel: React.FC<Props> = ({ contact, onCompanyFieldSave
       {/* ── Similar Prospects — with company, pagination, add to list ─── */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         {/* Header */}
-        <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-3 py-2 border-b border-slate-100 flex items-center gap-2 flex-wrap">
-          <Users size={11} className="text-white" />
-          <span className="text-[10px] font-bold text-white uppercase tracking-widest">Similar Prospects</span>
-          <span className="text-[9px] text-white"> by title &amp; seniority</span>
-          {/* {similarData?.source === 'apollo' && (
-            <span className="ml-auto flex items-center gap-1 text-[9px] font-medium text-violet-600 bg-violet-50 border border-violet-100 px-1.5 py-0.5 rounded-full">
-              <Sparkles size={8} />Cloud
-            </span>
-          )} */}
-        </div>
+<div className="crmtheme-header-bar px-3 py-2 flex items-center gap-2 flex-wrap">
+  <Users size={12} className="text-white/90" />
+
+  <span className="text-[10px] font-bold text-white uppercase tracking-widest">
+    Similar Prospects
+  </span>
+
+  <span className="text-[9px] text-white/70">
+    by title &amp; seniority
+  </span>
+
+  {/* Optional badge */}
+  {/* {similarData?.source === 'apollo' && (
+    <span className="ml-auto flex items-center gap-1 text-[9px] font-medium text-indigo-200 bg-indigo-500/20 border border-indigo-400/30 px-1.5 py-0.5 rounded-full">
+      <Sparkles size={8} /> Cloud
+    </span>
+  )} */}
+</div>
 
         {/* Filters row */}
         <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2 flex-wrap">
@@ -590,7 +598,7 @@ export const ContactRightPanel: React.FC<Props> = ({ contact, onCompanyFieldSave
               <button key={tab.id} onClick={() => setActiveSeniority(tab.id)}
                 className={cn(
                   'px-2 py-0.5 text-[9px] font-semibold rounded-full transition-all',
-                  activeSeniority === tab.id ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                  activeSeniority === tab.id ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                 )}>
                 {tab.label}
               </button>
