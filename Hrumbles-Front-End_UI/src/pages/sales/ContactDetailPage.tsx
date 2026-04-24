@@ -76,6 +76,8 @@ const ContactDetailPage = () => {
     enabled: !!id,
   });
 
+  console.log('contact', contact);  
+
   // ─── Phone pending detection ──────────────────────────────────────────────
   useEffect(() => {
     if (!contact) return;
@@ -327,23 +329,25 @@ const ContactDetailPage = () => {
     }
   }, [contact, id, organizationId, user?.id, refetch, toast]);
 
-  const handleListAdd = async (targetFileId: string) => {
-    if (!targetFileId || !contact?.id) return;
-    try {
-      const { error } = await supabase.from('contact_workspace_files').upsert({
-        contact_id: contact.id,
-        file_id:    targetFileId,
-        added_by:   user?.id,
-      });
-      if (error) throw error;
-      toast({ title: 'Added to List' });
-      queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Failed', description: err.message });
-    } finally {
-      setListModalOpen(false);
-    }
-  };
+const handleListAdd = async (fileIds: string | string[]) => {
+  const ids = Array.isArray(fileIds) ? fileIds : [fileIds];
+  if (!ids.length || !contact?.id) return;
+  try {
+    const rows = ids.map(fileId => ({
+      contact_id: contact.id,
+      file_id:    fileId,
+      added_by:   user?.id,
+    }));
+    const { error } = await supabase.from('contact_workspace_files').upsert(rows);
+    if (error) throw error;
+    toast({ title: 'Added to List' });
+    queryClient.invalidateQueries({ queryKey: ['contacts-unified'] });
+  } catch (err: any) {
+    toast({ variant: 'destructive', title: 'Failed', description: err.message });
+  } finally {
+    setListModalOpen(false);
+  }
+};
 
   // ─── Loading ───────────────────────────────────────────────────────────────
   if (isLoading || !contact) {

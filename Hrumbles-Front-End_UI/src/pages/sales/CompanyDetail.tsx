@@ -327,16 +327,26 @@ const CompanyDetail = () => {
     await updateFieldMutation.mutateAsync({ field, value });
   }, [updateFieldMutation]);
 
-  const handleListAdd = async (fileId: string) => {
-    if (!company?.id || !fileId) return;
-    try {
-      const { error } = await supabase.from('company_workspace_files').upsert({ company_id: company.id, file_id: fileId, added_by: user?.id }, { onConflict: 'company_id,file_id' });
-      if (error) throw error;
-      toast({ title: "Added to List", description: `${company.name} added successfully.` });
-    } catch (error: any) {
-      toast({ title: "Failed", description: error.message, variant: "destructive" });
-    } finally { setListModalOpen(false); }
-  };
+const handleListAdd = async (fileIds: string | string[]) => {
+  const ids = Array.isArray(fileIds) ? fileIds : [fileIds];
+  if (!ids.length || !company?.id) return;
+  try {
+    const rows = ids.map(fileId => ({
+      company_id: company.id,
+      file_id:    fileId,
+      added_by:   user?.id,
+    }));
+    const { error } = await supabase
+      .from('company_workspace_files')
+      .upsert(rows, { onConflict: 'company_id,file_id' });
+    if (error) throw error;
+    toast({ title: 'Added to List', description: `${company.name} added successfully.` });
+  } catch (error: any) {
+    toast({ title: 'Failed', description: error.message, variant: 'destructive' });
+  } finally {
+    setListModalOpen(false); 
+  }
+};
 
   const handleRefreshIntelligence = async () => {
     setIsSyncing(true);
