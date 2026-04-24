@@ -1,581 +1,587 @@
+// src/components/UserManagement/UserManagementDashboard.tsx
+// Rethemed to #7B43F1 app theme + licence-based user model
+// User  = hr_employees WITH user_id  (has auth account, consumes a licence slot)
+// Employee = hr_employees WITHOUT user_id (no login access, does NOT consume a slot)
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSelector } from 'react-redux';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import moment from 'moment';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Users, UserPlus, Search, Shield, Clock, Building, Edit, Eye, Trash2, UserRoundPen, AlertCircle } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+  Users, UserPlus, Search, Shield, Building, Edit,
+  UserRoundPen, RefreshCw, Key, UserX, ChevronDown,
+  CheckCircle, XCircle, Clock, AlertTriangle, Loader2,
+  UserCheck, Mail, Phone,
+} from 'lucide-react';
 import AddUserModal from './AddUserModal';
 import EditUserModal from './EditUserModal';
 import UserDetailsModal from './UserDetailsModal';
 import BulkActionsBar from './BulkActionsBar';
-import { useSelector } from 'react-redux';
-import { Progress } from "@/components/ui/progress";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-interface Employee {
+// ─── Types ───────────────────────────────────────────────────────────────────
+interface EmployeeRow {
   id: string;
   first_name: string;
   last_name: string;
   email: string;
-  phone?: string;
-  status: 'active' | 'inactive' | 'terminated';
-  employment_start_date?: string;
-  last_login?: string;
-  role_name?: string;
-  department_name?: string;
-  team_name?: string;
+  phone?: string | null;
+  status: string;
+  employee_id?: string | null;
+  joining_date?: string | null;
+  hire_type?: string | null;
+  user_id?: string | null;
+  has_licence: boolean;
+  last_sign_in?: string | null;
+  is_confirmed: boolean;
+  role_id?: string | null;
+  role_name?: string | null;
+  department_id?: string | null;
+  department_name?: string | null;
+  designation_name?: string | null;
+  created_at: string;
+  role_display_name?: string;
 }
 
+interface LicenceUsage {
+  role_name: string;
+  role_id: string;
+  limit_count: number;
+  used_count: number;
+  available_count: number;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const ROLE_DISPLAY: Record<string, string> = {
+  organization_superadmin: 'Super Admin',
+  admin: 'Admin',
+  employee: 'Employee',
+};
+
+const P = '#7B43F1';
+const PL = '#EDE9FE';
+
+// ─── Licence Slot Card ────────────────────────────────────────────────────────
+const LicenceSlotCard = ({ slot }: { slot: LicenceUsage }) => {
+  const pct = slot.limit_count > 0 ? Math.min((slot.used_count / slot.limit_count) * 100, 100) : 0;
+  const isFull = slot.available_count === 0;
+  const isNear = pct >= 80 && !isFull;
+  const displayName = ROLE_DISPLAY[slot.role_name] || slot.role_name;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-bold text-gray-600">{displayName}</span>
+        <span className={`text-xs font-black ${isFull ? 'text-red-600' : isNear ? 'text-amber-600' : 'text-[#7B43F1]'}`}>
+          {slot.used_count} / {slot.limit_count}
+        </span>
+      </div>
+      <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+        <div
+          className={`h-2 rounded-full transition-all duration-500 ${isFull ? 'bg-red-500' : isNear ? 'bg-amber-500' : 'bg-[#7B43F1]'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="text-[10px] text-gray-400 mt-1">
+        {isFull ? (
+          <span className="text-red-500 font-semibold">Limit reached</span>
+        ) : (
+          <span>{slot.available_count} slot{slot.available_count !== 1 ? 's' : ''} available</span>
+        )}
+      </p>
+    </div>
+  );
+};
+
+// ─── Status Badge ─────────────────────────────────────────────────────────────
+const StatusBadge = ({ status }: { status: string }) => {
+  const cfg: Record<string, string> = {
+    active:     'bg-emerald-50 text-emerald-700',
+    inactive:   'bg-amber-50 text-amber-700',
+    terminated: 'bg-red-50 text-red-600',
+  };
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${cfg[status] || 'bg-gray-100 text-gray-500'}`}>
+      {status}
+    </span>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 const UserManagementDashboard = () => {
-        const organizationId = useSelector((state: any) => state.auth.organization_id);
-  
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [planLimits, setPlanLimits] = useState<any>(null);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
+
+  const [rows, setRows] = useState<EmployeeRow[]>([]);
+  const [licenceUsage, setLicenceUsage] = useState<LicenceUsage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-      const [showEditModal, setShowEditModal] = useState(false);
-    const [editingUser, setEditingUser] = useState<Employee | null>(null);
-  
-  const [selectedUser, setSelectedUser] = useState<Employee | null>(null);
-  const [stats, setStats] = useState({
-    total: 0,
-    active: 0,
-    inactive: 0,
-    terminated: 0
-  });
-  const { toast } = useToast();
+  const [revoking, setRevoking] = useState<string | null>(null);
 
-     const roleDisplayNameMap: { [key: string]: string } = {
-        organization_superadmin: 'Super Admin',
-        admin: 'Admin',
-        employee: 'User',
-    };
+  // Filters
+  const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState<'licensed' | 'employees' | 'all'>('licensed');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
-        // 1. Fetch Organization Limits
-    useEffect(() => {
-        const fetchLimits = async () => {
-            if(!organizationId) return;
-            const { data } = await supabase
-                .from('hr_organizations')
-                .select('role_credit_limits, subscription_plan, subscription_status')
-                .eq('id', organizationId)
-                .single();
-            
-            if(data) setPlanLimits(data);
-        };
-        fetchLimits();
-    }, [organizationId]);
+  // Selection
+  const [selected, setSelected] = useState<string[]>([]);
 
-    const employeeLimit = planLimits?.role_credit_limits?.employee || 5; 
-    const currentEmployees = stats.active + stats.inactive; // Terminated usually don't count towards active license limits
-    const isLimitReached = currentEmployees >= employeeLimit;
-    const usagePercentage = Math.min((currentEmployees / employeeLimit) * 100, 100);
+  // Modals
+  const [showAdd, setShowAdd] = useState(false);
+  const [prefillEmployee, setPrefillEmployee] = useState<EmployeeRow | null>(null);
+  const [editingUser, setEditingUser] = useState<EmployeeRow | null>(null);
+  const [detailUser, setDetailUser] = useState<EmployeeRow | null>(null);
+  const [confirmRevoke, setConfirmRevoke] = useState<EmployeeRow | null>(null);
 
-
-
-useEffect(() => {
-        // MODIFICATION: The entire fetch function is replaced
-        const fetchEmployees = async () => {
-            if (!organizationId) {
-                setEmployees([]);
-                setLoading(false);
-                return;
-            }
-            try {
-                setLoading(true);
-                
-                // Call the PostgreSQL function using rpc()
-                const { data, error } = await supabase
-                    .rpc('get_employees_with_details', {
-                        org_id: organizationId
-                    });
-
-                if (error) throw error;
-
-                // The data is already flat, so mapping is simpler
-                const formattedEmployees = data.map(emp => ({
-                    ...emp,
-                    status: (emp.status || 'active') as 'active' | 'inactive' | 'terminated',
-                    role_display_name: roleDisplayNameMap[emp.role_name] || emp.role_name,
-                })) || [];
-
-                setEmployees(formattedEmployees);
-                setStats({
-                    total: formattedEmployees.length,
-                    active: formattedEmployees.filter(e => e.status === 'active').length,
-                    inactive: formattedEmployees.filter(e => e.status === 'inactive').length,
-                    terminated: formattedEmployees.filter(e => e.status === 'terminated').length,
-                });
-
-            } catch (error: any) {
-                toast({ title: "Error", description: `Failed to fetch employees: ${error.message}`, variant: "destructive" });
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchEmployees();
-    }, [organizationId, toast]);
-
-  console.log('employees', employees)
-  const fetchEmployees = async () => {
+  // ── Fetch ──────────────────────────────────────────────────────────────────
+  const fetchData = useCallback(async () => {
+    if (!organizationId) return;
+    setLoading(true);
     try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('hr_employees')
-        .select(`
-*,
-  hr_roles!inner(name),
-  hr_departments(name),
-  hr_team_members!hr_team_members_employee_id_fkey(team:hr_teams(name))
-        `)
-        .order('created_at', { ascending: false })
-        .eq('organization_id', organizationId);
+      const [rowsRes, licenceRes] = await Promise.all([
+        supabase.rpc('get_users_with_licence_status', { org_id: organizationId }),
+        supabase.rpc('get_licence_usage', { org_id: organizationId }),
+      ]);
 
-      if (error) throw error;
+      if (rowsRes.error) throw rowsRes.error;
+      if (licenceRes.error) throw licenceRes.error;
 
-      const formattedEmployees = data?.map(emp => ({
-        id: emp.id,
-        first_name: emp.first_name,
-        last_name: emp.last_name,
-        email: emp.email,
-        phone: emp.phone,
-        status: (emp.status || 'active') as 'active' | 'inactive' | 'terminated',
-        employment_start_date: emp.employment_start_date,
-        last_login: emp.last_login,
-        role_name: emp.hr_roles?.name,
-        department_name: emp.hr_departments?.name,
-        team_name: emp.hr_teams?.[0]?.name
-      })) || [];
+      const formatted = (rowsRes.data || []).map((r: any) => ({
+        ...r,
+        role_display_name: ROLE_DISPLAY[r.role_name] || r.role_name || '—',
+      }));
 
-      setEmployees(formattedEmployees);
-      
-      // Calculate stats
-      const statsData = {
-        total: formattedEmployees.length,
-        active: formattedEmployees.filter(emp => emp.status === 'active').length,
-        inactive: formattedEmployees.filter(emp => emp.status === 'inactive').length,
-        terminated: formattedEmployees.filter(emp => emp.status === 'terminated').length
-      };
-      setStats(statsData);
-
-    } catch (error) {
-      console.error('Error fetching employees:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch employees",
-        variant: "destructive",
-      });
+      setRows(formatted);
+      setLicenceUsage(licenceRes.data || []);
+    } catch (e: any) {
+      toast.error(`Failed to load users: ${e.message}`);
     } finally {
       setLoading(false);
     }
-  };
-  
+  }, [organizationId]);
 
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = 
-      emp.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.email.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || emp.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Revoke licence ─────────────────────────────────────────────────────────
+  const handleRevoke = async (emp: EmployeeRow) => {
+    setRevoking(emp.id);
+    try {
+      const { data, error } = await supabase.rpc('superadmin_revoke_user_licence', {
+        p_employee_id: emp.id,
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.message || 'Revoke failed');
+      toast.success('Licence revoked — auth access removed. Employee record preserved.');
+      setConfirmRevoke(null);
+      fetchData();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to revoke licence');
+    } finally {
+      setRevoking(null);
+    }
+  };
+
+  // ── Status change ──────────────────────────────────────────────────────────
+  const handleStatusChange = async (empId: string, newStatus: string) => {
+    const { error } = await supabase.from('hr_employees').update({ status: newStatus }).eq('id', empId);
+    if (error) { toast.error('Failed to update status'); return; }
+    toast.success(`Status updated to ${newStatus}`);
+    fetchData();
+  };
+
+  // ── Bulk actions ───────────────────────────────────────────────────────────
+  const bulkStatus = async (status: string) => {
+    await Promise.all(selected.map((id) => supabase.from('hr_employees').update({ status }).eq('id', id)));
+    toast.success(`${selected.length} users updated`);
+    setSelected([]);
+    fetchData();
+  };
+
+  // ── Filter ─────────────────────────────────────────────────────────────────
+  const filtered = rows.filter((r) => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || [r.first_name, r.last_name, r.email, r.employee_id]
+      .filter(Boolean).join(' ').toLowerCase().includes(q);
+    const matchView =
+      viewMode === 'all' ? true :
+      viewMode === 'licensed' ? r.has_licence :
+      !r.has_licence;
+    const matchRole = roleFilter === 'all' || r.role_name === roleFilter;
+    const matchStatus = statusFilter === 'all' || r.status === statusFilter;
+    return matchSearch && matchView && matchRole && matchStatus;
   });
 
-  const handleStatusChange = async (userId: string, newStatus: string) => {
-    try {
-      const { error } = await supabase
-        .from('hr_employees')
-        .update({ 
-          status: newStatus,
-          last_working_day: newStatus === 'terminated' ? new Date().toISOString().split('T')[0] : null
-        })
-        .eq('id', userId);
-
-      if (error) throw error;
-
-      await fetchEmployees();
-      toast({
-        title: "Success",
-        description: "User status updated successfully",
-      });
-    } catch (error) {
-      console.error('Error updating status:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update user status",
-        variant: "destructive",
-      });
-    }
+  // ── Stats ──────────────────────────────────────────────────────────────────
+  const stats = {
+    licensed: rows.filter((r) => r.has_licence).length,
+    employees: rows.filter((r) => !r.has_licence).length,
+    active: rows.filter((r) => r.status === 'active').length,
+    inactive: rows.filter((r) => r.status === 'inactive').length,
+    terminated: rows.filter((r) => r.status === 'terminated').length,
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <Badge className="bg-green-100 text-green-800">Active</Badge>;
-      case 'inactive':
-        return <Badge className="bg-yellow-100 text-yellow-800">Inactive</Badge>;
-      case 'terminated':
-        return <Badge className="bg-red-100 text-red-800">Terminated</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
-    }
-  };
+  const totalSlots = licenceUsage.reduce((a, s) => a + s.limit_count, 0);
+  const usedSlots = licenceUsage.reduce((a, s) => a + s.used_count, 0);
+  const canAddUser = licenceUsage.some((s) => s.available_count > 0);
 
-  const handleSelectUser = (userId: string) => {
-    setSelectedUsers(prev => 
-      prev.includes(userId) 
-        ? prev.filter(id => id !== userId)
-        : [...prev, userId]
-    );
-  };
+  const uniqueRoles = Array.from(new Set(rows.map((r) => r.role_name).filter(Boolean)));
 
-     const handleEditClick = (employee: Employee) => {
-        setEditingUser(employee);
-        setShowEditModal(true);
-    };
-
-    const getStatusSelectClass = (status: string) => {
-        switch (status) {
-            case 'active': return "bg-green-100 text-green-800 border-green-200 hover:bg-green-200";
-            case 'inactive': return "bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200";
-            case 'terminated': return "bg-red-100 text-red-800 border-red-200 hover:bg-red-200";
-            default: return "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200";
-        }
-    };
-  const handleSelectAll = () => {
-    setSelectedUsers(
-      selectedUsers.length === filteredEmployees.length 
-        ? [] 
-        : filteredEmployees.map(emp => emp.id)
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active</CardTitle>
-            <Shield className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.active}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Inactive</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{stats.inactive}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Terminated</CardTitle>
-            <Building className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.terminated}</div>
-          </CardContent>
-        </Card>
+    <div className="space-y-5">
+
+      {/* ── KPI Row ─────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {[
+          { label: 'Licensed Users', value: stats.licensed, color: 'text-[#7B43F1]', bg: '#EDE9FE', icon: Key },
+          { label: 'Employees Only', value: stats.employees, color: 'text-gray-600', bg: '#F3F4F6', icon: Users },
+          { label: 'Active', value: stats.active, color: 'text-emerald-700', bg: '#ECFDF5', icon: CheckCircle },
+          { label: 'Inactive', value: stats.inactive, color: 'text-amber-700', bg: '#FEF3C7', icon: Clock },
+          { label: 'Terminated', value: stats.terminated, color: 'text-red-600', bg: '#FEF2F2', icon: XCircle },
+        ].map(({ label, value, color, bg, icon: Icon }) => (
+          <div key={label} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</span>
+              <div className="p-1.5 rounded-lg" style={{ background: bg }}>
+                <Icon size={12} className={color} />
+              </div>
+            </div>
+            <p className={`text-2xl font-black ${color}`}>{value}</p>
+          </div>
+        ))}
       </div>
 
-      {/* --- NEW: Subscription Usage Banner --- */}
-            {planLimits && (
-                <Card className="bg-slate-50 border-slate-200">
-                    <CardContent className="pt-6">
-                        <div className="flex justify-between items-center mb-2">
-                            <div>
-                                <h3 className="font-semibold text-sm text-slate-700">
-                                    Current Plan: {planLimits.subscription_plan || 'Trial'}
-                                </h3>
-                                <p className="text-xs text-slate-500">
-                                    {isLimitReached 
-                                        ? "You have reached your user limit." 
-                                        : `You can add ${employeeLimit - currentEmployees} more users.`}
-                                </p>
-                            </div>
-                            <span className="text-sm font-bold text-slate-700">
-                                {currentEmployees} / {employeeLimit} Users
-                            </span>
-                        </div>
-                        {/* Simple Progress Bar */}
-                        <div className="w-full bg-gray-200 rounded-full h-2.5">
-                            <div 
-                                className={`h-2.5 rounded-full ${isLimitReached ? 'bg-red-500' : 'bg-blue-600'}`} 
-                                style={{ width: `${usagePercentage}%` }}
-                            ></div>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-      {/* Main User Management Card */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* ── Licence Slots ───────────────────────────────────────────────── */}
+      {licenceUsage.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <CardTitle>User Management</CardTitle>
-              <CardDescription>
-                Manage users, roles, and permissions across your organization
-              </CardDescription>
+              <h3 className="text-sm font-bold text-gray-900">Licence Slots</h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {usedSlots} of {totalSlots} total slots used across all roles
+              </p>
             </div>
-                                   {isLimitReached ? (
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <div className="cursor-not-allowed">
-                                            <Button disabled variant="secondary">
-                                                <UserPlus className="h-4 w-4 mr-2" />
-                                                Add User (Limit Reached)
-                                            </Button>
-                                        </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>Upgrade your plan to add more users.</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        ) : (
-                            <Button onClick={() => setShowAddModal(true)}>
-                                <UserPlus className="h-4 w-4 mr-2" />
-                                Add User
-                            </Button>
+            <div className="flex items-center gap-2">
+              <div className="text-[10px] text-gray-400">
+                <span className="font-bold text-[#7B43F1]">{usedSlots}</span> / {totalSlots}
+              </div>
+              <div className="w-24 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                <div className="h-1.5 rounded-full bg-[#7B43F1]" style={{ width: `${(usedSlots / totalSlots) * 100}%` }} />
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {licenceUsage.map((slot) => <LicenceSlotCard key={slot.role_id} slot={slot} />)}
+          </div>
+          <p className="text-[10px] text-gray-400 mt-3 flex items-center gap-1">
+            <AlertTriangle size={10} />
+            A <strong>Licence Slot</strong> is consumed when an employee has an auth login account (user_id is set).
+            Employees without auth accounts do not consume slots.
+          </p>
+        </div>
+      )}
+
+      {/* ── Main Table Card ──────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-5 border-b border-gray-50">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">
+              {viewMode === 'licensed' ? 'Licensed Users' : viewMode === 'employees' ? 'Employees (No Login)' : 'All People'}
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {viewMode === 'licensed'
+                ? 'People with active auth accounts — consuming a licence slot'
+                : viewMode === 'employees'
+                ? 'Employee records without login access — no licence consumed'
+                : 'All hr_employees records'}
+            </p>
+          </div>
+          <button
+            onClick={() => { setPrefillEmployee(null); setShowAdd(true); }}
+            disabled={!canAddUser}
+            title={!canAddUser ? 'No licence slots available' : 'Invite a new user'}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white transition-all hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: P }}
+          >
+            <UserPlus size={13} /> Invite User
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2 p-4 bg-gray-50/50 border-b border-gray-50">
+          {/* View mode toggle */}
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+            {([
+              { key: 'licensed',  label: `Users (${stats.licensed})` },
+              { key: 'employees', label: `Employees (${stats.employees})` },
+              { key: 'all',       label: `All (${rows.length})` },
+            ] as const).map(({ key, label }) => (
+              <button key={key} onClick={() => setViewMode(key)}
+                className={`px-3 py-1.5 font-semibold transition-colors ${viewMode === key ? 'bg-[#7B43F1] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className="relative flex-1 min-w-[180px]">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, email, ID…"
+              className="w-full pl-7 pr-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#7B43F1] bg-white" />
+          </div>
+
+          {/* Role filter */}
+          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#7B43F1]">
+            <option value="all">All Roles</option>
+            {uniqueRoles.map((r) => <option key={r!} value={r!}>{ROLE_DISPLAY[r!] || r}</option>)}
+          </select>
+
+          {/* Status filter */}
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#7B43F1]">
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="terminated">Terminated</option>
+          </select>
+
+          <span className="text-[10px] text-gray-400 ml-auto">{filtered.length} records</span>
+          <button onClick={fetchData} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
+            <RefreshCw size={12} className="text-gray-400" />
+          </button>
+        </div>
+
+        {/* Bulk action bar */}
+        {selected.length > 0 && (
+          <div className="px-4 py-2">
+            <BulkActionsBar
+              selectedCount={selected.length}
+              onActivate={() => bulkStatus('active')}
+              onDeactivate={() => bulkStatus('inactive')}
+              onClear={() => setSelected([])}
+            />
+          </div>
+        )}
+
+        {/* Table */}
+        {loading ? (
+          <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-[#7B43F1]" /></div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-50/80 border-b border-gray-100">
+                  <th className="px-4 py-3 w-8">
+                    <input type="checkbox"
+                      checked={selected.length === filtered.length && filtered.length > 0}
+                      onChange={() => setSelected(selected.length === filtered.length ? [] : filtered.map((r) => r.id))}
+                      className="rounded border-gray-300" />
+                  </th>
+                  {['Person', 'Role / Dept', 'Access', 'Status', 'Last Login', 'Joined', 'Actions'].map((h) => (
+                    <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filtered.map((emp) => (
+                  <tr key={emp.id} className="hover:bg-purple-50/20 transition-colors group">
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selected.includes(emp.id)}
+                        onChange={() => setSelected((p) => p.includes(emp.id) ? p.filter((x) => x !== emp.id) : [...p, emp.id])}
+                        className="rounded border-gray-300" />
+                    </td>
+
+                    {/* Person */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0"
+                          style={{ background: emp.has_licence ? PL : '#F3F4F6', color: emp.has_licence ? P : '#6B7280' }}>
+                          {(emp.first_name?.[0] || '?').toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">{emp.first_name} {emp.last_name}</p>
+                          <p className="text-[9px] text-gray-400">{emp.email}</p>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Role / Dept */}
+                    <td className="px-4 py-3">
+                      {emp.role_display_name && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700">{emp.role_display_name}</span>
+                      )}
+                      {emp.department_name && (
+                        <p className="text-[9px] text-gray-400 mt-0.5">{emp.department_name}</p>
+                      )}
+                    </td>
+
+                    {/* Access / Licence */}
+                    <td className="px-4 py-3">
+                      {emp.has_licence ? (
+                        <div>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700">
+                            <Key size={8} /> Licensed
+                          </span>
+                          {!emp.is_confirmed && (
+                            <p className="text-[9px] text-amber-500 mt-0.5 flex items-center gap-0.5">
+                              <Mail size={8} /> Invite pending
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-500">
+                          <UserX size={8} /> Employee only
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-4 py-3">
+                      <select
+                        value={emp.status}
+                        onChange={(e) => handleStatusChange(emp.id, e.target.value)}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border cursor-pointer focus:outline-none ${
+                          emp.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          emp.status === 'inactive' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          'bg-red-50 text-red-600 border-red-200'
+                        }`}
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="terminated">Terminated</option>
+                      </select>
+                    </td>
+
+                    {/* Last Login */}
+                    <td className="px-4 py-3 text-gray-400">
+                      {emp.last_sign_in ? (
+                        <div>
+                          <p className="text-gray-600">{moment(emp.last_sign_in).format('D MMM, HH:mm')}</p>
+                          <p className="text-[9px]">{moment(emp.last_sign_in).fromNow()}</p>
+                        </div>
+                      ) : (
+                        <span className="text-gray-300">{emp.has_licence ? 'Never' : '—'}</span>
+                      )}
+                    </td>
+
+                    {/* Joined */}
+                    <td className="px-4 py-3 text-gray-400">
+                      {emp.joining_date ? moment(emp.joining_date).format('D MMM YYYY') : '—'}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        {/* View details */}
+                        <button onClick={() => setDetailUser(emp)}
+                          title="View details"
+                          className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-[#7B43F1] transition-colors">
+                          <UserRoundPen size={13} />
+                        </button>
+
+                        {/* Edit */}
+                        <button onClick={() => setEditingUser(emp)}
+                          title="Edit"
+                          className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-[#7B43F1] transition-colors">
+                          <Edit size={13} />
+                        </button>
+
+                        {/* Revoke licence (only shown for licensed users) */}
+                        {emp.has_licence && (
+                          <button onClick={() => setConfirmRevoke(emp)}
+                            title="Revoke licence"
+                            className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors">
+                            <UserX size={13} />
+                          </button>
                         )}
 
+                        {/* Grant access (only shown for employees without licence) */}
+                        {!emp.has_licence && (
+                          <button
+                            onClick={() => { setPrefillEmployee(emp); setShowAdd(true); }}
+                            title="Grant login access to this employee"
+                            className="p-1.5 rounded-lg text-gray-400 hover:bg-purple-50 hover:text-[#7B43F1] transition-colors">
+                            <Key size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="text-center py-12 text-gray-400">
+                      <Users size={24} className="mx-auto mb-2 opacity-30" />
+                      No records match your filters
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        </CardHeader>
-        
-        <CardContent>
-          {/* Search and Filter Bar */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search users..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
+        )}
+      </div>
+
+      {/* ── Revoke Confirmation Modal ─────────────────────────────────────── */}
+      {confirmRevoke && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmRevoke(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm z-10">
+            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <UserX size={22} className="text-red-500" />
             </div>
-            
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="terminated">Terminated</option>
-            </select>
-          </div>
-
-          {/* Bulk Actions Bar */}
-          {selectedUsers.length > 0 && (
-            <BulkActionsBar
-              selectedCount={selectedUsers.length}
-              onDeactivate={() => {
-                selectedUsers.forEach(userId => handleStatusChange(userId, 'inactive'));
-                setSelectedUsers([]);
-              }}
-              onActivate={() => {
-                selectedUsers.forEach(userId => handleStatusChange(userId, 'active'));
-                setSelectedUsers([]);
-              }}
-              onClear={() => setSelectedUsers([])}
-            />
-          )}
-
-          {/* Users Table */}
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <input
-                      type="checkbox"
-                      checked={selectedUsers.length === filteredEmployees.length && filteredEmployees.length > 0}
-                      onChange={handleSelectAll}
-                      className="rounded"
-                    />
-                  </TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Last Login</TableHead>
-                  <TableHead className="w-10">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                  {filteredEmployees.map((employee) => (
-                    <TableRow key={employee.id}>
-                     <TableCell>
-                      <input
-                        type="checkbox"
-                        checked={selectedUsers.includes(employee.id)}
-                        onChange={() => handleSelectUser(employee.id)}
-                        className="rounded"
-                      />
-                    </TableCell>
-                      <TableCell className="font-medium">{employee.first_name} {employee.last_name}</TableCell>
-                      <TableCell>{employee.email}</TableCell>
-                      <TableCell><Badge variant="outline">{employee.role_display_name}</Badge></TableCell>
-                      <TableCell>{employee.department_name || '-'}</TableCell>
-                      <TableCell>
-                        <Select value={employee.status} onValueChange={(newStatus) => handleStatusChange(employee.id, newStatus)}>
-                          <SelectTrigger className={`h-8 w-[110px] text-xs font-semibold ${getStatusSelectClass(employee.status)}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent align="end">
-                            <SelectItem value="active">Active</SelectItem>
-                            <SelectItem value="inactive">Inactive</SelectItem>
-                            <SelectItem value="terminated">Terminated</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-          <TableCell>
-  {employee.last_login
-    ? new Date(employee.last_login).toLocaleString("en-IN", {
-        timeZone: "Asia/Kolkata",
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true, // use 12-hour format (AM/PM), remove if you want 24-hour
-      })
-    : "Never"}
-</TableCell>
-
-
-                      <TableCell>
-                        <TooltipProvider delayDuration={100}>
-                          <div className="flex items-center justify-center gap-1">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedUser(employee)}>
-                                  <UserRoundPen className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>View Details</p></TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditClick(employee)}>
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Edit User</p></TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </TooltipProvider>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-            </Table>
-          </div>
-
-          {filteredEmployees.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              No users found matching your criteria.
+            <h3 className="text-sm font-bold text-gray-900 text-center mb-1">Revoke Licence?</h3>
+            <p className="text-xs text-gray-500 text-center mb-2">
+              <strong>{confirmRevoke.first_name} {confirmRevoke.last_name}</strong>
+            </p>
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4">
+              <p className="text-xs text-amber-700 leading-relaxed">
+                This will <strong>remove their login access</strong> and free up their licence slot.
+                Their employee record, timesheets, payroll data, and all history will be <strong>fully preserved</strong>.
+                They can be re-invited at any time.
+              </p>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmRevoke(null)}
+                className="flex-1 py-2 text-sm font-medium text-gray-600 rounded-xl border border-gray-200 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button onClick={() => handleRevoke(confirmRevoke)} disabled={revoking === confirmRevoke.id}
+                className="flex-1 py-2 text-sm font-bold text-white rounded-xl bg-red-500 hover:bg-red-600 disabled:opacity-40 flex items-center justify-center gap-1">
+                {revoking === confirmRevoke.id ? <Loader2 size={14} className="animate-spin" /> : <UserX size={14} />}
+                Revoke
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Modals */}
-      <AddUserModal 
-        isOpen={showAddModal} 
-        onClose={() => setShowAddModal(false)}
-        onSuccess={() => {
-          fetchEmployees();
-          setShowAddModal(false);
-        }}
+      {/* ── Modals ─────────────────────────────────────────────────────────── */}
+      <AddUserModal
+        isOpen={showAdd}
+        onClose={() => { setShowAdd(false); setPrefillEmployee(null); }}
+        onSuccess={() => { setShowAdd(false); setPrefillEmployee(null); fetchData(); }}
+        prefillData={prefillEmployee}
       />
-      
-      {selectedUser && (
-        <UserDetailsModal
-          user={selectedUser}
-          isOpen={!!selectedUser}
-          onClose={() => setSelectedUser(null)}
-          onUpdate={fetchEmployees}
+      {editingUser && (
+        <EditUserModal
+          isOpen={!!editingUser}
+          onClose={() => setEditingUser(null)}
+          onSuccess={() => { setEditingUser(null); fetchData(); }}
+          user={editingUser as any}
         />
       )}
-       {editingUser && (
-                <EditUserModal
-                    isOpen={showEditModal}
-                    onClose={() => {
-                        setShowEditModal(false);
-                        setEditingUser(null);
-                    }}
-                    onSuccess={() => {
-                        fetchEmployees();
-                        setShowEditModal(false);
-                        setEditingUser(null);
-                    }}
-                    user={editingUser}
-                />
-            )}
+      {detailUser && (
+        <UserDetailsModal
+          user={detailUser as any}
+          isOpen={!!detailUser}
+          onClose={() => setDetailUser(null)}
+          onUpdate={fetchData}
+        />
+      )}
     </div>
   );
 };

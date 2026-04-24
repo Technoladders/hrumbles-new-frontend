@@ -367,6 +367,7 @@ const MainLayout = () => {
   const organizationId = useSelector((s) => s.auth.organization_id);
 
   const [isSubscriptionExpired, setIsSubscriptionExpired] = useState(false);
+   const [orgLockReason, setOrgLockReason] = useState(null); // null | 'expired' | 'suspended' | 'inactive'
   const [orgCredits, setOrgCredits]             = useState(null);
   const [isLoadingCredits, setIsLoadingCredits] = useState(true);
 
@@ -621,40 +622,69 @@ const MainLayout = () => {
   }, [organizationId, role]);
 
   // ── Subscription check ────────────────────────────────────────────────────
-  useEffect(() => {
+useEffect(() => {
     if (!organizationId) return;
-
+ 
+    const SUBSCRIPTION_LOCK_STATUSES = ['expired', 'inactive', 'canceled'];
+ 
     const check = async () => {
       const { data } = await supabase
         .from("hr_organizations")
-        .select("subscription_status")
+        .select("subscription_status, status")
         .eq("id", organizationId)
         .single();
+ 
       if (data) {
-        const expired = data.subscription_status === "expired" || data.subscription_status === "inactive";
-        setIsSubscriptionExpired(expired);
-        if (expired && role !== "organization_superadmin" && role !== "global_superadmin") handleLogout();
+        const subLocked    = SUBSCRIPTION_LOCK_STATUSES.includes(data.subscription_status);
+        const orgSuspended = data.status === 'suspended';
+        const orgInactive  = data.status === 'inactive';
+ 
+        let reason = null;
+        if (orgSuspended)      reason = 'suspended';
+        else if (orgInactive)  reason = 'inactive';
+        else if (subLocked)    reason = 'expired';
+ 
+        setOrgLockReason(reason);
+ 
+        // Non-superadmins get force-logged out
+        if (reason && role !== "organization_superadmin" && role !== "global_superadmin") {
+          handleLogout();
+        }
       }
     };
+ 
     check();
-
+ 
+    // Realtime: watch for org status changes
     const ch = supabase
       .channel(`org-status:${organizationId}`)
       .on("postgres_changes", {
-        event: "UPDATE", schema: "public", table: "hr_organizations",
+        event: "UPDATE",
+        schema: "public",
+        table: "hr_organizations",
         filter: `id=eq.${organizationId}`,
       }, (payload) => {
-        const expired = ["expired", "inactive"].includes(payload.new.subscription_status);
-        setIsSubscriptionExpired(expired);
-        if (expired && role !== "organization_superadmin" && role !== "global_superadmin") {
-          toast.error("Organization subscription has expired.");
+        const subLocked    = SUBSCRIPTION_LOCK_STATUSES.includes(payload.new.subscription_status);
+        const orgSuspended = payload.new.status === 'suspended';
+        const orgInactive  = payload.new.status === 'inactive';
+ 
+        let reason = null;
+        if (orgSuspended)      reason = 'suspended';
+        else if (orgInactive)  reason = 'inactive';
+        else if (subLocked)    reason = 'expired';
+ 
+        setOrgLockReason(reason);
+ 
+        if (reason && role !== "organization_superadmin" && role !== "global_superadmin") {
+          toast.error(`Organization account is ${reason}.`);
           handleLogout();
         }
       })
       .subscribe();
-
+ 
     return () => { supabase.removeChannel(ch); };
   }, [organizationId, role, handleLogout]);
+
 
   // ── Employee deactivation force-logout ───────────────────────────────────
   useEffect(() => {
@@ -735,7 +765,10 @@ const MainLayout = () => {
   return (
     <Flex direction="column" height="100vh" overflow="hidden" bg={colorMode === "dark" ? "gray.800" : "#F8F7F7"}>
 
-      <SubscriptionLockModal isOpen={isSubscriptionExpired && role === "organization_superadmin"} />
+         <SubscriptionLockModal
+     isOpen={!!orgLockReason && (role === "organization_superadmin" || role === "global_superadmin")}
+     reason={orgLockReason}
+   />
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <Flex
