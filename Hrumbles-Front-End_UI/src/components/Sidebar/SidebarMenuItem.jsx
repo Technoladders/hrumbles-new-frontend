@@ -6,7 +6,7 @@ import { ImProfile } from "react-icons/im";
 import { GoGoal } from "react-icons/go";
 import { AiOutlineProfile } from "react-icons/ai";
 import { FaFileInvoiceDollar, FaSackDollar, FaArrowsDownToPeople, FaRegCalendarCheck, FaDropbox, FaFileLines } from "react-icons/fa6";
-import { TbCheckbox } from "react-icons/tb";
+import { TbCheckbox, TbCalendarClock } from "react-icons/tb";
 import { GoOrganization } from "react-icons/go";
 import { VscOrganization } from "react-icons/vsc";
 import { GrDocumentTime, GrIntegration } from "react-icons/gr";
@@ -264,6 +264,7 @@ const masterMenuItems = [
   // { icon: TbDatabaseSearch, label: "Candidate Search", path: "/search/candidates/beta", suite: "RECRUITMENT", permission: "access_candidate_search", beta: true },
 
   { icon: LuSend, label: "My Invites", path: "/my-invites", suite: "RECRUITMENT", permission: "access_invite" },
+  { icon: TbCalendarClock, label: "Interviews", path: "/interviews", suite: "RECRUITMENT", permission: "access_interviews" },
   { icon: LuMessageSquare, label: "Conversations", path: "/whatsapp-conversations", suite: "RECRUITMENT", permission: "access_whatsapp_conversation", badge: "wa_unread" },
   { icon: MdOutlineEmojiPeople, label: "Clients", path: "/clients", suite: "RECRUITMENT", permission: "access_client_management" },
   { icon: FaArrowsDownToPeople, label: "Projects", path: "/projects", suite: "RECRUITMENT", permission: "access_project_management" },
