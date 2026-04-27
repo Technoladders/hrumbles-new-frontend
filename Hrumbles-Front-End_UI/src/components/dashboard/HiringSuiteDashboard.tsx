@@ -223,14 +223,14 @@ const HiringSuiteDashboard: React.FC = () => {
 
         {/* ═══ ROW 1 — FUNNEL + CREDIT GAUGE + TREND (all fixed 380px height) ═══ */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5 items-start">
-          <div className="lg:col-span-5">
+          <div className="lg:col-span-12">
             <HiringFunnel
               stages={funnelData ||[]}
               isLoading={funnelLoading}
               delay={0.15}
             />
           </div>
-          <div className="lg:col-span-3">
+          {/* <div className="lg:col-span-3">
             <CreditGauge
               balance={orgData?.credit_balance || 0}
               totalConsumed={creditSummary?.total_consumed || 0}
@@ -249,7 +249,7 @@ const HiringSuiteDashboard: React.FC = () => {
               delay={0.25}
               isSalesSuiteEnabled={isSalesSuiteEnabled}
             />
-          </div>
+          </div> */}
         </div>
 
         {/* ═══ ROW 2 — WEEKLY ACTIVITY (+ SALES ACTIVITY Conditionally) ═══ */}

@@ -159,6 +159,7 @@ import { JobBoardsHub } from "@/components/jobs/job-boards";
 import WhatsAppInbox from '@/components/whatsapp/WhatsAppInbox';
 import WhatsAppSettings from "./components/settings/WhatsAppSettings.tsx";
 import OrganizationProfilePage from "./pages/settings/OrganizationProfilePage.tsx";
+import { InterviewsPage } from '@/components/dashboard/widgets/InterviewsWidget';
 
 const FullScreenLoader = () => (
   <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
@@ -279,25 +280,25 @@ function AppContent() {
   // Added: suspended / inactive org check so those users get booted
   // Superadmins see the SubscriptionLockModal in MainLayout instead
   // ─────────────────────────────────────────────────────────────────────────
-  const validateCurrentSession = useCallback(async () => {
+ const validateCurrentSession = useCallback(async () => {
     const isPublic = publicPaths.some(p => {
       if (p === '/') return location.pathname === '/';
       return location.pathname.startsWith(p);
     });
     if (isPublic) return;
-
+ 
     const currentLoggingOutState = store.getState().auth.isLoggingOut;
     if (currentLoggingOutState) return;
-
+ 
     if (isOrgValidated !== true) return;
-
+ 
     const { data: { session } } = await supabase.auth.getSession();
-
+ 
     if (!session) {
       dispatch(showSessionExpiredModal());
       return;
     }
-
+ 
     if (session?.user?.id) {
       const { data } = await supabase
         .from('hr_employees')
@@ -312,16 +313,16 @@ function AppContent() {
         `)
         .eq('id', session.user.id)
         .single();
-
+ 
       if (data) {
         const rawRole    = data.hr_roles;
         const roleName   = Array.isArray(rawRole) ? rawRole[0]?.name : rawRole?.name;
         const userStatus = data.status;
         const subStatus  = data.hr_organizations?.subscription_status;
         const orgStatus  = data.hr_organizations?.status; // ✅ NEW: check org.status
-
+ 
         const isSuperAdmin = roleName === 'organization_superadmin' || roleName === 'global_superadmin';
-
+ 
         // 1. Inactive/terminated employee
         if (userStatus !== 'active') {
           await supabase.auth.signOut();
@@ -329,25 +330,19 @@ function AppContent() {
           window.location.href = "/login";
           return;
         }
-
-        // 2. ✅ NEW: Org suspended or inactive
-        //    Superadmins stay — they see the SubscriptionLockModal in MainLayout
-        //    Regular users get booted immediately
+ 
+        // 2. Org suspended or inactive → ALL users stay logged in.
+        //    SubscriptionLockModal in MainLayout shows for everyone with a logout button.
+        //    No silent force-logout — user gets to see the reason and choose to log out.
         if (orgStatus === 'suspended' || orgStatus === 'inactive') {
-          if (!isSuperAdmin) {
-            await supabase.auth.signOut();
-            dispatch(logout());
-            window.location.href = "/login";
-          }
-          return;
+          return; // MainLayout's orgLockReason handles the UI for all roles
         }
-
-        // 3. Subscription expired/canceled
+ 
+        // 3. Subscription expired/canceled → same: show modal, don't force-logout.
+        //    MainLayout subscription check sets orgLockReason for all roles.
         const isSubExpired = subStatus === 'expired' || subStatus === 'inactive' || subStatus === 'canceled';
-        if (isSubExpired && !isSuperAdmin) {
-          await supabase.auth.signOut();
-          dispatch(logout());
-          window.location.href = "/login";
+        if (isSubExpired) {
+          return; // MainLayout modal handles this for all roles
         }
       }
     }
@@ -440,8 +435,8 @@ function AppContent() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/set-password" element={<SetPassword />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/careers" element={<Career />} />
-        <Route path="/talentcareers" element={<TalentView />} />
+        <Route path="/talentcareers" element={<Career />} />
+        <Route path="/careers" element={<TalentView />} />
         <Route path="/job/:jobId" element={<JobDetailTalent />} />
         <Route path="/job/:jobId/apply" element={<CareerJobApplication />} />
         <Route path="/share/:shareId" element={<SharedProfile />} />
@@ -499,6 +494,7 @@ function AppContent() {
               <Route path="/jobstatuses" element={<StatusSettings />} />
               <Route path="/jobs/candidateprofile/:candidateId/:jobId" element={<CandidateProfileV2 />} />
               <Route path="/candidate-v2/:candidateId/:jobId" element={<EmployeeProfilePage />} />
+              <Route path="/interviews" element={<InterviewsPage />} />
               <Route path="/jobs/:id/invites" element={<InviteResponsesPage />} />
               <Route path="/my-invites" element={<MyInvitesPage />} />
               <Route path="/jobs/:jobId/candidate/:candidateId/bgv" element={<CandidateBgvProfilePage />} />

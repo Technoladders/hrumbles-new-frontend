@@ -366,7 +366,7 @@ const MainLayout = () => {
   const role           = useSelector((s) => s.auth.role);
   const organizationId = useSelector((s) => s.auth.organization_id);
 
-  const [isSubscriptionExpired, setIsSubscriptionExpired] = useState(false);
+
    const [orgLockReason, setOrgLockReason] = useState(null); // null | 'expired' | 'suspended' | 'inactive'
   const [orgCredits, setOrgCredits]             = useState(null);
   const [isLoadingCredits, setIsLoadingCredits] = useState(true);
@@ -640,22 +640,17 @@ useEffect(() => {
         const orgInactive  = data.status === 'inactive';
  
         let reason = null;
-        if (orgSuspended)      reason = 'suspended';
-        else if (orgInactive)  reason = 'inactive';
-        else if (subLocked)    reason = 'expired';
+        if (orgSuspended)     reason = 'suspended';
+        else if (orgInactive) reason = 'inactive';
+        else if (subLocked)   reason = 'expired';
  
         setOrgLockReason(reason);
- 
-        // Non-superadmins get force-logged out
-        if (reason && role !== "organization_superadmin" && role !== "global_superadmin") {
-          handleLogout();
-        }
+        // ✅ NO handleLogout() here — modal shows for all roles, user chooses to log out
       }
     };
  
     check();
  
-    // Realtime: watch for org status changes
     const ch = supabase
       .channel(`org-status:${organizationId}`)
       .on("postgres_changes", {
@@ -669,21 +664,17 @@ useEffect(() => {
         const orgInactive  = payload.new.status === 'inactive';
  
         let reason = null;
-        if (orgSuspended)      reason = 'suspended';
-        else if (orgInactive)  reason = 'inactive';
-        else if (subLocked)    reason = 'expired';
+        if (orgSuspended)     reason = 'suspended';
+        else if (orgInactive) reason = 'inactive';
+        else if (subLocked)   reason = 'expired';
  
         setOrgLockReason(reason);
- 
-        if (reason && role !== "organization_superadmin" && role !== "global_superadmin") {
-          toast.error(`Organization account is ${reason}.`);
-          handleLogout();
-        }
+        // ✅ NO handleLogout() here either — modal handles it
       })
       .subscribe();
  
     return () => { supabase.removeChannel(ch); };
-  }, [organizationId, role, handleLogout]);
+  }, [organizationId]);
 
 
   // ── Employee deactivation force-logout ───────────────────────────────────
@@ -765,10 +756,10 @@ useEffect(() => {
   return (
     <Flex direction="column" height="100vh" overflow="hidden" bg={colorMode === "dark" ? "gray.800" : "#F8F7F7"}>
 
-         <SubscriptionLockModal
-     isOpen={!!orgLockReason && (role === "organization_superadmin" || role === "global_superadmin")}
-     reason={orgLockReason}
-   />
+<SubscriptionLockModal
+  isOpen={!!orgLockReason}
+  reason={orgLockReason}
+/>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <Flex

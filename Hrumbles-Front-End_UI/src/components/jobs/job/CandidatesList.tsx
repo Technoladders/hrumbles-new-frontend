@@ -1183,8 +1183,21 @@ const getInviteState = (candidateId: string): 'none' | 'pending' | 'consented' =
       const success = await updateCandidateStatus(currentCandidateId, currentSubStatusId, user.id, additionalData);
       
       if (success) {
-        toast.success("Status updated successfully with details.");
-        onRefresh();
+        if (additionalData.interview_date || additionalData.interview_time) {
+        const { data: latestInterview } = await supabase
+          .from('hr_candidate_interviews')
+          .select('id')
+          .eq('candidate_id', currentCandidateId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+ 
+        if (latestInterview?.id) {
+          triggerInterviewNotification(latestInterview.id, 'confirmation');
+        }
+      }
+      toast.success("Status updated successfully with details.");
+      onRefresh();
       } else {
         toast.error("Failed to update status.");
       }
@@ -1637,7 +1650,21 @@ const handleInviteCandidate = (candidate: Candidate) => {
 
       // Update candidate status using the determined finalSubStatusId
       await updateCandidateStatus(currentCandidateId, finalSubStatusId, user.id, interviewData);
-      
+          const { data: latestInterview } = await supabase
+      .from('hr_candidate_interviews')
+      .select('id')
+      .eq('candidate_id', currentCandidateId)
+      .eq('interview_round', currentRound)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+ 
+    if (latestInterview?.id) {
+      triggerInterviewNotification(
+        latestInterview.id,
+        needsReschedule ? 'reschedule' : 'confirmation'
+      );
+    }
       setShowInterviewModal(false);
       resetInterviewForm();
       await onRefresh();
@@ -1647,6 +1674,36 @@ const handleInviteCandidate = (candidate: Candidate) => {
       toast.error("Failed to schedule/reschedule interview");
     }
   };
+
+  const triggerInterviewNotification = async (
+  interviewId: string,
+  notificationType: 'confirmation' | 'reschedule' | 'cancellation'
+) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+ 
+    await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-interview-notification`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          interview_id: interviewId,
+          notification_type: notificationType,
+          triggered_by: user?.id,
+        }),
+      }
+    );
+    // Fire-and-forget: don't block UI on email delivery
+  } catch (err) {
+    console.error('Failed to trigger interview notification:', err);
+  }
+};
 
   const handleInterviewFeedbackSubmit = async () => {
     if (!currentCandidateId || !currentSubStatusId || !currentRound) return;

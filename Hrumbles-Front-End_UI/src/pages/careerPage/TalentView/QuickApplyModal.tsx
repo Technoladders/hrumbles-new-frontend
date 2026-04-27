@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, User, Mail, Phone, MapPin, Calendar, FileText, Upload, Loader2, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, User, Mail, FileText, Upload, Loader2, Check, Calendar, Zap, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from "@/integrations/supabase/client";
 import PhoneInput from 'react-phone-number-input';
@@ -10,464 +10,437 @@ import { v4 as uuidv4 } from 'uuid';
 interface QuickApplyModalProps {
   isOpen: boolean;
   onClose: () => void;
-  job: {
-    id: string;
-    title: string;
-    company: string;
-    logoUrl?: string;
-  };
+  job: { id: string; title: string; company: string; logoUrl?: string; };
   organizationId: string;
 }
 
 interface FormData {
-  personalInfo: {
-    fullName: string;
-    email: string;
-    phone: string;
-    location: string;
-    availability: string;
-  };
+  personalInfo: { fullName: string; email: string; phone: string; location: string; availability: string; };
   resume: string | null;
   coverLetter: string;
 }
 
 const BUCKET_NAME = 'candidate_resumes';
+const COUNTDOWN_SECS = 5;
 
-const QuickApplyModal: React.FC<QuickApplyModalProps> = ({
-  isOpen,
-  onClose,
-  job,
-  organizationId
-}) => {
+// Steps with minimum progress thresholds — forces slow animation
+const PARSE_STEPS = [
+  { label: 'Uploading your resume…',         minPct: 0  },
+  { label: 'Extracting content & text…',     minPct: 20 },
+  { label: 'Scanning work history…',         minPct: 40 },
+  { label: 'Identifying skills & contact…',  minPct: 60 },
+  { label: 'Auto-filling your profile…',     minPct: 80 },
+  { label: 'Almost there…',                  minPct: 93 },
+];
+
+const QuickApplyModal: React.FC<QuickApplyModalProps> = ({ isOpen, onClose, job, organizationId }) => {
   const { toast } = useToast();
-  const [step, setStep] = useState<'form' | 'review' | 'success'>('form');
-  const [submitting, setSubmitting] = useState(false);
+  const [step, setStep] = useState<'form' | 'success'>('form');
+
+  // Parsing
   const [isParsing, setIsParsing] = useState(false);
+  const [parseProgress, setParseProgress] = useState(0);
+  const [parseStepLabel, setParseStepLabel] = useState('');
+  const [parseComplete, setParseComplete] = useState(false);
+  // Ref so async work can unlock the throttle
+  const pctRef = useRef(0);
+  const unlockedPctRef = useRef(0);
+
+  // Countdown
+  const [isCountingDown, setIsCountingDown] = useState(false);
+  const [countdown, setCountdown] = useState(COUNTDOWN_SECS);
+  // 0→100 progress for the fill bar
+  const [cdProgress, setCdProgress] = useState(0);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cdProgressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const [submitting, setSubmitting] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  
+  const [particles, setParticles] = useState<{ id: number; x: number; y: number; size: number; delay: number }[]>([]);
+
   const [formData, setFormData] = useState<FormData>({
-    personalInfo: {
-      fullName: '',
-      email: '',
-      phone: '',
-      location: '',
-      availability: '',
-    },
+    personalInfo: { fullName: '', email: '', phone: '', location: '', availability: '' },
     resume: null,
     coverLetter: '',
   });
 
-  // Handle file upload with AI parsing
-  const handleFileUpload = async (file: File) => {
-    if (file.size > 5 * 1024 * 1024) {
-      setUploadError("File size exceeds 5MB. Please upload a smaller file.");
-      return;
+  // Confetti on success
+  useEffect(() => {
+    if (step === 'success') {
+      setParticles(
+        Array.from({ length: 14 }, (_, i) => ({
+          id: i,
+          x: Math.random() * 100,
+          y: Math.random() * 100,
+          size: Math.random() * 8 + 4,
+          delay: Math.random() * 0.8,
+        }))
+      );
     }
+  }, [step]);
 
-    const fileExt = file.name.split('.').pop();
-    const uniqueFileName = `${uuidv4()}.${fileExt}`;
+  // ── Parse animation — paced, cannot outrun real async work ──
+  const runParseAnimation = () => {
+    pctRef.current = 0;
+    unlockedPctRef.current = 15; // allow up to 15% before first unlock
+    setParseProgress(0);
+    setParseComplete(false);
+    setParseStepLabel(PARSE_STEPS[0].label);
 
+    const interval = setInterval(() => {
+      const ceiling = Math.min(unlockedPctRef.current, 99);
+      if (pctRef.current >= ceiling) return;
+
+      pctRef.current = Math.min(pctRef.current + (Math.random() * 1.2 + 0.5), ceiling);
+      const pct = Math.round(pctRef.current);
+      setParseProgress(pct);
+
+      // Advance step label
+      const idx = PARSE_STEPS.reduce(
+        (best, s, i) => (pct >= s.minPct ? i : best), 0
+      );
+      setParseStepLabel(PARSE_STEPS[idx].label);
+
+      if (pct >= 99) clearInterval(interval);
+    }, 120);
+
+    return interval;
+  };
+
+  // ── File upload ───────────────────────────────────────────────
+  const handleFileUpload = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) { setUploadError('File size exceeds 5 MB.'); return; }
+    const ext = file.name.split('.').pop();
+    const fileName = `${uuidv4()}.${ext}`;
     setIsParsing(true);
     setUploadError(null);
-    toast({ title: "Uploading resume..." });
+
+    const animInterval = runParseAnimation();
 
     try {
-      // Upload file to storage
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET_NAME)
-        .upload(uniqueFileName, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
+      const { error: upErr } = await supabase.storage
+        .from(BUCKET_NAME).upload(fileName, file, { cacheControl: '3600', upsert: false });
+      if (upErr) throw upErr;
+      unlockedPctRef.current = 50;
 
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uniqueFileName);
-      if (!urlData || !urlData.publicUrl) {
-        throw new Error("Failed to retrieve resume URL.");
-      }
+      const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(fileName);
+      if (!urlData?.publicUrl) throw new Error('Failed to retrieve resume URL.');
       const resumeUrl = urlData.publicUrl;
-      
-      // Update form with resume URL
       setFormData(prev => ({ ...prev, resume: resumeUrl }));
+      unlockedPctRef.current = 65;
 
-      // Parse resume with AI
-      toast({ title: "Resume uploaded. Parsing with AI..." });
-      
-      const { data: parsedData, error: functionError } = await supabase.functions.invoke('parse-resume', {
+      const { data: parsed, error: fnErr } = await supabase.functions.invoke('parse-resume', {
         body: { fileUrl: resumeUrl },
       });
+      if (fnErr) throw new Error(`AI Parsing Error: ${fnErr.message}`);
+      unlockedPctRef.current = 92;
 
-      if (functionError) {
-        throw new Error(`AI Parsing Error: ${functionError.message}`);
-      }
-      
-      // Auto-fill form with parsed data
-      if (parsedData) {
+      if (parsed) {
         setFormData(prev => ({
           ...prev,
           personalInfo: {
             ...prev.personalInfo,
-            fullName: `${parsedData.firstName || ''} ${parsedData.lastName || ''}`.trim(),
-            email: parsedData.email || prev.personalInfo.email,
-            phone: parsedData.phone || prev.personalInfo.phone,
-            location: parsedData.currentLocation || prev.personalInfo.location,
+            fullName: `${parsed.firstName || ''} ${parsed.lastName || ''}`.trim(),
+            email: parsed.email || prev.personalInfo.email,
+            phone: parsed.phone || prev.personalInfo.phone,
+            location: parsed.currentLocation || prev.personalInfo.location,
           },
         }));
-        
-        toast({
-          title: "Success!",
-          description: "Your information has been auto-filled from your resume.",
-          variant: 'default',
-        });
+        toast({ title: 'Resume parsed!', description: 'Your details have been auto-filled.' });
       }
-
-    } catch (error: any) {
-      console.error('Resume processing error:', error);
-      setUploadError(`Processing failed: ${error.message}`);
-      toast({
-        title: "An Error Occurred",
-        description: error.message,
-        variant: 'destructive',
-      });
+    } catch (err: any) {
+      setUploadError(`Processing failed: ${err.message}`);
+      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
     } finally {
-      setIsParsing(false);
+      clearInterval(animInterval);
+      unlockedPctRef.current = 100;
+      setParseProgress(100);
+      setParseComplete(true);
+      setTimeout(() => setIsParsing(false), 900);
     }
   };
 
   const handleRemoveResume = async () => {
     if (formData.resume) {
       const filePath = formData.resume.split(`${BUCKET_NAME}/`)[1];
-      if (filePath) {
-        await supabase.storage.from(BUCKET_NAME).remove([filePath]);
-      }
+      if (filePath) await supabase.storage.from(BUCKET_NAME).remove([filePath]);
     }
     setFormData(prev => ({ ...prev, resume: null }));
   };
 
-  // Validation
+  // ── Validation ────────────────────────────────────────────────
   const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.personalInfo.fullName.trim()) {
-      newErrors.fullName = 'Full name is required';
-    }
-    
+    const e: Record<string, string> = {};
+    if (!formData.personalInfo.fullName.trim()) e.fullName = 'Full name is required';
     if (!formData.personalInfo.email.trim()) {
-      newErrors.email = 'Email is required';
+      e.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.personalInfo.email)) {
-      newErrors.email = 'Please enter a valid email';
+      e.email = 'Please enter a valid email';
     }
-    
-    if (!formData.resume) {
-      newErrors.resume = 'Resume is required';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (!formData.resume) e.resume = 'Resume is required';
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
-  // Handle form submission
-  const handleSubmit = async () => {
-    if (step === 'form') {
-      if (validateForm()) {
-        setStep('review');
-      } else {
-        toast({
-          title: "Please fix the errors",
-          description: "Name, Email, and Resume are required.",
-          variant: "destructive"
-        });
-      }
-      return;
+  // ── Countdown ─────────────────────────────────────────────────
+  const clearCountdownTimers = () => {
+    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+    if (cdProgressRef.current) { clearInterval(cdProgressRef.current); cdProgressRef.current = null; }
+  };
+
+  const startCountdown = () => {
+    setCountdown(COUNTDOWN_SECS);
+    setCdProgress(0);
+    setIsCountingDown(true);
+  };
+
+  const cancelCountdown = () => {
+    clearCountdownTimers();
+    setIsCountingDown(false);
+    setCountdown(COUNTDOWN_SECS);
+    setCdProgress(0);
+  };
+
+  useEffect(() => {
+    if (!isCountingDown) return;
+
+    // Smooth fill bar
+    cdProgressRef.current = setInterval(() => {
+      setCdProgress(prev => {
+        const next = prev + (100 / (COUNTDOWN_SECS * 20)); // 20 ticks/sec
+        return Math.min(next, 100);
+      });
+    }, 50);
+
+    // Actual second countdown
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        const next = prev - 1;
+        if (next <= 0) {
+          clearCountdownTimers();
+          setIsCountingDown(false);
+          doSubmit();
+          return COUNTDOWN_SECS;
+        }
+        return next;
+      });
+    }, 1000);
+
+    return clearCountdownTimers;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCountingDown]);
+
+  // ── Submit ────────────────────────────────────────────────────
+  const doSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.functions.invoke('submit-application', {
+        body: { applicationData: formData, jobId: job.id, orgId: organizationId },
+      });
+      if (error) throw error;
+      setStep('success');
+      toast({ title: 'Application Submitted!', description: `Applied for ${job.title}.` });
+    } catch (err: any) {
+      toast({ title: 'Submission Failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setSubmitting(false);
     }
+  };
 
-    if (step === 'review') {
-      setSubmitting(true);
-      try {
-        const payload = {
-          applicationData: formData,
-          jobId: job.id,
-          orgId: organizationId,
-        };
-
-        const { error } = await supabase.functions.invoke('submit-application', {
-          body: payload,
-        });
-
-        if (error) throw error;
-
-        setStep('success');
-        toast({
-          title: "Application Submitted Successfully!",
-          description: `Your application for ${job.title} has been submitted.`,
-          variant: "default",
-        });
-      } catch (error: any) {
-        toast({
-          title: "Submission Failed",
-          description: error.message || "An unexpected error occurred.",
-          variant: "destructive",
-        });
-      } finally {
-        setSubmitting(false);
-      }
+  const handleSubmitClick = () => {
+    if (validateForm()) {
+      startCountdown();
+    } else {
+      toast({ title: 'Please fix the errors', description: 'Name, Email, and Resume are required.', variant: 'destructive' });
     }
   };
 
   const handleClose = () => {
+    cancelCountdown();
     if (step === 'success') {
-      setFormData({
-        personalInfo: {
-          fullName: '',
-          email: '',
-          phone: '',
-          location: '',
-          availability: '',
-        },
-        resume: null,
-        coverLetter: '',
-      });
+      setFormData({ personalInfo: { fullName: '', email: '', phone: '', location: '', availability: '' }, resume: null, coverLetter: '' });
       setStep('form');
     }
     onClose();
   };
 
+  // ── Name helpers ──────────────────────────────────────────────
+  const splitName = (full: string) => {
+    const parts = full.split(' ');
+    return { first: parts[0] || '', last: parts.slice(1).join(' ') };
+  };
+  const { first, last } = splitName(formData.personalInfo.fullName);
+  const updateName = (field: 'first' | 'last', val: string) => {
+    const full = field === 'first' ? `${val} ${last}`.trim() : `${first} ${val}`.trim();
+    setFormData(prev => ({ ...prev, personalInfo: { ...prev.personalInfo, fullName: full } }));
+  };
+
+  // Ring maths
+  const CIRC = 264;
+  const ringOffset = CIRC - (parseProgress / 100) * CIRC;
+
   if (!isOpen) return null;
 
-  const splitFullName = (fullName: string) => {
-    const parts = fullName.split(' ');
-    if (parts.length <= 1) return { firstName: parts[0] || '', lastName: '' };
-    return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
-  };
-
-  const { firstName, lastName } = splitFullName(formData.personalInfo.fullName);
-
-  const updateFullName = (field: 'firstName' | 'lastName', value: string) => {
-    let newFullName = field === 'firstName' 
-      ? `${value} ${lastName}`.trim() 
-      : `${firstName} ${value}`.trim();
-    
-    setFormData(prev => ({
-      ...prev,
-      personalInfo: { ...prev.personalInfo, fullName: newFullName }
-    }));
-  };
-
   return (
-    <div className="quick-apply-overlay" onClick={handleClose}>
-      <div className="quick-apply-modal" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="quick-apply-header">
-          <div className="quick-apply-header-content">
-            {job.logoUrl ? (
-              <img src={job.logoUrl} alt={job.company} className="quick-apply-company-logo" />
-            ) : (
-              <div className="quick-apply-company-logo-placeholder">
-                {job.company.charAt(0)}
-              </div>
-            )}
+    <div className="qa-overlay" onClick={handleClose}>
+      <div className="qa-modal" onClick={e => e.stopPropagation()}>
+
+        {/* ── Header ── */}
+        <div className="qa-header">
+          <div className="qa-header-left">
+            {job.logoUrl
+              ? <img src={job.logoUrl} alt={job.company} className="qa-logo" />
+              : <div className="qa-logo-placeholder">{job.company.charAt(0)}</div>
+            }
             <div>
-              <h2 className="quick-apply-title">Quick Apply</h2>
-              <p className="quick-apply-subtitle">{job.title} • {job.company}</p>
+              <h2 className="qa-title">Quick Apply</h2>
+              <p className="qa-subtitle">{job.title} · <span className="qa-company">{job.company}</span></p>
             </div>
           </div>
-          <button onClick={handleClose} className="quick-apply-close-btn">
-            <X size={24} />
+          <button onClick={handleClose} className="qa-close-btn" aria-label="Close">
+            <X size={18} />
           </button>
         </div>
 
-        {/* Progress Steps */}
-        <div className="quick-apply-progress">
-          <div className={`progress-step ${step === 'form' ? 'active' : step === 'review' || step === 'success' ? 'completed' : ''}`}>
-            <div className="progress-step-circle">1</div>
-            <span className="progress-step-label">Fill Details</span>
-          </div>
-          <div className="progress-line"></div>
-          <div className={`progress-step ${step === 'review' ? 'active' : step === 'success' ? 'completed' : ''}`}>
-            <div className="progress-step-circle">2</div>
-            <span className="progress-step-label">Review</span>
-          </div>
-          <div className="progress-line"></div>
-          <div className={`progress-step ${step === 'success' ? 'active completed' : ''}`}>
-            <div className="progress-step-circle">3</div>
-            <span className="progress-step-label">Done</span>
-          </div>
-        </div>
+        {/* ── Scrollable content ── */}
+        <div className="qa-content">
 
-        {/* Content */}
-        <div className="quick-apply-content">
+          {/* AI Parse Overlay */}
           {isParsing && (
-            <div className="parsing-overlay">
-              <Loader2 className="parsing-spinner" size={48} />
-              <p className="parsing-text">Parsing your resume with AI...</p>
+            <div className="qa-parse-overlay">
+              <div className="qa-parse-bg-glow" />
+
+              <div className="qa-parse-ring-wrap">
+                <svg className="qa-parse-svg" viewBox="0 0 96 96">
+                  <defs>
+                    <linearGradient id="qa-ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#a78bfa" />
+                      <stop offset="50%" stopColor="#7731e8" />
+                      <stop offset="100%" stopColor="#4f46e5" />
+                    </linearGradient>
+                  </defs>
+                  <circle className="qa-ring-track"        cx="48" cy="48" r="42" />
+                  <circle className="qa-ring-glow-stroke"  cx="48" cy="48" r="42"
+                    style={{ strokeDashoffset: ringOffset }} />
+                  <circle className="qa-ring-fill"         cx="48" cy="48" r="42"
+                    style={{ strokeDashoffset: ringOffset }} />
+                </svg>
+                <div className="qa-parse-center">
+                  {parseComplete
+                    ? <Check size={28} className="qa-parse-done-icon" />
+                    : <span className="qa-parse-pct">{parseProgress}%</span>
+                  }
+                  <span className="qa-parse-sublabel">{parseComplete ? 'Done!' : ''}</span>
+                </div>
+              </div>
+
+              <div className="qa-parse-text">
+                <p className="qa-parse-headline">
+                  <Sparkles size={14} className="qa-parse-sparkle" />
+                  Parsing Resume
+                </p>
+                <p className="qa-parse-step">{parseStepLabel}</p>
+              </div>
+
+              <div className="qa-parse-dots">
+                {PARSE_STEPS.map((s, i) => (
+                  <span key={i} className={`qa-parse-dot ${parseProgress >= s.minPct ? 'active' : ''}`} />
+                ))}
+              </div>
             </div>
           )}
 
-          {/* STEP 1: Form */}
+          {/* ── Form ── */}
           {step === 'form' && (
-            <div className="quick-apply-form">
-              <p className="form-required-note">Fields marked with * are required</p>
+            <div className="qa-form">
+              <p className="qa-required-note">Fields marked <span className="qa-asterisk">*</span> are required</p>
 
-              {/* Resume Upload */}
-              <div className="form-section">
-                <h3 className="form-section-title">
-                  <FileText size={20} /> Resume *
+              {/* Resume */}
+              <div className="qa-section">
+                <h3 className="qa-section-title">
+                  <FileText size={16} /> Resume <span className="qa-asterisk">*</span>
                 </h3>
-                
                 {formData.resume ? (
-                  <div className="resume-uploaded">
-                    <div className="resume-uploaded-content">
-                      <FileText size={32} className="resume-icon" />
+                  <div className="qa-resume-uploaded">
+                    <div className="qa-resume-uploaded-left">
+                      <div className="qa-resume-icon-wrap"><FileText size={20} /></div>
                       <div>
-                        <p className="resume-filename">{formData.resume.split('/').pop()}</p>
-                        <a 
-                          href={formData.resume} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="resume-view-link"
-                        >
-                          View Resume
-                        </a>
+                        <p className="qa-resume-name">{formData.resume.split('/').pop()}</p>
+                        <a href={formData.resume} target="_blank" rel="noopener noreferrer" className="qa-resume-link">View file ↗</a>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleRemoveResume}
-                      className="resume-remove-btn"
-                      disabled={isParsing}
-                    >
-                      <X size={20} />
+                    <button type="button" onClick={handleRemoveResume} className="qa-resume-remove" disabled={isParsing}>
+                      <X size={14} />
                     </button>
                   </div>
                 ) : (
-                  <div className={`resume-upload-area ${errors.resume ? 'error' : ''}`}>
-                    <input
-                      type="file"
-                      id="resume-upload"
-                      accept=".pdf,.doc,.docx"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleFileUpload(file);
-                      }}
-                      disabled={isParsing}
-                      style={{ display: 'none' }}
-                    />
-                    <label htmlFor="resume-upload" className="resume-upload-label">
-                      <Upload size={40} className="upload-icon" />
-                      <h4 className="upload-title">
-                        {isParsing ? 'Processing Resume...' : 'Upload your resume'}
-                      </h4>
-                      <p className="upload-subtitle">PDF, DOC, or DOCX (Max 5MB)</p>
-                      <button 
-                        type="button" 
-                        className="upload-btn"
-                        disabled={isParsing}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          document.getElementById('resume-upload')?.click();
-                        }}
-                      >
-                        {isParsing ? (
-                          <>
-                            <Loader2 size={16} className="btn-spinner" />
-                            Please wait
-                          </>
-                        ) : (
-                          'Select File'
-                        )}
+                  <div className={`qa-upload-zone ${errors.resume ? 'qa-upload-zone--error' : ''}`}>
+                    <input type="file" id="qa-resume-upload" accept=".pdf,.doc,.docx"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }}
+                      disabled={isParsing} style={{ display: 'none' }} />
+                    <label htmlFor="qa-resume-upload" className="qa-upload-label">
+                      <div className="qa-upload-icon-wrap"><Upload size={22} /></div>
+                      <p className="qa-upload-title">Drop your resume here</p>
+                      <p className="qa-upload-sub">PDF, DOC, DOCX · max 5 MB</p>
+                      <button type="button" className="qa-upload-btn" disabled={isParsing}
+                        onClick={e => { e.preventDefault(); document.getElementById('qa-resume-upload')?.click(); }}>
+                        Choose File
                       </button>
                     </label>
                   </div>
                 )}
-
-                {uploadError && <p className="error-text">{uploadError}</p>}
-                {errors.resume && <p className="error-text">{errors.resume}</p>}
+                {uploadError && <p className="qa-error">{uploadError}</p>}
+                {errors.resume && <p className="qa-error">{errors.resume}</p>}
               </div>
 
-              {/* Personal Information */}
-              <div className="form-section">
-                <h3 className="form-section-title">
-                  <User size={20} /> Personal Information
-                </h3>
-
-                <div className="form-grid">
-                  <div className="form-field">
-                    <label className="form-label">First Name *</label>
-                    <input
-                      type="text"
-                      className={`form-input ${errors.fullName ? 'error' : ''}`}
-                      value={firstName}
-                      onChange={(e) => updateFullName('firstName', e.target.value)}
-                      placeholder="John"
-                    />
+              {/* Personal Info */}
+              <div className="qa-section">
+                <h3 className="qa-section-title"><User size={16} /> Personal Information</h3>
+                <div className="qa-grid">
+                  <div className="qa-field">
+                    <label className="qa-label">First Name <span className="qa-asterisk">*</span></label>
+                    <input type="text" className={`qa-input ${errors.fullName ? 'qa-input--error' : ''}`}
+                      value={first} onChange={e => updateName('first', e.target.value)} placeholder="Jane" />
                   </div>
-
-                  <div className="form-field">
-                    <label className="form-label">Last Name *</label>
-                    <input
-                      type="text"
-                      className={`form-input ${errors.fullName ? 'error' : ''}`}
-                      value={lastName}
-                      onChange={(e) => updateFullName('lastName', e.target.value)}
-                      placeholder="Doe"
-                    />
+                  <div className="qa-field">
+                    <label className="qa-label">Last Name <span className="qa-asterisk">*</span></label>
+                    <input type="text" className={`qa-input ${errors.fullName ? 'qa-input--error' : ''}`}
+                      value={last} onChange={e => updateName('last', e.target.value)} placeholder="Smith" />
                   </div>
+                  {errors.fullName && <p className="qa-error qa-field-full">{errors.fullName}</p>}
 
-                  <div className="form-field">
-                    <label className="form-label">Email *</label>
-                    <div className="form-input-icon">
-                      <Mail size={18} className="input-icon" />
-                      <input
-                        type="email"
-                        className={`form-input with-icon ${errors.email ? 'error' : ''}`}
+                  <div className="qa-field">
+                    <label className="qa-label">Email <span className="qa-asterisk">*</span></label>
+                    <div className="qa-input-icon-wrap">
+                      <Mail size={14} className="qa-input-icon" />
+                      <input type="email" className={`qa-input qa-input--icon ${errors.email ? 'qa-input--error' : ''}`}
                         value={formData.personalInfo.email}
-                        onChange={(e) => setFormData(prev => ({
-                          ...prev,
-                          personalInfo: { ...prev.personalInfo, email: e.target.value }
-                        }))}
-                        placeholder="john.doe@example.com"
-                      />
+                        onChange={e => setFormData(p => ({ ...p, personalInfo: { ...p.personalInfo, email: e.target.value } }))}
+                        placeholder="jane@example.com" />
                     </div>
-                    {errors.email && <p className="error-text">{errors.email}</p>}
+                    {errors.email && <p className="qa-error">{errors.email}</p>}
                   </div>
 
-                  <div className="form-field">
-                    <label className="form-label">Phone Number</label>
-                    <PhoneInput
-                      international
-                      defaultCountry="IN"
-                      placeholder="Enter phone number"
+                  <div className="qa-field">
+                    <label className="qa-label">Phone</label>
+                    <PhoneInput international defaultCountry="IN" placeholder="Enter phone number"
                       value={formData.personalInfo.phone}
-                      onChange={(value) => setFormData(prev => ({
-                        ...prev,
-                        personalInfo: { ...prev.personalInfo, phone: value || '' }
-                      }))}
-                      className="phone-input-wrapper"
-                    />
+                      onChange={val => setFormData(p => ({ ...p, personalInfo: { ...p.personalInfo, phone: val || '' } }))}
+                      className="qa-phone-wrapper" />
                   </div>
 
-                  <div className="form-field form-field-full">
-                    <label className="form-label">Availability</label>
-                    <div className="form-input-icon">
-                      <Calendar size={18} className="input-icon" />
-                      <select
-                        className="form-input with-icon"
+                  <div className="qa-field qa-field-full">
+                    <label className="qa-label">Availability</label>
+                    <div className="qa-input-icon-wrap">
+                      <Calendar size={14} className="qa-input-icon" />
+                      <select className="qa-input qa-input--icon"
                         value={formData.personalInfo.availability}
-                        onChange={(e) => setFormData(prev => ({
-                          ...prev,
-                          personalInfo: { ...prev.personalInfo, availability: e.target.value }
-                        }))}
-                      >
+                        onChange={e => setFormData(p => ({ ...p, personalInfo: { ...p.personalInfo, availability: e.target.value } }))}>
                         <option value="">Select availability</option>
-                        <option value="Immediate">Immediate</option>
-                        <option value="15 Days">15 Days</option>
-                        <option value="30 Days">30 Days</option>
-                        <option value="45 Days">45 Days</option>
-                        <option value="60 Days">60 Days</option>
-                        <option value="90 Days">90 Days</option>
+                        {['Immediate', '15 Days', '30 Days', '45 Days', '60 Days', '90 Days'].map(o =>
+                          <option key={o} value={o}>{o}</option>
+                        )}
                       </select>
                     </div>
                   </div>
@@ -475,146 +448,85 @@ const QuickApplyModal: React.FC<QuickApplyModalProps> = ({
               </div>
 
               {/* Cover Letter */}
-              <div className="form-section">
-                <h3 className="form-section-title">
-                  <FileText size={20} /> Cover Letter (Optional)
+              <div className="qa-section">
+                <h3 className="qa-section-title">
+                  <FileText size={16} /> Cover Letter
+                  <span className="qa-optional">(Optional)</span>
                 </h3>
-                <textarea
-                  className="form-textarea"
+                <textarea className="qa-textarea" rows={3}
                   value={formData.coverLetter}
-                  onChange={(e) => setFormData(prev => ({ ...prev, coverLetter: e.target.value }))}
-                  placeholder="Write a brief cover letter explaining why you're interested in this position..."
-                  rows={5}
-                />
+                  onChange={e => setFormData(p => ({ ...p, coverLetter: e.target.value }))}
+                  placeholder="Why are you excited about this role?" />
               </div>
             </div>
           )}
 
-          {/* STEP 2: Review */}
-          {step === 'review' && (
-            <div className="quick-apply-review">
-              <h3 className="review-title">Review Your Application</h3>
-              <p className="review-subtitle">Please review your information before submitting</p>
-
-              <div className="review-section">
-                <h4 className="review-section-title">
-                  <User size={18} /> Personal Information
-                </h4>
-                <div className="review-grid">
-                  <div className="review-item">
-                    <span className="review-label">Full Name</span>
-                    <span className="review-value">{formData.personalInfo.fullName}</span>
-                  </div>
-                  <div className="review-item">
-                    <span className="review-label">Email</span>
-                    <span className="review-value">{formData.personalInfo.email}</span>
-                  </div>
-                  <div className="review-item">
-                    <span className="review-label">Phone</span>
-                    <span className="review-value">{formData.personalInfo.phone || '-'}</span>
-                  </div>
-                  <div className="review-item">
-                    <span className="review-label">Availability</span>
-                    <span className="review-value">{formData.personalInfo.availability || '-'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {formData.resume && (
-                <div className="review-section">
-                  <h4 className="review-section-title">
-                    <FileText size={18} /> Resume
-                  </h4>
-                  <div className="review-resume">
-                    <FileText size={24} className="review-resume-icon" />
-                    <div>
-                      <p className="review-resume-name">{formData.resume.split('/').pop()}</p>
-                      <a 
-                        href={formData.resume} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="review-resume-link"
-                      >
-                        View Resume
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {formData.coverLetter && (
-                <div className="review-section">
-                  <h4 className="review-section-title">
-                    <FileText size={18} /> Cover Letter
-                  </h4>
-                  <p className="review-cover-letter">{formData.coverLetter}</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* STEP 3: Success */}
+          {/* ── Success ── */}
           {step === 'success' && (
-            <div className="quick-apply-success">
-              <div className="success-checkmark">
-                <Check size={48} />
+            <div className="qa-success">
+              <div className="qa-success-particles">
+                {particles.map(p => (
+                  <span key={p.id} className="qa-particle"
+                    style={{ left: `${p.x}%`, top: `${p.y}%`, width: p.size, height: p.size, animationDelay: `${p.delay}s` }} />
+                ))}
               </div>
-              <h3 className="success-title">Application Submitted!</h3>
-              <p className="success-message">
-                Thank you for applying to <strong>{job.title}</strong> at <strong>{job.company}</strong>.
-                We've received your application and will review it shortly.
+              <div className="qa-success-ring">
+                <div className="qa-success-check"><Check size={40} strokeWidth={3} /></div>
+              </div>
+              <h3 className="qa-success-title">You're all set! 🎉</h3>
+              <p className="qa-success-msg">
+                Your application for <strong>{job.title}</strong> at <strong>{job.company}</strong> has been submitted.
               </p>
-              <p className="success-note">
-                You'll receive an email confirmation at <strong>{formData.personalInfo.email}</strong>
+              <p className="qa-success-note">
+                Confirmation sent to <strong>{formData.personalInfo.email}</strong>
               </p>
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="quick-apply-footer">
-          {step === 'form' && (
+        {/* ── Footer ── */}
+        <div className="qa-footer">
+
+          {/* Normal state */}
+          {step === 'form' && !isCountingDown && !submitting && (
             <>
-              <button type="button" onClick={handleClose} className="btn-secondary">
-                Cancel
-              </button>
-              <button type="button" onClick={handleSubmit} className="btn-primary">
-                Continue to Review
+              <button type="button" onClick={handleClose} className="qa-btn-ghost">Cancel</button>
+              <button type="button" onClick={handleSubmitClick} className="qa-btn-primary">
+                <Zap size={15} /> Submit Application
               </button>
             </>
           )}
 
-          {step === 'review' && (
+          {/* Countdown state — cancel + progress bar, same layout as normal */}
+          {step === 'form' && isCountingDown && (
             <>
-              <button 
-                type="button" 
-                onClick={() => setStep('form')} 
-                className="btn-secondary"
-                disabled={submitting}
-              >
-                Back to Edit
+              <button type="button" onClick={cancelCountdown} className="qa-btn-ghost qa-btn-ghost--danger">
+                <X size={14} /> Cancel
               </button>
-              <button 
-                type="button" 
-                onClick={handleSubmit} 
-                className="btn-primary"
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 size={18} className="btn-spinner" />
-                    Submitting...
-                  </>
-                ) : (
-                  'Submit Application'
-                )}
+              {/* Progress submit button — fixed width, no layout shift */}
+              <div className="qa-cd-btn">
+                <div className="qa-cd-fill" style={{ width: `${cdProgress}%` }} />
+                <div className="qa-cd-inner">
+                  <Loader2 size={15} className="qa-cd-spinner" />
+                  <span className="qa-cd-label">Submitting in {countdown}s…</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Submitting spinner */}
+          {step === 'form' && submitting && (
+            <>
+              <span />
+              <button type="button" className="qa-btn-primary" disabled>
+                <Loader2 size={15} className="qa-spinner" /> Submitting…
               </button>
             </>
           )}
 
           {step === 'success' && (
-            <button type="button" onClick={handleClose} className="btn-primary btn-full">
-              Close
+            <button type="button" onClick={handleClose} className="qa-btn-primary qa-btn-full">
+              Close &amp; Continue
             </button>
           )}
         </div>

@@ -157,7 +157,7 @@ const GlobalSuperadminDashboard: FC = () => {
     try {
       // 2. Update Supabase
       const { error } = await supabase
-        .from('organizations')
+        .from('hr_organizations')
         .update({ status: newStatus })
         .eq('id', orgId);
 

@@ -1,211 +1,343 @@
-// src/pages/careerPage/TalentView/JobDetailTalent.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Calendar, MapPin, Briefcase, Clock, ArrowLeft, Check, Heart } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import {
+  ArrowLeft, MapPin, Briefcase, Clock, DollarSign,
+  BookOpen, Zap, Users, ChevronRight, Bookmark, Share2
+} from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
-import QuickApplyModal from './QuickApplyModal';   // ← reuse the same modal
-import Header from '@/components/careerPage/Header'; // assuming this exists
-import './talent-theme.css';   // ← reuse the same global talent styles
+import QuickApplyModal from './QuickApplyModal';
+import './talent-detail-theme.css';
 
-interface Job {
+interface ExperienceRange {
+  min?: { years?: number; months?: number };
+  max?: { years?: number; months?: number };
+}
+
+interface JobDetail {
   id: string;
   title: string;
-  location: string[] | string;
+  location: string | string[];
   job_type: string;
   posted_date: string;
   description: string;
-  salary?: string;              // optional now
+  budget: number | null;
+  budget_type: string | null;
+  skills: string[] | string | null;
+  experience: string | ExperienceRange | null;
   organization_id: string;
-  company?: string;             // optional – can come from hr_organizations if needed
-  logoUrl?: string;             // optional – for modal & header
 }
 
-const JobDetailTalent = () => {
+const JobDetailTalent: React.FC = () => {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
-  const { toast } = useToast();
-
-  const [job, setJob] = useState<Job | null>(null);
+  const [job, setJob] = useState<JobDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showQuickApply, setShowQuickApply] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [orgLogoUrl, setOrgLogoUrl] = useState<string | null>(null);
+  const [orgName, setOrgName] = useState<string>('');
 
   useEffect(() => {
+    if (!jobId) return;
     const fetchJob = async () => {
-      if (!jobId) return;
       setLoading(true);
-
-      const { data, error } = await supabase.functions.invoke('get-public-job-by-id', {
-        body: { jobId },
-      });
-
-      if (error) {
-        toast({
-          title: 'Error fetching job details',
-          description: error.message,
-          variant: 'destructive',
+      try {
+        const { data, error: fnErr } = await supabase.functions.invoke('get-public-job-by-id', {
+          body: { jobId },
         });
-        setJob(null);
-      } else {
-        // Optional: enhance with company/logo if your function returns it
-        setJob({
-          ...data,
-          // company: data.hr_organizations?.name || 'Company',
-          // logoUrl: data.hr_organizations?.hr_organization_profile?.logo_url || '',
-        });
+        if (fnErr) throw new Error(fnErr.message);
+        if (data?.error) throw new Error(data.error);
+        setJob(data);
+
+        console.log('jobdetail', data);
+
+        if (data?.organization_id) {
+          const { data: org } = await supabase
+            .from('hr_organization_profiles')
+            .select('name, logo_url')
+            .eq('id', data.organization_id)
+            .single();
+          if (org) {
+            setOrgName(org.name || '');
+            setOrgLogoUrl(org.logo_url || null);
+          }
+        }
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
-
     fetchJob();
-  }, [jobId, toast]);
+  }, [jobId]);
 
-  const handleApplyClick = () => {
-    if (!job) return;
-    setShowQuickApply(true);
+  // ── Helpers ──────────────────────────────────────────────────
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const diff = Math.floor((Date.now() - d.getTime()) / 86400000);
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Yesterday';
+    if (diff < 7) return `${diff} days ago`;
+    if (diff < 30) return `${Math.floor(diff / 7)}w ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  const formatBudget = (budget: number | null, type: string | null): string | null => {
+    if (!budget) return null;
+    const formatted = new Intl.NumberFormat('en-IN', {
+      style: 'currency', currency: 'INR', maximumFractionDigits: 0,
+    }).format(budget);
+    return type ? `${formatted} / ${type}` : formatted;
+  };
+
+  /**
+   * experience can come back as:
+   *   - a plain string:  "6-9 years"
+   *   - an object:  { min: { years: 6, months: 0 }, max: { years: 9, months: 0 } }
+   * Always returns a safe string for rendering.
+   */
+  const formatExperience = (exp: string | ExperienceRange | null): string => {
+    if (!exp) return '';
+    if (typeof exp === 'string') return exp;
+    const minYrs = exp.min?.years ?? 0;
+    const maxYrs = exp.max?.years ?? 0;
+    if (minYrs === maxYrs) return `${minYrs} year${minYrs !== 1 ? 's' : ''}`;
+    if (!maxYrs) return `${minYrs}+ years`;
+    return `${minYrs} – ${maxYrs} years`;
+  };
+
+  /**
+   * location can be a plain string or an array of strings.
+   */
+  const formatLocation = (loc: string | string[] | null): string => {
+    if (!loc) return '';
+    if (Array.isArray(loc)) return loc.join(', ');
+    return loc;
+  };
+
+  /**
+   * skills can be an array or a comma-separated string.
+   */
+  const parseSkills = (raw: string[] | string | null): string[] => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    return raw.split(',').map(s => s.trim()).filter(Boolean);
+  };
+
+  // ── Derived display values ───────────────────────────────────
+  const skills       = job ? parseSkills(job.skills) : [];
+  const locationStr  = job ? formatLocation(job.location) : '';
+  const experienceStr= job ? formatExperience(job.experience) : '';
+  const budgetStr    = job ? formatBudget(job.budget, job.budget_type) : null;
+
+  // ── Loading / Error ──────────────────────────────────────────
   if (loading) {
     return (
-      <div className="talent-page-wrapper min-h-screen flex items-center justify-center">
-        <p className="text-lg font-semibold text-gray-600">Loading job details...</p>
+      <div className="talent-page-wrapper">
+        <div className="jd-loading-state">
+          <div className="jd-loading-spinner" />
+          <p>Loading job details…</p>
+        </div>
       </div>
     );
   }
 
-  if (!job) {
+  if (error || !job) {
     return (
-      <div className="talent-page-wrapper min-h-screen">
-        <Header />
-        <div className="container mx-auto px-4 pt-32 text-center">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">Job not found</h1>
-          <Button 
-            onClick={() => navigate('/careers')}
-            variant="outline"
-            className="border-hrumbles-accent text-hrumbles-accent hover:bg-hrumbles-accent/10"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Job Listings
-          </Button>
+      <div className="talent-page-wrapper">
+        <div className="jd-error-state">
+          <h2>Job not found</h2>
+          <p>{error || 'This listing may have been removed.'}</p>
+          <button onClick={() => navigate('/careers')} className="jd-back-btn">
+            <ArrowLeft size={16} /> Back to Jobs
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="talent-page-wrapper min-h-screen">
-      {/* Header - reuse same as list page */}
-      <Header />
+    <div className="talent-page-wrapper">
 
-      {/* Back + Title Bar */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              onClick={() => navigate('/careers')}
-              className="text-gray-600 hover:text-hrumbles-accent"
+      {/* ── Top Bar ── */}
+      <div className="jd-topbar">
+        <div className="jd-topbar-inner">
+          <button className="jd-back-btn" onClick={() => navigate('/careers')}>
+            <ArrowLeft size={15} />
+            <span>All Jobs</span>
+          </button>
+          <div className="jd-topbar-actions">
+            {/* <button className="jd-icon-btn" title="Save job">
+              <Bookmark size={16} />
+            </button> */}
+            <button
+              className="jd-icon-btn"
+              title="Share job"
+              onClick={() => navigator.share?.({ title: job.title, url: window.location.href })}
             >
-              <ArrowLeft className="mr-2 h-5 w-5" /> Back to Jobs
-            </Button>
-
-            <Button
-              onClick={handleApplyClick}
-              className="bg-hrumbles-accent hover:bg-hrumbles-accent/90 text-white font-medium px-6"
-            >
-              <Check className="mr-2 h-4 w-4" /> Apply Now
-            </Button>
+              <Share2 size={16} />
+            </button>
+            <button className="jd-apply-pill" onClick={() => setIsModalOpen(true)}>
+              Apply Now <ChevronRight size={14} />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="container mx-auto px-4 py-10">
-        <div className="max-w-4xl mx-auto">
-          {/* Job Header Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-10">
-            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-              <div className="flex-1">
-                <div className="flex flex-wrap items-center gap-3 mb-4">
-                  <div className="inline-flex items-center gap-1.5 bg-hrumbles-accent/10 text-hrumbles-accent px-3 py-1 rounded-full text-sm font-medium">
-                    <Briefcase size={14} />
-                    {job.job_type || 'Full-time'}
-                  </div>
-                  <div className="inline-flex items-center gap-1.5 text-gray-600 text-sm">
-                    <Calendar size={14} />
-                    Posted {new Date(job.posted_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </div>
-                </div>
-
-                <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">{job.title}</h1>
-
-                <div className="flex flex-wrap gap-6 text-gray-600 mb-6">
-                  <div className="flex items-center gap-2">
-                    <MapPin size={18} className="text-hrumbles-accent" />
-                    <span>{Array.isArray(job.location) ? job.location.join(', ') : job.location || 'Not specified'}</span>
-                  </div>
-                  {job.salary && (
-                    <div className="flex items-center gap-2 font-medium text-gray-800">
-                      <Clock size={18} className="text-hrumbles-accent" />
-                      {job.salary}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 lg:self-start">
-                <Button
-                  onClick={handleApplyClick}
-                  className="bg-hrumbles-accent hover:bg-hrumbles-accent/90 text-white px-8 py-6 text-lg"
-                >
-                  Apply Now
-                </Button>
-                <Button variant="outline" className="border-gray-300">
-                  <Heart className="mr-2 h-5 w-5" /> Save
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Job Description */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-6">Job Description</h2>
-            <div className="prose prose-lg max-w-none text-gray-700 whitespace-pre-line">
-              {job.description || 'No description available.'}
-            </div>
-
-            <div className="mt-12 pt-8 border-t border-gray-200">
-              <h2 className="text-2xl font-semibold text-gray-900 mb-6">How to Apply</h2>
-              <p className="text-gray-600 mb-8 leading-relaxed">
-                Ready to take the next step in your career? Submit your application using the button below. 
-                Our team reviews every application carefully and will reach out to qualified candidates.
-              </p>
-
-              <Button
-                onClick={handleApplyClick}
-                size="lg"
-                className="bg-hrumbles-accent hover:bg-hrumbles-accent/90 text-white px-10 py-7 text-lg"
-              >
-                <Check className="mr-3 h-5 w-5" /> Apply for this Position
-              </Button>
+      {/* ── Hero ── */}
+      <div className="jd-hero">
+        <div className="jd-hero-inner">
+          {orgLogoUrl
+            ? <img src={orgLogoUrl} alt={orgName} className="jd-hero-logo" />
+            : <div className="jd-hero-logo-placeholder">{(orgName || job.title).charAt(0)}</div>
+          }
+          <div className="jd-hero-info">
+            <h1 className="jd-hero-title">{job.title}</h1>
+            {orgName && <p className="jd-hero-company">{orgName}</p>}
+            <div className="jd-hero-chips">
+              {locationStr && (
+                <span className="jd-chip jd-chip--location">
+                  <MapPin size={12} /> {locationStr}
+                </span>
+              )}
+              {job.job_type && (
+                <span className="jd-chip jd-chip--type">
+                  <Briefcase size={12} /> {job.job_type}
+                </span>
+              )}
+              {job.posted_date && (
+                <span className="jd-chip jd-chip--date">
+                  <Clock size={12} /> {formatDate(job.posted_date)}
+                </span>
+              )}
+             
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ── Two-column body ── */}
+      <div className="jd-body">
+
+        {/* LEFT SIDEBAR */}
+        <aside className="jd-sidebar">
+
+          {/* Quick Apply CTA */}
+          <div className="jd-sidebar-cta">
+            <p className="jd-sidebar-cta-label">Ready to apply?</p>
+            <button className="jd-apply-full-btn" onClick={() => setIsModalOpen(true)}>
+              Quick Apply
+              <span className="jd-apply-btn-orb">
+                <span className="jd-apply-btn-orb-inner">
+                  <Zap size={13} />
+                </span>
+              </span>
+            </button>
+          </div>
+
+          {/* Experience */}
+          {experienceStr && (
+            <div className="jd-sidebar-card">
+              <div className="jd-sidebar-card-header">
+                <Users size={15} />
+                <span>Experience</span>
+              </div>
+              <p className="jd-sidebar-card-value">{experienceStr}</p>
+            </div>
+          )}
+
+          {/* Skills */}
+          {skills.length > 0 && (
+            <div className="jd-sidebar-card">
+              <div className="jd-sidebar-card-header">
+                <BookOpen size={15} />
+                <span>Required Skills</span>
+              </div>
+              <div className="jd-skills-list">
+                {skills.map((skill, i) => (
+                  <span key={i} className="jd-skill-tag">{skill}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Job Details mini-list */}
+          <div className="jd-sidebar-card">
+            <div className="jd-sidebar-card-header">
+              <Briefcase size={15} />
+              <span>Job Details</span>
+            </div>
+            <ul className="jd-details-list">
+              {job.job_type && (
+                <li>
+                  <span className="jd-details-key">Type</span>
+                  <span className="jd-details-val">{job.job_type}</span>
+                </li>
+              )}
+              {locationStr && (
+                <li>
+                  <span className="jd-details-key">Location</span>
+                  <span className="jd-details-val">{locationStr}</span>
+                </li>
+              )}
+              {/* {budgetStr && (
+                <li>
+                  <span className="jd-details-key">Salary</span>
+                  <span className="jd-details-val">{budgetStr}</span>
+                </li>
+              )} */}
+              {job.posted_date && (
+                <li>
+                  <span className="jd-details-key">Posted</span>
+                  <span className="jd-details-val">{formatDate(job.posted_date)}</span>
+                </li>
+              )}
+            </ul>
+          </div>
+
+        </aside>
+
+        {/* RIGHT: Description */}
+        <main className="jd-main">
+          <div className="jd-desc-card">
+            <h2 className="jd-desc-title">Job Description</h2>
+            <div className="jd-desc-body">
+              {job.description || 'No description provided.'}
+            </div>
+          </div>
+
+          {/* Bottom CTA */}
+          <div className="jd-bottom-cta">
+            <div>
+              <p className="jd-bottom-cta-title">Interested in this role?</p>
+              <p className="jd-bottom-cta-sub">Apply now — takes less than 2 minutes with Quick Apply.</p>
+            </div>
+            <button className="jd-apply-full-btn jd-apply-full-btn--cta" onClick={() => setIsModalOpen(true)}>
+              Quick Apply
+              <span className="jd-apply-btn-orb">
+                <span className="jd-apply-btn-orb-inner">
+                  <Zap size={13} />
+                </span>
+              </span>
+            </button>
+          </div>
+        </main>
       </div>
 
       {/* Quick Apply Modal */}
       {job && (
         <QuickApplyModal
-          isOpen={showQuickApply}
-          onClose={() => setShowQuickApply(false)}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
           job={{
             id: job.id,
             title: job.title,
-            company: job.company || 'Company', // fallback
-            logoUrl: job.logoUrl,
+            company: orgName,
+            logoUrl: orgLogoUrl || undefined,
           }}
-          organizationId={job.organization_id || ''}
+          organizationId={job.organization_id}
         />
       )}
     </div>

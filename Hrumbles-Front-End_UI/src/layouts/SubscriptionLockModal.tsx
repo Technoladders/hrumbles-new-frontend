@@ -55,7 +55,7 @@ const CONTENT: Record<NonNullable<LockReason>, {
     iconBg: 'orange.50',
     title: 'Account Suspended',
     titleColor: 'orange.600',
-    message: "Your organization's account has been temporarily suspended by the platform administrator. This is usually due to a policy review.",
+    message: "Your organization's account has been temporarily suspended by the platform administrator.",
     alertBg: 'orange.50',
     alertBorder: 'orange.400',
     alertText: 'Action Required',
@@ -177,7 +177,7 @@ const SubscriptionLockModal: React.FC<SubscriptionLockModalProps> = ({
             Log Out
           </Button>
 
-          {cfg.showContact && (
+          {/* {cfg.showContact && (
             <Button
               colorScheme={cfg.buttonScheme}
               leftIcon={<Icon as={FiMail} />}
@@ -190,7 +190,7 @@ const SubscriptionLockModal: React.FC<SubscriptionLockModalProps> = ({
             >
               Contact Support
             </Button>
-          )}
+          )} */}
         </ModalFooter>
       </ModalContent>
     </Modal>

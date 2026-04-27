@@ -608,3 +608,5 @@ const TalentCareerPage = () => {
 };
 
 export default TalentCareerPage;
+
+// ui changes final version
