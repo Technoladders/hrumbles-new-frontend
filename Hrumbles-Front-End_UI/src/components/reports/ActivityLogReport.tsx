@@ -22,7 +22,7 @@ import {
   ChevronDown, ChevronUp, ChevronsUpDown, BarChart3,
   PieChart as PieIcon, Activity, Clock, Target, Award,
   Eye, X, ChevronLeft, ChevronRight, AlertCircle,
-  CheckCircle2, ListTodo, FileText, Building2,
+  CheckCircle2, ListTodo, FileText, Building2, PhoneCall, PhoneOff,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -51,6 +51,13 @@ const MAIN_CFG: Record<string, { label: string; color: string; light: string; ic
   email:    { label: 'Emails',   color: '#6366F1', light: '#EEF2FF', icon: Mail },
   meeting:  { label: 'Meetings', color: '#10B981', light: '#D1FAE5', icon: Calendar },
   linkedin: { label: 'LinkedIn', color: '#0A66C2', light: '#DBEAFE', icon: Linkedin },
+};
+
+const CALL_CONNECTED_CFG = {
+  label: 'Connected',
+  color: '#10B981',
+  light: '#D1FAE5',
+  icon: PhoneCall,
 };
 
 const OUTCOME_COLORS: Record<string, string> = {
@@ -543,17 +550,25 @@ export const ActivityLogReport: React.FC = () => {
       label, count: mainActs.filter((a: any) => parseISO(a.activity_date).getDay() === d).length,
     }));
 
-    const empMap: Record<string, any> = {};
-    mainActs.forEach((a: any) => {
-      const id = (a.creator as any)?.id || 'unknown';
-      if (!empMap[id]) empMap[id] = {
-        id, avatar: (a.creator as any)?.profile_picture_url,
-        name: a.creator ? `${(a.creator as any).first_name} ${(a.creator as any).last_name}` : 'Unknown',
-        total: 0, call: 0, email: 0, meeting: 0, linkedin: 0,
-      };
-      empMap[id].total++;
-      empMap[id][a.type] = (empMap[id][a.type] || 0) + 1;
-    });
+const empMap: Record<string, any> = {};
+mainActs.forEach((a: any) => {
+  const id = (a.creator as any)?.id || 'unknown';
+  if (!empMap[id]) empMap[id] = {
+    id, avatar: (a.creator as any)?.profile_picture_url,
+    name: a.creator ? `${(a.creator as any).first_name} ${(a.creator as any).last_name}` : 'Unknown',
+    total: 0, call: 0, call_connected: 0, email: 0, meeting: 0, linkedin: 0,
+  };
+  empMap[id].total++;
+  if (a.type === 'call') {
+    empMap[id].call = (empMap[id].call || 0) + 1;
+    if (a.outcome === 'connected') {
+      empMap[id].call_connected = (empMap[id].call_connected || 0) + 1;
+    }
+  }
+  if (a.type !== 'call') {
+    empMap[id][a.type] = (empMap[id][a.type] || 0) + 1;
+  }
+});
     const byEmployee = Object.values(empMap).sort((a: any, b: any) => b.total - a.total);
 
     const typeBreakdown = Object.entries(MAIN_CFG).map(([type, cfg]) => ({
@@ -720,16 +735,64 @@ export const ActivityLogReport: React.FC = () => {
 
         {/* ── STAT CARDS ────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {Object.entries(MAIN_CFG).map(([type, cfg], i) => (
-            <StatCard key={type} title={cfg.label}
-              value={(analytics?.counts[type] || 0).toLocaleString()}
-              icon={cfg.icon} color={cfg.color} light={cfg.light}
-              trend={analytics?.getTrend(type)}
-              delay={i * 0.07}
-              active={statFilter === type}
-              onClick={() => { setStatFilter(statFilter === type ? null : type); setMainFilter('all'); setPage(1); }}
-            />
-          ))}
+{Object.entries(MAIN_CFG).map(([type, cfg], i) => {
+  if (type === 'call') {
+    // Calculate connected calls count
+    const connectedCount = mainActs.filter((a: any) => a.type === 'call' && a.outcome === 'connected').length;
+    const totalCalls = analytics?.counts[type] || 0;
+    
+    return (
+      <motion.div
+        key={type}
+        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, delay: i * 0.07 }}
+        onClick={() => { setStatFilter(statFilter === type ? null : type); setMainFilter('all'); setPage(1); }}
+        className={cn(
+          'relative bg-white rounded-2xl border p-4 cursor-pointer overflow-hidden group transition-all duration-200',
+          statFilter === type ? 'ring-2 shadow-lg' : 'border-gray-100 hover:shadow-md',
+        )}
+        style={statFilter === type ? { borderColor: cfg.color, boxShadow: `0 4px 20px ${cfg.color}20` } : {}}
+      >
+        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+          style={{ background: `radial-gradient(ellipse at 80% 20%, ${cfg.color}08 0%, transparent 65%)` }} />
+        <div className="relative z-10 flex items-start justify-between mb-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: cfg.light }}>
+            <cfg.icon size={18} style={{ color: cfg.color }} />
+          </div>
+          {analytics?.getTrend(type) !== undefined && (
+            <span className={cn('flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full',
+              (analytics?.getTrend(type) ?? 0) >= 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-500 bg-red-50')}>
+              {(analytics?.getTrend(type) ?? 0) >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+              {Math.abs(analytics?.getTrend(type) ?? 0)}%
+            </span>
+          )}
+        </div>
+        
+        {/* Split display for calls: Connected / Total */}
+        <div className="relative z-10 flex items-baseline gap-1.5">
+          <span className="text-2xl font-bold text-emerald-600 tabular-nums">{connectedCount}</span>
+          <span className="text-lg font-semibold text-gray-300 tabular-nums">/</span>
+          <span className="text-2xl font-bold text-gray-900 tabular-nums">{totalCalls}</span>
+        </div>
+        <p className="text-xs text-gray-500 mt-0.5 relative z-10">
+          {cfg.label} <span className="text-emerald-500 font-medium">({totalCalls > 0 ? Math.round((connectedCount / totalCalls) * 100) : 0}% connected)</span>
+        </p>
+      </motion.div>
+    );
+  }
+  
+  // For other types (email, meeting, linkedin) - keep original
+  return (
+    <StatCard key={type} title={cfg.label}
+      value={(analytics?.counts[type] || 0).toLocaleString()}
+      icon={cfg.icon} color={cfg.color} light={cfg.light}
+      trend={analytics?.getTrend(type)}
+      delay={i * 0.07}
+      active={statFilter === type}
+      onClick={() => { setStatFilter(statFilter === type ? null : type); setMainFilter('all'); setPage(1); }}
+    />
+  );
+})}
         </div>
 
         {/* ── KPI ROW ──────────────────────────── */}
@@ -816,58 +879,112 @@ export const ActivityLogReport: React.FC = () => {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="text-left px-5 py-3 text-gray-400 font-semibold">#</th>
-                    <th className="text-left px-4 py-3 text-gray-400 font-semibold">Member</th>
-                    <th className="text-center px-4 py-3 text-gray-500 font-semibold">Total</th>
-                    {Object.entries(MAIN_CFG).map(([t, c]) => (
-                      <th key={t} className="text-center px-4 py-3 font-semibold" style={{ color: c.color }}>{c.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(analytics?.byEmployee || []).map((emp: any, idx: number) => {
-                    const mx = (analytics?.byEmployee[0] as any)?.total || 1;
-                    return (
-                      <tr key={emp.id} className="border-b border-gray-50 hover:bg-amber-50/15 transition-colors">
-                        <td className="px-5 py-3 text-[11px] text-gray-400 font-bold">
-                          {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <Avatar className="h-7 w-7 flex-shrink-0">
-                              <AvatarImage src={emp.avatar} />
-                              <AvatarFallback className="text-[9px] bg-indigo-100 text-indigo-700 font-bold">
-                                {emp.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="font-medium text-gray-800">{emp.name}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex flex-col items-center gap-1">
-                            <span className="font-bold text-gray-900">{emp.total}</span>
-                            <div className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-indigo-500 rounded-full"
-                                style={{ width: `${Math.round((emp.total / mx) * 100)}%` }} />
-                            </div>
-                          </div>
-                        </td>
-                        {Object.entries(MAIN_CFG).map(([type, cfg]) => (
-                          <td key={type} className="px-4 py-3 text-center">
-                            <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold"
-                              style={emp[type] > 0
-                                ? { backgroundColor: `${cfg.color}18`, color: cfg.color }
-                                : { color: '#D1D5DB' }}>
-                              {emp[type] || 0}
-                            </span>
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
+               <thead>
+  <tr className="bg-gray-50 border-b border-gray-100">
+    <th className="text-left px-5 py-3 text-gray-400 font-semibold">#</th>
+    <th className="text-left px-4 py-3 text-gray-400 font-semibold">Member</th>
+    <th className="text-center px-4 py-3 text-gray-500 font-semibold">Total</th>
+    {Object.entries(MAIN_CFG).map(([t, c]) => {
+      if (t === 'call') {
+        return (
+          <React.Fragment key={t}>
+            <th className="text-center px-3 py-3">
+              <div className="flex flex-col items-center">
+                <span className="text-emerald-500 font-semibold text-[10px]">Connected</span>
+                <span className="text-emerald-400 text-[9px] font-normal mt-0.5">Calls</span>
+              </div>
+            </th>
+            <th className="text-center px-3 py-3">
+              <div className="flex flex-col items-center">
+                <span className="font-semibold" style={{ color: c.color }}>Total</span>
+                <span className="text-gray-400 text-[9px] font-normal mt-0.5">Calls</span>
+              </div>
+            </th>
+          </React.Fragment>
+        );
+      }
+      return (
+        <th key={t} className="text-center px-4 py-3 font-semibold" style={{ color: c.color }}>{c.label}</th>
+      );
+    })}
+  </tr>
+</thead>
+<tbody>
+  {(analytics?.byEmployee || []).map((emp: any, idx: number) => {
+    const mx = (analytics?.byEmployee[0] as any)?.total || 1;
+    return (
+      <tr key={emp.id} className="border-b border-gray-50 hover:bg-amber-50/15 transition-colors">
+        <td className="px-5 py-3 text-[11px] text-gray-400 font-bold">
+          {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Avatar className="h-7 w-7 flex-shrink-0">
+              <AvatarImage src={emp.avatar} />
+              <AvatarFallback className="text-[9px] bg-indigo-100 text-indigo-700 font-bold">
+                {emp.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="font-medium text-gray-800">{emp.name}</span>
+          </div>
+        </td>
+        <td className="px-4 py-3 text-center">
+          <div className="flex flex-col items-center gap-1">
+            <span className="font-bold text-gray-900">{emp.total}</span>
+            <div className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-500 rounded-full"
+                style={{ width: `${Math.round((emp.total / mx) * 100)}%` }} />
+            </div>
+          </div>
+        </td>
+        {Object.entries(MAIN_CFG).map(([type, cfg]) => {
+          if (type === 'call') {
+            const connected = emp.call_connected || 0;
+            const total = emp.call || 0;
+            const connectRate = total > 0 ? Math.round((connected / total) * 100) : 0;
+            return (
+              <React.Fragment key={type}>
+                {/* Connected column */}
+                <td className="px-3 py-3 text-center">
+                  <span className="inline-flex items-center justify-center min-w-[28px] h-7 rounded-lg text-xs font-bold"
+                    style={connected > 0
+                      ? { backgroundColor: '#D1FAE5', color: '#10B981' }
+                      : { color: '#D1D5DB' }}>
+                    {connected}
+                  </span>
+                  {total > 0 && (
+                    <div className="mt-1">
+                      <span className="text-[9px] font-medium text-emerald-500">{connectRate}%</span>
+                    </div>
+                  )}
+                </td>
+                {/* Total column */}
+                <td className="px-3 py-3 text-center">
+                  <span className="inline-flex items-center justify-center min-w-[28px] h-7 rounded-lg text-xs font-bold"
+                    style={total > 0
+                      ? { backgroundColor: `${cfg.color}18`, color: cfg.color }
+                      : { color: '#D1D5DB' }}>
+                    {total}
+                  </span>
+                </td>
+              </React.Fragment>
+            );
+          }
+          return (
+            <td key={type} className="px-4 py-3 text-center">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold"
+                style={emp[type] > 0
+                  ? { backgroundColor: `${cfg.color}18`, color: cfg.color }
+                  : { color: '#D1D5DB' }}>
+                {emp[type] || 0}
+              </span>
+            </td>
+          );
+        })}
+      </tr>
+    );
+  })}
+</tbody>
               </table>
             </div>
           </motion.div>

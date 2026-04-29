@@ -361,3 +361,4 @@ const ProjectTable = ({ projectFinancials, setAddProjectOpen, setEditingProject,
 };
 
 export default ProjectTable;
+// deepseek ui changes

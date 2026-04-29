@@ -37,6 +37,8 @@ import DynamicIndividualReport      from '@/components/reports/DynamicIndividual
 import DynamicClientWiseReport      from '@/components/reports/DynamicClientWiseReport';
 import NewClientWiseReport          from '@/components/reports/NewClientWiseReport';
 import NewIndividualReport          from '@/components/reports/NewIndividualReport';
+import CallAnalyticsReport from "@/components/sales/activity-report/CallAnalyticsReport.tsx";
+import ActivityLogReport from '@/components/reports/ActivityLogReport.tsx';
 import { LoadingSpinner }           from '@/components/ui/loading-spinner';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -90,6 +92,8 @@ const ALL_CATEGORIES: CategoryDef[] = [
     color: '#2563EB',
     bgLight: '#EFF6FF',
     reports: [
+      { type: 'contact_activity',  label: 'Contact Activity',  description: 'Contact activity log' },
+      { type:'contact_call_activity', label: 'Contact Call Activity', description: 'Contact Call activity' },
       { type: 'contacts',          label: 'Contacts',          description: 'Contact status overview' },
       { type: 'companies',         label: 'Companies',         description: 'Company status overview' },
       { type: 'contacts_trends',   label: 'Contacts Trends',   description: 'Trend analysis for contacts' },
@@ -124,6 +128,8 @@ const renderReport = (type: ReportType, orgId: string) => {
     case 'verification':        return <VerificationReportPage />;
     case 'consolidated_status': return <ConsolidatedStatusReport />;
     case 'user_activity':       return <UserActivityReportPage />;
+    case 'contact_activity':    return <ActivityLogReport />;
+    case 'contact_call_activity': return <CallAnalyticsReport />;
     case 'contacts':            return <ContactsReport />;
     case 'companies':           return <CompaniesReport />;
     case 'contacts_trends':     return <ContactsTrendsReport />;
