@@ -160,6 +160,9 @@ import WhatsAppInbox from '@/components/whatsapp/WhatsAppInbox';
 import WhatsAppSettings from "./components/settings/WhatsAppSettings.tsx";
 import OrganizationProfilePage from "./pages/settings/OrganizationProfilePage.tsx";
 import { InterviewsPage } from '@/components/dashboard/widgets/InterviewsWidget';
+import MigrationPage from "@/components/global/MigrationPage";
+import MigrationHistoryPage from "@/components/global/MigrationHistoryPage";
+import CallAnalyticsReport from "@/components/sales/activity-report/CallAnalyticsReport.tsx";
 
 const FullScreenLoader = () => (
   <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
@@ -455,6 +458,8 @@ function AppContent() {
               <Route path="/password" element={<PasswordChange />} />
               <Route path="/organization" element={<GlobalSuperadminDashboard />} />
               <Route path="/organization/:organizationId" element={<SingleOrganizationDashboard />} />
+              <Route path="/migration" element={<MigrationPage />} />
+              <Route path="/database/history" element={<MigrationHistoryPage />} />  
               <Route path="/verifications" element={<VerificationHubPage />} />
               <Route path="/verifications/:verificationType" element={<VerificationTypeDashboardPage />} />
               <Route path="/verifications/:verificationType/:organizationId" element={<OrganizationVerificationReportPage />} />
@@ -529,6 +534,7 @@ function AppContent() {
               <Route path="/accounts/reconciliation" element={<ReconciliationPage />} />
               <Route path="/sales/dashboard" element={<SalesDashboard />} />
               <Route path="/activity-log" element={<ActivityLogReport />} />
+              <Route path="/call-analytics" element={<CallAnalyticsReport />} />
               <Route path="/companies" element={<CompanyIntelligenceSearchPage />} />
               <Route path="/lists/companies/file/:fileId" element={<CompanyIntelligenceSearchPage />} />
               <Route path="/contacts" element={<TanstackContactsPage />} />

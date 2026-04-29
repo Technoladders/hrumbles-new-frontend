@@ -1270,27 +1270,133 @@ const handleBulkAddToList = async (targetFileIds: string[]) => {
     className="border-slate-300 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600 h-3.5 w-3.5"
   />
 </td>
-                                <td className="sticky left-[40px] left-0 z-5 bg-white group-hover:bg-slate-50 px-3 py-2 shadow-[2px_0_6px_-3px_rgba(0,0,0,0.08)] border-r border-slate-100 w-[260px]">
-                                  <div className="flex items-center gap-2">
-                                   
-                                    <Avatar className="h-8 w-8 border shadow-sm flex-shrink-0">
-                                      <AvatarImage src={company.logo_url} />
-                                      <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white text-[9px] font-bold">{getInitials(company.name)}</AvatarFallback>
-                                    </Avatar>
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex items-center gap-1">
-                                        {!isCloudMode && company.id ? (
-                                          <RouterLink to={`/companies/${company.id}`} className="font-semibold text-slate-900 hover:text-indigo-700 truncate text-[11px] block leading-tight">{company.name}</RouterLink>
-                                        ) : (
-                                          <span className="font-semibold text-slate-900 truncate text-[11px] block leading-tight">{company.name}</span>
-                                        )}
-                                        {/* {hasApollo   && <Sparkles className="h-3 w-3 text-amber-500 flex-shrink-0" />}
-                                        {isPromoted  && <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />} */}
-                                      </div>
-                                      <p className="text-[9px] text-slate-500 truncate">{domain || "No domain"}</p>
-                                    </div>
-                                  </div>
-                                </td>
+{/* COMPANY NAME CELL */}
+<td className="sticky left-[40px] z-5 bg-white group-hover:bg-slate-50 px-3 py-2 shadow-[2px_0_6px_-3px_rgba(0,0,0,0.08)] border-r border-slate-100 w-[260px]">
+  <div className="flex items-center gap-2">
+    <Avatar className="h-8 w-8 border shadow-sm flex-shrink-0">
+      <AvatarImage src={company.logo_url} />
+      <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white text-[9px] font-bold">
+        {getInitials(company.name)}
+      </AvatarFallback>
+    </Avatar>
+
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-1">
+        
+        {/* ==================== CLOUD MODE ==================== */}
+        {isCloudMode ? (
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+
+              const apolloId = company.apollo_org_id;
+              console.log("🔍 [CLOUD CLICK] Company:", company.name, "| Apollo ID:", apolloId);
+
+              if (!apolloId) {
+                console.warn("⚠️ No apollo_org_id");
+                if (company.id) navigate(`/companies/${company.id}`);
+                return;
+              }
+
+              const cidStr = apolloId.toString();
+              setIsSavingIds(prev => new Set(prev).add(cidStr));
+
+              try {
+                console.log("🚀 Updating is_saved=true for apollo_org_id:", apolloId);
+
+                const { error } = await supabase
+                  .from("companies")
+                  .update({
+                    is_saved: true,
+                    updated_at: new Date().toISOString(),
+                    updated_by: currentUserId,
+                  })
+                  .eq("apollo_org_id", apolloId)
+                  .eq("organization_id", organizationId);
+
+                if (error) {
+                  console.error("❌ Supabase error:", error);
+                  throw error;
+                }
+
+                console.log("✅ Successfully marked as saved");
+
+                toast({ title: "Company Saved ✓" });
+
+                // Update local UI
+                if (apiResults) {
+                  setApiResults((prev: any) => {
+                    if (!prev) return prev;
+                    return {
+                      ...prev,
+                      organizations: prev.organizations.map((o: any) =>
+                        o.apollo_org_id === apolloId ? { ...o, is_saved: true } : o
+                      )
+                    };
+                  });
+                }
+
+                queryClient.invalidateQueries({ queryKey: ["companies-crm"] });
+
+              } catch (err: any) {
+                console.error("💥 Save failed:", err);
+                toast({
+                  title: "Save Failed",
+                  description: err.message || "Try again",
+                  variant: "destructive"
+                });
+              } finally {
+                setIsSavingIds(prev => {
+                  const n = new Set(prev);
+                  n.delete(cidStr);
+                  return n;
+                });
+              }
+
+              // Navigate
+              if (company.id) {
+                navigate(`/companies/${company.id}`);
+              }
+            }}
+            disabled={isSavingIds.has(companyId) || !!company.is_saved}
+            className="font-semibold text-slate-900 hover:text-indigo-700 truncate text-[11px] block leading-tight text-left disabled:opacity-60 hover:underline w-full"
+          >
+            {isSavingIds.has(companyId) ? (
+              <span className="flex items-center gap-1">
+                <Loader2 size={9} className="animate-spin" /> Saving...
+              </span>
+            ) : company.is_saved ? (
+              <span className="flex items-center gap-1">
+                {company.name} <BookmarkCheck size={13} className="text-green-600" />
+              </span>
+            ) : (
+              company.name
+            )}
+          </button>
+        ) : 
+        /* ==================== CRM MODE (existing links) ==================== */
+        company.id ? (
+          <RouterLink
+            to={`/companies/${company.id}`}
+            className="font-semibold text-slate-900 hover:text-indigo-700 truncate text-[11px] block leading-tight"
+          >
+            {company.name}
+          </RouterLink>
+        ) : (
+          <span className="font-semibold text-slate-900 truncate text-[11px] block leading-tight">
+            {company.name}
+          </span>
+        )}
+
+      </div>
+
+      <p className="text-[9px] text-slate-500 truncate">
+        {company.domain || company.primary_domain || "No domain"}
+      </p>
+    </div>
+  </div>
+</td>
                                 <td className="px-3 py-2 whitespace-nowrap w-[160px]">
                                   {displayPhone ? (
                                     <div className="flex items-center gap-2">

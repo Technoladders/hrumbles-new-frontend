@@ -1,119 +1,134 @@
 // src/components/clients-new/ClientDetails.tsx
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
-import { Client, ClientContact, Address } from './ClientTypes';
-import { format } from "date-fns";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Pencil, Plus, MoreVertical, Trash2, UserPlus } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+// Light mode — white cards, violet accent
 
-const AddressView: React.FC<{ title: string; address: Address }> = ({ title, address }) => (
-  <div className="mb-2">
-    <div className="flex justify-between items-center mb-1">
-      <h4 className="text-sm font-semibold text-gray-600">{title}</h4>
-      <Button variant="ghost" size="icon" className="h-6 w-6"><Pencil className="h-3 w-3 text-gray-500" /></Button>
-    </div>
-    <address className="text-sm text-gray-700 not-italic">
-      {address.street}<br />{address.city}, {address.state} {address.zipCode}<br />{address.country}
-    </address>
+import React from 'react';
+import { Client, ClientContact, Address } from './ClientTypes';
+import { format } from 'date-fns';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Pencil, Trash2, UserPlus, MoreVertical, MapPin, Mail, Building2, Phone } from 'lucide-react';
+
+const DetailRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
+  <div className="flex justify-between items-start py-2 border-b border-gray-50 last:border-0">
+    <span className="text-[11px] text-gray-400 uppercase tracking-wider flex-shrink-0">{label}</span>
+    <span className="text-xs font-medium text-gray-700 text-right max-w-[58%]">{value}</span>
   </div>
 );
 
-const DetailRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-    <div className="flex justify-between py-2 border-b last:border-b-0">
-        <span className="text-sm text-gray-500">{label}</span>
-        <span className="text-sm font-medium text-gray-800 text-right">{value}</span>
-    </div>
+const SectionCard = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
+  <div className={`bg-white rounded-xl border border-gray-100 shadow-sm mb-3 overflow-hidden ${className}`}>{children}</div>
 );
 
 interface ClientDetailsProps {
-  client: Client;
-  contacts: ClientContact[];
-  onAddContact: () => void;
-  onEditContact: (contact: ClientContact) => void;
+  client: Client; contacts: ClientContact[];
+  onAddContact: () => void; onEditContact: (contact: ClientContact) => void;
   onDeleteContact: (contactId: string) => void;
   onEditAddress: (type: 'billing_address' | 'shipping_address') => void;
 }
 
-
-const ClientDetails: React.FC<ClientDetailsProps> = ({ client, contacts, onAddContact, onEditContact, onDeleteContact, onEditAddress }) => {
+const ClientDetails: React.FC<ClientDetailsProps> = ({
+  client, contacts, onAddContact, onEditContact, onDeleteContact, onEditAddress,
+}) => {
   return (
-    <Accordion type="multiple" defaultValue={['item-1', 'item-2', 'item-3']} className="w-full space-y-4">
-      <AccordionItem value="item-1" className="bg-white border rounded-lg px-4">
-        <AccordionTrigger className="text-base font-semibold">Address</AccordionTrigger>
-        <AccordionContent>
-          <div className="mb-2">
-            <div className="flex justify-between items-center mb-1">
-              <h4 className="text-sm font-semibold text-gray-600">Billing Address</h4>
-              {/* --- UPDATE onClick HANDLER --- */}
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onEditAddress('billing_address')}>
-                <Pencil className="h-3 w-3 text-gray-500" />
-              </Button>
+    <Accordion type="multiple" defaultValue={['address', 'contacts', 'details']} className="w-full">
+
+      {/* ── Address ──────────────────────────────────────────────── */}
+      <AccordionItem value="address" className="bg-white rounded-xl border border-gray-100 shadow-sm mb-3 overflow-hidden">
+        <AccordionTrigger className="px-4 py-3 text-sm font-semibold text-gray-700 hover:no-underline hover:bg-gray-50 [&[data-state=open]]:bg-gray-50">
+          <div className="flex items-center gap-2"><MapPin size={13} className="text-violet-500" />Address</div>
+        </AccordionTrigger>
+        <AccordionContent className="px-4 pb-4 pt-1">
+          {(['billing_address', 'shipping_address'] as const).map(type => (
+            <div key={type} className="mb-3 last:mb-0">
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">{type === 'billing_address' ? 'Billing' : 'Shipping'}</span>
+                <button onClick={() => onEditAddress(type)} className="p-1 rounded text-gray-300 hover:text-violet-500 hover:bg-violet-50 transition-all"><Pencil size={11} /></button>
+              </div>
+              {client[type]?.street ? (
+                <address className="text-xs text-gray-600 not-italic leading-relaxed">
+                  {client[type]?.street}<br />{client[type]?.city}, {client[type]?.state} {client[type]?.zipCode}
+                </address>
+              ) : <p className="text-xs text-gray-300 italic">Not set</p>}
             </div>
-            <address className="text-sm text-gray-700 not-italic">
-              {client.billing_address?.street}<br />{client.billing_address?.city}, {client.billing_address?.state} {client.billing_address?.zipCode}
-            </address>
-          </div>
-          <div className="mb-2">
-             <div className="flex justify-between items-center mb-1">
-               <h4 className="text-sm font-semibold text-gray-600">Shipping Address</h4>
-               {/* --- UPDATE onClick HANDLER --- */}
-               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onEditAddress('shipping_address')}>
-                 <Pencil className="h-3 w-3 text-gray-500" />
-               </Button>
-             </div>
-            <address className="text-sm text-gray-700 not-italic">
-              {client.shipping_address?.street}<br />{client.shipping_address?.city}, {client.shipping_address?.state} {client.shipping_address?.zipCode}
-            </address>
-          </div>
+          ))}
         </AccordionContent>
       </AccordionItem>
-      <AccordionItem value="item-2" className="bg-white border rounded-lg px-4">
-        <AccordionTrigger className="text-base font-semibold">
-            <div className="flex justify-between items-center w-full">
-                <span>Contacts</span>
-                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); onAddContact(); }} className="mr-2 hover:bg-gray-200"><UserPlus className="h-4 w-4 mr-2"/>Add Contact</Button>
+
+      {/* ── Contacts ─────────────────────────────────────────────── */}
+      <AccordionItem value="contacts" className="bg-white rounded-xl border border-gray-100 shadow-sm mb-3 overflow-hidden">
+        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 [&[data-state=open]]:bg-gray-50">
+          <div className="flex items-center justify-between w-full pr-1">
+            <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+              <Mail size={13} className="text-cyan-500" />
+              Contacts
+              {contacts.length > 0 && <span className="text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-bold">{contacts.length}</span>}
             </div>
+            <button onClick={e => { e.stopPropagation(); onAddContact(); }} className="flex items-center gap-1 text-[11px] text-violet-600 hover:text-violet-800 transition-colors">
+              <UserPlus size={11} />Add
+            </button>
+          </div>
         </AccordionTrigger>
-        <AccordionContent>
-          <div className="max-h-[300px] overflow-y-auto pr-2 space-y-4">
-            {contacts.map(contact => (
-              <div key={contact.id} className="flex items-center gap-3">
-                <Avatar><AvatarFallback>{contact.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
-                <div className="flex-1">
-                  <p className="font-medium text-sm text-gray-900">{contact.name}</p>
-                  <p className="text-xs text-gray-500">{contact.email}</p>
+        <AccordionContent className="px-4 pb-4 pt-1">
+          <div className="space-y-2 max-h-[250px] overflow-y-auto">
+            {contacts.length > 0 ? contacts.map(contact => (
+              <div key={contact.id} className="flex items-center gap-2.5 p-2 rounded-lg bg-gray-50 hover:bg-violet-50/50 transition-colors">
+                <Avatar className="w-7 h-7 flex-shrink-0">
+                  <AvatarFallback className="text-[11px] font-bold text-white bg-gradient-to-br from-violet-500 to-violet-700">{contact.name.charAt(0).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-gray-800 truncate">{contact.name}</p>
+                  <p className="text-[10px] text-gray-400 truncate">{contact.email}</p>
                 </div>
                 <DropdownMenu>
-                  <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => onEditContact(contact)}><Pencil className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onDeleteContact(contact.id)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
+                  <DropdownMenuTrigger asChild>
+                    <button className="p-1 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-200 transition-all"><MoreVertical size={12} /></button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="rounded-xl shadow-lg">
+                    <DropdownMenuItem onClick={() => onEditContact(contact)} className="text-xs"><Pencil size={11} className="mr-2" />Edit</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onDeleteContact(contact.id)} className="text-xs text-red-600"><Trash2 size={11} className="mr-2" />Delete</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-            ))}
-             {contacts.length === 0 && <p className="text-sm text-center text-gray-500 py-4">No contacts found.</p>}
+            )) : (
+              <div className="text-center py-5">
+                <Mail size={22} className="text-gray-200 mx-auto mb-1.5" />
+                <p className="text-xs text-gray-400">No contacts yet</p>
+              </div>
+            )}
           </div>
         </AccordionContent>
       </AccordionItem>
-      {/* OTHER DETAILS SECTION */}
-      <AccordionItem value="item-3" className="bg-white border rounded-lg px-4">
-        <AccordionTrigger className="text-base font-semibold">Other Details</AccordionTrigger>
-        <AccordionContent>
-            <DetailRow label="Customer Type" value="Business" />
-            <DetailRow label="Default Currency" value={client.currency} />
-            <DetailRow label="GST Treatment" value="Registered Business - Regular" />
-            {client.verification_status === 'Verified' && (
-                <>
-                    <DetailRow label="Verified Name" value={client.verified_company_name} />
-                    <DetailRow label="Company ID" value={client.verified_company_id} />
-                    <DetailRow label="Incorporation Date" value={client.verified_incorporation_date ? format(new Date(client.verified_incorporation_date), 'dd MMM yyyy') : 'N/A'} />
-                    <DetailRow label="State" value={client.verified_state} />
-                </>
-            )}
+
+      {/* ── Other Details ─────────────────────────────────────────── */}
+      <AccordionItem value="details" className="bg-white rounded-xl border border-gray-100 shadow-sm mb-3 overflow-hidden">
+        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 [&[data-state=open]]:bg-gray-50">
+          <div className="flex items-center gap-2 text-sm font-semibold text-gray-700"><Building2 size={13} className="text-emerald-500" />Other Details</div>
+        </AccordionTrigger>
+        <AccordionContent className="px-4 pb-4 pt-1">
+          <DetailRow label="Customer Type" value="Business" />
+          <DetailRow label="Currency" value={client.currency} />
+          <DetailRow label="GST Treatment" value="Registered — Regular" />
+          {client.commission_type && (
+            <DetailRow label="Commission" value={`${client.commission_value}${client.commission_type === 'percentage' ? '%' : ` ${client.currency}`} (${client.commission_type})`} />
+          )}
+          {client.service_type?.length > 0 && (
+            <DetailRow label="Services" value={
+              <div className="flex flex-wrap gap-1 justify-end">
+                {client.service_type.map((t, i) => (
+                  <span key={i} className={`text-[10px] px-1.5 py-0.5 rounded font-semibold capitalize ${t === 'permanent' ? 'bg-violet-100 text-violet-700' : 'bg-cyan-50 text-cyan-700'}`}>{t}</span>
+                ))}
+              </div>
+            } />
+          )}
+          {client.verification_status === 'Verified' && (
+            <>
+              <DetailRow label="Verified Name" value={client.verified_company_name} />
+              <DetailRow label="Company ID" value={client.verified_company_id} />
+              <DetailRow label="Incorporation" value={client.verified_incorporation_date ? format(new Date(client.verified_incorporation_date), 'dd MMM yyyy') : 'N/A'} />
+              <DetailRow label="State" value={client.verified_state} />
+            </>
+          )}
         </AccordionContent>
       </AccordionItem>
     </Accordion>

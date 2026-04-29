@@ -6,12 +6,12 @@ import { ImProfile } from "react-icons/im";
 import { GoGoal } from "react-icons/go";
 import { AiOutlineProfile } from "react-icons/ai";
 import { FaFileInvoiceDollar, FaSackDollar, FaArrowsDownToPeople, FaRegCalendarCheck, FaDropbox, FaFileLines } from "react-icons/fa6";
-import { TbCheckbox, TbCalendarClock } from "react-icons/tb";
+import { TbCheckbox, TbCalendarClock, TbDatabaseImport } from "react-icons/tb";
 import { GoOrganization } from "react-icons/go";
 import { VscOrganization } from "react-icons/vsc";
 import { GrDocumentTime, GrIntegration } from "react-icons/gr";
 import { LuCalendarPlus, LuUserSearch, LuCalendarCog, LuSend, LuMessageSquare } from "react-icons/lu";
-import { BsShieldLock, BsShieldCheck, BsPin, BsGraphUpArrow } from "react-icons/bs";
+import { BsShieldLock, BsShieldCheck, BsPin, BsGraphUpArrow, BsDatabaseSlash } from "react-icons/bs";
 import { FaUserShield, FaProjectDiagram, FaUserTie, FaSearch } from 'react-icons/fa';
 import { RiCustomerService2Fill, RiProfileLine } from 'react-icons/ri';
 import { TbDatabaseSearch } from "react-icons/tb";
@@ -319,6 +319,8 @@ export const menuItemsByRole = {
                 { icon: TrendingUp, label: "Apollo Usage", path: "/reports/apollo-usage" },
             ],
         },
+        { icon: BsDatabaseSlash, label: "Migration", path: "/migration" },
+        { icon: TbDatabaseImport, label: "Migration History", path: "/database/history" },
         { icon: FiSettings, label: "Settings", path: "/settings" },
     ],
     organization_superadmin: (organizationId, organization, isPurelyPermanentOrg, userPermissions) => {

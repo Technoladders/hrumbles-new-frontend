@@ -1,547 +1,723 @@
 // src/components/clients-new/AllCandidatesTab.tsx
-import React, { useState, useEffect, useMemo } from 'react';
+// Light mode — fully dynamic statuses from job_statuses table
+// Rich compact visualizations + proper pagination in child tables
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import supabase from '@/config/supabaseClient';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, isValid } from 'date-fns';
-import { AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sigma, BarChart2, Star, Tag, User, Loader2, GitMerge, UserCheck, Crown, Calendar, Clock, MessageSquare } from 'lucide-react';
-import { Tooltip as ShadTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Tooltip } from 'recharts';
+import {
+  AlertCircle, Layers, List, Search, Download, ChevronDown, ChevronUp,
+  ChevronLeft, ChevronRight, Sigma, Star, Tag, User, Loader2, GitMerge,
+  UserCheck, Crown, MessageSquare, TrendingUp, Users, Target, Award,
+  ArrowUpRight, BarChart3, Activity, Briefcase,
+} from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, Cell, PieChart, Pie, FunnelChart, Funnel,
+  LabelList, AreaChart, Area,
+} from 'recharts';
 import { Progress } from '@/components/ui/progress';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-// --- Type Definitions ---
-interface Candidate { id: string; name: string; created_at: string; main_status_id: string | null; sub_status_id: string | null; job_title: string | null; recruiter_name: string | null; client_name: string | null; current_salary: number | null; expected_salary: number | null; location: string | null; notice_period: string | null; overall_score: number | null; job_id: string; metadata: any; interview_date?: string | null; interview_time?: string | null; interview_feedback?: string | null; }interface StatusMap {[key: string]: string; }
-interface GroupedData { [statusName: string]: Candidate[]; }
-interface TableRowData { type: 'header' | 'data'; statusName?: string; count?: number; candidate?: Candidate; }
-interface RecruiterPerformance { name: string; hires: number; }
-interface PipelineStage { stage: string; count: number; }
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface StatusDef {
+  id: string; name: string; type: 'main' | 'sub';
+  parent_id: string | null; display_order: number; color: string | null;
+}
+interface Candidate {
+  id: string; name: string; created_at: string; main_status_id: string | null;
+  sub_status_id: string | null; job_title: string | null; recruiter_name: string | null;
+  client_name: string | null; current_salary: number | null; expected_salary: number | null;
+  location: string | null; notice_period: string | null; overall_score: number | null;
+  job_id: string; metadata: any; interview_date?: string | null;
+  interview_time?: string | null; interview_feedback?: string | null;
+}
+interface DateRange { startDate: Date | null; endDate: Date | null; }
 
-// --- CONSTANTS FOR CALCULATION ---
-const STATUS_CONFIG = {
-  default: {
-    INTERVIEW_MAIN_STATUS_ID: "f72e13f8-7825-4793-85e0-e31d669f8097",
-    INTERVIEW_SCHEDULED_SUB_STATUS_IDS:["4ab0c42a-4748-4808-8f29-e57cb401bde5", "a8eed1eb-f903-4bbf-a91b-e347a0f7c43f", "1de35d8a-c07f-4c1d-b185-12379f559286", "0cc92be8-c8f1-47c6-a38d-3ca04eca6bb8", "48e060dc-5884-47e5-85dd-d717d4debe40"],
-    INTERVIEW_RESCHEDULED_SUB_STATUS_IDS:["00601f51-90ec-4d75-8ced-3225fed31643", "9ef38a36-cffa-4286-9826-bc7d736a04ce", "2c38a0fb-8b56-47bf-8c7e-e4bd19b68fdf", "d2aef2b3-89b4-4845-84f0-777b6adf9018", "e569facd-7fd0-48b9-86cd-30062c80260b"],
-    INTERVIEW_OUTCOME_SUB_STATUS_IDS:["1930ab52-4bb4-46a2-a9d1-887629954868", "e5615fa5-f60c-4312-9f6b-4ed543541520", "258741d9-cdb1-44fe-8ae9-ed5e9eed9e27", "0111b1b9-23c9-4be1-8ad4-322ccad6ccf0", "11281dd5-5f33-4d5c-831d-2488a5d3c96e", "31346b5c-1ff4-4842-aab4-645b36b6197a", "1ce3a781-09c7-4b3f-9a58-e4c6cd02721a", "4694aeff-567b-4007-928e-b3fefe558daf", "5b59c8cb-9a6a-43b8-a3cd-8f867c0b30a2", "368aa85f-dd4a-45b5-9266-48898704839b"],
-    JOINED_STATUS_ID: "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e",
-    OFFERED_STATUS_ID: "9d48d0f9-8312-4f60-aaa4-bafdce067417",
-    JOINED_SUB_STATUS_ID: "c9716374-3477-4606-877a-dfa5704e7680",
-  },
-  demo: { // organization_id: 53989f03-bdc9-439a-901c-45b274eff506
-    INTERVIEW_MAIN_STATUS_ID: "6f5a6a77-ab6a-46ca-b659-fd207b22ae0d",
-    INTERVIEW_SCHEDULED_SUB_STATUS_IDS:["84e97908-3a51-4ccd-82c3-ec2ebcc17757", "97e76257-b0c8-4935-8bae-2ef4097d776f", "531a2ca1-551f-43f4-9eb4-cb293f4f7517", "74cba87d-b193-44d0-9ac6-9c378ef971b2", "4a13bb3c-cf3b-45d4-9d80-f9d9c3d4d7d1"],
-    INTERVIEW_RESCHEDULED_SUB_STATUS_IDS:["72711a0d-5060-4eb9-8a68-6558e73d013d", "708424a6-5d24-4905-a275-f3d3e0519914", "59e371e3-455c-4cf1-912e-aab38872ebad", "7f468dd7-30af-4632-97b9-7668cbd847e0", "c5f48189-07ed-49a8-985b-0a98b46ca831"],
-    INTERVIEW_OUTCOME_SUB_STATUS_IDS:["fc3acdf6-48f7-4a9f-98fa-bd29d72ed118", "ebb88495-1a66-48d4-afe9-d45cabeecac3", "a8f533cf-5e68-4a86-96eb-c519a48aef1f", "385af9cb-4ae6-49b7-b5a8-45b653ca0c78", "3cca7b15-6b26-470b-b086-406d401c8c28", "743fd5ed-2ebf-45b3-8703-d0114b3607ae", "d9798bab-c375-4748-937a-abb739c5c82a", "fdd2c99c-29a6-4fad-8a58-ad9c3d30d7c5", "5aabfefe-e426-4bf1-b037-0eca402a1a4b", "3f797fc6-caef-48fd-9aa0-3d1fba010168"],
-    JOINED_STATUS_ID: "5ab8833c-c409-46b8-a6b0-dbf23591827b",
-    OFFERED_STATUS_ID: "0557a2c9-6c27-46d5-908c-a826b82a6c47",
-    JOINED_SUB_STATUS_ID: "247ef818-9fbe-41ee-a755-a446d620ebb6",
-  },
-  ample: { // organization_id: e032d8c5-2168-4083-9919-c2e09719550a
-    INTERVIEW_MAIN_STATUS_ID: "da3fbfcb-f06b-4ed5-bea7-fd3cc83574ec",
-    INTERVIEW_SCHEDULED_SUB_STATUS_IDS:["3f6d2b70-1bef-458f-9159-1fccbff6a7da", "af109127-7551-4a8b-9f8d-540677031e6c", "265e8b74-f119-48a9-8287-12681e2ca85a", "c99881c4-5187-4671-ace5-bc7f843a8e3d", "e4c869bf-6d02-44e7-9104-d5e71a7dbe02"],
-    INTERVIEW_RESCHEDULED_SUB_STATUS_IDS:["55f56dd7-4a92-4b51-be2b-6d2f9bc6827d", "d8a786cb-45d7-45f5-9792-36a791ffab4a", "a20be41a-8f16-4a3d-bc74-4022187aaf01", "73ac9fb4-7589-48d6-834f-499a49cda2df", "ea8b2079-55a3-4104-910b-b73734533791"],
-    INTERVIEW_OUTCOME_SUB_STATUS_IDS:["7206549a-2614-4e43-a607-c1fe62f19a98", "e2fe5bb5-e5dd-43a7-910d-60d898544a8d", "60e64b4b-59bf-42c8-a2fe-6c9845002dc7", "6eccd385-d4a6-48b9-a2cd-81ad6c681469", "07b22796-dd81-4bc5-930d-3e3442a5294f", "803dbde0-1757-423d-b68f-56aaaf7149ab", "40a98037-ce72-402c-b0da-ca578902fd10", "40e3139a-d220-4c7d-8743-1edc21dd7c2d", "e352c699-13de-4765-8e83-1df563b6f488", "e1104e37-7dcd-44fd-af27-b7f574a8bd90"],
-    JOINED_STATUS_ID: "c86f65ab-b122-476c-8d5b-f6ff1ca8147b",
-    OFFERED_STATUS_ID: "bf2f3bf1-c1a0-417c-9c26-53083b5888ce",
-    JOINED_SUB_STATUS_ID: "d1537afc-0b75-454d-ba37-dd2bd4acaf2d",
-  }
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmt = (v: number | null | undefined) =>
+  v == null ? 'N/A' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
+const fmtV = (v: any) => (v != null && v !== '') ? String(v) : 'N/A';
+const fmtDate = (d: string) => isValid(new Date(d)) ? format(new Date(d), 'MMM d, yyyy') : 'N/A';
+const fmtTime = (t?: string | null) => {
+  if (!t) return '';
+  try { const [h, m] = t.split(':'); const d = new Date(); d.setHours(+h, +m, 0); return format(d, 'h:mm a'); } catch { return t; }
 };
-const DEMO_ORGANIZATION_ID = '53989f03-bdc9-439a-901c-45b274eff506';
-const AMPLE_ORGANIZATION_ID = 'e032d8c5-2168-4083-9919-c2e09719550a';
-
-// --- Helper Functions ---
-const formatCurrency = (value: number | null | undefined) => (value == null) ? 'N/A' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
-const formatValue = (value: any) => (value != null && value !== '') ? String(value) : 'N/A';
-const formatDate = (date: string) => isValid(new Date(date)) ? format(new Date(date), 'MMM d, yyyy') : 'N/A';
-const getScoreBadgeClass = (score: number | null | undefined): string => { if (score == null) return 'bg-gray-100 text-gray-800'; if (score > 80) return 'bg-green-100 text-green-800'; if (score > 50) return 'bg-amber-100 text-amber-800'; return 'bg-red-100 text-red-800'; };
-const formatTime = (time?: string | null) => {
-  if (!time || typeof time !== 'string') return '';
-  try {
-    const [hours, minutes] = time.split(':');
-    const date = new Date();
-    date.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0);
-    return format(date, 'h:mm a'); 
-  } catch {
-    return time; 
-  }
+const scoreColor = (s: number | null | undefined) => {
+  if (s == null) return 'bg-gray-100 text-gray-600';
+  if (s > 80) return 'bg-green-100 text-green-700';
+  if (s > 50) return 'bg-amber-100 text-amber-700';
+  return 'bg-red-100 text-red-600';
 };
 
-// --- Reusable Analytics Card Component ---
-const AnalyticsCard: React.FC<{ icon: React.ElementType; title: string; value: string | number; subMetrics?: { label: string; value: string | number }[]; }> = ({ icon: Icon, title, value, subMetrics }) => (
-  <Card className="shadow-sm hover:shadow-md transition-shadow h-full">
-    <CardContent className="p-4 flex flex-col justify-between h-full">
-      <div>
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <Icon className="h-5 w-5 text-gray-400" />
-        </div>
-        {value && <div className="mt-2"><h3 className="text-3xl font-bold text-gray-800 truncate" title={String(value)}>{value}</h3></div>}
-      </div>
-      {subMetrics && subMetrics.length > 0 && (
-        <div className={`mt-0 pt-2 border-t border-gray-200 flex items-start ${value ? 'justify-between' : 'justify-around'} text-center`}>
-          {subMetrics.map((metric) => (
-              <div key={metric.label} className="flex-1 min-w-0 px-1">
-                <p className="text-xs text-gray-500">{metric.label}</p>
-                <TooltipProvider>
-                  <ShadTooltip>
-                    <TooltipTrigger asChild>
-                      <p className="text-md font-bold text-gray-800 truncate cursor-default">{metric.value}</p>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{metric.value}</p>
-                    </TooltipContent>
-                  </ShadTooltip>
-                </TooltipProvider>
-              </div>
-          ))}
-        </div>
-      )}
-    </CardContent>
-  </Card>
+// ─── CHART COLORS ─────────────────────────────────────────────────────────────
+const PALETTE = ['#7B43F1', '#06B6D4', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#3B82F6', '#14B8A6', '#F97316'];
+
+// ─── Reusable UI Pieces ───────────────────────────────────────────────────────
+const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
+  <div className={`bg-white rounded-xl border border-gray-100 shadow-sm ${className}`}>{children}</div>
+);
+const CardHead = ({ title, sub }: { title: string; sub?: string }) => (
+  <div className="px-4 py-3 border-b border-gray-100">
+    <div className="flex items-center gap-2">
+      <div className="w-1 h-4 rounded-full bg-gradient-to-b from-violet-500 to-violet-700" />
+      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">{title}</span>
+    </div>
+    {sub && <p className="text-[11px] text-gray-400 mt-0.5 ml-3">{sub}</p>}
+  </div>
 );
 
-// --- Main Component ---
+// Mini KPI chip
+const KpiChip = ({ label, value, color, icon }: { label: string; value: string | number; color: string; icon: React.ReactNode }) => (
+  <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+    <div className="flex items-center gap-2">
+      <div className="p-1.5 rounded-md" style={{ background: `${color}18` }}>
+        <div style={{ color, width: 13, height: 13 }}>{icon}</div>
+      </div>
+      <span className="text-[11px] text-gray-500">{label}</span>
+    </div>
+    <span className="text-sm font-bold text-gray-800">{value}</span>
+  </div>
+);
+
+// Table chip
+const StatusChip = ({ name, color }: { name: string; color?: string }) => (
+  <span
+    className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold"
+    style={{
+      background: color ? `${color}18` : '#7B43F118',
+      color: color || '#7B43F1',
+      border: `1px solid ${color ? `${color}30` : '#7B43F130'}`,
+    }}
+  >
+    {name}
+  </span>
+);
+
+const LightTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-2.5 text-xs">
+      <p className="font-semibold text-gray-600 mb-1">{label}</p>
+      {payload.map((p: any, i: number) => (
+        <p key={i} style={{ color: p.color || p.fill }}>{p.name || p.dataKey}: {p.value}</p>
+      ))}
+    </div>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 interface AllCandidatesTabProps {
   clientName: string;
-  dateRange: { startDate: Date; endDate: Date; key: string } | null;
+  dateRange: DateRange | null;
 }
+
+const ITEMS_PER_PAGE = 20;
 
 const AllCandidatesTab: React.FC<AllCandidatesTabProps> = ({ clientName, dateRange }) => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
-  
-  // Dynamic State initialization for statuses
-  const[dynamicStatusIds, setDynamicStatusIds] = useState(STATUS_CONFIG.default);
-  
+
+  // Status definitions fetched once from DB
+  const [statusDefs, setStatusDefs] = useState<StatusDef[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [statuses, setStatuses] = useState<StatusMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isGrouped, setIsGrouped] = useState(false);
-  const[searchTerm, setSearchTerm] = useState('');
+
+  // Filters & view
+  const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [recruiterFilter, setRecruiterFilter] = useState('all');
-  const[recruiterOptions, setRecruiterOptions] = useState<string[]>([]);
+  const [isGrouped, setIsGrouped] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(20);
-  const[expandedGroups, setExpandedGroups] = useState<string[]>([]);
 
-  // --- STATUS CELL COMPONENT ---
-  const StatusCell: React.FC<{ candidate: Candidate; statusName: string }> = ({ candidate, statusName }) => {
-    const isScheduled = candidate.main_status_id === dynamicStatusIds.INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && (dynamicStatusIds.INTERVIEW_SCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id));
-    const isRescheduled = candidate.main_status_id === dynamicStatusIds.INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && dynamicStatusIds.INTERVIEW_RESCHEDULED_SUB_STATUS_IDS.includes(candidate.sub_status_id);
-    const isOutcome = candidate.main_status_id === dynamicStatusIds.INTERVIEW_MAIN_STATUS_ID && candidate.sub_status_id && dynamicStatusIds.INTERVIEW_OUTCOME_SUB_STATUS_IDS.includes(candidate.sub_status_id);
+  // ── Dynamic status helpers derived from statusDefs ────────────────────────
+  const statusMap = useMemo(() => {
+    const m: Record<string, StatusDef> = {};
+    statusDefs.forEach(s => { m[s.id] = s; });
+    return m;
+  }, [statusDefs]);
 
-    let displayStatusName = statusName;
-    if (isScheduled) {
-      displayStatusName = `${statusName} Scheduled`;
-    }
+  const mainStatusByName = useMemo(() => {
+    const m: Record<string, StatusDef> = {};
+    statusDefs.filter(s => s.type === 'main').forEach(s => { m[s.name.toLowerCase()] = s; });
+    return m;
+  }, [statusDefs]);
 
+  // IDs resolved dynamically from job_statuses table by matching status NAMES
+  const dynamicIds = useMemo(() => {
+    const find = (name: string, type: 'main' | 'sub') =>
+      statusDefs.find(s => s.name.toLowerCase() === name.toLowerCase() && s.type === type)?.id;
+    const findMany = (names: string[], type: 'main' | 'sub') =>
+      names.map(n => find(n, type)).filter(Boolean) as string[];
+
+    return {
+      interviewMainId:    find('Interview', 'main') || '',
+      scheduledSubIds:    findMany(['Technical Assessment', 'L1', 'L2', 'L3', 'End Client Round'], 'sub'),
+      rescheduledSubIds:  findMany(['Reschedule Technical Assessment', 'Reschedule L1', 'Reschedule L2', 'Reschedule L3', 'Reschedule End Client Round'], 'sub'),
+      outcomeSubIds:      findMany(['Technical Assessment Selected', 'Technical Assessment Rejected', 'L1 Selected', 'L1 Rejected', 'L2 Selected', 'L2 Rejected', 'L3 Selected', 'L3 Rejected', 'End Client Selected', 'End Client Rejected'], 'sub'),
+      joinedMainId:       find('Joined', 'main') || '',
+      offeredMainId:      find('Offered', 'main') || '',
+      joinedSubId:        find('Joined', 'sub') || '',
+    };
+  }, [statusDefs]);
+
+  // ── Fetch ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!organizationId || !clientName) return;
+      setIsLoading(true); setError(null);
+      try {
+        // 1. Fetch status definitions dynamically for this org
+        const { data: statuses, error: sErr } = await supabase
+          .from('job_statuses')
+          .select('id, name, type, parent_id, display_order, color')
+          .eq('organization_id', organizationId)
+          .order('display_order', { ascending: true });
+        if (sErr) throw sErr;
+        setStatusDefs((statuses as StatusDef[]) || []);
+
+        // 2. Fetch jobs for this client
+        const { data: jobs, error: jErr } = await supabase
+          .from('hr_jobs').select('id')
+          .eq('organization_id', organizationId)
+          .eq('client_details->>clientName', clientName);
+        if (jErr) throw jErr;
+        if (!jobs?.length) { setCandidates([]); return; }
+
+        // 3. Fetch candidates
+        let q = supabase.from('hr_job_candidates').select(`
+          id, name, created_at, main_status_id, sub_status_id, metadata, job_id,
+          interview_date, interview_time, interview_feedback,
+          job:hr_jobs!hr_job_candidates_job_id_fkey(title),
+          recruiter:created_by(first_name, last_name),
+          analysis:candidate_resume_analysis!candidate_id(overall_score)
+        `)
+          .eq('organization_id', organizationId)
+          .in('job_id', jobs.map(j => j.id));
+
+        if (dateRange?.startDate && dateRange?.endDate) {
+          q = q
+            .gte('created_at', format(dateRange.startDate, 'yyyy-MM-dd'))
+            .lte('created_at', format(dateRange.endDate, 'yyyy-MM-dd'));
+        }
+        const { data: raw, error: cErr } = await q.order('created_at', { ascending: false });
+        if (cErr) throw cErr;
+
+        setCandidates((raw as any[]).map(c => ({
+          id: c.id, job_id: c.job_id, name: c.name, created_at: c.created_at,
+          main_status_id: c.main_status_id, sub_status_id: c.sub_status_id, metadata: c.metadata,
+          job_title: c.job?.title || 'N/A',
+          recruiter_name: c.recruiter ? `${c.recruiter.first_name} ${c.recruiter.last_name}`.trim() : 'N/A',
+          client_name: clientName,
+          current_salary: c.metadata?.currentSalary ?? null,
+          expected_salary: c.metadata?.expectedSalary ?? null,
+          location: c.metadata?.currentLocation ?? null,
+          notice_period: c.metadata?.noticePeriod ?? null,
+          overall_score: c.analysis?.[0]?.overall_score ?? null,
+          interview_date: c.interview_date,
+          interview_time: c.interview_time,
+          interview_feedback: c.interview_feedback,
+        })));
+      } catch (e: any) {
+        setError(e.message || 'Unknown error');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, [organizationId, clientName, dateRange]);
+
+  // ── Recruiter options ──────────────────────────────────────────────────────
+  const recruiterOptions = useMemo(() =>
+    [...new Set(candidates.map(c => c.recruiter_name).filter(r => r && r !== 'N/A'))].sort() as string[],
+    [candidates]);
+
+  // ── Filtering ─────────────────────────────────────────────────────────────
+  const filtered = useMemo(() => candidates.filter(c => {
+    const subStatusName = statusMap[c.sub_status_id || '']?.name || '';
+    return (statusFilter === 'all' || subStatusName === statusFilter)
+      && (recruiterFilter === 'all' || c.recruiter_name === recruiterFilter)
+      && (!searchTerm || [c.name, c.job_title, c.recruiter_name].some(v => v?.toLowerCase().includes(searchTerm.toLowerCase())));
+  }), [candidates, searchTerm, statusMap, statusFilter, recruiterFilter]);
+
+  // ── Analytics ─────────────────────────────────────────────────────────────
+  const analytics = useMemo(() => {
+    const conversionIds = [dynamicIds.interviewMainId, dynamicIds.offeredMainId, dynamicIds.joinedMainId].filter(Boolean);
+    let joined = 0, converted = 0, scoreSum = 0, scoreCount = 0;
+    const recruiterProfiles: Record<string, number> = {};
+    const recruiterJoins: Record<string, number> = {};
+    const recruiterConversions: Record<string, number> = {};
+
+    filtered.forEach(c => {
+      if (c.main_status_id && conversionIds.includes(c.main_status_id)) {
+        converted++;
+        if (c.recruiter_name && c.recruiter_name !== 'N/A')
+          recruiterConversions[c.recruiter_name] = (recruiterConversions[c.recruiter_name] || 0) + 1;
+      }
+      if (c.main_status_id === dynamicIds.joinedMainId && c.sub_status_id === dynamicIds.joinedSubId) {
+        joined++;
+        if (c.recruiter_name && c.recruiter_name !== 'N/A')
+          recruiterJoins[c.recruiter_name] = (recruiterJoins[c.recruiter_name] || 0) + 1;
+      }
+      if (c.recruiter_name && c.recruiter_name !== 'N/A')
+        recruiterProfiles[c.recruiter_name] = (recruiterProfiles[c.recruiter_name] || 0) + 1;
+      if (c.overall_score != null) { scoreSum += c.overall_score; scoreCount++; }
+    });
+
+    const top = (obj: Record<string, number>) => Object.entries(obj).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+
+    // Pipeline: group by main status, ordered by display_order
+    const mainCounts: Record<string, number> = {};
+    filtered.forEach(c => {
+      const name = statusMap[c.main_status_id || '']?.name || 'Unknown';
+      mainCounts[name] = (mainCounts[name] || 0) + 1;
+    });
+    const pipelineStages = statusDefs
+      .filter(s => s.type === 'main' && mainCounts[s.name])
+      .map(s => ({ stage: s.name, count: mainCounts[s.name], color: s.color || '#7B43F1' }));
+
+    // Sub-status breakdown
+    const subCounts: Record<string, { count: number; color: string | null }> = {};
+    filtered.forEach(c => {
+      const def = statusMap[c.sub_status_id || ''];
+      if (def) subCounts[def.name] = { count: (subCounts[def.name]?.count || 0) + 1, color: def.color };
+    });
+
+    // Recruiter table
+    const recruiterTable = Object.entries(recruiterProfiles)
+      .map(([name, profiles]) => ({
+        name, profiles,
+        conversions: recruiterConversions[name] || 0,
+        joins: recruiterJoins[name] || 0,
+      }))
+      .sort((a, b) => b.profiles - a.profiles);
+
+    return {
+      total: filtered.length, converted, joined,
+      conversionRate: filtered.length > 0 ? `${((converted / filtered.length) * 100).toFixed(1)}%` : '—',
+      joinedRate: filtered.length > 0 ? `${((joined / filtered.length) * 100).toFixed(1)}%` : '—',
+      avgScore: scoreCount > 0 ? Math.round(scoreSum / scoreCount) : null,
+      topProfiles: top(recruiterProfiles),
+      topConverted: top(recruiterConversions),
+      topJoined: top(recruiterJoins),
+      pipelineStages,
+      subCounts: Object.entries(subCounts).map(([name, { count, color }]) => ({ name, count, color })).sort((a, b) => b.count - a.count),
+      recruiterTable,
+    };
+  }, [filtered, statusMap, statusDefs, dynamicIds]);
+
+  // ── Grouped view ──────────────────────────────────────────────────────────
+  const grouped = useMemo(() => {
+    // Group by main status, preserve display_order
+    const g: Record<string, Candidate[]> = {};
+    filtered.forEach(c => {
+      const key = statusMap[c.main_status_id || '']?.name || 'Unknown';
+      if (!g[key]) g[key] = [];
+      g[key].push(c);
+    });
+    // Sort groups by display_order
+    return statusDefs
+      .filter(s => s.type === 'main' && g[s.name])
+      .map(s => ({ statusName: s.name, candidates: g[s.name], color: s.color }));
+  }, [filtered, statusMap, statusDefs]);
+
+  const flatRows = useMemo(() => {
+    if (!isGrouped) return filtered;
+    return grouped.flatMap(g => (expandedGroups.has(g.statusName) ? g.candidates : []));
+  }, [isGrouped, filtered, grouped, expandedGroups]);
+
+  const totalPages = Math.ceil((isGrouped ? 0 : filtered.length) / ITEMS_PER_PAGE);
+  const paginated = isGrouped ? [] : filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  const toggleGroup = (name: string) => {
+    const next = new Set(expandedGroups);
+    if (next.has(name)) next.delete(name); else next.add(name);
+    setExpandedGroups(next);
+  };
+
+  // ── Export ────────────────────────────────────────────────────────────────
+  const exportCSV = () => {
+    if (!filtered.length) return;
+    const csv = Papa.unparse(filtered.map(c => ({
+      'Name': c.name, 'Status': statusMap[c.sub_status_id || '']?.name || '',
+      'AI Score': fmtV(c.overall_score), 'Job': fmtV(c.job_title),
+      'Recruiter': fmtV(c.recruiter_name), 'Applied': fmtDate(c.created_at),
+      'CCTC': c.current_salary, 'ECTC': c.expected_salary,
+      'Notice': fmtV(c.notice_period), 'Location': fmtV(c.location),
+    })), { header: true });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' }));
+    a.download = `${clientName}_candidates_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+  };
+  const exportPDF = () => {
+    if (!filtered.length) return;
+    const doc = new jsPDF({ orientation: 'landscape' });
+    doc.text(`Candidates — ${clientName}`, 14, 15);
+    (doc as any).autoTable({
+      head: [['Name', 'Status', 'Score', 'Job', 'Recruiter', 'Applied', 'CCTC', 'ECTC', 'Notice', 'Location']],
+      body: filtered.map(c => [c.name, statusMap[c.sub_status_id || '']?.name || '', fmtV(c.overall_score), fmtV(c.job_title), fmtV(c.recruiter_name), fmtDate(c.created_at), fmt(c.current_salary), fmt(c.expected_salary), fmtV(c.notice_period), fmtV(c.location)]),
+      startY: 20, theme: 'grid',
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [123, 67, 241] },
+    });
+    doc.save(`${clientName}_candidates_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  };
+
+  // ── Status cell with interview details ────────────────────────────────────
+  const StatusCell = ({ c }: { c: Candidate }) => {
+    const subDef = statusMap[c.sub_status_id || ''];
+    const isScheduled = c.main_status_id === dynamicIds.interviewMainId && c.sub_status_id && dynamicIds.scheduledSubIds.includes(c.sub_status_id);
+    const isRescheduled = c.main_status_id === dynamicIds.interviewMainId && c.sub_status_id && dynamicIds.rescheduledSubIds.includes(c.sub_status_id);
+    const isOutcome = c.main_status_id === dynamicIds.interviewMainId && c.sub_status_id && dynamicIds.outcomeSubIds.includes(c.sub_status_id);
+    const name = subDef?.name || '—';
+    const displayName = isScheduled ? `${name} (Scheduled)` : name;
     return (
-      <div className="flex flex-col">
-        <p className="font-medium">{displayStatusName}</p>
-        
-        {(isScheduled || isRescheduled) && candidate.interview_date && (
-          <div className="text-xs text-gray-500 mt-1 flex items-center gap-1.5 whitespace-nowrap">
-            <span>{formatDate(candidate.interview_date)}</span>
-            {candidate.interview_time && (
-              <>
-                <span className="text-gray-300">|</span>
-                <span>{formatTime(candidate.interview_time)}</span>
-              </>
-            )}
-          </div>
+      <div>
+        <StatusChip name={displayName} color={subDef?.color || undefined} />
+        {(isScheduled || isRescheduled) && c.interview_date && (
+          <p className="text-[10px] text-gray-400 mt-1">{fmtDate(c.interview_date)}{c.interview_time ? ` · ${fmtTime(c.interview_time)}` : ''}</p>
         )}
-
-        {isOutcome && candidate.interview_feedback && (
+        {isOutcome && c.interview_feedback && (
           <TooltipProvider>
-            <ShadTooltip>
+            <Tooltip>
               <TooltipTrigger asChild>
-                <div className="text-xs text-gray-500 mt-1 flex items-start gap-1.5 cursor-help">
-                  <MessageSquare size={12} className="flex-shrink-0 mt-0.5" />
-                  <p className="truncate">
-                    {candidate.interview_feedback.length > 10 ? `${candidate.interview_feedback.slice(0, 10)}...` : candidate.interview_feedback}
-                  </p>
-                </div>
+                <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-1 cursor-help">
+                  <MessageSquare size={9} />{c.interview_feedback.substring(0, 20)}…
+                </p>
               </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                <p className="text-sm">{candidate.interview_feedback}</p>
-              </TooltipContent>
-            </ShadTooltip>
+              <TooltipContent className="max-w-xs text-xs"><p>{c.interview_feedback}</p></TooltipContent>
+            </Tooltip>
           </TooltipProvider>
         )}
       </div>
     );
   };
 
-useEffect(() => {
-    const fetchData = async () => {
-      if (!organizationId || !clientName) return;
-      setIsLoading(true); setError(null);
-      try {
-        const { data: jobs, error: jobsError } = await supabase.from('hr_jobs').select('id').eq('organization_id', organizationId).eq('client_details->>clientName', clientName);
-        if (jobsError) throw jobsError;
-        if (!jobs || jobs.length === 0) { setCandidates([]); return; }
-        const jobIds = jobs.map(job => job.id);
-        
-        let candidatesQuery = supabase.from('hr_job_candidates').select(`
-          id, name, created_at, main_status_id, sub_status_id, metadata, job_id,
-          interview_date, interview_time, interview_feedback,
-          job:hr_jobs!hr_job_candidates_job_id_fkey(title),
-          recruiter:created_by(first_name, last_name),
-          analysis:candidate_resume_analysis!candidate_id(overall_score)
-        `).eq('organization_id', organizationId).in('job_id', jobIds);
-
-        if (dateRange?.startDate && dateRange.endDate) {
-            candidatesQuery = candidatesQuery.gte('created_at', format(dateRange.startDate, 'yyyy-MM-dd')).lte('created_at', format(dateRange.endDate, 'yyyy-MM-dd'));
-        }
-
-        // Changed select to fetch type column to help map dynamic ID names uniquely
-        const [candidatesResponse, statusesResponse] = await Promise.all([
-          candidatesQuery.order('created_at', { ascending: false }),
-          supabase.from('job_statuses').select('id, name, type').eq('organization_id', organizationId),
-        ]);
-
-        if (candidatesResponse.error) throw candidatesResponse.error;
-        if (statusesResponse.error) throw statusesResponse.error;
-        
-        const statusesData = statusesResponse.data ||[];
-        const statusMap = statusesData.reduce((acc: any, status: any) => { acc[status.id] = status.name; return acc; }, {});
-        setStatuses(statusMap);
-
-        // --- DYNAMIC STATUS ID RESOLUTION --- 
-        // This makes sure it works seamlessly for *any* newly added organization moving forward!
-        const findId = (name: string, type?: string) => statusesData.find((s: any) => s.name === name && (type ? s.type === type : true))?.id;
-        const interviewMain = findId('Interview', 'main');
-        
-        if (interviewMain) {
-            setDynamicStatusIds({
-                INTERVIEW_MAIN_STATUS_ID: interviewMain,
-                INTERVIEW_SCHEDULED_SUB_STATUS_IDS:["Technical Assessment", "L1", "L2", "L3", "End Client Round"].map(n => findId(n, 'sub')).filter(Boolean) as string[],
-                INTERVIEW_RESCHEDULED_SUB_STATUS_IDS:["Reschedule Technical Assessment", "Reschedule L1", "Reschedule L2", "Reschedule L3", "Reschedule End Client Round"].map(n => findId(n, 'sub')).filter(Boolean) as string[],
-                INTERVIEW_OUTCOME_SUB_STATUS_IDS:["Technical Assessment Selected", "Technical Assessment Rejected", "L1 Selected", "L1 Rejected", "L2 Selected", "L2 Rejected", "L3 Selected", "L3 Rejected", "End Client Selected", "End Client Rejected"].map(n => findId(n, 'sub')).filter(Boolean) as string[],
-                JOINED_STATUS_ID: findId('Joined', 'main') || STATUS_CONFIG.default.JOINED_STATUS_ID,
-                OFFERED_STATUS_ID: findId('Offered', 'main') || STATUS_CONFIG.default.OFFERED_STATUS_ID,
-                JOINED_SUB_STATUS_ID: findId('Joined', 'sub') || STATUS_CONFIG.default.JOINED_SUB_STATUS_ID,
-            });
-        } else {
-             // Fallback for statically declared IDs
-             if (organizationId === DEMO_ORGANIZATION_ID) setDynamicStatusIds(STATUS_CONFIG.demo);
-             else if (organizationId === AMPLE_ORGANIZATION_ID) setDynamicStatusIds(STATUS_CONFIG.ample);
-             else setDynamicStatusIds(STATUS_CONFIG.default);
-        }
-
-        const formattedCandidates: Candidate[] = (candidatesResponse.data as any[]).map(c => ({
-          id: c.id, job_id: c.job_id, name: c.name, created_at: c.created_at, main_status_id: c.main_status_id, sub_status_id: c.sub_status_id, metadata: c.metadata,
-          job_title: c.job?.title || 'N/A', 
-          recruiter_name: c.recruiter ? `${c.recruiter.first_name} ${c.recruiter.last_name}`.trim() : 'N/A', 
-          client_name: clientName, 
-          current_salary: c.metadata?.currentSalary,
-          expected_salary: c.metadata?.expectedSalary,
-          location: c.metadata?.currentLocation,
-          notice_period: c.metadata?.noticePeriod,
-          overall_score: c.analysis?.[0]?.overall_score || null,
-          interview_date: c.interview_date,
-          interview_time: c.interview_time,
-          interview_feedback: c.interview_feedback,
-        }));
-
-        setCandidates(formattedCandidates);
-        
-        const uniqueRecruiters =[...new Set(formattedCandidates.map(c => c.recruiter_name).filter(r => r && r !== 'N/A'))].sort();
-        setRecruiterOptions(uniqueRecruiters);
-      } catch (err: any) {
-        setError(err.message || 'An unknown error occurred.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  },[organizationId, clientName, dateRange]);
-
-  const filteredCandidates = useMemo(() => candidates.filter(c => {
-    const statusName = statuses[c.sub_status_id || ''] || 'Uncategorized';
-    return (statusFilter === 'all' || statusName === statusFilter) &&
-           (recruiterFilter === 'all' || c.recruiter_name === recruiterFilter) &&
-           (!searchTerm || (c.name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.job_title?.toLowerCase().includes(searchTerm.toLowerCase()) || c.recruiter_name?.toLowerCase().includes(searchTerm.toLowerCase())));
-  }),[candidates, searchTerm, statuses, statusFilter, recruiterFilter]);
-
-  // --- UPDATED ANALYTICS LOGIC ---
-  const { analytics, pipelineStages, recruiterPerformance } = useMemo(() => {
-    const stageCounts: { [key: string]: number } = {}; let scoreSum = 0; let scoreCount = 0;
-    const recruiterProfiles: { [key: string]: number } = {}; const recruiterConversions: { [key: string]: number } = {}; const recruiterJoins: { [key: string]: number } = {};
-    let convertedCount = 0; let joinedCount = 0;
-    const conversionStatuses =[dynamicStatusIds.INTERVIEW_MAIN_STATUS_ID, dynamicStatusIds.OFFERED_STATUS_ID, dynamicStatusIds.JOINED_STATUS_ID];
-
-    filteredCandidates.forEach(c => {
-      const mainStatusName = statuses[c.main_status_id || ''] || 'Sourced';
-      stageCounts[mainStatusName] = (stageCounts[mainStatusName] || 0) + 1;
-      if (c.overall_score != null) { scoreSum += c.overall_score; scoreCount++; }
-      if (c.recruiter_name && c.recruiter_name !== 'N/A') { 
-          recruiterProfiles[c.recruiter_name] = (recruiterProfiles[c.recruiter_name] || 0) + 1;
-          if (c.main_status_id && conversionStatuses.includes(c.main_status_id)) { recruiterConversions[c.recruiter_name] = (recruiterConversions[c.recruiter_name] || 0) + 1; }
-          if (c.main_status_id === dynamicStatusIds.JOINED_STATUS_ID && c.sub_status_id === dynamicStatusIds.JOINED_SUB_STATUS_ID) { recruiterJoins[c.recruiter_name] = (recruiterJoins[c.recruiter_name] || 0) + 1; }
-      }
-      if (c.main_status_id && conversionStatuses.includes(c.main_status_id)) { convertedCount++; }
-      if (c.main_status_id === dynamicStatusIds.JOINED_STATUS_ID && c.sub_status_id === dynamicStatusIds.JOINED_SUB_STATUS_ID) { joinedCount++; }
-    });
-    
-    const getTopPerformer = (counts: { [key: string]: number }) => Object.keys(counts).sort((a,b) => counts[b] - counts[a])[0] || 'N/A';
-    
-    return {
-        analytics: {
-            totalCandidates: filteredCandidates.length, convertedCount, joinedCount,
-            conversionRate: filteredCandidates.length > 0 ? `${((convertedCount / filteredCandidates.length) * 100).toFixed(1)}%` : '0.0%',
-            joinedRate: filteredCandidates.length > 0 ? `${((joinedCount / filteredCandidates.length) * 100).toFixed(1)}%` : '0.0%',
-            averageScore: scoreCount > 0 ? (scoreSum / scoreCount).toFixed(0) : 'N/A',
-            topProfilesRecruiter: getTopPerformer(recruiterProfiles),
-            topConvertedRecruiter: getTopPerformer(recruiterConversions),
-            topJoinedRecruiter: getTopPerformer(recruiterJoins),
-        },
-        pipelineStages: Object.entries(stageCounts).map(([stage, count]) => ({ stage, count })),
-        recruiterPerformance: Object.entries(recruiterProfiles).map(([name, hires]) => ({ name, hires })).sort((a,b) => b.hires - a.hires)
-    };
-  }, [filteredCandidates, statuses, dynamicStatusIds]);
-
-  const groupedBySubStatus = useMemo<GroupedData>(() => filteredCandidates.reduce((acc: GroupedData, c) => { const s = statuses[c.sub_status_id || ''] || 'Uncategorized'; if (!acc[s]) acc[s] = []; acc[s].push(c); return acc; }, {}), [filteredCandidates, statuses]);
-  const tableRows = useMemo<TableRowData[]>(() => !isGrouped ? filteredCandidates.map(c => ({ type: 'data', candidate: c, statusName: statuses[c.sub_status_id || ''] || 'Uncategorized' })) : Object.entries(groupedBySubStatus).sort((a, b) => a[0].localeCompare(b[0])).flatMap(([s, g]) =>[{ type: 'header', statusName: s, count: g.length }, ...expandedGroups.includes(s) ? g.map(c => ({ type: 'data', candidate: c, statusName: s })) : []]),[isGrouped, filteredCandidates, groupedBySubStatus, expandedGroups, statuses]);
-  const totalPages = Math.ceil(tableRows.length / itemsPerPage); const startIndex = (currentPage - 1) * itemsPerPage; const paginatedData = tableRows.slice(startIndex, startIndex + itemsPerPage);
- 
-  const exportToCSV = () => {
-    if (filteredCandidates.length === 0) {
-        alert("No data to export.");
-        return;
-    }
-    const dataForExport = filteredCandidates.map(c => ({
-      'Candidate Name': c.name,
-      'Status': statuses[c.sub_status_id || ''] || 'Uncategorized',
-      'AI Score': formatValue(c.overall_score),
-      'Job Title': formatValue(c.job_title),
-      'Client': formatValue(c.client_name),
-      'Recruiter': formatValue(c.recruiter_name),
-      'Applied Date': formatDate(c.created_at),
-      'Current Salary': c.current_salary,
-      'Expected Salary': c.expected_salary,
-      'Notice Period': formatValue(c.notice_period),
-      'Location': formatValue(c.location),
-    }));
-    const csv = Papa.unparse(dataForExport, { header: true });
-    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' }); 
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${clientName}_candidate_report_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const exportToPDF = () => {
-    if (filteredCandidates.length === 0) {
-        alert("No data to export.");
-        return;
-    }
-    const doc = new jsPDF({ orientation: 'landscape' });
-    const tableHead = [['Name', 'Status', 'Score', 'Job', 'Recruiter', 'Applied', 'CCTC', 'ECTC', 'Notice', 'Location']];
-    const tableBody = filteredCandidates.map(c => [
-      c.name,
-      statuses[c.sub_status_id || ''] || 'Uncategorized',
-      formatValue(c.overall_score),
-      formatValue(c.job_title),
-      formatValue(c.recruiter_name),
-      formatDate(c.created_at),
-      formatCurrency(c.current_salary),
-      formatCurrency(c.expected_salary),
-      formatValue(c.notice_period),
-      formatValue(c.location),
-    ]);
-
-    doc.text(`Candidate Report for ${clientName}`, 14, 15);
-    (doc as any).autoTable({
-      head: tableHead,
-      body: tableBody,
-      startY: 20,
-      theme: 'grid',
-      styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
-      headStyles: { fillColor:[123, 67, 241] }, 
-      columnStyles: { 0: { cellWidth: 30 }, 3: { cellWidth: 40 } } 
-    });
-    doc.save(`${clientName}_candidate_report_${new Date().toISOString().split('T')[0]}.pdf`);
-  };
-  
-  const toggleGroup = (statusName: string) => setExpandedGroups(prev => prev.includes(statusName) ? prev.filter(g => g !== statusName) :[...prev, statusName]);
-  const onFilterChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (value: string) => { setter(value); setCurrentPage(1); };
-
-  if (isLoading) return <div className="flex h-[50vh] items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-purple-600"/></div>;
-  if (error) return <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>;
+  if (isLoading) return (
+    <div className="flex h-40 items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
+    </div>
+  );
+  if (error) return (
+    <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+      <AlertCircle size={16} />{error}
+    </div>
+  );
 
   return (
-    <div className="space-y-6 animate-fade-in bg-gray-50 p-6 rounded-lg">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <AnalyticsCard icon={Sigma} title="Total Candidates" value={analytics.totalCandidates} subMetrics={[{ label: 'Converted', value: analytics.convertedCount }, { label: 'Joined', value: analytics.joinedCount }]} />
-        <AnalyticsCard icon={GitMerge} title="Conversion Rate" value={analytics.conversionRate} subMetrics={[{ label: 'Joined Rate', value: analytics.joinedRate }]} />
-        <AnalyticsCard icon={Star} title="Average AI Score" value={analytics.averageScore} />
-        <AnalyticsCard 
-            icon={Crown} 
-            title="Top Performers" 
-            value="" 
-            subMetrics={[
-                { label: 'Profiles', value: analytics.topProfilesRecruiter },
-                { label: 'Converted', value: analytics.topConvertedRecruiter },
-                { label: 'Joined', value: analytics.topJoinedRecruiter }
-            ]} 
-        />
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2">
-            <CardHeader><CardTitle className="text-base font-semibold">Candidate Pipeline Stage</CardTitle></CardHeader>
-            <CardContent>
-                {pipelineStages.length > 2 ? (
-                     <ResponsiveContainer width="100%" height={280}>
-                        <RadarChart cx="50%" cy="50%" outerRadius="80%" data={pipelineStages}>
-                            <PolarGrid />
-                            <PolarAngleAxis dataKey="stage" tick={{ fontSize: 12 }} />
-                            <PolarRadiusAxis angle={30} domain={[0, 'dataMax']} tick={false} axisLine={false} />
-                            <Radar name="Candidates" dataKey="count" stroke="#6366F1" fill="#818CF8" fillOpacity={0.6} />
-                            <Tooltip />
-                        </RadarChart>
-                    </ResponsiveContainer>
-                ) : <div className="h-[280px] flex items-center justify-center text-sm text-gray-500">Not enough pipeline data for chart.</div>}
-            </CardContent>
-        </Card>
-        <Card>
-            <CardHeader><CardTitle className="text-base font-semibold">Profiles by Recruiter</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-                {recruiterPerformance.length > 0 ? recruiterPerformance.slice(0, 5).map(r => (
-                    <div key={r.name}>
-                        <div className="flex justify-between text-sm mb-1"><span className="font-medium text-gray-700">{r.name}</span><span className="text-gray-500">{r.hires} profiles</span></div>
-                        <Progress value={(r.hires / recruiterPerformance[0].hires) * 100} className="h-1.5" />
-                    </div>
-                )) : <div className="h-[280px] flex items-center justify-center text-sm text-gray-500">No recruiter data.</div>}
-            </CardContent>
-        </Card>
-      </div>
+    <div className="space-y-5">
 
-      <Card>
-        <CardContent className="p-4">
-         <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full mb-6">
-  {/* Status Filter */}
-  <div className="flex-shrink-0 order-2 w-full sm:w-[150px]">
-    <Select value={statusFilter} onValueChange={onFilterChange(setStatusFilter)}>
-      <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
-        <div className="flex items-center gap-2">
-          <Tag size={16} className="text-gray-500" />
-          <SelectValue placeholder="Filter by Status" />
-        </div>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">All Statuses</SelectItem>
-        {Object.values(statuses).sort().map(s => (
-          <SelectItem key={s} value={s}>{s}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
-
-  {/* Recruiter Filter */}
-  <div className="flex-shrink-0 order-3 w-full sm:w-[150px]">
-    <Select value={recruiterFilter} onValueChange={onFilterChange(setRecruiterFilter)}>
-      <SelectTrigger className="w-full rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
-        <div className="flex items-center gap-2">
-          <User size={16} className="text-gray-500" />
-          <SelectValue placeholder="Filter by Recruiter" />
-        </div>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">All Recruiters</SelectItem>
-        {recruiterOptions.map(r => (
-          <SelectItem key={r} value={r}>{r}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
-
-  {/* Search Bar */}
-  <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">
-    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-    <Input 
-      placeholder="Search by name, job, recruiter..." 
-      className="pl-10 h-10 w-full rounded-full bg-gray-100 dark:bg-gray-800 shadow-inner text-sm md:text-base placeholder:text-xs md:placeholder:text-sm" 
-      value={searchTerm} 
-      onChange={(e) => { 
-        setSearchTerm(e.target.value); 
-        setCurrentPage(1); 
-      }} 
-    />
-  </div>
-
-  {/* Group Button */}
-  <Button 
-    variant="outline" 
-    onClick={() => setIsGrouped(!isGrouped)} 
-    className="flex-shrink-0 order-4 w-full sm:w-auto rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm"
-  >
-    {isGrouped ? <List className="mr-2 h-4 w-4" /> : <Layers className="mr-2 h-4 w-4" />} 
-    {isGrouped ? 'Ungroup' : 'Group'}
-  </Button>
-
-  {/* Export Buttons */}
-  <div className="flex gap-2 flex-shrink-0 order-5">
-    <Button variant="outline" size="sm" onClick={exportToCSV} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
-      <Download className="w-4 h-4 mr-2" />
-      CSV
-    </Button>
-    <Button variant="outline" size="sm" onClick={exportToPDF} className="rounded-full h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 shadow-inner text-sm">
-      <Download className="w-4 h-4 mr-2" />
-      PDF
-    </Button>
-  </div>
-</div>
-          <div className="rounded-md border overflow-x-auto"><Table>
-              <TableHeader><TableRow className="bg-gray-50 hover:bg-gray-50">
-                <TableHead className="w-[200px]">Candidate</TableHead><TableHead>Status</TableHead><TableHead>AI Score</TableHead><TableHead>Job Title</TableHead><TableHead>Recruiter</TableHead><TableHead>Applied</TableHead><TableHead>CCTC</TableHead><TableHead>ECTC</TableHead><TableHead>Notice</TableHead><TableHead>Location</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>
-                {paginatedData.length > 0 ? paginatedData.map((row) => {
-                  if (row.type === 'header') return (<TableRow key={row.statusName} className="bg-gray-100"><TableCell colSpan={10} className="font-bold"><div className="flex items-center gap-2"><Button variant="ghost" size="sm" onClick={() => toggleGroup(row.statusName!)} className="p-0 h-6 w-6">{expandedGroups.includes(row.statusName!) ? <ChevronUp /> : <ChevronDown />}</Button>{row.statusName} <Badge variant="secondary">{row.count}</Badge></div></TableCell></TableRow>);
-                  const { candidate, statusName } = row;
-                  return (
-                    <TableRow key={candidate!.id} className="hover:bg-gray-50">
-                      <TableCell className="font-medium"><Link to={`/jobs/candidateprofile/${candidate!.id}/${candidate!.job_id}`} className="text-purple-600 hover:underline">{candidate!.name}</Link></TableCell>
-                      <TableCell>
-                        <StatusCell candidate={candidate!} statusName={statusName!} />
-                      </TableCell>
-                      <TableCell><Badge className={getScoreBadgeClass(candidate!.overall_score)}>{formatValue(candidate!.overall_score)}</Badge></TableCell>
-                      <TableCell><Link to={`/jobs/${candidate!.job_id}`} className="hover:underline">{formatValue(candidate!.job_title)}</Link></TableCell>
-                      <TableCell>{formatValue(candidate!.recruiter_name)}</TableCell>
-                      <TableCell>{formatDate(candidate!.created_at)}</TableCell>
-                      <TableCell>{formatCurrency(candidate!.current_salary)}</TableCell>
-                      <TableCell>{formatCurrency(candidate!.expected_salary)}</TableCell>
-                      <TableCell>{formatValue(candidate!.notice_period)}</TableCell>
-                      <TableCell>{formatValue(candidate!.location)}</TableCell>
-                    </TableRow>
-                  );
-                }) : <TableRow><TableCell colSpan={10} className="h-24 text-center">No candidates found matching your criteria.</TableCell></TableRow>}
-              </TableBody>
-            </Table>
+      {/* ── Row 1: KPI chips ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="p-4">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Total Candidates</p>
+          <p className="text-2xl font-bold text-gray-800">{analytics.total}</p>
+          <div className="mt-2 flex gap-3">
+            <div><p className="text-[10px] text-gray-400">Converted</p><p className="text-sm font-bold text-violet-600">{analytics.converted}</p></div>
+            <div><p className="text-[10px] text-gray-400">Joined</p><p className="text-sm font-bold text-emerald-600">{analytics.joined}</p></div>
           </div>
-          {totalPages > 1 && <div className="flex justify-between items-center mt-4">
-              <span className="text-sm text-gray-600">Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, tableRows.length)} of {tableRows.length}</span>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}><ChevronLeft/></Button>
-                <span>Page {currentPage} of {totalPages}</span>
-                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}><ChevronRight/></Button>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Conversion Rate</p>
+          <p className="text-2xl font-bold text-gray-800">{analytics.conversionRate}</p>
+          <p className="text-[11px] text-gray-400 mt-1">Joined rate: <span className="font-semibold text-emerald-600">{analytics.joinedRate}</span></p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Avg AI Score</p>
+          <p className="text-2xl font-bold text-gray-800">{analytics.avgScore ?? '—'}</p>
+          {analytics.avgScore && (
+            <div className="mt-2 h-1.5 rounded-full bg-gray-100">
+              <div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${analytics.avgScore}%` }} />
+            </div>
+          )}
+        </Card>
+        <Card className="p-4">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Top Performers</p>
+          <div className="space-y-1 mt-1">
+            {[
+              { label: 'Profiles', value: analytics.topProfiles },
+              { label: 'Converted', value: analytics.topConverted },
+              { label: 'Joined', value: analytics.topJoined },
+            ].map(item => (
+              <div key={item.label} className="flex justify-between items-center">
+                <span className="text-[10px] text-gray-400">{item.label}</span>
+                <span className="text-[11px] font-semibold text-gray-700 max-w-[100px] truncate">{item.value}</span>
               </div>
-          </div>}
-        </CardContent>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      {/* ── Row 2: Pipeline funnel + Sub-status breakdown + Recruiter table ─ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* Pipeline bar chart — ordered by display_order */}
+        <Card className="lg:col-span-1">
+          <CardHead title="Candidate Pipeline" sub="By main status" />
+          <div className="p-4 h-[200px]">
+            {analytics.pipelineStages.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={analytics.pipelineStages} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
+                  <XAxis type="number" tick={{ fontSize: 9, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="stage" tick={{ fontSize: 10, fill: '#4B5563' }} axisLine={false} tickLine={false} width={80} />
+                  <RechartsTooltip content={<LightTooltip />} />
+                  <Bar dataKey="count" name="Candidates" radius={[0, 4, 4, 0]} maxBarSize={18}>
+                    {analytics.pipelineStages.map((entry, i) => (
+                      <Cell key={i} fill={entry.color || PALETTE[i % PALETTE.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <div className="h-full flex items-center justify-center"><p className="text-xs text-gray-300">No pipeline data</p></div>}
+          </div>
+        </Card>
+
+        {/* Sub-status donut */}
+        <Card>
+          <CardHead title="Status Breakdown" sub="By sub-status" />
+          <div className="p-4 h-[200px] flex items-center">
+            {analytics.subCounts.length > 0 ? (
+              <div className="flex items-center gap-3 w-full">
+                <div className="w-[90px] h-[90px] flex-shrink-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={analytics.subCounts} cx="50%" cy="50%" innerRadius={24} outerRadius={42} paddingAngle={2} dataKey="count" stroke="none">
+                        {analytics.subCounts.map((entry, i) => (
+                          <Cell key={i} fill={entry.color || PALETTE[i % PALETTE.length]} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex-1 space-y-1.5 max-h-[170px] overflow-y-auto pr-1">
+                  {analytics.subCounts.slice(0, 8).map((entry, i) => (
+                    <div key={entry.name}>
+                      <div className="flex justify-between items-center mb-0.5">
+                        <div className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color || PALETTE[i % PALETTE.length] }} />
+                          <span className="text-[10px] text-gray-500 truncate max-w-[100px]">{entry.name}</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-gray-700">{entry.count}</span>
+                      </div>
+                      <div className="h-1 rounded-full bg-gray-100">
+                        <div className="h-full rounded-full" style={{ width: `${(entry.count / analytics.total) * 100}%`, backgroundColor: entry.color || PALETTE[i % PALETTE.length] }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : <div className="w-full flex items-center justify-center"><p className="text-xs text-gray-300">No data</p></div>}
+          </div>
+        </Card>
+
+        {/* Recruiter performance */}
+        <Card>
+          <CardHead title="Recruiter Performance" />
+          <div className="p-4 space-y-2 max-h-[200px] overflow-y-auto">
+            {analytics.recruiterTable.length > 0 ? analytics.recruiterTable.map((r, i) => (
+              <div key={r.name} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0">
+                <span className="w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-gray-700 truncate">{r.name}</p>
+                  <div className="h-1 rounded-full bg-gray-100 mt-0.5">
+                    <div className="h-full rounded-full bg-violet-400" style={{ width: `${(r.profiles / analytics.recruiterTable[0].profiles) * 100}%` }} />
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-xs font-bold text-gray-800">{r.profiles}</p>
+                  <p className="text-[9px] text-gray-400">{r.joins} joined</p>
+                </div>
+              </div>
+            )) : <p className="text-xs text-gray-300 text-center py-6">No recruiter data</p>}
+          </div>
+        </Card>
+      </div>
+
+      {/* ── Candidate Table ───────────────────────────────────────────────── */}
+      <Card>
+        {/* Toolbar */}
+        <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              placeholder="Search name, job, recruiter…"
+              value={searchTerm}
+              onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-400 transition-all"
+            />
+          </div>
+
+          {/* Status filter */}
+          <select
+            value={statusFilter}
+            onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 text-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-200 min-w-[130px]"
+          >
+            <option value="all">All Statuses</option>
+            {/* Ordered by parent's display_order then child display_order */}
+            {statusDefs.filter(s => s.type === 'main').map(main => {
+              const children = statusDefs.filter(s => s.type === 'sub' && s.parent_id === main.id);
+              return children.map(child => (
+                <option key={child.id} value={child.name}>{main.name} → {child.name}</option>
+              ));
+            })}
+          </select>
+
+          {/* Recruiter filter */}
+          <select
+            value={recruiterFilter}
+            onChange={e => { setRecruiterFilter(e.target.value); setCurrentPage(1); }}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 text-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-200 min-w-[130px]"
+          >
+            <option value="all">All Recruiters</option>
+            {recruiterOptions.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+
+          {/* Group toggle */}
+          <button
+            onClick={() => setIsGrouped(!isGrouped)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${isGrouped ? 'bg-violet-600 text-white border-violet-600' : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-violet-300'}`}
+          >
+            {isGrouped ? <List size={12} /> : <Layers size={12} />}
+            {isGrouped ? 'Ungroup' : 'Group by Status'}
+          </button>
+
+          {/* Export */}
+          <div className="flex gap-1.5">
+            <button onClick={exportCSV} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200 hover:border-violet-300 transition-all">
+              <Download size={11} />CSV
+            </button>
+            <button onClick={exportPDF} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200 hover:border-violet-300 transition-all">
+              <Download size={11} />PDF
+            </button>
+          </div>
+
+          <span className="text-[11px] text-gray-400 ml-auto">{filtered.length} candidates</span>
+        </div>
+
+        {/* Table — grouped view */}
+        {isGrouped ? (
+          <div className="divide-y divide-gray-100">
+            {grouped.map(group => (
+              <div key={group.statusName}>
+                {/* Group header */}
+                <button
+                  onClick={() => toggleGroup(group.statusName)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 bg-gray-50 hover:bg-violet-50/50 transition-colors text-left"
+                >
+                  {expandedGroups.has(group.statusName) ? <ChevronDown size={14} className="text-gray-400" /> : <ChevronRight size={14} className="text-gray-400" />}
+                  <span
+                    className="text-xs font-bold px-2 py-0.5 rounded"
+                    style={{ background: group.color ? `${group.color}18` : '#7B43F118', color: group.color || '#7B43F1' }}
+                  >
+                    {group.statusName}
+                  </span>
+                  <span className="text-[11px] text-gray-500">{group.candidates.length} candidates</span>
+                </button>
+
+                {/* Expanded child table — has its own header */}
+                {expandedGroups.has(group.statusName) && (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full">
+                      {/* Child table own header */}
+                      <thead>
+                        <tr className="bg-violet-50/40">
+                          <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-violet-500">Candidate</th>
+                          <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-violet-500">Sub-status</th>
+                          <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-violet-500">Score</th>
+                          <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-violet-500">Job</th>
+                          <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-violet-500">Recruiter</th>
+                          <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-violet-500">Applied</th>
+                          <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-violet-500">CCTC</th>
+                          <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-violet-500">ECTC</th>
+                          <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-violet-500">Notice</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {group.candidates.map(c => (
+                          <tr key={c.id} className="hover:bg-violet-50/20 transition-colors">
+                            <td className="px-4 py-2.5"><Link to={`/jobs/candidateprofile/${c.id}/${c.job_id}`} className="text-xs font-semibold text-violet-600 hover:text-violet-800">{c.name}</Link></td>
+                            <td className="px-4 py-2.5"><StatusCell c={c} /></td>
+                            <td className="px-4 py-2.5"><span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${scoreColor(c.overall_score)}`}>{fmtV(c.overall_score)}</span></td>
+                            <td className="px-4 py-2.5 text-xs text-gray-500"><Link to={`/jobs/${c.job_id}`} className="hover:text-violet-600 transition-colors">{fmtV(c.job_title)}</Link></td>
+                            <td className="px-4 py-2.5 text-xs text-gray-500">{fmtV(c.recruiter_name)}</td>
+                            <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmtDate(c.created_at)}</td>
+                            <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmt(c.current_salary)}</td>
+                            <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmt(c.expected_salary)}</td>
+                            <td className="px-4 py-2.5 text-xs text-gray-500">{fmtV(c.notice_period)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {/* Pagination inside child group if large */}
+                    {group.candidates.length > 10 && (
+                      <div className="px-4 py-2 text-[11px] text-gray-400 bg-violet-50/20">
+                        Showing all {group.candidates.length} candidates in this group
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* Flat view with outer pagination */
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {['Candidate', 'Status', 'Score', 'Job', 'Recruiter', 'Applied', 'CCTC', 'ECTC', 'Notice', 'Location'].map(h => (
+                      <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {paginated.length > 0 ? paginated.map(c => (
+                    <tr key={c.id} className="hover:bg-violet-50/30 transition-colors">
+                      <td className="px-4 py-3"><Link to={`/jobs/candidateprofile/${c.id}/${c.job_id}`} className="text-xs font-semibold text-violet-600 hover:text-violet-800">{c.name}</Link></td>
+                      <td className="px-4 py-3"><StatusCell c={c} /></td>
+                      <td className="px-4 py-3"><span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${scoreColor(c.overall_score)}`}>{fmtV(c.overall_score)}</span></td>
+                      <td className="px-4 py-3 text-xs text-gray-500"><Link to={`/jobs/${c.job_id}`} className="hover:text-violet-600">{fmtV(c.job_title)}</Link></td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{fmtV(c.recruiter_name)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(c.created_at)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmt(c.current_salary)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmt(c.expected_salary)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{fmtV(c.notice_period)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{fmtV(c.location)}</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={10} className="px-4 py-12 text-center">
+                      <Users size={28} className="text-gray-200 mx-auto mb-2" />
+                      <p className="text-sm text-gray-400">No candidates found</p>
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* Outer pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+                <span className="text-[11px] text-gray-400">
+                  {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:border-violet-300 hover:text-violet-600 disabled:opacity-40 transition-all"><ChevronLeft size={13} /></button>
+                  <span className="text-xs text-gray-500 font-medium">{currentPage} / {totalPages}</span>
+                  <button onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage >= totalPages} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:border-violet-300 hover:text-violet-600 disabled:opacity-40 transition-all"><ChevronRight size={13} /></button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </Card>
     </div>
   );
