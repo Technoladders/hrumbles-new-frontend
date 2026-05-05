@@ -724,3 +724,4 @@ const AllCandidatesTab: React.FC<AllCandidatesTabProps> = ({ clientName, dateRan
 };
 
 export default AllCandidatesTab;
+// color change

@@ -30,6 +30,13 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Register Chart.js components
 ChartJS.register(ArcElement, Tooltip, Legend);
@@ -68,6 +75,7 @@ const EmployeeList = () => {
   // State for the drawer
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
   useEffect(() => {
     fetchEmployees();
@@ -148,6 +156,45 @@ const EmployeeList = () => {
       toast.error(`Error deleting employee: ${error.message}`);
     }
   };
+
+  // Add this function to handle status changes
+const handleStatusChange = async (employeeId: string, newStatus: string) => {
+  try {
+    setUpdatingStatus(employeeId);
+    
+    // If status is "terminated", we need last_working_day
+    let updateData: any = {
+      employment_status: newStatus,
+      status: newStatus === 'terminated' ? 'terminated' : 
+              newStatus === 'inactive' ? 'inactive' : 'active'
+    };
+
+    if (newStatus === 'terminated') {
+      updateData.last_working_day = new Date().toISOString().split('T')[0];
+    }
+
+    const { error } = await supabase
+      .from('hr_employees')
+      .update(updateData)
+      .eq('id', employeeId);
+
+    if (error) throw error;
+
+    // Update local state
+    setEmployees(employees.map(emp => 
+      emp.id === employeeId 
+        ? { ...emp, employment_status: newStatus } 
+        : emp
+    ));
+
+    toast.success(`Employee status updated to ${newStatus}`);
+  } catch (error: any) {
+    console.error("Error updating status:", error);
+    toast.error(`Error updating status: ${error.message}`);
+  } finally {
+    setUpdatingStatus(null);
+  }
+};
 
   const filteredEmployees = employees.filter(emp => 
     emp.first_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -543,19 +590,69 @@ const EmployeeList = () => {
           
                         <TableCell>{employee.department_name}</TableCell>
           
-                        <TableCell>
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs ${
-                              employee.employment_status?.toLowerCase() === 'active'
-                                ? 'bg-purple-100 text-purple-800'
-                                : 'bg-gradient-to-r from-purple-400 to-purple-600 text-white'
-                            }`}
-                          >
-                            {employee.employment_status?.toLowerCase() === 'active'
-                              ? 'Active'
-                              : employee.employment_status}
-                          </span>
-                        </TableCell>
+<TableCell>
+  {updatingStatus === employee.id ? (
+    <div className="flex items-center">
+      <span className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"></span>
+    </div>
+  ) : (
+    <Select
+      value={employee.employment_status?.toLowerCase() || 'active'}
+      onValueChange={(value) => handleStatusChange(employee.id, value)}
+    >
+      <SelectTrigger 
+        className={`h-8 w-[130px] text-xs border-0 bg-transparent hover:bg-gray-100 transition-colors ${
+          employee.employment_status?.toLowerCase() === 'active'
+            ? 'text-purple-800'
+            : employee.employment_status?.toLowerCase() === 'terminated'
+            ? 'text-red-800'
+            : employee.employment_status?.toLowerCase() === 'inactive'
+            ? 'text-orange-800'
+            : 'text-gray-800'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <SelectValue>
+          <span className={`flex items-center gap-1.5`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              employee.employment_status?.toLowerCase() === 'active'
+                ? 'bg-green-500'
+                : employee.employment_status?.toLowerCase() === 'terminated'
+                ? 'bg-red-500'
+                : employee.employment_status?.toLowerCase() === 'inactive'
+                ? 'bg-orange-500'
+                : 'bg-gray-500'
+            }`}></span>
+            {employee.employment_status?.charAt(0).toUpperCase() + employee.employment_status?.slice(1) || 'Active'}
+          </span>
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent 
+        className="w-[130px]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <SelectItem value="active">
+          <span className="flex items-center gap-2 text-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            Active
+          </span>
+        </SelectItem>
+        <SelectItem value="inactive">
+          <span className="flex items-center gap-2 text-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+            Inactive
+          </span>
+        </SelectItem>
+        <SelectItem value="terminated">
+          <span className="flex items-center gap-2 text-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+            Terminated
+          </span>
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  )}
+</TableCell>
           
                         <TableCell className="text-right">
                           <div className="flex justify-end">

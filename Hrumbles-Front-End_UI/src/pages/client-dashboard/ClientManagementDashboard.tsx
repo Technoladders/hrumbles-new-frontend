@@ -324,8 +324,8 @@ const ClientManagementDashboard = () => {
           <Card className="lg:col-span-2 p-5">
             <SectionTitle>Revenue & Profit — Top 10 Clients</SectionTitle>
             {chartData.length > 0 ? (
-              <div className="h-[240px]">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-[230px]">
+                <ResponsiveContainer width="100%" height="130%">
                   <ComposedChart data={chartData} margin={{ top: 5, right: 10, left: 5, bottom: 40 }}>
                     <defs>
                       <linearGradient id="revBarGrad" x1="0" y1="0" x2="0" y2="1">
@@ -338,11 +338,11 @@ const ClientManagementDashboard = () => {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                    <XAxis dataKey="name" angle={-30} textAnchor="end" interval={0} height={48} tick={{ fontSize: 9, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="name" angle={0} textAnchor="end" interval={0} height={48} tick={{ fontSize: 9, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                     <YAxis yAxisId="left" tick={{ fontSize: 10, fill: '#7B43F1' }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
                     <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#06B6D4' }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
                     <RechartsTooltip content={<LightTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280', paddingTop: 4 }} />
+                    <Legend wrapperStyle={{ fontSize: 10, color: '#6B7280', paddingTop: 2 }} />
                     <Bar yAxisId="left" dataKey="revenue_inr" name="Revenue" fill="url(#revBarGrad)" radius={[4, 4, 0, 0]} maxBarSize={36} />
                     <Area yAxisId="right" type="monotone" dataKey="profit_inr" name="Profit" stroke="#06B6D4" strokeWidth={2} fill="url(#profAreaGrad)" />
                   </ComposedChart>

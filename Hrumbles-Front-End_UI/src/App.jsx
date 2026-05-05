@@ -163,6 +163,7 @@ import { InterviewsPage } from '@/components/dashboard/widgets/InterviewsWidget'
 import MigrationPage from "@/components/global/MigrationPage";
 import MigrationHistoryPage from "@/components/global/MigrationHistoryPage";
 import CallAnalyticsReport from "@/components/sales/activity-report/CallAnalyticsReport.tsx";
+import BatchJobsPage from '@/components/candidates/talent-pool/BatchJobsPage.tsx';
 
 const FullScreenLoader = () => (
   <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
@@ -513,6 +514,7 @@ function AppContent() {
               <Route path="/my-submission" element={<MySubmissionsReport />} />
               <Route path="/talent-pool" element={<TalentPoolPage />} />
               <Route path="/talent-pool/:candidateId" element={<CandidateProfilePage />} />
+              <Route path="/talent-pool/batch-jobs" element={<BatchJobsPage />} />
               <Route path="/migrated-talent-pool" element={<MigratedTalentPoolPage />} />
               <Route path="/migrated-talent-pool/:candidateId" element={<MigratedCandidateProfilePage />} />
               <Route path="/zive-x" element={<ZiveXSearchPage />} />
