@@ -182,6 +182,7 @@ const ClientDetailsStep: React.FC<ClientDetailsStepProps> = ({ form }) => {
                   </FormControl>
                   <SelectContent>
                     <SelectItem value="30">30 Days</SelectItem>
+                    <SelectItem value="45">45 Days</SelectItem>
                     <SelectItem value="60">60 Days</SelectItem>
                     <SelectItem value="90">90 Days</SelectItem>
                   </SelectContent>

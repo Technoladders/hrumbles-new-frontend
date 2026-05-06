@@ -413,10 +413,13 @@ export const ActivityLogReport: React.FC = () => {
   const [tnSearch, setTnSearch] = useState('');
   const TN_PS = 10;
 
-  const isAdmin = useMemo(() => {
-    if (typeof userRole !== 'string') return false;
-    return userRole.toLowerCase().trim().replace(/\s+/g, '_') === 'organization_superadmin';
-  }, [userRole]);
+const isAdmin = useMemo(() => {
+  if (typeof userRole !== 'string') return false;
+
+  const normalizedRole = userRole.toLowerCase().trim().replace(/\s+/g, '_');
+
+  return ['organization_superadmin', 'admin'].includes(normalizedRole);
+}, [userRole]);
 
   const df = useMemo(() => ({
     start: dateRange.startDate ? startOfDay(dateRange.startDate).toISOString() : null,

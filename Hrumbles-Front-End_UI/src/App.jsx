@@ -164,6 +164,7 @@ import MigrationPage from "@/components/global/MigrationPage";
 import MigrationHistoryPage from "@/components/global/MigrationHistoryPage";
 import CallAnalyticsReport from "@/components/sales/activity-report/CallAnalyticsReport.tsx";
 import BatchJobsPage from '@/components/candidates/talent-pool/BatchJobsPage.tsx';
+import UploadProgressFloat from '@/components/candidates/talent-pool/UploadProgressFloat';
 
 const FullScreenLoader = () => (
   <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
@@ -581,10 +582,13 @@ function AppContent() {
 
 function App() {
   return (
+    <>
     <Router>
       <AppContent />
       <GlobalDialogs />
     </Router>
+    <UploadProgressFloat />
+    </>
   );
 }
 
