@@ -114,7 +114,7 @@ export const SalesDashboardLayout: React.FC = () => {
           hr_departments!inner(name)
         `)
         .eq('organization_id', organizationId)
-        .eq('status', 'active')
+        // .eq('status', 'active')
         .eq('hr_departments.name', 'Sales & Marketing'); 
 
       if (error) throw error;
@@ -122,6 +122,8 @@ export const SalesDashboardLayout: React.FC = () => {
     },
     enabled: !!organizationId && isAdmin
   });
+
+  console.log("teamMembers:", teamMembers);
 
   // Fetch contacts for task creation
   const { data: contacts } = useQuery({

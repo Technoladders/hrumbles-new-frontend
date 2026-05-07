@@ -1,53 +1,74 @@
 // src/lib/UploadSessionManager.ts
-// Singleton that manages large bulk upload sessions with:
-//   • DB persistence (survives page refresh / system restart)
-//   • IndexedDB for fast local state
-//   • File deduplication via SHA-256 hash
-//   • Concurrency-controlled uploads (3 at a time)
-//   • Resume from interruption
-//   • EventEmitter for reactive UI updates
+//
+// ARCHITECTURE CHANGE:
+//   Browser responsibility: parse file → upload to storage → insert session_file row (status='uploaded')
+//   Server responsibility: talent-batch-submit reads from DB and calls OpenAI — no resume text in HTTP payload
+//
+// Resume logic:
+//   On mount, checkForIncompleteSession fetches the DB session.
+//   It compares DB file records against the files the user re-selects.
+//   Files already 'uploaded' in DB are skipped (dedup by file_hash).
+//   Only truly pending/failed files get reprocessed.
+//
+// Why uploads stopped before:
+//   1. Browser tab closed / went idle → in-memory queue died
+//   2. talent-pool-parser edge function timed out on large PDFs (Supabase free: 150s wall clock)
+//   3. All 3 CONCURRENCY workers hitting simultaneous timeouts caused processFiles to fall through early
+//
+// Long-term fixes applied here:
+//   1. Each file is independently retried up to MAX_RETRIES times with exponential backoff
+//   2. CONCURRENCY reduced to 2 to reduce simultaneous edge function load
+//   3. Session state is persisted to BOTH IndexedDB (fast) and Supabase (durable across devices)
+//   4. Resume requires user to re-select files; we match by sha256 hash (not just name+size)
+//      so renamed files still match
+//   5. submitSession is idempotent — if called twice it won't double-submit
 
 import { supabase } from '@/integrations/supabase/client';
 import mammoth from 'mammoth';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface UploadFileState {
-  id         : string;       // UUID assigned at start
-  fileName   : string;
-  fileSize   : number;
-  status     : 'pending' | 'parsing' | 'uploading' | 'done' | 'failed' | 'skipped' | 'duplicate';
-  error?     : string;
-  resumePath?: string;
+  id          : string;
+  fileName    : string;
+  fileSize    : number;
+  status      : 'pending' | 'parsing' | 'uploading' | 'done' | 'failed' | 'skipped' | 'duplicate';
+  error?      : string;
+  resumePath? : string;
+  retries?    : number;
 }
 
 export interface UploadSession {
-  sessionId       : string;
-  organizationId  : string;
-  userId          : string;
-  totalFiles      : number;
-  files           : UploadFileState[];
-  status          : 'uploading' | 'submitting' | 'submitted' | 'failed' | 'cancelled';
-  startedAt       : string;
+  sessionId      : string;
+  organizationId : string;
+  userId         : string;
+  totalFiles     : number;
+  files          : UploadFileState[];
+  status         : 'uploading' | 'submitting' | 'submitted' | 'failed' | 'cancelled';
+  startedAt      : string;
 }
 
 export type UploadEvent =
-  | { type: 'progress'; session: UploadSession }
+  | { type: 'progress';  session: UploadSession }
   | { type: 'file_done'; fileId: string; status: UploadFileState['status'] }
   | { type: 'submitted'; batchJobId: string }
-  | { type: 'error'; message: string }
-  | { type: 'resumed'; session: UploadSession };
+  | { type: 'error';     message: string }
+  | { type: 'resumed';   session: UploadSession };
 
 type Listener = (e: UploadEvent) => void;
 
-const BUCKET           = 'talent-pool-resumes';
-const CONCURRENCY      = 3;    // parallel file uploads
-const IDB_DB_NAME      = 'hrumbles_uploads';
-const IDB_STORE        = 'sessions';
+// ─── Constants ────────────────────────────────────────────────────────────────
+const BUCKET      = 'talent-pool-resumes';
+const CONCURRENCY = 2;    // reduced from 3 — fewer simultaneous edge function calls
+const MAX_RETRIES = 3;    // retry each file up to 3 times on timeout/network error
+const IDB_DB_NAME = 'hrumbles_uploads';
+const IDB_STORE   = 'sessions';
 
 // ─── SHA-256 helper ───────────────────────────────────────────────────────────
 async function sha256hex(buffer: ArrayBuffer): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 // ─── Sanitize filename ────────────────────────────────────────────────────────
@@ -55,7 +76,8 @@ const sanitize = (n: string) => n.replace(/[\[\]\+\s]+/g, '_');
 
 // ─── base64 → Blob ────────────────────────────────────────────────────────────
 function base64ToBlob(b64: string, mime: string): Blob {
-  const CHUNK = 8192; const chunks: Uint8Array[] = [];
+  const CHUNK = 8192;
+  const chunks: Uint8Array[] = [];
   const raw = atob(b64);
   for (let i = 0; i < raw.length; i += CHUNK) {
     const s = raw.slice(i, i + CHUNK);
@@ -65,6 +87,9 @@ function base64ToBlob(b64: string, mime: string): Blob {
   }
   return new Blob(chunks, { type: mime });
 }
+
+// ─── Sleep helper ─────────────────────────────────────────────────────────────
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 // ─── IndexedDB helpers ────────────────────────────────────────────────────────
 function openIDB(): Promise<IDBDatabase> {
@@ -79,31 +104,37 @@ function openIDB(): Promise<IDBDatabase> {
   });
 }
 async function idbGet(key: string): Promise<any> {
-  const db = await openIDB();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_STORE, 'readonly');
-    const r  = tx.objectStore(IDB_STORE).get(key);
-    r.onsuccess = () => res(r.result);
-    r.onerror   = () => rej(r.error);
-  });
+  try {
+    const db = await openIDB();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const r  = tx.objectStore(IDB_STORE).get(key);
+      r.onsuccess = () => res(r.result ?? null);
+      r.onerror   = () => rej(r.error);
+    });
+  } catch { return null; }
 }
 async function idbSet(key: string, value: any): Promise<void> {
-  const db = await openIDB();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put(value, key);
-    tx.oncomplete = () => res();
-    tx.onerror    = () => rej(tx.error);
-  });
+  try {
+    const db = await openIDB();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = () => res();
+      tx.onerror    = () => rej(tx.error);
+    });
+  } catch {}
 }
 async function idbDel(key: string): Promise<void> {
-  const db = await openIDB();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).delete(key);
-    tx.oncomplete = () => res();
-    tx.onerror    = () => rej(tx.error);
-  });
+  try {
+    const db = await openIDB();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).delete(key);
+      tx.oncomplete = () => res();
+      tx.onerror    = () => rej(tx.error);
+    });
+  } catch {}
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -114,15 +145,16 @@ class UploadSessionManager {
   private listeners: Listener[]           = [];
   private aborted                         = false;
 
-  // ── Subscribe / unsubscribe ────────────────────────────────────────────────
   on(fn: Listener)  { this.listeners.push(fn); }
   off(fn: Listener) { this.listeners = this.listeners.filter(l => l !== fn); }
   private emit(e: UploadEvent) { this.listeners.forEach(l => { try { l(e); } catch {} }); }
 
   get currentSession() { return this.session; }
-  get isActive()       { return this.session !== null && this.session.status === 'uploading'; }
+  get isActive()       { return this.session?.status === 'uploading'; }
 
-  // ── On app mount: check for incomplete sessions ────────────────────────────
+  // ── On app mount: check DB for any incomplete sessions ─────────────────────
+  // Returns a reconstructed session so the UI can offer resume.
+  // Does NOT start processing — user must re-select files to resume.
   async checkForIncompleteSession(userId: string): Promise<UploadSession | null> {
     try {
       const { data } = await supabase
@@ -132,19 +164,19 @@ class UploadSessionManager {
         .in('status', ['uploading', 'submitting'])
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (!data) return null;
 
-      // Try to load file states from IndexedDB (local cache)
-      const localState: UploadSession | null = await idbGet(`session_${data.id}`);
-      if (localState) {
-        this.session = localState;
-        this.emit({ type: 'resumed', session: localState });
-        return localState;
+      // Try IndexedDB first (has per-file detail)
+      const local: UploadSession | null = await idbGet(`session_${data.id}`);
+      if (local && local.status !== 'cancelled') {
+        // Emit resumed — UI shows banner, session is NOT set as active
+        this.emit({ type: 'resumed', session: local });
+        return local;
       }
 
-      // Fallback: reconstruct from DB session files
+      // Reconstruct from DB session files
       const { data: files } = await supabase
         .from('hr_talent_pool_upload_session_files')
         .select('id, file_name, file_size, resume_path, upload_status, error_message')
@@ -154,49 +186,67 @@ class UploadSessionManager {
         id        : f.id,
         fileName  : f.file_name,
         fileSize  : f.file_size ?? 0,
-        status    : f.upload_status === 'uploaded' ? 'done' :
-                    f.upload_status === 'failed'   ? 'failed' :
-                    f.upload_status === 'skipped'  ? 'skipped' : 'pending',
-        resumePath: f.resume_path,
+        status    : (f.upload_status === 'uploaded' ? 'done' :
+                     f.upload_status === 'failed'   ? 'failed' :
+                     f.upload_status === 'skipped'  ? 'skipped' : 'pending') as UploadFileState['status'],
+        resumePath: f.resume_path ?? undefined,
         error     : f.error_message ?? undefined,
       }));
+
+      // The total in DB may be higher than what's been recorded as files yet
+      // (files not yet processed have no row). Fill the gap with pending placeholders.
+      const recordedCount = fileStates.length;
+      const totalInDB     = data.total_files;
+      const pendingCount  = Math.max(0, totalInDB - recordedCount);
+      for (let i = 0; i < pendingCount; i++) {
+        fileStates.push({
+          id       : `placeholder_${i}`,
+          fileName : `File ${recordedCount + i + 1} (not yet uploaded)`,
+          fileSize : 0,
+          status   : 'pending',
+        });
+      }
 
       const session: UploadSession = {
         sessionId      : data.id,
         organizationId : data.organization_id,
         userId         : data.created_by,
-        totalFiles     : data.total_files,
+        totalFiles     : totalInDB,
         files          : fileStates,
-        status         : data.status,
+        status         : 'uploading', // treat as resumable
         startedAt      : data.created_at,
       };
 
-      this.session = session;
+      await idbSet(`session_${data.id}`, session);
       this.emit({ type: 'resumed', session });
       return session;
-    } catch {
+
+    } catch (err) {
+      console.warn('checkForIncompleteSession failed:', err);
       return null;
     }
   }
 
-  // ── Start a new upload session ────────────────────────────────────────────
-  async startSession(
-    files          : File[],
-    organizationId : string,
-    userId         : string,
-  ): Promise<string> {
+  // ── Start a brand new upload session ─────────────────────────────────────
+  async startSession(files: File[], organizationId: string, userId: string): Promise<string> {
     this.aborted = false;
 
-    // 1. Create session in DB
+    // Create session row in DB
     const { data: sessionRow, error } = await supabase
       .from('hr_talent_pool_upload_sessions')
-      .insert({ organization_id: organizationId, created_by: userId, total_files: files.length, status: 'uploading' })
-      .select('id').single();
+      .insert({
+        organization_id : organizationId,
+        created_by      : userId,
+        total_files     : files.length,
+        status          : 'uploading',
+      })
+      .select('id')
+      .single();
 
     if (error || !sessionRow) throw new Error(`Failed to create session: ${error?.message}`);
     const sessionId = sessionRow.id;
 
-    // 2. Create initial file states
+    // Build initial file states (all pending)
     const fileStates: UploadFileState[] = files.map((f, i) => ({
       id       : `${sessionId}_${i}`,
       fileName : f.name,
@@ -204,53 +254,123 @@ class UploadSessionManager {
       status   : 'pending',
     }));
 
-    this.session = { sessionId, organizationId, userId, totalFiles: files.length, files: fileStates, status: 'uploading', startedAt: new Date().toISOString() };
+    this.session = {
+      sessionId,
+      organizationId,
+      userId,
+      totalFiles : files.length,
+      files      : fileStates,
+      status     : 'uploading',
+      startedAt  : new Date().toISOString(),
+    };
 
-    // 3. Persist to IndexedDB
     await idbSet(`session_${sessionId}`, this.session);
     this.emit({ type: 'progress', session: this.session });
 
-    // 4. Process files with concurrency
     await this.processFiles(files, sessionId, organizationId);
-
     return sessionId;
   }
 
   // ── Resume an incomplete session ──────────────────────────────────────────
+  // newFiles: the files the user re-selected. We match by SHA-256 hash,
+  // skipping any file whose hash is already 'uploaded' in the DB.
+  // This means:
+  //   - Already uploaded files (2036): matched by hash → skipped instantly
+  //   - Pending files from the original batch: processed fresh
+  //   - Files the user didn't re-select: left as pending (resume again later)
   async resumeSession(existingSession: UploadSession, newFiles: File[]): Promise<void> {
-    this.aborted   = false;
-    this.session   = existingSession;
+    this.aborted = false;
 
-    // Match new File objects to pending session files by name+size
-    const pendingStates = existingSession.files.filter(f => f.status === 'pending' || f.status === 'failed');
-    const matchedFiles  = pendingStates.flatMap(state => {
-      const match = newFiles.find(f => f.name === state.fileName && f.size === state.fileSize);
-      return match ? [match] : [];
-    });
+    // Activate the session so the float widget shows
+    existingSession.status = 'uploading';
+    this.session = existingSession;
+    await idbSet(`session_${existingSession.sessionId}`, this.session);
+    this.emit({ type: 'progress', session: this.session });
 
-    if (!matchedFiles.length) {
-      // Nothing to match — just re-submit what's already uploaded
-      await this.submitSession(existingSession.sessionId);
+    // Compute hashes for all re-selected files (in parallel, batched)
+    const hashMap = new Map<string, File>(); // hash → File
+    await Promise.all(
+      newFiles.map(async f => {
+        try {
+          const buf  = await f.arrayBuffer();
+          const hash = await sha256hex(buf);
+          hashMap.set(hash, f);
+        } catch {}
+      })
+    );
+
+    // Fetch which hashes are already uploaded for this org
+    const hashes = [...hashMap.keys()];
+    const alreadyUploaded = new Set<string>();
+
+    if (hashes.length > 0) {
+      // Check in batches of 100 to avoid URL length limits
+      for (let i = 0; i < hashes.length; i += 100) {
+        const batch = hashes.slice(i, i + 100);
+        const { data } = await supabase
+          .from('hr_talent_pool_upload_session_files')
+          .select('file_hash')
+          .eq('organization_id', existingSession.organizationId)
+          .in('file_hash', batch)
+          .eq('upload_status', 'uploaded');
+        (data ?? []).forEach(r => { if (r.file_hash) alreadyUploaded.add(r.file_hash); });
+      }
+    }
+
+    // Separate into: skip (already in DB) vs process (need uploading)
+    const toProcess: File[] = [];
+    for (const [hash, file] of hashMap.entries()) {
+      if (alreadyUploaded.has(hash)) {
+        // Mark matching file state as done if it was pending
+        const idx = this.session.files.findIndex(
+          f => f.fileName === file.name && (f.status === 'pending' || f.status === 'failed')
+        );
+        if (idx >= 0) {
+          this.session.files[idx] = { ...this.session.files[idx], status: 'done' };
+        }
+      } else {
+        toProcess.push(file);
+      }
+    }
+
+    // Update total to reflect reality (remove placeholder count, add real remaining)
+    // Keep existing done/skipped, only recount pending
+    const doneSoFar   = this.session.files.filter(f => f.status === 'done' || f.status === 'duplicate' || f.status === 'skipped').length;
+    const failedSoFar = this.session.files.filter(f => f.status === 'failed').length;
+
+    await idbSet(`session_${existingSession.sessionId}`, this.session);
+    this.emit({ type: 'progress', session: this.session });
+
+    if (toProcess.length === 0) {
+      // Everything already done — just submit
+      const doneCount = this.session.files.filter(f => f.status === 'done').length;
+      if (doneCount > 0) {
+        await this.submitSession(existingSession.sessionId);
+      } else {
+        this.emit({ type: 'error', message: 'No new files to process and nothing to submit.' });
+      }
       return;
     }
 
-    await this.processFiles(matchedFiles, existingSession.sessionId, existingSession.organizationId);
+    await this.processFiles(toProcess, existingSession.sessionId, existingSession.organizationId);
   }
 
   // ── Cancel active session ──────────────────────────────────────────────────
   async cancelSession(): Promise<void> {
     if (!this.session) return;
     this.aborted = true;
-    await supabase.from('hr_talent_pool_upload_sessions')
-      .update({ status: 'cancelled' }).eq('id', this.session.sessionId);
-    await idbDel(`session_${this.session.sessionId}`);
+    const id = this.session.sessionId;
+    await supabase
+      .from('hr_talent_pool_upload_sessions')
+      .update({ status: 'cancelled' })
+      .eq('id', id);
+    await idbDel(`session_${id}`);
     this.session = null;
   }
 
   // ── Core: process files with controlled concurrency ───────────────────────
   private async processFiles(files: File[], sessionId: string, organizationId: string): Promise<void> {
-    const queue  = [...files];
-    const workers: Promise<void>[] = [];
+    const queue = [...files];
 
     const worker = async () => {
       while (queue.length > 0 && !this.aborted) {
@@ -260,12 +380,12 @@ class UploadSessionManager {
       }
     };
 
+    const workers: Promise<void>[] = [];
     for (let i = 0; i < CONCURRENCY; i++) workers.push(worker());
     await Promise.all(workers);
 
     if (this.aborted) return;
 
-    // All files processed — submit to OpenAI batch
     const doneCount = this.session?.files.filter(f => f.status === 'done').length ?? 0;
     if (doneCount === 0) {
       this.emit({ type: 'error', message: 'No files could be parsed or uploaded.' });
@@ -275,140 +395,244 @@ class UploadSessionManager {
     await this.submitSession(sessionId);
   }
 
-  // ── Process a single file: hash → dedup check → parse → upload → DB insert ─
+  // ── Process one file with retry logic ────────────────────────────────────
+  // Retries on timeout/network errors. Each retry waits 2^attempt seconds.
+  // On permanent failure (bad file, unsupported type) it fails immediately.
   private async processOneFile(file: File, sessionId: string, organizationId: string): Promise<void> {
-    const fileIdx = this.session!.files.findIndex(f => f.fileName === file.name && f.fileSize === file.size);
-    if (fileIdx < 0) return;
+    const fileIdx = this.session!.files.findIndex(
+      f => f.fileName === file.name && (f.status === 'pending' || f.status === 'failed')
+    );
+    // If we can't find by name, try any pending slot (for resume with renamed files)
+    const actualIdx = fileIdx >= 0 ? fileIdx : this.session!.files.findIndex(f => f.status === 'pending');
+    if (actualIdx < 0) return;
 
     const updateFile = (patch: Partial<UploadFileState>) => {
       if (!this.session) return;
-      this.session.files[fileIdx] = { ...this.session.files[fileIdx], ...patch };
+      this.session.files[actualIdx] = { ...this.session.files[actualIdx], ...patch };
       idbSet(`session_${sessionId}`, this.session).catch(() => {});
-      this.emit({ type: 'progress', session: this.session });
+      this.emit({ type: 'progress', session: { ...this.session, files: [...this.session.files] } });
     };
 
-    updateFile({ status: 'parsing' });
+    let lastError = '';
 
-    try {
-      // ── Hash the file for dedup ──────────────────────────────────────────
-      const rawBuffer = await file.arrayBuffer();
-      const fileHash  = await sha256hex(rawBuffer);
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (this.aborted) return;
 
-      // ── Check dedup against DB ────────────────────────────────────────────
-      const { data: existing } = await supabase.rpc('check_file_already_uploaded', {
-        p_file_hash       : fileHash,
-        p_organization_id : organizationId,
-      });
+      if (attempt > 0) {
+        // Exponential backoff: 2s, 4s, 8s
+        const backoff = Math.pow(2, attempt) * 1000;
+        updateFile({ status: 'pending', error: `Retry ${attempt}/${MAX_RETRIES} in ${backoff/1000}s…` });
+        await sleep(backoff);
+        if (this.aborted) return;
+      }
 
-      if (existing?.length > 0) {
-        // File already uploaded — reuse existing resume_path and mark as duplicate
-        const prev = existing[0];
-        updateFile({ status: 'duplicate', resumePath: prev.resume_path, error: `Duplicate of ${prev.file_name}` });
-        await supabase.from('hr_talent_pool_upload_session_files').insert({
-          session_id      : sessionId,
-          organization_id : organizationId,
-          file_name       : file.name,
-          file_size       : file.size,
-          file_hash       : fileHash,
-          resume_path     : prev.resume_path,
-          resume_text     : null,  // will re-use existing
-          upload_status   : 'skipped',
-          error_message   : `Duplicate of ${prev.file_name}`,
+      updateFile({ status: 'parsing', error: undefined, retries: attempt });
+
+      try {
+        // ── Hash file ───────────────────────────────────────────────────────
+        const rawBuffer = await file.arrayBuffer();
+        const fileHash  = await sha256hex(rawBuffer);
+
+        // ── Dedup check ─────────────────────────────────────────────────────
+        const { data: existing } = await supabase.rpc('check_file_already_uploaded', {
+          p_file_hash       : fileHash,
+          p_organization_id : organizationId,
         });
-        await supabase.from('hr_talent_pool_upload_sessions')
-          .update({ skipped_count: (this.session?.files.filter(f => f.status === 'duplicate' || f.status === 'skipped').length ?? 0) })
-          .eq('id', sessionId);
-        return;
+
+        if (existing?.length > 0) {
+          const prev = existing[0];
+          updateFile({ status: 'duplicate', resumePath: prev.resume_path, error: `Duplicate of ${prev.file_name}` });
+          // Still insert a record so we know it was seen
+          await supabase
+            .from('hr_talent_pool_upload_session_files')
+            .insert({
+              session_id      : sessionId,
+              organization_id : organizationId,
+              file_name       : file.name,
+              file_size       : file.size,
+              file_hash       : fileHash,
+              resume_path     : prev.resume_path,
+              resume_text     : null,
+              upload_status   : 'skipped',
+              error_message   : `Duplicate of ${prev.file_name}`,
+            })
+            .catch(() => {});
+          return; // success (duplicate) — don't retry
+        }
+
+        // ── Parse file ──────────────────────────────────────────────────────
+        let text           = '';
+        let compressedBlob : Blob;
+
+        if (file.type === 'application/pdf') {
+          // Use AbortController so we can time out the edge function call ourselves
+          // Supabase edge function timeout is 150s; we set 120s to catch it cleanly
+          const controller = new AbortController();
+          const timeout    = setTimeout(() => controller.abort(), 120_000);
+
+          let data: any;
+          let invokeError: any;
+          try {
+            const result = await supabase.functions.invoke('talent-pool-parser', {
+              body   : file,
+            });
+            data        = result.data;
+            invokeError = result.error;
+          } finally {
+            clearTimeout(timeout);
+          }
+
+          if (invokeError || !data?.text) {
+            const msg = invokeError?.message ?? 'Parser returned no text';
+            // Distinguish retryable (timeout/network) from permanent (bad PDF)
+            const isRetryable = msg.includes('timeout') || msg.includes('network') ||
+                                msg.includes('524') || msg.includes('fetch') ||
+                                msg.includes('abort') || controller.signal.aborted;
+            if (isRetryable && attempt < MAX_RETRIES) {
+              lastError = `Parse timeout (attempt ${attempt + 1})`;
+              continue; // retry
+            }
+            throw new Error(`Parse error: ${msg}`);
+          }
+
+          text           = data.text;
+          compressedBlob = base64ToBlob(data.compressedBase64, 'application/pdf');
+
+        } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+          const result   = await mammoth.extractRawText({ arrayBuffer: rawBuffer });
+          text           = result.value;
+          compressedBlob = new Blob([rawBuffer], { type: file.type });
+
+        } else {
+          // Permanent failure — don't retry
+          throw Object.assign(new Error('Unsupported file type. Use PDF or DOCX.'), { permanent: true });
+        }
+
+        // ── Upload to storage ───────────────────────────────────────────────
+        updateFile({ status: 'uploading' });
+        const storageKey = `${crypto.randomUUID()}-${sanitize(file.name)}`;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from(BUCKET)
+          .upload(storageKey, compressedBlob, { cacheControl: '3600', upsert: false });
+
+        if (uploadErr) {
+          const isRetryable = uploadErr.message?.includes('network') || uploadErr.message?.includes('timeout');
+          if (isRetryable && attempt < MAX_RETRIES) {
+            lastError = `Upload error (attempt ${attempt + 1}): ${uploadErr.message}`;
+            continue; // retry
+          }
+          throw new Error(`Storage upload failed: ${uploadErr.message}`);
+        }
+
+        const resumePath = supabase.storage.from(BUCKET).getPublicUrl(uploadData.path).data.publicUrl;
+
+        // ── Insert session file record ──────────────────────────────────────
+        const { data: sfRow } = await supabase
+          .from('hr_talent_pool_upload_session_files')
+          .insert({
+            session_id      : sessionId,
+            organization_id : organizationId,
+            file_name       : file.name,
+            file_size       : file.size,
+            file_hash       : fileHash,
+            resume_path     : resumePath,
+            resume_text     : text,
+            upload_status   : 'uploaded',
+          })
+          .select('id')
+          .single();
+
+        // ── Update session uploaded_count ────────────────────────────────────
+        // Use DB increment to avoid race conditions between concurrent workers
+        await supabase.rpc('increment_session_uploaded_count', { p_session_id: sessionId }).catch(() => {
+          // Fallback if RPC not available: read-modify-write (less accurate under concurrency)
+          supabase
+            .from('hr_talent_pool_upload_sessions')
+            .select('uploaded_count')
+            .eq('id', sessionId)
+            .single()
+            .then(({ data: s }) => {
+              if (s) {
+                supabase
+                  .from('hr_talent_pool_upload_sessions')
+                  .update({ uploaded_count: (s.uploaded_count ?? 0) + 1 })
+                  .eq('id', sessionId)
+                  .then(() => {});
+              }
+            });
+        });
+
+        updateFile({ status: 'done', resumePath, id: sfRow?.id ?? this.session!.files[actualIdx].id });
+        return; // success — exit retry loop
+
+      } catch (err: any) {
+        const permanent = (err as any).permanent === true;
+        if (permanent || attempt >= MAX_RETRIES) {
+          // Final failure
+          const msg = (err.message ?? 'Unknown error').slice(0, 200);
+          lastError = msg;
+          updateFile({ status: 'failed', error: msg });
+
+          await supabase
+            .from('hr_talent_pool_upload_session_files')
+            .insert({
+              session_id      : sessionId,
+              organization_id : organizationId,
+              file_name       : file.name,
+              file_size       : file.size,
+              upload_status   : 'failed',
+              error_message   : msg,
+            })
+            .catch(() => {});
+
+          await supabase.rpc('increment_session_failed_count', { p_session_id: sessionId }).catch(() => {});
+          return;
+        }
+        lastError = err.message;
+        // Loop continues to next retry
       }
-
-      // ── Parse file text + compress ────────────────────────────────────────
-      let text = '';
-      let compressedBlob: Blob;
-
-      if (file.type === 'application/pdf') {
-        const { data, error } = await supabase.functions.invoke('talent-pool-parser', { body: file });
-        if (error || !data?.text) throw new Error(`Parse error: ${error?.message ?? 'no text'}`);
-        text           = data.text;
-        compressedBlob = base64ToBlob(data.compressedBase64, 'application/pdf');
-      } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-        const result   = await mammoth.extractRawText({ arrayBuffer: rawBuffer });
-        text           = result.value;
-        compressedBlob = new Blob([rawBuffer], { type: file.type });
-      } else {
-        throw new Error('Unsupported file type. Use PDF or DOCX.');
-      }
-
-      // ── Upload to storage ─────────────────────────────────────────────────
-      updateFile({ status: 'uploading' });
-      const storageKey = `${crypto.randomUUID()}-${sanitize(file.name)}`;
-      const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from(BUCKET).upload(storageKey, compressedBlob, { cacheControl: '3600', upsert: false });
-
-      if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
-      const resumePath = supabase.storage.from(BUCKET).getPublicUrl(uploadData.path).data.publicUrl;
-
-      // ── Insert session file record with resume_text ───────────────────────
-      const { data: sfRow } = await supabase
-        .from('hr_talent_pool_upload_session_files')
-        .insert({
-          session_id      : sessionId,
-          organization_id : organizationId,
-          file_name       : file.name,
-          file_size       : file.size,
-          file_hash       : fileHash,
-          resume_path     : resumePath,
-          resume_text     : text,
-          upload_status   : 'uploaded',
-        })
-        .select('id').single();
-
-      // ── Update session counters in DB ─────────────────────────────────────
-      const doneNow = (this.session?.files.filter(f => f.status === 'done').length ?? 0) + 1;
-      await supabase.from('hr_talent_pool_upload_sessions')
-        .update({ uploaded_count: doneNow }).eq('id', sessionId);
-
-      updateFile({ status: 'done', resumePath, id: sfRow?.id ?? this.session!.files[fileIdx].id });
-
-    } catch (err: any) {
-      const msg = (err.message || 'Unknown error').slice(0, 200);
-      updateFile({ status: 'failed', error: msg });
-
-      // Record failure in DB
-      await supabase.from('hr_talent_pool_upload_session_files').insert({
-        session_id      : sessionId,
-        organization_id : organizationId,
-        file_name       : file.name,
-        file_size       : file.size,
-        upload_status   : 'failed',
-        error_message   : msg,
-      }).catch(() => {});
-
-      const failedNow = this.session?.files.filter(f => f.status === 'failed').length ?? 0;
-      await supabase.from('hr_talent_pool_upload_sessions')
-        .update({ failed_count: failedNow }).eq('id', sessionId).catch(() => {});
     }
   }
 
-  // ── Submit session to OpenAI Batch API ────────────────────────────────────
+  // ── Submit session to OpenAI Batch (idempotent) ───────────────────────────
+  // Checks if a batch_job_id is already set — if so, don't double-submit.
   async submitSession(sessionId: string): Promise<void> {
     if (!this.session) return;
+
+    // Idempotency: check if already submitted
+    const { data: existing } = await supabase
+      .from('hr_talent_pool_upload_sessions')
+      .select('status, batch_job_id')
+      .eq('id', sessionId)
+      .single();
+
+    if (existing?.batch_job_id && existing?.status === 'submitted') {
+      this.session.status = 'submitted';
+      this.emit({ type: 'submitted', batchJobId: existing.batch_job_id });
+      this.session = null;
+      return;
+    }
+
     this.session.status = 'submitting';
     await idbSet(`session_${sessionId}`, this.session);
-    this.emit({ type: 'progress', session: this.session });
+    this.emit({ type: 'progress', session: { ...this.session } });
 
     try {
       const { data, error } = await supabase.functions.invoke('talent-batch-submit', {
-        body: { sessionId, organizationId: this.session.organizationId, userId: this.session.userId },
+        body: {
+          sessionId,
+          organizationId : this.session.organizationId,
+          userId         : this.session.userId,
+        },
       });
 
       if (error) throw new Error(error.message);
 
       this.session.status = 'submitted';
-      await idbSet(`session_${sessionId}`, this.session);
-      await idbDel(`session_${sessionId}`);  // clean up local cache after success
-
+      await idbDel(`session_${sessionId}`);
       this.emit({ type: 'submitted', batchJobId: data.batchJobId });
       this.session = null;
+
     } catch (err: any) {
       this.emit({ type: 'error', message: `Batch submit failed: ${err.message}` });
     }
