@@ -58,7 +58,7 @@ type Listener = (e: UploadEvent) => void;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BUCKET      = 'talent-pool-resumes';
-const CONCURRENCY = 2;    // reduced from 3 — fewer simultaneous edge function calls
+const CONCURRENCY = 8;    // reduced from 3 — fewer simultaneous edge function calls
 const MAX_RETRIES = 3;    // retry each file up to 3 times on timeout/network error
 const IDB_DB_NAME = 'hrumbles_uploads';
 const IDB_STORE   = 'sessions';
@@ -228,48 +228,67 @@ class UploadSessionManager {
   }
 
   // ── Start a brand new upload session ─────────────────────────────────────
-  async startSession(files: File[], organizationId: string, userId: string): Promise<string> {
-    this.aborted = false;
+ async startSession(files: File[], organizationId: string, userId: string): Promise<string> {
+  this.aborted = false;
 
-    // Create session row in DB
-    const { data: sessionRow, error } = await supabase
-      .from('hr_talent_pool_upload_sessions')
-      .insert({
-        organization_id : organizationId,
-        created_by      : userId,
-        total_files     : files.length,
-        status          : 'uploading',
-      })
-      .select('id')
-      .single();
+  // Auto-cancel stale sessions (older than 30 minutes)
+  const { data: staleSessions } = await supabase
+    .from('hr_talent_pool_upload_sessions')
+    .select('id')
+    .eq('created_by', userId)
+    .in('status', ['uploading', 'submitting'])
+    .lt('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
 
-    if (error || !sessionRow) throw new Error(`Failed to create session: ${error?.message}`);
-    const sessionId = sessionRow.id;
-
-    // Build initial file states (all pending)
-    const fileStates: UploadFileState[] = files.map((f, i) => ({
-      id       : `${sessionId}_${i}`,
-      fileName : f.name,
-      fileSize : f.size,
-      status   : 'pending',
-    }));
-
-    this.session = {
-      sessionId,
-      organizationId,
-      userId,
-      totalFiles : files.length,
-      files      : fileStates,
-      status     : 'uploading',
-      startedAt  : new Date().toISOString(),
-    };
-
-    await idbSet(`session_${sessionId}`, this.session);
-    this.emit({ type: 'progress', session: this.session });
-
-    await this.processFiles(files, sessionId, organizationId);
-    return sessionId;
+  if (staleSessions?.length) {
+    await Promise.all(
+      staleSessions.map(s =>
+        supabase
+          .from('hr_talent_pool_upload_sessions')
+          .update({ status: 'cancelled' })
+          .eq('id', s.id)
+      )
+    );
   }
+
+  // ✅ ADD THIS BACK: Create the actual session row
+  const { data: sessionRow, error } = await supabase
+    .from('hr_talent_pool_upload_sessions')
+    .insert({
+      organization_id: organizationId,
+      created_by: userId,
+      total_files: files.length,
+      status: 'uploading',
+    })
+    .select('id')
+    .single();
+
+  if (error || !sessionRow) throw new Error(`Failed to create session: ${error?.message}`);
+  const sessionId = sessionRow.id;
+
+  // Build initial file states (all pending)
+  const fileStates: UploadFileState[] = files.map((f, i) => ({
+    id: `${sessionId}_${i}`,
+    fileName: f.name,
+    fileSize: f.size,
+    status: 'pending' as const,
+  }));
+
+  this.session = {
+    sessionId,
+    organizationId,
+    userId,
+    totalFiles: files.length,
+    files: fileStates,
+    status: 'uploading',
+    startedAt: new Date().toISOString(),
+  };
+
+  await idbSet(`session_${sessionId}`, this.session);
+  this.emit({ type: 'progress', session: this.session });
+
+  await this.processFiles(files, sessionId, organizationId);
+  return sessionId;
+}
 
   // ── Resume an incomplete session ──────────────────────────────────────────
   // newFiles: the files the user re-selected. We match by SHA-256 hash,
@@ -305,8 +324,8 @@ class UploadSessionManager {
 
     if (hashes.length > 0) {
       // Check in batches of 100 to avoid URL length limits
-      for (let i = 0; i < hashes.length; i += 100) {
-        const batch = hashes.slice(i, i + 100);
+for (let i = 0; i < hashes.length; i += 50) {
+  const batch = hashes.slice(i, i + 50);
         const { data } = await supabase
           .from('hr_talent_pool_upload_session_files')
           .select('file_hash')
@@ -439,27 +458,35 @@ class UploadSessionManager {
           p_organization_id : organizationId,
         });
 
-        if (existing?.length > 0) {
-          const prev = existing[0];
-          updateFile({ status: 'duplicate', resumePath: prev.resume_path, error: `Duplicate of ${prev.file_name}` });
-          // Still insert a record so we know it was seen
-          await supabase
-            .from('hr_talent_pool_upload_session_files')
-            .insert({
-              session_id      : sessionId,
-              organization_id : organizationId,
-              file_name       : file.name,
-              file_size       : file.size,
-              file_hash       : fileHash,
-              resume_path     : prev.resume_path,
-              resume_text     : null,
-              upload_status   : 'skipped',
-              error_message   : `Duplicate of ${prev.file_name}`,
-            })
-            .catch(() => {});
-          return; // success (duplicate) — don't retry
-        }
-
+       if (existing?.length > 0) {
+  const prev = existing[0];
+  updateFile({ 
+    status: 'duplicate', 
+    resumePath: prev.resume_path, 
+    error: `Duplicate of ${prev.file_name}` 
+  });
+  
+  // Still insert a record so we know it was seen
+  const { error: duplicateInsertError } = await supabase
+    .from('hr_talent_pool_upload_session_files')
+    .insert({
+      session_id: sessionId,
+      organization_id: organizationId,
+      file_name: file.name,
+      file_size: file.size,
+      file_hash: fileHash,
+      resume_path: prev.resume_path,
+      resume_text: null,
+      upload_status: 'skipped',
+      error_message: `Duplicate of ${prev.file_name}`,
+    });
+    
+  if (duplicateInsertError) {
+    console.warn('Failed to insert duplicate record:', duplicateInsertError);
+  }
+  
+  return; // ✅ CRITICAL: Stop processing this file, it's a duplicate
+}
         // ── Parse file ──────────────────────────────────────────────────────
         let text           = '';
         let compressedBlob : Blob;
@@ -544,23 +571,29 @@ class UploadSessionManager {
 
         // ── Update session uploaded_count ────────────────────────────────────
         // Use DB increment to avoid race conditions between concurrent workers
-        await supabase.rpc('increment_session_uploaded_count', { p_session_id: sessionId }).catch(() => {
-          // Fallback if RPC not available: read-modify-write (less accurate under concurrency)
-          supabase
-            .from('hr_talent_pool_upload_sessions')
-            .select('uploaded_count')
-            .eq('id', sessionId)
-            .single()
-            .then(({ data: s }) => {
-              if (s) {
-                supabase
-                  .from('hr_talent_pool_upload_sessions')
-                  .update({ uploaded_count: (s.uploaded_count ?? 0) + 1 })
-                  .eq('id', sessionId)
-                  .then(() => {});
-              }
-            });
+                const { error: uploadCountError } = await supabase.rpc('increment_session_uploaded_count', { 
+          p_session_id: sessionId 
         });
+
+        if (uploadCountError) {
+          console.warn('RPC increment_session_uploaded_count failed, using fallback:', uploadCountError);
+          try {
+            const { data: sessionData } = await supabase
+              .from('hr_talent_pool_upload_sessions')
+              .select('uploaded_count')
+              .eq('id', sessionId)
+              .single();
+              
+            if (sessionData) {
+              await supabase
+                .from('hr_talent_pool_upload_sessions')
+                .update({ uploaded_count: (sessionData.uploaded_count ?? 0) + 1 })
+                .eq('id', sessionId);
+            }
+          } catch (fallbackError) {
+            console.error('Fallback uploaded count increment failed:', fallbackError);
+          }
+        }
 
         updateFile({ status: 'done', resumePath, id: sfRow?.id ?? this.session!.files[actualIdx].id });
         return; // success — exit retry loop
@@ -573,19 +606,46 @@ class UploadSessionManager {
           lastError = msg;
           updateFile({ status: 'failed', error: msg });
 
-          await supabase
+          const { error: failedInsertError } = await supabase
             .from('hr_talent_pool_upload_session_files')
             .insert({
-              session_id      : sessionId,
-              organization_id : organizationId,
-              file_name       : file.name,
-              file_size       : file.size,
-              upload_status   : 'failed',
-              error_message   : msg,
-            })
-            .catch(() => {});
+              session_id: sessionId,
+              organization_id: organizationId,
+              file_name: file.name,
+              file_size: file.size,
+              upload_status: 'failed',
+              error_message: msg,
+            });
 
-          await supabase.rpc('increment_session_failed_count', { p_session_id: sessionId }).catch(() => {});
+          if (failedInsertError) {
+            console.warn('Failed to insert failed record:', failedInsertError);
+          }
+
+          // ✅ FIXED: Proper error handling for failed count RPC
+          const { error: failedCountError } = await supabase.rpc('increment_session_failed_count', { 
+            p_session_id: sessionId 
+          });
+          
+          if (failedCountError) {
+            console.warn('RPC increment_session_failed_count failed, using fallback:', failedCountError);
+            try {
+              const { data: sessionData } = await supabase
+                .from('hr_talent_pool_upload_sessions')
+                .select('failed_count')
+                .eq('id', sessionId)
+                .single();
+                
+              if (sessionData) {
+                await supabase
+                  .from('hr_talent_pool_upload_sessions')
+                  .update({ failed_count: (sessionData.failed_count ?? 0) + 1 })
+                  .eq('id', sessionId);
+              }
+            } catch (fallbackError) {
+              console.error('Fallback failed count increment failed:', fallbackError);
+            }
+          }
+          
           return;
         }
         lastError = err.message;
