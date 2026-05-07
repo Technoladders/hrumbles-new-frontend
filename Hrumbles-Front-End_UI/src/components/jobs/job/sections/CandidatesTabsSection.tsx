@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Filter, X, Zap, Mail, User, Search, Settings2, Send } from "lucide-react";
+import { Filter, X, Zap, Mail, User, Search, Settings2, Send, Download, FileSpreadsheet } from "lucide-react";
 import CandidatesList from "../CandidatesList";
 import { Candidate } from "@/lib/types";
 import StatusSettings from "@/pages/jobs/StatusSettings";
@@ -23,6 +23,7 @@ import {
 import { AnalysisConfigDialog } from "../AnalysisConfigDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { getCandidatesByJobId } from "@/services/candidateService";
+import CSVExportDialog from "../export/CSVExportDialog";
 
 // --- ADDED: Define a type for the ref to get autocompletion ---
 // --- Update the ref handle interface ---
@@ -30,6 +31,7 @@ interface CandidatesListHandle {
   triggerBatchValidate: () => void;
   triggerBulkShare: (emailType: 'shortlist' | 'rejection') => void; // Add this new method
   triggerBulkInvite: () => void;
+  triggerCSVExport: () => void;
 }
 
 interface CandidatesTabsSectionProps {
@@ -78,6 +80,9 @@ const [mainStatuses, setMainStatuses] = useState<MainStatus[]>([]);
     // --- ADDED: State for the Analysis Config Dialog ---
     const [showConfigDialog, setShowConfigDialog] = useState(false);
     const [analysisConfig, setAnalysisConfig] = useState<any>(null);
+
+    const [showCSVExportDialog, setShowCSVExportDialog] = useState(false);
+const [exportCandidates, setExportCandidates] = useState<Candidate[]>([]);
 
   useEffect(() => {
     setLocalCandidates(candidates);
@@ -136,6 +141,16 @@ const handleBulkShareClick = (type?: 'shortlist' | 'rejection') => {
   const handleBulkInviteClick = () => {
   if (candidatesListRef.current) {
     candidatesListRef.current.triggerBulkInvite();
+  }
+};
+
+const handleCSVExportClick = () => {
+  if (candidatesListRef.current) {
+    const candidatesForExport = candidatesListRef.current.triggerCSVExport();
+    if (candidatesForExport && candidatesForExport.length > 0) {
+      setExportCandidates(candidatesForExport);
+      setShowCSVExportDialog(true);
+    }
   }
 };
 
@@ -383,6 +398,24 @@ return (
             <TooltipContent>AI Config</TooltipContent>
           </Tooltip>
 
+          {/* 📊 Export CSV */}
+<Tooltip>
+  <TooltipTrigger asChild>
+    <button
+      onClick={handleCSVExportClick}
+      className="
+        flex items-center justify-center
+        w-8 h-8 rounded-lg
+        bg-emerald-100 text-emerald-700
+        hover:scale-105 transition
+      "
+    >
+      <FileSpreadsheet size={14} />
+    </button>
+  </TooltipTrigger>
+  <TooltipContent>Export CSV</TooltipContent>
+</Tooltip>
+
         </div>
       </div>
 
@@ -410,6 +443,13 @@ return (
         jobId={jobId}
         currentConfig={analysisConfig}
       />
+
+      <CSVExportDialog
+  open={showCSVExportDialog}
+  onOpenChange={setShowCSVExportDialog}
+  candidates={exportCandidates}
+  jobTitle={jobdescription}
+/>
     </div>
   </TooltipProvider>
 );

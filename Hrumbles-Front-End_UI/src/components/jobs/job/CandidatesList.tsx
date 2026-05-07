@@ -1421,6 +1421,7 @@ const openBulkInviteReview = (candidatesToInvite: Candidate[]) => {
   };
 
   // --- MODIFIED: Expose both batch functions to the parent component via ref ---
+// Update the useImperativeHandle to include triggerCSVExport
 useImperativeHandle(ref, () => ({
   triggerBatchValidate() {
     handleBatchValidate();
@@ -1435,12 +1436,25 @@ useImperativeHandle(ref, () => ({
     }
     openShareModal(candidatesToShare, emailType);
   },
-  // NEW
   triggerBulkInvite() {
     const toInvite = selectedCandidates.size > 0
       ? paginatedCandidates.filter(c => selectedCandidates.has(c.id) && c.email)
       : paginatedCandidates.filter(c => c.email);
     openBulkInviteReview(toInvite);
+  },
+  // ADD THIS NEW METHOD
+  triggerCSVExport() {
+    const candidatesToExport = selectedCandidates.size > 0
+      ? candidates.filter(c => selectedCandidates.has(c.id))
+      : filteredCandidates;
+    
+    if (candidatesToExport.length === 0) {
+      toast.info("No candidates to export.");
+      return;
+    }
+    
+    // Pass the ref to parent to open the dialog
+    return candidatesToExport;
   },
 }));
 
