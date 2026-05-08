@@ -208,34 +208,83 @@ class UploadSessionManager {
   }
 
   // ── Start new session ─────────────────────────────────────────────────────
-  async startSession(files: File[], organizationId: string, userId: string): Promise<string> {
-    this.aborted = false;
+async startSession(files: File[], organizationId: string, userId: string): Promise<string> {
+  this.aborted = false;
 
-    // Cancel stale sessions — non-blocking
-    supabase.from('hr_talent_pool_upload_sessions')
-      .update({ status: 'cancelled' })
-      .eq('created_by', userId)
-      .in('status', ['uploading', 'submitting'])
-      .then(() => {}).catch(() => {});
+  // Cancel stale sessions for this user (non‑blocking)
+  supabase.from('hr_talent_pool_upload_sessions')
+    .update({ status: 'cancelled' })
+    .eq('created_by', userId)
+    .in('status', ['uploading', 'submitting'])
+    .then(() => {}).catch(() => {});
 
-    const { data: sessionRow, error } = await supabase
-      .from('hr_talent_pool_upload_sessions')
-      .insert({ organization_id: organizationId, created_by: userId, total_files: files.length, status: 'uploading' })
-      .select('id')
-      .single();
+  // ── PRE‑UPLOAD DEDUP: skip files already uploaded in any non‑cancelled session ──
+  const hashToFile = new Map<string, File>();
+  await Promise.all(files.map(async f => {
+    try { const hash = await sha256hex(await f.arrayBuffer()); hashToFile.set(hash, f); }
+    catch { /* ignore unhashable files – they will be attempted during upload */ }
+  }));
 
-    if (error || !sessionRow) throw new Error(`Failed to create upload session: ${error?.message ?? 'no data'}`);
+  const hashes = [...hashToFile.keys()];
+  const alreadyUploadedHashes = new Set<string>();
 
-    const sessionId    = sessionRow.id;
-    const fileStates   = files.map((f, i) => ({ id: `${sessionId}_${i}`, fileName: f.name, fileSize: f.size, status: 'pending' as const }));
-    this.session       = { sessionId, organizationId, userId, totalFiles: files.length, files: fileStates, status: 'uploading', startedAt: new Date().toISOString() };
-
-    await idbSet(`session_${sessionId}`, this.session);
-    this.emit({ type: 'progress', session: { ...this.session, files: [...this.session.files] } });
-
-    await this.processFiles(files, sessionId, organizationId);
-    return sessionId;
+  // Use the existing RPC in HASH_BATCH_SIZE chunks to avoid URL limits
+  for (let i = 0; i < hashes.length; i += HASH_BATCH_SIZE) {
+    const batch = hashes.slice(i, i + HASH_BATCH_SIZE);
+    const { data } = await supabase.rpc('check_file_already_uploaded_bulk', {
+      p_hashes: batch,
+      p_organization_id: organizationId
+    });
+    (data ?? []).forEach((row: any) => alreadyUploadedHashes.add(row.file_hash));
   }
+
+  const deduplicatedFiles = files.filter(f => {
+    return ![...alreadyUploadedHashes].some(hash => {
+      // We can't re‑hash here quickly, so we accept that a file matching an already‑uploaded hash will be removed.
+      // For perfect match you'd need to keep the Map, but performance is acceptable.
+      return hashToFile.get(hash) === f;
+    });
+  });
+
+  if (deduplicatedFiles.length === 0) {
+    throw new Error('All selected files have already been uploaded in another active session.');
+  }
+  // ── END DEDUP ──
+
+  const { data: sessionRow, error } = await supabase
+    .from('hr_talent_pool_upload_sessions')
+    .insert({
+      organization_id: organizationId,
+      created_by: userId,
+      total_files: deduplicatedFiles.length,
+      status: 'uploading'
+    })
+    .select('id')
+    .single();
+
+  if (error || !sessionRow) throw new Error(`Failed to create upload session: ${error?.message ?? 'no data'}`);
+
+  const sessionId = sessionRow.id;
+  const fileStates = deduplicatedFiles.map((f, i) => ({
+    id: `${sessionId}_${i}`,
+    fileName: f.name,
+    fileSize: f.size,
+    status: 'pending' as const
+  }));
+  this.session = {
+    sessionId, organizationId, userId,
+    totalFiles: deduplicatedFiles.length,
+    files: fileStates,
+    status: 'uploading',
+    startedAt: new Date().toISOString()
+  };
+
+  await idbSet(`session_${sessionId}`, this.session);
+  this.emit({ type: 'progress', session: { ...this.session, files: [...this.session.files] } });
+
+  await this.processFiles(deduplicatedFiles, sessionId, organizationId);
+  return sessionId;
+}
 
   // ── Resume session ────────────────────────────────────────────────────────
   async resumeSession(existingSession: UploadSession, newFiles: File[]): Promise<void> {
