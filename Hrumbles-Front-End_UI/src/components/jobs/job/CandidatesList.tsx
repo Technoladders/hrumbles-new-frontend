@@ -1443,18 +1443,27 @@ useImperativeHandle(ref, () => ({
     openBulkInviteReview(toInvite);
   },
   // ADD THIS NEW METHOD
-  triggerCSVExport() {
+ triggerCSVExport() {
     const candidatesToExport = selectedCandidates.size > 0
-      ? candidates.filter(c => selectedCandidates.has(c.id))
-      : filteredCandidates;
+      ? candidatesData.filter((c: any) => selectedCandidates.has(c.id))
+      : candidatesData.filter((c: any) => {
+          // Apply the same filtering as filteredCandidates
+          if (activeTab === "All Candidates" && c.main_status?.name === "New Applicants") return false;
+          if (activeTab !== "All Candidates" && activeTab !== "Applied" && c.main_status?.name !== activeTab) return false;
+          return true;
+        });
     
     if (candidatesToExport.length === 0) {
       toast.info("No candidates to export.");
-      return;
+      return null;
     }
     
-    // Pass the ref to parent to open the dialog
-    return candidatesToExport;
+    // Enrich with AI scores from candidateAnalysisData
+    return candidatesToExport.map((c: any) => ({
+      ...c,
+      overall_score: candidateAnalysisData[c.id]?.overall_score ?? c.overall_score ?? null,
+      aiScore: candidateAnalysisData[c.id]?.overall_score ?? null,
+    }));
   },
 }));
 

@@ -45,6 +45,7 @@ const JobDetailView = ({ job, candidates, onCandidateAdded }: JobDetailViewProps
       <CandidatesTabsSection 
         jobId={job.id} 
         jobdescription={job.description}
+        jobTitle={job.title}
         candidates={candidates} 
         onAddCandidate={handleOpenCandidateModal} 
       />

@@ -36,6 +36,7 @@ interface CandidatesListHandle {
 
 interface CandidatesTabsSectionProps {
   jobId: string;
+  jobTitle: string;
   jobdescription: string;
   candidates: Candidate[];
   onAddCandidate: () => void;
@@ -46,6 +47,7 @@ const ASCENDION_ORGANIZATION_ID = "22068cb4-88fb-49e4-9fb8-4fa7ae9c23e5";
 
 const CandidatesTabsSection = ({ 
   jobId, 
+  jobTitle,
   jobdescription,
   candidates,
   onAddCandidate 
@@ -148,6 +150,12 @@ const handleCSVExportClick = () => {
   if (candidatesListRef.current) {
     const candidatesForExport = candidatesListRef.current.triggerCSVExport();
     if (candidatesForExport && candidatesForExport.length > 0) {
+      // Enrich candidates with analysis data before passing to dialog
+      const enrichedCandidates = candidatesForExport.map((candidate: any) => ({
+        ...candidate,
+        // The analysis data needs to be passed from CandidatesList
+        // We'll handle this through the ref
+      }));
       setExportCandidates(candidatesForExport);
       setShowCSVExportDialog(true);
     }
@@ -448,7 +456,7 @@ return (
   open={showCSVExportDialog}
   onOpenChange={setShowCSVExportDialog}
   candidates={exportCandidates}
-  jobTitle={jobdescription}
+  jobTitle={jobTitle}
 />
     </div>
   </TooltipProvider>
