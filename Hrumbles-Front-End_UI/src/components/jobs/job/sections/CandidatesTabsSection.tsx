@@ -407,21 +407,37 @@ return (
           </Tooltip>
 
           {/* 📊 Export CSV */}
+
+
 <Tooltip>
   <TooltipTrigger asChild>
-    <button
+    <Button
       onClick={handleCSVExportClick}
+      variant="outline"
+      size="sm"
       className="
-        flex items-center justify-center
-        w-8 h-8 rounded-lg
-        bg-emerald-100 text-emerald-700
-        hover:scale-105 transition
+        h-8 px-3 rounded-xl
+        bg-gradient-to-br from-emerald-50 to-emerald-100
+        text-emerald-700
+        border border-emerald-200
+        shadow-sm
+        hover:text-emerald-700
+        hover:from-emerald-100 hover:to-emerald-200
+        hover:shadow-md hover:scale-[1.03]
+        active:scale-[0.97]
+        transition-all duration-200
+        flex items-center gap-2
+        whitespace-nowrap
       "
     >
       <FileSpreadsheet size={14} />
-    </button>
+      <span className="text-xs font-medium">Export CSV</span>
+    </Button>
   </TooltipTrigger>
-  <TooltipContent>Export CSV</TooltipContent>
+
+  <TooltipContent>
+    Export CSV
+  </TooltipContent>
 </Tooltip>
 
         </div>
