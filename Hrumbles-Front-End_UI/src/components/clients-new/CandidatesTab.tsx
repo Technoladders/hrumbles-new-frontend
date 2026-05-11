@@ -82,14 +82,26 @@ const CandidatesTab: React.FC<{ candidates: Candidate[]; loading: boolean; onUpd
     setSortConfig(prev => ({ key, direction: prev?.key === key && prev.direction === 'ascending' ? 'descending' : 'ascending' }));
   };
 
-  const sorted = useMemo(() => {
-    let items = [...candidates];
-    if (sortConfig) items.sort((a, b) => {
+const sorted = useMemo(() => {
+  let items = [...candidates];
+
+  // Default order: latest joining date first
+  items.sort((a, b) =>
+    new Date(b.joining_date || 0).getTime() - new Date(a.joining_date || 0).getTime()
+  );
+
+  // User sort overrides default
+  if (sortConfig) {
+    items.sort((a, b) => {
       const av = a[sortConfig.key] || '', bv = b[sortConfig.key] || '';
-      return sortConfig.direction === 'ascending' ? (av < bv ? -1 : av > bv ? 1 : 0) : (av > bv ? -1 : av < bv ? 1 : 0);
+      return sortConfig.direction === 'ascending'
+        ? (av < bv ? -1 : av > bv ? 1 : 0)
+        : (av > bv ? -1 : av < bv ? 1 : 0);
     });
-    return items;
-  }, [candidates, sortConfig]);
+  }
+
+  return items;
+}, [candidates, sortConfig]);
 
   const totalPages = Math.ceil(sorted.length / ITEMS_PER_PAGE);
   const paginated = sorted.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);

@@ -3,12 +3,15 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "../../
 import { Input } from "../../ui/input";
 import { Checkbox } from "../../ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
+import { EmployeeSelect } from "@/components/ui/employee-select";
+import { MultiEmployeeSelect } from "@/components/ui/multi-employee-select";
 import { UseFormReturn } from "react-hook-form";
 import { ClientFormValues } from "@/lib/schemas/client";
 import { motion } from "framer-motion";
 
 interface ClientDetailsStepProps {
   form: UseFormReturn<ClientFormValues>;
+  employees: { id: string; first_name: string; last_name: string }[];
 }
 
 const itemVariants = {
@@ -20,9 +23,10 @@ const itemVariants = {
   }),
 };
 
-const ClientDetailsStep: React.FC<ClientDetailsStepProps> = ({ form }) => {
+const ClientDetailsStep: React.FC<ClientDetailsStepProps> = ({ form, employees }) => {
   const showCommissionFields = form.watch("service_type")?.includes("permanent");
 
+  console.log("employees in clients details step", employees);
   return (
     <div className="space-y-6">
        <div className="text-center">
@@ -146,19 +150,24 @@ const ClientDetailsStep: React.FC<ClientDetailsStepProps> = ({ form }) => {
             />
         </motion.div>
         <motion.div custom={4} variants={itemVariants} initial="hidden" animate="visible">
-            <FormField
-            control={form.control}
-            name="internal_contact"
-            render={({ field }) => (
-                <FormItem>
-                <FormLabel className="text-sm">Internal Point of Contact</FormLabel>
-                <FormControl>
-                    <Input placeholder="e.g., John Doe" {...field} />
-                </FormControl>
-                <FormMessage />
-                </FormItem>
-            )}
-            />
+           <FormField
+  control={form.control}
+  name="internal_contact_ids"
+  render={({ field }) => (
+    <FormItem>
+      <FormLabel className="text-sm">Internal Points of Contact</FormLabel>
+      <FormControl>
+        <MultiEmployeeSelect
+          value={field.value || []}
+          onChange={field.onChange}
+          employees={employees}
+          placeholder="Select internal contacts..."
+        />
+      </FormControl>
+      <FormMessage />
+    </FormItem>
+  )}
+/>
         </motion.div>
       </div>
 

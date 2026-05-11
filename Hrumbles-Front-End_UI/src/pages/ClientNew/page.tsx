@@ -124,13 +124,14 @@ const ClientViewPage = () => {
       let totalCandidateRevenue = 0, totalCandidateProfit = 0, totalEmployeeRevenue = 0, totalEmployeeProfit = 0;
       const monthlyAggregates: { [k: string]: { revenue: number; profit: number } } = {};
       const hiresAggregates: { [k: string]: number } = {};
-      const { data: jobsData } = await supabase.from('hr_jobs').select('id, title, job_type_category').eq('client_owner', clientName);
+      const { data: jobsData } = await supabase.from('hr_jobs').select('id, title, job_type_category').eq('client_details->>clientName', clientName);
       if (jobsData) {
         let query = supabase.from('hr_job_candidates').select('*').in('job_id', jobsData.map(j => j.id)).or(`main_status_id.eq.${statusIds.JOINED_STATUS_ID},main_status_id.eq.${statusIds.OFFERED_STATUS_ID}`).in('sub_status_id', [statusIds.JOINED_SUB_STATUS_ID, statusIds.OFFER_ISSUED_SUB_STATUS_ID]);
         if (dateRange?.startDate && dateRange?.endDate) {
           query = query.gte('joining_date', format(dateRange.startDate, 'yyyy-MM-dd')).lte('joining_date', format(dateRange.endDate, 'yyyy-MM-dd'));
         }
         const { data: candidatesData } = await query;
+        console.log('candidatesData123', candidatesData);
         const processedCandidates = candidatesData?.map(c => {
           const job = jobsData.find(j => j.id === c.job_id)!;
           const profit = calculateCandidateProfit(c, job, clientData);
@@ -217,6 +218,8 @@ const ClientViewPage = () => {
 
   const visibleTabs = TAB_CONFIG.filter(t => t.value !== 'employees' || client.service_type?.includes('contractual'));
   const hasDateFilter = !!(dateRange.startDate || dateRange.endDate);
+
+  console.log('candidatesData', candidates);
 
   return (
     <div className="min-h-screen bg-[#F7F7F8]">

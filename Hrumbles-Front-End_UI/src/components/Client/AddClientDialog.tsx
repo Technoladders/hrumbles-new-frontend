@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
+import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, ArrowLeft } from "lucide-react";
 import Stepper from "./form/Stepper";
@@ -70,6 +71,7 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit, onClientAdded }: Ad
       service_type: [],
       payment_terms: 30,
       internal_contact: "",
+      internal_contact_ids: [],
       billing_address: { street: "", city: "", state: "", country: "India", zipCode: "" },
       shipping_address: { street: "", city: "", state: "", country: "India", zipCode: "" },
       commission_type: undefined,
@@ -127,12 +129,27 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit, onClientAdded }: Ad
       service_type: clientData.service_type || [],
       payment_terms: clientData.payment_terms || 30,
       internal_contact: clientData.internal_contact || "",
+      internal_contact_ids: clientData.internal_contact_ids || [],
       billing_address: clientData.billing_address || { street: "", city: "", state: "", country: "India", zipCode: "" },
       shipping_address: clientData.shipping_address || { street: "", city: "", state: "", country: "India", zipCode: "" },
       commission_type: clientData.commission_type || undefined,
       commission_value: clientData.commission_value || undefined,
     });
   };
+
+  const { data: employees = [] } = useQuery({
+  queryKey: ["hr_employees", organization_id],
+  queryFn: async () => {
+    const { data } = await supabase
+      .from("hr_employees")
+      .select("id, first_name, last_name")
+      .eq("organization_id", organization_id)
+      .in("employment_status", ["active", "Active"])   
+      .order("first_name");
+    return data || [];
+  },
+  enabled: !!organization_id,
+});
 
   const handleCompanySelect = (company: any) => {
     form.setValue("client_name", company.company_name, { shouldValidate: true });
@@ -190,6 +207,7 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit, onClientAdded }: Ad
           service_type: values.service_type,
           payment_terms: values.payment_terms,
           internal_contact: values.internal_contact,
+          internal_contact_ids: values.internal_contact_ids || [],
           billing_address: values.billing_address,
           shipping_address: values.shipping_address,
           commission_type: values.commission_type,
@@ -310,7 +328,7 @@ const AddClientDialog = ({ open, onOpenChange, clientToEdit, onClientAdded }: Ad
                     transition={{ type: "tween", ease: "easeInOut", duration: 0.3 }}
                 >
                     {currentStep === 0 && <SelectCompanyStep onCompanySelect={handleCompanySelect} onManualEntry={handleManualEntry} />}
-                    {currentStep === 1 && <ClientDetailsStep form={form} />}
+                    {currentStep === 1 && <ClientDetailsStep form={form} employees={employees} />}
                     {currentStep === 2 && <ClientContactsStep form={form} />}
                     {currentStep === 3 && <ClientAddressStep form={form} />}
                 </motion.div>

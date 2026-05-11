@@ -17,7 +17,8 @@ export const clientFormSchema = z.object({
   currency: z.string().default("INR"),
   service_type: z.array(z.string()).min(1, "At least one service type is required"),
   payment_terms: z.number().default(30),
-  internal_contact: z.string().optional().default(""),
+   internal_contact_ids: z.array(z.string().uuid()).optional().default([]),
+  internal_contact_id: z.string().uuid().optional().nullable(),
   billing_address: z.object({
     street: z.string().optional().default(""),
     city: z.string().optional().default(""),

@@ -48,7 +48,7 @@ const STATUS_COLORS: Record<string, string> = {
 interface Client {
   id: string; display_name: string; client_name: string; service_type: string[];
   status: string; commission_value?: number; commission_type?: string; currency: string;
-  internal_contact?: string; hr_employees?: { first_name?: string; last_name?: string };
+  internal_contact?: string; internal_contact_ids?: string[]; hr_employees?: { first_name?: string; last_name?: string };
 }
 interface Candidate { id: string; name: string; job_id: string; ctc?: string; accrual_ctc?: string; expected_salary?: number; main_status_id?: string; }
 interface Employee { id: string; assign_employee: string; project_id: string; client_id: string; salary: number; client_billing: number; billing_type: string; salary_type: string; salary_currency: string; working_hours?: number; working_days_config?: 'all_days' | 'weekdays_only' | 'saturday_working'; }
@@ -128,6 +128,8 @@ const ClientManagementDashboard = () => {
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
+  const [allEmployees, setAllEmployees] = useState<any[]>([]);
+
   const navigate = useNavigate();
   const { toast } = useToast();
   const organization_id = useSelector((state: any) => state.auth.organization_id);
@@ -187,12 +189,22 @@ const ClientManagementDashboard = () => {
     if (!organization_id) return;
     setLoading(true);
     try {
-      const { data: clientsData, error: clientsError } = await supabase.from("hr_clients").select("*, hr_employees:hr_employees!hr_clients_created_by_fkey(first_name, last_name)").eq("organization_id", organization_id);
+      const { data: clientsData, error: clientsError } = await supabase.from("hr_clients").select("*, hr_employees:hr_employees!hr_clients_created_by_fkey(first_name, last_name), internal_contact_employee:hr_employees!hr_clients_internal_contact_id_fkey(first_name, last_name)").eq("organization_id", organization_id);
       if (clientsError) throw clientsError;
       if (!clientsData) { setLoading(false); return; }
       setClients(clientsData);
+       const { data: employeesData } = await supabase
+      .from("hr_employees")
+      .select("id, first_name, last_name")
+      .eq("organization_id", organization_id)
+      .in("employment_status", ["active", "Active"]);
+    
+    if (employeesData) {
+      setAllEmployees(employeesData);
+    }
+
       const { data: candidatesData } = await supabase.from("hr_job_candidates").select(`*, hr_jobs!hr_job_candidates_job_id_fkey(*)`).or(`main_status_id.eq.${statusIds.JOINED_STATUS_ID},main_status_id.eq.${statusIds.OFFERED_STATUS_ID}`).in("sub_status_id", [statusIds.JOINED_SUB_STATUS_ID, statusIds.OFFER_ISSUED_SUB_STATUS_ID]);
-      const { data: employeesData } = await supabase.from("hr_project_employees").select("*");
+      // const { data: employeesData } = await supabase.from("hr_project_employees").select("*");
       const { data: timeLogs } = await supabase.from("time_logs").select("*").eq("is_approved", true);
       let totalRevenue = 0, totalProfit = 0;
       const metricsByClient: { [k: string]: { revenue: number; profit: number } } = {};
@@ -224,6 +236,31 @@ const ClientManagementDashboard = () => {
       toast({ title: "Error", description: `Failed to load data: ${error.message}`, variant: "destructive" });
     } finally { setLoading(false); }
   }, [organization_id, toast, statusIds]);
+
+  // Helper function to get employee names from IDs
+const getInternalContactNames = useCallback((client: Client) => {
+  // First try to use the new internal_contact_ids array
+  if (client.internal_contact_ids && client.internal_contact_ids.length > 0 && allEmployees.length > 0) {
+    const names = client.internal_contact_ids
+      .map(id => {
+        const emp = allEmployees.find(e => e.id === id);
+        return emp ? `${emp.first_name} ${emp.last_name}` : null;
+      })
+      .filter(Boolean);
+    
+    if (names.length > 0) return names.join(", ");
+  }
+  
+  // Fall back to single internal_contact_employee
+  if (client.internal_contact_employee?.first_name) {
+    return `${client.internal_contact_employee.first_name} ${client.internal_contact_employee.last_name}`;
+  }
+  
+  // Final fallback to old internal_contact text field
+  if (client.internal_contact) return client.internal_contact;
+  
+  return null;
+}, [allEmployees]);
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
@@ -452,7 +489,47 @@ const ClientManagementDashboard = () => {
                         <Building2 size={13} className="opacity-60" />{client.client_name}
                       </button>
                     </td>
-                    <td className="px-5 py-3 whitespace-nowrap text-xs text-gray-500">{client.internal_contact || <span className="text-gray-300">—</span>}</td>
+<td className="px-5 py-3 text-xs text-gray-500 max-w-[200px]">
+  {(() => {
+    const contactNames = getInternalContactNames(client);
+    const hasMultipleContacts = client.internal_contact_ids && client.internal_contact_ids.length > 1;
+    
+    if (!contactNames) {
+      return <span className="text-gray-300">—</span>;
+    }
+    
+    if (hasMultipleContacts) {
+      const firstContact = client.internal_contact_ids!
+        .map(id => allEmployees.find(e => e.id === id))
+        .filter(Boolean)
+        .map(emp => `${emp.first_name} ${emp.last_name}`)[0];
+      
+      return (
+        <div className="relative group inline-block max-w-full">
+          <div className="truncate cursor-pointer flex items-center">
+            <span className="truncate">{firstContact}</span>
+            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-medium flex-shrink-0">
+              +{client.internal_contact_ids!.length - 1}
+            </span>
+          </div>
+          {/* Instant hover tooltip */}
+          <div className="absolute left-0 -top-2 transform -translate-y-full hidden group-hover:block z-50 pointer-events-none">
+            <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg max-w-[300px] whitespace-normal break-words">
+              {contactNames}
+              <div className="absolute left-3 -bottom-1 w-2 h-2 bg-gray-900 rotate-45"></div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="truncate" title={contactNames}>
+        {contactNames}
+      </div>
+    );
+  })()}
+</td>
                     <td className="px-5 py-3 whitespace-nowrap">
                       <div className="flex flex-wrap gap-1">
                         {client.service_type?.length ? client.service_type.map((type, i) => (
