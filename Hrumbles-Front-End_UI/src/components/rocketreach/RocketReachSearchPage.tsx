@@ -491,7 +491,7 @@ useEffect(() => {
           <div className="flex items-center gap-2">
             {totalEntries > 0 && !isLoading && (
               <span className="text-[10px] text-slate-500">
-                <span className="font-semibold text-slate-700">{totalEntries.toLocaleString()}</span> profiles
+                {/* <span className="font-semibold text-slate-700">{totalEntries.toLocaleString()}</span> profiles */}
                 {totalPages > 1 && <span className="ml-1.5 text-slate-400">· Page {page}/{totalPages}</span>}
               </span>
             )}
