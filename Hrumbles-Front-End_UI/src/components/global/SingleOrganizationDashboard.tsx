@@ -38,6 +38,7 @@ interface OrgDetails {
   credit_balance: string;
   status: string;
   verification_check: string;
+  people_search_provider: string;
   is_recruitment_firm: boolean;
   is_verification_firm: boolean;
   subscription_features: any;
@@ -1084,6 +1085,15 @@ const SingleOrganizationDashboard: FC = () => {
                 <EditField label="Job ID Prefix" value={details.job_id_prefix} onSave={(v) => saveOrgField("job_id_prefix", v)} />
                 <EditField label="Verification Provider" value={details.verification_check} onSave={(v) => saveOrgField("verification_check", v)}
                   options={[{ value: "gridlines", label: "Gridlines" }, { value: "truthscreen", label: "Truthscreen" }]} />
+                  <EditField
+  label="Recruiter-X Search Provider"
+  value={details.people_search_provider || "rocketreach"}
+  onSave={(v) => saveOrgField("people_search_provider", v)}
+  options={[
+    { value: "rocketreach", label: "RocketReach" },
+    { value: "contactout", label: "ContactOut" },
+  ]}
+/>
               </div>
             </div>
           </div>

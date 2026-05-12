@@ -37,6 +37,7 @@ import { useQuery } from "@tanstack/react-query";
 import supabase from "@/config/supabaseClient";
 import { toast } from "sonner";
 import { Loader2, Plus, ChevronsUpDown, Check } from "lucide-react";
+import { MultiEmployeeSelect } from "@/components/ui/multi-employee-select";
 
 interface AssociateToClientModalProps {
   isOpen: boolean;
@@ -83,6 +84,8 @@ const AssociateToClientModal = ({
   const [openClientPopover, setOpenClientPopover] = useState(false);
   const isInitialMount = useRef(true);
   const navigate = useNavigate();
+  const [internalPocIds, setInternalPocIds] = useState<string[]>([]);
+const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
 
   const currencies = [
     { value: "INR", symbol: "₹" },
@@ -153,6 +156,12 @@ const AssociateToClientModal = ({
           setSelectedProject(job.clientProjectId || '');
         }
       }
+
+      if (job.clientDetails?.internal_poc_ids && Array.isArray(job.clientDetails.internal_poc_ids)) {
+  setInternalPocIds(job.clientDetails.internal_poc_ids);
+} else {
+  setInternalPocIds([]);
+}
       isInitialMount.current = false;
     }
     
@@ -192,6 +201,32 @@ const AssociateToClientModal = ({
       refetchContacts();
     }
   }, [selectedClient, refetchProjects, refetchContacts]);
+
+  useEffect(() => {
+  if (!selectedClient) {
+    setInternalContactsList([]);
+    setInternalPocIds([]);
+    return;
+  }
+  const fetchInternal = async () => {
+    const { data: clientData } = await supabase
+      .from("hr_clients")
+      .select("internal_contact_ids")
+      .eq("id", selectedClient)
+      .single();
+    const ids: string[] = clientData?.internal_contact_ids || [];
+    if (ids.length > 0) {
+      const { data: employees } = await supabase
+        .from("hr_employees")
+        .select("id, first_name, last_name")
+        .in("id", ids);
+      setInternalContactsList(employees || []);
+    } else {
+      setInternalContactsList([]);
+    }
+  };
+  fetchInternal();
+}, [selectedClient]);
   
   const handleCurrencyChange = (value: string) => {
     setCurrencyType(value);
@@ -230,6 +265,7 @@ const AssociateToClientModal = ({
           clientBudget: budgetType === "Unpaid" ? "Unpaid" : `${currentCurrency.symbol}${budget} ${budgetType}`,
           pointOfContact: contact ? contact.name : '',
           currency_type: currencyType,
+          internal_poc_ids: internalPocIds,
         },
         clientProjectId: selectedProject || undefined,
         currency_type: currencyType
@@ -405,7 +441,7 @@ const AssociateToClientModal = ({
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="contact">SPOC Contact (Optional)</Label>
+                <Label htmlFor="contact">Client SPOC (Optional)</Label>
                 <Select value={selectedContact} onValueChange={setSelectedContact}>
                   <SelectTrigger id="contact">
                     <SelectValue placeholder="Select a contact" />
@@ -420,6 +456,16 @@ const AssociateToClientModal = ({
                 </Select>
                 <p className="text-xs text-gray-500">Select a contact person or leave blank</p>
               </div>
+
+              <div className="space-y-2">
+  <Label>Internal Point of Contact (Optional)</Label>
+  <MultiEmployeeSelect
+    value={internalPocIds}
+    onChange={setInternalPocIds}
+    employees={internalContactsList}
+    placeholder="Select internal contacts..."
+  />
+</div>
             </>
           )}
         </div>

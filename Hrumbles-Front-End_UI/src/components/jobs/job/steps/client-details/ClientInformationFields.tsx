@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { ClientDetailsData } from "./types";
 import { supabase } from "@/integrations/supabase/client";
+import { MultiEmployeeSelect } from "@/components/ui/multi-employee-select";
 
 interface ClientInformationFieldsProps {
   data: ClientDetailsData;
@@ -22,6 +23,7 @@ const ClientInformationFields = ({ data, onChange }: ClientInformationFieldsProp
   const [filteredClients, setFilteredClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
   const [filteredContacts, setFilteredContacts] = useState([]);
+  const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -52,6 +54,33 @@ setFilteredClients(clientData || []);
       }
     }
   }, [clients, data.clientName]); // Runs whenever clients or clientName changes
+
+   // Fetch internal contacts for selected client
+  useEffect(() => {
+    const fetchInternalContacts = async () => {
+      if (!selectedClient) {
+        setInternalContactsList([]);
+        return;
+      }
+      const { data: clientData } = await supabase
+        .from("hr_clients")
+        .select("internal_contact_ids")
+        .eq("id", selectedClient)
+        .single();
+      
+      const ids = clientData?.internal_contact_ids || [];
+      if (ids.length > 0) {
+        const { data: employees } = await supabase
+          .from("hr_employees")
+          .select("id, first_name, last_name")
+          .in("id", ids);
+        setInternalContactsList(employees || []);
+      } else {
+        setInternalContactsList([]);
+      }
+    };
+    fetchInternalContacts();
+  }, [selectedClient]);
 
   const handleClientChange = (clientId: string) => {
     setSelectedClient(clientId);
@@ -119,6 +148,17 @@ setFilteredClients(clientData || []);
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+       {/* NEW: Internal Point of Contact (multi-select from client's internal contacts) */}
+      <div className="space-y-2">
+        <Label>Internal Point of Contact</Label>
+        <MultiEmployeeSelect
+          value={data.internalPocIds || []}
+          onChange={(ids) => onChange({ internalPocIds: ids })}
+          employees={internalContactsList}
+          placeholder="Select internal contacts..."
+        />
       </div>
     </>
   );

@@ -59,6 +59,7 @@ export const mapFormDataToJobData = (
       clientBudget: formData.clientDetails.clientBudget,
       endClient: formData.clientDetails.endClient,
       pointOfContact: formData.clientDetails.pointOfContact,
+      internal_poc_ids: formData.clientDetails.internalPocIds,
     },
     client_project_id: formData.clientDetails.clientProjectId || null,
     currency_type: formData.clientDetails.currency_type,

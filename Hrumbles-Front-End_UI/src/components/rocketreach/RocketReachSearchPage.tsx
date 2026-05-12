@@ -12,7 +12,7 @@ import React, {
 } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { useSelector }    from "react-redux";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { cn }             from "@/lib/utils";
 import { supabase }       from "@/integrations/supabase/client";
 import {
@@ -162,7 +162,7 @@ function decodeState(p: URLSearchParams): PageState {
     },
     pageSize: parseInt(p.get("per") ?? (p.get("pv") === "contactout" ? "25" : "10"), 10),
     page:     parseInt(p.get("pg")  ?? "1",  10),
-    provider: (p.get("pv") as SearchProvider) ?? "contactout",
+    provider: (p.get("pv") as SearchProvider) ?? "rocketreach",
   };
 }
 
@@ -224,6 +224,22 @@ export const RocketReachSearchPage: React.FC = () => {
 
   const orgId  = useSelector((s: any) => s.auth?.organization_id ?? s.auth?.user?.organization_id ?? null);
   const userId = useSelector((s: any) => s.auth?.user?.id ?? s.auth?.id ?? null);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
+
+  // Fetch org's preferred search provider from hr_organizations
+const { data: orgProvider } = useQuery({
+  queryKey: ["organization-provider", organizationId],
+  queryFn: async (): Promise<SearchProvider> => {
+    if (!organizationId) return "rocketreach";
+    const { data, error } = await supabase
+      .from("hr_organizations")
+      .select("people_search_provider")
+      .eq("id", organizationId)
+      .single();
+    return (data as any)?.people_search_provider ?? "rocketreach";
+  },
+  enabled: !!organizationId,
+});
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [pageState, setPageState] = useState<PageState>(() => decodeState(searchParams));
@@ -253,6 +269,19 @@ export const RocketReachSearchPage: React.FC = () => {
     setSearchParams(encodeState(next), { replace: true });
   }, [pageState, setSearchParams]);
 
+  // Sync provider from organization config when URL has no pv param
+useEffect(() => {
+  if (orgProvider && !searchParams.get("pv")) {
+    setPageState(prev => {
+      if (prev.provider === orgProvider) return prev;
+      const next = { ...prev, provider: orgProvider as SearchProvider };
+      setSearchParams(encodeState(next), { replace: true });
+      return next;
+    });
+  }
+}, [orgProvider]);
+  
+
   const { filters, pageSize, page, provider } = pageState;
 const effectivePageSize =
   provider === "contactout" ? 25 : pageSize;
@@ -274,7 +303,8 @@ const effectivePageSize =
   const fallbackTimer = useRef<ReturnType<typeof setTimeout>>();
 
   // ── When search results arrive ────────────────────────────────────────────
-  useEffect(() => {
+  // ── When search results arrive ────────────────────────────────────────────
+useEffect(() => {
     setEnrichedProfiles(profiles);
     setSelectedProfile(null);
     setCheckedIds(new Set());
@@ -284,6 +314,12 @@ const effectivePageSize =
 
     if (!profiles.length) return;
 
+    // ──────────────────────────────────────────────────────────────────────
+    // AUTOMATIC ENRICHMENT DISABLED — now relies on manual reveal buttons
+    // to trigger email/phone lookup and get full details.
+    // To re‑enable, uncomment the block below.
+    // ──────────────────────────────────────────────────────────────────────
+    /*
     const toEnrich = profiles.filter(p => p._needs_rescrape);
     if (!toEnrich.length) return;
 
@@ -323,7 +359,8 @@ const effectivePageSize =
       }
       setEnrichProgress(prev => ({ ...prev, active: false }));
     }, 45_000);
-  }, [profiles, orgId]);
+    */
+}, [profiles, orgId]);
 
   // ── Realtime subscription ─────────────────────────────────────────────────
   useEffect(() => {

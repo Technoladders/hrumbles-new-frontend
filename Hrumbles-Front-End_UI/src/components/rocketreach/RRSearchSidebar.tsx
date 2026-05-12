@@ -1065,7 +1065,7 @@ interface RRSearchSidebarProps {
 
 // ─── Main sidebar ─────────────────────────────────────────────────────────────
 export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
-  filters, provider = "contactout", onChange, onClearAll, onSearch,
+  filters, provider = "rocketreach", onChange, onClearAll, onSearch,
   isLoading, totalEntries, filterCount, hasFilters,
 }) => {
   const [open, setOpen] = useState({

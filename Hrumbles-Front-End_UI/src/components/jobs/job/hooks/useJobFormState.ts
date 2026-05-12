@@ -47,6 +47,7 @@ export interface ClientDetailsData {
   clientProjectId: string;
   currency_type: string;
   budget_type: string;
+  internalPocIds: string[];
 }
 
 export interface JobDescriptionData {
@@ -105,6 +106,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
       clientBudget: "",
       endClient: "",
       pointOfContact: "",
+      internalPocIds: [],
       assignedTo: "",
       clientProjectId: "",
       currency_type: "INR",
@@ -145,6 +147,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
           clientBudget: String(editJob.clientDetails?.clientBudget) || "",
           endClient: editJob.clientDetails?.endClient || "",
           pointOfContact: editJob.clientDetails?.pointOfContact || "",
+          internalPocIds: editJob.clientDetails?.internal_poc_ids || [],
           assignedTo: editJob.assignedTo?.name || "",
           clientProjectId: editJob.clientProjectId || "",
           currency_type: editJob.currency_type || "INR",  // Direct from DB (snake_case)

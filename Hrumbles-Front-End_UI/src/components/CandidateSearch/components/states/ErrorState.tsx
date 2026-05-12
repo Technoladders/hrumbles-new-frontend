@@ -25,10 +25,10 @@ const ERROR_INFO: Record<string, { icon: string; title: string; hint: string; fi
     hint: "One or more filter values were rejected. Check technology names match the supported list exactly.",
   },
   unknown: {
-    icon: "💥",
+    icon: "⚠️",
     title: "Something Went Wrong",
-    hint: "An unexpected error occurred. Check the edge function logs in your Supabase dashboard.",
-    fix:  "Supabase Dashboard → Edge Functions → search-candidates → Logs",
+    hint: "An unexpected error occurred. Check after some time or contact support.",
+    // fix:  "Supabase Dashboard → Edge Functions → search-candidates → Logs",
   },
 };
 
@@ -114,7 +114,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({ error, onRetry, onClearA
         </button>
       </div>
 
-      <div style={{
+      {/* <div style={{
         marginTop: 32, padding: "12px 18px", borderRadius: 10,
         background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.18)",
         maxWidth: 400,
@@ -130,7 +130,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({ error, onRetry, onClearA
           Errors are logged in the Supabase Edge Function dashboard under{" "}
           <strong>search-candidates → Logs</strong>. If issues persist, contact your admin.
         </div>
-      </div>
+      </div> */}
     </div>
   );
 };

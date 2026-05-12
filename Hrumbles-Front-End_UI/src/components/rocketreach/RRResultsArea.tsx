@@ -612,7 +612,8 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
   const isContactOut = provider === "contactout";
   const enriched     = !!p._enriched || revealed;
   const coData       = (p as any)._coData;
-  const isEnriching  = p._needs_rescrape && !p._is_cached && !p._enriched;
+  // const isEnriching  = p._needs_rescrape && !p._is_cached && !p._enriched;
+  const isEnriching  = false;
 
   const allEmailsRaw = p._allEmails ?? [];
   const allPhones    = p._allPhones ?? [];
@@ -667,6 +668,13 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
     onRowClick();
   }, [showCV, onRowClick]);
 
+  // ─── Blurred field – shown when profile isn't enriched ────────────────────────
+const BlurredField: React.FC<{ label: string }> = ({ label }) => (
+  <span className="inline-flex items-center gap-1 text-slate-300 select-none blur-[3px]">
+    {label}
+  </span>
+);
+
   return (
     <div
       onClick={handleRowClick}
@@ -699,11 +707,11 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
             {isContactOut && coData?.seniority && (
               <span className="text-[8px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 capitalize">{coData.seniority}</span>
             )}
-            {isEnriching && !enriched && (
+            {/* {isEnriching && !enriched && (
               <span className="flex items-center gap-1 text-[8px] text-slate-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />Loading…
               </span>
-            )}
+            )} */}
           </div>
 
           {/* Location */}
@@ -713,12 +721,74 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
             {p.connections && <span className="ml-1">· {p.connections.toLocaleString()} connections</span>}
           </div>
 
-          <JobsSection jobs={displayJobs} loading={isEnriching && !displayJobs.length} />
-          <EduSection education={eduRaw} loading={isEnriching && !eduRaw.length} />
-          <SkillsRow skills={skills} loading={isEnriching && !skills.length} activeLabels={activeLabels.size > 0 ? activeLabels : undefined} />
-          {certs.length > 0 && <CertificationsRow certifications={certs} loading={isEnriching && !certs.length} />}
+{enriched ? (
+  <>
+    <JobsSection jobs={displayJobs} loading={false} />
+    <EduSection education={eduRaw} loading={false} />
+    <SkillsRow skills={skills} loading={false} activeLabels={activeLabels.size > 0 ? activeLabels : undefined} />
+    {certs.length > 0 && <CertificationsRow certifications={certs} loading={false} />}
+  </>
+) : (
+  <div className="relative mt-2">
+    {/* Real Current (always available from search) */}
+    {p.current_title && (
+      <div className="flex items-start text-sm">
+        <span className={ROW_LABEL_CLASS}>Current</span>
+        <span className="text-slate-700 flex-1 leading-tight">
+          {p.current_title}{p.current_employer ? ` at ${p.current_employer}` : ""}
+        </span>
+      </div>
+    )}
 
-          {revealError && <p className="mt-1 text-[9px] text-red-500">{revealError}</p>}
+    {/* Blurred placeholder sections for the rest */}
+    <div className="space-y-2 select-none pointer-events-none opacity-50 blur-[3px]">
+      {/* Previous — only if not already showing real data */}
+      {jobHist.length === 0 && (
+        <div className="flex items-start">
+          <span className={ROW_LABEL_CLASS}>Previous</span>
+          <span className="text-slate-400 flex-1 leading-tight">
+            Software Engineer at Example Corp (2021–2024)
+          </span>
+        </div>
+      )}
+
+      {/* Education */}
+      <div className="flex items-start">
+        <span className={ROW_LABEL_CLASS}>Education</span>
+        <span className="text-slate-400 flex-1 leading-tight">
+          Bachelor's, Computer Science · University Name (2017–2021)
+        </span>
+      </div>
+
+      {/* Key Skills */}
+      <div className="flex items-start">
+        <span className={ROW_LABEL_CLASS}>Key Skills</span>
+        <div className="flex-1 flex flex-wrap gap-1">
+          {["Project Management", "Agile", "Data Analysis", "Python", "Cloud"].map((s, i) => (
+            <span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full border font-medium bg-slate-100 text-slate-400 border-slate-200">
+              {s}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    {/* Reveal prompt overlay */}
+    <div className="absolute inset-0 flex items-center justify-center">
+      <div className="bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-violet-200 shadow-sm">
+        <span className="text-[10px] font-medium text-violet-600 flex items-center gap-1.5">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Reveal contact to see full profile
+        </span>
+      </div>
+    </div>
+  </div>
+)}
+
+{revealError && <p className="mt-1 text-[9px] text-red-500">{revealError}</p>}
         </div>
 
         {/* Right card */}
@@ -813,7 +883,7 @@ export const RRResultsArea: React.FC<RRResultsAreaProps> = ({
 
         {totalEntries > 0 && (
           <span className="text-[10px] text-slate-500">
-            <span className="font-semibold text-slate-700">{totalEntries.toLocaleString()}</span> profiles
+            {/* <span className="font-semibold text-slate-700">{totalEntries.toLocaleString()}</span> profiles */}
             {totalPages > 1 && <span className="ml-1.5 text-slate-400">· Page {page}/{totalPages}</span>}
           </span>
         )}

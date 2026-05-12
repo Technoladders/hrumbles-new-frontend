@@ -92,6 +92,7 @@ import {
 } from "@/components/jobs/ui/popover";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import AssociateToClientModal from "@/components/jobs/job/AssociateToClientModal";
 import { useSelector } from "react-redux";
 import moment from "moment";
@@ -272,6 +273,19 @@ useEffect(() => {
     },
     refetchOnWindowFocus: false,
   });
+
+  // Fetch all employees for the organization to map internal POC IDs to names
+const { data: allEmployees = [] } = useQuery({
+  queryKey: ["hr_employees", organization_id],
+  queryFn: async () => {
+    const { data } = await supabase.from("hr_employees")
+      .select("id, first_name, last_name")
+      .eq("organization_id", organization_id)
+      .order("first_name");
+    return data || [];
+  },
+  enabled: !!organization_id && !ITECH_ORGANIZATION_ID.includes(organization_id),
+});
 
 const clientList = useMemo(() => {
   if (!jobs || jobs.length === 0) return [];
@@ -662,12 +676,41 @@ if (isLoading) {
                     </div>
                   </td>
                   {!ITECH_ORGANIZATION_ID.includes(organization_id) && (
-                    <td className="table-cell">
-                      <div className="flex flex-col">
-                        <span className="text-gray-800">{job.clientDetails?.clientName || "N/A"}</span>
-                        <Badge variant="outline" className="w-fit mt-1">{job.clientDetails?.pointOfContact || "N/A"}</Badge>
-                      </div>
-                    </td>
+                   <td className="table-cell">
+    <div className="flex flex-col">
+      <span className="text-gray-800">{job.clientDetails?.clientName || "N/A"}</span>
+      {/* Badges in same line with flex-wrap */}
+      <div className="flex flex-nowrap items-center gap-1 mt-1">
+        {/* Client POC badge */}
+        <Badge variant="outline" className="w-fit flex-shrink-0">
+          {job.clientDetails?.pointOfContact || "N/A"}
+        </Badge>
+        {/* Internal POC badge(s) */}
+        {job.clientDetails?.internal_poc_ids?.length > 0 && (() => {
+          const pocIds = job.clientDetails.internal_poc_ids;
+          const mapped = pocIds
+            .map(id => allEmployees.find(e => e.id === id))
+            .filter(Boolean)
+            .map(e => `${e.first_name} ${e.last_name}`);
+          if (mapped.length === 0) return null;
+          return (
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex items-center px-2 py-0.8 rounded-full text-[9px] font-semibold border bg-amber-100 text-amber-800 border-amber-200 flex-shrink-0 cursor-default">
+                    {mapped.length > 1 ? `${mapped[0]} +${mapped.length - 1}` : mapped[0]}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs bg-black text-white border-blac">
+                  <p className="text-xs">{mapped.join(", ")}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        })()}
+      </div>
+    </div>
+  </td>
                   )}
                   {/* --- MODIFICATION: Added Calendar Icon --- */}
                   <td className="table-cell">
