@@ -21,6 +21,8 @@ import {
   HousePlus,
   CalendarDays,
   AlertCircle,
+  UserCheck,
+  Contact
 } from "lucide-react";
 import { Button } from "@/components/jobs/ui/button";
 import { Input } from "@/components/jobs/ui/input";
@@ -107,6 +109,7 @@ import { EnhancedDateRangeSelector } from "@/components/ui/EnhancedDateRangeSele
 import { CareerjetShareModal } from "@/components/jobs/CareerjetShareModal";
 // demo job board imports
 import { JobBoardShareModal, getJobPosts } from "@/components/jobs/job-boards";
+import JobPocModal from "@/components/jobs/job/JobPocModal";
 
 interface DateRange {
   startDate: Date | null;
@@ -215,6 +218,9 @@ const Jobs = () => {
 
 const [postedBoards,     setPostedBoards]     = useState<Record<string, string[]>>({});
 const [broadcastJob, setBroadcastJob] = useState<JobData | null>(null);
+
+const [pocModalOpen, setPocModalOpen] = useState(false);
+const [selectedJobForPoc, setSelectedJobForPoc] = useState<JobData | null>(null);
  
 // Helper: read board post count for any job directly from localStorage
 const getBoardPostCount = (jobId: string) => Object.keys(getJobPosts(jobId)).length;
@@ -811,6 +817,30 @@ if (isLoading) {
                                 </Tooltip>
                               </TooltipProvider>
                             )}
+
+                            {/* POC Manager button – visible when client is assigned */}
+{!ITECH_ORGANIZATION_ID.includes(organization_id) && job.clientDetails?.clientName && (
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 rounded-full text-slate-500 hover:bg-indigo-600 hover:text-white transition-colors"
+          onClick={() => {
+            setSelectedJobForPoc(job);
+            setPocModalOpen(true);
+          }}
+        >
+          <Contact className="h-4 w-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent delayDuration={100} side="top">
+        <p>Manage POCs</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+)}
                                      {/* <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1216,6 +1246,20 @@ if (isLoading) {
     supabaseUrl={import.meta.env.VITE_SUPABASE_URL}
     isOpen={!!careerjetShareJob}
     onClose={() => setCareerjetShareJob(null)}
+  />
+)}
+
+{selectedJobForPoc && (
+  <JobPocModal
+    isOpen={pocModalOpen}
+    onClose={() => {
+      setPocModalOpen(false);
+      setSelectedJobForPoc(null);
+    }}
+    job={selectedJobForPoc}
+    onSaved={() => {
+      refetch(); // refetch the jobs list to reflect changes
+    }}
   />
 )}
 

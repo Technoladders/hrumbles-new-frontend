@@ -48,6 +48,7 @@ export interface ClientDetailsData {
   currency_type: string;
   budget_type: string;
   internalPocIds: string[];
+  pointOfContactIds: string[];
 }
 
 export interface JobDescriptionData {
@@ -107,6 +108,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
       endClient: "",
       pointOfContact: "",
       internalPocIds: [],
+      pointOfContactIds: [],
       assignedTo: "",
       clientProjectId: "",
       currency_type: "INR",
@@ -147,6 +149,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
           clientBudget: String(editJob.clientDetails?.clientBudget) || "",
           endClient: editJob.clientDetails?.endClient || "",
           pointOfContact: editJob.clientDetails?.pointOfContact || "",
+          pointOfContactIds: editJob.clientDetails?.point_of_contact_ids || [],
           internalPocIds: editJob.clientDetails?.internal_poc_ids || [],
           assignedTo: editJob.assignedTo?.name || "",
           clientProjectId: editJob.clientProjectId || "",

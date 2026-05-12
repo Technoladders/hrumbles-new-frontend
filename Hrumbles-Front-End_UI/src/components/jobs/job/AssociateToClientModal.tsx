@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -67,25 +67,27 @@ interface Contact {
   client_id: string;
 }
 
-const AssociateToClientModal = ({ 
-  isOpen, 
-  onClose, 
-  job, 
-  onAssociate 
+const AssociateToClientModal = ({
+  isOpen,
+  onClose,
+  job,
+  onAssociate,
 }: AssociateToClientModalProps) => {
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [budgetType, setBudgetType] = useState<string>("LPA");
   const [budget, setBudget] = useState<string>("");
   const [currencyType, setCurrencyType] = useState<string>("INR");
   const [selectedProject, setSelectedProject] = useState<string>("");
-  const [selectedContact, setSelectedContact] = useState<string>("");
   const [isInternPaid, setIsInternPaid] = useState<string>("Paid");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openClientPopover, setOpenClientPopover] = useState(false);
   const isInitialMount = useRef(true);
   const navigate = useNavigate();
   const [internalPocIds, setInternalPocIds] = useState<string[]>([]);
-const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
+  const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
+
+  // Multi-select for client POC
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
 
   const currencies = [
     { value: "INR", symbol: "₹" },
@@ -93,96 +95,177 @@ const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
   ];
 
   const { data: clients = [], isLoading: isLoadingClients } = useQuery({
-    queryKey: ['clients-permanent-contractual'],
+    queryKey: ["clients-permanent-contractual"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('hr_clients')
-        .select('id, client_name, service_type');
+        .from("hr_clients")
+        .select("id, client_name, service_type");
       if (error) throw error;
       return data as Client[];
-    }
+    },
   });
-  
-  const filteredClients = clients.filter(client => 
-    client.service_type.includes("permanent") || 
-    client.service_type.includes("contractual")
+
+  const filteredClients = clients.filter(
+    (client) =>
+      client.service_type.includes("permanent") ||
+      client.service_type.includes("contractual")
   );
 
-  console.log('filteredClients', filteredClients);
-  
   const { data: projects = [], refetch: refetchProjects } = useQuery({
-    queryKey: ['client-projects', selectedClient],
+    queryKey: ["client-projects", selectedClient],
     queryFn: async () => {
       if (!selectedClient) return [];
       const { data, error } = await supabase
-        .from('hr_projects')
-        .select('id, name, client_id')
-        .eq('client_id', selectedClient);
+        .from("hr_projects")
+        .select("id, name, client_id")
+        .eq("client_id", selectedClient);
       if (error) throw error;
       return data as ClientProject[];
     },
     enabled: !!selectedClient,
   });
-  
+
   const { data: contacts = [], refetch: refetchContacts } = useQuery({
-    queryKey: ['client-contacts', selectedClient],
+    queryKey: ["client-contacts", selectedClient],
     queryFn: async () => {
       if (!selectedClient) return [];
       const { data, error } = await supabase
-        .from('hr_client_contacts')
-        .select('id, name, email, phone, designation, client_id')
-        .eq('client_id', selectedClient);
+        .from("hr_client_contacts")
+        .select("id, name, email, phone, designation, client_id")
+        .eq("client_id", selectedClient);
       if (error) throw error;
       return data as Contact[];
     },
     enabled: !!selectedClient,
   });
-  
+
+  // Transform contacts for MultiEmployeeSelect
+  const contactOptions = useMemo(
+    () =>
+      contacts.map((c) => ({
+        id: c.id,
+        first_name: c.name,
+        last_name: "",
+      })),
+    [contacts]
+  );
+
+  // Init data on first open
   useEffect(() => {
     if (isOpen && isInitialMount.current) {
       if (job.clientDetails?.clientName) {
-        const client = clients.find(c => c.client_name === job.clientDetails.clientName);
+        const client = clients.find(
+          (c) => c.client_name === job.clientDetails.clientName
+        );
         if (client) {
           setSelectedClient(client.id);
           if (job.clientDetails.clientBudget) {
-            const currentCurrency = currencies.find(c => job.clientDetails.clientBudget.startsWith(c.symbol)) || currencies[0];
-            const budgetParts = job.clientDetails.clientBudget.replace(currentCurrency.symbol, "").trim().split(' ');
-            const amount = budgetParts[0] || '';
-            const type = budgetParts[1] || 'LPA';
+            const currentCurrency =
+              currencies.find((c) =>
+                job.clientDetails.clientBudget.startsWith(c.symbol)
+              ) || currencies[0];
+            const budgetParts = job.clientDetails.clientBudget
+              .replace(currentCurrency.symbol, "")
+              .trim()
+              .split(" ");
+            const amount = budgetParts[0] || "";
+            const type = budgetParts[1] || "LPA";
             setBudget(amount);
             setBudgetType(type);
             setCurrencyType(currentCurrency.value);
           }
-          setSelectedProject(job.clientProjectId || '');
+          setSelectedProject(job.clientProjectId || "");
         }
       }
 
-      if (job.clientDetails?.internal_poc_ids && Array.isArray(job.clientDetails.internal_poc_ids)) {
-  setInternalPocIds(job.clientDetails.internal_poc_ids);
-} else {
-  setInternalPocIds([]);
-}
+      if (
+        job.clientDetails?.internal_poc_ids &&
+        Array.isArray(job.clientDetails.internal_poc_ids)
+      ) {
+        setInternalPocIds(job.clientDetails.internal_poc_ids);
+      } else {
+        setInternalPocIds([]);
+      }
       isInitialMount.current = false;
     }
-    
+
     if (!isOpen) {
       isInitialMount.current = true;
-      setSelectedClient('');
-      setBudget('');
-      setBudgetType('LPA');
-      setCurrencyType('INR');
-      setSelectedProject('');
-      setSelectedContact('');
+      setSelectedClient("");
+      setBudget("");
+      setBudgetType("LPA");
+      setCurrencyType("INR");
+      setSelectedProject("");
+      setSelectedContactIds([]);
+      setInternalPocIds([]);
     }
   }, [isOpen, job.clientDetails, clients, job.clientProjectId]);
-  
+
+  // Populate client POC IDs after contacts load
   useEffect(() => {
-    if (selectedClient && contacts.length > 0 && job.clientDetails?.pointOfContact) {
-      const contact = contacts.find(c => c.name === job.clientDetails.pointOfContact);
-      setSelectedContact(contact ? contact.id : '');
+    if (!selectedClient || contacts.length === 0) return;
+
+    const currentDetails = job.clientDetails || {};
+
+    // New format: array of IDs
+    if (
+      currentDetails.point_of_contact_ids &&
+      currentDetails.point_of_contact_ids.length > 0
+    ) {
+      setSelectedContactIds(currentDetails.point_of_contact_ids);
     }
-  }, [contacts, selectedClient, job.clientDetails]);
-  
+    // Old format: single/comma-separated names
+    else if (currentDetails.pointOfContact) {
+      const names = currentDetails.pointOfContact
+        .split(",")
+        .map((n: string) => n.trim())
+        .filter(Boolean);
+      const matchedIds = contacts
+        .filter((c) => names.includes(c.name))
+        .map((c) => c.id);
+      setSelectedContactIds(matchedIds);
+    } else {
+      setSelectedContactIds([]);
+    }
+  }, [selectedClient, contacts, job.clientDetails]);
+
+  // Fetch internal POC employees for selected client
+  useEffect(() => {
+    if (!selectedClient) {
+      setInternalContactsList([]);
+      setInternalPocIds([]);
+      return;
+    }
+    const fetchInternal = async () => {
+      const { data: clientData } = await supabase
+        .from("hr_clients")
+        .select("internal_contact_ids")
+        .eq("id", selectedClient)
+        .single();
+      const ids: string[] = clientData?.internal_contact_ids || [];
+      if (ids.length > 0) {
+        const { data: employees } = await supabase
+          .from("hr_employees")
+          .select("id, first_name, last_name")
+          .in("id", ids);
+        setInternalContactsList(employees || []);
+      } else {
+        setInternalContactsList([]);
+      }
+    };
+    fetchInternal();
+  }, [selectedClient]);
+
+  // Reset projects and contacts when client changes
+  useEffect(() => {
+    setSelectedProject("");
+    setSelectedContactIds([]);
+    if (selectedClient) {
+      refetchProjects();
+      refetchContacts();
+    }
+  }, [selectedClient, refetchProjects, refetchContacts]);
+
   useEffect(() => {
     if (job.hiringMode === "Full Time" || job.hiringMode === "Permanent") {
       setBudgetType("LPA");
@@ -192,51 +275,16 @@ const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
       setBudgetType("Monthly");
     }
   }, [job.hiringMode, isInternPaid]);
-  
-  useEffect(() => {
-    setSelectedProject("");
-    setSelectedContact("");
-    if (selectedClient) {
-      refetchProjects();
-      refetchContacts();
-    }
-  }, [selectedClient, refetchProjects, refetchContacts]);
 
-  useEffect(() => {
-  if (!selectedClient) {
-    setInternalContactsList([]);
-    setInternalPocIds([]);
-    return;
-  }
-  const fetchInternal = async () => {
-    const { data: clientData } = await supabase
-      .from("hr_clients")
-      .select("internal_contact_ids")
-      .eq("id", selectedClient)
-      .single();
-    const ids: string[] = clientData?.internal_contact_ids || [];
-    if (ids.length > 0) {
-      const { data: employees } = await supabase
-        .from("hr_employees")
-        .select("id, first_name, last_name")
-        .in("id", ids);
-      setInternalContactsList(employees || []);
-    } else {
-      setInternalContactsList([]);
-    }
-  };
-  fetchInternal();
-}, [selectedClient]);
-  
   const handleCurrencyChange = (value: string) => {
     setCurrencyType(value);
   };
 
   const handleNavigateToClients = () => {
     onClose();
-    navigate('/clients');
+    navigate("/clients");
   };
-  
+
   const handleSubmit = async () => {
     try {
       setIsSubmitting(true);
@@ -248,13 +296,21 @@ const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
         toast.error("Please enter a budget");
         return;
       }
-      const client = clients.find(c => c.id === selectedClient);
+      const client = clients.find((c) => c.id === selectedClient);
       if (!client) {
         toast.error("Selected client not found");
         return;
       }
-      const contact = contacts.find(c => c.id === selectedContact);
-      const currentCurrency = currencies.find(c => c.value === currencyType) || currencies[0];
+
+      // Build pointOfContact names from selected IDs
+      const contactNames = selectedContactIds
+        .map((id) => contacts.find((c) => c.id === id)?.name)
+        .filter(Boolean)
+        .join(", ");
+
+      const currentCurrency =
+        currencies.find((c) => c.value === currencyType) || currencies[0];
+
       const updatedJob: JobData = {
         ...job,
         submissionType: "Client",
@@ -262,13 +318,17 @@ const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
         clientDetails: {
           ...job.clientDetails,
           clientName: client.client_name,
-          clientBudget: budgetType === "Unpaid" ? "Unpaid" : `${currentCurrency.symbol}${budget} ${budgetType}`,
-          pointOfContact: contact ? contact.name : '',
+          clientBudget:
+            budgetType === "Unpaid"
+              ? "Unpaid"
+              : `${currentCurrency.symbol}${budget} ${budgetType}`,
+          pointOfContact: contactNames,
+          point_of_contact_ids: selectedContactIds,
           currency_type: currencyType,
           internal_poc_ids: internalPocIds,
         },
         clientProjectId: selectedProject || undefined,
-        currency_type: currencyType
+        currency_type: currencyType,
       };
       await onAssociate(updatedJob);
       toast.success("Job successfully associated with client");
@@ -280,14 +340,16 @@ const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
       setIsSubmitting(false);
     }
   };
-  
+
   const getBudgetTypeOptions = () => {
     if (job.hiringMode === "Full Time") return ["LPA", "Monthly", "Hourly"];
-    if (job.hiringMode === "Contract" || job.hiringMode === "Part Time") return ["Monthly", "Hourly"];
-    if (job.hiringMode === "Intern") return isInternPaid === "Paid" ? ["Stipend"] : ["Unpaid"];
+    if (job.hiringMode === "Contract" || job.hiringMode === "Part Time")
+      return ["Monthly", "Hourly"];
+    if (job.hiringMode === "Intern")
+      return isInternPaid === "Paid" ? ["Stipend"] : ["Unpaid"];
     return ["LPA"];
   };
-  
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
@@ -296,11 +358,15 @@ const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="client">Select Client <span className="text-red-500">*</span></Label>
+            <Label htmlFor="client">
+              Select Client <span className="text-red-500">*</span>
+            </Label>
             {isLoadingClients ? (
               <div className="flex items-center justify-center h-10 border rounded-md">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-sm text-muted-foreground">Loading clients...</span>
+                <span className="ml-2 text-sm text-muted-foreground">
+                  Loading clients...
+                </span>
               </div>
             ) : (
               <Popover open={openClientPopover} onOpenChange={setOpenClientPopover}>
@@ -312,15 +378,16 @@ const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
                     className="w-full justify-between font-normal"
                   >
                     {selectedClient
-                      ? clients.find((client) => client.id === selectedClient)?.client_name
+                      ? clients.find((c) => c.id === selectedClient)
+                          ?.client_name
                       : "Select a client..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent
-  className="w-[--radix-popover-trigger-width] p-0"
-  onWheel={(e) => e.stopPropagation()}
->
+                  className="w-[--radix-popover-trigger-width] p-0"
+                  onWheel={(e) => e.stopPropagation()}
+                >
                   <Command>
                     <CommandInput placeholder="Search client..." />
                     <CommandList className="max-h-72 overflow-y-auto">
@@ -350,7 +417,11 @@ const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
                             }}
                           >
                             <Check
-                              className={`mr-2 h-4 w-4 ${selectedClient === client.id ? "opacity-100" : "opacity-0"}`}
+                              className={`mr-2 h-4 w-4 ${
+                                selectedClient === client.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              }`}
                             />
                             {client.client_name}
                           </CommandItem>
@@ -362,10 +433,12 @@ const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
               </Popover>
             )}
           </div>
-          
+
           {job.hiringMode === "Intern" && (
             <div className="space-y-2">
-              <Label>Internship Type <span className="text-red-500">*</span></Label>
+              <Label>
+                Internship Type <span className="text-red-500">*</span>
+              </Label>
               <Select value={isInternPaid} onValueChange={setIsInternPaid}>
                 <SelectTrigger id="internType">
                   <SelectValue placeholder="Select internship type" />
@@ -377,11 +450,14 @@ const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
               </Select>
             </div>
           )}
-          
+
           {budgetType !== "Unpaid" && (
             <div className="space-y-2">
               <Label htmlFor="budget">
-                {budgetType === "Stipend" ? "Stipend (Monthly)" : "Budget"} <span className="text-red-500">*</span>
+                {budgetType === "Stipend"
+                  ? "Stipend (Monthly)"
+                  : "Budget"}{" "}
+                <span className="text-red-500">*</span>
               </Label>
               <div className="flex">
                 <Select value={currencyType} onValueChange={handleCurrencyChange}>
@@ -391,7 +467,7 @@ const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
                   <SelectContent>
                     <SelectGroup>
                       <SelectLabel>Currency</SelectLabel>
-                      {currencies.map(currency => (
+                      {currencies.map((currency) => (
                         <SelectItem key={currency.value} value={currency.value}>
                           {currency.symbol} {currency.value}
                         </SelectItem>
@@ -402,79 +478,99 @@ const [internalContactsList, setInternalContactsList] = useState<any[]>([]);
                 <Input
                   id="budget"
                   type="text"
-                  placeholder={`Enter ${budgetType === "Stipend" ? "stipend" : "budget"} amount`}
+                  placeholder={`Enter ${
+                    budgetType === "Stipend" ? "stipend" : "budget"
+                  } amount`}
                   value={budget}
                   onChange={(e) => setBudget(e.target.value)}
                   className="rounded-none"
                 />
-                <Select value={budgetType} onValueChange={setBudgetType} disabled={getBudgetTypeOptions().length <= 1}>
+                <Select
+                  value={budgetType}
+                  onValueChange={setBudgetType}
+                  disabled={getBudgetTypeOptions().length <= 1}
+                >
                   <SelectTrigger className="w-[110px] rounded-l-none border-l-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {getBudgetTypeOptions().map(type => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    {getBudgetTypeOptions().map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
           )}
-          
+
           {selectedClient && (
             <>
               <div className="space-y-2">
                 <Label htmlFor="project">Client Project (Optional)</Label>
-                <Select value={selectedProject} onValueChange={setSelectedProject}>
+                <Select
+                  value={selectedProject}
+                  onValueChange={setSelectedProject}
+                >
                   <SelectTrigger id="project">
                     <SelectValue placeholder="Select a project" />
                   </SelectTrigger>
                   <SelectContent>
-                    {projects.map(project => (
+                    {projects.map((project) => (
                       <SelectItem key={project.id} value={project.id}>
                         {project.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500">Select an existing project or leave blank</p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="contact">Client SPOC (Optional)</Label>
-                <Select value={selectedContact} onValueChange={setSelectedContact}>
-                  <SelectTrigger id="contact">
-                    <SelectValue placeholder="Select a contact" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {contacts.map(contact => (
-                      <SelectItem key={contact.id} value={contact.id}>
-                        {contact.name}{contact.email ? ` (${contact.email})` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-gray-500">Select a contact person or leave blank</p>
+                <p className="text-xs text-gray-500">
+                  Select an existing project or leave blank
+                </p>
               </div>
 
+              {/* Multi-select Client POC */}
               <div className="space-y-2">
-  <Label>Internal Point of Contact (Optional)</Label>
-  <MultiEmployeeSelect
-    value={internalPocIds}
-    onChange={setInternalPocIds}
-    employees={internalContactsList}
-    placeholder="Select internal contacts..."
-  />
-</div>
+                <Label>Client SPOC (Optional)</Label>
+                <MultiEmployeeSelect
+                  value={selectedContactIds}
+                  onChange={setSelectedContactIds}
+                  employees={contactOptions}
+                  placeholder="Select contact(s)..."
+                  disabled={isSubmitting}
+                />
+                <p className="text-xs text-gray-500">
+                  Select one or more contact persons
+                </p>
+              </div>
+
+              {/* Internal POC */}
+              <div className="space-y-2">
+                <Label>Internal Point of Contact (Optional)</Label>
+                <MultiEmployeeSelect
+                  value={internalPocIds}
+                  onChange={setInternalPocIds}
+                  employees={internalContactsList}
+                  placeholder="Select internal contacts..."
+                  disabled={isSubmitting}
+                />
+              </div>
             </>
           )}
         </div>
-        
+
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting || !selectedClient}>
+          <Button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !selectedClient}
+          >
             {isSubmitting ? "Assigning..." : "Assign to Client"}
           </Button>
         </DialogFooter>

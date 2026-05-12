@@ -120,7 +120,7 @@ export function MultiEmployeeSelect({
         >
           {filteredEmployees.length === 0 ? (
             <div className="py-6 text-center text-sm text-muted-foreground">
-              No employee found.
+              No employee found for this client.
             </div>
           ) : (
             filteredEmployees.map((emp) => {

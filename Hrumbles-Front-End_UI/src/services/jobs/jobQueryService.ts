@@ -75,6 +75,16 @@ const resolveCreatorEmail = async (job: JobData): Promise<string> => {
   return '';
 };
 
+// Resolve internal POC names from UUIDs
+const resolveInternalPocNames = async (pocIds: string[]): Promise<string[]> => {
+  if (!pocIds || pocIds.length === 0) return [];
+  const { data: employees } = await supabase
+    .from('hr_employees')
+    .select('first_name, last_name')
+    .in('id', pocIds);
+  return (employees || []).map(e => `${e.first_name} ${e.last_name}`);
+};
+
 // --- NEW HELPER: Trigger CREATION Email ---
 export const sendJobCreatedNotification = async (job: JobData, organizationId: string, userId: string) => {
   try {
@@ -93,13 +103,19 @@ export const sendJobCreatedNotification = async (job: JobData, organizationId: s
 
     if (!creatorEmail && configEmails.length === 0) return;
 
+        // Resolve internal POC names
+    const internalPocNames = await resolveInternalPocNames(
+      job.clientDetails?.internal_poc_ids || []
+    );
+    const enrichedJob = { ...job, internalPocNames };
+
     await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/Send-Job-Created-Email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify({
             creatorEmail,
             configEmails,
-            jobDetails: job,
+            jobDetails: enrichedJob,
             createdBy: createdBy,
             APP_BASE_URL: window.location.origin
         })
@@ -133,6 +149,12 @@ export const sendJobUpdatedNotification = async (job: JobData, organizationId: s
 
     if (!creatorEmail && configEmails.length === 0 && assignedEmails.length === 0) return;
 
+     // Resolve internal POC names
+    const internalPocNames = await resolveInternalPocNames(
+      job.clientDetails?.internal_poc_ids || []
+    );
+    const enrichedJob = { ...job, internalPocNames };
+
     await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/Send-Job-Updated-Email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
@@ -140,7 +162,7 @@ export const sendJobUpdatedNotification = async (job: JobData, organizationId: s
             creatorEmail,
             configEmails,
             assignedEmails,
-            jobDetails: job,
+            jobDetails: enrichedJob,
             updatedBy: updatedBy,
             APP_BASE_URL: window.location.origin
         })
