@@ -1115,12 +1115,12 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
           )}
         </div>
 
-        {totalEntries > 0 && (
+        {/* {totalEntries > 0 && (
           <div className="mb-3 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between">
             <span className="text-[10px] bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent font-medium">Found</span>
             <span className="text-[10px] font-semibold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">{totalEntries.toLocaleString()}</span>
           </div>
-        )}
+        )} */}
 
         {/* Keyword */}
         <div className="rounded-lg p-[1px] bg-slate-200 focus-within:bg-gradient-to-r focus-within:from-purple-600 focus-within:to-pink-600 transition-all mb-3">
