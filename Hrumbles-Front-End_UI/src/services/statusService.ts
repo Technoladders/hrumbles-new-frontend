@@ -1125,6 +1125,12 @@ export const sendStatusUpdateNotification = async (
       return;
     }
 
+    const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id, userId } = authData;
+
     const [candidateRes, jobRes, changerRes] = await Promise.all([
       supabase.from('hr_job_candidates').select('name, created_by').eq('id', candidateId).single(),
       supabase.from('hr_jobs').select('title, created_by').eq('id', jobId).single(),
@@ -1148,7 +1154,7 @@ export const sendStatusUpdateNotification = async (
     const [candidateOwnerRes, jobOwnerRes, emailConfigRes] = await Promise.all([
         supabase.from('hr_employees').select('email, first_name, last_name').eq('id', candidateOwnerId).single(),
         supabase.from('hr_employees').select('email, first_name, last_name').eq('id', jobOwnerId).single(),
-        supabase.from('hr_email_configurations').select('recipients').eq('report_type', 'status_update').limit(1).single()
+        supabase.from('hr_email_configurations').select('recipients').eq('report_type', 'status_update').eq('organization_id', organization_id).limit(1).single()
     ]);
     
     const recipientEmails = new Set<string>();
