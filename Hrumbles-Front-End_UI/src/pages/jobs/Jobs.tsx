@@ -22,7 +22,8 @@ import {
   CalendarDays,
   AlertCircle,
   UserCheck,
-  Contact
+  Contact,
+  Building2
 } from "lucide-react";
 import { Button } from "@/components/jobs/ui/button";
 import { Input } from "@/components/jobs/ui/input";
@@ -685,13 +686,49 @@ if (isLoading) {
                    <td className="table-cell">
     <div className="flex flex-col">
       <span className="text-gray-800">{job.clientDetails?.clientName || "N/A"}</span>
-      {/* Badges in same line with flex-wrap */}
-      <div className="flex flex-nowrap items-center gap-1 mt-1">
+      {/* Single line badges container */}
+      <div className="flex items-center gap-x-2 gap-y-1 mt-1 whitespace-nowrap">
         {/* Client POC badge */}
-        <Badge variant="outline" className="w-fit flex-shrink-0">
-          {job.clientDetails?.pointOfContact || "N/A"}
-        </Badge>
-        {/* Internal POC badge(s) */}
+        {(() => {
+          const pocStr = job.clientDetails?.pointOfContact || "";
+          if (!pocStr || pocStr === "N/A") {
+            return (
+              <span className="inline-flex items-center gap-1 flex-shrink-0">
+                {/* <span className="text-[9px] text-gray-400 font-medium">Client:</span> */}
+                <Badge variant="outline" className="w-fit text-[9px] py-0">N/A</Badge>
+              </span>
+            );
+          }
+          const names = pocStr.split(",").map(n => n.trim()).filter(Boolean);
+          if (names.length === 0) {
+            return (
+              <span className="inline-flex items-center gap-1 flex-shrink-0">
+                {/* <span className="text-[9px] text-gray-400 font-medium">Client:</span> */}
+                <Badge variant="outline" className="w-fit text-[9px] py-0">N/A</Badge>
+              </span>
+            );
+          }
+          return (
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex items-center gap-1 cursor-default flex-shrink-0">
+                    {/* <span className="text-[9px] text-gray-400 font-medium">Client:</span> */}
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold border bg-blue-100 text-blue-800 border-blue-200">
+                      <Building2 className="h-2.5 w-2.5" />
+                      {names.length > 1 ? `${names[0]} +${names.length - 1}` : names[0]}
+                    </span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs bg-black text-white border-0 z-50">
+                  <p className="text-xs font-semibold mb-0.5">Client POC:</p>
+                  <p className="text-xs">{names.join(", ")}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        })()}
+        {/* Internal POC badge */}
         {job.clientDetails?.internal_poc_ids?.length > 0 && (() => {
           const pocIds = job.clientDetails.internal_poc_ids;
           const mapped = pocIds
@@ -703,17 +740,27 @@ if (isLoading) {
             <TooltipProvider delayDuration={0}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="inline-flex items-center px-2 py-0.8 rounded-full text-[9px] font-semibold border bg-amber-100 text-amber-800 border-amber-200 flex-shrink-0 cursor-default">
-                    {mapped.length > 1 ? `${mapped[0]} +${mapped.length - 1}` : mapped[0]}
+                  <span className="inline-flex items-center gap-1 cursor-default flex-shrink-0">
+                    {/* <span className="text-[9px] text-gray-400 font-medium">Internal:</span> */}
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold border bg-amber-100 text-amber-800 border-amber-200">
+                      <UserCheck className="h-2.5 w-2.5" />
+                      {mapped.length > 1 ? `${mapped[0]} +${mapped.length - 1}` : mapped[0]}
+                    </span>
                   </span>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-xs bg-black text-white border-blac">
+                <TooltipContent side="top" className="max-w-xs bg-black text-white border-0 z-50">
+                  <p className="text-xs font-semibold mb-0.5">Internal POC:</p>
                   <p className="text-xs">{mapped.join(", ")}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           );
         })()}
+        {/* If no POCs at all */}
+        {(!job.clientDetails?.pointOfContact || job.clientDetails?.pointOfContact === "N/A") && 
+         (!job.clientDetails?.internal_poc_ids || job.clientDetails?.internal_poc_ids.length === 0) && (
+          <span className="text-[9px] text-gray-300">—</span>
+        )}
       </div>
     </div>
   </td>
@@ -819,7 +866,7 @@ if (isLoading) {
                             )}
 
                             {/* POC Manager button – visible when client is assigned */}
-{!ITECH_ORGANIZATION_ID.includes(organization_id) && job.clientDetails?.clientName && (
+{/* {!ITECH_ORGANIZATION_ID.includes(organization_id) && job.clientDetails?.clientName && (
   <TooltipProvider>
     <Tooltip>
       <TooltipTrigger asChild>
@@ -840,7 +887,7 @@ if (isLoading) {
       </TooltipContent>
     </Tooltip>
   </TooltipProvider>
-)}
+)} */}
                                      {/* <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1229,7 +1276,7 @@ if (isLoading) {
         setIsCreateModalOpen(false);
         setEditJob(null);
       }} onSave={handleSaveJob} editJob={editJob} />
-      <AssignJobModal isOpen={isAssignModalOpen} onClose={() => setIsAssignModalOpen(false)} job={selectedJob} />
+      <AssignJobModal isOpen={isAssignModalOpen} onClose={() => {setIsAssignModalOpen(false); refetch();}} job={selectedJob} />
       {clientselectedJob && <AssociateToClientModal isOpen={associateModalOpen} onClose={() => setAssociateModalOpen(false)} job={clientselectedJob} onAssociate={handleAssociateToClient} />}
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

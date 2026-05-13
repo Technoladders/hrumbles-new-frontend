@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+// AssignJobModal.tsx
+import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/jobs/ui/dialog";
 import { Button } from "@/components/jobs/ui/button";
 import { Label } from "@/components/jobs/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/jobs/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -25,6 +25,7 @@ import { useSelector } from "react-redux";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { MultiEmployeeSelect } from "@/components/ui/multi-employee-select";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -42,19 +43,16 @@ interface AssignJobModalProps {
   job: JobData | null;
 }
 
-// Radix <SelectItem> forbids value=""
 const NO_SELECT = "__none__";
 
 // ── Small shared UI pieces ────────────────────────────────────────────────────
 
-/** Section label — matches team-modal field labels */
 const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
     {children}
   </p>
 );
 
-/** Pill chip for selected individuals */
 const Chip: React.FC<{ label: string; onRemove: () => void; disabled?: boolean }> = ({
   label, onRemove, disabled,
 }) => (
@@ -70,7 +68,6 @@ const Chip: React.FC<{ label: string; onRemove: () => void; disabled?: boolean }
   </div>
 );
 
-/** Tab button — replaces shadcn Tabs so we can fully style it */
 const TabBtn: React.FC<{
   active: boolean;
   onClick: () => void;
@@ -95,7 +92,6 @@ const TabBtn: React.FC<{
   </button>
 );
 
-/** Radio option card */
 const RadioCard: React.FC<{
   value: string;
   current: string;
@@ -158,14 +154,20 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
   const [vendors, setVendors]                         = useState<{ value: string; label: string }[]>([]);
   const [dataLoading, setDataLoading]                 = useState(true);
 
+  // ── POC state ──────────────────────────────────────────────────────────
+  const [selectedClientPocIds, setSelectedClientPocIds] = useState<string[]>([]);
+  const [selectedInternalPocIds, setSelectedInternalPocIds] = useState<string[]>([]);
+  const [clientContacts, setClientContacts]               = useState<{ id: string; first_name: string; last_name: string }[]>([]);
+  const [internalContacts, setInternalContacts]           = useState<{ id: string; first_name: string; last_name: string }[]>([]);
+  const [loadingPocs, setLoadingPocs]                     = useState(false);
+
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const user           = useSelector((state: any) => state.auth.user);
 
+  // ── Load assignment data ─────────────────────────────────────────────────
   useEffect(() => {
     if (isOpen && organizationId) loadData();
   }, [isOpen, organizationId]);
-
-  // ── Load ──────────────────────────────────────────────────────────────────
 
   const loadData = async () => {
     setDataLoading(true);
@@ -223,7 +225,82 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
     }
   };
 
-  // ── Individual helpers ────────────────────────────────────────────────────
+  // ── Load POCs when job has a client ──────────────────────────────────────
+  useEffect(() => {
+    if (!isOpen || !job?.clientDetails?.clientName) {
+      setClientContacts([]);
+      setInternalContacts([]);
+      setSelectedClientPocIds([]);
+      setSelectedInternalPocIds([]);
+      return;
+    }
+    const fetchPocData = async () => {
+      setLoadingPocs(true);
+      try {
+        // Find client by name
+        const { data: clientData, error: clientError } = await supabase
+          .from("hr_clients")
+          .select("id, internal_contact_ids")
+          .eq("client_name", job.clientDetails!.clientName)
+          .eq("organization_id", organizationId)
+          .single();
+
+        if (clientError || !clientData) {
+          toast.error("Client not found");
+          setLoadingPocs(false);
+          return;
+        }
+
+        // Fetch client contacts (hr_client_contacts)
+        const { data: contactsData } = await supabase
+          .from("hr_client_contacts")
+          .select("id, name")
+          .eq("client_id", clientData.id);
+
+        setClientContacts(
+          (contactsData || []).map(c => ({
+            id: c.id,
+            first_name: c.name,
+            last_name: "",
+          }))
+        );
+
+        // Fetch internal POC employees
+        const internalIds = clientData.internal_contact_ids || [];
+        if (internalIds.length > 0) {
+          const { data: empData } = await supabase
+            .from("hr_employees")
+            .select("id, first_name, last_name")
+            .in("id", internalIds);
+          setInternalContacts(empData || []);
+        } else {
+          setInternalContacts([]);
+        }
+
+        // Pre‑fill selections
+        const currentDetails = job.clientDetails || {};
+        if (currentDetails.point_of_contact_ids?.length) {
+          setSelectedClientPocIds(currentDetails.point_of_contact_ids);
+        } else if (currentDetails.pointOfContact) {
+          const names = currentDetails.pointOfContact.split(",").map((s: string) => s.trim()).filter(Boolean);
+          const matchedIds = (contactsData || []).filter(c => names.includes(c.name)).map(c => c.id);
+          setSelectedClientPocIds(matchedIds);
+        } else {
+          setSelectedClientPocIds([]);
+        }
+
+        setSelectedInternalPocIds(currentDetails.internal_poc_ids || []);
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to load POC data");
+      } finally {
+        setLoadingPocs(false);
+      }
+    };
+    fetchPocData();
+  }, [isOpen, job?.id]);
+
+  // ── Individual helpers ──────────────────────────────────────────────────
 
   const handleEmployeeSelect = (value: string) => {
     const emp = employees.find(e => e.value === value);
@@ -239,7 +316,22 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
     if (v === "" || (/^\d*$/.test(v) && Number(v) >= 0)) setBudget(v);
   };
 
-  // ── Save ──────────────────────────────────────────────────────────────────
+  // ── Save ────────────────────────────────────────────────────────────────
+
+  const updateClientPocs = async () => {
+    if (!job?.id || !job.clientDetails?.clientName) return;
+    const contactNames = selectedClientPocIds
+      .map(id => clientContacts.find(c => c.id === id)?.first_name)
+      .filter(Boolean)
+      .join(", ");
+    const newDetails = {
+      ...job.clientDetails,
+      pointOfContact: contactNames,
+      point_of_contact_ids: selectedClientPocIds,
+      internal_poc_ids: selectedInternalPocIds,
+    };
+    await supabase.from("hr_jobs").update({ client_details: newDetails }).eq("id", job.id);
+  };
 
   const handleSave = async () => {
     if (!budget || Number(budget) <= 0) {
@@ -262,9 +354,16 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
       const vendorName = vendors.find(v => v.value === selectedVendor)?.label ?? "";
       await saveAssignment("vendor", selectedVendor, vendorName, budget, budgetType);
     }
+    // After successful assignment, update POCs
+    try {
+      await updateClientPocs();
+    } catch (err) {
+      console.error("POC update failed:", err);
+    } finally {
+      handleReset();
+      onClose(); // Close modal AFTER POCs are saved → triggers refetch in Jobs.tsx
+    }
   };
-
-  // ── Team expand + save ────────────────────────────────────────────────────
 
   const saveTeamAssignment = async (teamId: string, budget?: string, budgetType?: string) => {
     if (!job?.id) { toast.error("Job information is missing"); return; }
@@ -305,7 +404,7 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
       }
 
       toast.success(`Job assigned to team! ${recipientEmails.length > 0 ? `${recipientEmails.length} member(s) notified.` : ""}`);
-      handleReset(); onClose();
+      // handleReset(); onClose();
     } catch (err: any) {
       toast.error(err.message ?? "Failed to assign job to team.");
     } finally {
@@ -352,7 +451,7 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
       }
 
       toast.success(`Job assigned successfully!${recipientEmails.length > 0 ? " Notification sent." : ""}`);
-      handleReset(); onClose();
+      // handleReset(); onClose();
     } catch (err: any) {
       toast.error(err.message?.includes("email")
         ? "Job assigned, but failed to send notification."
@@ -367,9 +466,9 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
     to: string[], title: string,
     budget?: string, budgetType?: string,
     assignedTo?: string, assignedBy?: string,
-        jobId?: string,
-        clientName?: string,
-        pointOfContact?: string,
+    jobId?: string,
+    clientName?: string,
+    pointOfContact?: string,
   ) => {
     await fetch(
       "https://kbpeyfietrwlhwcwqhjw.supabase.co/functions/v1/send-job-assignment-email",
@@ -386,8 +485,8 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
             title, budget: budget || "N/A", budgetType: budgetType || "N/A",
             assignedTo, assignedBy, assignedDate: format(new Date(), "yyyy-MM-dd"),
             jobId:          job?.jobId                          || "N/A",
-    clientName:     job?.clientDetails?.clientName     || "N/A",
-    pointOfContact: job?.clientDetails?.pointOfContact || "N/A",
+            clientName:     job?.clientDetails?.clientName     || "N/A",
+            pointOfContact: job?.clientDetails?.pointOfContact || "N/A",
           },
         }),
       }
@@ -398,6 +497,8 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
     setActiveTab("internal"); setAssignmentType("individual");
     setSelectedIndividuals([]); setSelectedTeam(NO_SELECT);
     setSelectedVendor(NO_SELECT); setBudget(""); setBudgetType("LPA");
+    setSelectedClientPocIds([]);
+    setSelectedInternalPocIds([]);
   };
 
   const handleClose = () => { handleReset(); onClose(); };
@@ -409,7 +510,7 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
     <Dialog open={isOpen} onOpenChange={open => !open && handleClose()}>
       <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden gap-0 border-0 shadow-xl">
 
-        {/* ── Gradient header ─────────────────────────────────────────── */}
+        {/* Gradient header */}
         <div className="bg-gradient-to-r from-violet-600 to-pink-600 px-6 py-5">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-white/20 p-2">
@@ -426,7 +527,6 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
           </div>
         </div>
 
-        {/* ── Body ────────────────────────────────────────────────────── */}
         {dataLoading ? (
           <div className="flex flex-col items-center justify-center py-16 bg-white gap-3">
             <div className="animate-spin h-8 w-8 rounded-full border-2 border-violet-200 border-t-violet-600" />
@@ -434,6 +534,41 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
           </div>
         ) : (
           <div className="bg-white px-6 py-5 space-y-5">
+
+            {/* ── POC Management Section ──────────────────────────────────── */}
+            {job?.clientDetails?.clientName && (
+              <div className="space-y-3 border-b border-slate-100 pb-4">
+                <SectionLabel>Manage Client Contacts</SectionLabel>
+                {loadingPocs ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Loading contacts…
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium text-slate-600">Client SPOC</Label>
+                      <MultiEmployeeSelect
+                        value={selectedClientPocIds}
+                        onChange={setSelectedClientPocIds}
+                        employees={clientContacts}
+                        placeholder="Select client contact(s)…"
+                        disabled={loading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium text-slate-600">Internal Point of Contact</Label>
+                      <MultiEmployeeSelect
+                        value={selectedInternalPocIds}
+                        onChange={setSelectedInternalPocIds}
+                        employees={internalContacts}
+                        placeholder="Select internal contact(s)…"
+                        disabled={loading}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* ── Tab row ─────────────────────────────────────────────── */}
             <div className="flex gap-1.5 p-1 bg-slate-50 rounded-xl border border-slate-100">
@@ -453,12 +588,11 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
               />
             </div>
 
-            {/* ── Internal panel ───────────────────────────────────────── */}
+            {/* Internal panel */}
             {activeTab === "internal" && (
               <div className="space-y-3">
                 <SectionLabel>Assignment Type</SectionLabel>
 
-                {/* Individual card */}
                 <RadioCard
                   value="individual" current={assignmentType}
                   onChange={setAssignmentType} disabled={loading}
@@ -505,7 +639,6 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
                   )}
                 </RadioCard>
 
-                {/* Team card */}
                 <RadioCard
                   value="team" current={assignmentType}
                   onChange={setAssignmentType} disabled={loading}
@@ -575,7 +708,6 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
                     </SelectContent>
                   </Select>
 
-                  {/* Member preview */}
                   {assignmentType === "team" && selectedTeam !== NO_SELECT && (
                     <TeamMemberPreview teamId={selectedTeam} />
                   )}
@@ -583,7 +715,7 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
               </div>
             )}
 
-            {/* ── External panel ───────────────────────────────────────── */}
+            {/* External panel */}
             {activeTab === "external" && (
               <div className="space-y-3">
                 <SectionLabel>Vendor Selection</SectionLabel>
@@ -614,7 +746,7 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
               </div>
             )}
 
-            {/* ── Budget ──────────────────────────────────────────────── */}
+            {/* Budget */}
             <div className="space-y-1.5">
               <SectionLabel>Budget</SectionLabel>
               <div className="flex gap-2">
@@ -645,7 +777,7 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
               </div>
             </div>
 
-            {/* ── Footer buttons ───────────────────────────────────────── */}
+            {/* Footer buttons */}
             <div className="flex justify-end gap-2 pt-1 border-t border-slate-100">
               <Button
                 variant="outline" onClick={handleClose} disabled={loading}

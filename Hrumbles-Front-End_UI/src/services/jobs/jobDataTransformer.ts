@@ -42,6 +42,7 @@ export const transformToJobData = (jobRecord: any): JobData => {
     currency_type: jobRecord.currency_type,
     budget_type: jobRecord.budget_type,
     isSkillMatrixMandatory: jobRecord.is_skill_matrix_mandatory ?? false,
+    analysisConfig: jobRecord.analysis_config || {},
   };
 
   console.log("TRANSFORM OUTPUT:", transformedJob.isSkillMatrixMandatory);

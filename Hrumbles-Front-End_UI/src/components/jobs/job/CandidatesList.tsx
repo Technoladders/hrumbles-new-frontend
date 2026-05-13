@@ -1503,12 +1503,12 @@ useImperativeHandle(ref, () => ({
     // --- UPDATED LOGIC STARTS HERE ---
     if (activeTab === "All Candidates") {
       // Exclude "New Applicants" from the "All Candidates" tab
-      filtered = filtered.filter(c => c.main_status?.name !== "New Applicants");
+      filtered = filtered.filter(c => c.currentStage !== "New Applicants");
     } else if (activeTab === "Applied") {
       filtered = appliedCandidates;
     } else {
       // This handles specific tabs (e.g., clicking "New Applicants" shows only those candidates)
-      filtered = filtered.filter(c => c.main_status?.name === activeTab);
+      filtered = filtered.filter(c => c.currentStage === activeTab);
     }
     // --- UPDATED LOGIC ENDS HERE ---
     

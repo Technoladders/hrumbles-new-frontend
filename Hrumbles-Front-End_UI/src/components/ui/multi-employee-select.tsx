@@ -66,7 +66,7 @@ export function MultiEmployeeSelect({
           role="combobox"
           aria-expanded={open}
           className={cn(
-            "w-full justify-between font-normal min-h-[2.5rem] h-auto",
+            "w-full justify-between font-normal min-h-[2.5rem] h-8",
             open && "ring-2 ring-purple-200 border-purple-400"
           )}
           disabled={disabled}

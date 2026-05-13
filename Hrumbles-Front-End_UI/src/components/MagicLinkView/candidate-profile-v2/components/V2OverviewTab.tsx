@@ -180,27 +180,52 @@ export const V2OverviewTab: React.FC<V2OverviewTabProps> = ({
     }));
   }, [validatedStrengths, parsedMatchedSkills, topSkills]);
 
+  const severityOrder = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
   // Build effective gaps
-  const effectiveGaps = useMemo(() => {
-    if (validatedGaps.length > 0) return validatedGaps;
-    const gaps: { title: string; description: string; severity: string }[] = [];
-    devGaps.forEach((g: any) => {
-      const t = typeof g === "string" ? g : g?.name || g?.skill || "Gap";
-      const d = typeof g === "object" ? (g?.description || "") : "";
-      gaps.push({ title: t, description: d, severity: "HIGH · Development gap" });
+ const effectiveGaps = useMemo(() => {
+  // If validatedGaps are already present, use them directly (they should already be unique)
+  if (validatedGaps.length > 0) return validatedGaps;
+
+  const combinedGaps: Record<string, { title: string; description: string; severity: string }> = {};
+
+  const addGap = (title: string, description: string, severity: string) => {
+    const key = title.trim().toLowerCase();
+    if (!key) return;
+    const existing = combinedGaps[key];
+    if (
+      !existing ||
+      severityOrder.indexOf(severity.split("·")[0].trim()) > severityOrder.indexOf(existing.severity.split("·")[0].trim())
+    ) {
+      combinedGaps[key] = { title: title.trim(), description, severity };
+    } else if (existing && description && !existing.description) {
+      // keep description if we had none
+      combinedGaps[key].description = description;
+    }
+  };
+
+  // 1. Development gaps
+  devGaps.forEach((g: any) => {
+    const t = typeof g === "string" ? g : g?.name || g?.skill || "Gap";
+    const d = typeof g === "object" ? (g?.description || "") : "";
+    addGap(t, d, "HIGH · Development gap");
+  });
+
+  // 2. Missing / weak areas
+  missingAreas.forEach((a: any) => {
+    const t = typeof a === "string" ? a : a?.name || a?.area || "Missing";
+    const d = typeof a === "object" ? (a?.description || "") : "";
+    addGap(t, d, "CRITICAL · Missing requirement");
+  });
+
+  // 3. Unmatched skills from matched_skills
+  parsedMatchedSkills
+    .filter((s: any) => s.matched === "no")
+    .forEach((s: any) => {
+      addGap(s.requirement, s.details || "", "HIGH · Not found in resume");
     });
-    missingAreas.forEach((a: any) => {
-      const t = typeof a === "string" ? a : a?.name || a?.area || "Missing";
-      const d = typeof a === "object" ? (a?.description || "") : "";
-      gaps.push({ title: t, description: d, severity: "CRITICAL · Missing requirement" });
-    });
-    parsedMatchedSkills.filter((s: any) => s.matched === "no").forEach((s: any) => {
-      if (!gaps.some((g) => g.title === s.requirement)) {
-        gaps.push({ title: s.requirement, description: s.details || "", severity: "HIGH · Not found in resume" });
-      }
-    });
-    return gaps;
-  }, [validatedGaps, devGaps, missingAreas, parsedMatchedSkills]);
+
+  return Object.values(combinedGaps);
+}, [validatedGaps, devGaps, missingAreas, parsedMatchedSkills]);
 
   // Gauge
   const R = 38, C = 2 * Math.PI * R;
@@ -395,7 +420,7 @@ export const V2OverviewTab: React.FC<V2OverviewTabProps> = ({
 
           {/* Experience Gap */}
           <InsightCard accent={totalYears !== null && totalYears < 5 ? "#EF4444" : "#F59E0B"}
-            label="Experience Gap"
+            label="Experience"
             valueMain={totalYears !== null ? String(totalYears) : "—"}
             valueSub={totalYears !== null ? " yrs" : ""}
             desc={relevantYears !== null ? `${relevantYears} yrs relevant experience` : "No experience data"}

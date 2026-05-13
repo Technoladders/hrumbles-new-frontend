@@ -143,50 +143,82 @@ export const V2ResumeAnalysis: React.FC<V2ResumeAnalysisProps> = ({
         {/* Gaps & Strengths side by side */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 20 }}>
           {/* Development Gaps */}
-          <div className="v2-card" style={{ padding: 24 }}>
-            <div style={{
-              fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase",
-              letterSpacing: "1.5px", color: "var(--v2-red)", marginBottom: 16,
-            }}>
-              🔴 Development Gaps
-            </div>
-            {devGaps.length > 0 ? devGaps.map((gap: string, i: number) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex", gap: 12, padding: "12px 14px", borderRadius: 10,
-                  background: "rgba(239,68,68,0.04)", border: "1px solid rgba(239,68,68,0.1)",
-                  marginBottom: 8,
-                }}
-              >
-                <span style={{ fontSize: "0.85rem", flexShrink: 0 }}>⚠</span>
-                <div>
-                  <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#DC2626" }}>{gap}</div>
-                </div>
-              </div>
-            )) : (
-              <p style={{ fontSize: "0.82rem", color: "var(--v2-text-muted)", textAlign: "center", padding: 16 }}>
-                No development gaps identified
-              </p>
-            )}
+         <div className="v2-card" style={{ padding: 24 }}>
+  <div style={{
+    fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase",
+    letterSpacing: "1.5px", color: "var(--v2-red)", marginBottom: 16,
+  }}>
+    🔴 Gaps & Weak Areas
+  </div>
+  {(() => {
+    // Merge both lists, deduplicate by lowercase key
+    const allGaps = [...devGaps, ...missingAreas]
+      .filter((item, idx, arr) => {
+        const key = (typeof item === 'string' ? item : item?.name || '').toLowerCase();
+        return key && arr.findIndex(
+          (x) => (typeof x === 'string' ? x : x?.name || '').toLowerCase() === key
+        ) === idx;
+      });
 
-            {missingAreas.length > 0 && (
-              <>
-                <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--v2-amber)", marginTop: 16, marginBottom: 8, textTransform: "uppercase", letterSpacing: "1px" }}>
-                  Missing / Weak Areas
-                </div>
-                {missingAreas.map((area: string, i: number) => (
-                  <div key={i} style={{
-                    display: "flex", gap: 10, padding: "10px 12px", borderRadius: 8,
-                    background: "rgba(245,158,11,0.04)", border: "1px solid rgba(245,158,11,0.1)",
-                    marginBottom: 6, fontSize: "0.8rem", color: "#D97706",
-                  }}>
-                    <span>△</span> {area}
-                  </div>
-                ))}
-              </>
+    if (allGaps.length === 0) return (
+      <p style={{ fontSize: "0.82rem", color: "var(--v2-text-muted)", textAlign: "center", padding: 16 }}>
+        No gaps or weak areas identified
+      </p>
+    );
+
+    return allGaps.map((gap: any, i: number) => {
+      const text = typeof gap === 'string' ? gap : gap?.name || gap;
+      const isFromMissing = missingAreas.some(
+        (m: any) => (typeof m === 'string' ? m : m?.name || '').toLowerCase() === text.toLowerCase()
+      );
+      const isFromDev = devGaps.some(
+        (d: any) => (typeof d === 'string' ? d : d?.name || '').toLowerCase() === text.toLowerCase()
+      );
+
+      // Determine severity and styling
+      let severity = '';
+      let bgColor = 'rgba(239,68,68,0.04)';
+      let borderColor = 'rgba(239,68,68,0.1)';
+      let textColor = '#DC2626';
+      let icon = '⚠';
+
+      if (isFromMissing && isFromDev) {
+        severity = 'CRITICAL · Missing & Development Gap';
+        bgColor = 'rgba(239,68,68,0.06)';
+        borderColor = 'rgba(239,68,68,0.2)';
+      } else if (isFromMissing) {
+        severity = 'CRITICAL · Missing Requirement';
+        bgColor = 'rgba(245,158,11,0.04)';
+        borderColor = 'rgba(245,158,11,0.1)';
+        textColor = '#D97706';
+        icon = '△';
+      } else {
+        severity = 'HIGH · Development Gap';
+      }
+
+      return (
+        <div
+          key={i}
+          style={{
+            display: "flex", gap: 12, padding: "12px 14px", borderRadius: 10,
+            background: bgColor, border: `1px solid ${borderColor}`,
+            marginBottom: 8,
+          }}
+        >
+          <span style={{ fontSize: "0.85rem", flexShrink: 0 }}>{icon}</span>
+          <div>
+            <div style={{ fontSize: "0.82rem", fontWeight: 600, color: textColor }}>{text}</div>
+            {severity && (
+              <div style={{ fontSize: "0.65rem", color: textColor, opacity: 0.8, marginTop: 2 }}>
+                {severity}
+              </div>
             )}
           </div>
+        </div>
+      );
+    });
+  })()}
+</div>
 
           {/* Certifications & Top Skills */}
           <div>

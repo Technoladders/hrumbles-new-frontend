@@ -100,7 +100,8 @@ async function parseFileToText(file: File): Promise<string> {
 }
 
 // --- NEW: This function calls your Supabase Edge Function ---
-async function runAnalysisViaEdge(resumeText: string, jobDescription: string): Promise<any> {
+// --- AFTER ---
+async function runAnalysisViaEdge(resumeText: string, jobDescription: string, analysisConfig?: any): Promise<any> {
   if (!resumeText || !jobDescription) {
     throw new Error("Resume text and job description are required.");
   }
@@ -108,12 +109,11 @@ async function runAnalysisViaEdge(resumeText: string, jobDescription: string): P
   const { data, error } = await supabase.functions.invoke('initial-analysis-4o', {
     body: {
       type: 'initial',
-      payload: { jobDescription, resumeText },
+      payload: { jobDescription, resumeText, analysisConfig },
     },
   });
 
   if (error) {
-    // Try to parse a more specific error message from the function if available
     try {
       const errorBody = JSON.parse(error.message);
       throw new Error(errorBody.error || `Edge Function failed: ${error.message}`);
@@ -126,7 +126,6 @@ async function runAnalysisViaEdge(resumeText: string, jobDescription: string): P
     throw new Error("Edge Function returned an invalid or empty response.");
   }
   
-  // The Edge Function returns { analysis, usage }. We only need the analysis object.
   return data.analysis;
 }
 
@@ -146,30 +145,44 @@ async function saveAnalysisToDB(profile: ParsedCandidateProfile, job_id: string,
       throw new Error('Missing required fields: job_id or candidate_id');
     }
 
-    // Step 1: Prepare resume_analysis payload
-    const resumePayload = {
-      job_id,
-      candidate_id,
-      resume_text: resumeText || null,
-      resume_url: profile.resume_url || null,
-      overall_score: Math.round(profile.overall_match_score || 0),
-      matched_skills: profile.matched_skills ? JSON.parse(JSON.stringify(profile.matched_skills)) : null,
-      summary: profile.summary || null,
-      missing_or_weak_areas: Array.isArray(profile.missing_or_weak_areas) ? profile.missing_or_weak_areas : [],
-      top_skills: Array.isArray(profile.top_skills) ? profile.top_skills : [],
-      development_gaps: Array.isArray(profile.development_gaps) ? profile.development_gaps : [],
-      additional_certifications: Array.isArray(profile.additional_certifications) ? profile.additional_certifications : [],
-      section_wise_scoring: profile.section_wise_scoring ? JSON.parse(JSON.stringify(profile.section_wise_scoring)) : {},
-      candidate_name: profile.candidate_name || 'Unknown',
-      email: profile.email || '',
-      github: profile.github || '',
-      linkedin: profile.linkedin || '',
-      updated_at: new Date().toISOString(),
-      updated_by: user.id,
-      organization_id: organizationId,
-      ...(isInitial && { created_by: user.id }),
-    };
+  const candidateInfo = profile.candidate_info || {};
+const matchQuality = profile.match_quality || {};
+const experienceAnalysis = profile.experience_analysis || {};
 
+const resumePayload = {
+  job_id,
+  candidate_id,
+  resume_text: resumeText || null,
+  resume_url: profile.resume_url || null,
+  overall_score: Math.round(profile.overall_match_score || 0),
+  matched_skills: profile.matched_skills ? JSON.parse(JSON.stringify(profile.matched_skills)) : null,
+  summary: matchQuality.summary || profile.summary || null,                    // <-- use match_quality.summary
+  missing_or_weak_areas: Array.isArray(profile.missing_or_weak_areas) ? profile.missing_or_weak_areas : [],
+  top_skills: Array.isArray(profile.top_skills) ? profile.top_skills : [],
+  development_gaps: Array.isArray(profile.development_gaps) ? profile.development_gaps : [],
+  additional_certifications: Array.isArray(profile.additional_certifications) ? profile.additional_certifications : [],
+  section_wise_scoring: profile.section_wise_scoring ? JSON.parse(JSON.stringify(profile.section_wise_scoring)) : {},
+  candidate_name: candidateInfo.name || profile.candidate_name || 'Unknown',   // <-- use candidate_info.name
+  email: candidateInfo.email || profile.email || '',
+  github: candidateInfo.github || profile.github || '',
+  linkedin: candidateInfo.linkedin || profile.linkedin || '',
+  phone_number: candidateInfo.phone || profile.phone_number || null,
+  updated_at: new Date().toISOString(),
+  updated_by: user.id,
+  organization_id: organizationId,
+  ...(isInitial && { created_by: user.id }),
+
+  // New rich fields
+  match_quality: JSON.parse(JSON.stringify(matchQuality)),
+  resume_quality: profile.resume_quality ? JSON.parse(JSON.stringify(profile.resume_quality)) : {},
+  requirements_coverage: profile.requirements_coverage ? JSON.parse(JSON.stringify(profile.requirements_coverage)) : {},
+  red_flags: Array.isArray(profile.red_flags) ? profile.red_flags : [],
+  experience_analysis: JSON.parse(JSON.stringify(experienceAnalysis)),
+  raw_ai_analysis: JSON.parse(JSON.stringify(profile)),
+};
+
+// --- Company logic: use experience_analysis.companies if available ---
+const companies = experienceAnalysis.companies || profile.companies || [];
     console.log('Saving to Supabase - Resume Analysis Payload:', JSON.stringify(resumePayload, null, 2));
 
     // Step 2: Upsert resume_analysis
@@ -277,35 +290,38 @@ async function saveAnalysisToDB(profile: ParsedCandidateProfile, job_id: string,
 }
 
 const transformAnalysisToFormData = (analysis: ParsedCandidateProfile): Partial<CandidateFormData> => {
-    // This check prevents the crash if undefined is accidentally passed.
-    if (!analysis) {
-        toast.error("Analysis data is missing.");
-        return {};
-    }
-    const [firstName, ...lastNameParts] = (analysis.candidate_name || "").split(" ");
-    const lastName = lastNameParts.join(" ");
-    const totalExperience = analysis.experience_years ? parseInt(analysis.experience_years, 10) : undefined;
+  if (!analysis) {
+    toast.error("Analysis data is missing.");
+    return {};
+  }
 
-    return {
-        firstName: firstName || "",
-        lastName: lastName || "",
-        email: analysis.email || "",
-        phone: "", // Leave for manual entry
-        currentLocation: analysis.location || "",
-        preferredLocations: [],
-        totalExperience: isNaN(totalExperience) ? undefined : totalExperience,
-        totalExperienceMonths: 0,
-        resume: analysis.resume_url || null,
-        skills: analysis.top_skills?.map(skill => ({
-            name: skill,
-            rating: 0,
-            experienceYears: 0,
-            experienceMonths: 0,
-        })) || [],
-        linkedInId: analysis.linkedin || "",
-        currentSalary: undefined,
-        expectedSalary: undefined,
-    };
+  // Use candidate_info if present
+  const candidateInfo = analysis.candidate_info || {};
+  const fullName = candidateInfo.name || analysis.candidate_name || "";
+  const [firstName, ...lastNameParts] = fullName.split(" ");
+  const lastName = lastNameParts.join(" ");
+  const totalExperience = analysis.experience_years ? parseInt(analysis.experience_years, 10) : undefined;
+
+  return {
+    firstName: firstName || "",
+    lastName: lastName || "",
+    email: candidateInfo.email || analysis.email || "",
+    phone: candidateInfo.phone || "",                        // <-- now populated
+    currentLocation: analysis.location || "",
+    preferredLocations: [],
+    totalExperience: isNaN(totalExperience) ? undefined : totalExperience,
+    totalExperienceMonths: 0,
+    resume: analysis.resume_url || null,
+    skills: analysis.top_skills?.map(skill => ({
+      name: skill,
+      rating: 0,
+      experienceYears: 0,
+      experienceMonths: 0,
+    })) || [],
+    linkedInId: candidateInfo.linkedin || analysis.linkedin || "",
+    currentSalary: undefined,
+    expectedSalary: undefined,
+  };
 };
 
 // ===================================================================
@@ -536,6 +552,8 @@ const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'bulk'>('upload'
   const user = useSelector((state: any) => state.auth.user);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
+  console.log("job in upload", job);
+
   const handleSingleAnalysis = async () => {
     if (!job?.description || !job?.id) return toast.error("Job details are required for analysis.");
 
@@ -562,7 +580,8 @@ const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'bulk'>('upload'
       if (!textToAnalyze) throw new Error("Could not extract text from the source.");
 
       // --- USE THE NEW EDGE FUNCTION ---
-      const analysisResult = await runAnalysisViaEdge(textToAnalyze, job.description);
+    const analysisConfig = job.analysisConfig;
+const analysisResult = await runAnalysisViaEdge(textToAnalyze, job.description, analysisConfig);
       
       const candidate_id = uuidv4();
       const finalProfile: ParsedCandidateProfile = {
@@ -617,7 +636,8 @@ const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'bulk'>('upload'
 
         const text = await parseFileToText(file);
         // --- USE THE NEW EDGE FUNCTION ---
-        const analysisResult = await runAnalysisViaEdge(text, job.description);
+        const analysisConfig = job.analysisConfig;
+const analysisResult = await runAnalysisViaEdge(text, job.description, analysisConfig);
         
         const candidate_id = uuidv4();
         const finalProfile: ParsedCandidateProfile = {
@@ -675,7 +695,6 @@ const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'bulk'>('upload'
     setActiveTab('paste');
     setParsedCandidates([]);
     setSelectedIndices(new Set());
-    setCurrentPage(1);
     setProgress(0);
     setIsProcessing(false);
     setResumeText('');
