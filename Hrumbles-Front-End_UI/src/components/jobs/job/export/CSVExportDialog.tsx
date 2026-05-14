@@ -55,6 +55,7 @@ const formatDateForCSV = (dateStr: string | undefined): string => {
   }
 };
 
+
 const CSVExportDialog = ({ open, onOpenChange, candidates, jobTitle }: CSVExportDialogProps) => {
 
 console.log('candidates:', candidates);

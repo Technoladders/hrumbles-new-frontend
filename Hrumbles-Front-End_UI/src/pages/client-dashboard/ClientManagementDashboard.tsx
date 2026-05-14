@@ -13,12 +13,17 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   Briefcase, ChevronLeft, ChevronRight, Eye, Edit, Trash2, Loader2, Plus,
   ReceiptIndianRupee, TrendingUp, Search, UserCheck2, Building2, BarChart3,
-  ChevronDown, ArrowUpRight,
+  ChevronDown, ArrowUpRight, Star, StarOff, Pencil, Undo2, FileSpreadsheet, Settings2, Info
 } from "lucide-react";
 import {
   ResponsiveContainer, ComposedChart, Bar, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, Legend, PieChart, Pie, Cell,
 } from "recharts";
+import TemplateEditorDialog, { ColumnItem, ALL_COLUMNS } from "@/components/clients-new/TemplateEditorDialog";
+import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // --- Constants (UNCHANGED) ---
 const STATUS_CONFIG = {
@@ -129,6 +134,15 @@ const ClientManagementDashboard = () => {
   const [actionLoading, setActionLoading] = useState(false);
 
   const [allEmployees, setAllEmployees] = useState<any[]>([]);
+
+  // Template management state
+const [isTemplateDialogOpen, setTemplateDialogOpen] = useState(false);
+const [templateClient, setTemplateClient] = useState<Client | null>(null);
+const [templateClientTemplates, setTemplateClientTemplates] = useState<any[]>([]);
+const [editingTemplate, setEditingTemplate] = useState<{
+  name: string; columns: ColumnItem[]; index: number;
+} | null>(null);
+const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
 
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -316,6 +330,86 @@ const getInternalContactNames = useCallback((client: Client) => {
     catch { toast({ title: "Error", variant: "destructive" }); }
     finally { setActionLoading(false); setDeleteDialogOpen(false); setClientToDelete(null); }
   };
+
+  // Template management handlers
+const handleOpenTemplateManager = async (client: Client) => {
+  setTemplateClient(client);
+  
+  // Fetch existing templates for this client
+  const { data, error } = await supabase
+    .from("hr_clients")
+    .select("export_template_config")
+    .eq("id", client.id)
+    .single();
+  
+  if (!error && data?.export_template_config) {
+    setTemplateClientTemplates(data.export_template_config as any[]);
+  } else {
+    setTemplateClientTemplates([]);
+  }
+  
+  setTemplateDialogOpen(true);
+};
+
+const saveTemplates = async (updatedTemplates: any[]) => {
+  if (!templateClient) return;
+  
+  const { error } = await supabase
+    .from("hr_clients")
+    .update({ export_template_config: updatedTemplates })
+    .eq("id", templateClient.id);
+  
+  if (error) {
+    toast.error("Failed to save templates");
+    throw error;
+  }
+  
+  setTemplateClientTemplates(updatedTemplates);
+  toast.success("Templates saved");
+};
+
+const handleAddTemplate = () => {
+  setEditingTemplate({ name: "", columns: ALL_COLUMNS.map(c => ({ ...c })), index: -1 });
+  setTemplateEditorOpen(true);
+};
+
+const handleEditTemplate = (index: number) => {
+  const t = templateClientTemplates[index];
+  setEditingTemplate({ name: t.name, columns: t.columns, index });
+  setTemplateEditorOpen(true);
+};
+
+const handleDeleteTemplate = async (index: number) => {
+  const updated = templateClientTemplates.filter((_, i) => i !== index);
+  await saveTemplates(updated);
+};
+
+const handleSetDefault = async (index: number) => {
+  const updated = templateClientTemplates.map((t, i) => ({ ...t, is_default: i === index }));
+  await saveTemplates(updated);
+};
+
+const handleTemplateSave = async (name: string, columns: ColumnItem[]) => {
+  const newTemplate = { name, columns, is_default: false };
+  let updatedTemplates: any[];
+  
+  if (editingTemplate?.index !== undefined && editingTemplate.index >= 0) {
+    updatedTemplates = templateClientTemplates.map((t, i) =>
+      i === editingTemplate.index ? { ...t, ...newTemplate } : t
+    );
+  } else {
+    updatedTemplates = [...templateClientTemplates, newTemplate];
+  }
+  
+  await saveTemplates(updatedTemplates);
+};
+
+// Add this new handler
+const handleRemoveDefaultFromDialog = async (index: number) => {
+  const updated = templateClientTemplates.map((t, i) => ({ ...t, is_default: false }));
+  await saveTemplates(updated);
+  toast.success("Default removed — export will prompt to choose template");
+};
 
   if (loading) return (
     <div className="min-h-screen bg-[#F7F7F8] flex items-center justify-center">
@@ -564,6 +658,31 @@ const getInternalContactNames = useCallback((client: Client) => {
                         <TooltipProvider>
                           <Tooltip><TooltipTrigger asChild><button onClick={() => handleClientClick(client.client_name)} className="p-1.5 rounded-lg hover:bg-violet-100 text-gray-400 hover:text-violet-600 transition-all"><Eye size={13} /></button></TooltipTrigger><TooltipContent side="top" className="text-xs">View</TooltipContent></Tooltip>
                           <Tooltip><TooltipTrigger asChild><button onClick={() => handleEditClient(client)} className="p-1.5 rounded-lg hover:bg-blue-100 text-gray-400 hover:text-blue-600 transition-all"><Edit size={13} /></button></TooltipTrigger><TooltipContent side="top" className="text-xs">Edit</TooltipContent></Tooltip>
+                          <Tooltip>
+  <TooltipTrigger asChild>
+    <button 
+      onClick={() => handleOpenTemplateManager(client)} 
+      className="p-1.5 rounded-lg hover:bg-emerald-100 text-gray-400 hover:text-emerald-600 transition-all"
+    >
+      <Settings2 size={13} />
+    </button>
+  </TooltipTrigger>
+<TooltipContent
+  side="top"
+  sideOffset={8}
+  collisionPadding={16}
+  className="z-[9999] max-w-[260px] min-w-[220px] rounded-lg border border-gray-200 bg-white shadow-xl p-3 break-words whitespace-normal"
+>
+  <div className="flex flex-col leading-tight">
+    <p className="text-xs font-semibold text-gray-900 mb-2">
+      Export Templates
+    </p>
+    <p className="text-[10px] text-gray-500 whitespace-normal break-words">
+      Configure CSV export columns for this client's jobs
+    </p>
+  </div>
+</TooltipContent>
+</Tooltip>
                           <Tooltip><TooltipTrigger asChild><button onClick={() => handleDeleteClient(client)} className="p-1.5 rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-600 transition-all"><Trash2 size={13} /></button></TooltipTrigger><TooltipContent side="top" className="text-xs">Delete</TooltipContent></Tooltip>
                         </TooltipProvider>
                       </div>
@@ -614,6 +733,232 @@ const getInternalContactNames = useCallback((client: Client) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+{/* Template Management Dialog */}
+<Dialog open={isTemplateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+  <DialogContent className="sm:max-w-[650px]">
+    <DialogHeader>
+      <DialogTitle className="flex items-center gap-2">
+        <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-100">
+          <Settings2 className="h-5 w-5 text-emerald-600" />
+        </div>
+        <div>
+          <span className="text-lg font-bold text-gray-800">Export Templates</span>
+          <span className="text-sm font-normal text-gray-400 ml-2">— {templateClient?.client_name}</span>
+        </div>
+      </DialogTitle>
+      <DialogDescription className="flex items-start gap-2 mt-2">
+        <Info size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />
+        <span>
+          Manage export tracker templates for this client. 
+          <strong className="text-amber-600"> Default templates auto-apply during job exports.</strong>
+        </span>
+      </DialogDescription>
+    </DialogHeader>
+
+    {/* Guide Banner */}
+    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mb-2">
+      <div className="flex items-start gap-3">
+        <div className="p-1.5 rounded-lg bg-blue-100 flex-shrink-0">
+          <Info size={14} className="text-blue-600" />
+        </div>
+        <div className="space-y-2 text-xs">
+          <div>
+            <p className="font-semibold text-blue-800 mb-1">How templates work:</p>
+            <ul className="space-y-1 text-blue-700">
+              <li className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0"></span>
+                Create templates to customize which columns appear in exports
+              </li>
+              <li className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0"></span>
+                Set a <strong>default template</strong> to export directly without choosing
+              </li>
+              <li className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 flex-shrink-0"></span>
+                Remove default to show template picker during export
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <ScrollArea className="max-h-[380px] pr-2">
+      <div className="space-y-3">
+        {templateClientTemplates.length > 0 ? (
+          templateClientTemplates.map((t, idx) => (
+            <div 
+              key={idx} 
+              className={`group relative flex items-center justify-between p-4 rounded-xl border transition-all duration-200 hover:shadow-md ${
+                t.is_default 
+                  ? 'bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-300 shadow-sm' 
+                  : 'bg-white border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              {/* Default indicator ribbon */}
+              {t.is_default && (
+                <div className="absolute -top-0 -right-[-10px]">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-white shadow-sm">
+                    <Star size={10} className="fill-white" />
+                    DEFAULT
+                  </span>
+                </div>
+              )}
+
+              {/* Template Info */}
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className={`p-2 rounded-lg flex-shrink-0 ${
+                  t.is_default ? 'bg-amber-100' : 'bg-gray-100'
+                }`}>
+                  {t.is_default ? (
+                    <Star size={16} className="text-amber-600 fill-amber-600" />
+                  ) : (
+                    <StarOff size={16} className="text-gray-400" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{t.name}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[11px] text-gray-500">
+                      {t.columns?.filter((c: any) => c.selected).length || 0} columns selected
+                    </span>
+                    <span className="text-gray-300">•</span>
+                    <span className="text-[11px] text-gray-400">
+                      {t.is_default ? 'Applied automatically' : 'Manual selection'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-1 ml-3">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleEditTemplate(idx)}
+                        className="h-8 w-8 p-0 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">Edit Template</TooltipContent>
+                  </Tooltip>
+
+                  {t.is_default ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleRemoveDefaultFromDialog(idx)} 
+                          className="h-8 w-8 p-0 rounded-lg text-amber-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <Undo2 size={14} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        <p className="font-medium">Remove as Default</p>
+                        <p className="text-gray-400">Export will ask to choose template</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleSetDefault(idx)} 
+                          className="h-8 w-8 p-0 rounded-lg text-gray-400 hover:text-amber-500 hover:bg-amber-50 transition-colors"
+                        >
+                          <Star size={14} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        <p className="font-medium">Set as Default</p>
+                        <p className="text-gray-400">Auto-apply during export</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleDeleteTemplate(idx)} 
+                        className="h-8 w-8 p-0 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">Delete Template</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="text-center py-10">
+            <div className="p-3 rounded-full bg-gray-100 inline-flex mb-3">
+              <FileSpreadsheet size={28} className="text-gray-300" />
+            </div>
+            <p className="text-sm font-medium text-gray-500 mb-1">No templates yet</p>
+            <p className="text-xs text-gray-400">Create a template to customize your export columns</p>
+          </div>
+        )}
+      </div>
+    </ScrollArea>
+
+    {/* Footer */}
+    <div className="space-y-3 pt-4 border-t">
+      <Button 
+        variant="outline" 
+        size="sm" 
+        onClick={handleAddTemplate} 
+        className="w-full justify-center gap-2 h-9 rounded-xl border-dashed border-2 border-gray-300 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-all"
+      >
+        <Plus size={14} />
+        <span className="text-xs font-medium">Add New Template</span>
+      </Button>
+
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+            Default
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-gray-300"></span>
+            Optional
+          </div>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => setTemplateDialogOpen(false)}
+          className="rounded-lg"
+        >
+          Close
+        </Button>
+      </div>
+    </div>
+  </DialogContent>
+</Dialog>
+
+{/* Template Editor Dialog */}
+{isTemplateEditorOpen && (
+  <TemplateEditorDialog
+    open={isTemplateEditorOpen}
+    onOpenChange={setTemplateEditorOpen}
+    initialColumns={editingTemplate?.columns || ALL_COLUMNS}
+    initialTemplateName={editingTemplate?.name || ""}
+    onSave={handleTemplateSave}
+  />
+)}
     </div>
   );
 };

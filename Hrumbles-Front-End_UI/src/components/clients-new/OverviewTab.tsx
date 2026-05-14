@@ -1,5 +1,7 @@
 // src/components/clients-new/OverviewTab.tsx
 import React from 'react';
+import { useSelector } from 'react-redux';
+
 import { Client, ClientContact, ClientMetrics, MonthlyData, HiresByMonth, RecruiterPerformance, PipelineStage } from './ClientTypes';
 import ClientDetails from './ClientDetails';
 import ClientFinancials from './ClientFinancials';
@@ -22,7 +24,13 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
   client, contacts, metrics, monthlyData, hiresByMonth, loading,
   onAddContact, onEditContact, onDeleteContact, onEditAddress,
   allCandidatesCount, recruiterPerformance, pipelineStages,
+
+  
 }) => {
+
+    const organization_id = useSelector((state: any) => state.auth.organization_id);
+
+
   if (loading || !client) return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
       <div className="lg:col-span-2 space-y-4"><Skel className="h-48" /><Skel className="h-64" /></div>
@@ -35,7 +43,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
         <ClientDetails client={client} contacts={contacts} onAddContact={onAddContact} onEditContact={onEditContact} onDeleteContact={onDeleteContact} onEditAddress={onEditAddress} />
       </div>
       <div className="lg:col-span-3">
-        <ClientFinancials metrics={metrics} monthlyData={monthlyData} hiresByMonth={hiresByMonth} allCandidatesCount={allCandidatesCount} recruiterPerformance={recruiterPerformance} pipelineStages={pipelineStages} />
+        <ClientFinancials metrics={metrics} monthlyData={monthlyData} hiresByMonth={hiresByMonth} allCandidatesCount={allCandidatesCount} recruiterPerformance={recruiterPerformance} pipelineStages={pipelineStages} clientId={client.id} organizationId={organization_id} />
       </div>
     </div>
   );

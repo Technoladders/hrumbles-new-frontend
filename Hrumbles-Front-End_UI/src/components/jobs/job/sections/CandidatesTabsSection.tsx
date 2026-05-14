@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Filter, X, Zap, Mail, User, Search, Settings2, Send, Download, FileSpreadsheet } from "lucide-react";
 import CandidatesList from "../CandidatesList";
-import { Candidate } from "@/lib/types";
+import { Candidate, JobData } from "@/lib/types";
 import StatusSettings from "@/pages/jobs/StatusSettings";
 import { getCandidatesForJob } from "@/services/candidatesService";
 import { fetchAllStatuses, MainStatus } from "@/services/statusService";
@@ -24,20 +24,24 @@ import { AnalysisConfigDialog } from "../AnalysisConfigDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { getCandidatesByJobId } from "@/services/candidateService";
 import CSVExportDialog from "../export/CSVExportDialog";
+import TemplateSelectorDialog from "../export/TemplateSelectorDialog";
+import { ALL_COLUMNS, ColumnItem } from "@/components/clients-new/TemplateEditorDialog"; // adjust path
+import * as XLSX from "xlsx";
 
 // --- ADDED: Define a type for the ref to get autocompletion ---
 // --- Update the ref handle interface ---
 interface CandidatesListHandle {
   triggerBatchValidate: () => void;
-  triggerBulkShare: (emailType: 'shortlist' | 'rejection') => void; // Add this new method
+  triggerBulkShare: (emailType: 'shortlist' | 'rejection') => void;
   triggerBulkInvite: () => void;
-  triggerCSVExport: () => void;
+  triggerCSVExport: () => any[] | null;  // Changed from void
 }
 
 interface CandidatesTabsSectionProps {
   jobId: string;
   jobTitle: string;
   jobdescription: string;
+  clientdetails?: JobData['clientDetails'];
   candidates: Candidate[];
   onAddCandidate: () => void;
 }
@@ -49,6 +53,7 @@ const CandidatesTabsSection = ({
   jobId, 
   jobTitle,
   jobdescription,
+  clientdetails,
   candidates,
   onAddCandidate 
 }: CandidatesTabsSectionProps) => {
@@ -61,6 +66,109 @@ const [candidateFilter, setCandidateFilter] = useState<string>("All");
 
     const [activeTab, setActiveTab] = useState("All Candidates");
 const [mainStatuses, setMainStatuses] = useState<MainStatus[]>([]);
+
+// Helper functions (same as before, but we'll move them inside the component for simplicity)
+const formatPhoneForCSV = (phone?: string) => phone || "";
+const formatSalaryForCSV = (salary: any) => {
+  if (!salary && salary !== 0) return "";
+  const num = typeof salary === "string" ? parseFloat(salary.replace(/[^0-9.]/g, "")) : salary;
+  if (isNaN(num) || num === 0) return "";
+  return num.toLocaleString("en-IN", { maximumFractionDigits: 0 });
+};
+const formatDateForCSV = (dateStr?: string) => {
+  if (!dateStr) return "";
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  } catch { return dateStr; }
+};
+
+// New state
+const [isTemplateSelectorOpen, setTemplateSelectorOpen] = useState(false);
+const [clientTemplates, setClientTemplates] = useState<any[]>([]);
+const [pendingExportCandidates, setPendingExportCandidates] = useState<any[]>([]);
+
+// Direct export function
+const performExport = (candidates: any[], columns: ColumnItem[], filenamePrefix: string) => {
+  const exportData = candidates.map(c => {
+    const row: Record<string, string> = {};
+    columns.filter(col => col.selected).forEach(col => {
+      let value = "";
+      switch (col.key) {
+        case "name": value = c.name || ""; break;
+        case "email": value = c.email || ""; break;
+        case "phone": value = formatPhoneForCSV(c.phone); break;
+        case "experience": value = c.experience || ""; break;
+        case "currentSalary": value = formatSalaryForCSV(c.currentSalary || c.current_salary); break;
+        case "expectedSalary": value = formatSalaryForCSV(c.expectedSalary || c.expected_salary); break;
+        case "noticePeriod": value = c.notice_period || c.metadata?.noticePeriod || ""; break;
+        case "location": value = c.location || c.metadata?.currentLocation || ""; break;
+        case "status": value = c.main_status?.name || c.status || ""; break;
+        case "subStatus": value = c.sub_status?.name || ""; break;
+        case "skills": {
+          if (c.skills && Array.isArray(c.skills)) {
+            const stringSkills = c.skills.filter((s: any) => typeof s === "string");
+            value = stringSkills.join(", ");
+          }
+          break;
+        }
+        case "skillRatings": {
+          const ratings = c.skill_ratings || c.skillRatings;
+          if (ratings) {
+            value = ratings
+              .map((s: any) =>
+                s.name ? `${s.name} - ${s.rating || ""}/5 (${s.experienceYears}y ${s.experienceMonths}m)` : ""
+              )
+              .filter(Boolean)
+              .join(" | ");
+          }
+          break;
+        }
+        case "appliedDate": value = formatDateForCSV(c.appliedDate || c.applied_date); break;
+        case "owner": value = c.hr_employees?.first_name
+          ? `${c.hr_employees.first_name} ${c.hr_employees.last_name || ""}`
+          : (c.owner || c.appliedFrom || ""); break;
+        case "aiScore": value = c.overall_score ?? c.overallScore ?? ""; break;
+        case "linkedin": value = c.linkedin_url || c.linkedin || c.metadata?.linkedInId || ""; break;
+        case "interviewDate": value = formatDateForCSV(c.interview_date); break;
+        case "joiningDate": value = formatDateForCSV(c.joining_date); break;
+        case "rejectionReason": value = c.reject_reason || c.rejection_reason || ""; break;
+        default: break;
+      }
+      row[col.label] = value;
+    });
+    return row;
+  });
+
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Candidates");
+
+  // column widths
+  const selectedCols = columns.filter(c => c.selected);
+  ws["!cols"] = selectedCols.map(col => {
+    const maxLen = Math.max(
+      col.label.length,
+      ...exportData.map(row => (row[col.label] || "").length).filter(len => len > 0),
+      0
+    );
+    return { wch: Math.min(maxLen + 3, 60) };
+  });
+
+const sanitizedTitle = (jobTitle || 'candidates')
+  .toLowerCase()
+  .replace(/[^a-z0-9\s]/g, '')   // Keep only alphanumeric and spaces
+  .trim()
+  .replace(/\s+/g, '_')           // Replace spaces with underscores
+  .substring(0, 40);
+  const timestamp = new Date().toISOString().split("T")[0].replace(/-/g, "");
+  const filename = `${sanitizedTitle}_${candidates.length}_${timestamp}.xlsx`;
+  XLSX.writeFile(wb, filename);
+  toast.success(`Exported ${candidates.length} candidates`);
+};
+
+console.log("clientdetails in tab section:", clientdetails);
 
       const uniqueOwners = useMemo(() => {
     const owners = localCandidates
@@ -146,20 +254,42 @@ const handleBulkShareClick = (type?: 'shortlist' | 'rejection') => {
   }
 };
 
-const handleCSVExportClick = () => {
-  if (candidatesListRef.current) {
-    const candidatesForExport = candidatesListRef.current.triggerCSVExport();
-    if (candidatesForExport && candidatesForExport.length > 0) {
-      // Enrich candidates with analysis data before passing to dialog
-      const enrichedCandidates = candidatesForExport.map((candidate: any) => ({
-        ...candidate,
-        // The analysis data needs to be passed from CandidatesList
-        // We'll handle this through the ref
-      }));
-      setExportCandidates(candidatesForExport);
-      setShowCSVExportDialog(true);
-    }
+const handleCSVExportClick = async () => {
+  if (!candidatesListRef.current) return;
+  const candidatesForExport = candidatesListRef.current.triggerCSVExport();
+  if (!candidatesForExport || candidatesForExport.length === 0) return;
+
+  const clientName = clientdetails?.clientName;
+  if (!clientName) {
+    setExportCandidates(candidatesForExport);
+    setShowCSVExportDialog(true);
+    return;
   }
+
+  const { data: clientData, error } = await supabase
+    .from("hr_clients")
+    .select("export_template_config")
+    .eq("client_name", clientName)
+    .eq("organization_id", organization_id)
+    .single();
+
+  const templates = (clientData?.export_template_config as any[]) || [];
+  if (templates.length === 0) {
+    setExportCandidates(candidatesForExport);
+    setShowCSVExportDialog(true);
+    return;
+  }
+
+  const defaultTemplate = templates.find(t => t.is_default);
+  if (defaultTemplate) {
+    performExport(candidatesForExport, defaultTemplate.columns, jobTitle);
+    return;
+  }
+
+  // No default -> ask which template
+  setPendingExportCandidates(candidatesForExport);
+  setClientTemplates(templates);
+  setTemplateSelectorOpen(true);
 };
 
   const getTabCount = (tabName: string) => {
@@ -407,8 +537,6 @@ return (
           </Tooltip>
 
           {/* 📊 Export CSV */}
-
-
 <Tooltip>
   <TooltipTrigger asChild>
     <Button
@@ -428,15 +556,25 @@ return (
         transition-all duration-200
         flex items-center gap-2
         whitespace-nowrap
+        relative
       "
     >
       <FileSpreadsheet size={14} />
       <span className="text-xs font-medium">Export CSV</span>
     </Button>
   </TooltipTrigger>
-
-  <TooltipContent>
-    Export CSV
+  <TooltipContent side="top" className="max-w-[250px] p-3">
+    <div className="text-xs space-y-1">
+      <p className="font-semibold text-emerald-700">Export Candidates</p>
+      <p className="text-gray-500">
+        {clientdetails?.clientName 
+          ? `Uses template from ${clientdetails.clientName}. Set default template in Client Settings to export directly.`
+          : 'Select columns and export candidates to Excel.'}
+      </p>
+      <p className="text-gray-400 italic">
+        💡 Configure templates per client in Client Page → Export Templates
+      </p>
+    </div>
   </TooltipContent>
 </Tooltip>
 
@@ -473,6 +611,17 @@ return (
   onOpenChange={setShowCSVExportDialog}
   candidates={exportCandidates}
   jobTitle={jobTitle}
+/>
+
+<TemplateSelectorDialog
+  open={isTemplateSelectorOpen}
+  onOpenChange={setTemplateSelectorOpen}
+  templates={clientTemplates}
+  onSelect={(index) => {
+    const template = clientTemplates[index];
+    performExport(pendingExportCandidates, template.columns, jobTitle);
+    setTemplateSelectorOpen(false);
+  }}
 />
     </div>
   </TooltipProvider>

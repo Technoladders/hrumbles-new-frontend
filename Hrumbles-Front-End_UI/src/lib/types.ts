@@ -130,6 +130,7 @@ export interface JobData {
     endClient?: string;
     pointOfContact?: string;
     currency_type?: string;
+    internal_poc_ids?: string[];
   };
   jobCategory?: string;
   primarySkills?: string[];

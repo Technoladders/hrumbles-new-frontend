@@ -2,13 +2,18 @@
 // Light mode — compact mini visualizations, white cards, violet accent
 
 import React from 'react';
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button'
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   PieChart, Pie, Cell, LineChart, Line,
 } from 'recharts';
 import { ClientMetrics, MonthlyData, HiresByMonth, RecruiterPerformance, PipelineStage } from './ClientTypes';
-import { TrendingUp, TrendingDown, IndianRupee, Users, Percent, Activity } from 'lucide-react';
+import { TrendingUp, TrendingDown, IndianRupee, Users, Percent, Activity, Pencil, Trash2, Star, StarOff, Plus, Info, Undo2, FileSpreadsheet } from 'lucide-react';
+import TemplateEditorDialog, { ColumnItem, ALL_COLUMNS } from './TemplateEditorDialog';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
@@ -82,14 +87,102 @@ const PIE_COLORS = ['#7B43F1', '#06B6D4'];
 interface ClientFinancialsProps {
   metrics: ClientMetrics; monthlyData: MonthlyData[]; hiresByMonth: HiresByMonth[];
   allCandidatesCount?: number; recruiterPerformance?: RecruiterPerformance[]; pipelineStages?: PipelineStage[];
+  clientId: string;
+  organizationId: string;
+  onConfigSaved?: () => void; // optional refresh
 }
 
-const ClientFinancials: React.FC<ClientFinancialsProps> = ({ metrics, monthlyData, hiresByMonth }) => {
+const ClientFinancials: React.FC<ClientFinancialsProps> = ({ metrics, monthlyData, hiresByMonth, clientId, organizationId, onConfigSaved }) => {
   const totalRevenue = metrics.candidateRevenue + metrics.employeeRevenueINR;
   const totalProfit = metrics.candidateProfit + metrics.employeeProfitINR;
   const profitMarginPct = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0.0';
   const costAmount = totalRevenue - totalProfit;
   const maxRevenue = Math.max(metrics.candidateRevenue, metrics.employeeRevenueINR, 1);
+
+ const [templates, setTemplates] = useState<any[]>([]);
+const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
+const [editingTemplate, setEditingTemplate] = useState<{
+  name: string; columns: ColumnItem[]; index: number;
+} | null>(null);
+
+// Fetch templates from client.export_template_config
+useEffect(() => {
+  const fetchTemplates = async () => {
+    const { data, error } = await supabase
+      .from("hr_clients")
+      .select("export_template_config")
+      .eq("id", clientId)
+      .single();
+    if (!error && data?.export_template_config) {
+      setTemplates(data.export_template_config as any[]);
+    }
+  };
+  fetchTemplates();
+}, [clientId]);
+
+const saveTemplates = async (updatedTemplates: any[]) => {
+  const { error } = await supabase
+    .from("hr_clients")
+    .update({ export_template_config: updatedTemplates })
+    .eq("id", clientId);  // ✅ use clientId prop
+  if (error) {
+    toast.error("Failed to save templates");
+    throw error;
+  }
+  setTemplates(updatedTemplates);
+};
+
+const handleAddTemplate = () => {
+  setEditingTemplate({ name: "", columns: ALL_COLUMNS.map(c => ({ ...c })), index: -1 });
+  setTemplateEditorOpen(true);
+};
+
+const handleEditTemplate = (index: number) => {
+  const t = templates[index];
+  setEditingTemplate({ name: t.name, columns: t.columns, index });
+  setTemplateEditorOpen(true);
+};
+
+const handleDeleteTemplate = async (index: number) => {
+  const updated = templates.filter((_, i) => i !== index);
+  await saveTemplates(updated);
+  toast.success("Template deleted");
+};
+
+const handleSetDefault = async (index: number) => {
+  const updated = templates.map((t, i) => ({ ...t, is_default: i === index }));
+  await saveTemplates(updated);
+  toast.success("Default template set");
+};
+
+const handleTemplateSave = async (name: string, columns: ColumnItem[], isDefault?: boolean) => {
+  const newTemplate = { name, columns, is_default: isDefault || false };
+  let updatedTemplates: any[];
+  
+  if (editingTemplate?.index !== undefined && editingTemplate.index >= 0) {
+    updatedTemplates = templates.map((t, i) =>
+      i === editingTemplate.index ? { ...t, ...newTemplate } : t
+    );
+  } else {
+    // If setting as default, remove default from others
+    if (isDefault) {
+      updatedTemplates = templates.map(t => ({ ...t, is_default: false }));
+      updatedTemplates.push(newTemplate);
+    } else {
+      updatedTemplates = [...templates, newTemplate];
+    }
+  }
+  
+  await saveTemplates(updatedTemplates);
+  toast.success(isDefault ? "Template saved and set as default" : "Template saved");
+};
+
+const handleRemoveDefault = async (index: number) => {
+  const updated = templates.map((t, i) => ({ ...t, is_default: false }));
+  await saveTemplates(updated);
+  toast.success("Default template removed — export will ask to choose");
+};
+
 
   const pieData = [
     { name: 'Permanent', value: metrics.candidateRevenue },
@@ -268,6 +361,107 @@ const ClientFinancials: React.FC<ClientFinancialsProps> = ({ metrics, monthlyDat
           </div>
         </div>
       </MiniCard>
+
+      {/* ── Tracker Templates Section ─────────────────────────────── */}
+{/* ── Export Tracker Templates ─────────────────────────────── */}
+<MiniCard>
+  <MiniTitle>Export Tracker Templates</MiniTitle>
+  
+  {/* Info banner */}
+  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2 mb-3">
+    <Info size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />
+    <div className="text-xs text-blue-700">
+      <p className="font-medium mb-1">Template Guide:</p>
+      <ul className="list-disc list-inside space-y-0.5 text-blue-600">
+        <li>Create templates to customize export columns for jobs</li>
+        <li><strong>Default template</strong> is auto-applied when exporting</li>
+        <li>Remove default to show template picker during export</li>
+        <li>Changes apply immediately to all future exports</li>
+      </ul>
+    </div>
+  </div>
+
+  <div className="space-y-2">
+    {templates.map((t, idx) => (
+      <div key={idx} className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
+        t.is_default ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-transparent'
+      }`}>
+        <div className="flex items-center gap-2">
+          {t.is_default ? (
+            <Star size={14} className="text-amber-500 fill-amber-500" />
+          ) : (
+            <StarOff size={14} className="text-gray-300" />
+          )}
+          <span className="text-sm font-medium">{t.name}</span>
+          <span className="text-[10px] text-gray-400">
+            ({t.columns?.filter((c: any) => c.selected).length || 0} columns)
+          </span>
+          {t.is_default && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+              Active Default
+            </span>
+          )}
+        </div>
+        <div className="flex gap-1">
+          <Button variant="ghost" size="sm" onClick={() => handleEditTemplate(idx)}>
+            <Pencil size={13} />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => handleDeleteTemplate(idx)}>
+            <Trash2 size={13} />
+          </Button>
+          {t.is_default ? (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => handleRemoveDefault(idx)} 
+              title="Remove as default"
+              className="text-amber-600 hover:text-amber-800"
+            >
+              <Undo2 size={13} />
+            </Button>
+          ) : (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => handleSetDefault(idx)} 
+              title="Set as default"
+              className="text-gray-400 hover:text-amber-600"
+            >
+              <Star size={13} />
+            </Button>
+          )}
+        </div>
+      </div>
+    ))}
+    
+    {templates.length === 0 && (
+      <div className="text-center py-6">
+        <FileSpreadsheet size={32} className="text-gray-200 mx-auto mb-2" />
+        <p className="text-sm text-gray-400 mb-1">No templates yet</p>
+        <p className="text-xs text-gray-300">Create a template to customize exports</p>
+      </div>
+    )}
+    
+    <Button 
+      variant="outline" 
+      size="sm" 
+      onClick={handleAddTemplate} 
+      className="w-full justify-center gap-1"
+    >
+      <Plus size={14} /> Add Template
+    </Button>
+  </div>
+</MiniCard>
+
+{isTemplateEditorOpen && (
+  <TemplateEditorDialog
+    open={isTemplateEditorOpen}
+    onOpenChange={setTemplateEditorOpen}
+    initialColumns={editingTemplate?.columns || ALL_COLUMNS}
+    initialTemplateName={editingTemplate?.name || ""}
+    onSave={handleTemplateSave}
+  />
+)}
     </div>
   );
 };

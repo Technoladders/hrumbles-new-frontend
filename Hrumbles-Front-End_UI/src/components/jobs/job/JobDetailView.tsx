@@ -23,6 +23,8 @@ const JobDetailView = ({ job, candidates, onCandidateAdded }: JobDetailViewProps
   const handleOpenCandidateModal = () => {
     setIsCandidateModalOpen(true);
   };
+
+  console.log("job data in JobDetailView:", job);
   
 
   return (
@@ -46,6 +48,7 @@ const JobDetailView = ({ job, candidates, onCandidateAdded }: JobDetailViewProps
         jobId={job.id} 
         jobdescription={job.description}
         jobTitle={job.title}
+        clientdetails={job.clientDetails}
         candidates={candidates} 
         onAddCandidate={handleOpenCandidateModal} 
       />
